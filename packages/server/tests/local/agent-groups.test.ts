@@ -161,6 +161,49 @@ describe('local agent group execution', () => {
     }
   });
 
+  it('does not grant an implicit synthesizer write tools for a read-only coordinator group', async () => {
+    const calls: AgentLoopConfig[] = [];
+    const allTools = ['bash', 'read_file', 'write_file', 'save_memory', 'create_plan'].map((name) => ({
+      name,
+      description: name,
+      parameters: { type: 'object', properties: {} },
+      execute: async () => 'ok',
+    } satisfies ToolDefinition));
+    server = createServer(async (config) => {
+      calls.push(config);
+      return {
+        content: 'done',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    }, allTools);
+
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      payload: {
+        name: 'Read-only coordinator pair',
+        strategy: 'coordinator',
+        members: [
+          { agentId: 'planner', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'verifier', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const started = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+      payload: { task: 'Inspect the release plan without changing anything' },
+    });
+    const job = await waitForJob(server, (started.json() as { jobId: string }).jobId);
+
+    expect(job.status).toBe('completed');
+    expect(calls).toHaveLength(3);
+    const synthesizer = calls.at(-1)!;
+    expect(synthesizer.systemPrompt).toContain('Sub-Agent: Synthesizer');
+    expect(synthesizer.tools).toEqual([]);
+  });
+
   it('runs a parallel group in one durable Room with Dance events and two-mind result attribution', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-room-'));
     const workspaceDir = path.join(dataDir, 'project');

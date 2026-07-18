@@ -730,6 +730,8 @@ describe('conversational gated tool filtering', () => {
     { name: 'git_push' },
     { name: 'create_plan' },
     { name: 'spawn_agent' },
+    { name: 'run_code' },
+    { name: 'get_task_output' },
   ];
 
   it('hides gated system tools for normal conversational turns', () => {
@@ -791,7 +793,34 @@ describe('conversational gated tool filtering', () => {
       'normal',
     ).map(t => t.name);
 
-    expect(filtered).toEqual(tools.map(t => t.name));
+    expect(filtered).toContain('write_file');
+    expect(filtered).not.toContain('create_plan');
+  });
+
+  it('withholds plan authoring for an inline advisory plan but keeps explicit plan creation', () => {
+    const advisory = filterGatedToolsForConversationalTurn(
+      tools,
+      'Choose the order, justify it in one concise plan, and identify the first action for today.',
+      'normal',
+    ).map(tool => tool.name);
+    expect(advisory).not.toContain('create_plan');
+
+    const explicit = filterGatedToolsForConversationalTurn(
+      tools,
+      'Create a product launch plan and a concise launch memo.',
+      'normal',
+    ).map(tool => tool.name);
+    expect(explicit).toContain('create_plan');
+  });
+
+  it('does not treat a prioritization plan as authorization to execute tools', () => {
+    const message = 'I have three priorities this week: close one customer, repair onboarding friction, and investigate a production memory bug. Choose the order, justify it in one concise plan, and identify the first action for today. Do not ask clarifying questions; make reasonable assumptions.';
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    expect(isExplicitExternalResearchRequest(message)).toBe(false);
+
+    const filtered = filterGatedToolsForConversationalTurn(tools, message, 'normal')
+      .map(tool => tool.name);
+    expect(filtered).toEqual([]);
   });
 
   it('treats a broad no-change clause as authoritative at every autonomy level', () => {

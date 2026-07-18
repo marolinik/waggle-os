@@ -12,6 +12,27 @@ interface OllamaRoutingModel {
   source: 'local' | 'cloud';
 }
 
+const PREFERRED_CLOUD_FALLBACKS: Readonly<Record<string, readonly string[]>> = {
+  anthropic: ['anthropic/claude-sonnet-5', 'anthropic/claude-sonnet-4-6'],
+  openai: ['openai/gpt-5.6-sol', 'openai/gpt-5.4'],
+  google: ['google/gemini-2.5-flash', 'google/gemini-2.5-pro'],
+  openrouter: [
+    'openrouter/anthropic/claude-sonnet-5',
+    'openrouter/openai/gpt-5.6-sol',
+    'openrouter/openai/gpt-5.4',
+    'openrouter/google/gemini-2.5-flash',
+  ],
+};
+
+function qualityRankedFallbacks(provider: string, models: readonly string[]): string[] {
+  const preferred = PREFERRED_CLOUD_FALLBACKS[provider] ?? [];
+  const available = new Set(models);
+  return [
+    ...preferred.filter(model => available.has(model)),
+    ...models.filter(model => !preferred.includes(model)),
+  ];
+}
+
 export class OllamaModelNotLocalError extends Error {
   readonly statusCode = 409;
   readonly code = 'OLLAMA_MODEL_NOT_LOCAL';
@@ -119,7 +140,7 @@ async function findRoutableCloudFallback(server: FastifyInstance): Promise<strin
   );
 
   for (const { provider, models } of catalogs) {
-    for (const model of models) {
+    for (const model of qualityRankedFallbacks(provider, models)) {
       if (await modelIsRoutable(server, model, provider)) return model;
     }
   }

@@ -127,6 +127,7 @@ const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'read_other_workspace_file',
 ]);
 const EXPLICIT_READ_ONLY_TOOL_NAMES = new Set([...READONLY_TOOLS, 'read_skill']);
+const PLAN_AUTHORING_TOOL_NAMES = new Set(['create_plan', 'add_plan_step']);
 
 /**
  * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
@@ -144,10 +145,17 @@ export function resolveChatAncestry(
 
 export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
-  return /\b(write|read|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|plan|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
+  return /\b(write|read|edit|modify|create|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
     || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
-    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message);
+    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
+    || isExplicitPlanAuthoringRequest(message);
+}
+
+function isExplicitPlanAuthoringRequest(message: string): boolean {
+  return /\/plan\b/i.test(message)
+    || /\b(?:create|make|build|draft|prepare|write|generate|develop|set up)\b[^.?!\r\n]{0,100}\bplan\b/i.test(message)
+    || /\bplan(?:ning)?\s+(?:this|that|the|a|an|my|our|your)\b/i.test(message);
 }
 
 export function isExplicitMemoryRecallRequest(message: string): boolean {
@@ -160,7 +168,7 @@ export function isExplicitMemorySaveRequest(message: string): boolean {
 
 export function isExplicitExternalResearchRequest(message: string): boolean {
   return /https?:\/\//i.test(message)
-    || /\b(web|internet|online|current|latest|today|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|investigate|look up|find out|dig into|study|survey|external)\b/i.test(message);
+    || /\b(web|internet|online|current|latest|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|look up|find out|dig into|study|survey|external)\b/i.test(message);
 }
 
 export function shouldNarrowToolsForConversationalTurn(
@@ -180,6 +188,9 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
   let eligibleTools = mutationPolicy.denyMemoryPersistence
     ? tools.filter(tool => tool.name !== 'save_memory')
     : tools;
+  if (autonomyLevel === 'normal' && !isExplicitPlanAuthoringRequest(message)) {
+    eligibleTools = eligibleTools.filter(tool => !PLAN_AUTHORING_TOOL_NAMES.has(tool.name));
+  }
   if (mutationPolicy.denyAllMutations) {
     return eligibleTools.filter(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name));
   }
@@ -192,7 +203,10 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
     if (tool.name === 'search_memory' && !allowMemorySearch) return false;
     if (tool.name === 'save_memory' && !allowMemorySave) return false;
     if ((tool.name === 'web_search' || tool.name === 'web_fetch') && !allowExternalResearch) return false;
-    return true;
+    return tool.name === 'search_memory'
+      || tool.name === 'save_memory'
+      || tool.name === 'web_search'
+      || tool.name === 'web_fetch';
   });
   return eligibleTools;
 }
@@ -229,8 +243,15 @@ export function filterPluginToolsForConversationalTurn(
   };
 }
 
-function conversationalToolPolicyPrompt(message: string, autonomyLevel: AutonomyLevel): string {
+export function conversationalToolPolicyPrompt(
+  message: string,
+  autonomyLevel: AutonomyLevel,
+  selectedToolCount: number,
+): string {
   if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return '';
+  if (selectedToolCount === 0) {
+    return `\n\n# Current Turn Tool Policy\nNo executable tools are available in this turn. Answer the user directly in plain text. Never emit tool-call syntax, tool names as control tokens, or a request to run an absent tool. Do not mention this policy or claim that a tool was used.`;
+  }
   return `\n\n# Current Turn Tool Policy\nThis is a normal conversational turn. Some action, inspection, plugin, planning, and external research tools may be intentionally hidden until the user asks for a concrete action or lookup. Do not mention this policy. Do not infer or tell the user that a capability is missing because a tool is absent on this turn. If the user asks what Waggle can do, answer at the product level and offer one concrete next step.`;
 }
 
@@ -1910,7 +1931,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           systemPrompt = ambiguityPrefix
             + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled, packageMode)
             + templateContext
-            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel)
+            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
             + (assembled ? '' : recalledContext);
           log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
         }

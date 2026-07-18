@@ -101,8 +101,9 @@ describe('auto-update configuration', () => {
       expect(workflow).toContain('x86_64-apple-darwin');
     });
 
-    it('uses tauri-action for builds', () => {
-      expect(workflow).toContain('tauri-apps/tauri-action');
+    it('uses the app-lockfile-pinned Tauri CLI for builds', () => {
+      expect(workflow).toContain('node node_modules/@tauri-apps/cli/tauri.js build');
+      expect(workflow).not.toMatch(/^\s*uses:\s+tauri-apps\/tauri-action/m);
     });
 
     it('does NOT publish a broken (empty-signature) updater manifest', () => {

@@ -290,6 +290,7 @@ export class SubagentOrchestrator extends EventEmitter {
           name: 'Synthesizer',
           role: 'synthesizer',
           task: 'Synthesize the completed worker results into a cohesive response.',
+          tools: [],
         }, securityContext)
       : undefined;
     const plans = [...stepPlanList, ...(synthesisPlan ? [synthesisPlan] : [])];
@@ -529,6 +530,7 @@ export class SubagentOrchestrator extends EventEmitter {
           name: 'Synthesizer',
           role: 'synthesizer',
           task: `Synthesize the following results from multiple workers into a cohesive response:\n\n${allResults}`,
+          tools: [],
         };
 
         const synthState = await this.runWorker(synthesizeStep, contextResults, synthesisPlan!);

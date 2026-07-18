@@ -6,8 +6,8 @@
  * WAGGLE_PERSONA_NON_GATING_DEBUG=1 and WAGGLE_PERSONA_REPEATS (1-10).
  * This is intentionally a live LLM suite; list/compile it cheaply with:
  *   npx playwright test tests/vision/personas.spec.ts --list
- * Run the expensive matrix only with a real provider:
- *   WAGGLE_E2E_SKIP_LITELLM=0 npx playwright test tests/vision/personas.spec.ts
+ * Run the expensive matrix through the built-in proxy with a real provider:
+ *   WAGGLE_E2E_SKIP_LITELLM=1 npx playwright test tests/vision/personas.spec.ts
  */
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { randomUUID } from 'node:crypto';

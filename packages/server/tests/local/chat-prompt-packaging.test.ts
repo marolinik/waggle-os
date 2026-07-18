@@ -11,6 +11,7 @@ import {
   buildTemplateWelcomePrompt,
 } from '../../src/local/routes/chat-helpers.js';
 import {
+  conversationalToolPolicyPrompt,
   filterPluginToolsForConversationalTurn,
   isExplicitGatedToolRequest,
 } from '../../src/local/routes/chat.js';
@@ -98,6 +99,18 @@ describe('chat prompt packaging', () => {
     expect(compact).toMatch(/regulated topics/i);
     expect(compact).toContain('unless the user specified a response syntax or shape that does not permit it');
     expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
+  });
+
+  it('gives a literal plain-text contract when selection leaves no tools', () => {
+    const policy = conversationalToolPolicyPrompt(
+      'Choose the order and justify it in one concise plan. Make reasonable assumptions.',
+      'normal',
+      0,
+    );
+
+    expect(policy).toMatch(/no executable tools are available/i);
+    expect(policy).toMatch(/plain text/i);
+    expect(policy).toMatch(/never emit.*tool-call syntax/i);
   });
 
   it('keeps optional first-turn questions and greetings conditional in assembled compact prompts', () => {

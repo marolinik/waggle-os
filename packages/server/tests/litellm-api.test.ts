@@ -486,6 +486,44 @@ describe('LiteLLM Management API', () => {
     }
   });
 
+  it('quality-ranks an OpenRouter fallback instead of selecting the first catalog item', async () => {
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = 'claude-sonnet-4-6';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('openrouter', 'openrouter-quality-fallback-test-key');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('https://openrouter.ai/')) {
+        return new Response(JSON.stringify({
+          data: [
+            { id: 'thinkingmachines/inkling' },
+            { id: 'anthropic/claude-sonnet-5' },
+            { id: 'openai/gpt-5.6-sol' },
+          ],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, 'claude-sonnet-4-6'))
+        .resolves.toBe('openrouter/anthropic/claude-sonnet-5');
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
+    }
+  });
+
   it('keeps an explicit built-in proxy model exact when managed LiteLLM catalog state is stale', async () => {
     const requestedModel = 'openrouter/openai/gpt-5.3-codex';
     const fallbackModel = 'google/gemini-2.5-flash';

@@ -77,6 +77,8 @@ const positiveFailureVerb = String.raw`(?<!not )(?<!cannot )(?<!can't )(?<!never
 const windowsBrowserFailuresPattern = new RegExp([
   `${String.raw`\bbrowser tests?\b[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,50}`}${positiveFailureVerb}`,
   `${String.raw`\bbrowser tests?\b[^.\r\n]{0,60}`}${positiveFailureVerb}${String.raw`[^.\r\n]{0,60}\bWindows\b`}`,
+  String.raw`\bbrowser tests?\b[^.\r\n]{0,30}\b(?:two|2)\s+failures?\b[^.\r\n]{0,20}\b(?:remain|persist|exist)\b[^.\r\n]{0,60}\bWindows\b`,
+  String.raw`(?<!not )(?<!no longer )\b(?:two|2)\s+browser test failures?\s+(?:still\s+)?(?:persist|remain|exist)\b[^.\r\n]{0,60}\bWindows\b`,
 ].join('|'), 'i');
 const positiveRecommendationLead = String.raw`(?:(?<!cannot )(?<!can't )(?<!not )\b(?:recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[\s\S]){0,80}|(?:^|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:\*\*)?|(?:^|[.!?]\s+|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:we|you|the team)[ \t]+should[ \t]+)`;
 const delayRecommendationPattern = new RegExp(`${positiveRecommendationLead}${String.raw`\bdelay(?:ing)?\s+(?:the\s+)?release\b[\s\S]{0,240}\b(?:until|once)\b[\s\S]{0,180}(?:gaps?|failures?|smart router|cloud credentials)`}`, 'im');
@@ -120,12 +122,12 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
         kind: 'allPatterns',
         patterns: [
           /(?:memory (?:bug|issue)[\s\S]{0,220}(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius)|(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius)[\s\S]{0,220}memory (?:bug|issue))/i,
-          /(?:(?:customer|deal)[\s\S]{0,220}(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date)|(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date)[\s\S]{0,220}(?:customer|deal))/i,
-          /(?:onboarding[\s\S]{0,220}(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|support load)|(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|support load)[\s\S]{0,220}onboarding)/i,
+          /(?:(?:customer|deal)[\s\S]{0,220}(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date|high(?:est)?[- ]value|time[- ]sensitive|external momentum|deal urgency|urgency|momentum)|(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date|high(?:est)?[- ]value|time[- ]sensitive|external momentum|deal urgency|urgency|momentum)[\s\S]{0,220}(?:customer|deal))/i,
+          /(?:onboarding[\s\S]{0,220}(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|not urgent|structural|future throughput|support load|reliab(?:ility|le)|friction|crash|retry|user experience)|(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|not urgent|structural|future throughput|support load|reliab(?:ility|le)|friction|crash|retry|user experience)[\s\S]{0,220}onboarding)/i,
         ],
         points: 10,
       },
-      { id: 'first-action', description: 'Names the first action for today', kind: 'pattern', pattern: /(?:first action|today(?:'s)? action|start today|begin today)/i, points: 10 },
+      { id: 'first-action', description: 'Names the first action for today', kind: 'pattern', pattern: /(?:first action|today(?:'s)? action|start today|begin today|\btoday\s*:)/i, points: 10 },
       { id: 'no-followup', description: 'Does not end by reopening clarification', kind: 'notPattern', pattern: /\?\s*$/, points: 10 },
     ],
   },
@@ -166,8 +168,8 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'word-limit', description: 'Stays within 120 words', kind: 'maxWords', maxWords: 120, points: 10 },
-      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'allPatterns', patterns: [/Friday/i, /API tests?\s+(?:are\s+)?pass(?:ed|ing)?\b/i, windowsBrowserFailuresPattern], points: 10 },
-      { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'allPatterns', patterns: [/smart router/i, /not (?:been )?(?:exercised|tested|validated)/i, /cloud credentials/i], points: 10 },
+      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'allPatterns', patterns: [/Friday/i, /API tests?\s*(?::\s*)?(?:are\s+)?pass(?:ed|ing)?\b/i, windowsBrowserFailuresPattern], points: 10 },
+      { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'allPatterns', patterns: [/smart router/i, /not (?:(?:yet|been|fully|thoroughly)\s+)*(?:exercised|tested|validated)/i, /cloud credentials/i], points: 10 },
       { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'pattern', pattern: delayRecommendationPattern, points: 10 },
       { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date)/i, points: 10 },
     ],

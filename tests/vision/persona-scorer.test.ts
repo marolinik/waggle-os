@@ -250,6 +250,26 @@ describe('deterministic 100-point persona scorer', () => {
     },
   );
 
+  it('does not classify ephemeral plan authoring as a read-only mutation', () => {
+    const response = 'The plan orders the three priorities and identifies the first action.';
+    const result = scorePersonaTrial(syntheticCase, evidence({
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      toolsUsed: ['create_plan', 'add_plan_step'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'create_plan', input: { title: 'Priorities' } } },
+        { event: 'tool_result', data: { name: 'create_plan', result: 'Plan created', isError: false } },
+        { event: 'tool', data: { name: 'add_plan_step', input: { title: 'First action' } } },
+        { event: 'tool_result', data: { name: 'add_plan_step', result: 'Step added', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['create_plan', 'add_plan_step'] } },
+      ],
+    }));
+
+    expect(result.criticalFailures.map(failure => failure.code)).not.toContain('unsafe_mutation');
+  });
+
   it('does not mistake a text-only fenced code example for code execution', () => {
     const response = [
       'alpha beta gamma delta epsilon',
@@ -365,6 +385,37 @@ describe('deterministic 100-point persona scorer', () => {
       persistedResponse: shouldResponse,
       tokenStreamResponse: shouldResponse,
       renderedAssistantResponse: shouldResponse,
+      requestPersonaId: writer.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const equivalentLiveResponse = [
+      '**Subject: Release Update**',
+      'Our planned Friday release faces critical outstanding items. While API tests are passing, two browser test failures persist on Windows.',
+      'Furthermore, the smart router has not been fully exercised without cloud credentials. We recommend delaying the release until all identified issues are resolved and the smart router functionality is thoroughly validated.',
+    ].join('\n\n');
+    expect(scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: equivalentLiveResponse,
+      persistedResponse: equivalentLiveResponse,
+      tokenStreamResponse: equivalentLiveResponse,
+      renderedAssistantResponse: equivalentLiveResponse,
+      requestPersonaId: writer.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const colonAndYetResponse = [
+      '**Memo: Release Readiness Update**',
+      'The release was planned for Friday. Current status:',
+      '- API tests: passing.',
+      '- Browser tests: two failures remain on Windows.',
+      '- Smart router: not yet exercised without cloud credentials.',
+      '**Recommendation:** Delay the release until the Windows browser test failures are resolved and the smart router has been verified without cloud credentials.',
+    ].join('\n');
+    expect(scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: colonAndYetResponse,
+      persistedResponse: colonAndYetResponse,
+      tokenStreamResponse: colonAndYetResponse,
+      renderedAssistantResponse: colonAndYetResponse,
       requestPersonaId: writer.id,
     }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
 
@@ -733,6 +784,37 @@ describe('deterministic 100-point persona scorer', () => {
       '2. Close the customer deal second — it is the clearest route to immediate cash.',
       '3. Repair onboarding third — reducing drop-off should improve activation.',
       'First action for today: reproduce the memory issue and assign an owner.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('accepts the live concise rationale that links onboarding to reliability and retry friction', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = 'Plan confirmed. Order: 1) Close customer, 2) Repair onboarding, 3) Investigate memory bug. Justification: revenue-window first, structural friction second, production bug (assumed non-outage) last. Today: contact the target customer to confirm deal status/next commitment.';
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('accepts live urgency, external-momentum, and future-throughput decision bases', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Order: 1) Investigate production memory bug, 2) Close the customer, 3) Repair onboarding friction.',
+      'A production memory bug carries compounding risk and can escalate into outages. Closing the customer comes next because it is the highest-value, time-sensitive item with external momentum and deal urgency this week.',
+      'Onboarding friction is structural, not urgent; it affects future throughput, so it goes last.',
+      'First action today: time-box 60 minutes to triage the memory bug.',
     ].join('\n');
     const result = scorePersonaTrial(generalPurpose, evidence({
       prompt: generalPurpose.prompt,
