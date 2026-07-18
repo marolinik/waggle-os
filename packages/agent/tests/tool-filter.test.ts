@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { filterToolsForContext, filterAvailableTools } from '../src/tool-filter.js';
+import {
+  DEFAULT_TURN_SCHEMA_CHAR_LIMIT,
+  DEFAULT_TURN_TOOL_LIMIT,
+  filterAvailableTools,
+  filterToolsForContext,
+  measureOpenAiToolSchemaChars,
+  selectToolsForTurn,
+} from '../src/tool-filter.js';
 import type { ToolDefinition } from '../src/tools.js';
 
 function makeTool(name: string): ToolDefinition {
@@ -130,5 +137,61 @@ describe('filterAvailableTools', () => {
       { ...makeTool('b'), checkAvailability: () => false },
     ];
     expect(filterAvailableTools(tools)).toHaveLength(0);
+  });
+});
+
+describe('selectToolsForTurn', () => {
+  it('measures the exact tool schema shape sent by the agent loop', () => {
+    const tools = [makeTool('read_file'), makeTool('run_code')];
+    const expected = JSON.stringify(tools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: { type: 'object', properties: {}, ...tool.parameters },
+      },
+    }))).length;
+
+    expect(measureOpenAiToolSchemaChars(tools)).toBe(expected);
+  });
+
+  it('never sends all 29 relevant tools and skips a schema that exceeds the budget', () => {
+    const candidates = [
+      {
+        ...makeTool('run_code'),
+        description: `Run code tests and inspect this implementation.${' x'.repeat(5_000)}`,
+      },
+      ...Array.from({ length: 29 }, (_, index) => ({
+        ...makeTool(`code_tool_${index}`),
+        description: `Run code tests and inspect this implementation.${' x'.repeat(120)}`,
+      })),
+    ];
+    const selected = selectToolsForTurn(candidates, {
+      message: 'Run code tests and inspect this implementation',
+    });
+
+    expect(selected.tools.map((tool) => tool.name)).not.toContain('run_code');
+    expect(selected.tools.length).toBeLessThanOrEqual(DEFAULT_TURN_TOOL_LIMIT);
+    expect(selected.tools.length).toBeLessThan(29);
+    expect(selected.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
+    expect(measureOpenAiToolSchemaChars(selected.tools)).toBe(selected.schemaChars);
+  });
+
+  it('offers a bounded non-external fallback only when delegated execution requests it', () => {
+    const candidates = [
+      makeTool('read_file'),
+      makeTool('write_file'),
+      makeTool('mcp_unknown_action'),
+    ];
+    const conversational = selectToolsForTurn(candidates, { message: 'Handle it' });
+    const delegated = selectToolsForTurn(candidates, {
+      message: 'Handle it',
+      fallbackToEligible: true,
+      externalToolNames: ['mcp_unknown_action'],
+    });
+
+    expect(conversational.tools).toEqual([]);
+    expect(delegated.tools.map((tool) => tool.name)).toEqual(['read_file', 'write_file']);
+    expect(delegated.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
   });
 });

@@ -317,7 +317,20 @@ export { Plan, type PlanStep } from './plan.js';
 export { createPlanTools } from './plan-tools.js';
 export { createGitTools } from './git-tools.js';
 export { PermissionManager, READONLY_TOOLS } from './permissions.js';
-export { filterToolsForContext, filterAvailableTools, filterOfflineTools, getOfflineCapableToolNames, type ToolContext, type ToolFilterConfig } from './tool-filter.js';
+export {
+  DEFAULT_TURN_SCHEMA_CHAR_LIMIT,
+  DEFAULT_TURN_TOOL_LIMIT,
+  filterToolsForContext,
+  filterAvailableTools,
+  filterOfflineTools,
+  getOfflineCapableToolNames,
+  measureOpenAiToolSchemaChars,
+  selectToolsForTurn,
+  type ToolContext,
+  type ToolFilterConfig,
+  type TurnToolSelectionOptions,
+  type TurnToolSelectionResult,
+} from './tool-filter.js';
 export {
   needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass,
   ConfirmationGate, getApprovalClass, classifyGatedToolRisk,
