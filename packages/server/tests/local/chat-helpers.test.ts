@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  canUseBudgetModelWithoutCloudEgress,
   classifyExplicitTurnMutationPolicy,
   isRegulatedContent,
   isRetryableError,
@@ -104,6 +105,10 @@ describe('isRetryableError', () => {
     expect(isRetryableError(new Error('Service unavailable 503'))).toBe(true);
   });
 
+  it('returns true for Error with 504 in message', () => {
+    expect(isRetryableError(new Error('Gateway timeout 504'))).toBe(true);
+  });
+
   // ── Network errors ────────────────────────────────────────────────
 
   it('returns true for ETIMEDOUT error', () => {
@@ -116,6 +121,12 @@ describe('isRetryableError', () => {
 
   it('returns true for ECONNABORTED error', () => {
     expect(isRetryableError(new Error('ECONNABORTED: request timed out'))).toBe(true);
+  });
+
+  it('returns true after the agent loop exhausts network retries', () => {
+    expect(isRetryableError(new Error(
+      'Could not reach the model endpoint after 3 attempts (fetch failed).',
+    ))).toBe(true);
   });
 
   // ── Rate limit / capacity messages ────────────────────────────────
@@ -152,6 +163,10 @@ describe('isRetryableError', () => {
 
   it('returns true for plain object with status 503', () => {
     expect(isRetryableError({ status: 503 })).toBe(true);
+  });
+
+  it('returns true for plain object with status 504', () => {
+    expect(isRetryableError({ status: 504 })).toBe(true);
   });
 
   // ── Non-retryable cases ───────────────────────────────────────────
@@ -265,6 +280,36 @@ describe('classifyExplicitTurnMutationPolicy', () => {
     expect(classifyExplicitTurnMutationPolicy(
       'Rewrite: ‘Don’t create or edit anything.’',
     )).toEqual({ denyAllMutations: false, denyMemoryPersistence: false });
+  });
+});
+
+describe('canUseBudgetModelWithoutCloudEgress', () => {
+  it('blocks an implicit local-to-cloud budget route', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'ollama/private-local-model',
+      'openrouter/cloud-budget-model',
+    )).toBe(false);
+  });
+
+  it('allows local-to-local budget routing', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'ollama/private-local-model',
+      'ollama/local-budget-model',
+    )).toBe(true);
+  });
+
+  it('blocks Ollama cloud aliases from being treated as local budget models', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'ollama/private-local-model',
+      'ollama/minimax-m2.7:cloud',
+    )).toBe(false);
+  });
+
+  it('allows cloud-primary routing because history is already cloud-eligible', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'anthropic/claude-sonnet',
+      'openrouter/cloud-budget-model',
+    )).toBe(true);
   });
 });
 

@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -36,7 +36,7 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { buildTemplateWelcomePrompt, classifyExplicitTurnMutationPolicy, isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnMutationPolicy } from './chat-helpers.js';
+import { buildTemplateWelcomePrompt, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnMutationPolicy } from './chat-helpers.js';
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
@@ -49,7 +49,7 @@ import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
-import { resolveUsableModel } from '../model-availability.js';
+import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import type { GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
@@ -923,27 +923,53 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Budget check: if daily spend exceeds threshold, use budget model
       let resolvedModel = primaryModel;
       let modelSwitchReason: string | null = null;
+      let budgetModelSelected = false;
+      const budgetRoutingAllowed = budgetModel
+        ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
+        : false;
 
       const dailyBudget = pilotConfig.getDailyBudget();
-      if (dailyBudget && dailyBudget > 0 && budgetModel) {
+      if (dailyBudget && dailyBudget > 0 && budgetModel && budgetRoutingAllowed) {
         const spent = costTracker.getDailyTotal();
         if (spent / dailyBudget >= budgetThreshold) {
           resolvedModel = budgetModel;
+          budgetModelSelected = resolvedModel !== primaryModel;
           modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
         }
       }
 
       // Smart routing: simple messages → budget model (cost optimization)
-      if (!modelSwitchReason && budgetModel) {
+      if (!modelSwitchReason && budgetModel && budgetRoutingAllowed) {
         const routing = routeMessage(message, resolvedModel, budgetModel);
         if (routing.reason === 'simple_turn') {
           resolvedModel = routing.model;
+          budgetModelSelected = resolvedModel !== primaryModel;
           // Smart routing is silent — no toast, no inline message
         }
       }
 
       // ── Conversation history management (moved before LLM check so echo mode also persists) ──
-      resolvedModel = await resolveUsableModel(server, resolvedModel);
+      try {
+        resolvedModel = await resolveUsableModel(server, resolvedModel);
+      } catch (selectedResolutionError) {
+        const unavailableModel = resolvedModel;
+        if (budgetModelSelected && unavailableModel !== primaryModel) {
+          try {
+            resolvedModel = await resolveUsableModel(server, primaryModel);
+            budgetModelSelected = false;
+            modelSwitchReason = `${unavailableModel} unavailable; primary selected`;
+          } catch (primaryResolutionError) {
+            if (!fallbackModel || fallbackModel === unavailableModel) throw primaryResolutionError;
+            resolvedModel = await resolveUsableModel(server, fallbackModel);
+            budgetModelSelected = false;
+            modelSwitchReason = `${unavailableModel} and ${primaryModel} unavailable; configured fallback selected`;
+          }
+        } else {
+          if (!fallbackModel || fallbackModel === unavailableModel) throw selectedResolutionError;
+          resolvedModel = await resolveUsableModel(server, fallbackModel);
+          modelSwitchReason = `${unavailableModel} unavailable; configured fallback selected`;
+        }
+      }
 
       const sessionId = activeSessionId;
       const effectiveWorkspace = activeWorkspaceId;
@@ -1670,20 +1696,37 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // When conversation exceeds 50% of context window: prune tool results,
         // protect head/tail, LLM-summarize the middle using budget model ($0 cost).
         let windowedMessages: Array<{ role: string; content: string }>;
-        if (budgetModel) {
+        let compressionModel = budgetModel
+          && canUseBudgetModelWithoutCloudEgress(resolvedModel, budgetModel)
+          ? budgetModel
+          : null;
+        const discoveredWindow = getModelContextWindow(resolvedModel);
+        const isLocalModel = isOfflineOllamaModelReference(resolvedModel);
+        const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
+          conservativeDefault: isLocalModel ? 8192 : 128_000,
+        });
+        if (compressionModel
+          && isLocalModel
+          && needsCompression(history, { maxContextTokens, compressionThreshold: 0.5 })) {
+          const verifiedCompressionModel = await resolveExplicitRoutableModel(server, compressionModel);
+          compressionModel = verifiedCompressionModel
+            && isOfflineOllamaModelReference(verifiedCompressionModel)
+            ? verifiedCompressionModel
+            : null;
+        }
+        if (compressionModel) {
           // §B: size compaction to the actual model window so a local 4k/8k model
           // is not treated as a 128k model. Local (ollama/*) models with an unknown
           // window get a conservative 8k floor; non-local/unknown cloud ids we don't
           // map yet (deepseek/mistral/openrouter/…) keep the prior 128k baseline so
           // they aren't over-compacted.
-          const discoveredWindow = getModelContextWindow(resolvedModel);
-          const isLocalModel = resolvedModel.trim().toLowerCase().startsWith('ollama/');
-          const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
-            conservativeDefault: isLocalModel ? 8192 : 128_000,
-          });
+          const compressionUsesOllama = compressionModel.trim().toLowerCase().startsWith('ollama/');
+          const ollamaHost = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
           const compressionConfig = createDefaultCompressionConfig({
-            budgetModel,
-            litellmUrl: getLitellmUrl(),
+            budgetModel: compressionUsesOllama
+              ? compressionModel.slice('ollama/'.length)
+              : compressionModel,
+            litellmUrl: compressionUsesOllama ? ollamaHost : getLitellmUrl(),
             litellmApiKey: server.agentState.litellmApiKey,
             maxContextTokens,
           });
@@ -2079,6 +2122,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : undefined,
         };
 
+        const configForModelAttempt = (
+          logicalModel: string,
+          apiKey = effectiveApiKey,
+        ): typeof runConfig => {
+          const useOllama = logicalModel.trim().toLowerCase().startsWith('ollama/');
+          return {
+            ...runConfig,
+            model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
+            litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
+            litellmApiKey: apiKey,
+          };
+        };
+
         const runAgentAttempt = async (config: typeof runConfig) => {
           bufferedAgentTokens = [];
           const attemptedResult = await agentRunner(config);
@@ -2086,6 +2142,48 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             throw abortController.signal.reason ?? new Error('Chat request aborted');
           }
           return attemptedResult;
+        };
+
+        const runModelFallbackChain = async (
+          initialError: unknown,
+          allowNonRetryableConfiguredFallback = false,
+        ) => {
+          let failure = initialError;
+          let failedBudgetModel: string | null = null;
+
+          if (budgetModelSelected && resolvedModel !== primaryModel) {
+            failedBudgetModel = resolvedModel;
+            try {
+              resolvedModel = await resolveUsableModel(server, primaryModel);
+              budgetModelSelected = false;
+              modelSwitchReason = `${failedBudgetModel} failed; primary selected`;
+            } catch (primaryResolutionError) {
+              failure = primaryResolutionError;
+              budgetModelSelected = false;
+              if (!fallbackModel || fallbackModel === failedBudgetModel) throw failure;
+              resolvedModel = await resolveUsableModel(server, fallbackModel);
+              modelSwitchReason = `${failedBudgetModel} failed and ${primaryModel} unavailable; configured fallback selected`;
+              return await runAgentAttempt(configForModelAttempt(resolvedModel));
+            }
+
+            try {
+              return await runAgentAttempt(configForModelAttempt(resolvedModel));
+            } catch (primaryRunError) {
+              failure = primaryRunError;
+            }
+          }
+
+          if ((allowNonRetryableConfiguredFallback || isRetryableError(failure))
+            && fallbackModel
+            && fallbackModel !== failedBudgetModel
+            && resolvedModel !== fallbackModel) {
+            const failedModel = resolvedModel;
+            resolvedModel = await resolveUsableModel(server, fallbackModel);
+            modelSwitchReason = `${failedModel} failed (${(failure as { status?: number }).status ?? 'timeout'}); configured fallback selected`;
+            return await runAgentAttempt(configForModelAttempt(resolvedModel));
+          }
+
+          throw failure;
         };
 
         // SEC: publish the request-scoped security context so sub-agents /
@@ -2114,7 +2212,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         };
 
         // ── Run agent with credential pool + fallback chain ──
-        let result;
+        let result: AgentResponse;
         const agentStartedAt = performance.now();
         let agentLatencyMs = 0;
         try {
@@ -2124,39 +2222,50 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } catch (primaryErr) {
           if (abortController.signal.aborted) throw primaryErr;
           // Report error to credential pool and try next key
-          const errStatus = extractStatusCode(primaryErr);
-          if (credPool && poolKey && errStatus) {
-            const keyName = credPool.getNameForKey(poolKey) ?? poolKey;
-            const hasMore = credPool.reportError(poolKey, errStatus, (primaryErr as Error).message);
-            log.warn(`[credential-pool] Key ${keyName} failed (${errStatus}), cooldown applied. More keys: ${hasMore}`);
+          if (credPool && poolKey) {
+            let failedKey = poolKey;
+            let credentialError = primaryErr;
+            let credentialResult: AgentResponse | null = null;
+            let poolExhausted = false;
 
-            if (hasMore) {
-              const nextKey = credPool.getKey();
-              if (nextKey) {
-                sendEvent('step', { content: `API key rotated — retrying with next credential` });
-                result = await runAgentAttempt({ ...runConfig, litellmApiKey: nextKey });
-                credPool.reportSuccess(nextKey);
-              } else {
-                throw primaryErr;
+            for (let failureIndex = 0; failureIndex < credPool.size; failureIndex++) {
+              const errorStatus = extractStatusCode(credentialError);
+              if (!errorStatus) break;
+
+              const keyName = credPool.getNameForKey(failedKey) ?? failedKey;
+              const hasMore = credPool.reportError(
+                failedKey,
+                errorStatus,
+                (credentialError as Error).message,
+              );
+              log.warn(`[credential-pool] Key ${keyName} failed (${errorStatus}), cooldown applied. More keys: ${hasMore}`);
+
+              if (!hasMore || failureIndex === credPool.size - 1) {
+                poolExhausted = true;
+                break;
               }
-            } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
-              // No pool keys left — fall back to different model
-              modelSwitchReason = `${resolvedModel} failed (${errStatus}), all keys exhausted`;
-              resolvedModel = fallbackModel;
-              // #4: the fallback is a LiteLLM/cloud model — reset litellmUrl in
-              // case the original was an Ollama model routed to the local endpoint.
-              result = await runAgentAttempt({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
-            } else {
-              throw primaryErr;
+
+              const nextKey = credPool.getKey();
+              if (!nextKey) {
+                poolExhausted = true;
+                break;
+              }
+              sendEvent('step', { content: `API key rotated — retrying with next credential` });
+              try {
+                credentialResult = await runAgentAttempt({ ...runConfig, litellmApiKey: nextKey });
+                credPool.reportSuccess(nextKey);
+                break;
+              } catch (nextCredentialError) {
+                if (abortController.signal.aborted) throw nextCredentialError;
+                failedKey = nextKey;
+                credentialError = nextCredentialError;
+              }
             }
-          } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
-            modelSwitchReason = `${resolvedModel} failed (${(primaryErr as { status?: number }).status ?? 'timeout'})`;
-            resolvedModel = fallbackModel;
-            // #4: reset litellmUrl — the fallback is a LiteLLM/cloud model even
-            // if the original selection was a local Ollama model.
-            result = await runAgentAttempt({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
+
+            result = credentialResult
+              ?? await runModelFallbackChain(credentialError, poolExhausted);
           } else {
-            throw primaryErr;
+            result = await runModelFallbackChain(primaryErr);
           }
         } finally {
           agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));

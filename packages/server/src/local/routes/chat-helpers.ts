@@ -5,6 +5,8 @@
  * These functions have ZERO dependencies on server state.
  */
 
+import { isRemoteOllamaAlias } from '../provider-model-catalog.js';
+
 // ── Regulated Content Detection ────────────────────────────────────────
 
 /** Check whether a response contains substantive regulated content for a given persona domain */
@@ -27,14 +29,37 @@ export function isRegulatedContent(content: string, personaId: string): boolean 
 export function isRetryableError(err: unknown): boolean {
   if (err instanceof Error) {
     const msg = err.message.toLowerCase();
-    if (/\b(429|500|502|503)\b/.test(msg)) return true;
+    if (/\b(429|500|502|503|504)\b/.test(msg)) return true;
     if (msg.includes('etimedout') || msg.includes('econnrefused') || msg.includes('econnaborted')) return true;
+    if (msg.includes('could not reach the model endpoint') || msg.includes('fetch failed')) return true;
+    if (msg.includes('socket hang up') || msg.includes('network error') || msg.includes('timed out')) return true;
     if (msg.includes('rate limit') || msg.includes('too many requests')) return true;
     if (msg.includes('overloaded') || msg.includes('capacity')) return true;
   }
   const status = (err as { status?: number })?.status;
-  if (status === 429 || status === 500 || status === 502 || status === 503) return true;
+  if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
   return false;
+}
+
+/**
+ * A configured local primary is a user privacy boundary. Budget optimization
+ * may stay local, but it must never silently move the turn or its history to a
+ * cloud model. Explicit model selection and configured failure fallback are
+ * separate, user-controlled egress decisions.
+ */
+export function canUseBudgetModelWithoutCloudEgress(
+  primaryModel: string,
+  budgetModel: string,
+): boolean {
+  const primaryIsLocal = isOfflineOllamaModelReference(primaryModel);
+  const budgetIsLocal = isOfflineOllamaModelReference(budgetModel);
+  return !primaryIsLocal || budgetIsLocal;
+}
+
+export function isOfflineOllamaModelReference(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  if (!normalized.startsWith('ollama/')) return false;
+  return !isRemoteOllamaAlias(normalized.slice('ollama/'.length));
 }
 
 // ── Ambiguity Detection (GAP-006) ──────────────────────────────────────
