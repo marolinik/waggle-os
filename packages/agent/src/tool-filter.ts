@@ -106,9 +106,9 @@ interface IntentBundle {
   tools: readonly string[];
 }
 
-const ACTION_PATTERN = /\b(create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
+const ACTION_PATTERN = /\b(use|using|call|invoke|create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
 const CONTINUATION_PATTERN = /\b(continue|proceed|do it|go ahead|yes,? please|next step|same again|retry|try again|carry on)\b/i;
-const NEGATED_ACTION_CLAUSE = /\b(?:(?:do\s+not|don't|don’t|never)\s+(?!forget\b|avoid\b|skip\b)|without\s+)(?:create|write|edit|read|browse|search|schedule|send|post|commit|push|delete|remove|run|execute)\b[^.;!?\r\n]*/giu;
+const NEGATED_ACTION_CLAUSE = /\b(?:(?:do\s+not|don't|don’t|never)\s+(?!forget\b|avoid\b|skip\b)|without\s+)(?:use|using|call|calling|invoke|invoking|create|write|edit|read|browse|search|schedule|send|post|commit|push|delete|remove|run|execute)\b(?:(?!\b(?:but|however|instead)\b)[^.;!?\r\n])*/giu;
 const DIRECT_CALCULATION_PATTERN = /\b(?:calculate|compute)\b/i;
 const EXPLICIT_CALCULATION_CAPABILITY_PATTERN = /\b(?:create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|transform|query|design|implement|compile|lint|refactor|summarize|check|file|spreadsheet|workbook|xlsx|calculator|python|code|script|memory|database|web|internet|slack|calendar|connector)\b/i;
 
@@ -200,6 +200,16 @@ function positiveIntentText(value: string): string {
   return value.replace(NEGATED_ACTION_CLAUSE, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function isNegatedExecutionTool(tool: ToolDefinition, negatedClauses: readonly string[]): boolean {
+  const name = tool.name.toLowerCase();
+  return negatedClauses.some(clause => {
+    const codeExecution = /\b(?:code|python|script)\b/i.test(clause)
+      && /^(?:run_code|bash|cli_execute)$/.test(name);
+    const calculator = /\bcalculator\b/i.test(clause) && /calculator/.test(name);
+    return codeExecution || calculator;
+  });
+}
+
 function isSelfContainedCalculation(value: string): boolean {
   if (!DIRECT_CALCULATION_PATTERN.test(value)) return false;
   if (EXPLICIT_CALCULATION_CAPABILITY_PATTERN.test(value)) return false;
@@ -258,7 +268,9 @@ export function selectToolsForTurn(
     deduplicated.push({ tool: candidate, index });
   }
 
-  const message = positiveIntentText(options.message.toLowerCase());
+  const rawMessage = options.message.toLowerCase();
+  const negatedClauses = [...rawMessage.matchAll(NEGATED_ACTION_CLAUSE)].map(match => match[0]);
+  const message = positiveIntentText(rawMessage);
   const messageTokens = tokensOf(message);
   const isContinuation = CONTINUATION_PATTERN.test(message);
   const isAction = ACTION_PATTERN.test(message) || isContinuation;
@@ -284,6 +296,7 @@ export function selectToolsForTurn(
 
   const ranked: Array<{ tool: ToolDefinition; index: number; score: number }> = [];
   for (const { tool, index } of deduplicated) {
+    if (isNegatedExecutionTool(tool, negatedClauses)) continue;
     const normalizedName = tool.name.toLowerCase();
     const nameTokens = tokensOf(normalizedName);
     const metadataTokens = tokensOf(`${tool.description} ${JSON.stringify(tool.parameters)}`);

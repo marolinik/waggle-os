@@ -322,7 +322,7 @@ describe('deterministic 100-point persona scorer', () => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const response = [
       'Runway is 4 months.',
-      'Formula: Runway (months) = Cash Balance ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
       'Biggest assumption: net burn stays constant and no new revenue arrives.',
       'Two actions: reduce monthly burn and increase monthly revenue.',
     ].join('\n');
@@ -349,12 +349,15 @@ describe('deterministic 100-point persona scorer', () => {
       'Two actions: reduce monthly burn and increase monthly revenue.',
     ].join('\n');
     const numericFormulas = [
+      'Formula: Runway = $40,000 ÷ $10,000.',
+      'Formula: Runway = $40,000.00 ÷ $10,000.00.',
       String.raw`\frac{40{,}000}{10{,}000} = 4`,
       String.raw`\frac{40{,}000.00}{10{,}000.00} = 4`,
       String.raw`\frac{40\,000{.}0}{10\,000{.}00} = 4`,
     ];
     const bare = completeResponse('The runway result is four months.');
     const reversed = completeResponse(String.raw`\frac{10{,}000}{40{,}000} = 0.25`);
+    const substringMatch = completeResponse('Formula: Runway = 140000 ÷ 10000.');
     const score = (response: string) => scorePersonaTrial(finance, evidence({
       prompt: finance.prompt,
       response,
@@ -368,7 +371,7 @@ describe('deterministic 100-point persona scorer', () => {
         pointsAwarded: 10,
       });
     }
-    for (const response of [bare, reversed]) {
+    for (const response of [bare, reversed, substringMatch]) {
       expect(score(response).checks.find(check => check.id === 'formula')).toMatchObject({
         passed: false,
         pointsAwarded: 0,

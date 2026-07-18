@@ -147,11 +147,19 @@ export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
   if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
   if (isInlineTextOnlyDraftRequest(message)) return false;
-  return /\b(write|read|edit|modify|create|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
-    || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
-    || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
-    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
-    || isExplicitPlanAuthoringRequest(message);
+  const affirmativeMessage = message.replace(
+    /\b(?:(?:do\s+not|don't|don’t|never)\s+|without\s+)(?:use|using|call|calling|invoke|invoking|create|write|edit|read|browse|search|schedule|send|post|commit|push|delete|remove|run|execute)\b(?:(?!\b(?:but|however|instead)\b)[^.;!?\r\n])*/giu,
+    ' ',
+  );
+  const directCalculation = /\b(?:calculate|compute)\b/i.test(affirmativeMessage);
+  const explicitCalculationCapability = /\b(?:calculator|python|code|script|spreadsheet|workbook|xlsx)\b/i.test(affirmativeMessage);
+  return /\b(write|read|edit|modify|create|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculator|cross-workspace|other workspace)\b/i.test(affirmativeMessage)
+    || (directCalculation && explicitCalculationCapability)
+    || /\b(?:use|using|call|invoke|run)\s+(?:(?:the|a|an)\s+)?(?:calculator|python|code|script|spreadsheet|workbook|xlsx)\b/i.test(affirmativeMessage)
+    || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(affirmativeMessage)
+    || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(affirmativeMessage)
+    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(affirmativeMessage)
+    || isExplicitPlanAuthoringRequest(affirmativeMessage);
 }
 
 function isExclusiveSuppliedOnlyResponseRequest(message: string): boolean {
