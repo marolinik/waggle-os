@@ -119,7 +119,7 @@ const INTENT_BUNDLES: readonly IntentBundle[] = [
     ],
   },
   {
-    pattern: /\b(research|investigate|source|sources|citation|cite|current|latest|docs?|documentation|web|internet|online|benchmark)\b/i,
+    pattern: /\b(research|investigate|find information|source|sources|citation|cite|current|latest|docs?|documentation|web|internet|online|benchmark)\b/i,
     tools: [
       'search_memory', 'perplexity_search', 'tavily_search', 'brave_search',
       'web_search', 'web_fetch', 'read_file', 'query_knowledge',

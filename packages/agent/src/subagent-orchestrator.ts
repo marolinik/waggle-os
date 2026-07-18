@@ -9,8 +9,11 @@
 import { EventEmitter } from 'events';
 import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
+import { selectAgentRunBudget } from './agent-run-budget.js';
 import type { HookRegistry } from './hooks.js';
 import { filterSpawnToolNames, type SpawnSecurityContext } from './subagent-tools.js';
+import { detectTaskShape } from './task-shape.js';
+import { filterAvailableTools, selectToolsForTurn } from './tool-filter.js';
 
 export type WorkerStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -236,7 +239,25 @@ export class SubagentOrchestrator extends EventEmitter {
     // so a workflow worker cannot escape the request's tool restrictions.
     const secCtx = this.config.getSpawnSecurityContext?.();
     const toolNames = filterSpawnToolNames(baseToolNames, secCtx);
-    const tools = this.config.availableTools.filter(t => toolNames.includes(t.name));
+    const eligibleTools = filterAvailableTools(
+      this.config.availableTools.filter(t => toolNames.includes(t.name)),
+    );
+    const tools = selectToolsForTurn(eligibleTools, {
+      message: step.task,
+      preferredToolNames: toolNames,
+      fallbackToEligible: true,
+    }).tools;
+    const taskShape = detectTaskShape(step.task);
+    const runBudget = selectAgentRunBudget({
+      taskShape: taskShape.type,
+      complexity: taskShape.complexity,
+      selectedToolNames: tools.map(tool => tool.name),
+    });
+    const normalizedMaxTurns = Math.floor(step.maxTurns ?? 0);
+    const requestedMaxTurns = Number.isFinite(normalizedMaxTurns) && normalizedMaxTurns >= 1
+      ? normalizedMaxTurns
+      : runBudget.maxTurns;
+    const maxTurns = Math.min(requestedMaxTurns, runBudget.maxTurns);
 
     // Build system prompt with optional context from previous steps
     const systemPrompt = this.buildWorkerContext(step, contextResults);
@@ -249,7 +270,9 @@ export class SubagentOrchestrator extends EventEmitter {
         systemPrompt,
         tools,
         messages: [{ role: 'user', content: step.task }],
-        maxTurns: step.maxTurns ?? 50,
+        ...runBudget,
+        maxTurns,
+        maxToolRounds: Math.min(runBudget.maxToolRounds, Math.max(0, maxTurns - 1)),
         stream: false,
         signal: this.config.signal,
         // SEC: worker loops respect the request's approval gate + governance

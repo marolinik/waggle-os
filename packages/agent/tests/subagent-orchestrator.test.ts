@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SubagentOrchestrator, type WorkflowTemplate, type OrchestratorConfig } from '../src/subagent-orchestrator.js';
 import type { ToolDefinition } from '../src/tools.js';
 import type { AgentLoopConfig, AgentResponse } from '../src/agent-loop.js';
+import {
+  DEFAULT_TURN_SCHEMA_CHAR_LIMIT,
+  DEFAULT_TURN_TOOL_LIMIT,
+  measureOpenAiToolSchemaChars,
+} from '../src/tool-filter.js';
 
 function makeMockTools(): ToolDefinition[] {
   return [
@@ -476,5 +481,72 @@ describe('SubagentOrchestrator', () => {
     const workers = orchestrator.getWorkers();
     expect(workers[0].usage).toEqual({ inputTokens: 200, outputTokens: 100 });
     expect(workers[0].toolsUsed).toEqual(['web_search', 'read_file']);
+  });
+
+  it('bounds explicit group tools and requested turns before invoking the worker loop', async () => {
+    const availableTools = [
+      ...Array.from({ length: 37 }, (_, index) => ({
+        name: `code_tool_${index}`,
+        description: `Run code tests and inspect this implementation.${' x'.repeat(120)}`,
+        parameters: { type: 'object', properties: {} },
+        execute: async () => 'ok',
+      } satisfies ToolDefinition)),
+      {
+        name: 'read_file',
+        description: 'Read a file for code inspection.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => 'content',
+      } satisfies ToolDefinition,
+    ];
+    const boundedRunner = makeMockRunner();
+    const bounded = new SubagentOrchestrator({
+      ...makeConfig(boundedRunner),
+      availableTools,
+    });
+
+    await bounded.runWorkflow({
+      name: 'bounded-worker',
+      description: 'Bound delegated model context',
+      steps: [{
+        name: 'Coder',
+        role: 'coder',
+        task: 'Run code tests and inspect this implementation',
+        tools: availableTools.map((tool) => tool.name),
+        maxTurns: 50,
+      }],
+      aggregation: 'last',
+    });
+
+    const config = boundedRunner.mock.calls[0][0];
+    expect(DEFAULT_TURN_TOOL_LIMIT).toBe(14);
+    expect(DEFAULT_TURN_SCHEMA_CHAR_LIMIT).toBe(8_000);
+    expect(config.tools.length).toBeLessThanOrEqual(14);
+    expect(config.tools.map((tool) => tool.name)).toContain('read_file');
+    expect(measureOpenAiToolSchemaChars(config.tools)).toBeLessThanOrEqual(8_000);
+    expect(config).toMatchObject({
+      maxTurns: 9,
+      maxToolRounds: 8,
+      maxTokenBudget: 80_000,
+      synthesisReserveTokens: 14_000,
+      toolContextBudget: {
+        maxSingleResultChars: 8_000,
+        recentResultCount: 2,
+        historicalResultChars: 750,
+      },
+    });
+
+    await bounded.runWorkflow({
+      name: 'fractional-limit',
+      description: 'Reject a zero-turn fractional limit',
+      steps: [{
+        name: 'Coder',
+        role: 'coder',
+        task: 'Run code tests and inspect this implementation',
+        tools: availableTools.map((tool) => tool.name),
+        maxTurns: 0.5,
+      }],
+      aggregation: 'last',
+    });
+    expect(boundedRunner.mock.calls[1][0].maxTurns).toBe(9);
   });
 });
