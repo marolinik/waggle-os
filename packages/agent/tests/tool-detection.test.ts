@@ -15,7 +15,11 @@ import {
 import { resolveToolCommandInvocation } from '../src/tool-command.js';
 import type { ManifestLoaderDeps } from '../src/tool-manifest-loader.js';
 
-type DetectOpts = ToolDetectionDeps & { manifestLoader?: ManifestLoaderDeps };
+type WindowsAppExecutables = Readonly<Record<string, readonly string[]>>;
+type DetectOpts = ToolDetectionDeps & {
+  manifestLoader?: ManifestLoaderDeps;
+  windowsAppExecutables?: () => WindowsAppExecutables | Promise<WindowsAppExecutables>;
+};
 
 /**
  * Build a deps object that defaults to "nothing exists anywhere".
@@ -31,6 +35,7 @@ function makeDeps(overrides: Partial<DetectOpts> = {}): DetectOpts {
     execVersion: async () => null,
     readJson: async () => null,
     pathFromEnv: () => null,
+    windowsAppExecutables: () => ({}),
     // Hermetic: no third-party adapters unless a test injects them.
     manifestLoader: { readDir: () => [] },
     ...overrides,
@@ -322,6 +327,37 @@ describe('claude-desktop detector', () => {
     expect(t.installed).toBe(true);
     expect(t.installedPath).toBe(installed);
   });
+
+  it('detects Claude Desktop from its registered Windows AppX executable', async () => {
+    const installed =
+      'C:\\Program Files\\WindowsApps\\Claude_1.22209.0.0_x64__pzs8sxrjxfjjc\\app\\Claude.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        exists: async (p) => p === installed,
+        windowsAppExecutables: () => ({ 'claude-desktop': [installed] }),
+      }),
+    );
+    const t = result.tools.find((x) => x.id === 'claude-desktop')!;
+    expect(t.installed).toBe(true);
+    expect(t.installedPath).toBe(installed);
+  });
+
+  it('keeps conventional detection available when AppX discovery throws synchronously', async () => {
+    const installed =
+      'C:\\Users\\test\\AppData\\Local\\AnthropicClaude\\Claude.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        exists: async (p) => p === installed,
+        windowsAppExecutables: () => { throw new Error('AppX unavailable'); },
+      }),
+    );
+    expect(result.tools.find((tool) => tool.id === 'claude-desktop')).toMatchObject({
+      installed: true,
+      installedPath: installed,
+    });
+  });
 });
 
 describe('extended-cohort detectors (Codex / Hermes / OpenClaw — Phase 4)', () => {
@@ -568,6 +604,38 @@ describe('extended-cohort detectors (Codex / Hermes / OpenClaw — Phase 4)', ()
       installed: true,
       installedPath: cli,
       launchable: false,
+    });
+    expect(result.tools.find((tool) => tool.id === 'codex-desktop')).toMatchObject({
+      installed: true,
+      installedPath: desktop,
+      launchable: true,
+    });
+  });
+
+  it('detects Codex Desktop AppX when a healthy npm Codex CLI shadows the Store resource', async () => {
+    const cli = 'C:\\Users\\test\\AppData\\Roaming\\npm\\codex.cmd';
+    const desktop =
+      'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.715.2305.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe';
+    let appxQueries = 0;
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        exists: async (p) => p === cli || p === desktop,
+        pathFromEnv: (name) => name === 'codex' ? cli : null,
+        execVersion: async (binary) => binary === cli ? 'codex-cli 0.144.1' : null,
+        windowsAppExecutables: () => {
+          appxQueries++;
+          return { 'codex-desktop': [desktop] };
+        },
+      }),
+    );
+
+    expect(appxQueries).toBe(1);
+    expect(result.tools.find((tool) => tool.id === 'codex')).toMatchObject({
+      installed: true,
+      installedPath: cli,
+      version: 'codex-cli 0.144.1',
+      launchable: true,
     });
     expect(result.tools.find((tool) => tool.id === 'codex-desktop')).toMatchObject({
       installed: true,

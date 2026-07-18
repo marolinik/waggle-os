@@ -1,17 +1,10 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
+import { SUPPORTED_TOOLS } from '@waggle/shared';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&skipBriefing=true&tier=power';
-const TOOL_IDS = [
-  'claude-code',
-  'claude-desktop',
-  'cursor',
-  'codex',
-  'codex-desktop',
-  'hermes',
-  'openclaw',
-] as const;
+const TOOL_IDS = SUPPORTED_TOOLS;
 const SAFE_VERSION_ARGS: Partial<Record<typeof TOOL_IDS[number], string[]>> = {
   'claude-code': ['--version'],
   codex: ['--version'],
@@ -44,6 +37,7 @@ type DetectedTool = {
   installedPath: string | null;
   launchable?: boolean;
   hookCapable?: boolean;
+  builtin?: boolean;
   capabilities?: {
     interactiveLaunch: boolean;
     headlessTask: boolean;
@@ -195,7 +189,9 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
     expect(detectionResponse.ok()).toBe(true);
     const detection = await detectionResponse.json() as DetectionEnvelope;
     expect(detection.platform).toBe('win32');
-    expect(detection.tools.map(tool => tool.id)).toEqual(TOOL_IDS);
+    expect(
+      detection.tools.filter(tool => tool.builtin === true).map(tool => tool.id),
+    ).toEqual(TOOL_IDS);
 
     await page.goto(routeWithSkip('/launcher?watch=1'), { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.waggle-sidebar, [role="navigation"], main', { timeout: 15_000 });
