@@ -1948,6 +1948,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             isAutomatedTurn,
             explicitCapabilityRequest,
             taskComplexity: turnTaskShape.complexity,
+            exclusiveSuppliedOnlyResponseContract: isExclusiveSuppliedOnlyResponseRequest(agentMessage),
           });
           systemPrompt = ambiguityPrefix
             + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled, packageMode)

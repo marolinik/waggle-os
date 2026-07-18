@@ -13,6 +13,7 @@ export interface ChatPromptPackageModeInput {
   isAutomatedTurn: boolean;
   explicitCapabilityRequest: boolean;
   taskComplexity: 'simple' | 'moderate' | 'complex';
+  exclusiveSuppliedOnlyResponseContract?: boolean;
 }
 
 interface BehavioralSpecForPackaging {
@@ -48,6 +49,11 @@ const CONVERSATIONAL_OPERATING_CONTRACT = `# CONVERSATIONAL OPERATING CONTRACT
  */
 export function selectChatPromptPackageMode(input: ChatPromptPackageModeInput): ChatPromptPackageMode {
   const message = input.message.trim();
+  if (input.exclusiveSuppliedOnlyResponseContract) {
+    if (!message || input.selectedToolCount !== 0) return 'full';
+    if (input.autonomyLevel !== 'normal' || input.isAutomatedTurn || input.explicitCapabilityRequest) return 'full';
+    return 'compact';
+  }
   if (!message || message.length > 240) return 'full';
   if (input.selectedToolCount !== 0) return 'full';
   if (input.autonomyLevel !== 'normal' || input.isAutomatedTurn) return 'full';

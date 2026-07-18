@@ -70,6 +70,18 @@ describe('chat prompt packaging', () => {
     expect(selectChatPromptPackageMode(baseModeInput)).toBe('compact');
   });
 
+  it('uses compact mode for a tool-free supplied-only exclusive contract', () => {
+    const input = {
+      ...baseModeInput,
+      message: `Return exactly one supplied-only JSON envelope and no surrounding prose. ${'x'.repeat(500)}`,
+      taskComplexity: 'complex' as const,
+      exclusiveSuppliedOnlyResponseContract: true,
+    };
+
+    expect(selectChatPromptPackageMode(input)).toBe('compact');
+    expect(selectChatPromptPackageMode({ ...input, selectedToolCount: 1 })).toBe('full');
+  });
+
   it.each([
     ['a selected tool', { selectedToolCount: 1 }],
     ['elevated autonomy', { autonomyLevel: 'trusted' as const }],
