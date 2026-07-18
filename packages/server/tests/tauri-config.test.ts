@@ -995,6 +995,9 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain("'EMBEDDING_PROVIDER'");
     expect(script).toContain('environmentSnapshot');
     expect(script).toContain('environmentRestored');
+    expect(script).toContain("$isolationPath = Join-Path $scratchRoot 'isolated-path'");
+    expect(script).toContain('$env:PATH = $isolationPath');
+    expect(script).not.toContain('$env:PATH = "$env:SystemRoot\\System32;$env:SystemRoot"');
     expect(script).toContain('/api/embedding/status');
     expect(script).toContain('/api/local-inference/status');
     expect(script).toContain('dockerRequired');

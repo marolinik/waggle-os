@@ -700,7 +700,9 @@ try {
   $env:OLLAMA_HOST = "http://127.0.0.1:$(Get-FreeTcpPort)"
   $env:VLLM_HOST = "http://127.0.0.1:$(Get-FreeTcpPort)"
   $env:WAGGLE_SKIP_MARKETPLACE_SYNC = '1'
-  $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+  $isolationPath = Join-Path $scratchRoot 'isolated-path'
+  New-Item -ItemType Directory -Path $isolationPath -Force | Out-Null
+  $env:PATH = $isolationPath
   foreach ($name in $environmentNamesToClear) {
     [Environment]::SetEnvironmentVariable($name, $null, 'Process')
   }
