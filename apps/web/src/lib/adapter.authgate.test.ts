@@ -295,7 +295,7 @@ describe('P1b auth gate', () => {
     vi.useFakeTimers();
     const caller = new AbortController();
     fetchSpy.mockImplementation(async (_url, init) => new Promise<Response>((_resolve, reject) => {
-      const signal = init?.signal;
+      const signal = (init as RequestInit | undefined)?.signal;
       if (!(signal instanceof AbortSignal)) throw new Error('missing request signal');
       if (signal.aborted) {
         reject(new DOMException('The operation was aborted', 'AbortError'));
@@ -329,7 +329,7 @@ describe('P1b auth gate', () => {
     const a = new LocalAdapter(BASE);
     const requestSignals: AbortSignal[] = [];
     fetchSpy.mockImplementation(async (_url, init) => new Promise<Response>((_resolve, reject) => {
-      const signal = init?.signal;
+      const signal = (init as RequestInit | undefined)?.signal;
       if (!(signal instanceof AbortSignal)) throw new Error('missing request signal');
       requestSignals.push(signal);
       signal.addEventListener(
