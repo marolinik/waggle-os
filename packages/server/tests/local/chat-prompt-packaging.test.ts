@@ -128,6 +128,31 @@ describe('chat prompt packaging', () => {
     expect(filterGatedToolsForConversationalTurn(tools, message, 'normal')).toEqual([]);
   });
 
+  it('keeps a supplied-only exclusive verifier contract tool-free', () => {
+    const message = 'A teammate claims the product is production-ready because the web build passed. Return exactly one <waggle-verifier-report-v1>...</waggle-verifier-report-v1> JSON envelope and no text before or after it. Use evidenceScope "supplied_only". Do not create or edit files.';
+    const tools = [
+      { name: 'search_memory' },
+      { name: 'read_file' },
+      { name: 'search_files' },
+      { name: 'read_skill' },
+      { name: 'write_file' },
+    ];
+
+    expect(filterGatedToolsForConversationalTurn(tools, message, 'normal')).toEqual([]);
+  });
+
+  it('retains read tools for an explicit inspection that forbids changes', () => {
+    const message = 'Inspect this repository for hardcoded secrets. Do not create or edit anything.';
+    const tools = [
+      { name: 'read_file' },
+      { name: 'search_files' },
+      { name: 'write_file' },
+    ];
+
+    expect(filterGatedToolsForConversationalTurn(tools, message, 'normal'))
+      .toEqual([{ name: 'read_file' }, { name: 'search_files' }]);
+  });
+
   it('requires executive-assistant timed agendas to fill the requested duration', () => {
     expect(getPersona('executive-assistant')?.systemPrompt)
       .toMatch(/time blocks.*add up to the requested duration/i);

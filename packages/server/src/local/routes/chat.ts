@@ -145,12 +145,20 @@ export function resolveChatAncestry(
 
 export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
+  if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
   if (isInlineTextOnlyDraftRequest(message)) return false;
   return /\b(write|read|edit|modify|create|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
     || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
     || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
     || isExplicitPlanAuthoringRequest(message);
+}
+
+function isExclusiveSuppliedOnlyResponseRequest(message: string): boolean {
+  const suppliedOnly = /\b(?:use only (?:the )?supplied|only supplied|supplied[_ -]only)\b/i.test(message);
+  const exclusiveEnvelope = /\b(?:return|emit|respond with)\b[\s\S]{0,240}\b(?:exactly one|one)\b[\s\S]{0,180}\b(?:json|xml|envelope|payload)\b/i.test(message);
+  const noSurroundingText = /\b(?:no text before or after|nothing (?:before or after|outside|else)|no surrounding (?:text|prose))\b/i.test(message);
+  return suppliedOnly && exclusiveEnvelope && noSurroundingText;
 }
 
 function isInlineTextOnlyDraftRequest(message: string): boolean {
@@ -197,6 +205,7 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
   autonomyLevel: AutonomyLevel,
   mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): T[] {
+  if (isExclusiveSuppliedOnlyResponseRequest(message)) return [];
   let eligibleTools = mutationPolicy.denyMemoryPersistence
     ? tools.filter(tool => tool.name !== 'save_memory')
     : tools;

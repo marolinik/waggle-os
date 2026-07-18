@@ -96,6 +96,8 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/schema, field set, or tagged envelope alone is not exclusive/i);
     expect(prompt).toMatch(/one requested payload and nothing else/i);
     expect(prompt).toMatch(/add no headings, commentary, offers, extra fields, or second VERDICT line/i);
+    expect(prompt).toMatch(/never wrap.*Markdown code fence/i);
+    expect(prompt).toMatch(/preserve.*JSON value types.*numeric literals.*unquoted/is);
     expect(prompt).toMatch(/syntax\/shape override never relaxes read-only, evidence, attribution, anti-fabrication/is);
     expect(prompt).toMatch(/Never emit a fixed result contrary to evidence/i);
     expect(prompt).toMatch(/explain the incompatibility rather than fabricate/i);
