@@ -10,6 +10,7 @@
  *   WAGGLE_E2E_SKIP_LITELLM=1 npx playwright test tests/vision/personas.spec.ts
  */
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -40,6 +41,31 @@ const ARTIFACTS = resolve(
 const ACCEPTANCE_RUN_ID = process.env.WAGGLE_PERSONA_RUN_ID?.trim() || null;
 const EXPECTED_LLM_PROVIDER = process.env.WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER?.trim() || null;
 const EXPECTED_LLM_DETAIL = process.env.WAGGLE_PERSONA_EXPECTED_LLM_DETAIL?.trim() || null;
+
+function gitOutput(args: string[]): string | null {
+  try {
+    return execFileSync('git', args, {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+const SOURCE_REVISION = gitOutput(['rev-parse', 'HEAD']);
+const RELEVANT_WORKTREE_STATUS = gitOutput([
+  'status',
+  '--porcelain',
+  '--untracked-files=all',
+  '--',
+  '.',
+  ':(exclude)output/**',
+  ':(exclude)test-results/**',
+  ':(exclude)playwright-report/**',
+  ':(exclude).playwright-cli/**',
+]);
 const RUN_MODE = resolvePersonaRunMode(
   process.env.WAGGLE_PERSONA_NON_GATING_DEBUG,
   process.env.WAGGLE_PERSONA_REPEATS,
@@ -698,6 +724,21 @@ test('persona harness preserves denial evidence and exits at the absolute body d
 
 test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'} (${REPEATS} repeats each)`, () => {
   test.beforeAll(async ({ request }) => {
+    if (RUN_MODE.gating) {
+      expect(
+        process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER,
+        'paid acceptance requires a freshly built server (WAGGLE_E2E_REUSE_EXISTING_SERVER=0)',
+      ).toBe('0');
+      expect(ACCEPTANCE_RUN_ID, 'paid acceptance requires WAGGLE_PERSONA_RUN_ID').toMatch(/\S/);
+      expect(
+        EXPECTED_LLM_PROVIDER,
+        'paid acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER',
+      ).toMatch(/\S/);
+      expect(
+        EXPECTED_LLM_DETAIL,
+        'paid acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_DETAIL',
+      ).toMatch(/\S/);
+    }
     const response = await request.get(`${BASE}/api/personas`);
     expect(response.ok(), 'live persona catalog is available before acceptance trials').toBe(true);
     const body = await response.json() as { personas?: Array<{ id?: string }> };
@@ -751,6 +792,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           : [];
         const inputTokens = numeric(usage?.inputTokens ?? usage?.prompt_tokens ?? tokens?.input);
         const outputTokens = numeric(usage?.outputTokens ?? usage?.completion_tokens ?? tokens?.output);
+        const estimatedCostUsd = numeric(wire.done?.cost);
         const contextMetrics = asRecord(wire.done?.contextMetrics);
         const toolCatalogCount = finiteContextMetric(contextMetrics, 'toolCatalogCount');
         const toolEligibleCount = finiteContextMetric(contextMetrics, 'toolEligibleCount');
@@ -890,10 +932,15 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         };
         const score = scorePersonaTrial(persona, evidence);
         const artifact = {
-          schemaVersion: 6,
+          schemaVersion: 7,
           runId: ACCEPTANCE_RUN_ID,
           runStartedAt,
           runCompletedAt: new Date().toISOString(),
+          source: {
+            gitRevision: SOURCE_REVISION,
+            relevantWorkingTreeClean: RELEVANT_WORKTREE_STATUS === '',
+            relevantWorkingTreeStatus: RELEVANT_WORKTREE_STATUS?.split(/\r?\n/).filter(Boolean) ?? null,
+          },
           persona: {
             id: persona.id,
             label: persona.label,
@@ -920,6 +967,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             doneEventCount,
             httpStatus: wire.httpStatus,
             model: wire.done?.model ?? null,
+            estimatedCostUsd,
             durationMs: wire.durationMs,
             tokens: { input: inputTokens, output: outputTokens },
             contextMetrics,
@@ -1066,6 +1114,9 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         expect(providerOutputTokens, 'provider output tokens match parsed usage').toBe(outputTokens);
         expect(providerInputTokens, 'provider input tokens are positive').toBeGreaterThan(0);
         expect(providerOutputTokens, 'provider output tokens are positive').toBeGreaterThan(0);
+        if (RUN_MODE.gating) {
+          expect(estimatedCostUsd, 'Waggle returned a positive paid-call cost estimate').toBeGreaterThan(0);
+        }
         if (RUN_MODE.gating) {
           expect(
             score.passed,

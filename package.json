@@ -41,7 +41,8 @@
     "test:visual": "node node_modules/playwright/cli.js test tests/visual --project=chromium --reporter=list",
     "test:all": "node node_modules/playwright/cli.js test --reporter=list",
     "test:retry": "node node_modules/playwright/cli.js test --last-failed --reporter=list",
-    "test:fast": "node node_modules/playwright/cli.js test -c playwright-e2e.config.ts --project=chromium --grep-invert=\"4\\.9|B8\\.5\" --reporter=list"
+    "test:fast": "node node_modules/playwright/cli.js test -c playwright-e2e.config.ts --project=chromium --grep-invert=\"4\\.9|B8\\.5\" --reporter=list",
+    "persona:seal": "tsx scripts/seal-persona-acceptance.ts"
   },
   "author": "Marko Markovic",
   "license": "MIT",
