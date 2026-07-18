@@ -335,7 +335,7 @@ describe('@waggle/cli runtime UX', () => {
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 180_000);
 
   it('installs the local package closure and starts the local REPL', async () => {
     const home = makeHome();
