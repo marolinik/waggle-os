@@ -145,11 +145,23 @@ export function resolveChatAncestry(
 
 export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
+  if (isInlineTextOnlyDraftRequest(message)) return false;
   return /\b(write|read|edit|modify|create|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
     || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
     || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
     || isExplicitPlanAuthoringRequest(message);
+}
+
+function isInlineTextOnlyDraftRequest(message: string): boolean {
+  if (!/\b(?:draft|prepare|write)\b/i.test(message) || isExplicitPlanAuthoringRequest(message)) {
+    return false;
+  }
+  const affirmativeRequest = message.replace(
+    /\b(?:do not|don't|never|without)\b[^.?!]*(?:[.?!]|$)/gi,
+    ' ',
+  );
+  return !/\b(?:file|docx|pdf|document|artifact|export|download|code|bug|repo(?:sitory)?|terminal|shell|bash|command|test suite|database|sql|etl|pipeline|previous|prior|saved|memory|notes?|schedule|calendar|send|post|delegate|agent|browser|website|url|calculate|calculator|compute)\b/i.test(affirmativeRequest);
 }
 
 function isExplicitPlanAuthoringRequest(message: string): boolean {

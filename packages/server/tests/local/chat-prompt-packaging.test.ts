@@ -1,4 +1,4 @@
-import { BEHAVIORAL_SPEC, type AgentPersona, type AssembledPrompt } from '@waggle/agent';
+import { BEHAVIORAL_SPEC, getPersona, type AgentPersona, type AssembledPrompt } from '@waggle/agent';
 import { describe, expect, it } from 'vitest';
 import {
   behavioralRulesForPromptPackage,
@@ -12,6 +12,7 @@ import {
 } from '../../src/local/routes/chat-helpers.js';
 import {
   conversationalToolPolicyPrompt,
+  filterGatedToolsForConversationalTurn,
   filterPluginToolsForConversationalTurn,
   isExplicitGatedToolRequest,
 } from '../../src/local/routes/chat.js';
@@ -111,6 +112,25 @@ describe('chat prompt packaging', () => {
     expect(policy).toMatch(/no executable tools are available/i);
     expect(policy).toMatch(/plain text/i);
     expect(policy).toMatch(/never emit.*tool-call syntax/i);
+  });
+
+  it('keeps an inline meeting-agenda draft tool-free', () => {
+    const message = 'Draft a 30-minute launch-readiness meeting agenda with time blocks, desired decisions, and a short pre-read checklist. Participants are product, engineering, QA, and support. Do not create a calendar event and do not ask follow-up questions.';
+    const tools = [
+      { name: 'search_memory' },
+      { name: 'read_file' },
+      { name: 'generate_docx' },
+      { name: 'write_file' },
+      { name: 'read_skill' },
+    ];
+
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    expect(filterGatedToolsForConversationalTurn(tools, message, 'normal')).toEqual([]);
+  });
+
+  it('requires executive-assistant timed agendas to fill the requested duration', () => {
+    expect(getPersona('executive-assistant')?.systemPrompt)
+      .toMatch(/time blocks.*add up to the requested duration/i);
   });
 
   it('keeps optional first-turn questions and greetings conditional in assembled compact prompts', () => {

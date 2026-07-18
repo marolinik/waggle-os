@@ -86,16 +86,44 @@ export function summarizeDroppedContext(messages: Array<{ role: string; content:
 export function buildSkillPromptSection(skills: Array<{ name: string; content: string }>): string {
   if (skills.length === 0) return '';
   let section = '\n\n# Active Skills\n\n';
-  section += 'You have specialized skills loaded. **When a user request matches a loaded skill, follow that skill\'s instructions** instead of generic behavior. Skills represent curated, high-quality workflows.\n\n';
+  section += 'You have specialized skills loaded. The registry below is for routing only; it does not contain the complete workflows.\n\n';
   section += '## Skill-Aware Routing\n';
   section += 'Before responding to any substantial user request:\n';
   section += '1. Check if any loaded skill matches the request (catch-up → catch-up skill, draft → draft-memo skill, etc.)\n';
   section += '2. If a skill matches, follow its structured workflow — it produces better output than ad-hoc responses\n';
   section += '3. If no skill matches but one could help, mention it: "I have a [skill-name] skill that could help with this"\n';
+  section += 'Before applying a matching skill, call read_skill with its exact name to load the complete workflow.\n';
   section += '4. Use suggest_skill to find relevant skills when unsure\n\n';
   section += `## Loaded Skills (${skills.length})\n`;
   for (const skill of skills) {
-    section += `\n### ${skill.name}\n${skill.content}\n`;
+    section += `\n### ${skill.name}\n${summarizeSkillForRouting(skill.content)}\n`;
   }
   return section;
+}
+
+function summarizeSkillForRouting(content: string): string {
+  const lines = content.split(/\r?\n/);
+  const summary: string[] = [];
+  let inFrontmatter = lines[0]?.trim() === '---';
+
+  for (let index = inFrontmatter ? 1 : 0; index < lines.length; index += 1) {
+    const line = lines[index]?.trim() ?? '';
+    if (inFrontmatter) {
+      if (line === '---') inFrontmatter = false;
+      continue;
+    }
+    if (!line) {
+      if (summary.length > 0) break;
+      continue;
+    }
+    if (/^#{1,6}\s/.test(line) || /^(?:[-*+]\s|\d+[.)]\s)/.test(line)) {
+      if (summary.length > 0) break;
+      continue;
+    }
+    summary.push(line);
+    if (summary.join(' ').length >= 240) break;
+  }
+
+  const text = summary.join(' ').trim();
+  return text ? `${text.slice(0, 240)}${text.length > 240 ? '...' : ''}` : 'Open with read_skill to load the complete workflow.';
 }
