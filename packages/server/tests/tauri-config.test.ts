@@ -708,6 +708,31 @@ describe('Tauri Production Configuration', () => {
     expect(missing).toEqual([]);
   });
 
+  it('stages the patched archive parser required by dynamic sidecar imports', () => {
+    const stageScript = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'stage-sidecar-deps.mjs'),
+      'utf-8',
+    );
+    expect(stageScript).toContain("const DYNAMIC_RUNTIME_ROOTS = new Set(['adm-zip']);");
+    expect(stageScript).toContain('adm-zip runtime root must be version 0.6.0 or newer');
+
+    const stagedManifest = path.join(
+      TAURI_DIR,
+      'resources',
+      'node_modules',
+      'adm-zip',
+      'package.json',
+    );
+    if (!fs.existsSync(path.join(TAURI_DIR, 'resources', 'node_modules'))) return;
+
+    expect(fs.existsSync(stagedManifest)).toBe(true);
+    const { version } = JSON.parse(fs.readFileSync(stagedManifest, 'utf-8')) as {
+      version: string;
+    };
+    const [major, minor] = version.split('.').map(Number);
+    expect(major > 0 || minor >= 6).toBe(true);
+  });
+
   it.runIf(fs.existsSync(path.join(TAURI_DIR, 'resources', 'node_modules')))(
     'stages only runtime payloads for first-party packages',
     () => {

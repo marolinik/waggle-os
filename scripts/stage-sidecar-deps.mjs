@@ -51,6 +51,9 @@ const HOOK_RUNTIME_ROOTS = new Set([
   '@waggle/hive-mind-hooks-openclaw',
   'waggle-memory-mcp',
 ]);
+// These are loaded through computed require() calls, so esbuild's metafile
+// cannot discover them even though installed desktop features require them.
+const DYNAMIC_RUNTIME_ROOTS = new Set(['adm-zip']);
 
 const platform = process.platform;
 const arch = process.env.TARGET_ARCH || process.arch;
@@ -602,13 +605,27 @@ fs.rmSync(stageDir, { recursive: true, force: true });
 fs.mkdirSync(stageDir, { recursive: true });
 
 const externals = readExternalPackages();
-const runtimeRoots = new Set([...externals, ...HOOK_RUNTIME_ROOTS]);
+const runtimeRoots = new Set([
+  ...externals,
+  ...HOOK_RUNTIME_ROOTS,
+  ...DYNAMIC_RUNTIME_ROOTS,
+]);
 const staged = [...runtimeRoots].filter((n) => !SKIP.has(n)).sort();
 const skipped = [...externals].filter((n) => SKIP.has(n)).sort();
 console.log(`[stage-sidecar-deps] Bundle/runtime roots: ${runtimeRoots.size} (${staged.length} to stage, ${skipped.length} skipped)`);
 if (skipped.length) console.log(`[stage-sidecar-deps]   skipped: ${skipped.join(', ')}`);
 
 const closure = stageClosure(runtimeRoots);
+const archiveParser = readManifest(path.join(stageDir, 'adm-zip'));
+const [archiveParserMajor, archiveParserMinor] = String(archiveParser.version || '')
+  .split('.')
+  .map(Number);
+if (!(archiveParserMajor > 0 || archiveParserMinor >= 6)) {
+  console.error(
+    '[stage-sidecar-deps] FATAL - adm-zip runtime root must be version 0.6.0 or newer',
+  );
+  process.exit(1);
+}
 
 pruneOnnxRuntime();
 pruneSkipListed(stageDir);
