@@ -108,6 +108,9 @@ interface IntentBundle {
 
 const ACTION_PATTERN = /\b(create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
 const CONTINUATION_PATTERN = /\b(continue|proceed|do it|go ahead|yes,? please|next step|same again|retry|try again|carry on)\b/i;
+const NEGATED_ACTION_CLAUSE = /\b(?:(?:do\s+not|don't|don’t|never)\s+(?!forget\b|avoid\b|skip\b)|without\s+)(?:create|write|edit|read|browse|search|schedule|send|post|commit|push|delete|remove|run|execute)\b[^.;!?\r\n]*/giu;
+const DIRECT_CALCULATION_PATTERN = /\b(?:calculate|compute)\b/i;
+const EXPLICIT_CALCULATION_CAPABILITY_PATTERN = /\b(?:create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|transform|query|design|implement|compile|lint|refactor|summarize|check|file|spreadsheet|workbook|xlsx|calculator|python|code|script|memory|database|web|internet|slack|calendar|connector)\b/i;
 
 const INTENT_BUNDLES: readonly IntentBundle[] = [
   {
@@ -193,6 +196,16 @@ function overlapCount(left: ReadonlySet<string>, right: ReadonlySet<string>): nu
   return count;
 }
 
+function positiveIntentText(value: string): string {
+  return value.replace(NEGATED_ACTION_CLAUSE, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function isSelfContainedCalculation(value: string): boolean {
+  if (!DIRECT_CALCULATION_PATTERN.test(value)) return false;
+  if (EXPLICIT_CALCULATION_CAPABILITY_PATTERN.test(value)) return false;
+  return (value.match(/(?:^|[^\p{L}\p{N}])[-+]?\d[\d,.]*/gu) ?? []).length >= 2;
+}
+
 function toOpenAiTool(tool: ToolDefinition): {
   type: 'function';
   function: {
@@ -245,7 +258,7 @@ export function selectToolsForTurn(
     deduplicated.push({ tool: candidate, index });
   }
 
-  const message = options.message.toLowerCase();
+  const message = positiveIntentText(options.message.toLowerCase());
   const messageTokens = tokensOf(message);
   const isContinuation = CONTINUATION_PATTERN.test(message);
   const isAction = ACTION_PATTERN.test(message) || isContinuation;
@@ -256,6 +269,15 @@ export function selectToolsForTurn(
   const mandatory = new Set(options.mandatoryToolNames ?? []);
   const external = new Set(options.externalToolNames ?? []);
   const recent = new Set(Array.from(new Set(options.recentToolNames ?? [])).slice(-4));
+
+  if (mandatory.size === 0 && isSelfContainedCalculation(message)) {
+    return {
+      tools: [],
+      schemaChars: 2,
+      omittedCount: deduplicated.length,
+    };
+  }
+
   const historyTokens = tokensOf(
     (options.recentMessages ?? []).slice(-4).map(entry => entry.content).join(' '),
   );

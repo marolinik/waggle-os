@@ -254,6 +254,46 @@ describe('selectToolsForTurn - bounded per-turn model context', () => {
     expect(selected.schemaChars).toBe(2);
   });
 
+  it('keeps the self-contained finance acceptance calculation tool-free', () => {
+    const financeTools = [
+      selectorTool('generate_xlsx', 'Create a runway spreadsheet and financial model'),
+      selectorTool('read_file', 'Read files containing financial inputs'),
+      selectorTool('search_memory', 'Search saved financial data'),
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('create_schedule', 'Create schedules and recurring reminders'),
+    ];
+    const selected = selectToolsForTurn(financeTools, {
+      message: 'Cash is 40000 dollars, monthly burn is 10000 dollars, and revenue is zero. Calculate runway in months, state the formula, name the biggest assumption, and give two actions that improve runway. Do not create files or schedules.',
+      preferredToolNames: getPersona('finance-owner')?.tools ?? [],
+    });
+
+    expect(selected.tools).toEqual([]);
+    expect(selected.schemaChars).toBe(2);
+  });
+
+  it('keeps an explicit positive capability attached to a calculation', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('create_schedule', 'Create schedules and recurring reminders'),
+      selectorTool('run_code', 'Calculate values with code'),
+    ], {
+      message: 'Calculate 40000 divided by 10000 and create a schedule with the result.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('create_schedule');
+  });
+
+  it('keeps an explicit external send capability attached to a calculation', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('plugin_slack_send_message', 'Send a Slack message'),
+      selectorTool('run_code', 'Calculate values with code'),
+    ], {
+      message: 'Calculate 40000 divided by 10000 and send the result to Slack.',
+      externalToolNames: ['plugin_slack_send_message'],
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('plugin_slack_send_message');
+  });
+
   it('selects an explicitly relevant external tool without exposing unrelated externals', () => {
     const candidates = [
       selectorTool('plugin_slack_send_message', 'Send a Slack message'),

@@ -67,8 +67,8 @@ const primaryResearchDomains = [
 const runwayAssertionPrefix = String.raw`(?<!incorrect )(?<!wrong )\b(?:formula|runway(?:\s*\(months\))?)\b(?:(?!\b(?:do\s+not|don't|not|never|avoid|cannot|can't|incorrect|wrong)\b)[\s\S]){0,180}`;
 const runwayAssertionSuffix = String.raw`(?![^.\r\n]{0,60}\b(?:incorrect|wrong)\b)`;
 const runwayFormulaPattern = new RegExp([
-  `${runwayAssertionPrefix}${String.raw`40[,.]?000\s*(?:/|divided by)\s*10[,.]?000`}${runwayAssertionSuffix}`,
-  `${runwayAssertionPrefix}${String.raw`cash(?:\s+balance)?\s*(?:/|divided by)\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn|net\s+burn|burn)`}${runwayAssertionSuffix}`,
+  `${runwayAssertionPrefix}${String.raw`40[,.]?000\s*(?:/|÷|divided by)\s*10[,.]?000`}${runwayAssertionSuffix}`,
+  `${runwayAssertionPrefix}${String.raw`cash(?:\s+balance)?\s*(?:/|÷|divided by)\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn|net\s+burn|burn)`}${runwayAssertionSuffix}`,
   `${runwayAssertionPrefix}${String.raw`\\frac\s*\{\s*\\text\s*\{\s*cash(?:\s+balance)?\s*\}\s*\}\s*\{\s*\\text\s*\{\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn)\s*\}\s*\}`}${runwayAssertionSuffix}`,
   `${runwayAssertionPrefix}${String.raw`\\frac\s*\{\s*\\?\$?\s*40(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}\s*\{\s*\\?\$?\s*10(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}`}${runwayAssertionSuffix}`,
 ].join('|'), 'i');

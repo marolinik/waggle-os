@@ -318,6 +318,28 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 
+  it('accepts the exact Unicode division formula returned by the paid finance trial', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway is 4 months.',
+      'Formula: Runway (months) = Cash Balance ÷ Net Monthly Burn Rate.',
+      'Biggest assumption: net burn stays constant and no new revenue arrives.',
+      'Two actions: reduce monthly burn and increase monthly revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'formula')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it('accepts numeric TeX division but rejects a bare four-month result', () => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const completeResponse = (formula: string) => [
