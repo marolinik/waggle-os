@@ -147,6 +147,24 @@ async function findRoutableCloudFallback(server: FastifyInstance): Promise<strin
   return null;
 }
 
+function findBuiltInProxyFamilyFallback(
+  server: FastifyInstance,
+  preferredProvider: string | null,
+): string | null {
+  const activeProvider = server.agentState?.llmProvider;
+  if (
+    !preferredProvider
+    || activeProvider?.provider !== 'anthropic-proxy'
+    || activeProvider.health === 'unavailable'
+    || !providerIsReady(server, 'openrouter')
+  ) {
+    return null;
+  }
+  return PREFERRED_CLOUD_FALLBACKS.openrouter
+    .find(model => model.startsWith(`openrouter/${preferredProvider}/`))
+    ?? null;
+}
+
 export async function fetchOllamaRoutingModels(): Promise<OllamaRoutingModel[]> {
   const endpoint = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
   const controller = new AbortController();
@@ -220,6 +238,12 @@ export async function resolveUsableModel(
       return canonicalCurrent;
     }
   }
+
+  // The built-in proxy can route a known OpenRouter model directly. Preserve
+  // the preferred model family without depending on a live catalog fetch;
+  // the completion request remains the authority for current model validity.
+  const proxyFamilyFallback = findBuiltInProxyFamilyFallback(server, preferredProvider);
+  if (proxyFamilyFallback) return proxyFamilyFallback;
 
   const cloudFallback = await findRoutableCloudFallback(server);
   if (cloudFallback) return cloudFallback;

@@ -524,6 +524,38 @@ describe('LiteLLM Management API', () => {
     }
   });
 
+  it('routes a preferred Claude alias through the built-in OpenRouter proxy without catalog discovery', async () => {
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = 'claude-sonnet-4-6';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('openrouter', 'openrouter-direct-fallback-test-key');
+    let catalogRequests = 0;
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('https://')) catalogRequests += 1;
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'minicpm5-fable:1b' }] }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, 'claude-sonnet-4-6'))
+        .resolves.toBe('openrouter/anthropic/claude-sonnet-5');
+      expect(catalogRequests).toBe(0);
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
+    }
+  });
+
   it('keeps an explicit built-in proxy model exact when managed LiteLLM catalog state is stale', async () => {
     const requestedModel = 'openrouter/openai/gpt-5.3-codex';
     const fallbackModel = 'google/gemini-2.5-flash';
