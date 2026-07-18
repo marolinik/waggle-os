@@ -1,12 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SubagentOrchestrator, type WorkflowTemplate, type OrchestratorConfig } from '../src/subagent-orchestrator.js';
+import {
+  SubagentOrchestrator,
+  type WorkflowStep,
+  type WorkflowTemplate,
+  type OrchestratorConfig,
+} from '../src/subagent-orchestrator.js';
 import type { ToolDefinition } from '../src/tools.js';
 import type { AgentLoopConfig, AgentResponse } from '../src/agent-loop.js';
+import { HookRegistry } from '../src/hooks.js';
 import {
   DEFAULT_TURN_SCHEMA_CHAR_LIMIT,
   DEFAULT_TURN_TOOL_LIMIT,
   measureOpenAiToolSchemaChars,
 } from '../src/tool-filter.js';
+
+const EXPECTED_MAX_WORKFLOW_STEPS = 32;
+const EXPECTED_MAX_WORKFLOW_CONCURRENCY = 5;
+const EXPECTED_MAX_WORKFLOW_TURNS = 96;
+const EXPECTED_MAX_WORKFLOW_TOKENS = 1_000_000;
 
 function makeMockTools(): ToolDefinition[] {
   return [
@@ -38,6 +49,15 @@ function makeConfig(runLoop?: ReturnType<typeof makeMockRunner>): OrchestratorCo
     litellmApiKey: 'test-key',
     defaultModel: 'test-model',
   };
+}
+
+function makeIndependentSteps(count: number, tools: string[] = []): WorkflowStep[] {
+  return Array.from({ length: count }, (_, index) => ({
+    name: `Step ${index + 1}`,
+    role: 'analyst',
+    task: 'Inspect this implementation',
+    tools,
+  }));
 }
 
 describe('SubagentOrchestrator', () => {
@@ -548,5 +568,233 @@ describe('SubagentOrchestrator', () => {
       aggregation: 'last',
     });
     expect(boundedRunner.mock.calls[1][0].maxTurns).toBe(9);
+  });
+
+  it('rejects excessive workflow steps before worker events or model calls', async () => {
+    const events: unknown[] = [];
+    orchestrator.on('worker:status', event => events.push(event));
+    const template: WorkflowTemplate = {
+      name: 'excessive-fanout',
+      description: 'Must fail before dispatch',
+      steps: makeIndependentSteps(500),
+      aggregation: 'last',
+    };
+
+    await expect(orchestrator.runWorkflow(template)).rejects.toMatchObject({
+      name: 'WorkflowLimitError',
+      kind: 'steps',
+      actual: 500,
+      limit: EXPECTED_MAX_WORKFLOW_STEPS,
+    });
+    expect(runner).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+    expect(orchestrator.getWorkers()).toEqual([]);
+  });
+
+  it('runs a dependency-ready wave in batches capped at five workers', async () => {
+    let active = 0;
+    let peakActive = 0;
+    runner.mockImplementation(async () => {
+      active++;
+      peakActive = Math.max(peakActive, active);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      active--;
+      return {
+        content: 'done',
+        usage: { inputTokens: 1, outputTokens: 1 },
+        toolsUsed: [],
+      };
+    });
+
+    await orchestrator.runWorkflow({
+      name: 'bounded-concurrency',
+      description: 'Seven independent workers',
+      steps: makeIndependentSteps(7),
+      aggregation: 'last',
+    });
+
+    expect(runner).toHaveBeenCalledTimes(7);
+    expect(peakActive).toBe(EXPECTED_MAX_WORKFLOW_CONCURRENCY);
+  });
+
+  it('rejects aggregate configured turns above the workflow ceiling', async () => {
+    const steps = [
+      ...makeIndependentSteps(11, ['read_file']).map(step => ({ ...step, maxTurns: 9 })),
+      { ...makeIndependentSteps(1)[0], name: 'No tools', maxTurns: 3 },
+    ];
+
+    await expect(orchestrator.runWorkflow({
+      name: 'turn-exhaustion',
+      description: 'Aggregate turn cap',
+      steps,
+      aggregation: 'last',
+    })).rejects.toMatchObject({
+      name: 'WorkflowLimitError',
+      kind: 'turns',
+      actual: 102,
+      limit: EXPECTED_MAX_WORKFLOW_TURNS,
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it('rejects aggregate configured token budgets above one million', async () => {
+    await expect(orchestrator.runWorkflow({
+      name: 'token-exhaustion',
+      description: 'Aggregate token cap',
+      steps: makeIndependentSteps(26),
+      aggregation: 'last',
+    })).rejects.toMatchObject({
+      name: 'WorkflowLimitError',
+      kind: 'tokens',
+      actual: 1_040_000,
+      limit: EXPECTED_MAX_WORKFLOW_TOKENS,
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it('counts the implicit synthesizer in aggregate workflow limits', async () => {
+    await expect(orchestrator.runWorkflow({
+      name: 'implicit-synthesis-budget',
+      description: 'Explicit steps consume exactly one million tokens',
+      steps: makeIndependentSteps(25),
+      aggregation: 'synthesize',
+    })).rejects.toMatchObject({ name: 'WorkflowLimitError', kind: 'tokens' });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it('counts every array entry when the same step object is repeated', async () => {
+    const repeatedStep: WorkflowStep = {
+      name: 'Repeated',
+      role: 'analyst',
+      task: 'Inspect this implementation',
+      tools: ['read_file'],
+      maxTurns: 9,
+    };
+
+    await expect(orchestrator.runWorkflow({
+      name: 'repeated-reference',
+      description: 'Repeated references must not bypass aggregate accounting',
+      steps: Array(32).fill(repeatedStep),
+      aggregation: 'last',
+    })).rejects.toMatchObject({
+      name: 'WorkflowLimitError',
+      kind: 'turns',
+      actual: 288,
+      limit: EXPECTED_MAX_WORKFLOW_TURNS,
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it('intersects a tighter live security context before dispatch', async () => {
+    const broadContext = {
+      allowedToolNames: new Set(['bash', 'read_file']),
+      blockedTools: [] as string[],
+    };
+    const tightContext = {
+      allowedToolNames: new Set(['read_file']),
+      blockedTools: ['bash'],
+    };
+    const getSpawnSecurityContext = vi.fn()
+      .mockReturnValueOnce(broadContext)
+      .mockReturnValue(tightContext);
+    const secured = new SubagentOrchestrator({
+      ...makeConfig(runner),
+      getSpawnSecurityContext,
+    });
+
+    await secured.runWorkflow({
+      name: 'live-security',
+      description: 'Queued workers inherit tightened restrictions',
+      steps: [{
+        name: 'Worker',
+        role: 'analyst',
+        task: 'Inspect this implementation',
+        tools: ['bash', 'read_file'],
+      }],
+      aggregation: 'last',
+    });
+
+    const workerConfig = runner.mock.calls[0][0];
+    expect(getSpawnSecurityContext).toHaveBeenCalledTimes(2);
+    expect(workerConfig.tools.map(tool => tool.name)).toEqual(['read_file']);
+    expect(workerConfig.governancePolicies?.blockedTools).toContain('bash');
+  });
+
+  it('preserves both preflight and live approval hook registries', async () => {
+    const initialHooks = new HookRegistry();
+    const liveHooks = new HookRegistry();
+    const initialPreTool = vi.fn();
+    const livePreTool = vi.fn(() => ({ cancel: true, reason: 'live approval required' }));
+    const initialMemory = vi.fn(() => ({ cancel: true, reason: 'initial memory approval required' }));
+    const liveMemory = vi.fn();
+    initialHooks.on('pre:tool', initialPreTool);
+    liveHooks.on('pre:tool', livePreTool);
+    initialHooks.on('pre:memory-write', initialMemory);
+    liveHooks.on('pre:memory-write', liveMemory);
+    const getSpawnSecurityContext = vi.fn()
+      .mockReturnValueOnce({ hooks: initialHooks })
+      .mockReturnValue({ hooks: liveHooks });
+    let toolHookResult: Awaited<ReturnType<HookRegistry['fire']>> | undefined;
+    let memoryHookResult: Awaited<ReturnType<HookRegistry['fire']>> | undefined;
+    runner.mockImplementation(async (config) => {
+      toolHookResult = await config.hooks!.fire('pre:tool', { toolName: 'read_file' });
+      memoryHookResult = await config.hooks!.fire('pre:memory-write', { toolName: 'save_memory' });
+      return {
+        content: 'done',
+        usage: { inputTokens: 1, outputTokens: 1 },
+        toolsUsed: [],
+      };
+    });
+    const secured = new SubagentOrchestrator({
+      ...makeConfig(runner),
+      getSpawnSecurityContext,
+    });
+
+    await secured.runWorkflow({
+      name: 'hook-intersection',
+      description: 'All approval gates remain active',
+      steps: makeIndependentSteps(1, ['read_file']),
+      aggregation: 'last',
+    });
+
+    expect(initialPreTool).toHaveBeenCalledOnce();
+    expect(livePreTool).toHaveBeenCalledOnce();
+    expect(toolHookResult).toMatchObject({ cancelled: true, reason: 'live approval required' });
+    expect(initialMemory).toHaveBeenCalledOnce();
+    expect(liveMemory).not.toHaveBeenCalled();
+    expect(memoryHookResult).toMatchObject({
+      cancelled: true,
+      reason: 'initial memory approval required',
+    });
+  });
+
+  it('rejects a concurrent workflow on the same orchestrator instance', async () => {
+    let callCount = 0;
+    runner.mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) await new Promise(resolve => setTimeout(resolve, 20));
+      return {
+        content: 'done',
+        usage: { inputTokens: 1, outputTokens: 1 },
+        toolsUsed: [],
+      };
+    });
+    const first = orchestrator.runWorkflow({
+      name: 'first',
+      description: 'First active workflow',
+      steps: makeIndependentSteps(1),
+      aggregation: 'last',
+    });
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledOnce());
+
+    await expect(orchestrator.runWorkflow({
+      name: 'second',
+      description: 'Must not overlap shared state',
+      steps: makeIndependentSteps(1),
+      aggregation: 'last',
+    })).rejects.toThrow(/already running/i);
+    await first;
+
+    expect(runner).toHaveBeenCalledOnce();
   });
 });

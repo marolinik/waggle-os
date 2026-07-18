@@ -9,8 +9,8 @@
 import { EventEmitter } from 'events';
 import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
-import { selectAgentRunBudget } from './agent-run-budget.js';
-import type { HookRegistry } from './hooks.js';
+import { selectAgentRunBudget, type AgentRunBudgetPolicy } from './agent-run-budget.js';
+import { HookRegistry, type HookEvent } from './hooks.js';
 import { filterSpawnToolNames, type SpawnSecurityContext } from './subagent-tools.js';
 import { detectTaskShape } from './task-shape.js';
 import { filterAvailableTools, selectToolsForTurn } from './tool-filter.js';
@@ -56,6 +56,29 @@ export interface WorkflowTemplate {
   aggregation: 'concatenate' | 'last' | 'synthesize';
 }
 
+export const MAX_WORKFLOW_STEPS = 32;
+export const MAX_WORKFLOW_CONCURRENCY = 5;
+export const MAX_WORKFLOW_TURNS = 96;
+export const MAX_WORKFLOW_CONFIGURED_TOKEN_BUDGET = 1_000_000;
+
+export type WorkflowLimitKind = 'steps' | 'turns' | 'tokens';
+
+export class WorkflowLimitError extends Error {
+  constructor(
+    public readonly kind: WorkflowLimitKind,
+    public readonly actual: number,
+    public readonly limit: number,
+  ) {
+    const label = kind === 'steps'
+      ? 'worker'
+      : kind === 'turns'
+        ? 'turn budget'
+        : 'configured token budget';
+    super(`Workflow ${label} limit exceeded: ${actual} > ${limit}`);
+    this.name = 'WorkflowLimitError';
+  }
+}
+
 export interface OrchestratorConfig {
   availableTools: ToolDefinition[];
   runLoop: (config: AgentLoopConfig) => Promise<AgentResponse>;
@@ -76,10 +99,24 @@ export interface OrchestratorConfig {
   getSpawnSecurityContext?: () => SpawnSecurityContext | undefined;
 }
 
+interface WorkerExecutionPlan {
+  tools: ToolDefinition[];
+  runBudget: AgentRunBudgetPolicy;
+  maxTurns: number;
+  maxToolRounds: number;
+  securityContext?: SpawnSecurityContext;
+}
+
+interface WorkflowExecutionPlan {
+  stepPlans: Map<WorkflowStep, WorkerExecutionPlan>;
+  synthesisPlan?: WorkerExecutionPlan;
+}
+
 export class SubagentOrchestrator extends EventEmitter {
   private config: OrchestratorConfig;
   private workers: Map<string, WorkerState>;
   private workflowCounter: number;
+  private workflowRunning: boolean;
   private parentContext: string = '';
 
   /** Role presets (same as subagent-tools for consistency, plus synthesizer/summarizer) */
@@ -99,6 +136,7 @@ export class SubagentOrchestrator extends EventEmitter {
     this.config = config;
     this.workers = new Map();
     this.workflowCounter = 0;
+    this.workflowRunning = false;
   }
 
   /** Set parent agent context to inject into all worker prompts */
@@ -118,6 +156,13 @@ export class SubagentOrchestrator extends EventEmitter {
     if (template.steps.length === 0) {
       return { results: new Map(), aggregated: '' };
     }
+    if (this.workflowRunning) {
+      throw new Error('A workflow is already running on this orchestrator instance');
+    }
+    this.workflowRunning = true;
+
+    try {
+      const executionPlan = this.preflightWorkflow(template);
 
     // Reset workers for this workflow run
     this.workers = new Map();
@@ -179,23 +224,39 @@ export class SubagentOrchestrator extends EventEmitter {
         break;
       }
 
-      const wave = await Promise.all(
-        ready.map((step) => this.runWorker(step, contextResults, stepWorkerIds.get(step.name))),
-      );
-      for (let index = 0; index < ready.length; index++) {
-        const step = ready[index];
-        const workerState = wave[index];
-        if (workerState.status === 'done' && workerState.result) {
-          contextResults.set(step.name, workerState.result);
+      for (let offset = 0; offset < ready.length; offset += MAX_WORKFLOW_CONCURRENCY) {
+        const batch = ready.slice(offset, offset + MAX_WORKFLOW_CONCURRENCY);
+        const batchStates = await Promise.all(
+          batch.map((step) => this.runWorker(
+            step,
+            contextResults,
+            executionPlan.stepPlans.get(step)!,
+            stepWorkerIds.get(step.name),
+          )),
+        );
+        for (let index = 0; index < batch.length; index++) {
+          const step = batch[index];
+          const workerState = batchStates[index];
+          if (workerState.status === 'done' && workerState.result) {
+            contextResults.set(step.name, workerState.result);
+          }
+          completed.add(step.name);
         }
-        completed.add(step.name);
       }
     }
 
     // Aggregate results
-    const aggregated = await this.aggregateResults(this.workers, template.aggregation, contextResults);
+    const aggregated = await this.aggregateResults(
+      this.workers,
+      template.aggregation,
+      contextResults,
+      executionPlan.synthesisPlan,
+    );
 
-    return { results: new Map(this.workers), aggregated };
+      return { results: new Map(this.workers), aggregated };
+    } finally {
+      this.workflowRunning = false;
+    }
   }
 
   /** Get all workers and their current status */
@@ -210,37 +271,57 @@ export class SubagentOrchestrator extends EventEmitter {
 
   // ── Private helpers ──────────────────────────────────────────────────
 
-  private makeWorkerId(name: string): string {
-    this.workflowCounter++;
-    return `worker-${this.workflowCounter}-${Date.now()}`;
+  private preflightWorkflow(template: WorkflowTemplate): WorkflowExecutionPlan {
+    const implicitWorkerCount = template.aggregation === 'synthesize' ? 1 : 0;
+    const workerCount = template.steps.length + implicitWorkerCount;
+    if (workerCount > MAX_WORKFLOW_STEPS) {
+      throw new WorkflowLimitError('steps', workerCount, MAX_WORKFLOW_STEPS);
+    }
+
+    const securityContext = this.config.getSpawnSecurityContext?.();
+    const stepPlans = new Map<WorkflowStep, WorkerExecutionPlan>();
+    const stepPlanList = template.steps.map((step) => {
+      const plan = this.buildWorkerExecutionPlan(step, securityContext);
+      stepPlans.set(step, plan);
+      return plan;
+    });
+    const synthesisPlan = template.aggregation === 'synthesize'
+      ? this.buildWorkerExecutionPlan({
+          name: 'Synthesizer',
+          role: 'synthesizer',
+          task: 'Synthesize the completed worker results into a cohesive response.',
+        }, securityContext)
+      : undefined;
+    const plans = [...stepPlanList, ...(synthesisPlan ? [synthesisPlan] : [])];
+    const totalTurns = plans.reduce((sum, plan) => sum + plan.maxTurns, 0);
+    if (totalTurns > MAX_WORKFLOW_TURNS) {
+      throw new WorkflowLimitError('turns', totalTurns, MAX_WORKFLOW_TURNS);
+    }
+    const totalTokenBudget = plans.reduce(
+      (sum, plan) => sum + plan.runBudget.maxTokenBudget,
+      0,
+    );
+    if (totalTokenBudget > MAX_WORKFLOW_CONFIGURED_TOKEN_BUDGET) {
+      throw new WorkflowLimitError(
+        'tokens',
+        totalTokenBudget,
+        MAX_WORKFLOW_CONFIGURED_TOKEN_BUDGET,
+      );
+    }
+
+    return { stepPlans, synthesisPlan };
   }
 
-  private async runWorker(step: WorkflowStep, contextResults: Map<string, string>, existingId?: string): Promise<WorkerState> {
-    const id = existingId ?? this.makeWorkerId(step.name);
-    // Reuse pre-created pending worker or create fresh
-    const workerState: WorkerState = this.workers.get(id) ?? {
-      id,
-      name: step.name,
-      role: step.role,
-      status: 'pending',
-      task: step.task,
-      toolsUsed: [],
-      usage: { inputTokens: 0, outputTokens: 0 },
-      model: step.model ?? this.config.defaultModel,
-    };
-    workerState.status = 'running';
-    workerState.startedAt = Date.now();
-    this.workers.set(id, workerState);
-    this.emit('worker:status', { workerId: id, status: 'running', workerState });
-
-    // Resolve tools
-    const baseToolNames = step.tools ?? SubagentOrchestrator.ROLE_TOOL_PRESETS[step.role] ?? SubagentOrchestrator.ROLE_TOOL_PRESETS.analyst!;
-    // SEC: inherit the spawning request's governance denylist + persona allowlist
-    // so a workflow worker cannot escape the request's tool restrictions.
-    const secCtx = this.config.getSpawnSecurityContext?.();
-    const toolNames = filterSpawnToolNames(baseToolNames, secCtx);
+  private buildWorkerExecutionPlan(
+    step: WorkflowStep,
+    securityContext?: SpawnSecurityContext,
+  ): WorkerExecutionPlan {
+    const baseToolNames = step.tools
+      ?? SubagentOrchestrator.ROLE_TOOL_PRESETS[step.role]
+      ?? SubagentOrchestrator.ROLE_TOOL_PRESETS.analyst!;
+    const toolNames = filterSpawnToolNames(baseToolNames, securityContext);
     const eligibleTools = filterAvailableTools(
-      this.config.availableTools.filter(t => toolNames.includes(t.name)),
+      this.config.availableTools.filter(tool => toolNames.includes(tool.name)),
     );
     const tools = selectToolsForTurn(eligibleTools, {
       message: step.task,
@@ -259,6 +340,93 @@ export class SubagentOrchestrator extends EventEmitter {
       : runBudget.maxTurns;
     const maxTurns = Math.min(requestedMaxTurns, runBudget.maxTurns);
 
+    return {
+      tools,
+      runBudget,
+      maxTurns,
+      maxToolRounds: Math.min(runBudget.maxToolRounds, Math.max(0, maxTurns - 1)),
+      securityContext,
+    };
+  }
+
+  private makeWorkerId(name: string): string {
+    this.workflowCounter++;
+    return `worker-${this.workflowCounter}-${Date.now()}`;
+  }
+
+  private combineWorkerHooks(
+    initialHooks?: HookRegistry,
+    liveHooks?: HookRegistry,
+  ): HookRegistry | undefined {
+    const originalHooks = initialHooks ?? this.config.hooks;
+    if (!originalHooks) return liveHooks;
+    if (!liveHooks || liveHooks === originalHooks) return originalHooks;
+
+    const combinedHooks = new HookRegistry();
+    const workerEvents: HookEvent[] = [
+      'pre:tool',
+      'post:tool',
+      'pre:memory-write',
+      'post:memory-write',
+    ];
+    for (const event of workerEvents) {
+      combinedHooks.on(event, async (context) => {
+        const originalResult = await originalHooks.fire(event, context);
+        if (originalResult.cancelled) {
+          return { cancel: true, reason: originalResult.reason };
+        }
+        const liveResult = await liveHooks.fire(event, context);
+        return liveResult.cancelled
+          ? { cancel: true, reason: liveResult.reason }
+          : undefined;
+      });
+    }
+    return combinedHooks;
+  }
+
+  private async runWorker(
+    step: WorkflowStep,
+    contextResults: Map<string, string>,
+    executionPlan: WorkerExecutionPlan,
+    existingId?: string,
+  ): Promise<WorkerState> {
+    const id = existingId ?? this.makeWorkerId(step.name);
+    // Reuse pre-created pending worker or create fresh
+    const workerState: WorkerState = this.workers.get(id) ?? {
+      id,
+      name: step.name,
+      role: step.role,
+      status: 'pending',
+      task: step.task,
+      toolsUsed: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+      model: step.model ?? this.config.defaultModel,
+    };
+    workerState.status = 'running';
+    workerState.startedAt = Date.now();
+    this.workers.set(id, workerState);
+    this.emit('worker:status', { workerId: id, status: 'running', workerState });
+
+    const {
+      tools: plannedTools,
+      runBudget,
+      maxTurns,
+      maxToolRounds,
+      securityContext,
+    } = executionPlan;
+    const liveSecurityContext = this.config.getSpawnSecurityContext?.();
+    const liveToolNames = filterSpawnToolNames(
+      plannedTools.map(tool => tool.name),
+      liveSecurityContext,
+    );
+    const liveToolSet = new Set(liveToolNames);
+    const tools = plannedTools.filter(tool => liveToolSet.has(tool.name));
+    const blockedTools = [...new Set([
+      ...(securityContext?.blockedTools ?? []),
+      ...(liveSecurityContext?.blockedTools ?? []),
+    ])];
+    const hooks = this.combineWorkerHooks(securityContext?.hooks, liveSecurityContext?.hooks);
+
     // Build system prompt with optional context from previous steps
     const systemPrompt = this.buildWorkerContext(step, contextResults);
 
@@ -272,15 +440,15 @@ export class SubagentOrchestrator extends EventEmitter {
         messages: [{ role: 'user', content: step.task }],
         ...runBudget,
         maxTurns,
-        maxToolRounds: Math.min(runBudget.maxToolRounds, Math.max(0, maxTurns - 1)),
+        maxToolRounds,
         stream: false,
         signal: this.config.signal,
         // SEC: worker loops respect the request's approval gate + governance
         // denylist. The executeToolCall critical floor still fail-closes
         // destructive ops even when no gate is wired.
-        hooks: secCtx?.hooks ?? this.config.hooks,
-        governancePolicies: secCtx?.blockedTools?.length
-          ? { blockedTools: [...secCtx.blockedTools] }
+        hooks,
+        governancePolicies: blockedTools.length > 0
+          ? { blockedTools }
           : undefined,
       });
 
@@ -333,6 +501,7 @@ export class SubagentOrchestrator extends EventEmitter {
     workers: Map<string, WorkerState>,
     mode: WorkflowTemplate['aggregation'],
     contextResults: Map<string, string>,
+    synthesisPlan?: WorkerExecutionPlan,
   ): Promise<string> {
     const workerList = Array.from(workers.values());
     const doneWorkers = workerList.filter(w => w.status === 'done' && w.result);
@@ -362,7 +531,7 @@ export class SubagentOrchestrator extends EventEmitter {
           task: `Synthesize the following results from multiple workers into a cohesive response:\n\n${allResults}`,
         };
 
-        const synthState = await this.runWorker(synthesizeStep, contextResults);
+        const synthState = await this.runWorker(synthesizeStep, contextResults, synthesisPlan!);
         return synthState.result ?? '';
       }
 

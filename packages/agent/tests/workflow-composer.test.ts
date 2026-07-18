@@ -253,6 +253,21 @@ describe('Template Validation', () => {
     expect(errors.some(e => e.field === 'steps')).toBe(true);
   });
 
+  it('rejects templates that exceed the bounded worker count', () => {
+    const errors = validateTemplate(makeTemplate({
+      steps: Array.from({ length: 500 }, (_, index) => ({
+        name: `step-${index}`,
+        role: 'analyst',
+        task: 'Inspect the implementation',
+      })),
+    }));
+
+    expect(errors).toContainEqual({
+      field: 'steps',
+      message: 'Workflow worker limit exceeded: 500 > 32',
+    });
+  });
+
   it('rejects invalid aggregation', () => {
     const errors = validateTemplate(makeTemplate({ aggregation: 'invalid' as unknown as WorkflowTemplate['aggregation'] }));
     expect(errors.some(e => e.field === 'aggregation')).toBe(true);
