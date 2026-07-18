@@ -50,6 +50,7 @@ import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } 
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
+import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import type { GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
@@ -724,6 +725,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     } = request.body ?? {};
     const workspace = _ws ?? _wsId;
     const requestedSessionId = session ?? sessionIdAlias;
+    if (workspace) assertSafeSegment(workspace, 'workspace');
 
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
@@ -753,14 +755,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
-    let workspacePath = explicitWorkspacePath;
-    if (!workspacePath && workspace) {
+    let workspacePath = workspace ? undefined : explicitWorkspacePath;
+    let workspacePathFromTrustedConfig = false;
+    if (workspace) {
       const wsConfig = server.workspaceManager?.get(workspace);
-      if (wsConfig?.directory && fs.existsSync(wsConfig.directory)) {
-        workspacePath = wsConfig.directory; // linked mode
+      const configuredPath = wsConfig?.directory || wsConfig?.storagePath;
+      if (wsConfig && configuredPath) {
+        try {
+          workspacePath = resolveWorkspaceExecutionRoot(server.localConfig.dataDir, wsConfig);
+          workspacePathFromTrustedConfig = true;
+        } catch (error) {
+          log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
+          return reply.status(409).send({
+            error: 'Configured workspace directory is unavailable',
+            code: 'WORKSPACE_ROOT_UNAVAILABLE',
+          });
+        }
       } else if (workspace !== 'default') {
         // Virtual workspace storage — managed files directory
         workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
+      } else {
+        // Legacy default-workspace callers may still supply an anchored managed path.
+        workspacePath = explicitWorkspacePath;
       }
     }
 
@@ -786,7 +802,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // "../evil" segment would escape the sessions dir on both write and read.
     // Reuse the shared guard; runs BEFORE reply.hijack() so the thrown
     // {statusCode:400} is converted to a 400 by Fastify's default error handler.
-    if (workspace) assertSafeSegment(workspace, 'workspace');
     if (session && sessionIdAlias && session !== sessionIdAlias) {
       return reply.status(400).send({
         error: 'session and sessionId must match when both are provided',
@@ -822,13 +837,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     }
 
-    // Review Critical #1: path-traversal guard on workspacePath.
-    // A client can supply "../../../../etc" or on Windows "C:\\Windows\\System32".
-    // Both the explicit-path and workspace-derived branches must be anchored to dataDir.
+    // Review Critical #1: request-supplied paths stay anchored to dataDir.
+    // A workspace directory loaded from persisted config is an explicit user
+    // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
     if (workspacePath) {
       const resolved = path.resolve(workspacePath);
       const allowed = path.resolve(server.localConfig.dataDir);
-      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+      if (!workspacePathFromTrustedConfig
+        && resolved !== allowed
+        && !resolved.startsWith(allowed + path.sep)) {
         log.warn(`[security] Path traversal attempt blocked: ${workspacePath}`);
         return reply.status(400).send({
           error: 'Invalid workspace path',

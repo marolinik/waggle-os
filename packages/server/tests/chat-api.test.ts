@@ -165,6 +165,57 @@ describe('Chat Streaming API', () => {
     );
   });
 
+  it('allows a configured linked workspace directory outside managed storage', async () => {
+    const linkedDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-linked-chat-'));
+    const workspace = server.workspaceManager.create({
+      name: `Linked chat ${Date.now()}`,
+      group: 'test',
+      directory: linkedDirectory,
+    });
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async (): Promise<AgentResponse> => ({
+      content: 'linked ok',
+      toolsUsed: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Inspect the linked workspace.',
+          workspaceId: workspace.id,
+          workspacePath: path.join(os.tmpdir(), 'request-path-must-not-override-config'),
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(parseSSE(res.body).some(event => event.event === 'done')).toBe(true);
+    } finally {
+      server.agentRunner = originalRunner;
+      fs.rmSync(linkedDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when a configured linked workspace directory is unavailable', async () => {
+    const missingDirectory = path.join(os.tmpdir(), `waggle-missing-linked-${Date.now()}`);
+    const workspace = server.workspaceManager.create({
+      name: `Missing linked chat ${Date.now()}`,
+      group: 'test',
+      directory: missingDirectory,
+    });
+
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Inspect the linked workspace.', workspaceId: workspace.id },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'WORKSPACE_ROOT_UNAVAILABLE' });
+  });
+
   it('validates message is required', async () => {
     const res = await injectWithAuth(server, {
       method: 'POST',
