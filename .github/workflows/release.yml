@@ -258,7 +258,7 @@ jobs:
             'baseAppDataDeletionNeutralized', 'authenticodeSignature', 'authenticodeSigner',
             'authenticodeTimestamp', 'installedAppAuthenticodeSignature',
             'installedAppAuthenticodeSigner', 'installedAppAuthenticodeTimestamp',
-            'silentInstall', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
+            'silentInstall', 'vaultKeyAclRestricted', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
             'configuredDataDirPreserved', 'profileDataPathPreserved', 'environmentRestored'
           )
           foreach ($checkName in $requiredChecks) {

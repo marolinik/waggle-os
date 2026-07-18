@@ -75,6 +75,67 @@ function Assert-TcpPortAvailable {
     "Required desktop port $Port is already in use; refusing to disturb another service."
 }
 
+function Assert-VaultKeyAclRestricted {
+  param([Parameter(Mandatory = $true)] [string]$KeyPath)
+
+  Assert-True (Test-Path -LiteralPath $KeyPath -PathType Leaf) `
+    'Windows vault key was not created during first boot.'
+  $acl = Get-Acl -LiteralPath $KeyPath
+  Assert-True ($acl.AreAccessRulesProtected) `
+    'Windows vault key still inherits filesystem permissions.'
+
+  $currentSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+  Assert-True ($null -ne $currentSid) 'Could not resolve the current Windows security identifier.'
+  $ownerSid = $acl.GetOwner([Security.Principal.SecurityIdentifier])
+  Assert-True ([string]::Equals(
+    $ownerSid.Value,
+    $currentSid.Value,
+    [System.StringComparison]::OrdinalIgnoreCase
+  )) 'Windows vault key is not owned by the current user.'
+  $rules = @(
+    $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
+  )
+  Assert-True ($rules.Count -eq 1) `
+    "Windows vault key must have exactly one access rule; found $($rules.Count)."
+  $allowRules = @(
+    $rules |
+      Where-Object {
+        $_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow
+      }
+  )
+  $currentUserAllows = @(
+    $allowRules | Where-Object {
+      [string]::Equals(
+        $_.IdentityReference.Value,
+        $currentSid.Value,
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+    }
+  )
+  $unexpectedAllows = @(
+    $allowRules | Where-Object {
+      -not [string]::Equals(
+        $_.IdentityReference.Value,
+        $currentSid.Value,
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+    }
+  )
+  $unexpectedPrincipals = @(
+    $unexpectedAllows | ForEach-Object { $_.IdentityReference.Value }
+  )
+  Assert-True ($unexpectedAllows.Count -eq 0) `
+    "Windows vault key grants access to unexpected principals: $($unexpectedPrincipals -join ', ')"
+  $fullControl = [Security.AccessControl.FileSystemRights]::FullControl
+  $hasCurrentUserFullControl = @(
+    $currentUserAllows | Where-Object {
+      ($_.FileSystemRights -band $fullControl) -eq $fullControl
+    }
+  ).Count -gt 0
+  Assert-True $hasCurrentUserFullControl `
+    'Windows vault key does not grant the current user full control.'
+}
+
 function Test-TcpPortAvailable {
   param([Parameter(Mandatory = $true)] [int]$Port)
 
@@ -813,6 +874,9 @@ try {
     $health = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $firstProcess.Refresh()
     Assert-True (-not $firstProcess.HasExited) 'The installed desktop process exited during first boot'
+    $vaultKeyPath = Join-Path $dataDir '.vault-key'
+    Assert-VaultKeyAclRestricted $vaultKeyPath
+    $receipt.checks['vaultKeyAclRestricted'] = $true
     $proxy = Invoke-JsonRequest "$baseUrl/v1/health/liveliness"
     Assert-True ($proxy.status -eq 'healthy') 'Built-in provider proxy is not healthy'
     Assert-True ((Get-HttpStatusCode "$baseUrl/api/tier") -eq 401) `

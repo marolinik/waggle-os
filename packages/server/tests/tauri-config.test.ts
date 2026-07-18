@@ -1054,6 +1054,11 @@ describe('CI/CD Configuration', () => {
     expect(script).not.toContain("$receipt.checks['uninstallCleanup']");
     expect(script).toContain("$receipt.checks['uninstallerCleanup']");
     expect(script).toContain('embeddingPayloadReady');
+    expect(script).toContain('Assert-VaultKeyAclRestricted');
+    expect(script).toContain("Join-Path $dataDir '.vault-key'");
+    expect(script).toContain('AreAccessRulesProtected');
+    expect(script).toContain('[Security.Principal.WindowsIdentity]::GetCurrent().User');
+    expect(script).toContain("$receipt.checks['vaultKeyAclRestricted']");
     expect(script).toContain('sourceRevision');
     expect(script).toContain('certificateRunId');
     expect(script).toContain('$desktopShortcut');
@@ -1125,6 +1130,15 @@ describe('CI/CD Configuration', () => {
     for (const [index, sidecarIndex] of sidecarIndexes.entries()) {
       expect(buildPackageIndexes[index]).toBeLessThan(sidecarIndex);
     }
+  });
+
+  it('release publication requires the verified Windows vault-key ACL receipt', () => {
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+      'utf-8',
+    );
+
+    expect(workflow).toMatch(/\$requiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
   });
 });
 
