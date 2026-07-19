@@ -22,7 +22,11 @@ export async function suggestionRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'status must be one of: accepted, dismissed, snoozed' });
     }
 
-    const updated = await proactiveService.updateStatus(id, body.status as 'accepted' | 'dismissed' | 'snoozed');
+    const updated = await proactiveService.updateStatus(
+      id,
+      request.userId,
+      body.status as 'accepted' | 'dismissed' | 'snoozed',
+    );
     if (!updated) {
       return reply.code(404).send({ error: 'Suggestion not found' });
     }

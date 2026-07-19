@@ -107,7 +107,7 @@ describe('Proactive Engine (Task 3.17)', () => {
     expect(suggestion).toBeTruthy();
 
     // Dismiss it
-    await proactiveService.updateStatus(suggestion!.id, 'dismissed');
+    await proactiveService.updateStatus(suggestion!.id, secondUserId, 'dismissed');
 
     // Clear pending count so the MAX check doesn't block us
     // (dismissed doesn't count as pending, so evaluate should proceed)
@@ -145,6 +145,30 @@ describe('Proactive Engine (Task 3.17)', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.status).toBe('accepted');
+  });
+
+  it('does not let one user update another user\'s suggestion', async () => {
+    const patterns = await server.db.select().from(proactivePatterns);
+    const [victimSuggestion] = await server.db.insert(suggestionsLog).values({
+      userId: secondUserId,
+      patternId: patterns[0].id,
+      context: { owner: 'victim' },
+      status: 'pending',
+    }).returning();
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/suggestions/${victimSuggestion.id}`,
+      headers: { 'x-test-user-id': userId },
+      payload: { status: 'accepted' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: 'Suggestion not found' });
+    const [unchanged] = await server.db.select().from(suggestionsLog)
+      .where(eq(suggestionsLog.id, victimSuggestion.id));
+    expect(unchanged.status).toBe('pending');
+    expect(unchanged.userId).toBe(secondUserId);
   });
 
   it('list pending returns only pending suggestions via API', async () => {
