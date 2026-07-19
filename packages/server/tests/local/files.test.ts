@@ -443,6 +443,60 @@ describe('File Management API', () => {
       expect(res.statusCode).toBe(400);
     });
   });
+
+  describe('local workspace filesystem boundary', () => {
+    it('blocks sensitive files and escaping junctions through the real API', async () => {
+      const linkedRoot = path.join(tmpDir, 'linked-security-root');
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-files-api-outside-'));
+      fs.mkdirSync(linkedRoot);
+      fs.writeFileSync(path.join(linkedRoot, '.env'), 'TOKEN=secret');
+      fs.writeFileSync(path.join(outside, 'secret.txt'), 'outside');
+
+      try {
+        try {
+          fs.symlinkSync(outside, path.join(linkedRoot, 'escape'), 'junction');
+        } catch {
+          return;
+        }
+
+        const created = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/workspaces',
+          payload: { name: 'Linked Security Workspace', group: 'Test', storageType: 'local', storagePath: linkedRoot },
+        });
+        expect(created.statusCode).toBe(201);
+        const linkedWorkspaceId = created.json().id as string;
+        // Persisted local workspaces can come from prior releases (and the
+        // separate workspace-update finding); exercise the real files route.
+        server.workspaceManager.update(linkedWorkspaceId, { storageType: 'local', storagePath: linkedRoot });
+        const localPrefix = `/api/workspaces/${linkedWorkspaceId}/files`;
+
+        const listed = await injectWithAuth(server, { method: 'GET', url: `${localPrefix}/list?path=/` });
+        expect(listed.statusCode).toBe(200);
+        expect(listed.json().map((entry: FileEntry) => entry.name)).not.toEqual(expect.arrayContaining(['.env', 'escape']));
+
+        const secretDownload = await injectWithAuth(server, { method: 'GET', url: `${localPrefix}/download?path=/.env` });
+        expect(secretDownload.statusCode).toBe(404);
+
+        const secretUpload = await injectWithAuth(server, {
+          method: 'POST',
+          url: `${localPrefix}/upload`,
+          payload: { path: '/', name: '.env', data: Buffer.from('overwrite').toString('base64') },
+        });
+        expect(secretUpload.statusCode).toBe(400);
+
+        const escapeUpload = await injectWithAuth(server, {
+          method: 'POST',
+          url: `${localPrefix}/upload`,
+          payload: { path: '/escape', name: 'new.txt', data: Buffer.from('outside').toString('base64') },
+        });
+        expect(escapeUpload.statusCode).toBe(400);
+        expect(fs.existsSync(path.join(outside, 'new.txt'))).toBe(false);
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 // ── Storage Provider Unit Tests ────────────────────────────────
@@ -499,6 +553,217 @@ describe('FsStorageProvider', () => {
     const firstFile = entries.findIndex(e => e.type === 'file');
     if (firstDir >= 0 && firstFile >= 0) {
       expect(firstDir).toBeLessThan(firstFile);
+    }
+  });
+
+  it('denies reads and deepest-existing writes through an escaping junction', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-root-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-outside-'));
+    const link = path.join(root, 'escape');
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'outside');
+
+    try {
+      try {
+        fs.symlinkSync(outside, link, 'junction');
+      } catch {
+        return;
+      }
+
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+
+      await expect(provider.read('/escape/secret.txt')).rejects.toThrow(/symlink|workspace root/i);
+      await expect(provider.write('/escape/new/deep/file.txt', Buffer.from('outside'))).rejects.toThrow(/symlink|workspace root/i);
+      expect(fs.existsSync(path.join(outside, 'new', 'deep', 'file.txt'))).toBe(false);
+      expect(await provider.exists('/escape/secret.txt')).toBe(false);
+      await expect(provider.list('/escape')).rejects.toThrow(/symlink|workspace root/i);
+      expect((await provider.list('/')).map(entry => entry.name)).not.toContain('escape');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('allows an in-root junction including a not-yet-created descendant', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-inroot-'));
+    const real = path.join(root, 'real');
+    const link = path.join(root, 'alias');
+    fs.mkdirSync(real);
+
+    try {
+      try {
+        fs.symlinkSync(real, link, 'junction');
+      } catch {
+        return;
+      }
+
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+      await provider.write('/alias/new/deep/file.txt', Buffer.from('inside'));
+
+      expect((await provider.read('/alias/new/deep/file.txt')).toString()).toBe('inside');
+      expect(fs.readFileSync(path.join(real, 'new', 'deep', 'file.txt'), 'utf8')).toBe('inside');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a dangling junction before the filesystem operation', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-dangling-root-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-dangling-outside-'));
+    const link = path.join(root, 'dangling');
+
+    try {
+      try {
+        fs.symlinkSync(outside, link, 'junction');
+      } catch {
+        return;
+      }
+      fs.rmSync(outside, { recursive: true, force: true });
+      expect(fs.existsSync(link)).toBe(false);
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+      await expect(provider.write('/dangling/new.txt', Buffer.from('outside'))).rejects.toThrow(/Invalid path/i);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('denies recursive copy when a nested junction escapes the root', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-copy-root-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-copy-outside-'));
+    const source = path.join(root, 'source');
+    fs.mkdirSync(source);
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'outside');
+
+    try {
+      try {
+        fs.symlinkSync(outside, path.join(source, 'escape'), 'junction');
+      } catch {
+        return;
+      }
+
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+
+      await expect(provider.copy('/source', '/copied')).rejects.toThrow(/symlink|workspace root/i);
+      expect(fs.existsSync(path.join(root, 'copied', 'escape', 'secret.txt'))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('denies recursive merge-copy through a destination junction', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-dest-root-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-dest-outside-'));
+    const sourceNested = path.join(root, 'source', 'nested');
+    const destination = path.join(root, 'destination');
+    fs.mkdirSync(sourceNested, { recursive: true });
+    fs.mkdirSync(destination);
+    fs.writeFileSync(path.join(sourceNested, 'payload.txt'), 'outside');
+
+    try {
+      try {
+        fs.symlinkSync(outside, path.join(destination, 'nested'), 'junction');
+      } catch {
+        return;
+      }
+
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+      await expect(provider.copy('/source', '/destination')).rejects.toThrow(/symlink|workspace root/i);
+      expect(fs.existsSync(path.join(outside, 'payload.txt'))).toBe(false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('denies sensitive operations and hides sensitive metadata for linked roots', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-sensitive-'));
+    fs.writeFileSync(path.join(root, '.env'), 'TOKEN=secret');
+    fs.writeFileSync(path.join(root, 'credentials.json'), '{}');
+    fs.writeFileSync(path.join(root, 'README.md'), 'safe');
+
+    try {
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+
+      await expect(provider.read('/.env')).rejects.toThrow(/sensitive file denied/i);
+      await expect(provider.write('/.ssh/authorized_keys', Buffer.from('key'))).rejects.toThrow(/sensitive file denied/i);
+      await expect(provider.delete('/credentials.json')).rejects.toThrow(/sensitive file denied/i);
+      await expect(provider.move('/README.md', '/.env')).rejects.toThrow(/sensitive file denied/i);
+      await expect(provider.copy('/README.md', '/credentials.json')).rejects.toThrow(/sensitive file denied/i);
+      await expect(provider.mkdir('/.aws')).rejects.toThrow(/sensitive file denied/i);
+      expect(await provider.exists('/.env')).toBe(false);
+
+      const names = (await provider.list('/')).map(entry => entry.name);
+      expect(names).toContain('README.md');
+      expect(names).not.toContain('.env');
+      expect(names).not.toContain('credentials.json');
+      expect(fs.readFileSync(path.join(root, 'credentials.json'), 'utf8')).toBe('{}');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('denies recursive operations on directories containing sensitive files', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-sensitive-tree-'));
+    for (const name of ['copy-source', 'move-source', 'delete-source']) {
+      fs.mkdirSync(path.join(root, name));
+      fs.writeFileSync(path.join(root, name, '.env'), 'TOKEN=secret');
+    }
+
+    try {
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+
+      await expect(provider.copy('/copy-source', '/copy-target')).rejects.toThrow(/sensitive file denied/i);
+      await expect(provider.move('/move-source', '/move-target')).rejects.toThrow(/sensitive file denied/i);
+      await expect(provider.delete('/delete-source')).rejects.toThrow(/sensitive file denied/i);
+      expect(fs.existsSync(path.join(root, 'copy-target'))).toBe(false);
+      expect(fs.existsSync(path.join(root, 'move-source', '.env'))).toBe(true);
+      expect(fs.existsSync(path.join(root, 'delete-source', '.env'))).toBe(true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves sensitive-looking files in app-managed roots', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-managed-'));
+
+    try {
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root);
+      await provider.write('/.env', Buffer.from('documented workspace content'));
+
+      expect((await provider.read('/.env')).toString()).toBe('documented workspace content');
+      expect((await provider.list('/')).map(entry => entry.name)).toContain('.env');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('enables the sensitive deny only for local workspace storage', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-storage-policy-'));
+    const linkedRoot = path.join(dataDir, 'linked');
+    fs.mkdirSync(linkedRoot);
+    fs.writeFileSync(path.join(linkedRoot, '.env'), 'TOKEN=secret');
+
+    try {
+      const { getStorageProvider } = await import('../../src/local/storage/index.js');
+      const linked = getStorageProvider({ id: 'linked', storageType: 'local', storagePath: linkedRoot }, dataDir);
+      const managed = getStorageProvider({ id: 'managed', storageType: 'virtual' }, dataDir);
+
+      await expect(linked.read('/.env')).rejects.toThrow(/sensitive file denied/i);
+      await managed.write('/.env', Buffer.from('managed workspace content'));
+      expect((await managed.read('/.env')).toString()).toBe('managed workspace content');
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
     }
   });
 });

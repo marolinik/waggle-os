@@ -30,7 +30,7 @@ export function getStorageProvider(workspace: WorkspaceLike, dataDir: string): S
       if (!workspace.storagePath) {
         throw new Error(`Workspace "${workspace.id}" has storageType=local but no storagePath`);
       }
-      return new FsStorageProvider(workspace.storagePath);
+      return new FsStorageProvider(workspace.storagePath, { denySensitive: true });
     }
 
     case 'team': {
