@@ -235,6 +235,24 @@ function Invoke-JsonRequest {
   return Invoke-RestMethod -Uri $Uri -Method Get -Headers $Headers -TimeoutSec 5
 }
 
+function Invoke-JsonPostRequest {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Uri,
+    [Parameter(Mandatory = $true)] [hashtable]$Body,
+    [hashtable]$Headers = @{}
+  )
+
+  $json = $Body | ConvertTo-Json -Compress -Depth 8
+  return Invoke-WebRequest `
+    -Uri $Uri `
+    -Method Post `
+    -Headers $Headers `
+    -ContentType 'application/json; charset=utf-8' `
+    -Body ([System.Text.Encoding]::UTF8.GetBytes($json)) `
+    -TimeoutSec 30 `
+    -UseBasicParsing
+}
+
 function Get-HttpStatusCode {
   param([Parameter(Mandatory = $true)] [string]$Uri)
 
@@ -989,6 +1007,28 @@ try {
       'Session-token bootstrap returned no token'
     $headers = @{ Authorization = "Bearer $($tokenResponse.token)" }
     $null = Invoke-JsonRequest "$baseUrl/api/tier" $headers
+    $chatProbeMessage = "installer-certificate-no-model-$runId"
+    $chatResponse = Invoke-JsonPostRequest "$baseUrl/api/chat" @{
+      message = $chatProbeMessage
+      sessionId = "installer-certificate-no-model-$runId"
+    } $headers
+    $chatContent = [string]$chatResponse.Content
+    Assert-True ([int]$chatResponse.StatusCode -eq 200) `
+      'Clean no-model chat did not return HTTP 200.'
+    Assert-True (
+      ([string]$chatResponse.Headers['Content-Type']).StartsWith('text/event-stream')
+    ) 'Clean no-model chat did not return an SSE stream.'
+    Assert-True ([regex]::Matches(
+      $chatContent,
+      '(?m)^event:[ \t]*done[ \t]*\r?$'
+    ).Count -eq 1) 'Clean no-model chat did not complete with exactly one done event.'
+    Assert-True (-not ($chatContent -match '(?m)^event:[ \t]*error[ \t]*\r?$')) `
+      'Clean no-model chat emitted an error event.'
+    Assert-True ($chatContent.Contains('No AI model is ready')) `
+      'Clean no-model chat did not report that model setup is required.'
+    Assert-True (-not $chatContent.Contains($chatProbeMessage)) `
+      'Clean no-model chat echoed the prompt instead of reporting setup-required state.'
+    $receipt.checks['noModelChatSetupRequired'] = $true
     $embedding = Invoke-JsonRequest "$baseUrl/api/embedding/status" $headers
     Assert-True ($embedding.activeProvider -eq 'inprocess') `
       "Clean install did not load the in-process embedding model: $($embedding.activeProvider)"

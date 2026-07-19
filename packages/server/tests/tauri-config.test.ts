@@ -1076,6 +1076,9 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain("resources\\service.js");
     expect(script).toContain('/v1/health/liveliness');
     expect(script).toContain('/api/auth/session-token');
+    expect(script).toContain("$baseUrl/api/chat");
+    expect(script).toContain('No AI model is ready');
+    expect(script).toContain("$receipt.checks['noModelChatSetupRequired']");
     expect(script).toContain("$baseUrl/api/tier");
     expect(script).toContain('unauthenticatedProtectedRoute');
     expect(script).toContain("'WAGGLE_TRUST_LOCALHOST'");
