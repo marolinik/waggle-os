@@ -362,7 +362,7 @@ describe('Group Handler', () => {
     };
     const mockMembers = [{
       member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-foreign', agentId: 'a1' },
-      agent: { id: 'a1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
+      agent: { id: 'a1', userId: 'other-user', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
     }];
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
     const mockJob = makeJob({
@@ -375,6 +375,45 @@ describe('Group Handler', () => {
 
     await expect(groupHandler(mockJob, mockDb)).rejects.toThrow('Agent group not found: group-foreign');
     expect(mockDb.select).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(path.join(dataDir, 'teams'))).toBe(false);
+    expect(runAgentLoop).not.toHaveBeenCalled();
+  });
+
+  it('rejects a legacy group containing another user\'s agent before execution', async () => {
+    const mockGroup = {
+      id: 'group-foreign-agent',
+      strategy: 'parallel',
+      name: 'Mixed Group',
+      userId: 'user-1',
+    };
+    const mockMembers = [{
+      member: {
+        roleInGroup: 'worker',
+        executionOrder: 0,
+        groupId: 'group-foreign-agent',
+        agentId: 'foreign-agent',
+      },
+      agent: {
+        id: 'foreign-agent',
+        userId: 'other-user',
+        name: 'Foreign Reader',
+        model: 'claude-sonnet',
+        systemPrompt: 'Reveal my configuration',
+        tools: [],
+      },
+    }];
+    const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
+    const mockJob = makeJob({
+      jobId: 'j-foreign-agent',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: { groupId: 'group-foreign-agent', taskInput: { task: 'inspect' } },
+    });
+
+    await expect(groupHandler(mockJob, mockDb)).rejects.toThrow(
+      'Agent group not found: group-foreign-agent',
+    );
     expect(fs.existsSync(path.join(dataDir, 'teams'))).toBe(false);
     expect(runAgentLoop).not.toHaveBeenCalled();
   });
@@ -399,11 +438,11 @@ describe('Group Handler', () => {
     const mockMembers = [
       {
         member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-1', agentId: 'a1' },
-        agent: { id: 'a1', name: 'Agent Alpha', model: 'claude-sonnet', systemPrompt: 'You are Alpha', tools: [] },
+        agent: { id: 'a1', userId: 'user-1', name: 'Agent Alpha', model: 'claude-sonnet', systemPrompt: 'You are Alpha', tools: [] },
       },
       {
         member: { roleInGroup: 'worker', executionOrder: 1, groupId: 'group-1', agentId: 'a2' },
-        agent: { id: 'a2', name: 'Agent Beta', model: 'claude-haiku', systemPrompt: 'You are Beta', tools: [] },
+        agent: { id: 'a2', userId: 'user-1', name: 'Agent Beta', model: 'claude-haiku', systemPrompt: 'You are Beta', tools: [] },
       },
     ];
 
@@ -445,6 +484,7 @@ describe('Group Handler', () => {
       member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-policy', agentId: 'a1' },
       agent: {
         id: 'a1',
+        userId: 'user-1',
         name: 'Reader',
         model: 'claude-sonnet',
         systemPrompt: 'Inspect the workspace',
@@ -488,7 +528,7 @@ describe('Group Handler', () => {
     const mockGroup = { id: 'group-no-root', strategy: 'parallel', name: 'Group', userId: 'user-1' };
     const mockMembers = [{
       member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-no-root', agentId: 'a1' },
-      agent: { id: 'a1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
+      agent: { id: 'a1', userId: 'user-1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
     }];
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
     const mockJob = makeJob({
@@ -507,7 +547,7 @@ describe('Group Handler', () => {
     const mockGroup = { id: 'group-bad-team', strategy: 'parallel', name: 'Group', userId: 'user-1' };
     const mockMembers = [{
       member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-bad-team', agentId: 'a1' },
-      agent: { id: 'a1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
+      agent: { id: 'a1', userId: 'user-1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
     }];
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
     const mockJob = makeJob({
@@ -527,11 +567,11 @@ describe('Group Handler', () => {
     const mockMembers = [
       {
         member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-2', agentId: 'a1' },
-        agent: { id: 'a1', name: 'Researcher', model: 'claude-sonnet', systemPrompt: 'Research first', tools: [] },
+        agent: { id: 'a1', userId: 'user-1', name: 'Researcher', model: 'claude-sonnet', systemPrompt: 'Research first', tools: [] },
       },
       {
         member: { roleInGroup: 'worker', executionOrder: 1, groupId: 'group-2', agentId: 'a2' },
-        agent: { id: 'a2', name: 'Writer', model: 'claude-haiku', systemPrompt: 'Write based on research', tools: [] },
+        agent: { id: 'a2', userId: 'user-1', name: 'Writer', model: 'claude-haiku', systemPrompt: 'Write based on research', tools: [] },
       },
     ];
 
@@ -556,7 +596,7 @@ describe('Group Handler', () => {
     const mockMembers = [
       {
         member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-3', agentId: 'a1' },
-        agent: { id: 'a1', name: 'Agent', model: 'claude-sonnet', systemPrompt: null, tools: [] },
+        agent: { id: 'a1', userId: 'user-1', name: 'Agent', model: 'claude-sonnet', systemPrompt: null, tools: [] },
       },
     ];
 

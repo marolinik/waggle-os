@@ -41,6 +41,9 @@ export async function groupHandler(job: Job<JobData>, db: Db): Promise<Record<st
   if (members.length === 0) {
     throw new Error(`Agent group ${groupId} has no members`);
   }
+  if (members.some(({ agent }) => agent.userId !== group.userId)) {
+    throw new Error(`Agent group not found: ${groupId}`);
+  }
 
   const executionContext = createWorkerExecutionContext(teamId);
 
