@@ -6,13 +6,14 @@ import { eq } from 'drizzle-orm';
 import { executeParallel, type ExecutionDeps } from '../execution/parallel.js';
 import { executeSequential } from '../execution/sequential.js';
 import { executeCoordinator } from '../execution/coordinator.js';
-import { runAgentLoop, createSystemTools } from '@waggle/agent';
+import { runAgentLoop } from '@waggle/agent';
+import { createWorkerExecutionContext } from '../execution-policy.js';
 
 const LITELLM_URL = process.env.LITELLM_URL ?? 'http://localhost:4000/v1';
 const LITELLM_API_KEY = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
 
 export async function groupHandler(job: Job<JobData>, db: Db): Promise<Record<string, unknown>> {
-  const { input } = job.data;
+  const { teamId, input } = job.data;
   const groupId = (input as Record<string, unknown>).groupId as string;
   const taskInput = (input as Record<string, unknown>).taskInput as Record<string, unknown> ?? {};
 
@@ -41,26 +42,25 @@ export async function groupHandler(job: Job<JobData>, db: Db): Promise<Record<st
     throw new Error(`Agent group ${groupId} has no members`);
   }
 
+  const executionContext = createWorkerExecutionContext(teamId);
+
   // Sort by execution order
   members.sort((a: typeof members[number], b: typeof members[number]) => a.member.executionOrder - b.member.executionOrder);
 
   // Build execution deps — wires strategies to real runAgentLoop
-  const workspaceDir = (taskInput.workspaceDir as string) ?? process.cwd();
-  const allTools = createSystemTools(workspaceDir);
-
   const deps: ExecutionDeps = {
     runAgent: async (config) => runAgentLoop({
       litellmUrl: LITELLM_URL,
       litellmApiKey: LITELLM_API_KEY,
       model: config.model,
-      systemPrompt: config.systemPrompt,
+      systemPrompt: `${executionContext.systemPrompt}\n\n${config.systemPrompt}`,
       tools: config.tools,
       messages: config.messages,
       maxTurns: config.maxTurns ?? 10,
     }),
     resolveTools: (toolNames) => {
-      if (toolNames.length === 0) return allTools; // No filter = all tools
-      return allTools.filter(t => toolNames.includes(t.name));
+      if (toolNames.length === 0) return executionContext.tools; // No filter = all safe tools
+      return executionContext.tools.filter(t => toolNames.includes(t.name));
     },
   };
 

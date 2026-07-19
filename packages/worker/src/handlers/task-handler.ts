@@ -8,7 +8,8 @@ import type { JobData } from '../job-processor.js';
 import type { Db } from '../../../server/src/db/connection.js';
 import { tasks } from '../../../server/src/db/schema.js';
 import { eq } from 'drizzle-orm';
-import { runAgentLoop, createSystemTools } from '@waggle/agent';
+import { runAgentLoop } from '@waggle/agent';
+import { createWorkerExecutionContext } from '../execution-policy.js';
 
 const LITELLM_URL = process.env.LITELLM_URL ?? 'http://localhost:4000/v1';
 const LITELLM_API_KEY = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
@@ -34,6 +35,8 @@ export async function taskHandler(job: Job<JobData>, db: Db): Promise<Record<str
     throw new Error(`Task ${taskId} does not belong to team ${teamId}`);
   }
 
+  const executionContext = createWorkerExecutionContext(teamId);
+
   // Mark task as in-progress
   await db.update(tasks)
     .set({ status: 'in_progress', assignedTo: userId, updatedAt: new Date() })
@@ -41,27 +44,25 @@ export async function taskHandler(job: Job<JobData>, db: Db): Promise<Record<str
 
   // Build prompt from task context
   const systemPrompt = [
+    executionContext.systemPrompt,
+    '',
     'You are a Waggle AI agent executing an assigned task.',
     'Complete the task described below. Be thorough but concise.',
-    'Use system tools (bash, read_file, write_file, edit_file, search_files, search_content) to interact with the workspace.',
     '',
     `Task: ${task.title}`,
     task.description ? `Details: ${task.description}` : '',
     task.priority ? `Priority: ${task.priority}` : '',
   ].filter(Boolean).join('\n');
 
-  const workspaceDir = (input as Record<string, unknown>).workspaceDir as string ?? process.cwd();
   const model = (input as Record<string, unknown>).model as string ?? DEFAULT_MODEL;
 
   try {
-    const tools = createSystemTools(workspaceDir);
-
     const result = await runAgentLoop({
       litellmUrl: LITELLM_URL,
       litellmApiKey: LITELLM_API_KEY,
       model,
       systemPrompt,
-      tools,
+      tools: executionContext.tools,
       messages: [{ role: 'user', content: `Execute this task: ${task.title}${task.description ? '\n\n' + task.description : ''}` }],
     });
 
