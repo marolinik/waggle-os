@@ -128,6 +128,47 @@ describe('applyPersonaToolFilter — read-only allowlist (no write tool leaks)',
   });
 });
 
+describe('applyPersonaToolFilter — dynamic connector safety rails', () => {
+  const CONNECTOR_POOL = [
+    'chat_x',
+    'connector_slack_list_channels',
+    'connector_slack_send_message',
+  ].map(tool);
+
+  it('keeps connected connector actions eligible for a persona with a static allowlist', () => {
+    const out = applyPersonaToolFilter(
+      CONNECTOR_POOL,
+      persona({ tools: ['chat_x'] }),
+    ).map(t => t.name);
+
+    expect(out).toContain('connector_slack_list_channels');
+    expect(out).toContain('connector_slack_send_message');
+  });
+
+  it('honors disallowedTools against dynamic connector names', () => {
+    const out = applyPersonaToolFilter(
+      CONNECTOR_POOL,
+      persona({
+        tools: ['chat_x'],
+        disallowedTools: ['connector_slack_send_message'],
+      }),
+    ).map(t => t.name);
+
+    expect(out).toContain('connector_slack_list_channels');
+    expect(out).not.toContain('connector_slack_send_message');
+  });
+
+  it('grants a read-only persona no dynamic connector actions', () => {
+    const out = applyPersonaToolFilter(
+      CONNECTOR_POOL,
+      persona({ tools: ['chat_x'], isReadOnly: true }),
+    ).map(t => t.name);
+
+    expect(out).not.toContain('connector_slack_list_channels');
+    expect(out).not.toContain('connector_slack_send_message');
+  });
+});
+
 // Steal #6: MCP tools bypass the persona ALLOWLIST (their dynamic
 // `mcp_<server>_<tool>` names are never in a persona's static tools[]) but must
 // still honor the two safety rails — explicit denylist + read-only.
