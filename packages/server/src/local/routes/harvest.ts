@@ -75,13 +75,25 @@ export function writeHarvestCache(dataDir: string, cacheKey: string, data: unkno
   const dir = getHarvestCacheDir(dataDir);
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${cacheKey}.json`);
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data), 'utf-8');
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
   try {
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    try { fs.unlinkSync(tmp); } catch { /* already gone */ }
-    throw err;
+    fs.writeFileSync(tmp, JSON.stringify(data), 'utf-8');
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        fs.renameSync(tmp, file);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 4) throw error;
+        // Windows antivirus and indexers can briefly hold an exclusive handle.
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort cleanup */ }
   }
   return file;
 }
