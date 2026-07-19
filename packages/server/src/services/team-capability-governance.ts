@@ -280,10 +280,13 @@ export class TeamCapabilityGovernance {
     return row;
   }
 
-  async deleteOverride(overrideId: string) {
+  async deleteOverride(teamId: string, overrideId: string) {
     const [deleted] = await this.db
       .delete(teamCapabilityOverrides)
-      .where(eq(teamCapabilityOverrides.id, overrideId))
+      .where(and(
+        eq(teamCapabilityOverrides.teamId, teamId),
+        eq(teamCapabilityOverrides.id, overrideId),
+      ))
       .returning();
     return deleted ?? null;
   }
@@ -339,16 +342,20 @@ export class TeamCapabilityGovernance {
     return { duplicate: false, request };
   }
 
-  async getRequest(requestId: string) {
+  async getRequest(teamId: string, requestId: string) {
     const [row] = await this.db
       .select()
       .from(teamCapabilityRequests)
-      .where(eq(teamCapabilityRequests.id, requestId))
+      .where(and(
+        eq(teamCapabilityRequests.teamId, teamId),
+        eq(teamCapabilityRequests.id, requestId),
+      ))
       .limit(1);
     return row ?? null;
   }
 
   async decideRequest(
+    teamId: string,
     requestId: string,
     decidedBy: string,
     decision: 'approved' | 'rejected',
@@ -362,7 +369,10 @@ export class TeamCapabilityGovernance {
         decisionReason: reason ?? null,
         decidedAt: new Date(),
       })
-      .where(eq(teamCapabilityRequests.id, requestId))
+      .where(and(
+        eq(teamCapabilityRequests.teamId, teamId),
+        eq(teamCapabilityRequests.id, requestId),
+      ))
       .returning();
     return updated ?? null;
   }

@@ -160,7 +160,7 @@ export async function capabilityGovernanceRoutes(fastify: FastifyInstance) {
     if (!ctx) return;
     if (!requireAdmin(ctx.membership, reply)) return;
 
-    const deleted = await governance.deleteOverride(id);
+    const deleted = await governance.deleteOverride(ctx.team.id, id);
     if (!deleted) {
       return reply.code(404).send({ error: 'Override not found' });
     }
@@ -236,7 +236,7 @@ export async function capabilityGovernanceRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'status must be approved or rejected' });
     }
 
-    const capRequest = await governance.getRequest(id);
+    const capRequest = await governance.getRequest(ctx.team.id, id);
     if (!capRequest) {
       return reply.code(404).send({ error: 'Request not found' });
     }
@@ -245,7 +245,13 @@ export async function capabilityGovernanceRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'Request has already been decided' });
     }
 
-    const decided = await governance.decideRequest(id, request.userId, body.status as 'approved' | 'rejected', body.reason);
+    const decided = await governance.decideRequest(
+      ctx.team.id,
+      id,
+      request.userId,
+      body.status as 'approved' | 'rejected',
+      body.reason,
+    );
 
     // On approve: auto-create override
     if (body.status === 'approved') {
