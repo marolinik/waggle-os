@@ -32,6 +32,12 @@ export interface McpToolInfo {
   };
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function classifyMcpToolRisk(tool: McpToolInfo): RiskLevel {
   // MCP servers currently have no independently verified trust provenance.
   // Their annotations may elevate risk, but can never lower the high floor
@@ -483,21 +489,35 @@ export class McpRuntime extends EventEmitter {
 
   private wrapServerTools(server: McpServerInstance): ToolDefinition[] {
     const serverName = server.config.name;
-    return server.getTools()
-      .filter((tool) => scanForInjection(
-        `${typeof tool.description === 'string' ? tool.description : ''}\n${JSON.stringify(tool.inputSchema ?? {})}`,
-        'tool_output',
-      ).safe)
-      .map((tool) => ({
+    const tools: ToolDefinition[] = [];
+    for (const tool of server.getTools()) {
+      if (typeof tool.description !== 'string' || !isPlainRecord(tool.inputSchema)) continue;
+
+      let serializedInputSchema: string;
+      let normalizedInputSchema: unknown;
+      try {
+        serializedInputSchema = JSON.stringify(tool.inputSchema);
+        normalizedInputSchema = JSON.parse(serializedInputSchema) as unknown;
+      } catch {
+        continue;
+      }
+      if (!isPlainRecord(normalizedInputSchema)) continue;
+
+      const description = tool.description;
+      if (!scanForInjection(`${description}\n${serializedInputSchema}`, 'tool_output').safe) continue;
+
+      tools.push({
         name: `mcp_${serverName}_${tool.name}`,
-        description: `[UNTRUSTED MCP: ${serverName}] ${tool.description}`,
-        parameters: tool.inputSchema,
+        description: `[UNTRUSTED MCP: ${serverName}] ${description}`,
+        parameters: normalizedInputSchema,
         riskLevel: classifyMcpToolRisk(tool),
         execute: async (args: Record<string, unknown>) => {
           const result = await server.callTool(tool.name, args);
           return typeof result === 'string' ? result : JSON.stringify(result);
         },
-      }));
+      });
+    }
+    return tools;
   }
 }
 
