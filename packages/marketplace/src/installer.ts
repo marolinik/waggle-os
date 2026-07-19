@@ -98,6 +98,19 @@ export class MarketplaceInstaller {
     return configureMarketplaceMcpServer(source, settings);
   }
 
+  static mcpProvenanceMatches(
+    actual: MarketplaceMcpProvenance,
+    expected: MarketplaceMcpProvenance,
+  ): boolean {
+    return actual.kind === expected.kind
+      && actual.schemaVersion === expected.schemaVersion
+      && actual.sourceName === expected.sourceName
+      && actual.packageName === expected.packageName
+      && actual.packageVersion === expected.packageVersion
+      && actual.npmPackage === expected.npmPackage
+      && actual.profileDigest === expected.profileDigest;
+  }
+
   // ─── Public API ───────────────────────────────────────────────────
 
   /**
@@ -170,17 +183,42 @@ export class MarketplaceInstaller {
           manifest.mcp_config!,
         );
       } catch (err) {
-        const error = (err as Error).message;
+        const provenanceError = (err as Error).message;
+        const identityChanged = request.expectedMcpProvenance !== undefined;
+        const error = identityChanged
+          ? 'Marketplace MCP package changed during installation; retry from the refreshed catalog'
+          : provenanceError;
         return {
           success: false,
           packageId: pkg.id,
           packageName: pkg.name,
           installType,
           installPath: pkg.waggle_install_path,
-          message: `Rejected marketplace MCP provenance: ${error}`,
-          errors: [error],
+          message: identityChanged ? error : `Rejected marketplace MCP provenance: ${error}`,
+          errors: [identityChanged ? `${error}: ${provenanceError}` : error],
+          ...(identityChanged && { errorCode: 'PACKAGE_IDENTITY_CHANGED' as const }),
         };
       }
+    }
+
+    if (
+      request.expectedMcpProvenance
+      && (!mcpProvenance || !MarketplaceInstaller.mcpProvenanceMatches(
+        mcpProvenance,
+        request.expectedMcpProvenance,
+      ))
+    ) {
+      const error = 'Marketplace MCP package changed during installation; retry from the refreshed catalog';
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: error,
+        errors: [error],
+        errorCode: 'PACKAGE_IDENTITY_CHANGED',
+      };
     }
 
     // Check if already installed

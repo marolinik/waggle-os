@@ -36,6 +36,8 @@ import { scanForInjection, type RecordAuditInput } from '@waggle/core';
 import {
   MCP_SERVERS,
   MarketplaceInstaller,
+  createMarketplaceMcpProvenance,
+  type InstallManifest,
   type MarketplaceMcpProvenance,
   type McpServerConfig,
 } from '@waggle/marketplace';
@@ -245,7 +247,9 @@ export async function mcpRoutes(fastify: FastifyInstance) {
 
     // Resolve catalog id → marketplace package (mcp-registry seeds share ids)
     const row = db.getRawDb().prepare(`
-      SELECT p.id, p.name, p.version
+      SELECT p.id, p.name, p.version, p.install_manifest AS installManifest,
+        s.name AS sourceName, s.source_type AS sourceType,
+        s.is_custom AS sourceIsCustom
       FROM packages p
       INNER JOIN sources s ON s.id = p.source_id
       WHERE p.name = ?
@@ -255,9 +259,41 @@ export async function mcpRoutes(fastify: FastifyInstance) {
         AND s.is_custom = 0
       ORDER BY p.id
       LIMIT 1
-    `).get(mcpId) as { id: number; name: string; version: string } | undefined;
+    `).get(mcpId) as {
+      id: number;
+      name: string;
+      version: string;
+      installManifest: string | InstallManifest;
+      sourceName: string;
+      sourceType: 'registry';
+      sourceIsCustom: number;
+    } | undefined;
     if (!row) {
       return reply.code(404).send({ error: `No marketplace MCP package named "${mcpId}"` });
+    }
+
+    let expectedMcpProvenance: MarketplaceMcpProvenance;
+    try {
+      const manifest = (typeof row.installManifest === 'string'
+        ? JSON.parse(row.installManifest)
+        : row.installManifest) as InstallManifest;
+      const mcpConfig = manifest.mcp_config;
+      if (!mcpConfig) throw new Error('Marketplace MCP snapshot has no configuration.');
+      expectedMcpProvenance = createMarketplaceMcpProvenance(
+        {
+          name: row.sourceName,
+          source_type: row.sourceType,
+          is_custom: Boolean(row.sourceIsCustom),
+        },
+        { name: row.name, version: row.version },
+        mcpConfig,
+      );
+    } catch (err) {
+      return reply.code(422).send({
+        installed: false,
+        success: false,
+        error: `Canonical marketplace MCP snapshot is invalid: ${(err as Error).message}`,
+      });
     }
 
     const res = await fastify.inject({
@@ -270,6 +306,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
         force: body.force,
         forceInsecure: body.forceInsecure,
         expectedInstallType: 'mcp',
+        expectedMcpProvenance,
       },
     });
     const result = res.json() as {
@@ -278,6 +315,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
       scanResult?: { blocked?: boolean; overall_severity?: string };
       mcpSourceConfig?: McpServerConfig;
       mcpProvenance?: MarketplaceMcpProvenance;
+      errorCode?: 'PACKAGE_IDENTITY_CHANGED';
     };
     if (res.statusCode >= 400 || result.success === false) {
       // A SecurityGate block (route-level 403 OR installer-level 422 with
@@ -303,8 +341,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     }
     if (
       row.name !== mcpId
-      || result.mcpProvenance.packageName !== row.name
-      || result.mcpProvenance.packageVersion !== row.version
+      || !MarketplaceInstaller.mcpProvenanceMatches(result.mcpProvenance, expectedMcpProvenance)
       || result.mcpSourceConfig.name !== row.name
     ) {
       return reply.code(409).send({

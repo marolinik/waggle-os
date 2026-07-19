@@ -12,8 +12,8 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { MarketplaceDB, MarketplaceInstaller, MarketplaceSync, SecurityGate, ENTERPRISE_PACKS, PACKAGE_CATEGORIES, recategorizeAll, isCiscoScannerAvailable, resolveSkillSource, SkillSourceError } from '@waggle/marketplace';
-import type { InstallationType, SearchSort, ScanResult, MarketplacePackage, FetchFn } from '@waggle/marketplace';
+import { MarketplaceDB, MarketplaceInstaller, MarketplaceSync, SecurityGate, ENTERPRISE_PACKS, PACKAGE_CATEGORIES, recategorizeAll, isCiscoScannerAvailable, resolveSkillSource, SkillSourceError, createMarketplaceMcpProvenance } from '@waggle/marketplace';
+import type { InstallationType, SearchSort, ScanResult, MarketplacePackage, MarketplaceMcpProvenance, FetchFn } from '@waggle/marketplace';
 import { validateSkillMd } from '@waggle/sdk';
 import { safeFetch, assertUrlAllowed, scanForInjection } from '@waggle/agent';
 import { getKvarkConfig } from '../../kvark/kvark-config.js';
@@ -227,6 +227,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       force?: boolean;
       forceInsecure?: boolean;
       expectedInstallType?: InstallationType;
+      expectedMcpProvenance?: MarketplaceMcpProvenance;
     };
 
     if (!body.packageId) {
@@ -239,18 +240,64 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: `Package ID ${body.packageId} not found` });
     }
 
-    const gate = new SecurityGate({
-      enable_gen_trust_hub: false,
-      enable_cisco_scanner: false,
-      enable_mcp_guardian: false,
-      enable_heuristics: true,
-    });
+    if (
+      body.expectedMcpProvenance
+      && body.expectedInstallType
+      && pkg.waggle_install_type !== body.expectedInstallType
+    ) {
+      const error = 'Marketplace MCP package changed during installation; retry from the refreshed catalog';
+      return reply.code(409).send({
+        success: false,
+        error,
+        message: error,
+        errorCode: 'PACKAGE_IDENTITY_CHANGED',
+      });
+    }
+
+    if (body.expectedMcpProvenance) {
+      let actualMcpProvenance: MarketplaceMcpProvenance | undefined;
+      try {
+        const mcpConfig = pkg.install_manifest?.mcp_config;
+        if (!mcpConfig) throw new Error('Marketplace MCP snapshot has no configuration.');
+        actualMcpProvenance = createMarketplaceMcpProvenance(
+          db.getSource(pkg.source_id),
+          { name: pkg.name, version: pkg.version },
+          mcpConfig,
+        );
+      } catch {
+        // A delegated install treats an invalid fresh snapshot as the same
+        // retryable identity conflict as a valid-but-different snapshot.
+      }
+      if (
+        !actualMcpProvenance
+        || !MarketplaceInstaller.mcpProvenanceMatches(
+          actualMcpProvenance,
+          body.expectedMcpProvenance,
+        )
+      ) {
+        const error = 'Marketplace MCP package changed during installation; retry from the refreshed catalog';
+        return reply.code(409).send({
+          success: false,
+          error,
+          message: error,
+          errorCode: 'PACKAGE_IDENTITY_CHANGED',
+        });
+      }
+    }
 
     let scanResult: ScanResult | undefined;
-    try {
-      scanResult = await gate.scan(pkg);
-    } catch {
-      // Scan failure should not block installation — proceed with warning
+    if (!body.expectedMcpProvenance) {
+      const gate = new SecurityGate({
+        enable_gen_trust_hub: false,
+        enable_cisco_scanner: false,
+        enable_mcp_guardian: false,
+        enable_heuristics: true,
+      });
+      try {
+        scanResult = await gate.scan(pkg);
+      } catch {
+        // Scan failure should not block installation — proceed with warning
+      }
     }
 
     if (scanResult) {
@@ -379,6 +426,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       force: body.force,
       forceInsecure: body.forceInsecure,
       expectedInstallType: body.expectedInstallType,
+      expectedMcpProvenance: body.expectedMcpProvenance,
     });
 
     // Update security status in DB after successful install. Prefer the
@@ -456,6 +504,9 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
 
     // Attach security scan info to the response
     const response: Record<string, unknown> = { ...result };
+    if (result.errorCode === 'PACKAGE_IDENTITY_CHANGED') {
+      response.error = result.message;
+    }
     if (scanResult) {
       response.security = {
         severity: scanResult.overall_severity,
@@ -468,7 +519,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       };
     }
 
-    return reply.code(result.success ? 200 : 422).send(response);
+    return reply.code(result.success ? 200 : result.errorCode === 'PACKAGE_IDENTITY_CHANGED' ? 409 : 422).send(response);
   });
 
   // ── POST /api/marketplace/uninstall ─────────────────────────────────
