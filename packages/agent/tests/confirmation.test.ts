@@ -262,6 +262,12 @@ describe('ConfirmationGate headless deny-default (scheduled-tick footgun)', () =
     expect(await gate.confirm('connector_gmail_send_email', { to: 'x@y.z' })).toBe(false);
   });
 
+  it('denies an opaque provider-declared high-risk action while flowing declared-low reads', async () => {
+    const gate = new ConfirmationGate({ headless: true });
+    expect(await gate.confirm('connector_mock_sync_records', {}, 'high')).toBe(false);
+    expect(await gate.confirm('connector_mock_read_records', {}, 'low')).toBe(true);
+  });
+
   it('still flows L1 read-only work (read_file, safe bash) in headless', async () => {
     const gate = new ConfirmationGate({ headless: true });
     expect(await gate.confirm('read_file', { path: '/tmp/x' })).toBe(true);

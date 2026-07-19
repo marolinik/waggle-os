@@ -352,10 +352,14 @@ export class ConfirmationGate {
     this.headless = config.headless ?? false;
   }
 
-  async confirm(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+  async confirm(
+    toolName: string,
+    args: Record<string, unknown>,
+    trustedRiskLevel?: RiskLevel,
+  ): Promise<boolean> {
     // L1 reads / recall / notify never gate — let them flow even in headless.
     // (Checked FIRST so the headless deny-default cannot block read-only work.)
-    if (!needsConfirmation(toolName, args)) return true;
+    if (!needsConfirmation(toolName, args, trustedRiskLevel)) return true;
     if (this.autoApprove.has(toolName)) return true;
     // Legacy non-interactive behaviour is preserved when headless=false; a
     // headless tick denies the confirmation-requiring action instead.
