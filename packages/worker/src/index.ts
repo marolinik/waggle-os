@@ -1,4 +1,6 @@
 import { Worker } from 'bullmq';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createDb } from '../../server/src/db/connection.js';
 import { agentJobs } from '../../server/src/db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -91,9 +93,32 @@ export function createWorker(redisUrl = REDIS_URL, databaseUrl?: string, queueNa
 }
 
 // Start if run directly
-const isDirectRun = process.argv[1]?.replace(/\\/g, '/').includes('worker/src/index');
-if (isDirectRun) {
+export function isDirectModule(entryPath: string | undefined, moduleUrl: string): boolean {
+  return entryPath !== undefined && pathToFileURL(resolve(entryPath)).href === moduleUrl;
+}
+
+type ShutdownSignalTarget = {
+  once(signal: 'SIGTERM' | 'SIGINT', listener: () => void): unknown;
+};
+
+export function installShutdownHandlers(
+  worker: Pick<Worker, 'close'>,
+  signalTarget: ShutdownSignalTarget = process,
+): () => Promise<void> {
+  let shutdownPromise: Promise<void> | undefined;
+  const shutdown = () => {
+    shutdownPromise ??= worker.close();
+    return shutdownPromise;
+  };
+
+  signalTarget.once('SIGTERM', shutdown);
+  signalTarget.once('SIGINT', shutdown);
+  return shutdown;
+}
+
+if (isDirectModule(process.argv[1], import.meta.url)) {
   const { worker } = createWorker();
+  installShutdownHandlers(worker);
   console.log('Waggle agent worker started, waiting for jobs...');
 
   worker.on('completed', (job) => {

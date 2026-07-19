@@ -71,6 +71,25 @@ services:
       retries: 3
       start_period: 15s
 
+  worker:
+    image: waggle/server:latest
+    command: ['node', 'packages/worker/dist/index.js']
+    environment:
+      - DATABASE_URL=postgres://waggle:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/waggle
+      - REDIS_URL=redis://redis:6379
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - WAGGLE_SKIP_LITELLM=1
+      - NODE_ENV=production
+    depends_on:
+      waggle:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:

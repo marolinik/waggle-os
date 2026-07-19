@@ -20,7 +20,7 @@
     "build:dev": "cd apps/web && npx vite build --mode development --outDir ../../dist --emptyOutDir",
     "typecheck:web": "cd apps/web && npx tsc --noEmit -p tsconfig.app.json",
     "preview": "cd apps/web && npx vite preview",
-    "build:packages": "cd packages/shared && npx tsc --build && cd ../waggle-dance && npx tsc --build --force && cd ../hive-mind-core && npx tsc --build && cd ../core && npx tsc --build && cd ../weaver && npx tsc --build && cd ../wiki-compiler && npx tsc --build && cd ../marketplace && npx tsc --build && cd ../agent && npx tsc --build && cd ../server && npx tsc --build",
+    "build:packages": "cd packages/shared && npx tsc --build && cd ../waggle-dance && npx tsc --build --force && cd ../hive-mind-core && npx tsc --build && cd ../core && npx tsc --build && cd ../weaver && npx tsc --build && cd ../wiki-compiler && npx tsc --build && cd ../marketplace && npx tsc --build && cd ../agent && npx tsc --build && cd ../server && npx tsc --build && cd ../worker && npm run build",
     "build:hook-runtime": "node scripts/build-hook-runtime.mjs",
     "build:all": "npm run build:packages && npm run build",
     "dev:www": "npm run dev -w apps/www",
