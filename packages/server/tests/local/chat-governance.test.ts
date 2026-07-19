@@ -17,7 +17,8 @@ const { mockGetTeamServer } = vi.hoisted(() => {
   return { mockGetTeamServer };
 });
 
-vi.mock('@waggle/core', () => ({
+vi.mock('@waggle/core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@waggle/core')>(),
   WaggleConfig: vi.fn(() => ({
     getTeamServer: mockGetTeamServer,
   })),
@@ -66,7 +67,7 @@ describe('getGovernancePermissions — no team server', () => {
   });
 
   it('returns undefined when team server has no token', async () => {
-    mockGetTeamServer.mockReturnValue({ url: 'https://team.example.com' });
+    mockGetTeamServer.mockReturnValue({ url: 'https://93.184.216.34' });
 
     const result = await getGovernancePermissions('/fake/data', 'ws-no-token-1', 'member');
     expect(result).toBeUndefined();
@@ -87,7 +88,7 @@ describe('getGovernancePermissions — no team server', () => {
 describe('getGovernancePermissions — successful fetch', () => {
   it('returns blockedTools for the matching role', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -105,7 +106,7 @@ describe('getGovernancePermissions — successful fetch', () => {
 
   it('returns undefined when no policy matches the teamRole', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -122,7 +123,7 @@ describe('getGovernancePermissions — successful fetch', () => {
 
   it('returns undefined when permissions is not an array', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -135,7 +136,7 @@ describe('getGovernancePermissions — successful fetch', () => {
 
   it('returns undefined when the matching role policy has no blockedTools', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -152,7 +153,7 @@ describe('getGovernancePermissions — successful fetch', () => {
 
   it('constructs the correct URL with teamSlug and Authorization header', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com/',
+      url: 'https://93.184.216.34/',
       token: 'bearer-token-abc',
       teamSlug: 'my-team',
     });
@@ -164,13 +165,13 @@ describe('getGovernancePermissions — successful fetch', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://team.example.com/api/teams/my-team/capability-policies');
+    expect(url).toBe('https://93.184.216.34/api/teams/my-team/capability-policies');
     expect(options.headers.Authorization).toBe('Bearer bearer-token-abc');
   });
 
   it('strips trailing slash from team server URL', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com///',
+      url: 'https://93.184.216.34///',
       token: 'tok',
       teamSlug: 'slug',
     });
@@ -187,12 +188,74 @@ describe('getGovernancePermissions — successful fetch', () => {
   });
 });
 
+describe('getGovernancePermissions — guarded Team egress', () => {
+  it('blocks cloud metadata before sending the Team token', async () => {
+    mockGetTeamServer.mockReturnValue({
+      url: 'https://169.254.169.254/latest/meta-data',
+      token: 'metadata-token',
+      teamSlug: 'acme',
+    });
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse([
+      { role: 'member', blockedTools: ['write_file'] },
+    ]));
+    globalThis.fetch = fetchMock;
+
+    const result = await getGovernancePermissions('/fake/data', 'ws-metadata-block-1', 'member');
+
+    expect(result).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks cleartext public Team URLs even when loopback access is enabled', async () => {
+    const previousAllowLocal = process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+    process.env.WAGGLE_ALLOW_LOCAL_FETCH = '1';
+    mockGetTeamServer.mockReturnValue({
+      url: 'http://93.184.216.34',
+      token: 'cleartext-token',
+      teamSlug: 'acme',
+    });
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse([
+      { role: 'member', blockedTools: ['write_file'] },
+    ]));
+    globalThis.fetch = fetchMock;
+
+    try {
+      const result = await getGovernancePermissions('/fake/data', 'ws-cleartext-block-1', 'member');
+
+      expect(result).toBeUndefined();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (previousAllowLocal === undefined) delete process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+      else process.env.WAGGLE_ALLOW_LOCAL_FETCH = previousAllowLocal;
+    }
+  });
+
+  it('does not forward the Team token across redirects', async () => {
+    mockGetTeamServer.mockReturnValue({
+      url: 'https://93.184.216.34',
+      token: 'redirect-token',
+      teamSlug: 'acme',
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, {
+      status: 302,
+      headers: { location: 'https://169.254.169.254/latest/meta-data' },
+    }));
+    globalThis.fetch = fetchMock;
+
+    const result = await getGovernancePermissions('/fake/data', 'ws-redirect-block-1', 'member');
+
+    expect(result).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.redirect).toBe('manual');
+  });
+});
+
 // ─── Fetch failure ──────────────────────────────────────────────────
 
 describe('getGovernancePermissions — fetch failure', () => {
   it('returns undefined when fetch throws (network error)', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -205,7 +268,7 @@ describe('getGovernancePermissions — fetch failure', () => {
 
   it('returns undefined when server responds with non-ok status', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -222,7 +285,7 @@ describe('getGovernancePermissions — fetch failure', () => {
 describe('getGovernancePermissions — caching', () => {
   it('caches successful responses and does not re-fetch for the same workspace', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -251,7 +314,7 @@ describe('getGovernancePermissions — caching', () => {
 
   it('returns cached data when fetch fails on subsequent calls', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -286,7 +349,7 @@ describe('getGovernancePermissions — caching', () => {
 
   it('uses different cache entries for different workspaceIds', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -313,7 +376,7 @@ describe('getGovernancePermissions — caching', () => {
 describe('getGovernancePermissions — edge cases', () => {
   it('handles undefined teamRole gracefully', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       teamSlug: 'acme',
     });
@@ -332,7 +395,7 @@ describe('getGovernancePermissions — edge cases', () => {
 
   it('defaults teamSlug to "default" when not set on teamServer', async () => {
     mockGetTeamServer.mockReturnValue({
-      url: 'https://team.example.com',
+      url: 'https://93.184.216.34',
       token: 'tok-123',
       // No teamSlug property
     });
@@ -343,6 +406,6 @@ describe('getGovernancePermissions — edge cases', () => {
     await getGovernancePermissions('/fake/data', 'ws-default-slug-1', 'member');
 
     const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://team.example.com/api/teams/default/capability-policies');
+    expect(url).toBe('https://93.184.216.34/api/teams/default/capability-policies');
   });
 });

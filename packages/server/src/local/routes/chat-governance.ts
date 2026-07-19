@@ -6,6 +6,7 @@
  */
 
 import { WaggleConfig } from '@waggle/core';
+import { fetchTeamServer } from '../team-server-egress.js';
 
 /** Cached governance policies — same TTL as team.ts route cache (5 minutes) */
 const policyCache = new Map<string, { permissions: unknown; fetchedAt: number }>();
@@ -44,7 +45,7 @@ export async function getGovernancePermissions(
   try {
     const teamSlug = (teamServer as unknown as Record<string, unknown>).teamSlug as string ?? 'default';
     const url = `${teamServer.url.replace(/\/$/, '')}/api/teams/${teamSlug}/capability-policies`;
-    const res = await fetch(url, {
+    const res = await fetchTeamServer(url, {
       headers: { 'Authorization': `Bearer ${teamServer.token}` },
       signal: AbortSignal.timeout(5000),
     });
