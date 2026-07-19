@@ -198,6 +198,77 @@ describe('SSE Stream Resilience', () => {
         }
       }
     });
+
+    it('uses a newly verified local Ollama model even while startup provider status is stale', async () => {
+      const prevProvider = server.agentState.llmProvider;
+      const prevCurrentModel = server.agentState.currentModel;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      const prevOllamaHost = process.env.OLLAMA_HOST;
+      const providerEnv = [...new Set(Object.values(PROVIDER_ENV_NAMES).flat())];
+      const previousEnv = new Map(providerEnv.map((name) => [name, process.env[name]]));
+      for (const name of providerEnv) delete process.env[name];
+
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'degraded',
+        detail: 'Built-in provider proxy (no API key)',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-test';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+
+      const completionUrls: string[] = [];
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-test' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/health/readiness')) {
+          return new Response(JSON.stringify({ status: 'unavailable' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/chat/completions')) {
+          completionUrls.push(url);
+          const stream = 'data: {"choices":[{"delta":{"content":"Local model ready"}}]}\n\ndata: [DONE]\n\n';
+          return new Response(stream, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+        }
+        return new Response('', { status: 503 });
+      });
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: { message: 'Use the newly installed model', model: 'ollama/local-test' },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('event: done');
+        expect(res.body).toContain('Local model ready');
+        expect(res.body).not.toContain('No AI model is ready');
+        expect(completionUrls).toEqual(['http://ollama.test/v1/chat/completions']);
+      } finally {
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = prevProvider;
+        server.agentState.currentModel = prevCurrentModel;
+        server.localConfig.litellmUrl = prevLitellmUrl;
+        if (prevOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = prevOllamaHost;
+        for (const [name, value] of previousEnv) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+    });
   });
 
   // ── Notification SSE module and event wiring ────────────────────

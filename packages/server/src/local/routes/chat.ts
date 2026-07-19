@@ -1119,8 +1119,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Check whether the configured LLM path can serve a completion. Process
       // liveness is insufficient for the built-in proxy because it also runs
       // normally before a cloud credential or local model has been configured.
-      let litellmAvailable = hasCustomRunner; // trust injected runners
-      if (!hasCustomRunner) {
+      // resolveUsableModel() only returns an ollama/* selection after the tag
+      // is observed locally, so it remains authoritative even if startup's
+      // cloud-provider status has not yet caught up with onboarding.
+      const resolvedLocalOllama = resolvedModel.toLowerCase().startsWith('ollama/');
+      let litellmAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
+      if (!hasCustomRunner && !resolvedLocalOllama) {
         const llmStatus = server.agentState.llmProvider;
         if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
           // Healthy tracked provider — skip HTTP probe. For litellm the
