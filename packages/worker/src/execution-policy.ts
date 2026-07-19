@@ -38,6 +38,9 @@ function canonicalChild(parent: string, childName: string): string {
   if (!isContained(parent, canonical)) {
     throw new Error(`Worker tenant path escapes WAGGLE_DATA_DIR: ${childName}`);
   }
+  if (path.relative(child, canonical) !== '') {
+    throw new Error(`Worker tenant path must not traverse a link or junction: ${childName}`);
+  }
   return canonical;
 }
 

@@ -25,6 +25,31 @@ describe('worker execution policy', () => {
     expect(fs.statSync(context.workspaceDir).isDirectory()).toBe(true);
   });
 
+  it('rejects a team directory link that aliases another tenant', () => {
+    const teamsDir = path.join(dataDir, 'teams');
+    const otherTeamDir = path.join(teamsDir, 'team-other');
+    fs.mkdirSync(path.join(otherTeamDir, 'files'), { recursive: true });
+    fs.symlinkSync(
+      otherTeamDir,
+      path.join(teamsDir, 'team-requested'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    expect(() => createWorkerExecutionContext('team-requested')).toThrow('link or junction');
+  });
+
+  it('rejects a files directory link that widens the tenant root', () => {
+    const teamDir = path.join(dataDir, 'teams', 'team-123');
+    fs.mkdirSync(teamDir, { recursive: true });
+    fs.symlinkSync(
+      teamDir,
+      path.join(teamDir, 'files'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    expect(() => createWorkerExecutionContext('team-123')).toThrow('link or junction');
+  });
+
   it('exposes exactly the read-only system tool pool', () => {
     const context = createWorkerExecutionContext('team-123');
 
