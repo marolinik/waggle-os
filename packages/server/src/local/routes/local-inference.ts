@@ -53,6 +53,15 @@ interface InferenceServerStatus {
 
 const OLLAMA_MODEL_REF = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/;
 const OLLAMA_MANIFEST_DIGEST = /^sha256:[0-9a-f]{64}$/i;
+const OLLAMA_BARE_MANIFEST_DIGEST = /^[0-9a-f]{64}$/i;
+
+function canonicalizeOllamaManifestDigest(digest: unknown): string | null {
+  if (typeof digest !== 'string') return null;
+  const normalized = digest.toLowerCase();
+  if (OLLAMA_MANIFEST_DIGEST.test(normalized)) return normalized;
+  if (OLLAMA_BARE_MANIFEST_DIGEST.test(normalized)) return `sha256:${normalized}`;
+  return null;
+}
 
 function isValidOllamaModelRef(model: string): boolean {
   if (model.length > 200 || !OLLAMA_MODEL_REF.test(model)) return false;
@@ -87,13 +96,11 @@ async function checkOllama(baseUrl: string): Promise<InferenceServerStatus> {
       .filter((model) => !isRemoteOllamaAlias(model.name, model.remote_host))
       .map((model) => model.name);
     const modelDigests = Object.fromEntries(
-      entries
-        .filter((model) => (
-          !isRemoteOllamaAlias(model.name, model.remote_host)
-          && typeof model.digest === 'string'
-          && OLLAMA_MANIFEST_DIGEST.test(model.digest)
-        ))
-        .map((model) => [model.name, model.digest!]),
+      entries.flatMap((model): Array<[string, string]> => {
+        if (isRemoteOllamaAlias(model.name, model.remote_host)) return [];
+        const digest = canonicalizeOllamaManifestDigest(model.digest);
+        return digest ? [[model.name, digest]] : [];
+      }),
     );
     const cloudModels = entries
       .filter((model) => isRemoteOllamaAlias(model.name, model.remote_host))

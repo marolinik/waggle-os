@@ -385,7 +385,8 @@ describe('local-inference route — verified model installation', () => {
     }
   });
 
-  it('binds a successful pull to the digest advertised by the live Ollama tag API', async () => {
+  it('canonicalizes the bare digest advertised by the live Ollama tag API', async () => {
+    const wireDigest = 'B'.repeat(64);
     const digest = `sha256:${'b'.repeat(64)}`;
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
@@ -394,7 +395,7 @@ describe('local-inference route — verified model installation', () => {
       }
       if (url.endsWith('/api/tags')) {
         return new Response(JSON.stringify({
-          models: [{ name: 'qwen3:1.7b', digest }],
+          models: [{ name: 'qwen3:1.7b', digest: wireDigest }],
         }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (url.endsWith('/api/version')) {
