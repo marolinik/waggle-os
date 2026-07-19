@@ -77,7 +77,7 @@ export class ConnectorRegistry {
   /**
    * Generate ToolDefinition[] for all connected connectors.
    * Each action becomes a tool named `connector_<id>_<action>`.
-   * High-risk actions include _riskLevel metadata for approval gates.
+   * Trusted action risk stays on ToolDefinition metadata for approval gates.
    */
   generateTools(): ToolDefinition[] {
     const connected = this.getConnected();
@@ -89,6 +89,7 @@ export class ConnectorRegistry {
         tools.push({
           name: toolName,
           description: `[${connector.name}] ${action.description}`,
+          riskLevel: action.riskLevel,
           parameters: {
             type: 'object',
             ...(action.inputSchema as Record<string, unknown>),

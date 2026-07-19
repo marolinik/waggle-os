@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BaseConnector, type ConnectorAction, type ConnectorResult, type WaggleConnector } from '../src/connector-sdk.js';
 import { ConnectorRegistry, type AuditLogger } from '../src/connector-registry.js';
+import { needsConfirmationWithAutonomy } from '../src/confirmation.js';
 import type { VaultStore } from '@waggle/core';
 import type { ConnectorHealth, ConnectorStatus } from '@waggle/shared';
 
@@ -199,6 +200,35 @@ describe('ConnectorRegistry', () => {
       'connector_mock_create_item',
       'connector_mock_delete_item',
     ]);
+  });
+
+  it('propagates trusted action risk so declared-high actions stay gated at YOLO', () => {
+    vault = createMockVault({ mock: { value: 'token123', isExpired: false } });
+    registry = new ConnectorRegistry(vault);
+    const connector = new MockConnector();
+    connector.actions.splice(0, connector.actions.length,
+      {
+        name: 'read_action',
+        description: 'Read harmless data',
+        inputSchema: {},
+        riskLevel: 'low',
+      },
+      {
+        name: 'execute_action',
+        description: 'Execute a provider action',
+        inputSchema: {},
+        riskLevel: 'high',
+      },
+    );
+    registry.register(connector);
+
+    const tools = registry.generateTools();
+    const readTool = tools.find(tool => tool.name === 'connector_mock_read_action')!;
+    const executeTool = tools.find(tool => tool.name === 'connector_mock_execute_action')!;
+
+    expect(needsConfirmationWithAutonomy(executeTool.name, {}, 'yolo', executeTool.riskLevel)).toBe(true);
+    expect(needsConfirmationWithAutonomy(readTool.name, {}, 'yolo', readTool.riskLevel)).toBe(false);
+    expect(tools.map(tool => tool.riskLevel)).toEqual(['low', 'high']);
   });
 
   it('generateTools() returns empty array for disconnected connectors', () => {
