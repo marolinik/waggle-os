@@ -63,6 +63,14 @@ describe('Docker Deployment', () => {
     expect(content).not.toContain('${MINIO_ROOT_PASSWORD:-');
   });
 
+  it('production compose requires the Clerk webhook signing secret', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'docker-compose.production.yml'), 'utf-8');
+    expect(content).toContain(
+      'CLERK_WEBHOOK_SIGNING_SECRET=${CLERK_WEBHOOK_SIGNING_SECRET:?set CLERK_WEBHOOK_SIGNING_SECRET}',
+    );
+    expect(content).not.toContain('CLERK_WEBHOOK_SIGNING_SECRET=${CLERK_WEBHOOK_SIGNING_SECRET:-');
+  });
+
   it('.dockerignore excludes sensitive and unnecessary files', () => {
     const content = fs.readFileSync(path.join(ROOT, '.dockerignore'), 'utf-8');
     expect(content).toContain('node_modules');
