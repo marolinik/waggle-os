@@ -64,6 +64,23 @@ describe('mergeHiveHooks', () => {
     expect(merged2.hooks?.SessionStart?.[0].hooks[0].timeout).toBe(7);
   });
 
+  it('replaces stale marked entries when the install path changes', () => {
+    const oldCommand = hookCommandFor('/old/dist/hooks', 'session-start', '/old/cli.js');
+    const newCommand = hookCommandFor('/new/dist/hooks', 'session-start', '/new/cli.js');
+    const merged1 = mergeHiveHooks({}, [{ basename: 'session-start', command: oldCommand, timeout: 5 }]);
+    const merged2 = mergeHiveHooks(merged1, [{ basename: 'session-start', command: newCommand, timeout: 7 }]);
+
+    const markedGroups = merged2.hooks?.SessionStart?.filter(
+      (group) => group._hiveMindShim === HIVE_MIND_MARKER,
+    );
+    expect(markedGroups).toHaveLength(1);
+    expect(markedGroups?.[0].hooks[0]).toEqual({
+      type: 'command',
+      command: newCommand,
+      timeout: 7,
+    });
+  });
+
   it('preserves unrelated top-level fields', () => {
     const merged = mergeHiveHooks(
       { env: { SOMETHING: '1' }, statusLine: { type: 'command', command: 'foo' }, hooks: {} } as ClaudeCodeSettings,

@@ -65,8 +65,8 @@ function isHiveGroup(group: HookGroup | undefined): boolean {
  * Returns a NEW settings object with hive-mind hook entries appended to
  * each Claude Code event array. Existing entries are preserved.
  *
- * If a hive-mind entry for a given event is already present (matching
- * marker AND command path), it is replaced in place rather than
+ * If a hive-mind entry for a given event is already present, its marker is
+ * the ownership boundary, so it is replaced in place rather than
  * duplicated — supports re-running install for upgrades.
  */
 export function mergeHiveHooks(
@@ -82,16 +82,15 @@ export function mergeHiveHooks(
     const existingArr = nextHooks[eventKey] ? [...nextHooks[eventKey]] : [];
     const newGroup = buildGroup(spec);
 
-    let replaced = false;
-    for (let i = 0; i < existingArr.length; i += 1) {
-      const g = existingArr[i];
-      if (isHiveGroup(g) && g.hooks[0]?.command === spec.command) {
-        existingArr[i] = newGroup;
-        replaced = true;
-        break;
+    const ownedIndex = existingArr.findIndex(isHiveGroup);
+    if (ownedIndex === -1) {
+      existingArr.push(newGroup);
+    } else {
+      existingArr[ownedIndex] = newGroup;
+      for (let i = existingArr.length - 1; i > ownedIndex; i -= 1) {
+        if (isHiveGroup(existingArr[i])) existingArr.splice(i, 1);
       }
     }
-    if (!replaced) existingArr.push(newGroup);
 
     nextHooks[eventKey] = existingArr;
   }
