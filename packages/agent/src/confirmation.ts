@@ -28,7 +28,7 @@ const ALWAYS_CONFIRM = new Set([
 ]);
 
 // Connector action name patterns that indicate write operations
-const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|remove|add|set|put)_/;
+const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|remove|add|set|put|upload|append)_/;
 
 // Bash command patterns that are safe (read-only / informational)
 const SAFE_BASH_PATTERNS = [
@@ -76,16 +76,21 @@ const CHAIN_OPERATORS = /&&|\|\||;|\|/;
 /** Known high-risk connector actions (never trust LLM-provided metadata for this) */
 const CONNECTOR_HIGH_RISK_ACTIONS = new Set([
   'send_email', 'send_template', // email is always high-risk
+  'execute', 'execute_action',   // database writes and Composio's dynamic action bridge
 ]);
+
+function isHighRiskConnectorAction(toolName: string): boolean {
+  for (const actionName of CONNECTOR_HIGH_RISK_ACTIONS) {
+    if (toolName.endsWith(`_${actionName}`)) return true;
+  }
+  return false;
+}
 
 export function needsConfirmation(toolName: string, args?: Record<string, unknown>): boolean {
   // Connector tools: determine risk from tool NAME only (never trust args metadata)
   // This prevents LLM injection of _connectorMeta to bypass approval gates
   if (toolName.startsWith('connector_')) {
-    // Extract action name: connector_<id>_<action> → <action>
-    const parts = toolName.split('_');
-    const actionPart = parts.slice(2).join('_'); // everything after connector_<id>_
-    if (CONNECTOR_HIGH_RISK_ACTIONS.has(actionPart)) return true;
+    if (isHighRiskConnectorAction(toolName)) return true;
     return CONNECTOR_WRITE_PATTERNS.test(toolName);
   }
 
@@ -133,9 +138,7 @@ import type { ApprovalClass } from '@waggle/shared';
 export function getApprovalClass(toolName: string, args?: Record<string, unknown>): ApprovalClass {
   // Connector tools: derive approval class from tool NAME, not args
   if (toolName.startsWith('connector_')) {
-    const parts = toolName.split('_');
-    const actionPart = parts.slice(2).join('_');
-    if (CONNECTOR_HIGH_RISK_ACTIONS.has(actionPart)) return 'critical';
+    if (isHighRiskConnectorAction(toolName)) return 'critical';
     if (CONNECTOR_WRITE_PATTERNS.test(toolName)) return 'elevated';
     return 'standard';
   }
