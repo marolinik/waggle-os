@@ -55,7 +55,7 @@ function printHelp(): void {
     'Options:',
     '  --help, -h           Show this help.',
     '  --hooks-dir <PATH>   Override compiled hooks directory (testing).',
-    '  --hook-timeout <S>   Override per-hook timeout in seconds (default 5).',
+    '  --hook-timeout <S>   Override all hook timeouts (defaults: SessionStart 15s, others 12s).',
     '  --cli-path <PATH>    Absolute path to the hive-mind-cli binary or its',
     '                       compiled JS entry. Required on Windows (npm bin',
     '                       is a .cmd shim) and recommended for production',

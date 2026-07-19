@@ -60,6 +60,19 @@ export interface HookHandler<TPayload = unknown, TStdoutPayload = unknown> {
 }
 
 const STDIN_READ_TIMEOUT_MS = 2000;
+const HOOK_CLI_TIMEOUT_MS = 10_000;
+
+export function buildHookBridgeOptions(
+  logger: Logger,
+  cliPath?: string,
+): CliBridgeOptions {
+  return {
+    logger,
+    timeout_ms: HOOK_CLI_TIMEOUT_MS,
+    max_retries: 0,
+    ...(cliPath !== undefined ? { cli_path: cliPath } : {}),
+  };
+}
 
 export async function readStdinAsString(timeoutMs: number = STDIN_READ_TIMEOUT_MS): Promise<string> {
   if (process.stdin.isTTY) return '';
@@ -106,8 +119,7 @@ export async function runHook<TPayload, TStdoutPayload>(
   const reader = opts.readStdin ?? readStdinAsString;
   const argv = opts.argv ?? process.argv.slice(2);
   const argvFlags = parseHookArgs(argv);
-  const bridgeOpts: CliBridgeOptions = { logger };
-  if (argvFlags.cliPath !== undefined) bridgeOpts.cli_path = argvFlags.cliPath;
+  const bridgeOpts = buildHookBridgeOptions(logger, argvFlags.cliPath);
   const bridge = opts.bridge ?? createCliBridge(bridgeOpts);
 
   try {

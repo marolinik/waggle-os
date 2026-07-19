@@ -48,7 +48,7 @@ export interface InstallResult {
 }
 
 export interface InstallOptions extends ResolvePathsOptions {
-  /** Per-hook timeout, seconds. Default 5. */
+  /** Per-hook timeout override, seconds. Defaults: SessionStart 15; others 12. */
   hookTimeoutSeconds?: number;
   /** Override clock for deterministic tests. */
   now?: () => Date;
@@ -64,7 +64,8 @@ export interface InstallOptions extends ResolvePathsOptions {
   cliPath?: string;
 }
 
-const DEFAULT_HOOK_TIMEOUT_S = 5;
+const DEFAULT_HOOK_TIMEOUT_S = 12;
+const DEFAULT_SESSION_START_TIMEOUT_S = 15;
 
 interface ActiveInstallPointer {
   createdByUs: boolean;
@@ -159,12 +160,17 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
     log.info('existing rollback state preserved', { backupPath, createdByUs });
   }
 
+  const requestedTimeout = opts.hookTimeoutSeconds;
   const entries = defaultHookEntries(
     paths.hooksDir,
-    opts.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_S,
+    requestedTimeout ?? DEFAULT_HOOK_TIMEOUT_S,
     hookCommandFor,
     cliPath,
-  );
+  ).map((entry) => (
+    requestedTimeout === undefined && entry.basename === 'session-start'
+      ? { ...entry, timeout: DEFAULT_SESSION_START_TIMEOUT_S }
+      : entry
+  ));
   const merged = mergeHiveHooks(parsed, entries);
   const mergedJson = JSON.stringify(merged, null, 2) + '\n';
   await writeFile(paths.settingsPath, mergedJson, 'utf-8');
