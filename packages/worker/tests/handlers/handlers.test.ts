@@ -353,8 +353,34 @@ describe('Group Handler', () => {
     await expect(groupHandler(mockJob, mockDb)).rejects.toThrow('Agent group not found: nonexistent-group');
   });
 
+  it('rejects a group owned by another user before policy or agent execution', async () => {
+    const mockGroup = {
+      id: 'group-foreign',
+      strategy: 'parallel',
+      name: 'Foreign Group',
+      userId: 'other-user',
+    };
+    const mockMembers = [{
+      member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-foreign', agentId: 'a1' },
+      agent: { id: 'a1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
+    }];
+    const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: mockMembers });
+    const mockJob = makeJob({
+      jobId: 'j-foreign',
+      teamId: 'team-1',
+      userId: 'user-1',
+      jobType: 'group',
+      input: { groupId: 'group-foreign', taskInput: { task: 'inspect' } },
+    });
+
+    await expect(groupHandler(mockJob, mockDb)).rejects.toThrow('Agent group not found: group-foreign');
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(path.join(dataDir, 'teams'))).toBe(false);
+    expect(runAgentLoop).not.toHaveBeenCalled();
+  });
+
   it('throws if group has no members', async () => {
-    const mockGroup = { id: 'group-1', strategy: 'parallel', name: 'Test Group' };
+    const mockGroup = { id: 'group-1', strategy: 'parallel', name: 'Test Group', userId: 'user-1' };
     // First select returns the group, second returns empty members
     const mockDb = createMockDb({ selectResult: [mockGroup], selectResultSecond: [] });
     const mockJob = makeJob({
@@ -369,7 +395,7 @@ describe('Group Handler', () => {
   });
 
   it('dispatches parallel strategy correctly', async () => {
-    const mockGroup = { id: 'group-1', strategy: 'parallel', name: 'Parallel Group' };
+    const mockGroup = { id: 'group-1', strategy: 'parallel', name: 'Parallel Group', userId: 'user-1' };
     const mockMembers = [
       {
         member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-1', agentId: 'a1' },
@@ -414,7 +440,7 @@ describe('Group Handler', () => {
   });
 
   it('ignores taskInput.workspaceDir and filters requested mutating tools', async () => {
-    const mockGroup = { id: 'group-policy', strategy: 'parallel', name: 'Policy Group' };
+    const mockGroup = { id: 'group-policy', strategy: 'parallel', name: 'Policy Group', userId: 'user-1' };
     const mockMembers = [{
       member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-policy', agentId: 'a1' },
       agent: {
@@ -459,7 +485,7 @@ describe('Group Handler', () => {
 
   it('fails closed before group execution when worker data configuration is missing', async () => {
     vi.stubEnv('WAGGLE_DATA_DIR', '');
-    const mockGroup = { id: 'group-no-root', strategy: 'parallel', name: 'Group' };
+    const mockGroup = { id: 'group-no-root', strategy: 'parallel', name: 'Group', userId: 'user-1' };
     const mockMembers = [{
       member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-no-root', agentId: 'a1' },
       agent: { id: 'a1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
@@ -478,7 +504,7 @@ describe('Group Handler', () => {
   });
 
   it('fails closed before group execution when the runtime teamId is unsafe', async () => {
-    const mockGroup = { id: 'group-bad-team', strategy: 'parallel', name: 'Group' };
+    const mockGroup = { id: 'group-bad-team', strategy: 'parallel', name: 'Group', userId: 'user-1' };
     const mockMembers = [{
       member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-bad-team', agentId: 'a1' },
       agent: { id: 'a1', name: 'Reader', model: 'claude-sonnet', systemPrompt: null, tools: [] },
@@ -497,7 +523,7 @@ describe('Group Handler', () => {
   });
 
   it('dispatches sequential strategy correctly', async () => {
-    const mockGroup = { id: 'group-2', strategy: 'sequential', name: 'Sequential Group' };
+    const mockGroup = { id: 'group-2', strategy: 'sequential', name: 'Sequential Group', userId: 'user-1' };
     const mockMembers = [
       {
         member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-2', agentId: 'a1' },
@@ -526,7 +552,7 @@ describe('Group Handler', () => {
   });
 
   it('throws for unknown execution strategy', async () => {
-    const mockGroup = { id: 'group-3', strategy: 'unknown_strategy', name: 'Bad Group' };
+    const mockGroup = { id: 'group-3', strategy: 'unknown_strategy', name: 'Bad Group', userId: 'user-1' };
     const mockMembers = [
       {
         member: { roleInGroup: 'worker', executionOrder: 0, groupId: 'group-3', agentId: 'a1' },

@@ -13,7 +13,7 @@ const LITELLM_URL = process.env.LITELLM_URL ?? 'http://localhost:4000/v1';
 const LITELLM_API_KEY = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
 
 export async function groupHandler(job: Job<JobData>, db: Db): Promise<Record<string, unknown>> {
-  const { teamId, input } = job.data;
+  const { teamId, userId, input } = job.data;
   const groupId = (input as Record<string, unknown>).groupId as string;
   const taskInput = (input as Record<string, unknown>).taskInput as Record<string, unknown> ?? {};
 
@@ -25,7 +25,7 @@ export async function groupHandler(job: Job<JobData>, db: Db): Promise<Record<st
   const [group] = await db.select().from(agentGroups)
     .where(eq(agentGroups.id, groupId));
 
-  if (!group) {
+  if (!group || group.userId !== userId) {
     throw new Error(`Agent group not found: ${groupId}`);
   }
 
