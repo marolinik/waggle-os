@@ -22,7 +22,9 @@ export async function scoutRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'status must be one of: adopted, dismissed' });
     }
 
-    const action = body.status === 'adopted' ? scout.adopt(id) : scout.dismiss(id);
+    const action = body.status === 'adopted'
+      ? scout.adopt(id, request.userId)
+      : scout.dismiss(id, request.userId);
     const updated = await action;
     if (!updated) {
       return reply.code(404).send({ error: 'Finding not found' });

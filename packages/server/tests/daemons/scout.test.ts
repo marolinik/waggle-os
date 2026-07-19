@@ -8,6 +8,7 @@ import { ScoutAgent } from '../../src/daemons/scout.js';
 describe('Scout Agent (Task 3.18)', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
   let userId: string;
+  let secondUserId: string;
   let teamId: string;
   let scout: ScoutAgent;
 
@@ -32,6 +33,13 @@ describe('Scout Agent (Task 3.18)', () => {
       email: 'scout_user1@test.com',
     }).returning();
     userId = user.id;
+
+    const [secondUser] = await server.db.insert(users).values({
+      clerkId: 'scout_user2',
+      displayName: 'Scout User 2',
+      email: 'scout_user2@test.com',
+    }).returning();
+    secondUserId = secondUser.id;
 
     // Create team
     const [team] = await server.db.insert(teams).values({
@@ -127,7 +135,7 @@ describe('Scout Agent (Task 3.18)', () => {
     const findings = await scout.listFindings(userId);
     const finding = findings[0];
 
-    const updated = await scout.adopt(finding.id);
+    const updated = await scout.adopt(finding.id, userId);
     expect(updated).toBeTruthy();
     expect(updated!.status).toBe('adopted');
   });
@@ -137,7 +145,7 @@ describe('Scout Agent (Task 3.18)', () => {
     const newFinding = findings.find((f) => f.status === 'new');
     expect(newFinding).toBeTruthy();
 
-    const updated = await scout.dismiss(newFinding!.id);
+    const updated = await scout.dismiss(newFinding!.id, userId);
     expect(updated).toBeTruthy();
     expect(updated!.status).toBe('dismissed');
   });
@@ -167,6 +175,37 @@ describe('Scout Agent (Task 3.18)', () => {
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
   });
+
+  it.each(['adopted', 'dismissed'] as const)(
+    'does not let one user mark another user\'s finding as %s',
+    async (status) => {
+      const [victimFinding] = await server.db.insert(scoutFindings).values({
+        userId: secondUserId,
+        teamId,
+        source: 'team',
+        category: 'practice',
+        title: `Victim finding ${status}`,
+        summary: 'belongs to another user',
+        relevanceScore: 0.8,
+        url: null,
+        status: 'new',
+      }).returning();
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/api/scout/findings/${victimFinding.id}`,
+        headers: { 'x-test-user-id': userId },
+        payload: { status },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({ error: 'Finding not found' });
+      const [unchanged] = await server.db.select().from(scoutFindings)
+        .where(eq(scoutFindings.id, victimFinding.id));
+      expect(unchanged.status).toBe('new');
+      expect(unchanged.userId).toBe(secondUserId);
+    },
+  );
 
   it('PATCH /api/scout/findings/:id rejects invalid status', async () => {
     const findings = await scout.listFindings(userId);
