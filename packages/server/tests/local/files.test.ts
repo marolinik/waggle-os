@@ -92,6 +92,19 @@ describe('File Management API', () => {
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toContain('Invalid path');
     });
+
+    it('rejects an encoded workspace-id escape before building a virtual root', async () => {
+      const escapedRoot = path.join(tmpDir, 'outside', 'files');
+      expect(fs.existsSync(escapedRoot)).toBe(false);
+
+      const res = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/workspaces/..%5Coutside/files/list?path=/',
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(fs.existsSync(escapedRoot)).toBe(false);
+    });
   });
 
   // ── Upload ───────────────────────────────────────────────────

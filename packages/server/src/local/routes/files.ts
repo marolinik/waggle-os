@@ -16,6 +16,7 @@ import { getStorageProvider, MAX_UPLOAD_SIZE } from '../storage/index.js';
 import { lookup } from '../utils/mime.js';
 import path from 'node:path';
 import { FileIndexer } from '@waggle/core';
+import { assertSafeSegment } from './validate.js';
 
 interface WorkspaceParams { workspaceId: string }
 interface PathQuery { path?: string }
@@ -39,6 +40,11 @@ function errCode(err: unknown): string | undefined {
 
 /** Resolve workspace and storage provider from request params */
 function resolveWorkspace(server: FastifyInstance, workspaceId: string) {
+  try {
+    assertSafeSegment(workspaceId, 'workspaceId');
+  } catch {
+    throw new Error('Invalid path: workspaceId contains illegal characters');
+  }
   const dataDir = server.localConfig.dataDir;
 
   // Look up workspace metadata (storagePath, storageType)
