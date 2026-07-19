@@ -33,7 +33,12 @@ import {
 } from '@waggle/shared';
 import type { McpRuntime, McpServerState } from '@waggle/agent';
 import { scanForInjection, type RecordAuditInput } from '@waggle/core';
-import { MarketplaceInstaller, type McpServerConfig } from '@waggle/marketplace';
+import {
+  MCP_SERVERS,
+  MarketplaceInstaller,
+  type MarketplaceMcpProvenance,
+  type McpServerConfig,
+} from '@waggle/marketplace';
 import {
   loadMcpConfig,
   saveMcpServerEntry,
@@ -49,6 +54,13 @@ import { authHeaders, clampStr, clampStrArray } from './validate.js';
  *  already aborted — caught by the 2026-06-10 Extend live smoke), and stays
  *  under the instance's own 30s per-request timeout. */
 const TEST_TIMEOUT_MS = 8_000;
+
+const RESERVED_MARKETPLACE_MCP_NAMES = new Set(
+  [
+    ...MCP_CATALOG.map((server) => server.id),
+    ...MCP_SERVERS.flatMap((pkg) => pkg.install_manifest?.mcp_config?.name ?? []),
+  ],
+);
 
 /** Clamp env to ≤64 pairs with bounded key/value lengths. Non-record shapes
  *  (and non-string values) pass through untouched so validateMcpEntry still
@@ -232,9 +244,18 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     }
 
     // Resolve catalog id → marketplace package (mcp-registry seeds share ids)
-    const row = db.getRawDb().prepare(
-      "SELECT id FROM packages WHERE name = ? AND waggle_install_type = 'mcp'",
-    ).get(mcpId) as { id: number } | undefined;
+    const row = db.getRawDb().prepare(`
+      SELECT p.id, p.name, p.version
+      FROM packages p
+      INNER JOIN sources s ON s.id = p.source_id
+      WHERE p.name = ?
+        AND p.waggle_install_type = 'mcp'
+        AND s.name = 'mcp_registry'
+        AND s.source_type = 'registry'
+        AND s.is_custom = 0
+      ORDER BY p.id
+      LIMIT 1
+    `).get(mcpId) as { id: number; name: string; version: string } | undefined;
     if (!row) {
       return reply.code(404).send({ error: `No marketplace MCP package named "${mcpId}"` });
     }
@@ -256,6 +277,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
       blocked?: boolean;
       scanResult?: { blocked?: boolean; overall_severity?: string };
       mcpSourceConfig?: McpServerConfig;
+      mcpProvenance?: MarketplaceMcpProvenance;
     };
     if (res.statusCode >= 400 || result.success === false) {
       // A SecurityGate block (route-level 403 OR installer-level 422 with
@@ -273,10 +295,21 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     // Only the installer's exact validated source snapshot may reach an
     // execution sink. The receipt is secret-free; settings are normalized by
     // the same pure helper used for the installer's own .mcp.json.
-    if (!result.mcpSourceConfig) {
+    if (!result.mcpSourceConfig || !result.mcpProvenance) {
       return reply.code(500).send({
         installed: false,
-        error: 'Marketplace installer returned no validated MCP source receipt',
+        error: 'Marketplace installer returned no complete validated MCP receipt',
+      });
+    }
+    if (
+      row.name !== mcpId
+      || result.mcpProvenance.packageName !== row.name
+      || result.mcpProvenance.packageVersion !== row.version
+      || result.mcpSourceConfig.name !== row.name
+    ) {
+      return reply.code(409).send({
+        installed: false,
+        error: 'Marketplace MCP package changed during installation; retry from the refreshed catalog',
       });
     }
     let configured: McpServerConfig;
@@ -292,6 +325,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
       command: configured.command,
       args: configured.args,
       ...(configured.env ? { env: configured.env } : {}),
+      provenance: result.mcpProvenance,
     };
     const entryInvalid = validateMcpEntry(configured.name, entry);
     if (entryInvalid) {
@@ -350,6 +384,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
       mcpId,
       server: configured.name,
       status,
+      mcpProvenance: result.mcpProvenance,
       ...(startError ? { startError } : {}),
     };
   });
@@ -378,6 +413,11 @@ export async function mcpRoutes(fastify: FastifyInstance) {
         ? { workspaceId: typeof body.workspaceId === 'string' ? clampStr(body.workspaceId, 200) : body.workspaceId }
         : {}),
     };
+    if (RESERVED_MARKETPLACE_MCP_NAMES.has(name)) {
+      return reply.code(409).send({
+        error: `MCP server name "${name}" is reserved for verified marketplace installs`,
+      });
+    }
     const invalid = validateMcpEntry(name, candidate);
     if (invalid) return reply.code(400).send({ error: invalid });
 
@@ -526,36 +566,56 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const runtime = getRuntime();
     const hadInstance = !!runtime?.getServer(id);
+    const persisted = loadMcpConfig(dataDir()).mcpServers[id];
     const removedConfig = removeMcpServerEntry(dataDir(), id);
     if (!hadInstance && !removedConfig) {
       return reply.code(404).send({ error: `MCP server "${id}" is not installed` });
     }
     await runtime?.removeServer(id); // stops the process if running
+    const provenance = persisted?.provenance;
+    const verifiedMarketplaceOrigin = provenance?.kind === 'marketplace';
 
     // Keep the marketplace's installed:true annotation honest (A4): if this
     // server came from a marketplace package, retire that installation row
     // too — otherwise /api/marketplace/search keeps claiming it's installed.
-    try {
-      const db = fastify.marketplace;
-      const pkgRow = db?.getRawDb().prepare(
-        "SELECT id FROM packages WHERE name = ? AND waggle_install_type = 'mcp'",
-      ).get(id) as { id: number } | undefined;
-      if (pkgRow && db!.isInstalled(pkgRow.id)) {
-        db!.markUninstalled(pkgRow.id);
+    if (verifiedMarketplaceOrigin) {
+      try {
+        const db = fastify.marketplace;
+        const pkgRow = db?.getRawDb().prepare(`
+          SELECT p.id
+          FROM packages p
+          INNER JOIN sources s ON s.id = p.source_id
+          WHERE p.name = ?
+            AND p.version = ?
+            AND p.waggle_install_type = 'mcp'
+            AND s.name = ?
+            AND s.source_type = 'registry'
+            AND s.is_custom = 0
+          ORDER BY p.id
+          LIMIT 1
+        `).get(
+          provenance.packageName,
+          provenance.packageVersion,
+          provenance.sourceName,
+        ) as { id: number } | undefined;
+        if (pkgRow && db!.isInstalled(pkgRow.id)) {
+          db!.markUninstalled(pkgRow.id);
+        }
+      } catch (err) {
+        fastify.log.warn({ err, id }, 'marketplace bookkeeping on MCP revoke failed (non-blocking)');
       }
-    } catch (err) {
-      fastify.log.warn({ err, id }, 'marketplace bookkeeping on MCP revoke failed (non-blocking)');
     }
 
     recordMcpAudit({
       capabilityName: id,
-      source: 'mcp',
+      source: verifiedMarketplaceOrigin ? 'marketplace' : 'mcp',
+      version: verifiedMarketplaceOrigin ? provenance.packageVersion : null,
       riskLevel: 'low',
-      trustSource: 'local_user',
+      trustSource: verifiedMarketplaceOrigin ? 'third_party_verified' : 'local_user',
       approvalClass: 'standard',
-      action: 'rejected',
+      action: 'uninstalled',
       initiator: 'user',
-      detail: 'MCP server revoked — removed from runtime and persisted config',
+      detail: `MCP server revoked — removed from runtime and persisted config (${verifiedMarketplaceOrigin ? 'verified marketplace' : 'custom local'} origin)`,
     });
 
     return { ok: true, id, stoppedInstance: hadInstance, removedConfig };

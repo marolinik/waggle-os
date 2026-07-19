@@ -332,6 +332,19 @@ describe('MCP Hub routes (Phase 4)', () => {
     expect(runtime.getServer('evil')).toBeUndefined();
   });
 
+  it('POST /api/mcps reserves all catalog names against provenance downgrade and false official labeling', async () => {
+    for (const name of ['memory', 'postgres']) {
+      const res = await server.inject({
+        method: 'POST', url: '/api/mcps', payload: { name, command: 'node', args: ['custom.js'] },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toMatch(/reserved|marketplace/i);
+      expect(loadMcpConfig(tmpDir).mcpServers[name]).toBeUndefined();
+      expect(runtime.getServer(name)).toBeUndefined();
+    }
+  });
+
   // ── start / stop ───────────────────────────────────────────────────────
 
   it('start and stop drive the real runtime state machine', async () => {
@@ -427,10 +440,32 @@ describe('MCP Hub routes (Phase 4)', () => {
     expect(loadMcpConfig(tmpDir).mcpServers['doomed']).toBeUndefined();
 
     const audit = auditStore.getByCapability('doomed');
-    expect(audit[0]).toMatchObject({ capability_type: 'mcp', action: 'rejected' });
+    expect(audit[0]).toMatchObject({
+      capability_type: 'mcp',
+      source: 'mcp',
+      trust_source: 'local_user',
+      action: 'uninstalled',
+    });
 
     const missing = await server.inject({ method: 'POST', url: '/api/mcps/doomed/revoke' });
     expect(missing.statusCode).toBe(404);
+  });
+
+  it('does not retire a marketplace installation for a runtime-only same-name server', async () => {
+    runtime.addServer({ name: 'memory', command: 'node' });
+    marketplaceFake.recordInstallation(1);
+    expect(loadMcpConfig(tmpDir).mcpServers.memory).toBeUndefined();
+
+    const res = await server.inject({ method: 'POST', url: '/api/mcps/memory/revoke' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ stoppedInstance: true, removedConfig: false });
+    expect(marketplaceFake.isInstalled(1)).toBe(true);
+    expect(auditStore.getByCapability('memory')[0]).toMatchObject({
+      source: 'mcp',
+      trust_source: 'local_user',
+      action: 'uninstalled',
+    });
   });
 
   // ── permissions (C19) ──────────────────────────────────────────────────
@@ -486,7 +521,17 @@ describe('MCP Hub routes (Phase 4)', () => {
     expect(entry).toMatchObject({
       command: 'npx',
       args: ['--yes', '--ignore-scripts', '@modelcontextprotocol/server-memory@2026.7.4'],
+      provenance: {
+        kind: 'marketplace',
+        schemaVersion: 1,
+        sourceName: 'mcp_registry',
+        packageName: 'memory',
+        packageVersion: '2026.7.4',
+        npmPackage: '@modelcontextprotocol/server-memory@2026.7.4',
+        profileDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      },
     });
+    expect(res.json().mcpProvenance).toEqual(entry.provenance);
     // The installer ALSO wrote its own .mcp.json (WAGGLE_DATA_DIR redirect)
     expect(fs.existsSync(path.join(installerTmp, '.mcp.json'))).toBe(true);
     // Live in the runtime
@@ -519,6 +564,61 @@ describe('MCP Hub routes (Phase 4)', () => {
     expect(loadMcpConfig(tmpDir).mcpServers['brave-search'].env).toEqual(expectedEnv);
     expect(runtime.getServer('brave-search')?.config.env).toEqual(expectedEnv);
     expect(recordInstallation).not.toHaveBeenCalled();
+  });
+
+  it('selects the canonical registry package when a custom source shadows the MCP name', async () => {
+    marketplaceRaw.prepare('UPDATE packages SET id = 10 WHERE id = 1').run();
+    marketplaceRaw.exec(`
+      INSERT INTO sources (id, name, source_type, is_custom)
+        VALUES (2, 'custom-shadow', 'registry', 1);
+    `);
+    marketplaceRaw.prepare(`INSERT INTO packages
+      (id, source_id, name, display_name, description, version, waggle_install_type, waggle_install_path, install_manifest)
+      VALUES (1, 2, 'memory', 'Shadow Memory', 'Copied approved launcher under a custom source', '2026.7.4', 'mcp', '.mcp.json', ?)`)
+      .run(JSON.stringify({
+        npm_package: '@modelcontextprotocol/server-memory@2026.7.4',
+        mcp_config: {
+          name: 'memory',
+          command: 'npx',
+          args: ['--yes', '--ignore-scripts', '@modelcontextprotocol/server-memory@2026.7.4'],
+        },
+      }));
+
+    const res = await server.inject({
+      method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'memory' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ installed: true, mcpId: 'memory', server: 'memory' });
+    expect(marketplaceFake.isInstalled(10)).toBe(true);
+    expect(marketplaceFake.isInstalled(1)).toBe(false);
+    expect(loadMcpConfig(tmpDir).mcpServers.memory.provenance?.sourceName).toBe('mcp_registry');
+
+    marketplaceFake.recordInstallation(1);
+    const revoke = await server.inject({ method: 'POST', url: '/api/mcps/memory/revoke' });
+    expect(revoke.statusCode).toBe(200);
+    expect(marketplaceFake.isInstalled(10)).toBe(false);
+    expect(marketplaceFake.isInstalled(1)).toBe(true);
+  });
+
+  it('rejects a same-id swap to another valid canonical MCP before the server sink', async () => {
+    const memory = marketplaceFake.getPackage(1)!;
+    const brave = { ...marketplaceFake.getPackage(4)!, id: 1 };
+    let calls = 0;
+    vi.spyOn(marketplaceFake, 'getPackage').mockImplementation(() => (
+      calls++ === 0 ? memory : brave
+    ));
+
+    const res = await server.inject({
+      method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'memory', settings: { BRAVE_API_KEY: 'swap-secret' } },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatch(/changed during installation/i);
+    expect(loadMcpConfig(tmpDir).mcpServers.memory).toBeUndefined();
+    expect(loadMcpConfig(tmpDir).mcpServers['brave-search']).toBeUndefined();
+    expect(runtime.getServer('memory')).toBeUndefined();
+    expect(runtime.getServer('brave-search')).toBeUndefined();
   });
 
   it('persists and starts only the installer-validated package snapshot', async () => {
@@ -647,10 +747,17 @@ describe('MCP Hub routes (Phase 4)', () => {
   it('revoke retires the marketplace installation row (no installed:true desync)', async () => {
     await server.inject({ method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'memory' } });
     expect(marketplaceFake.isInstalled(1)).toBe(true);
+    const provenance = loadMcpConfig(tmpDir).mcpServers.memory.provenance!;
 
     const res = await server.inject({ method: 'POST', url: '/api/mcps/memory/revoke' });
     expect(res.statusCode).toBe(200);
     expect(marketplaceFake.isInstalled(1)).toBe(false);
+    expect(auditStore.getByCapability('memory').find((entry) => entry.action === 'uninstalled')).toMatchObject({
+      source: 'marketplace',
+      version: provenance.packageVersion,
+      trust_source: 'third_party_verified',
+      initiator: 'user',
+    });
   });
 
   it('marketplace uninstall also clears the runtime + server .mcp.json (no boot resurrection)', async () => {

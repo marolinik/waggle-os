@@ -20,7 +20,9 @@
  * in its environment). Vault-backed env references resolved at spawn time are
  * a scheduled follow-up; until then this file is the documented exception to
  * vault-only secrets. It must never leave the local dataDir (no GET route
- * returns env/command — see routes/mcps.ts McpListItem).
+ * returns env/command — see routes/mcps.ts McpListItem). Rejected entries
+ * retain their original values only in a sibling recovery quarantine under
+ * the same local dataDir trust boundary, never in the active configuration.
  */
 
 import * as fs from 'node:fs';
@@ -28,6 +30,13 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import type { McpRuntime, McpServerConfig } from '@waggle/agent';
+import {
+  MCP_SERVERS,
+  createMarketplaceMcpProvenance,
+  type MarketplaceMcpProvenance,
+  type McpServerConfig as MarketplaceMcpServerConfig,
+} from '@waggle/marketplace';
+import { MCP_CATALOG } from '@waggle/shared';
 
 /** One persisted server entry (installer-compatible + workspaceId). */
 export interface PersistedMcpEntry {
@@ -35,6 +44,7 @@ export interface PersistedMcpEntry {
   args?: string[];
   env?: Record<string, string>;
   workspaceId?: string;
+  provenance?: MarketplaceMcpProvenance;
 }
 
 export interface McpConfigFile {
@@ -50,6 +60,99 @@ export function mcpConfigPath(dataDir: string): string {
 /** Server names become tool prefixes (`mcp_<name>_<tool>`) and file keys —
  *  keep them shell/path-safe. */
 const NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
+
+interface CanonicalMarketplaceMcpProfile {
+  packageName: string;
+  packageVersion: string;
+  config: MarketplaceMcpServerConfig;
+  provenance: MarketplaceMcpProvenance;
+}
+
+const CANONICAL_MARKETPLACE_SOURCE = {
+  name: 'mcp_registry',
+  source_type: 'registry',
+  is_custom: false,
+} as const;
+
+const CANONICAL_MARKETPLACE_MCPS = new Map<string, CanonicalMarketplaceMcpProfile>();
+for (const pkg of MCP_SERVERS) {
+  const config = pkg.install_manifest?.mcp_config;
+  if (!config || !pkg.version) continue;
+  CANONICAL_MARKETPLACE_MCPS.set(config.name, {
+    packageName: pkg.name,
+    packageVersion: pkg.version,
+    config,
+    provenance: createMarketplaceMcpProvenance(
+      CANONICAL_MARKETPLACE_SOURCE,
+      { name: pkg.name, version: pkg.version },
+      config,
+    ),
+  });
+}
+const RESERVED_CATALOG_MCP_NAMES = new Set(MCP_CATALOG.map((server) => server.id));
+
+function sameStrings(left: string[] | undefined, right: string[] | undefined): boolean {
+  return JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
+}
+
+function validateMarketplaceBinding(name: string, entry: PersistedMcpEntry): string | null {
+  const profile = CANONICAL_MARKETPLACE_MCPS.get(name);
+  if (!profile) {
+    if (RESERVED_CATALOG_MCP_NAMES.has(name)) {
+      return 'catalog MCP server name is reserved for a verified marketplace profile';
+    }
+    return entry.provenance === undefined
+      ? null
+      : 'marketplace provenance is only valid for a current approved marketplace profile';
+  }
+
+  const provenance = entry.provenance as MarketplaceMcpProvenance | undefined;
+  if (!provenance) {
+    return 'approved marketplace profile requires canonical provenance; reinstall this MCP server';
+  }
+  if (provenance === null || typeof provenance !== 'object' || Array.isArray(provenance)) {
+    return 'marketplace provenance must be an object';
+  }
+  const expectedKeys = [
+    'kind',
+    'npmPackage',
+    'packageName',
+    'packageVersion',
+    'profileDigest',
+    'schemaVersion',
+    'sourceName',
+  ];
+  if (JSON.stringify(Object.keys(provenance).sort()) !== JSON.stringify(expectedKeys)) {
+    return 'marketplace provenance has an unsupported shape';
+  }
+  if (!/^sha256:[a-f0-9]{64}$/.test(provenance.profileDigest ?? '')) {
+    return 'marketplace provenance digest must be a lowercase SHA-256 value';
+  }
+  const expected = profile.provenance;
+  if (
+    provenance.kind !== expected.kind
+    || provenance.schemaVersion !== expected.schemaVersion
+    || provenance.sourceName !== expected.sourceName
+    || provenance.packageName !== expected.packageName
+    || provenance.packageVersion !== expected.packageVersion
+    || provenance.npmPackage !== expected.npmPackage
+    || provenance.profileDigest !== expected.profileDigest
+  ) {
+    return 'marketplace provenance does not match the current approved profile digest';
+  }
+  if (entry.command !== profile.config.command) {
+    return 'marketplace command does not match the current approved profile';
+  }
+  if (!sameStrings(entry.args, profile.config.args)) {
+    return 'marketplace arguments do not match the current approved profile';
+  }
+  const actualEnvKeys = Object.keys(entry.env ?? {}).sort();
+  const expectedEnvKeys = Object.keys(profile.config.env ?? {}).sort();
+  if (!sameStrings(actualEnvKeys, expectedEnvKeys)) {
+    return 'marketplace environment keys do not match the current approved profile';
+  }
+  return null;
+}
 
 /** Validate one entry; returns an error string or null when valid. */
 export function validateMcpEntry(name: string, entry: unknown): string | null {
@@ -71,7 +174,100 @@ export function validateMcpEntry(name: string, entry: unknown): string | null {
   if (e.workspaceId !== undefined && typeof e.workspaceId !== 'string') {
     return 'workspaceId must be a string';
   }
-  return null;
+  return validateMarketplaceBinding(name, e as PersistedMcpEntry);
+}
+
+interface QuarantinedMcpEntry {
+  entry: unknown;
+  reason: string;
+}
+
+function upgradeExactLegacyMarketplaceEntry(name: string, entry: unknown): PersistedMcpEntry | null {
+  const profile = CANONICAL_MARKETPLACE_MCPS.get(name);
+  if (!profile || entry === null || typeof entry !== 'object' || Array.isArray(entry)) return null;
+  const candidate = entry as Partial<PersistedMcpEntry>;
+  if (candidate.provenance !== undefined) return null;
+  if (candidate.command !== profile.config.command || !sameStrings(candidate.args, profile.config.args)) return null;
+  if (candidate.env === null || (candidate.env !== undefined && (
+    typeof candidate.env !== 'object'
+    || Array.isArray(candidate.env)
+    || Object.values(candidate.env).some((value) => typeof value !== 'string')
+  ))) return null;
+  const actualEnvKeys = Object.keys(candidate.env ?? {}).sort();
+  const expectedEnvKeys = Object.keys(profile.config.env ?? {}).sort();
+  if (!sameStrings(actualEnvKeys, expectedEnvKeys)) return null;
+  return { ...candidate, provenance: profile.provenance } as PersistedMcpEntry;
+}
+
+function partitionMcpEntries(raw: Record<string, unknown>): {
+  valid: Record<string, PersistedMcpEntry>;
+  rejected: Record<string, QuarantinedMcpEntry>;
+  upgraded: number;
+} {
+  const valid: Record<string, PersistedMcpEntry> = {};
+  const rejected: Record<string, QuarantinedMcpEntry> = {};
+  let upgraded = 0;
+  for (const [name, entry] of Object.entries(raw)) {
+    const legacyUpgrade = upgradeExactLegacyMarketplaceEntry(name, entry);
+    const candidate = legacyUpgrade ?? entry;
+    if (legacyUpgrade) upgraded += 1;
+    const reason = validateMcpEntry(name, candidate);
+    if (reason) rejected[name] = { entry, reason };
+    else valid[name] = candidate as PersistedMcpEntry;
+  }
+  return { valid, rejected, upgraded };
+}
+
+function quarantineRejectedEntries(
+  dataDir: string,
+  valid: Record<string, PersistedMcpEntry>,
+  rejected: Record<string, QuarantinedMcpEntry>,
+  log?: { warn: (msg: string) => void },
+): void {
+  if (Object.keys(rejected).length === 0) return;
+  const file = mcpConfigPath(dataDir);
+  const quarantine = `${file}.quarantine-${Date.now()}-${randomUUID()}.json`;
+  try {
+    fs.writeFileSync(quarantine, JSON.stringify({
+      schemaVersion: 1,
+      quarantinedAt: new Date().toISOString(),
+      entries: rejected,
+    }, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  } catch (err) {
+    (log?.warn ?? console.warn)(
+      `[mcp-config] Rejected unsafe MCP entries but recovery quarantine write failed: ${(err as Error).message}`,
+    );
+    return;
+  }
+  try {
+    writeMcpConfig(dataDir, { mcpServers: valid });
+  } catch (err) {
+    try { fs.unlinkSync(quarantine); } catch { /* preserve the original active file */ }
+    (log?.warn ?? console.warn)(
+      `[mcp-config] Rejected unsafe MCP entries but active config rewrite failed: ${(err as Error).message}`,
+    );
+    return;
+  }
+  (log?.warn ?? console.warn)(
+    `[mcp-config] Quarantined ${Object.keys(rejected).length} rejected MCP entr${Object.keys(rejected).length === 1 ? 'y' : 'ies'} to ${quarantine}: ${Object.entries(rejected).map(([name, item]) => `${name}: ${item.reason}`).join('; ')}`,
+  );
+}
+
+function persistLegacyUpgrades(
+  dataDir: string,
+  valid: Record<string, PersistedMcpEntry>,
+  upgraded: number,
+  rejected: Record<string, QuarantinedMcpEntry>,
+  log?: { warn: (msg: string) => void },
+): void {
+  if (upgraded === 0 || Object.keys(rejected).length > 0) return;
+  try {
+    writeMcpConfig(dataDir, { mcpServers: valid });
+  } catch (err) {
+    (log?.warn ?? console.warn)(
+      `[mcp-config] Valid legacy MCP profile migration could not be persisted; continuing safely in memory: ${(err as Error).message}`,
+    );
+  }
 }
 
 /**
@@ -81,15 +277,30 @@ export function validateMcpEntry(name: string, entry: unknown): string | null {
  * read-modify-write save would rewrite the file with only the new entry and
  * permanently destroy every other server. Still never throws (boot-tolerant).
  */
-export function loadMcpConfig(dataDir: string, log?: { warn: (msg: string) => void }): McpConfigFile {
+export function loadMcpConfig(
+  dataDir: string,
+  log?: { warn: (msg: string) => void },
+  onRejected?: (name: string, reason: string) => void,
+): McpConfigFile {
   const file = mcpConfigPath(dataDir);
   try {
     if (!fs.existsSync(file)) return { mcpServers: {} };
     const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as Partial<McpConfigFile>;
-    if (parsed === null || typeof parsed !== 'object' || typeof parsed.mcpServers !== 'object' || parsed.mcpServers === null) {
-      return { mcpServers: {} };
+    if (
+      parsed === null
+      || typeof parsed !== 'object'
+      || Array.isArray(parsed)
+      || typeof parsed.mcpServers !== 'object'
+      || parsed.mcpServers === null
+      || Array.isArray(parsed.mcpServers)
+    ) {
+      throw new Error('mcpServers must be an object record');
     }
-    return { mcpServers: parsed.mcpServers };
+    const { valid, rejected, upgraded } = partitionMcpEntries(parsed.mcpServers as Record<string, unknown>);
+    for (const [name, item] of Object.entries(rejected)) onRejected?.(name, item.reason);
+    quarantineRejectedEntries(dataDir, valid, rejected, log);
+    persistLegacyUpgrades(dataDir, valid, upgraded, rejected, log);
+    return { mcpServers: valid };
   } catch (err) {
     const quarantine = `${file}.corrupt-${Date.now()}`;
     try {
@@ -125,6 +336,8 @@ function writeMcpConfig(dataDir: string, config: McpConfigFile): void {
 
 /** Upsert one server entry (immutable read-modify-write). */
 export function saveMcpServerEntry(dataDir: string, name: string, entry: PersistedMcpEntry): void {
+  const invalid = validateMcpEntry(name, entry);
+  if (invalid) throw new Error(`Invalid MCP server entry "${name}": ${invalid}`);
   const current = loadMcpConfig(dataDir);
   writeMcpConfig(dataDir, {
     mcpServers: { ...current.mcpServers, [name]: entry },
@@ -159,6 +372,7 @@ export function populateMcpRuntimeFromConfig(
     const { mcpServers } = loadMcpConfig(
       dataDir,
       log?.warn ? { warn: (m) => log.warn!(m) } : undefined,
+      (name, reason) => skipped.push({ name, reason }),
     );
     for (const [name, entry] of Object.entries(mcpServers)) {
       const invalid = validateMcpEntry(name, entry);
@@ -287,8 +501,9 @@ export async function refreshMcpIfChanged(
   } else {
     try {
       const parsed = JSON.parse(content) as Partial<McpConfigFile>;
-      if (parsed === null || typeof parsed !== 'object'
-          || typeof parsed.mcpServers !== 'object' || parsed.mcpServers === null) {
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)
+          || typeof parsed.mcpServers !== 'object' || parsed.mcpServers === null
+          || Array.isArray(parsed.mcpServers)) {
         throw new Error('missing mcpServers object');
       }
       desiredRaw = parsed.mcpServers as Record<string, unknown>;
@@ -301,13 +516,22 @@ export async function refreshMcpIfChanged(
     }
   }
 
-  const desired = new Map<string, PersistedMcpEntry>();
-  const skipped: Array<{ name: string; reason: string }> = [];
-  for (const [name, entry] of Object.entries(desiredRaw)) {
-    const invalid = validateMcpEntry(name, entry);
-    if (invalid) { skipped.push({ name, reason: invalid }); continue; }
-    desired.set(name, entry as PersistedMcpEntry);
-  }
+  const { valid: validDesired, rejected, upgraded } = partitionMcpEntries(desiredRaw);
+  const desired = new Map<string, PersistedMcpEntry>(Object.entries(validDesired));
+  const skipped = Object.entries(rejected).map(([name, item]) => ({ name, reason: item.reason }));
+  quarantineRejectedEntries(
+    dataDir,
+    validDesired,
+    rejected,
+    log?.warn ? { warn: (message) => log.warn!(message) } : undefined,
+  );
+  persistLegacyUpgrades(
+    dataDir,
+    validDesired,
+    upgraded,
+    rejected,
+    log?.warn ? { warn: (message) => log.warn!(message) } : undefined,
+  );
 
   const added: string[] = [];
   const removed: string[] = [];
