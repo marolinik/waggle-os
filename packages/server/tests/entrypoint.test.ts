@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDirectModule } from '../src/index.js';
+
+const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 describe('team server entrypoint detection', () => {
   it('builds and exports WaggleDance as compiled runtime code before the server', () => {
-    const rootPackage = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as {
+    const rootPackage = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
     const dancePackage = JSON.parse(
-      readFileSync(resolve('packages/waggle-dance/package.json'), 'utf8'),
+      readFileSync(resolve(REPO_ROOT, 'packages/waggle-dance/package.json'), 'utf8'),
     ) as {
       main?: string;
       types?: string;
@@ -32,14 +34,14 @@ describe('team server entrypoint detection', () => {
   });
 
   it('recognizes the compiled dist entrypoint by URL identity', () => {
-    const distPath = resolve('packages/server/dist/index.js');
+    const distPath = resolve(REPO_ROOT, 'packages/server/dist/index.js');
 
     expect(isDirectModule(distPath, pathToFileURL(distPath).href)).toBe(true);
   });
 
   it('does not start when imported by another process entrypoint', () => {
-    const distPath = resolve('packages/server/dist/index.js');
-    const importerUrl = pathToFileURL(resolve('packages/server/dist/consumer.js')).href;
+    const distPath = resolve(REPO_ROOT, 'packages/server/dist/index.js');
+    const importerUrl = pathToFileURL(resolve(REPO_ROOT, 'packages/server/dist/consumer.js')).href;
 
     expect(isDirectModule(distPath, importerUrl)).toBe(false);
     expect(isDirectModule(undefined, importerUrl)).toBe(false);
