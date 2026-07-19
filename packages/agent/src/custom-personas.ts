@@ -8,6 +8,28 @@ import path from 'node:path';
 import type { AgentPersona } from './personas.js';
 
 const PERSONAS_DIR = 'personas';
+const INVALID_PORTABLE_ID_CHARACTERS = /[<>:"/\\|?*]/;
+const WINDOWS_RESERVED_BASENAME = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
+
+/** True when an ID is safe as one portable Windows/macOS filename segment. */
+export function isValidCustomPersonaId(id: string): boolean {
+  if (id.length === 0 || id.length > 200 || id === '.' || id === '..') return false;
+  const hasControlCharacter = [...id].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+  if (hasControlCharacter || INVALID_PORTABLE_ID_CHARACTERS.test(id) || /[ .]$/.test(id)) return false;
+
+  // Windows reserves device basenames even when an extension is present.
+  const basename = (id.split('.')[0] ?? id).trimEnd();
+  return !WINDOWS_RESERVED_BASENAME.test(basename);
+}
+
+export function assertValidCustomPersonaId(id: string): void {
+  if (!isValidCustomPersonaId(id)) {
+    throw new Error('Invalid custom persona ID');
+  }
+}
 
 export function loadCustomPersonas(dataDir: string): AgentPersona[] {
   const dir = path.join(dataDir, PERSONAS_DIR);
@@ -30,6 +52,7 @@ export function loadCustomPersonas(dataDir: string): AgentPersona[] {
 }
 
 export function saveCustomPersona(dataDir: string, persona: AgentPersona): void {
+  assertValidCustomPersonaId(persona.id);
   const dir = path.join(dataDir, PERSONAS_DIR);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const filePath = path.join(dir, `${persona.id}.json`);
@@ -37,6 +60,7 @@ export function saveCustomPersona(dataDir: string, persona: AgentPersona): void 
 }
 
 export function deleteCustomPersona(dataDir: string, id: string): boolean {
+  assertValidCustomPersonaId(id);
   const filePath = path.join(dataDir, PERSONAS_DIR, `${id}.json`);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);

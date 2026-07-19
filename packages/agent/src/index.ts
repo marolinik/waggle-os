@@ -383,7 +383,10 @@ export {
   type KvarkAskResponseLike, type KvarkStructuredResult, type KvarkFeedbackResponseLike, type KvarkActionResponseLike,
 } from './kvark-tools.js';
 export { PERSONAS, getPersona, listPersonas, composePersonaPrompt, setPersonaDataDir, type AgentPersona } from './personas.js';
-export { loadCustomPersonas, saveCustomPersona, deleteCustomPersona } from './custom-personas.js';
+export {
+  loadCustomPersonas, saveCustomPersona, deleteCustomPersona,
+  isValidCustomPersonaId, assertValidCustomPersonaId,
+} from './custom-personas.js';
 export { AgentMessageBus, type AgentMessage as BusAgentMessage } from './agent-message-bus.js';
 export { createAgentCommsTools } from './agent-comms-tools.js';
 export { createCliTools, type CliToolsConfig } from './cli-tools.js';
