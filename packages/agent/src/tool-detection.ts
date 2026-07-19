@@ -320,6 +320,55 @@ interface HookProbe {
   hookPointerPath: string | null;
 }
 
+const CLAUDE_CODE_HOOK_MARKER = '@hive-mind/claude-code-hooks';
+const CLAUDE_CODE_HOOKS = [
+  ['SessionStart', 'session-start'],
+  ['UserPromptSubmit', 'user-prompt-submit'],
+  ['Stop', 'stop'],
+  ['PreCompact', 'pre-compact'],
+] as const;
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function hasActiveClaudeCodeHooks(settings: unknown): boolean {
+  const settingsRecord = objectRecord(settings);
+  const hooks = objectRecord(settingsRecord?.hooks);
+  if (!hooks) return false;
+
+  return CLAUDE_CODE_HOOKS.every(([eventName, basename]) => {
+    const groups = hooks[eventName];
+    if (!Array.isArray(groups)) return false;
+    return groups.some((group) => {
+      const groupRecord = objectRecord(group);
+      if (groupRecord?._hiveMindShim !== CLAUDE_CODE_HOOK_MARKER) return false;
+      const entries = groupRecord.hooks;
+      if (!Array.isArray(entries)) return false;
+      const firstEntry = objectRecord(entries[0]);
+      return typeof firstEntry?.command === 'string'
+        && firstEntry.command.includes(`${basename}.js`);
+    });
+  });
+}
+
+async function activeClaudeCodeHooksHealthy(deps: ResolvedDeps): Promise<boolean> {
+  const settingsPath = joinForPlatform(deps.platform, deps.home, '.claude', 'settings.json');
+  if (!(await deps.exists(settingsPath))) return false;
+  return hasActiveClaudeCodeHooks(await deps.readJson(settingsPath));
+}
+
+async function activeHooksHealthy(
+  pointerHealthy: boolean,
+  toolId: string | undefined,
+  deps: ResolvedDeps,
+): Promise<boolean> {
+  if (!pointerHealthy) return false;
+  return toolId !== 'claude-code' || activeClaudeCodeHooksHealthy(deps);
+}
+
 function nonBlankEnv(deps: ResolvedDeps, name: string): string | null {
   const value = deps.env[name]?.trim();
   return value ? value : null;
@@ -346,6 +395,7 @@ async function probeHooks(
   rel: string,
   deps: ResolvedDeps,
   hookRoot: ToolManifest['hookRoot'] = 'user-home',
+  toolId?: string,
 ): Promise<HookProbe> {
   if (!rel) return { hooksInstalled: false, hookPointerPath: null };
   const root = hookRoot === 'hermes-home' ? hermesHome(deps) : deps.home;
@@ -369,13 +419,20 @@ async function probeHooks(
     : typeof hooksDir === 'string' && hooksDir.length > 0 && await deps.exists(hooksDir);
   if (!hooksDirValid) return { hooksInstalled: false, hookPointerPath: pointerPath };
   if (typeof backup === 'string' && backup.length > 0) {
-    return { hooksInstalled: await deps.exists(backup), hookPointerPath: pointerPath };
+    return {
+      hooksInstalled: await activeHooksHealthy(await deps.exists(backup), toolId, deps),
+      hookPointerPath: pointerPath,
+    };
   }
   // Create-if-missing adapters correctly have no backup. Their pointer is
   // healthy only while the config they created still exists.
   if (backup === null && pointer.created_by_us === true && typeof pointer.config_path === 'string') {
     return {
-      hooksInstalled: await deps.exists(pointer.config_path),
+      hooksInstalled: await activeHooksHealthy(
+        await deps.exists(pointer.config_path),
+        toolId,
+        deps,
+      ),
       hookPointerPath: pointerPath,
     };
   }
@@ -411,12 +468,12 @@ async function detectByPath(
     hookPointerPath: null,
   };
   const resolved = await deps.pathFromEnv(binaryName);
-  if (!resolved) return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot)) };
+  if (!resolved) return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot, id)) };
   if (!(await deps.exists(resolved))) {
-    return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot)) };
+    return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot, id)) };
   }
   const versionRaw = await deps.execVersion(resolved, ['--version']);
-  const hookProbe = await probeHooks(hookPointer, deps, hookRoot);
+  const hookProbe = await probeHooks(hookPointer, deps, hookRoot, id);
   const blockedWindowsAppsCodex =
     versionRaw === null && isBlockedWindowsAppsCodexPath(id, deps.platform, resolved);
   return {
@@ -466,7 +523,7 @@ async function detectHealthyWindowsHermes(
         installed: true,
         installedPath: candidate,
         version,
-        ...(await probeHooks(hookPointer, deps, hookRoot)),
+        ...(await probeHooks(hookPointer, deps, hookRoot, 'hermes')),
       };
     }
   }
@@ -479,7 +536,7 @@ async function detectHealthyWindowsHermes(
     version: null,
     launchable: firstExisting ? false : undefined,
     diagnostic: firstExisting ? HERMES_WINDOWS_HEALTH_DIAGNOSTIC : undefined,
-    ...(await probeHooks(hookPointer, deps, hookRoot)),
+    ...(await probeHooks(hookPointer, deps, hookRoot, 'hermes')),
   };
 }
 
@@ -603,7 +660,7 @@ async function detectByCandidates(
       const versionRaw = withVersion
         ? await deps.execVersion(candidate, ['--version'])
         : null;
-      const hookProbe = await probeHooks(hookPointer, deps, hookRoot);
+      const hookProbe = await probeHooks(hookPointer, deps, hookRoot, id);
       return {
         ...base,
         installed: true,
@@ -615,7 +672,7 @@ async function detectByCandidates(
       };
     }
   }
-  return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot)) };
+  return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot, id)) };
 }
 
 // ── Registry-driven detection ───────────────────────────────────────

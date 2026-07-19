@@ -223,9 +223,9 @@ export const TOOL_DISPLAY_NAMES = Object.fromEntries(
  *   - `installed`  : true iff the binary was found at a known path.
  *   - `installedPath` : absolute path to the binary, or null.
  *   - `version` : version string (best-effort; null if exec failed).
- *   - `hooksInstalled` : true iff a hive-mind hook pointer file
- *     was found AND its referenced backup file still exists
- *     (so a partially-rolled-back install reports false).
+ *   - `hooksInstalled` : true iff the hook pointer and its referenced rollback
+ *     state are healthy; tools with active-config verification must also still
+ *     contain their marker-tagged hook entries.
  *   - `hookPointerPath` : the pointer file we read (or attempted),
  *     for diagnostics.
  *   - `diagnostic` : optional human-readable reason for any

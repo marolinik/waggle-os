@@ -43,6 +43,21 @@ function makeDeps(overrides: Partial<DetectOpts> = {}): DetectOpts {
   };
 }
 
+function activeClaudeHookSettings() {
+  const group = (basename: string) => [{
+    _hiveMindShim: '@hive-mind/claude-code-hooks',
+    hooks: [{ type: 'command', command: `node "/hooks/${basename}.js"` }],
+  }];
+  return {
+    hooks: {
+      SessionStart: group('session-start'),
+      UserPromptSubmit: group('user-prompt-submit'),
+      Stop: group('stop'),
+      PreCompact: group('pre-compact'),
+    },
+  };
+}
+
 describe('detectInstalledTools', () => {
   it('returns an envelope covering every supported tool', async () => {
     const result = await detectInstalledTools(makeDeps());
@@ -185,12 +200,13 @@ describe('claude-code detector', () => {
     expect(t.version).toBe('1.2.3');
   });
 
-  it('reports hooksInstalled=true when the hive-mind pointer file is present and references an existing backup', async () => {
+  it('reports hooksInstalled=true when the pointer, backup, and active Claude hooks are healthy', async () => {
     const installed = '/usr/local/bin/claude';
     const home = '/Users/test';
     const pointer = '/Users/test/.claude/hive-mind-install.json';
     const backup = '/Users/test/.claude/settings.json.hive-mind-backup.X';
-    const existsSet = new Set([installed, pointer, backup]);
+    const settings = '/Users/test/.claude/settings.json';
+    const existsSet = new Set([installed, pointer, backup, settings]);
 
     const result = await detectInstalledTools(
       makeDeps({
@@ -199,12 +215,42 @@ describe('claude-code detector', () => {
         exists: async (p) => existsSet.has(p),
         pathFromEnv: () => installed,
         execVersion: async () => 'claude 1.2.3',
-        readJson: async (p) => (p === pointer ? { settings_backup: backup } : null),
+        readJson: async (p) => {
+          if (p === pointer) return { settings_backup: backup };
+          if (p === settings) return activeClaudeHookSettings();
+          return null;
+        },
       }),
     );
     const t = result.tools.find((x) => x.id === 'claude-code')!;
     expect(t.hooksInstalled).toBe(true);
     expect(t.hookPointerPath).toBe(pointer);
+  });
+
+  it('reports hooksInstalled=false when a stale pointer survives but active Claude hooks are gone', async () => {
+    const installed = '/usr/local/bin/claude';
+    const pointer = '/Users/test/.claude/hive-mind-install.json';
+    const backup = '/Users/test/.claude/settings.json.hive-mind-backup.X';
+    const settings = '/Users/test/.claude/settings.json';
+    const existsSet = new Set([installed, pointer, backup, settings]);
+
+    const result = await detectInstalledTools(makeDeps({
+      platform: 'darwin',
+      home: '/Users/test',
+      exists: async (candidate) => existsSet.has(candidate),
+      pathFromEnv: () => installed,
+      execVersion: async () => 'claude 1.2.3',
+      readJson: async (candidate) => {
+        if (candidate === pointer) return { settings_backup: backup };
+        if (candidate === settings) return { hooks: {} };
+        return null;
+      },
+    }));
+
+    expect(result.tools.find((tool) => tool.id === 'claude-code')).toMatchObject({
+      hooksInstalled: false,
+      hookPointerPath: pointer,
+    });
   });
 
   it('reports hooksInstalled=false when the pointer exists but its backup is gone (partial rollback)', async () => {
