@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { anthropicProxyRoutes } from '../../src/local/routes/anthropic-proxy.js';
+import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
 function createTestServer(options: {
   vaultApiKey?: string;
@@ -57,6 +58,7 @@ describe('Anthropic Proxy Routes', () => {
   afterEach(async () => {
     if (server) await server.close();
     globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
     // Restore env var
     if (originalApiKey !== undefined) {
       process.env.ANTHROPIC_API_KEY = originalApiKey;
@@ -78,6 +80,33 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.status).toBe('healthy');
+    });
+  });
+
+  describe('GET /v1/health/readiness', () => {
+    it('reports unavailable when the proxy has no provider credential', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      server = createTestServer();
+      const res = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toMatchObject({ status: 'unavailable' });
+    });
+
+    it('reports ready when at least one provider credential is configured', async () => {
+      server = createTestServer({ vaultApiKey: 'test-key' });
+      const res = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ status: 'ready' });
     });
   });
 

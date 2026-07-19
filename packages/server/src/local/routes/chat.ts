@@ -1116,11 +1116,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // catch so a failed generation still persists the raw user turn.
       activeSessionOrch = sessionOrch;
 
-      // Check if LiteLLM is available — if not, use echo mode
-      // F2 fix: When using the built-in Anthropic proxy, the /health/liveliness
-      // endpoint doesn't exist — so the HTTP probe always fails, dropping into
-      // echo mode even when an API key is configured. Instead, trust the
-      // provider status that was determined at startup (or updated at runtime).
+      // Check whether the configured LLM path can serve a completion. Process
+      // liveness is insufficient for the built-in proxy because it also runs
+      // normally before a cloud credential or local model has been configured.
       let litellmAvailable = hasCustomRunner; // trust injected runners
       if (!hasCustomRunner) {
         const llmStatus = server.agentState.llmProvider;
@@ -1137,7 +1135,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             if (token) {
               healthHeaders['Authorization'] = `Bearer ${token}`;
             }
-            const healthRes = await fetch(`${getLitellmUrl()}/health/liveliness`, {
+            const healthPath = llmStatus.provider === 'anthropic-proxy'
+              ? '/health/readiness'
+              : '/health/liveliness';
+            const healthRes = await fetch(`${getLitellmUrl()}${healthPath}`, {
               signal: AbortSignal.any([abortController.signal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
@@ -1235,8 +1236,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const shouldEchoMode = !reroutedMessage && !commandRegistry.isCommand(message) && !litellmAvailable;
 
       if (shouldEchoMode) {
-        // Echo mode — respond without LLM so the UI is functional
-        const echoResponse = `**Waggle is running in local mode** (no LLM proxy connected).\n\nYour message: "${message}"\n\nTo enable AI responses, configure an API key in Settings > API Keys.`;
+        // Setup-required mode — respond without pretending the user's input
+        // was answered. The raw turn is still persisted for continuity.
+        const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
         const words = echoResponse.split(' ');
         for (const word of words) {
           if (abortController.signal.aborted) return;

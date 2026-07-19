@@ -252,8 +252,26 @@ function mapModel(model: string): string {
 }
 
 export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
-  // Health check — always "OK" since we're built-in
+  // Process liveness is independent from whether a completion provider is
+  // configured. Installer/startup probes use this endpoint.
   server.get('/v1/health/liveliness', async () => ({ status: 'healthy' }));
+
+  // Model readiness is stricter: the in-process proxy cannot complete a turn
+  // until at least one cloud provider credential is available. Keep this
+  // separate from liveness so a clean Solo install remains operational while
+  // chat can truthfully ask the user to configure a model.
+  server.get('/v1/health/readiness', async (_request, reply) => {
+    const hasConfiguredProvider = Boolean(getAnthropicKey(server))
+      || Object.keys(PROVIDER_MODEL_CATALOGS)
+        .some((providerId) => getProviderApiKeys(providerId, server.vault).length > 0);
+    if (!hasConfiguredProvider) {
+      return reply.status(503).send({
+        status: 'unavailable',
+        detail: 'No provider credential configured',
+      });
+    }
+    return { status: 'ready' };
+  });
 
   // POST /v1/chat/completions — translate to Anthropic Messages API
   server.post<{ Body: ChatCompletionBody }>('/v1/chat/completions', async (request, reply) => {
