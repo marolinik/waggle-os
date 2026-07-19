@@ -1,10 +1,9 @@
 /**
- * Bridge to hive-mind-cli — uses `mcp call <tool>` for all MCP tools
- * uniformly. Single chokepoint, no per-command CLI surface drift.
+ * Bridge to hive-mind-cli. Hook lifecycle saves and bounded empty-query
+ * recalls use `hook-call`; semantic/general tools keep the MCP handshake.
  *
- * Wire format: spawn `hive-mind-cli mcp call <tool> --args <json> --json`
- * as a short-lived child process; parse stdout JSON. The CLI prints the
- * McpCallResult shape (see hive-mind/packages/cli/src/commands/mcp-call.ts).
+ * Both paths spawn a short-lived child and return the same McpCallResult
+ * envelope (see hive-mind/packages/cli/src/commands/mcp-call.ts).
  *
  * IMPORTANT (Commit 1.4 — MCP surface alignment):
  *   - There is no `switch_workspace` MCP tool. Workspace targeting is
@@ -153,7 +152,8 @@ interface SpawnTarget {
  * path to `dist/index.js` via `cli_path` so we route through Node.
  */
 function buildSpawnTarget(cliPath: string, args: readonly string[]): SpawnTarget {
-  if (cliPath.endsWith('.js') || cliPath.endsWith('.mjs') || cliPath.endsWith('.cjs')) {
+  const lowerPath = cliPath.toLowerCase();
+  if (lowerPath.endsWith('.js') || lowerPath.endsWith('.mjs') || lowerPath.endsWith('.cjs')) {
     return { command: process.execPath, args: [cliPath, ...args] };
   }
   return { command: cliPath, args };
@@ -239,7 +239,8 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
   const spawnImpl: SpawnFn = opts.spawnImpl ?? (spawn as unknown as SpawnFn);
   let activeWorkspaceId: string | undefined = opts.initial_workspace_id ?? workspaceIdFromEnvironment();
 
-  async function callMcpTool<T>(
+  async function callCliTool<T>(
+    mode: 'mcp' | 'hook',
     toolName: string,
     args: Record<string, unknown>,
     callOpts: CallMcpOptions = {},
@@ -252,13 +253,22 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
     };
 
     return withRetry<T>(async () => {
-      const cliArgs = [
-        'mcp', 'call', toolName,
-        '--args', JSON.stringify(args),
-        '--json',
-        '--timeout-ms', String(callTimeout),
-      ];
-      log.debug('hive-mind-cli mcp call', { tool: toolName, cliPath });
+      const cliArgs = mode === 'hook'
+        ? [
+            'hook-call', toolName,
+            '--args', JSON.stringify(args),
+            '--json',
+          ]
+        : [
+            'mcp', 'call', toolName,
+            '--args', JSON.stringify(args),
+            '--json',
+            '--timeout-ms', String(callTimeout),
+          ];
+      log.debug(`hive-mind-cli ${mode === 'hook' ? 'hook-call' : 'mcp call'}`, {
+        tool: toolName,
+        cliPath,
+      });
       const { stdout, stderr, code } = await spawnAndCollect(
         cliPath,
         cliArgs,
@@ -271,16 +281,31 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
       }
       const result = parseMcpCallOutput(stdout);
       if (!result.ok) {
-        throw new Error(`mcp tool ${toolName} failed: ${result.error ?? 'unknown error'}`);
+        throw new Error(`${mode} tool ${toolName} failed: ${result.error ?? 'unknown error'}`);
       }
       if (result.isError) {
-        throw new Error(`mcp tool ${toolName} reported isError: ${unwrapTextContent(result)}`);
+        throw new Error(`${mode} tool ${toolName} reported isError: ${unwrapTextContent(result)}`);
       }
       const text = unwrapTextContent(result);
       const parsed = tryParseJson<T>(text);
       if (parsed !== undefined) return parsed;
       return result as unknown as T;
     }, retryCfg);
+  }
+
+  async function callMcpTool<T>(
+    toolName: string,
+    args: Record<string, unknown>,
+    callOpts: CallMcpOptions = {},
+  ): Promise<T> {
+    return callCliTool<T>('mcp', toolName, args, callOpts);
+  }
+
+  async function callHookTool<T>(
+    toolName: 'save_memory' | 'recall_memory',
+    args: Record<string, unknown>,
+  ): Promise<T> {
+    return callCliTool<T>('hook', toolName, args);
   }
 
   function setWorkspaceById(workspaceId: string | undefined): void {
@@ -304,7 +329,7 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
     const targetWorkspace = opts.workspace ?? activeWorkspaceId;
     if (targetWorkspace) wireArgs['workspace'] = targetWorkspace;
 
-    const result = await callMcpTool<{
+    const result = await callHookTool<{
       id?: number | string;
       workspace?: string;
     }>('save_memory', wireArgs);
@@ -330,7 +355,20 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
     if (recallOpts.scope !== undefined) wireArgs['scope'] = recallOpts.scope;
     if (recallOpts.profile !== undefined) wireArgs['profile'] = recallOpts.profile;
 
-    const raw = await callMcpTool<unknown>('recall_memory', wireArgs);
+    const useHookPath = query === ''
+      && recallOpts.profile === undefined
+      && Number.isInteger(recallOpts.limit)
+      && (recallOpts.limit as number) >= 1
+      && (recallOpts.limit as number) <= 100
+      && (
+        (recallOpts.scope === 'personal' && targetWorkspace === undefined)
+        || (recallOpts.scope === 'current'
+          && typeof targetWorkspace === 'string'
+          && /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/.test(targetWorkspace))
+      );
+    const raw = useHookPath
+      ? await callHookTool<unknown>('recall_memory', wireArgs)
+      : await callMcpTool<unknown>('recall_memory', wireArgs);
     if (Array.isArray(raw)) {
       return raw as MemoryHit[];
     }
