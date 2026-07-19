@@ -1,10 +1,24 @@
 import { lte, eq, and } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import cronParser from 'cron-parser';
 const { parseExpression } = cronParser;
 import { cronSchedules } from '../db/schema.js';
 import type { Db } from '../db/connection.js';
 import type { JobService } from '../services/job-service.js';
 import { scheduledJobTypeSchema } from '@waggle/shared';
+
+function occurrenceJobId(scheduleId: string, scheduledFor: Date): string {
+  const bytes = createHash('sha256')
+    .update(scheduleId)
+    .update('\0')
+    .update(scheduledFor.toISOString())
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x80;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export class CronRunner {
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -61,7 +75,7 @@ export class CronRunner {
     let queuedCount = 0;
     for (const schedule of due) {
       const jobType = scheduledJobTypeSchema.safeParse(schedule.jobType);
-      if (!jobType.success) continue;
+      if (!jobType.success || !schedule.nextRunAt) continue;
 
       try {
         // Validate legacy rows before queueing so a poison cron expression
@@ -73,12 +87,17 @@ export class CronRunner {
           schedule.createdBy,
           jobType.data,
           schedule.jobConfig as Record<string, unknown>,
+          occurrenceJobId(schedule.id, schedule.nextRunAt),
         );
 
-        await this.db.update(cronSchedules)
+        const [advanced] = await this.db.update(cronSchedules)
           .set({ lastRunAt: now, nextRunAt })
-          .where(eq(cronSchedules.id, schedule.id));
-        queuedCount++;
+          .where(and(
+            eq(cronSchedules.id, schedule.id),
+            eq(cronSchedules.nextRunAt, schedule.nextRunAt),
+          ))
+          .returning({ id: cronSchedules.id });
+        if (advanced) queuedCount++;
       } catch (error) {
         // One malformed or temporarily failing schedule must not starve the
         // remaining due work. The lifecycle runner supplies the server logger.

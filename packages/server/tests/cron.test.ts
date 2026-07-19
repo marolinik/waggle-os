@@ -1,10 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { Queue } from 'bullmq';
 import { buildServer } from '../src/index.js';
 import { users, teams, teamMembers, cronSchedules, agentJobs } from '../src/db/schema.js';
 import { sql, eq } from 'drizzle-orm';
 import { CronRunner } from '../src/scheduler/cron-runner.js';
 import { CronService } from '../src/services/cron-service.js';
+import { JobService } from '../src/services/job-service.js';
 
 async function waitFor(
   predicate: () => Promise<boolean>,
@@ -377,7 +380,7 @@ describe('Cron Scheduler (Task 3.16)', () => {
       enabled: true,
       nextRunAt: pastDate,
     }).returning();
-    await server.db.insert(cronSchedules).values({
+    const [validSchedule] = await server.db.insert(cronSchedules).values({
       teamId,
       createdBy: ownerId,
       name: 'Valid After Invalid Cron',
@@ -386,7 +389,7 @@ describe('Cron Scheduler (Task 3.16)', () => {
       jobConfig: { marker: validMarker },
       enabled: true,
       nextRunAt: pastDate,
-    });
+    }).returning();
     const errors: unknown[] = [];
     const runner = new CronRunner(server.db, server.jobService, error => errors.push(error));
     let validJob: typeof agentJobs.$inferSelect | undefined;
@@ -406,6 +409,122 @@ describe('Cron Scheduler (Task 3.16)', () => {
       expect(persistedInvalid.nextRunAt?.getTime()).toBe(pastDate.getTime());
     } finally {
       if (validJob) await server.jobService.cancelJob(validJob.id);
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, invalidSchedule.id));
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, validSchedule.id));
+    }
+  });
+
+  it('deduplicates one due occurrence across concurrent runners', async () => {
+    const marker = `concurrent-occurrence-${Date.now()}`;
+    const [schedule] = await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Concurrent Occurrence',
+      cronExpr: '* * * * *',
+      jobType: 'task',
+      jobConfig: { marker },
+      enabled: true,
+      nextRunAt: new Date(Date.now() - 60_000),
+    }).returning();
+
+    const originalCreate = server.jobService.createJob.bind(server.jobService);
+    let arrivals = 0;
+    let release!: () => void;
+    const bothSelected = new Promise<void>(resolve => { release = resolve; });
+    const createSpy = vi.spyOn(server.jobService, 'createJob').mockImplementation(async (...args) => {
+      arrivals++;
+      if (arrivals === 2) release();
+      await bothSelected;
+      return originalCreate(...args);
+    });
+    let jobs: Array<typeof agentJobs.$inferSelect> = [];
+
+    try {
+      const first = new CronRunner(server.db, server.jobService);
+      const second = new CronRunner(server.db, server.jobService);
+      const counts = await Promise.all([first.tick(), second.tick()]);
+
+      jobs = (await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId)))
+        .filter(job => (job.input as { marker?: string }).marker === marker);
+      expect(jobs).toHaveLength(1);
+      expect(counts[0] + counts[1]).toBe(1);
+    } finally {
+      createSpy.mockRestore();
+      for (const job of jobs) await server.jobService.cancelJob(job.id);
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, schedule.id));
+    }
+  });
+
+  it('reuses the same occurrence job after a post-enqueue schedule-update failure', async () => {
+    const marker = `retry-occurrence-${Date.now()}`;
+    const [schedule] = await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Retry Occurrence',
+      cronExpr: '* * * * *',
+      jobType: 'task',
+      jobConfig: { marker },
+      enabled: true,
+      nextRunAt: new Date(Date.now() - 60_000),
+    }).returning();
+    const errors: unknown[] = [];
+    const runner = new CronRunner(server.db, server.jobService, error => errors.push(error));
+    const updateSpy = vi.spyOn(server.db, 'update').mockImplementationOnce(() => {
+      throw new Error('simulated schedule update failure');
+    });
+    let jobs: Array<typeof agentJobs.$inferSelect> = [];
+
+    try {
+      try {
+        expect(await runner.tick()).toBe(0);
+        expect(errors).toHaveLength(1);
+      } finally {
+        updateSpy.mockRestore();
+      }
+
+      expect(await runner.tick()).toBe(1);
+      jobs = (await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId)))
+        .filter(job => (job.input as { marker?: string }).marker === marker);
+      expect(jobs).toHaveLength(1);
+    } finally {
+      for (const job of jobs) await server.jobService.cancelJob(job.id);
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, schedule.id));
+    }
+  });
+
+  it('queues the persisted canonical payload when an occurrence retry input differs', async () => {
+    const queueName = `cron-canonical-${Date.now()}`;
+    const redisUrl = new URL(process.env.REDIS_URL ?? 'redis://localhost:6381');
+    const jobService = new JobService(server.db, redisUrl.href, queueName);
+    const queue = new Queue(queueName, {
+      connection: {
+        host: redisUrl.hostname,
+        port: parseInt(redisUrl.port || '6379', 10),
+      },
+    });
+    const jobId = randomUUID();
+
+    try {
+      await jobService.createJob(teamId, ownerId, 'task', { marker: 'canonical' }, jobId);
+      const firstQueueJob = await queue.getJob(jobId);
+      expect(firstQueueJob).toBeTruthy();
+      await firstQueueJob!.remove();
+
+      await jobService.createJob(teamId, ownerId, 'task', { marker: 'conflicting-retry' }, jobId);
+      const [persisted] = await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.id, jobId));
+      const retriedQueueJob = await queue.getJob(jobId);
+
+      expect(persisted.input).toEqual({ marker: 'canonical' });
+      expect(retriedQueueJob?.data.input).toEqual(persisted.input);
+    } finally {
+      const queued = await queue.getJob(jobId);
+      if (queued) await queued.remove();
+      await server.db.delete(agentJobs).where(eq(agentJobs.id, jobId));
+      await queue.close();
+      await jobService.close();
     }
   });
 

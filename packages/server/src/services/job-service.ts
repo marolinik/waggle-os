@@ -16,21 +16,34 @@ export class JobService {
     });
   }
 
-  async createJob(teamId: string, userId: string, jobType: string, input: Record<string, unknown>) {
-    const [job] = await this.db.insert(agentJobs).values({
+  async createJob(
+    teamId: string,
+    userId: string,
+    jobType: string,
+    input: Record<string, unknown>,
+    jobId?: string,
+  ) {
+    const [created] = await this.db.insert(agentJobs).values({
+      ...(jobId ? { id: jobId } : {}),
       teamId,
       userId,
       jobType,
       status: 'queued',
       input,
-    }).returning();
+    }).onConflictDoNothing({ target: agentJobs.id }).returning();
 
-    await this.queue.add(jobType, {
+    const job = created ?? (jobId ? await this.getJob(jobId) : null);
+    if (!job) throw new Error('Failed to create job');
+    if (job.teamId !== teamId || job.userId !== userId || job.jobType !== jobType) {
+      throw new Error('Job idempotency key collision');
+    }
+
+    await this.queue.add(job.jobType, {
       jobId: job.id,
-      teamId,
-      userId,
-      jobType,
-      input,
+      teamId: job.teamId,
+      userId: job.userId,
+      jobType: job.jobType,
+      input: job.input,
     }, { jobId: job.id });
 
     return job;
