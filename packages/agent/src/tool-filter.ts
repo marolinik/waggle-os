@@ -89,6 +89,8 @@ export interface TurnToolSelectionOptions {
   recentToolNames?: readonly string[];
   mandatoryToolNames?: readonly string[];
   externalToolNames?: readonly string[];
+  /** External tools matched by semantic retrieval for this turn. */
+  retrievedToolNames?: readonly string[];
   maxTools?: number;
   maxSchemaChars?: number;
   /** Keep a bounded authorized pool for delegated tasks with terse instructions. */
@@ -255,6 +257,7 @@ export function selectToolsForTurn(
   const preferred = new Set(options.preferredToolNames ?? []);
   const mandatory = new Set(options.mandatoryToolNames ?? []);
   const external = new Set(options.externalToolNames ?? []);
+  const retrieved = new Set(options.retrievedToolNames ?? []);
   const recent = new Set(Array.from(new Set(options.recentToolNames ?? [])).slice(-4));
   const historyTokens = tokensOf(
     (options.recentMessages ?? []).slice(-4).map(entry => entry.content).join(' '),
@@ -279,6 +282,10 @@ export function selectToolsForTurn(
     }
     if (mandatory.has(tool.name)) {
       score += 9_000;
+      relevant = true;
+    }
+    if (isAction && retrieved.has(tool.name)) {
+      score += 500;
       relevant = true;
     }
     for (const bundle of matchedIntents) {
@@ -313,6 +320,7 @@ export function selectToolsForTurn(
       const explicitExternal = exactName
         || currentNameOverlap > 0
         || mandatory.has(tool.name)
+        || (isAction && retrieved.has(tool.name))
         || (isContinuation && recent.has(tool.name));
       if (!explicitExternal) relevant = false;
     }

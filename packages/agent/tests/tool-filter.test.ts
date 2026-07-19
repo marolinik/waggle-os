@@ -194,4 +194,32 @@ describe('selectToolsForTurn', () => {
     expect(delegated.tools.map((tool) => tool.name)).toEqual(['read_file', 'write_file']);
     expect(delegated.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
   });
+
+  it('keeps a semantically retrieved external tool without name-token overlap', () => {
+    const semanticallyMatched = {
+      ...makeTool('mcp_x7f9'),
+      description: 'Publish an incident bulletin to a team channel',
+    };
+    const selected = selectToolsForTurn([semanticallyMatched], {
+      message: 'Send teammates an outage update',
+      externalToolNames: [semanticallyMatched.name],
+      retrievedToolNames: [semanticallyMatched.name, 'denied_tool_not_in_eligible_pool'],
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toEqual([semanticallyMatched.name]);
+    expect(selected.tools.map(tool => tool.name)).not.toContain('denied_tool_not_in_eligible_pool');
+    expect(selected.tools.length).toBeLessThanOrEqual(DEFAULT_TURN_TOOL_LIMIT);
+    expect(selected.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
+  });
+
+  it('does not make casual chat tool-bearing from a weak semantic match', () => {
+    const external = makeTool('mcp_x7f9');
+    const selected = selectToolsForTurn([external], {
+      message: 'Thanks for the help',
+      externalToolNames: [external.name],
+      retrievedToolNames: [external.name],
+    });
+
+    expect(selected.tools).toEqual([]);
+  });
 });

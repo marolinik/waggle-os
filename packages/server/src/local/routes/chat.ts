@@ -1694,6 +1694,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // sub-agent's legitimate toolset for its explicit task.
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
         const externalToolNames = new Set<string>();
+        const retrievedToolNames = new Set<string>();
         if (!hasCustomRunner) {
           effectiveTools = filterAvailableTools(effectiveTools);
 
@@ -1709,15 +1710,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();
-            let selectedMcp = await server.agentState.mcpToolRetriever.selectTools(
+            const retrieval = await server.agentState.mcpToolRetriever.selectToolsWithDetails(
               runningMcpTools, history, sessionId, retrievalCfg,
             );
+            let selectedMcp = retrieval.tools;
             if (activePersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, activePersona);
             selectedMcp = filterAvailableTools(selectedMcp);
             if (selectedMcp.length > 0) {
               const present = new Set(effectiveTools.map(t => t.name));
               const additions = selectedMcp.filter(t => !present.has(t.name));
-              for (const candidate of additions) externalToolNames.add(candidate.name);
+              const retrievedThisTurn = new Set(retrieval.retrievedToolNames);
+              for (const candidate of additions) {
+                externalToolNames.add(candidate.name);
+                if (retrievedThisTurn.has(candidate.name)) retrievedToolNames.add(candidate.name);
+              }
               effectiveTools = [...effectiveTools, ...additions];
             }
           }
@@ -1932,6 +1938,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               ? ['search_skills', 'create_skill']
               : [],
             externalToolNames: [...externalToolNames],
+            retrievedToolNames: [...retrievedToolNames],
           });
           selectorLatencyMs = Math.max(0, Math.round(performance.now() - selectorStartedAt));
           effectiveTools = selection.tools;
