@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
 import { WaggleConfig } from '@waggle/core';
+import { allowLocalFromEnv, safeFetch } from '@waggle/agent';
 import { emitNotification } from './notifications.js';
 import { emitAuditEvent } from './events.js';
 import { requireTier } from '../../middleware/assert-tier.js';
@@ -100,6 +101,38 @@ function getLocalDisplayName(dataDir: string): string {
   return 'You';
 }
 
+function hasAllowedTeamServerProtocol(url: URL, allowLocal: boolean): boolean {
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const isExplicitLoopback = hostname === 'localhost'
+    || hostname.endsWith('.localhost')
+    || hostname === '::1'
+    || /^127(?:\.\d{1,3}){3}$/.test(hostname);
+  return url.protocol === 'https:' || (url.protocol === 'http:' && allowLocal && isExplicitLoopback);
+}
+
+function normalizeTeamServerBaseUrl(value: string, allowLocal: boolean): string | null {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash) return null;
+    if (!hasAllowedTeamServerProtocol(url, allowLocal)) return null;
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return null;
+  }
+}
+
+function fetchTeamServer(url: string, init: RequestInit = {}): Promise<Response> {
+  const parsed = new URL(url);
+  if (parsed.username || parsed.password || parsed.hash
+    || !hasAllowedTeamServerProtocol(parsed, allowLocalFromEnv())) {
+    return Promise.reject(new Error('Blocked insecure Team server URL'));
+  }
+  return safeFetch(url, init, {
+    allowLocal: allowLocalFromEnv(),
+    maxRedirects: 0,
+  });
+}
+
 export async function teamRoutes(fastify: FastifyInstance) {
   const dataDir = fastify.localConfig.dataDir;
 
@@ -113,11 +146,17 @@ export async function teamRoutes(fastify: FastifyInstance) {
     if (!serverUrl || !token) {
       return reply.code(400).send({ error: 'serverUrl and token are required' });
     }
+    const normalizedServerUrl = normalizeTeamServerBaseUrl(serverUrl, allowLocalFromEnv());
+    if (!normalizedServerUrl) {
+      return reply.code(400).send({
+        error: 'Team server URL must use HTTPS; HTTP is allowed only for explicitly enabled loopback servers',
+      });
+    }
 
     // Validate by calling the team server health endpoint
     try {
-      const healthUrl = `${serverUrl.replace(/\/$/, '')}/health`;
-      const healthRes = await fetch(healthUrl, {
+      const healthUrl = `${normalizedServerUrl}/health`;
+      const healthRes = await fetchTeamServer(healthUrl, {
         headers: { 'Authorization': `Bearer ${token}` },
         signal: AbortSignal.timeout(5000),
       });
@@ -138,7 +177,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     let userId = 'unknown';
     let displayName = 'Unknown User';
     try {
-      const teamsRes = await fetch(`${serverUrl.replace(/\/$/, '')}/api/teams`, {
+      const teamsRes = await fetchTeamServer(`${normalizedServerUrl}/api/teams`, {
         headers: { 'Authorization': `Bearer ${token}` },
         signal: AbortSignal.timeout(5000),
       });
@@ -155,7 +194,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     // Store team server config
     const waggleConfig = new WaggleConfig(dataDir);
     waggleConfig.setTeamServer({
-      url: serverUrl.replace(/\/$/, ''),
+      url: normalizedServerUrl,
       token,
       userId,
       displayName,
@@ -163,7 +202,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     waggleConfig.save();
 
     const connection = {
-      serverUrl: serverUrl.replace(/\/$/, ''),
+      serverUrl: normalizedServerUrl,
       token: '***', // Don't send token back
       userId,
       displayName,
@@ -198,7 +237,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
 
     try {
       const teamsUrl = `${teamServer.url}/api/teams`;
-      const res = await fetch(teamsUrl, {
+      const res = await fetchTeamServer(teamsUrl, {
         headers: { 'Authorization': `Bearer ${teamServer.token}` },
         signal: AbortSignal.timeout(5000),
       });
@@ -236,7 +275,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     // Try to fetch real presence from team server
     try {
       const presenceUrl = `${teamServer.url}/api/presence`;
-      const res = await fetch(presenceUrl, {
+      const res = await fetchTeamServer(presenceUrl, {
         headers: { 'Authorization': `Bearer ${teamServer.token}` },
         signal: AbortSignal.timeout(3000),
       });
@@ -294,7 +333,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     const teamServer = waggleConfig.getTeamServer();
     if (teamServer) {
       try {
-        const res = await fetch(`${teamServer.url}/api/team/members`, {
+        const res = await fetchTeamServer(`${teamServer.url}/api/team/members`, {
           headers: { Authorization: `Bearer ${teamServer.token}` },
           signal: AbortSignal.timeout(3000),
         });
@@ -325,7 +364,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     try {
       const workspaceId = request.query.workspaceId;
       const entitiesUrl = `${teamServer.url}/api/entities?type=memory_frame&limit=${limit}`;
-      const res = await fetch(entitiesUrl, {
+      const res = await fetchTeamServer(entitiesUrl, {
         headers: { 'Authorization': `Bearer ${teamServer.token}` },
         signal: AbortSignal.timeout(5000),
       });
@@ -376,7 +415,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     try {
       const teamSlug = (teamServer as { teamSlug?: string }).teamSlug ?? 'default';
       const messagesUrl = `${teamServer.url}/api/teams/${teamSlug}/messages?limit=${limit}`;
-      const res = await fetch(messagesUrl, {
+      const res = await fetchTeamServer(messagesUrl, {
         headers: { 'Authorization': `Bearer ${teamServer.token}` },
         signal: AbortSignal.timeout(5000),
       });
@@ -433,7 +472,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     try {
       const teamSlug = (teamServer as { teamSlug?: string }).teamSlug ?? 'default';
       const url = `${teamServer.url.replace(/\/$/, '')}/api/teams/${teamSlug}/capability-policies`;
-      const res = await fetch(url, {
+      const res = await fetchTeamServer(url, {
         headers: { 'Authorization': `Bearer ${teamServer.token}` },
         signal: AbortSignal.timeout(5000),
       });
@@ -750,7 +789,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
 
       try {
         const url = `${teamServer.url}/api/entities?type=memory_frame&limit=${limit}`;
-        const res = await fetch(url, {
+        const res = await fetchTeamServer(url, {
           headers: { 'Authorization': `Bearer ${teamServer.token}` },
         });
         if (!res.ok) return { results: [], count: 0 };
