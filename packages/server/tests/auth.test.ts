@@ -1,35 +1,63 @@
+import { createHmac } from 'node:crypto';
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { buildServer } from '../src/index.js';
 import { users } from '../src/db/schema.js';
 import { sql } from 'drizzle-orm';
 import { UserService } from '../src/services/user-service.js';
 
+const SIGNING_KEY = Buffer.from('waggle-clerk-auth-integration-test-secret');
+const SIGNING_SECRET = `whsec_${SIGNING_KEY.toString('base64')}`;
+
+function signedHeaders(payload: object) {
+  const id = 'msg_waggle_clerk_auth_integration';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = createHmac('sha256', SIGNING_KEY)
+    .update(`${id}.${timestamp}.${JSON.stringify(payload)}`)
+    .digest('base64');
+
+  return {
+    'svix-id': id,
+    'svix-timestamp': String(timestamp),
+    'svix-signature': `v1,${signature}`,
+  };
+}
+
 describe('Clerk webhook', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
+  let originalSigningSecret: string | undefined;
 
   beforeAll(async () => {
+    originalSigningSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
+    process.env.CLERK_WEBHOOK_SIGNING_SECRET = SIGNING_SECRET;
     server = await buildServer();
   });
 
   afterAll(async () => {
     await server.db.execute(sql`DELETE FROM users WHERE clerk_id LIKE 'test_%'`);
     await server.close();
+    if (originalSigningSecret === undefined) {
+      delete process.env.CLERK_WEBHOOK_SIGNING_SECRET;
+    } else {
+      process.env.CLERK_WEBHOOK_SIGNING_SECRET = originalSigningSecret;
+    }
   });
 
   it('creates user on user.created webhook', async () => {
+    const payload = {
+      type: 'user.created',
+      data: {
+        id: 'test_clerk_001',
+        first_name: 'Marko',
+        last_name: 'Markovic',
+        email_addresses: [{ email_address: 'marko@test.com' }],
+        image_url: 'https://example.com/avatar.jpg',
+      },
+    };
     const response = await server.inject({
       method: 'POST',
       url: '/api/webhooks/clerk',
-      payload: {
-        type: 'user.created',
-        data: {
-          id: 'test_clerk_001',
-          first_name: 'Marko',
-          last_name: 'Markovic',
-          email_addresses: [{ email_address: 'marko@test.com' }],
-          image_url: 'https://example.com/avatar.jpg',
-        },
-      },
+      headers: signedHeaders(payload),
+      payload,
     });
     expect(response.statusCode).toBe(200);
 
@@ -40,19 +68,21 @@ describe('Clerk webhook', () => {
   });
 
   it('updates user on user.updated webhook', async () => {
+    const payload = {
+      type: 'user.updated',
+      data: {
+        id: 'test_clerk_001',
+        first_name: 'Marko',
+        last_name: 'Updated',
+        email_addresses: [{ email_address: 'marko@test.com' }],
+        image_url: null,
+      },
+    };
     const response = await server.inject({
       method: 'POST',
       url: '/api/webhooks/clerk',
-      payload: {
-        type: 'user.updated',
-        data: {
-          id: 'test_clerk_001',
-          first_name: 'Marko',
-          last_name: 'Updated',
-          email_addresses: [{ email_address: 'marko@test.com' }],
-          image_url: null,
-        },
-      },
+      headers: signedHeaders(payload),
+      payload,
     });
     expect(response.statusCode).toBe(200);
 
@@ -61,15 +91,17 @@ describe('Clerk webhook', () => {
   });
 
   it('deletes user on user.deleted webhook', async () => {
+    const payload = {
+      type: 'user.deleted',
+      data: {
+        id: 'test_clerk_001',
+      },
+    };
     const response = await server.inject({
       method: 'POST',
       url: '/api/webhooks/clerk',
-      payload: {
-        type: 'user.deleted',
-        data: {
-          id: 'test_clerk_001',
-        },
-      },
+      headers: signedHeaders(payload),
+      payload,
     });
     expect(response.statusCode).toBe(200);
 
