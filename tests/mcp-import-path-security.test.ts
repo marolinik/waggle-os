@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { MarkdownAdapter, PlaintextAdapter } from '@waggle/hive-mind-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,6 +59,16 @@ function captureTools(register: (server: McpServer) => void): Record<string, Too
 
 function resultText(result: ToolResult): string {
   return result.content.map((item) => item.text).join('\n');
+}
+
+function windowsShortBasename(target: string): string {
+  const command = `for %I in ("${target}") do @echo %~sI`;
+  const shortPath = execFileSync(
+    process.env.ComSpec ?? 'cmd.exe',
+    ['/d', '/c', command],
+    { encoding: 'utf8', windowsVerbatimArguments: true },
+  ).trim();
+  return path.basename(shortPath);
 }
 
 const surfaces = [
@@ -162,6 +173,48 @@ describe.each(surfaces)('$name local import containment', (surface) => {
 
     expect(result.isError).toBe(true);
     expect(resultText(result)).toMatch(/sensitive|denied/i);
+    expect(surface.parse).not.toHaveBeenCalled();
+  });
+
+  it('rejects backup copies of sensitive files inside the configured root', async () => {
+    for (const name of ['id_rsa.bak', '.npmrc.backup']) {
+      fs.writeFileSync(path.join(importRoot, name), '[]');
+
+      const result = await surface.harvest({
+        source: 'universal',
+        file_path: name,
+      });
+
+      expect(result.isError, name).toBe(true);
+      expect(resultText(result), name).toMatch(/sensitive|denied/i);
+    }
+    expect(surface.parse).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform !== 'win32')('rejects NTFS short aliases for sensitive files and directories', async (context) => {
+    const sensitiveDirectory = path.join(importRoot, '.terraform.d');
+    fs.mkdirSync(sensitiveDirectory);
+    fs.writeFileSync(path.join(importRoot, 'credentials.json'), '[]');
+    fs.writeFileSync(path.join(sensitiveDirectory, 'export.json'), '[]');
+
+    const candidates = [
+      windowsShortBasename(path.join(importRoot, 'credentials.json')),
+      `${windowsShortBasename(sensitiveDirectory)}/export.json`,
+    ];
+    if (candidates.some((candidate) => !/~\d/i.test(candidate))) {
+      context.skip('NTFS 8.3 alias creation is disabled on this volume');
+    }
+
+    for (const candidate of candidates) {
+      expect(candidate).toMatch(/~\d/i);
+      const result = await surface.harvest({
+        source: 'universal',
+        file_path: candidate,
+      });
+
+      expect(result.isError, candidate).toBe(true);
+      expect(resultText(result), candidate).toMatch(/sensitive|denied/i);
+    }
     expect(surface.parse).not.toHaveBeenCalled();
   });
 

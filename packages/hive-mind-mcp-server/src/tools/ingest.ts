@@ -32,6 +32,8 @@ const SENSITIVE_FILES = new Set([
   'credentials', 'credentials.json', 'service-account.json',
   'terraform.tfstate', 'terraform.tfstate.backup',
 ]);
+const SENSITIVE_EXTENSIONS = new Set(['.pem']);
+const BACKUP_SUFFIX_RE = /\.(bak|old|backup|orig|copy|save|swp)$/i;
 const SAFE_ENV_TEMPLATES = new Set([
   '.env.example', '.env.sample', '.env.template', '.env.dist', '.env.defaults',
 ]);
@@ -40,13 +42,21 @@ function normalizeSegment(segment: string): string {
   return segment.toLowerCase().replace(/::.*$/, '').replace(/[. ]+$/, '');
 }
 
+function isSensitiveBase(base: string): boolean {
+  if (SENSITIVE_FILES.has(base)) return true;
+  const dot = base.lastIndexOf('.');
+  if (dot > 0 && SENSITIVE_EXTENSIONS.has(base.slice(dot))) return true;
+  if (base === '.env' || base.startsWith('.env.')) return !SAFE_ENV_TEMPLATES.has(base);
+  return false;
+}
+
 function isSensitivePath(candidate: string): boolean {
   const segments = candidate.replace(/\\/g, '/').split('/').map(normalizeSegment).filter(Boolean);
   if (segments.some((segment) => SENSITIVE_DIRS.has(segment))) return true;
   const base = segments.at(-1);
   if (!base) return false;
-  if (SENSITIVE_FILES.has(base) || base.endsWith('.pem')) return true;
-  if (base === '.env' || base.startsWith('.env.')) return !SAFE_ENV_TEMPLATES.has(base);
+  if (isSensitiveBase(base)) return true;
+  if (BACKUP_SUFFIX_RE.test(base) && isSensitiveBase(base.replace(BACKUP_SUFFIX_RE, ''))) return true;
   return false;
 }
 
@@ -90,7 +100,7 @@ export function resolveImportFilePath(relativePath: string): string {
 
   let realRoot: string;
   try {
-    realRoot = fs.realpathSync(configuredRoot);
+    realRoot = fs.realpathSync.native(configuredRoot);
   } catch {
     throw new Error(`Configured import root does not exist: ${configuredRoot}`);
   }
@@ -105,7 +115,7 @@ export function resolveImportFilePath(relativePath: string): string {
 
   let realTarget: string;
   try {
-    realTarget = fs.realpathSync(lexicalTarget);
+    realTarget = fs.realpathSync.native(lexicalTarget);
   } catch {
     throw new Error(`Import file does not exist: ${relativePath}`);
   }
