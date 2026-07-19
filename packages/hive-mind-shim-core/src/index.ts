@@ -69,6 +69,8 @@ export { withRetry, computeBackoff } from './retry-bridge.js';
 export type { Logger, LogLevel, CreateLoggerOptions } from './logger.js';
 export { createLogger } from './logger.js';
 
+export { isDirectExecution } from './main-module.js';
+
 export type {
   EmitSignalOptions,
   EmittedSignal,
