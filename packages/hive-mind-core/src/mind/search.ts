@@ -3,7 +3,7 @@ import type { Embedder } from './embeddings.js';
 import type { MemoryFrame, Importance } from './frames.js';
 import type { Reranker } from './inprocess-reranker.js';
 import { chunkText, type ChunkOptions } from './chunker.js';
-import { buildFtsOrQuery, hasUnsegmentedScript, sanitizeFtsToken } from './fts-sanitize.js';
+import { buildFtsOrQuery, FTS_STOP_WORDS, hasUnsegmentedScript } from './fts-sanitize.js';
 import { createCoreLogger } from '../logger.js';
 import {
   computeRelevance,
@@ -86,6 +86,7 @@ export function assessRetrievalConfidence(
 }
 
 const RRF_K = 60;
+const MAX_PUNCTUATED_FTS_TERMS = 16;
 
 const log = createCoreLogger('hybrid-search');
 
@@ -119,6 +120,27 @@ function f32ToBlob(f32: Float32Array): Uint8Array {
  */
 function escapeLikeTerm(term: string): string {
   return term.replace(/[\\%_]/g, ch => `\\${ch}`);
+}
+
+/**
+ * Build a strict fallback MATCH expression from punctuation-delimited terms.
+ * Unlike the primary recall-oriented OR query, every surviving term is
+ * required. Refuse overlong expressions instead of truncating them into a
+ * broader query.
+ */
+function buildPunctuatedFtsAndQuery(query: string, minimumTerms = 2): string {
+  const tokens = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
+  const terms = tokens.filter((token) => (
+    token.length > 2
+    && !FTS_STOP_WORDS.has(token.toLowerCase())
+    && !hasUnsegmentedScript(token)
+  ));
+
+  if (terms.length < minimumTerms || terms.length > MAX_PUNCTUATED_FTS_TERMS) return '';
+
+  const uniqueTerms = [...new Set(terms)];
+  if (uniqueTerms.length < minimumTerms) return '';
+  return uniqueTerms.map(term => `"${term}"`).join(' AND ');
 }
 
 export class HybridSearch {
@@ -343,7 +365,6 @@ export class HybridSearch {
     }
 
     let sql: string;
-    let params: unknown[];
 
     if (gopId) {
       sql = `
@@ -353,7 +374,6 @@ export class HybridSearch {
         ORDER BY rank
         LIMIT ?
       `;
-      params = [safeQuery, gopId, limit];
     } else {
       sql = `
         SELECT rowid as id FROM memory_frames_fts
@@ -361,56 +381,71 @@ export class HybridSearch {
         ORDER BY rank
         LIMIT ?
       `;
-      params = [safeQuery, limit];
     }
 
-    try {
+    const runMatch = (matchQuery: string): number[] => {
+      const params = gopId
+        ? [matchQuery, gopId, limit]
+        : [matchQuery, limit];
       const rows = raw.prepare(sql).all(...params) as { id: number }[];
-      return rows.map(r => r.id);
+      return rows.map(row => row.id);
+    };
+
+    const runPunctuationFallback = (allowSingleTerm = false): number[] => {
+      // Preserve the complete identifier first. This is the most precise lane
+      // and the only safe behavior when the token count exceeds the FTS bound.
+      const literalIds = this.likeFallbackSearch(query, limit, gopId);
+      if (literalIds.length > 0) return literalIds;
+
+      // SQLite LIKE only case-folds ASCII. A strict unicode61 MATCH over every
+      // punctuation-delimited term supplies Unicode case-insensitive recall
+      // without broad OR matches.
+      const boundaryQuery = buildPunctuatedFtsAndQuery(query, allowSingleTerm ? 1 : 2);
+      if (!boundaryQuery) return [];
+      try {
+        return runMatch(boundaryQuery);
+      } catch {
+        return [];
+      }
+    };
+
+    try {
+      const ids = runMatch(safeQuery);
+      if (ids.length === 0 && /[^\p{L}\p{N}_\s]/u.test(query)) {
+        return runPunctuationFallback();
+      }
+      return ids;
     } catch {
-      // FTS5 parse error (e.g. user query with FTS5-special chars that survived
-      // sanitization) — fall back to a LIKE keyword scan over the same column so
-      // we return best-effort matches instead of a false "no memory found".
-      return this.likeFallbackSearch(query, limit, gopId);
+      // FTS5 parse error (for example, an unmatched quote): retry through the
+      // same precise literal-plus-strict-boundary fallback used for zero hits.
+      return runPunctuationFallback(true);
     }
   }
 
   /**
-   * LIKE-based keyword fallback over memory_frames.content. Used when the FTS5
-   * MATCH query throws a parse error (e.g. an unbalanced quote or other FTS5
-   * operator the user typed literally). The raw query is split into word tokens
-   * — stripping the punctuation that caused the FTS5 error, mirroring the
-   * primary sanitizer — and matched with OR-ed LIKE clauses for best-effort
-   * recall. Bound parameters only (the term is never interpolated) and LIKE
-   * metachars (`%`, `_`, `\`) are escaped with an ESCAPE clause so each token
-   * matches literally. If no usable token survives, a single literal LIKE over
-   * the whole escaped query is used.
+   * Whole-query LIKE fallback over memory_frames.content. Bound parameters only
+   * (the term is never interpolated), with LIKE metachars (`%`, `_`, `\`)
+   * escaped so punctuation-delimited identifiers stay literal. Unicode
+   * case-insensitive fallback is handled separately by strict unicode61 FTS.
    */
   private likeFallbackSearch(query: string, limit: number, gopId?: string): number[] {
     const raw = this.db.getDatabase();
-
-    const tokens = query
-      .split(/\s+/)
-      .map(sanitizeFtsToken) // strip punctuation (incl. FTS5 operators), Unicode-aware
-      .filter(w => w.length > 0);
-    const terms = (tokens.length > 0 ? tokens : [query]).map(t => `%${escapeLikeTerm(t)}%`);
-
-    const likeClause = terms.map(() => `content LIKE ? ESCAPE '\\'`).join(' OR ');
+    const term = `%${escapeLikeTerm(query)}%`;
 
     try {
       if (gopId) {
         const rows = raw.prepare(
           `SELECT id FROM memory_frames
-           WHERE (${likeClause}) AND gop_id = ?
+           WHERE content LIKE ? ESCAPE '\\' AND gop_id = ?
            ORDER BY created_at DESC LIMIT ?`
-        ).all(...terms, gopId, limit) as { id: number }[];
+        ).all(term, gopId, limit) as { id: number }[];
         return rows.map(r => r.id);
       }
       const rows = raw.prepare(
         `SELECT id FROM memory_frames
-         WHERE (${likeClause})
+         WHERE content LIKE ? ESCAPE '\\'
          ORDER BY created_at DESC LIMIT ?`
-      ).all(...terms, limit) as { id: number }[];
+      ).all(term, limit) as { id: number }[];
       return rows.map(r => r.id);
     } catch {
       return [];
