@@ -52,6 +52,7 @@ import { assertSafeSegment } from './validate.js';
 import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
+import { getBoundTeamServer } from '../team-server-binding.js';
 import type { GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 
@@ -2090,10 +2091,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               if (pushWsConfig?.teamId) {
                 try {
                   const waggleConfig = new WaggleConfig(server.localConfig.dataDir);
-                  const teamServer = waggleConfig.getTeamServer();
-                  if (teamServer?.token && pushWsConfig.teamServerUrl) {
+                  const teamServer = getBoundTeamServer(pushWsConfig.teamServerUrl, waggleConfig.getTeamServer());
+                  if (teamServer?.token) {
                     const sync = new TeamSync({
-                      teamServerUrl: pushWsConfig.teamServerUrl,
+                      teamServerUrl: teamServer.url,
                       teamSlug: pushWsConfig.teamId,
                       authToken: teamServer.token,
                       userId: teamServer.userId ?? 'local-user',

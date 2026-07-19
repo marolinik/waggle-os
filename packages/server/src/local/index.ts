@@ -12,6 +12,7 @@ import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, SuppressionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, harvestSetHash, type WorkspaceConfig } from '@waggle/core';
 import { corsOriginAllowed } from './cors-config.js';
+import { getBoundTeamServer } from './team-server-binding.js';
 import { getStorageProvider } from './storage/index.js';
 import { isLoopbackBind, resolveBindHost } from './net-config.js';
 import { isLocalRequest } from './origin-guard.js';
@@ -1246,22 +1247,70 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   };
 
   // ── TeamSync cache — one TeamSync instance per team workspace ──
-  const teamSyncCache = new Map<string, TeamSync>();
+  const teamSyncCache = new Map<string, { sync: TeamSync; binding: string }>();
+
+  const serializeTeamSyncBinding = (
+    teamServer: NonNullable<ReturnType<WaggleConfig['getTeamServer']>>,
+    teamId: string,
+  ): string => JSON.stringify({
+    url: teamServer.url,
+    teamId,
+    token: crypto.createHash('sha256').update(teamServer.token ?? '').digest('hex'),
+    userId: teamServer.userId ?? 'local-user',
+    displayName: teamServer.displayName ?? 'You',
+  });
 
   function getTeamSync(workspaceId: string, wsConfig: WorkspaceConfig | null, waggleConfig: WaggleConfig): TeamSync | null {
-    if (!wsConfig?.teamId || !wsConfig?.teamServerUrl) return null;
+    if (!wsConfig?.teamId || !wsConfig?.teamServerUrl) {
+      teamSyncCache.delete(workspaceId);
+      return null;
+    }
+    const teamServer = getBoundTeamServer(wsConfig.teamServerUrl, waggleConfig.getTeamServer());
+    if (!teamServer?.token) {
+      teamSyncCache.delete(workspaceId);
+      return null;
+    }
+    const binding = serializeTeamSyncBinding(teamServer, wsConfig.teamId);
     const cached = teamSyncCache.get(workspaceId);
-    if (cached) return cached;
-    const teamServer = waggleConfig.getTeamServer();
-    if (!teamServer?.token) return null;
+    if (cached?.binding === binding) return cached.sync;
     const sync = new TeamSync({
-      teamServerUrl: wsConfig.teamServerUrl,
+      teamServerUrl: teamServer.url,
       teamSlug: wsConfig.teamId, // teamId is used as slug
       authToken: teamServer.token,
       userId: teamServer.userId ?? 'local-user',
       displayName: teamServer.displayName ?? 'You',
     });
-    teamSyncCache.set(workspaceId, sync);
+    const pushFrame = sync.pushFrame.bind(sync);
+    sync.pushFrame = async (frame) => {
+      const currentWorkspace = wsManager.get(workspaceId);
+      const currentWaggleConfig = new WaggleConfig(fullConfig.dataDir);
+      const currentTeamServer = getBoundTeamServer(
+        currentWorkspace?.teamServerUrl,
+        currentWaggleConfig.getTeamServer(),
+      );
+      const currentBinding = currentWorkspace?.teamId && currentTeamServer?.token
+        ? serializeTeamSyncBinding(currentTeamServer, currentWorkspace.teamId)
+        : null;
+      const cached = teamSyncCache.get(workspaceId);
+      if (cached?.sync !== sync) {
+        return cached && currentBinding === cached.binding
+          ? cached.sync.pushFrame(frame)
+          : null;
+      }
+      if (currentBinding === binding) return pushFrame(frame);
+
+      teamSyncCache.delete(workspaceId);
+      if (currentWorkspace?.teamId && currentTeamServer?.token) {
+        const replacement = getTeamSync(workspaceId, currentWorkspace, currentWaggleConfig);
+        if (replacement) {
+          if (activeWorkspaceId === workspaceId) orchestrator.setTeamSync(replacement);
+          return replacement.pushFrame(frame);
+        }
+      }
+      if (activeWorkspaceId === workspaceId) orchestrator.setTeamSync(null);
+      return null;
+    };
+    teamSyncCache.set(workspaceId, { sync, binding });
     return sync;
   }
 
@@ -1445,6 +1494,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               log.warn(`TeamSync pull failed:`, err.message);
             });
           }
+        } else {
+          orchestrator.setTeamSync(null);
         }
       } else {
         // Non-team workspace — clear TeamSync
@@ -1466,7 +1517,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // and this seam closed the same MindDB.
     sessionManager.close(workspaceId);
     mindCache.close(workspaceId);
+    teamSyncCache.delete(workspaceId);
     if (activeWorkspaceId === workspaceId) {
+      orchestrator.setTeamSync(null);
       orchestrator.clearWorkspaceMind();
       setActiveWorkspaceId(null);
     }

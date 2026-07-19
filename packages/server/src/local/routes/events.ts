@@ -15,6 +15,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync, FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
 import { validateOrigin } from '../cors-config.js';
+import { getBoundTeamServer } from '../team-server-binding.js';
 
 // ── Event types ─────────────────────────────────────────────────────
 
@@ -152,9 +153,9 @@ export function emitAuditEvent(
           try {
             const { WaggleConfig } = await import('@waggle/core');
             const waggleConfig = new WaggleConfig(dataDir);
-            const teamServer = waggleConfig.getTeamServer();
+            const teamServer = getBoundTeamServer(wsConfig.teamServerUrl, waggleConfig.getTeamServer());
             if (teamServer?.token) {
-              fetch(`${wsConfig.teamServerUrl}/api/teams/${wsConfig.teamId}/audit`, {
+              fetch(`${teamServer.url}/api/teams/${wsConfig.teamId}/audit`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',

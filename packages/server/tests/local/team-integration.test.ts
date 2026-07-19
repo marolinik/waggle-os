@@ -12,7 +12,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { MindDB, SessionStore, FrameStore } from '@waggle/core';
+import { MindDB, SessionStore, FrameStore, type TeamSync } from '@waggle/core';
+import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import { emitAuditEvent, closeAuditDb } from '../../src/local/routes/events.js';
@@ -26,13 +27,13 @@ const mockFetch = vi.fn().mockResolvedValue({ ok: true });
  * Helper: write config.json with team server credentials into dataDir.
  * The real WaggleConfig will read this file.
  */
-function writeTeamConfig(dataDir: string, token?: string) {
+function writeTeamConfig(dataDir: string, token?: string, url = 'https://team.example.com') {
   const config: Record<string, unknown> = {
     defaultModel: 'claude-sonnet-4-6',
     providers: {},
   };
   if (token) {
-    config.teamServer = { url: 'https://team.example.com', token };
+    config.teamServer = { url, token };
   }
   fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify(config));
 }
@@ -133,6 +134,30 @@ describe('Team Integration — Audit Event Push (GAP-028)', () => {
       eventType: 'session_start',
     });
 
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('does not send a newly configured Team token to a workspace bound to the previous server', async () => {
+    writeTeamConfig(tmpDir, 'server-b-token', 'https://team-b.example.com');
+    const fakeServer = {
+      localConfig: { dataDir: tmpDir },
+      workspaceManager: {
+        get: vi.fn().mockReturnValue({
+          id: 'ws-server-a',
+          name: 'Old Team Workspace',
+          teamId: 'team-a',
+          teamServerUrl: 'https://team-a.example.com',
+        }),
+      },
+      eventBus: { emit: vi.fn() },
+    } as unknown as FastifyInstance;
+
+    emitAuditEvent(fakeServer, {
+      workspaceId: 'ws-server-a',
+      eventType: 'tool_call',
+    });
     await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(mockFetch).not.toHaveBeenCalled();
@@ -287,5 +312,146 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
       ([url]: [string]) => typeof url === 'string' && url.includes('/entities'),
     );
     expect(registrationCalls).toHaveLength(0);
+  });
+
+  it('does not push save_memory with a Team token bound to another server', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Server A Workspace',
+      group: 'work',
+      teamId: 'team-a',
+      teamServerUrl: 'https://team-a.example.com',
+    });
+    writeTeamConfig(tmpDir, 'server-b-token', 'https://team-b.example.com');
+    mockFetch.mockClear();
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'remote-frame' }) });
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      config.onToolResult?.('save_memory', {}, 'saved memory');
+      return { content: 'saved', toolsUsed: ['save_memory'], usage: { inputTokens: 1, outputTokens: 1 } };
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Remember this', workspace: workspace.id },
+      });
+      expect(res.statusCode).toBe(200);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockFetch.mock.calls.filter(([url, options]) =>
+        String(url).startsWith('https://team-a.example.com')
+        && options?.headers?.Authorization === 'Bearer server-b-token',
+      )).toHaveLength(0);
+    } finally {
+      server.agentRunner = originalRunner;
+      mockFetch.mockResolvedValue({ ok: true });
+    }
+  });
+
+  it('rebinds the TeamSync cache on token rotation and rejects a server change', async () => {
+    writeTeamConfig(tmpDir, 'server-a-token', 'https://team-a.example.com');
+    const workspace = server.workspaceManager.create({
+      name: 'Cached Server A Workspace',
+      group: 'work',
+      teamId: 'team-a',
+      teamServerUrl: 'https://team-a.example.com',
+    });
+    mockFetch.mockResolvedValue({ ok: true, json: async () => [] });
+
+    try {
+      server.agentState.activateWorkspaceMind(workspace.id);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      writeTeamConfig(tmpDir, 'rotated-a-token', 'https://team-a.example.com');
+      mockFetch.mockClear();
+      await server.agentState.orchestrator.autoSaveFromExchange(
+        'We decided to use the rotated credential guard for this workspace architecture.',
+        'Acknowledged.',
+      );
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const rotatedPush = mockFetch.mock.calls.find(([, options]) => options?.method === 'POST');
+      expect(rotatedPush?.[1]?.headers?.Authorization).toBe('Bearer rotated-a-token');
+
+      mockFetch.mockClear();
+      server.agentState.activateWorkspaceMind(workspace.id);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const rotatedPull = mockFetch.mock.calls.find(([url]) => String(url).includes('/entities?type=memory_frame'));
+      expect(rotatedPull?.[1]?.headers?.Authorization).toBe('Bearer rotated-a-token');
+
+      writeTeamConfig(tmpDir, 'server-b-token', 'https://team-b.example.com');
+      mockFetch.mockClear();
+      server.agentState.activateWorkspaceMind(workspace.id);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(mockFetch.mock.calls.filter(([url]) => String(url).includes('/entities?type=memory_frame'))).toHaveLength(0);
+    } finally {
+      mockFetch.mockResolvedValue({ ok: true });
+    }
+  });
+
+  it('does not push through an already-bound orchestrator after Team disconnect', async () => {
+    writeTeamConfig(tmpDir, 'server-a-token', 'https://team-a.example.com');
+    const workspace = server.workspaceManager.create({
+      name: 'Disconnected Server A Workspace',
+      group: 'work',
+      teamId: 'team-a',
+      teamServerUrl: 'https://team-a.example.com',
+    });
+    mockFetch.mockResolvedValue({ ok: true, json: async () => [] });
+
+    try {
+      server.agentState.activateWorkspaceMind(workspace.id);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      writeTeamConfig(tmpDir);
+      mockFetch.mockClear();
+      await server.agentState.orchestrator.autoSaveFromExchange(
+        'We decided to use the disconnect guard for this workspace architecture.',
+        'Acknowledged.',
+      );
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockFetch.mock.calls.filter(([url, options]) =>
+        String(url).includes('/entities') && options?.method === 'POST',
+      )).toHaveLength(0);
+    } finally {
+      mockFetch.mockResolvedValue({ ok: true });
+    }
+  });
+
+  it('clears the active TeamSync when a team workspace mind is closed', async () => {
+    writeTeamConfig(tmpDir, 'server-a-token', 'https://team-a.example.com');
+    const workspace = server.workspaceManager.create({
+      name: 'Deleted Server A Workspace',
+      group: 'work',
+      teamId: 'team-a',
+      teamServerUrl: 'https://team-a.example.com',
+    });
+    mockFetch.mockResolvedValue({ ok: true, json: async () => [] });
+
+    server.agentState.activateWorkspaceMind(workspace.id);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const sharedOrchestrator = server.agentState.orchestrator as unknown as { teamSync: TeamSync | null };
+    expect(sharedOrchestrator.teamSync).not.toBeNull();
+    const capturedTeamSync = sharedOrchestrator.teamSync!;
+
+    server.agentState.closeWorkspaceMind(workspace.id);
+
+    expect(sharedOrchestrator.teamSync).toBeNull();
+    mockFetch.mockClear();
+    await capturedTeamSync.pushFrame({
+      id: 99,
+      gop_id: 'closed-workspace',
+      t: 0,
+      frame_type: 'I',
+      base_frame_id: null,
+      content: 'must remain local after workspace close',
+      importance: 'normal',
+      source: 'agent_inferred',
+      access_count: 0,
+      created_at: new Date().toISOString(),
+      last_accessed: new Date().toISOString(),
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
