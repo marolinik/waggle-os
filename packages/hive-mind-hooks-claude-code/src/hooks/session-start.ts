@@ -15,7 +15,11 @@
  * output — the session starts as it would have without the shim.
  */
 
-import { recallPersonalAndWorkspace, type MemoryHit } from '@waggle/hive-mind-shim-core';
+import {
+  isDirectExecution,
+  recallPersonalAndWorkspace,
+  type MemoryHit,
+} from '@waggle/hive-mind-shim-core';
 import {
   pickStringFromObject,
   runHook,
@@ -88,15 +92,6 @@ export async function runSessionStart(opts: Partial<HookRunOptions> = {}): Promi
   return runHook(sessionStartHandler, { name: 'session-start', ...opts });
 }
 
-const isMain = (() => {
-  try {
-    if (typeof process.argv[1] !== 'string') return false;
-    const url = new URL(`file://${process.argv[1].replace(/\\/g, '/')}`);
-    return url.href === import.meta.url;
-  } catch {
-    return false;
-  }
-})();
-if (isMain) {
+if (isDirectExecution(import.meta.url)) {
   void runSessionStart();
 }

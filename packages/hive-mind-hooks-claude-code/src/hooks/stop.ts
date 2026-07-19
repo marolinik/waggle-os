@@ -7,6 +7,7 @@
 import {
   classifyImportance,
   encodeFrame,
+  isDirectExecution,
   maybeEmitDiscovery,
   summarizeTurn,
   type HookEvent,
@@ -115,15 +116,6 @@ export async function runStop(opts: Partial<HookRunOptions> = {}): Promise<void>
   return runHook(stopHandler, { name: 'stop', ...opts });
 }
 
-const isMain = (() => {
-  try {
-    if (typeof process.argv[1] !== 'string') return false;
-    const url = new URL(`file://${process.argv[1].replace(/\\/g, '/')}`);
-    return url.href === import.meta.url;
-  } catch {
-    return false;
-  }
-})();
-if (isMain) {
+if (isDirectExecution(import.meta.url)) {
   void runStop();
 }
