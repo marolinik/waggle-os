@@ -3,10 +3,37 @@ import { runStop, stopHandler } from '../../src/hooks/stop.js';
 import { makeHookCaptures, makeMockBridge } from './_test-helpers.js';
 
 describe('stop handler', () => {
-  it('extracts response from payload.response or payload.assistant_message', () => {
+  it('extracts response from current and legacy Claude Stop payload fields', () => {
     expect(stopHandler.parse({ response: 'r' }).response).toBe('r');
     expect(stopHandler.parse({ assistant_message: 'a' }).response).toBe('a');
+    expect(stopHandler.parse({ last_assistant_message: 'latest' }).response).toBe('latest');
+    expect(stopHandler.parse({
+      last_assistant_message: 'current',
+      response: 'legacy',
+    }).response).toBe('current');
     expect(stopHandler.parse({}).response).toBe('');
+  });
+
+  it('saves the assistant turn from a Claude Code 2.1 host-shaped payload', async () => {
+    const bridge = makeMockBridge();
+    const cap = makeHookCaptures();
+    await runStop({
+      readStdin: async () => JSON.stringify({
+        session_id: 'host-session',
+        transcript_path: 'C:\\tmp\\transcript.jsonl',
+        cwd: 'C:\\project',
+        hook_event_name: 'Stop',
+        stop_hook_active: false,
+        last_assistant_message: 'CLAUDE_HOST_CANARY_OK',
+      }),
+      writeStdout: cap.writeStdout,
+      exit: cap.exit,
+      bridge,
+    });
+
+    expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
+    expect(bridge.saveMemory.mock.calls[0][0].content).toContain('CLAUDE_HOST_CANARY_OK');
+    expect(cap.exits).toEqual([0]);
   });
 
   it('summarizes long responses and saves an important frame', async () => {

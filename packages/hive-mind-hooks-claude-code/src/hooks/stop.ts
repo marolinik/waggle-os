@@ -35,7 +35,8 @@ export const stopHandler: HookHandler<StopPayload, undefined> = {
     const sessionId = pickStringFromObject(obj, 'session_id')
       ?? pickStringFromObject(obj, 'sessionId')
       ?? 'default';
-    const response = pickStringFromObject(obj, 'response')
+    const response = pickStringFromObject(obj, 'last_assistant_message')
+      ?? pickStringFromObject(obj, 'response')
       ?? pickStringFromObject(obj, 'assistant_message')
       ?? pickStringFromObject(obj, 'transcript')
       ?? '';
