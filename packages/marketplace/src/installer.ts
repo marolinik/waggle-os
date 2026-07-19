@@ -13,23 +13,21 @@
  *          Write plugin.json manifest, copy skill files, register in registry.json.
  *          Then call POST /api/plugins/install if server is running.
  * 
- * MCP:     Add server config to .mcp.json (or bundle inside a plugin).
- *          Optionally install npm package via npx.
+ * MCP:     Add an exact curated npx/uvx server config to .mcp.json.
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { homedir } from 'os';
-import { execSync } from 'child_process';
 import { MarketplaceDB } from './db.js';
 import { SecurityGate, type ScanResult, type SecurityGateConfig } from './security.js';
 import { type FetchFn, defaultFetch } from './fetcher.js';
 import {
-  assertNoNpmArgs,
-  assertSafeGitUrl,
-  assertSafeNpmPackageSpec,
+  assertSafeConfiguredMarketplaceMcpConfig,
+  assertSafeMarketplaceInstallManifest,
+  assertSafeMarketplaceMcpConfig,
+  configureMarketplaceMcpServer,
   resolveManagedInstallPath,
-  runMarketplaceInstallCommand,
 } from './install-security.js';
 import type {
   MarketplacePackage,
@@ -40,7 +38,6 @@ import type {
   InstallationType,
   McpServerConfig,
   PluginManifest,
-  PostInstallHook,
 } from './types.js';
 
 const WAGGLE_DIR = join(homedir(), '.waggle');
@@ -52,6 +49,7 @@ function isPluginRegistryPath(candidate: string): boolean {
   // Reserve the same namespace on every platform; Windows aliases path casing.
   return resolve(candidate).toLowerCase() === resolve(REGISTRY_PATH).toLowerCase();
 }
+
 // UX-Refactor Phase 4 (C4): the sidecar boot loader reads <dataDir>/.mcp.json
 // (dataDir = WAGGLE_DATA_DIR or ~/.waggle — see server local/mcp-config.ts).
 // This previously wrote to process.cwd(), a file nothing ever read.
@@ -122,6 +120,24 @@ export class MarketplaceInstaller {
       };
     }
 
+    try {
+      assertSafeMarketplaceInstallManifest(
+        installType,
+        pkg.install_manifest as InstallManifest | null,
+      );
+    } catch (err) {
+      const error = (err as Error).message;
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: `Rejected marketplace manifest: ${error}`,
+        errors: [error],
+      };
+    }
+
     // Check if already installed
     if (!request.force && this.db.isInstalled(pkg.id)) {
       return {
@@ -165,7 +181,7 @@ export class MarketplaceInstaller {
 
     switch (installType) {
       case 'skill':
-        result = await this.installSkill(pkg, request);
+        result = await this.installSkill(pkg, request, contentToScan);
         break;
       case 'plugin':
         result = await this.installPlugin(pkg, request);
@@ -335,32 +351,23 @@ export class MarketplaceInstaller {
 
   // ─── Skill Installation ───────────────────────────────────────────
 
-  private async installSkill(pkg: MarketplacePackage, request: InstallRequest): Promise<InstallResult> {
+  private async installSkill(
+    pkg: MarketplacePackage,
+    request: InstallRequest,
+    scannedContent: string | undefined,
+  ): Promise<InstallResult> {
     const skillName = pkg.name;
     let installPath = request.installPath || '';
-    const manifest = pkg.install_manifest as InstallManifest | null;
 
     try {
       installPath = resolveManagedInstallPath(SKILLS_DIR, request.installPath || `${skillName}.md`);
       if (existsSync(installPath) && !request.force) {
         throw new Error(`Skill destination already exists: ${installPath}`);
       }
-      let content: string;
-
-      if (manifest?.skill_content) {
-        // Inline content from database
-        content = manifest.skill_content;
-      } else if (manifest?.skill_url) {
-        // Fetch from URL (GitHub raw, ClawHub API, etc.)
-        content = await this.fetchContent(manifest.skill_url);
-      } else if (pkg.repository_url) {
-        // Try to fetch SKILL.md from repository
-        const rawUrl = this.githubRawUrl(pkg.repository_url, 'SKILL.md');
-        content = await this.fetchContent(rawUrl);
-      } else {
-        // Generate a stub skill file from package metadata
-        content = this.generateSkillStub(pkg);
+      if (scannedContent === undefined) {
+        throw new Error('Unable to resolve the exact skill content for security scanning.');
       }
+      const content = scannedContent;
 
       // Ensure skills directory exists
       mkdirSync(dirname(installPath), { recursive: true });
@@ -417,51 +424,24 @@ export class MarketplaceInstaller {
         createdPluginDir = true;
       }
 
-      // Step 1: Clone repo, install npm package, or create from metadata
-      if (manifest?.git_url) {
-        const gitUrl = assertSafeGitUrl(manifest.git_url);
-        runMarketplaceInstallCommand('git', ['clone', '--depth', '1', '--', gitUrl, pluginDir], {
-          timeout: 60_000,
-        });
-      } else if (manifest?.npm_package) {
-        const npmPackage = assertSafeNpmPackageSpec(manifest.npm_package);
-        assertNoNpmArgs(manifest.npm_args);
-        // Install npm package into plugin directory
-        try {
-          writeFileSync(join(pluginDir, 'package.json'), JSON.stringify({ name: pluginName, private: true }), 'utf-8');
-          runMarketplaceInstallCommand('npm', ['install', '--save', '--', npmPackage], {
-            cwd: pluginDir,
-            timeout: 120_000,
-          });
-        } catch {
-          // npm install failed — continue with metadata-only plugin
-        }
-      }
-
-      // Step 2: Write plugin.json
-      const pluginManifest: PluginManifest = manifest?.plugin_manifest || {
+      // Step 1: Write plugin.json from preflight-validated metadata.
+      const sourcePluginManifest: PluginManifest = manifest?.plugin_manifest || {
         name: pluginName,
         version: pkg.version,
         description: pkg.description,
         skills: [],
         mcpServers: [],
       };
-
-      // Apply user settings to the manifest
-      if (request.settings && pluginManifest.settingsSchema) {
-        for (const [key, value] of Object.entries(request.settings)) {
-          // Inject settings into MCP server env vars
-          pluginManifest.mcpServers?.forEach(server => {
-            if (server.env) {
-              for (const envKey of Object.keys(server.env)) {
-                if (server.env[envKey] === `\${${key}}`) {
-                  server.env[envKey] = value;
-                }
-              }
-            }
-          });
-        }
-      }
+      const pluginSettings = sourcePluginManifest.settingsSchema ? request.settings : undefined;
+      const pluginManifest: PluginManifest = {
+        ...sourcePluginManifest,
+        ...(sourcePluginManifest.skills && { skills: [...sourcePluginManifest.skills] }),
+        ...(sourcePluginManifest.mcpServers && {
+          mcpServers: sourcePluginManifest.mcpServers.map(server => (
+            configureMarketplaceMcpServer(server, pluginSettings)
+          )),
+        }),
+      };
 
       writeFileSync(
         join(pluginDir, 'plugin.json'),
@@ -469,38 +449,10 @@ export class MarketplaceInstaller {
         'utf-8',
       );
 
-      // Step 3: Install bundled skills
-      if (pluginManifest.skills && pluginManifest.skills.length > 0) {
-        const skillsDir = resolveManagedInstallPath(pluginDir, 'skills');
-        mkdirSync(skillsDir, { recursive: true });
-
-        for (const skillName of pluginManifest.skills) {
-          const skillPath = resolveManagedInstallPath(skillsDir, `${skillName}.md`);
-          if (!existsSync(skillPath)) {
-            // Try to find the skill in marketplace and install it into the plugin
-            const skillPkg = this.db.getPackageByName(skillName);
-            if (skillPkg?.install_manifest) {
-              const skillManifest = skillPkg.install_manifest as InstallManifest;
-              if (skillManifest.skill_url) {
-                const content = await this.fetchContent(skillManifest.skill_url);
-                writeFileSync(skillPath, content, 'utf-8');
-              }
-            }
-          }
-        }
-      }
-
-      // Step 4: Update registry.json
+      // Step 2: Update registry.json
       this.updatePluginRegistry(pluginName, pluginManifest);
 
-      // Step 5: Run post-install hooks
-      if (manifest?.post_install) {
-        for (const hook of manifest.post_install) {
-          await this.runPostInstallHook(hook, pluginDir);
-        }
-      }
-
-      // Step 6: Notify server
+      // Step 3: Notify server
       await this.notifyServer('POST', '/api/plugins/install', {
         path: pluginDir,
       });
@@ -549,29 +501,15 @@ export class MarketplaceInstaller {
     }
 
     try {
-      // Step 1: Install npm package if needed
-      if (manifest?.npm_package) {
-        const npmPackage = assertSafeNpmPackageSpec(manifest.npm_package);
-        assertNoNpmArgs(manifest.npm_args);
-        runMarketplaceInstallCommand('npm', ['install', '--global', '--', npmPackage], {
-          timeout: 120_000,
-        });
-      }
+      assertSafeMarketplaceMcpConfig(mcpConfig);
 
-      // Step 2: Apply user settings to env vars
-      const serverConfig = { ...mcpConfig };
-      if (request.settings && serverConfig.env) {
-        for (const [key, value] of Object.entries(request.settings)) {
-          for (const envKey of Object.keys(serverConfig.env)) {
-            if (serverConfig.env[envKey] === `\${${key}}` || serverConfig.env[envKey] === '') {
-              serverConfig.env[envKey] = value;
-            }
-          }
-        }
-      }
+      // Step 1: Apply user settings to the exact matching env vars. npx/uvx
+      // resolves the curated package when the MCP process starts; installation
+      // must not execute package lifecycle scripts.
+      const serverConfig = configureMarketplaceMcpServer(mcpConfig, request.settings);
 
-      // Step 3: Update .mcp.json
-      this.updateMcpConfig(serverConfig);
+      // Step 2: Update .mcp.json
+      this.updateMcpConfig(serverConfig, mcpConfig, request.settings);
 
       return {
         success: true,
@@ -638,20 +576,21 @@ export class MarketplaceInstaller {
     }
 
     if (pkg.waggle_install_type === 'mcp') {
-      // For MCPs, "content" is the config + description for scanning
       return JSON.stringify({
-        name: manifest?.mcp_config?.name || pkg.name,
+        name: pkg.name,
         description: pkg.description,
-        args: manifest?.mcp_config?.args || [],
-        env: manifest?.mcp_config?.env || {},
+        install_type: pkg.waggle_install_type,
+        install_manifest: manifest,
       });
     }
 
     if (pkg.waggle_install_type === 'plugin') {
-      // For plugins, return the manifest as content
-      if (manifest?.plugin_manifest) {
-        return JSON.stringify(manifest.plugin_manifest);
-      }
+      return JSON.stringify({
+        name: pkg.name,
+        description: pkg.description,
+        install_type: pkg.waggle_install_type,
+        install_manifest: manifest,
+      });
     }
 
     return undefined;
@@ -769,7 +708,12 @@ This skill was installed from the marketplace. Configure or extend it as needed 
     writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf-8');
   }
 
-  private updateMcpConfig(serverConfig: McpServerConfig): void {
+  private updateMcpConfig(
+    serverConfig: McpServerConfig,
+    sourceConfig: McpServerConfig,
+    settings: Record<string, string> | undefined,
+  ): void {
+    assertSafeConfiguredMarketplaceMcpConfig(serverConfig, sourceConfig, settings);
     let mcpJson: McpConfigFile = { mcpServers: {} };
     if (existsSync(mcpConfigPath())) {
       mcpJson = JSON.parse(readFileSync(mcpConfigPath(), 'utf-8')) as McpConfigFile;
@@ -787,26 +731,6 @@ This skill was installed from the marketplace. Configure or extend it as needed 
     const mcpJson = JSON.parse(readFileSync(mcpConfigPath(), 'utf-8')) as McpConfigFile;
     delete mcpJson.mcpServers[serverName];
     writeFileSync(mcpConfigPath(), JSON.stringify(mcpJson, null, 2), 'utf-8');
-  }
-
-  private async runPostInstallHook(hook: PostInstallHook, cwd: string): Promise<void> {
-    switch (hook.type) {
-      case 'run_command':
-        if (hook.command) {
-          execSync(hook.command, { cwd, stdio: 'pipe', timeout: 30_000 });
-        }
-        break;
-      case 'create_file':
-        if (hook.path && hook.content) {
-          const fullPath = resolveManagedInstallPath(cwd, hook.path);
-          mkdirSync(dirname(fullPath), { recursive: true });
-          writeFileSync(fullPath, hook.content, 'utf-8');
-        }
-        break;
-      case 'append_config':
-        // Append to workspace config
-        break;
-    }
   }
 
   private async notifyServer(method: string, path: string, body?: unknown): Promise<void> {
