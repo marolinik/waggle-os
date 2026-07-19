@@ -1704,7 +1704,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // sub-agent inherits the selected MCP tools. Below the threshold the
           // retriever injects them all; above it, the conversation's union-only
           // accumulated top-k. Persona denylist / read-only rails still apply.
-          const runningMcpTools = server.agentState.mcpRuntime.getAllTools();
+          const runningMcpTools = server.agentState.mcpRuntime
+            .getToolsForWorkspace(effectiveWorkspace);
           for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();

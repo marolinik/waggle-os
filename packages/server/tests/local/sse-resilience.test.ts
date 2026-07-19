@@ -18,6 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
+import type { ToolDefinition } from '@waggle/agent';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import type { LlmProviderStatus } from '../../src/local/index.js';
@@ -267,6 +268,89 @@ describe('SSE Stream Resilience', () => {
           if (value === undefined) delete process.env[name];
           else process.env[name] = value;
         }
+      }
+    });
+
+    it('sends only global and active-workspace MCP tools to the model', async () => {
+      const prevProvider = server.agentState.llmProvider;
+      const prevCurrentModel = server.agentState.currentModel;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      const prevMcpRuntime = server.agentState.mcpRuntime;
+      const prevOllamaHost = process.env.OLLAMA_HOST;
+      const makeTool = (name: string): ToolDefinition => ({
+        name,
+        description: name,
+        parameters: { type: 'object', properties: {} },
+        execute: async () => 'ok',
+      });
+      const globalTool = makeTool('mcp_global_search');
+      const activeTool = makeTool('mcp_default_write');
+      const foreignTool = makeTool('mcp_other_workspace_admin');
+      const getAllTools = vi.fn(() => [globalTool, activeTool, foreignTool]);
+      const getToolsForWorkspace = vi.fn((workspaceId: string) =>
+        workspaceId === 'default' ? [globalTool, activeTool] : [globalTool, foreignTool]);
+      server.agentState.mcpRuntime = {
+        getAllTools,
+        getToolsForWorkspace,
+        getServerStates: () => ({}),
+      } as unknown as typeof server.agentState.mcpRuntime;
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'degraded',
+        detail: 'Built-in provider proxy (no API key)',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-test';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+
+      let transmittedToolNames: string[] = [];
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-test' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/chat/completions')) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            tools?: Array<{ function?: { name?: string } }>;
+          };
+          transmittedToolNames = body.tools?.flatMap(tool => tool.function?.name ?? []) ?? [];
+          const stream = 'data: {"choices":[{"delta":{"content":"Workspace tools ready"}}]}\n\ndata: [DONE]\n\n';
+          return new Response(stream, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+        }
+        return new Response('', { status: 503 });
+      });
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            message: 'Execute the mcp_global_search tool and the mcp_default_write tool',
+            model: 'ollama/local-test',
+          },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(transmittedToolNames).toContain(globalTool.name);
+        expect(transmittedToolNames).toContain(activeTool.name);
+        expect(transmittedToolNames).not.toContain(foreignTool.name);
+        expect(getToolsForWorkspace).toHaveBeenCalledWith('default');
+        expect(getAllTools).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = prevProvider;
+        server.agentState.currentModel = prevCurrentModel;
+        server.agentState.mcpRuntime = prevMcpRuntime;
+        server.localConfig.litellmUrl = prevLitellmUrl;
+        if (prevOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = prevOllamaHost;
       }
     });
   });
