@@ -13,6 +13,7 @@ import type {
 import type { CognifyPipeline } from './cognify.js';
 import type { FeedbackHandler } from './feedback-handler.js';
 import type { ImprovementSignalStore } from '@waggle/core';
+import type { RiskLevel } from '@waggle/shared';
 import { createCoreLogger } from '@waggle/core';
 import { detectContradiction } from './contradiction-detector.js';
 import { scanForInjection } from './injection-scanner.js';
@@ -27,6 +28,11 @@ export interface ToolDefinition {
   description: string;
   parameters: Record<string, unknown>;
   execute: (args: Record<string, unknown>) => Promise<string>;
+  /**
+   * Provider-authored runtime risk. This is trusted metadata, never model input;
+   * confirmation policy may use it only to elevate name-based risk.
+   */
+  riskLevel?: RiskLevel;
   /** PM-6: Whether this tool can operate without LLM connectivity (default: false) */
   offlineCapable?: boolean;
   /**

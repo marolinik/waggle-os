@@ -145,7 +145,11 @@ export async function executeToolCall(
 
   // ── Step 4: pre:tool hook ──
   if (hooks) {
-    const hookResult = await hooks.fire('pre:tool', { toolName: fnName, args: fnArgs });
+    const hookResult = await hooks.fire('pre:tool', {
+      toolName: fnName,
+      args: fnArgs,
+      riskLevel: existingTool.riskLevel,
+    });
     if (hookResult.cancelled) {
       return {
         content: `[BLOCKED] ${hookResult.reason ?? 'No reason given'}`,
@@ -166,7 +170,7 @@ export async function executeToolCall(
   // depend on the pre:tool hook being wired, which is the whole point. Without
   // it, a spawn path constructed with `hooks: undefined` executed rm -rf ~,
   // sudo, git push --force main, delete_skill, etc. unconfirmed.
-  if (isCriticalNeverAutopass(fnName, fnArgs)) {
+  if (isCriticalNeverAutopass(fnName, fnArgs, existingTool.riskLevel)) {
     const approvedOutOfBand = confirmCriticalAction
       ? await confirmCriticalAction(fnName, fnArgs)
       : false;

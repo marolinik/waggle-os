@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { executeToolCall } from '../src/tool-executor.js';
 import { LoopGuard } from '../src/loop-guard.js';
 import { HookRegistry } from '../src/hooks.js';
+import { classifyGatedToolRisk, needsConfirmation, needsConfirmationWithAutonomy } from '../src/confirmation.js';
 import type { ToolDefinition } from '../src/tools.js';
+import type { RiskLevel } from '@waggle/shared';
 
 /**
  * SEC-GATE — defense-in-depth critical floor (tool-executor.ts step 4b).
@@ -17,12 +19,13 @@ import type { ToolDefinition } from '../src/tools.js';
  * behaviour: no hooks ⇒ skip all gate logic), so these tests fail pre-fix.
  */
 
-function tool(name: string, output: string, spy?: () => void): ToolDefinition {
+function tool(name: string, output: string, spy?: () => void, riskLevel?: RiskLevel): ToolDefinition {
   return {
     name,
     description: `test tool ${name}`,
     parameters: { type: 'object', properties: {} },
     execute: async () => { spy?.(); return output; },
+    riskLevel,
   } as unknown as ToolDefinition;
 }
 
@@ -108,5 +111,73 @@ describe('tool-executor critical-destructive hard floor (SEC-GATE step 4b)', () 
     expect(r.content).toContain('LISTING');
     expect(r.countedAsUsed).toBe(true);
     expect(spy).toHaveBeenCalledOnce();
+  });
+});
+
+describe('trusted ToolDefinition risk metadata at the pre:tool boundary', () => {
+  it('forwards metadata to the confirmation hook and blocks an opaque medium-risk tool', async () => {
+    const spy = vi.fn();
+    const toolMap = new Map([
+      ['opaque_plugin_action', tool('opaque_plugin_action', 'PLUGIN_RAN', spy, 'medium')],
+    ]);
+    const hooks = new HookRegistry();
+    let observedRisk: unknown;
+    hooks.on('pre:tool', (ctx) => {
+      observedRisk = ctx.riskLevel;
+      if (ctx.toolName && needsConfirmationWithAutonomy(
+        ctx.toolName,
+        ctx.args,
+        'normal',
+        ctx.riskLevel as RiskLevel | undefined,
+      )) {
+        return { cancel: true, reason: 'trusted risk requires approval' };
+      }
+    });
+
+    const result = await executeToolCall(call('opaque_plugin_action', {
+      riskLevel: 'low',
+      _riskLevel: 'low',
+    }), {
+      toolMap,
+      guard: new LoopGuard(),
+      hooks,
+    });
+
+    expect(observedRisk).toBe('medium');
+    expect(result.content).toContain('[BLOCKED]');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('fail-closes an opaque high-risk tool when no approval gate is wired', async () => {
+    const spy = vi.fn();
+    const toolMap = new Map([
+      ['opaque_plugin_action', tool('opaque_plugin_action', 'PLUGIN_RAN', spy, 'high')],
+    ]);
+
+    const result = await executeToolCall(call('opaque_plugin_action'), {
+      toolMap,
+      guard: new LoopGuard(),
+    });
+
+    expect(result.content).toContain('[BLOCKED]');
+    expect(result.countedAsUsed).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('keeps high-risk metadata gated at YOLO and reports its stronger risk class', () => {
+    expect(needsConfirmationWithAutonomy('opaque_plugin_action', {}, 'yolo', 'high')).toBe(true);
+    expect(classifyGatedToolRisk('opaque_plugin_action', {}, 'high')).toEqual({
+      riskLevel: 'high',
+      approvalClass: 'critical',
+    });
+  });
+
+  it('never lets low metadata downgrade name-based policy', () => {
+    expect(needsConfirmation('connector_composio_execute_action', {}, 'low')).toBe(true);
+    expect(classifyGatedToolRisk('connector_composio_execute_action', {}, 'low')).toEqual({
+      riskLevel: 'high',
+      approvalClass: 'critical',
+    });
+    expect(needsConfirmation('opaque_read_action', {}, 'low')).toBe(false);
   });
 });

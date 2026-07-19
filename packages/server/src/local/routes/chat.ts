@@ -53,7 +53,7 @@ import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-avail
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import type { GoalAncestry } from '@waggle/shared';
-import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
+import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
@@ -1437,14 +1437,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         unregisterHook = requestHookRegistry?.on('pre:tool', async (ctx) => {
           if (!ctx.toolName) return;
           const args = (ctx.args ?? {}) as Record<string, unknown>;
+          const trustedRiskLevel = typeof ctx.riskLevel === 'string'
+            && (RISK_LEVELS as readonly string[]).includes(ctx.riskLevel)
+            ? ctx.riskLevel as RiskLevel
+            : undefined;
 
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
           // blocks even at YOLO (see isCriticalNeverAutopass).
-          if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel)) {
+          if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel, trustedRiskLevel)) {
             // Surface an audit-visible step when elevated autonomy pre-approved
             // so users can see WHY the tool ran without a prompt.
-            if (autonomyLevel !== 'normal' && needsConfirmation(ctx.toolName, args)) {
+            if (autonomyLevel !== 'normal' && needsConfirmation(ctx.toolName, args, trustedRiskLevel)) {
               sendEvent('step', { content: `\u26a1 ${ctx.toolName} auto-approved (${autonomyLevel})` });
               // Tag the audit input with the autonomy level so forensics can
               // see WHY the tool was auto-approved.
@@ -1547,7 +1551,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // 'local_user' was a false claim on the trust surface (review #3).
           if (!trustMeta) {
             try {
-              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input);
+              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input, trustedRiskLevel);
               trustMeta = {
                 riskLevel,
                 approvalClass,

@@ -5,7 +5,7 @@
  * Only commands that modify state need user approval.
  */
 
-import { RISK_LEVELS, type RiskLevel } from '@waggle/shared';
+import { RISK_LEVELS, riskAtLeast, type RiskLevel } from '@waggle/shared';
 import { deriveApprovalClass } from './trust-model.js';
 
 // Tools that ALWAYS need confirmation.
@@ -86,7 +86,15 @@ function isHighRiskConnectorAction(toolName: string): boolean {
   return false;
 }
 
-export function needsConfirmation(toolName: string, args?: Record<string, unknown>): boolean {
+export function needsConfirmation(
+  toolName: string,
+  args?: Record<string, unknown>,
+  trustedRiskLevel?: RiskLevel,
+): boolean {
+  // ToolDefinition metadata is server/provider-authored. It may only add a
+  // gate; name- and argument-based policy below remains authoritative.
+  if (trustedRiskLevel && riskAtLeast(trustedRiskLevel, 'medium')) return true;
+
   // Connector tools: determine risk from tool NAME only (never trust args metadata)
   // This prevents LLM injection of _connectorMeta to bypass approval gates
   if (toolName.startsWith('connector_')) {
@@ -165,24 +173,37 @@ export function getApprovalClass(toolName: string, args?: Record<string, unknown
 export function classifyGatedToolRisk(
   toolName: string,
   args?: Record<string, unknown>,
+  trustedRiskLevel?: RiskLevel,
 ): { riskLevel: RiskLevel; approvalClass: ApprovalClass } {
+  const elevate = (
+    classification: { riskLevel: RiskLevel; approvalClass: ApprovalClass },
+  ): { riskLevel: RiskLevel; approvalClass: ApprovalClass } => {
+    if (!trustedRiskLevel || !riskAtLeast(trustedRiskLevel, classification.riskLevel)) {
+      return classification;
+    }
+    return {
+      riskLevel: trustedRiskLevel,
+      approvalClass: deriveApprovalClass(trustedRiskLevel),
+    };
+  };
+
   // Terminal/destructive ops on the never-autopass blacklist → critical.
   if (isCriticalNeverAutopass(toolName, args)) {
-    return { riskLevel: 'critical', approvalClass: 'critical' };
+    return elevate({ riskLevel: 'critical', approvalClass: 'critical' });
   }
   // Connector tools carry their risk in the name (write vs read vs high-risk).
   if (toolName.startsWith('connector_')) {
     const cls = getApprovalClass(toolName, args);
     const riskLevel: RiskLevel = cls === 'critical' ? 'high' : cls === 'elevated' ? 'medium' : 'low';
-    return { riskLevel, approvalClass: cls };
+    return elevate({ riskLevel, approvalClass: cls });
   }
   // Cross-workspace reads are gated for PRIVACY, not destructiveness → low.
   if (toolName === 'read_other_workspace' || toolName === 'read_other_workspace_file' || toolName === 'list_workspace_files') {
-    return { riskLevel: 'low', approvalClass: 'standard' };
+    return elevate({ riskLevel: 'low', approvalClass: 'standard' });
   }
   // Everything else that gated — fs writes, git mutations, bash, docx — is a
   // state-changing action: medium / elevated.
-  return { riskLevel: 'medium', approvalClass: 'elevated' };
+  return elevate({ riskLevel: 'medium', approvalClass: 'elevated' });
 }
 
 export interface ConfirmationGateConfig {
@@ -246,7 +267,15 @@ const CRITICAL_NEVER_AUTOPASS: RegExp[] = [
  * Returns true if the tool call would be critical/never-autopass EVEN at YOLO.
  * Used by the autonomy gate to keep the safety net intact at the top level.
  */
-export function isCriticalNeverAutopass(toolName: string, args?: Record<string, unknown>): boolean {
+export function isCriticalNeverAutopass(
+  toolName: string,
+  args?: Record<string, unknown>,
+  trustedRiskLevel?: RiskLevel,
+): boolean {
+  // Canonical high/critical risk maps to the critical approval class, whose
+  // contract is never auto-pass. Lower metadata cannot weaken name policy.
+  if (trustedRiskLevel && riskAtLeast(trustedRiskLevel, 'high')) return true;
+
   // D4(i): deleting a skill is destructive — always ask, every autonomy level.
   if (toolName === 'delete_skill') return true;
   if (toolName === 'run_code') return true;
@@ -288,15 +317,16 @@ export function needsConfirmationWithAutonomy(
   toolName: string,
   args: Record<string, unknown> | undefined,
   level: AutonomyLevel = 'normal',
+  trustedRiskLevel?: RiskLevel,
 ): boolean {
-  const baseGates = needsConfirmation(toolName, args);
+  const baseGates = needsConfirmation(toolName, args, trustedRiskLevel);
   if (!baseGates) return false; // never gated anyway
 
   if (level === 'normal') return true;
   if (toolName === 'bash' || toolName === 'run_code') return true;
 
   // Critical blacklist overrides everything — never auto-pass at any level.
-  if (isCriticalNeverAutopass(toolName, args ?? {})) return true;
+  if (isCriticalNeverAutopass(toolName, args ?? {}, trustedRiskLevel)) return true;
 
   if (level === 'yolo') return false;
 
