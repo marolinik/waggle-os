@@ -1,7 +1,9 @@
 import { EventEmitter } from 'events';
 import { ChildProcess, spawn, type StdioOptions } from 'node:child_process';
 import type { Readable, Writable } from 'stream';
+import type { RiskLevel } from '@waggle/shared';
 import type { ToolDefinition } from '../tools.js';
+import { scanForInjection } from '../injection-scanner.js';
 import { resolveToolCommandInvocationFromPath } from '../tool-command.js';
 import { createSanitizedEnv, terminateProcessTree } from '../system-tools-helpers.js';
 
@@ -21,6 +23,20 @@ export interface McpToolInfo {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+}
+
+function classifyMcpToolRisk(tool: McpToolInfo): RiskLevel {
+  // MCP servers currently have no independently verified trust provenance.
+  // Their annotations may elevate risk, but can never lower the high floor
+  // required by automated/sub-agent execution contexts without a human gate.
+  return tool.annotations?.destructiveHint === true ? 'critical' : 'high';
 }
 
 /** JSON-RPC 2.0 request/response types */
@@ -467,15 +483,21 @@ export class McpRuntime extends EventEmitter {
 
   private wrapServerTools(server: McpServerInstance): ToolDefinition[] {
     const serverName = server.config.name;
-    return server.getTools().map((tool) => ({
-      name: `mcp_${serverName}_${tool.name}`,
-      description: `[MCP: ${serverName}] ${tool.description}`,
-      parameters: tool.inputSchema,
-      execute: async (args: Record<string, unknown>) => {
-        const result = await server.callTool(tool.name, args);
-        return typeof result === 'string' ? result : JSON.stringify(result);
-      },
-    }));
+    return server.getTools()
+      .filter((tool) => scanForInjection(
+        `${typeof tool.description === 'string' ? tool.description : ''}\n${JSON.stringify(tool.inputSchema ?? {})}`,
+        'tool_output',
+      ).safe)
+      .map((tool) => ({
+        name: `mcp_${serverName}_${tool.name}`,
+        description: `[UNTRUSTED MCP: ${serverName}] ${tool.description}`,
+        parameters: tool.inputSchema,
+        riskLevel: classifyMcpToolRisk(tool),
+        execute: async (args: Record<string, unknown>) => {
+          const result = await server.callTool(tool.name, args);
+          return typeof result === 'string' ? result : JSON.stringify(result);
+        },
+      }));
   }
 }
 

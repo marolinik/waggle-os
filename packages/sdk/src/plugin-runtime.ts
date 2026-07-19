@@ -8,6 +8,7 @@
 import { EventEmitter } from 'events';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { RISK_LEVELS, riskAtLeast, type RiskLevel } from '@waggle/shared';
 import type { PluginManifest } from './plugin-manifest.js';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,8 @@ export interface PluginToolDef {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  /** Optional declaration; runtime normalization enforces a medium floor. */
+  riskLevel?: RiskLevel;
 }
 
 /** A fully-hydrated tool with an execute function, created during activation */
@@ -29,7 +32,16 @@ export interface PluginTool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  riskLevel: RiskLevel;
   execute: (args: Record<string, unknown>) => Promise<string>;
+}
+
+function normalizePluginToolRisk(value: unknown): RiskLevel {
+  if ((RISK_LEVELS as readonly unknown[]).includes(value)) {
+    const declared = value as RiskLevel;
+    if (riskAtLeast(declared, 'medium')) return declared;
+  }
+  return 'medium';
 }
 
 /** Extended manifest that includes tool declarations */
@@ -130,6 +142,7 @@ export class PluginRuntime extends EventEmitter {
         name: def.name,
         description: def.description,
         parameters: def.parameters,
+        riskLevel: normalizePluginToolRisk(def.riskLevel),
         execute: executor(def),
       }));
 
