@@ -1,8 +1,15 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { MCP_SERVERS } from './mcp-registry.js';
-import type { InstallationType, InstallManifest, McpServerConfig } from './types.js';
+import type {
+  InstallationType,
+  InstallManifest,
+  MarketplaceMcpProvenance,
+  MarketplaceSource,
+  McpServerConfig,
+} from './types.js';
 
 export interface InstallCommandOptions {
   cwd?: string;
@@ -113,6 +120,8 @@ const PROCESS_CONTROL_ENV_PREFIXES = [
 ];
 
 interface ApprovedMarketplaceMcpProfile {
+  packageName: string;
+  packageVersion: string;
   name: string;
   command: string;
   args: string[];
@@ -130,8 +139,10 @@ interface ApprovedMarketplaceMcpProfile {
 const APPROVED_MARKETPLACE_MCP_PROFILES: ApprovedMarketplaceMcpProfile[] = MCP_SERVERS.flatMap((server) => {
   const manifest = server.install_manifest;
   const config = manifest?.mcp_config;
-  return config && manifest?.npm_package
+  return config && manifest?.npm_package && server.version
     ? [{
+        packageName: server.name,
+        packageVersion: server.version,
         name: config.name,
         command: config.command,
         args: [...config.args],
@@ -232,6 +243,60 @@ export function assertSafeMarketplaceMcpConfig(config: McpServerConfig): string 
     }
   }
   return profile.npmPackage;
+}
+
+/**
+ * Bind an approved launcher profile to the built-in catalog row that supplied
+ * it. Database-local IDs and environment values are intentionally excluded so
+ * the receipt is portable and never becomes another secret store.
+ */
+export function createMarketplaceMcpProvenance(
+  source: Pick<MarketplaceSource, 'name' | 'source_type' | 'is_custom'> | null,
+  pkg: { name: string; version: string },
+  config: McpServerConfig,
+): MarketplaceMcpProvenance {
+  if (
+    !source
+    || source.name !== 'mcp_registry'
+    || source.source_type !== 'registry'
+    || Boolean(source.is_custom)
+  ) {
+    throw new Error('Marketplace MCP package must come from the canonical mcp_registry source.');
+  }
+
+  const npmPackage = assertSafeMarketplaceMcpConfig(config);
+  const profile = approvedMarketplaceMcpProfile(config);
+  if (pkg.name !== profile.packageName) {
+    throw new Error('Marketplace MCP package name does not match its approved catalog profile.');
+  }
+  if (pkg.version !== profile.packageVersion) {
+    throw new Error('Marketplace MCP package version does not match its approved catalog profile.');
+  }
+
+  const digestInput = {
+    schemaVersion: 1,
+    sourceName: source.name,
+    packageName: pkg.name,
+    packageVersion: pkg.version,
+    npmPackage,
+    serverName: profile.name,
+    command: profile.command,
+    args: [...profile.args],
+    envKeys: [...profile.envKeys],
+  };
+  const profileDigest = `sha256:${createHash('sha256')
+    .update(JSON.stringify(digestInput), 'utf8')
+    .digest('hex')}` as const;
+
+  return {
+    kind: 'marketplace',
+    schemaVersion: 1,
+    sourceName: 'mcp_registry',
+    packageName: pkg.name,
+    packageVersion: pkg.version,
+    npmPackage,
+    profileDigest,
+  };
 }
 
 function resolvedMarketplaceMcpEnvironment(

@@ -27,6 +27,7 @@ import {
   assertSafeMarketplaceInstallManifest,
   assertSafeMarketplaceMcpConfig,
   configureMarketplaceMcpServer,
+  createMarketplaceMcpProvenance,
   resolveManagedInstallPath,
 } from './install-security.js';
 import type {
@@ -36,6 +37,7 @@ import type {
   InstallResult,
   PackInstallResult,
   InstallationType,
+  MarketplaceMcpProvenance,
   McpServerConfig,
   PluginManifest,
 } from './types.js';
@@ -67,6 +69,7 @@ interface McpConfigEntry {
   command: string;
   args: string[];
   env?: Record<string, string>;
+  provenance?: MarketplaceMcpProvenance;
 }
 
 /** Shape of the `.mcp.json` config file we read/write. */
@@ -157,6 +160,29 @@ export class MarketplaceInstaller {
       };
     }
 
+    let mcpProvenance: MarketplaceMcpProvenance | undefined;
+    if (installType === 'mcp') {
+      const manifest = pkg.install_manifest as InstallManifest;
+      try {
+        mcpProvenance = createMarketplaceMcpProvenance(
+          this.db.getSource(pkg.source_id),
+          { name: pkg.name, version: pkg.version },
+          manifest.mcp_config!,
+        );
+      } catch (err) {
+        const error = (err as Error).message;
+        return {
+          success: false,
+          packageId: pkg.id,
+          packageName: pkg.name,
+          installType,
+          installPath: pkg.waggle_install_path,
+          message: `Rejected marketplace MCP provenance: ${error}`,
+          errors: [error],
+        };
+      }
+    }
+
     // Check if already installed
     const wasInstalled = this.db.isInstalled(pkg.id);
     if (installType !== 'mcp' && !request.force && wasInstalled) {
@@ -207,7 +233,7 @@ export class MarketplaceInstaller {
         result = await this.installPlugin(pkg, request);
         break;
       case 'mcp':
-        result = await this.installMcp(pkg, request);
+        result = await this.installMcp(pkg, request, mcpProvenance!);
         break;
       default:
         result = {
@@ -506,7 +532,11 @@ export class MarketplaceInstaller {
 
   // ─── MCP Server Installation ──────────────────────────────────────
 
-  private async installMcp(pkg: MarketplacePackage, request: InstallRequest): Promise<InstallResult> {
+  private async installMcp(
+    pkg: MarketplacePackage,
+    request: InstallRequest,
+    provenance: MarketplaceMcpProvenance,
+  ): Promise<InstallResult> {
     const manifest = pkg.install_manifest as InstallManifest | null;
     const mcpConfig = manifest?.mcp_config;
 
@@ -531,7 +561,7 @@ export class MarketplaceInstaller {
       const serverConfig = configureMarketplaceMcpServer(mcpConfig, request.settings);
 
       // Step 2: Update .mcp.json
-      this.updateMcpConfig(serverConfig, mcpConfig, request.settings);
+      this.updateMcpConfig(serverConfig, mcpConfig, request.settings, provenance);
 
       return {
         success: true,
@@ -546,6 +576,7 @@ export class MarketplaceInstaller {
           args: [...mcpConfig.args],
           ...(mcpConfig.env && { env: { ...mcpConfig.env } }),
         },
+        mcpProvenance: provenance,
       };
     } catch (err) {
       return {
@@ -740,6 +771,7 @@ This skill was installed from the marketplace. Configure or extend it as needed 
     serverConfig: McpServerConfig,
     sourceConfig: McpServerConfig,
     settings: Record<string, string> | undefined,
+    provenance: MarketplaceMcpProvenance,
   ): void {
     assertSafeConfiguredMarketplaceMcpConfig(serverConfig, sourceConfig, settings);
     let mcpJson: McpConfigFile = { mcpServers: {} };
@@ -750,6 +782,7 @@ This skill was installed from the marketplace. Configure or extend it as needed 
       command: serverConfig.command,
       args: serverConfig.args,
       ...(serverConfig.env && { env: serverConfig.env }),
+      provenance,
     };
     writeFileSync(mcpConfigPath(), JSON.stringify(mcpJson, null, 2), 'utf-8');
   }

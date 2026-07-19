@@ -166,6 +166,17 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+/** Portable, secret-free identity for one audited marketplace MCP profile. */
+export interface MarketplaceMcpProvenance {
+  kind: 'marketplace';
+  schemaVersion: 1;
+  sourceName: 'mcp_registry';
+  packageName: string;
+  packageVersion: string;
+  npmPackage: string;
+  profileDigest: `sha256:${string}`;
+}
+
 export interface SettingField {
   type: 'string' | 'number' | 'boolean';
   description: string;
@@ -214,6 +225,8 @@ export interface InstallResult {
    * user secrets and can be safely normalized again at the server boundary.
    */
   mcpSourceConfig?: McpServerConfig;
+  /** Source-qualified identity persisted beside the configured MCP entry. */
+  mcpProvenance?: MarketplaceMcpProvenance;
 }
 
 export interface PackInstallResult {

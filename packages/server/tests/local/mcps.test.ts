@@ -94,8 +94,18 @@ function createMockSpawn(opts?: { initializeDelayMs?: number }): SpawnFn {
 
 function createFakeMarketplace() {
   const raw = new Database(':memory:');
-  raw.exec(`CREATE TABLE packages (
+  raw.exec(`
+  CREATE TABLE sources (
     id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    is_custom INTEGER NOT NULL DEFAULT 0
+  );
+  INSERT INTO sources (id, name, source_type, is_custom)
+    VALUES (1, 'mcp_registry', 'registry', 0);
+
+  CREATE TABLE packages (
+    id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL DEFAULT 1,
     name TEXT, display_name TEXT, description TEXT, version TEXT,
     waggle_install_type TEXT, waggle_install_path TEXT,
     install_manifest TEXT, homepage_url TEXT, repository_url TEXT,
@@ -159,6 +169,7 @@ function createFakeMarketplace() {
         if (!row) return null;
         return { ...row, install_manifest: row.install_manifest ? JSON.parse(row.install_manifest as string) : null };
       },
+      getSource: (id: number) => raw.prepare('SELECT * FROM sources WHERE id = ?').get(id) ?? null,
       isInstalled: (id: number) => installed.has(id),
       recordInstallation: (id: number) => { installed.add(id); },
       markUninstalled: (id: number) => { installed.delete(id); },

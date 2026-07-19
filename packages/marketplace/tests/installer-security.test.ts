@@ -1,12 +1,13 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { MarketplaceInstaller } from '../src/installer.js';
 import {
   assertSafeGitUrl,
   assertSafeNpmPackageSpec,
+  createMarketplaceMcpProvenance,
   resolveManagedInstallPath,
   resolveNpmInvocation,
 } from '../src/install-security.js';
@@ -14,7 +15,7 @@ import { MCP_SERVERS } from '../src/mcp-registry.js';
 import type { MarketplaceDB } from '../src/db.js';
 import type { FetchFn } from '../src/fetcher.js';
 import type { SecurityGateConfig } from '../src/security.js';
-import type { MarketplacePackage } from '../src/types.js';
+import type { MarketplacePackage, MarketplaceSource } from '../src/types.js';
 
 const childProcess = vi.hoisted(() => ({
   execSync: vi.fn(),
@@ -88,16 +89,37 @@ function packageFixture(overrides: Partial<MarketplacePackage> = {}): Marketplac
   };
 }
 
+function sourceFixture(overrides: Partial<MarketplaceSource> = {}): MarketplaceSource {
+  return {
+    id: 1,
+    name: 'mcp_registry',
+    display_name: 'MCP Server Registry',
+    url: 'https://github.com/modelcontextprotocol/servers',
+    source_type: 'registry',
+    platform: 'npm',
+    total_packages: MCP_SERVERS.length,
+    install_method: 'npm',
+    api_endpoint: null,
+    description: 'Verified local-stdio MCP servers curated for Waggle',
+    last_synced_at: null,
+    is_custom: false,
+    ...overrides,
+  };
+}
+
 function installerFor(
   pkg: MarketplacePackage,
   securityConfig: Partial<SecurityGateConfig> = {},
   fetchImpl?: FetchFn,
+  sources: MarketplaceSource[] = [sourceFixture()],
 ) {
   const recordInstallation = vi.fn();
   const getPackageByName = vi.fn();
+  const getSource = vi.fn((id: number) => sources.find(source => source.id === id) ?? null);
   const db = {
     getPackage: vi.fn(() => pkg),
     getPackageByName,
+    getSource,
     isInstalled: vi.fn(() => false),
     recordInstallation,
     markUninstalled: vi.fn(),
@@ -111,7 +133,7 @@ function installerFor(
     cache_dir: join(isolatedHome, 'security-cache'),
     ...securityConfig,
   }, fetchImpl);
-  return { installer, recordInstallation, getPackageByName };
+  return { installer, recordInstallation, getPackageByName, getSource };
 }
 
 afterEach(() => {
@@ -722,6 +744,167 @@ describe('MarketplaceInstaller security boundaries', () => {
     expect(recordInstallation).not.toHaveBeenCalled();
   });
 
+  it('builds deterministic marketplace MCP provenance from the canonical profile', () => {
+    const brave = MCP_SERVERS.find(server => server.name === 'brave-search')!;
+    const config = brave.install_manifest!.mcp_config!;
+    const version = brave.version!;
+
+    const first = createMarketplaceMcpProvenance(
+      sourceFixture(),
+      { name: brave.name, version },
+      config,
+    );
+    const second = createMarketplaceMcpProvenance(
+      sourceFixture(),
+      { name: brave.name, version },
+      { ...config, env: { BRAVE_API_KEY: '' } },
+    );
+    const expectedPayload = {
+      schemaVersion: 1,
+      sourceName: 'mcp_registry',
+      packageName: brave.name,
+      packageVersion: version,
+      npmPackage: brave.install_manifest!.npm_package!,
+      serverName: config.name,
+      command: config.command,
+      args: config.args,
+      envKeys: ['BRAVE_API_KEY'],
+    };
+    const expectedDigest = `sha256:${createHash('sha256')
+      .update(JSON.stringify(expectedPayload))
+      .digest('hex')}`;
+
+    expect(first).toEqual({
+      kind: 'marketplace',
+      schemaVersion: 1,
+      sourceName: 'mcp_registry',
+      packageName: brave.name,
+      packageVersion: version,
+      npmPackage: brave.install_manifest!.npm_package!,
+      profileDigest: expectedDigest,
+    });
+    expect(second).toEqual(first);
+  });
+
+  it('returns and persists secret-free provenance for a canonical MCP install', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server offline')));
+    const brave = MCP_SERVERS.find(server => server.name === 'brave-search')!;
+    const { installer, recordInstallation } = installerFor(packageFixture({
+      name: brave.name,
+      display_name: brave.display_name,
+      package_type: 'mcp_server',
+      waggle_install_type: 'mcp',
+      version: brave.version!,
+      install_manifest: brave.install_manifest ?? null,
+    }));
+
+    const result = await installer.install({
+      packageId: 1,
+      settings: { BRAVE_API_KEY: 'sentinel-brave-secret' },
+    });
+    const entry = JSON.parse(readFileSync(result.installPath, 'utf8'))
+      .mcpServers['brave-search'];
+
+    expect(result.success).toBe(true);
+    expect(result.mcpProvenance).toEqual(expect.objectContaining({
+      kind: 'marketplace',
+      sourceName: 'mcp_registry',
+      packageName: brave.name,
+      packageVersion: brave.version,
+      npmPackage: brave.install_manifest!.npm_package,
+      profileDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    }));
+    expect(entry.provenance).toEqual(result.mcpProvenance);
+    expect(result.mcpSourceConfig).toEqual(brave.install_manifest!.mcp_config);
+    expect(JSON.stringify(result.mcpProvenance)).not.toContain('sentinel-brave-secret');
+    expect(JSON.stringify(entry.provenance)).not.toContain('sentinel-brave-secret');
+    expect(entry.env).toEqual({ BRAVE_API_KEY: 'sentinel-brave-secret' });
+    expect(recordInstallation).toHaveBeenCalledWith(
+      1,
+      brave.version,
+      result.installPath,
+      { BRAVE_API_KEY: '[redacted]' },
+    );
+  });
+
+  it('rejects an approved MCP manifest cloned under a noncanonical source', async () => {
+    const brave = MCP_SERVERS.find(server => server.name === 'brave-search')!;
+    const configPath = join(isolatedHome, '.waggle', '.mcp.json');
+    const originalConfig = JSON.stringify({
+      mcpServers: {
+        existing: { command: 'existing-command', args: ['existing-arg'] },
+      },
+    });
+    mkdirSync(join(isolatedHome, '.waggle'), { recursive: true });
+    writeFileSync(configPath, originalConfig, 'utf8');
+    const customSource = sourceFixture({
+      id: 77,
+      name: 'custom_registry',
+      display_name: 'Custom registry',
+      is_custom: true,
+    });
+    const { installer, recordInstallation } = installerFor(packageFixture({
+      source_id: customSource.id,
+      name: brave.name,
+      display_name: brave.display_name,
+      package_type: 'mcp_server',
+      waggle_install_type: 'mcp',
+      version: brave.version!,
+      install_manifest: brave.install_manifest ?? null,
+    }), {}, undefined, [customSource]);
+
+    const result = await installer.install({ packageId: 1, forceInsecure: true });
+
+    expect(result.success).toBe(false);
+    expect(result.errors?.join(' ')).toMatch(/canonical|mcp_registry|source/i);
+    expect(readFileSync(configPath, 'utf8')).toBe(originalConfig);
+    expect(recordInstallation).not.toHaveBeenCalled();
+    expect(childProcess.execFileSync).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    sourceFixture({ id: 77, name: 'mcp_registry', is_custom: true }),
+    sourceFixture({ id: 78, name: 'mcp_registry', source_type: 'community_repo', is_custom: false }),
+  ])('rejects a noncanonical source that claims the reserved registry name ($source_type)', async source => {
+    const brave = MCP_SERVERS.find(server => server.name === 'brave-search')!;
+    const { installer, recordInstallation } = installerFor(packageFixture({
+      source_id: source.id,
+      name: brave.name,
+      display_name: brave.display_name,
+      package_type: 'mcp_server',
+      waggle_install_type: 'mcp',
+      version: brave.version!,
+      install_manifest: brave.install_manifest ?? null,
+    }), {}, undefined, [source]);
+
+    const result = await installer.install({ packageId: 1, forceInsecure: true });
+
+    expect(result.success).toBe(false);
+    expect(result.errors?.join(' ')).toMatch(/canonical|mcp_registry|source/i);
+    expect(recordInstallation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { field: 'name', name: 'brave-search-shadow', version: '2.1.0' },
+    { field: 'version', name: 'brave-search', version: '999.0.0' },
+  ])('rejects an approved MCP manifest whose package $field is not the catalog identity', async ({ name, version }) => {
+    const brave = MCP_SERVERS.find(server => server.name === 'brave-search')!;
+    const { installer, recordInstallation } = installerFor(packageFixture({
+      name,
+      display_name: brave.display_name,
+      package_type: 'mcp_server',
+      waggle_install_type: 'mcp',
+      version,
+      install_manifest: brave.install_manifest ?? null,
+    }));
+
+    const result = await installer.install({ packageId: 1, forceInsecure: true });
+
+    expect(result.success).toBe(false);
+    expect(result.errors?.join(' ')).toMatch(/name|version|catalog|profile/i);
+    expect(recordInstallation).not.toHaveBeenCalled();
+  });
+
   it.each(MCP_SERVERS)('accepts catalog MCP launcher $name', async server => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server offline')));
     const { installer } = installerFor(packageFixture({
@@ -729,6 +912,7 @@ describe('MarketplaceInstaller security boundaries', () => {
       display_name: server.display_name,
       package_type: 'mcp_server',
       waggle_install_type: 'mcp',
+      version: server.version!,
       install_manifest: server.install_manifest ?? null,
     }));
 
@@ -770,6 +954,7 @@ describe('MarketplaceInstaller security boundaries', () => {
       display_name: brave.display_name,
       package_type: 'mcp_server',
       waggle_install_type: 'mcp',
+      version: brave.version!,
       install_manifest: brave.install_manifest ?? null,
     }));
 
