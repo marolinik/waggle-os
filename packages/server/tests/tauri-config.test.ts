@@ -350,6 +350,58 @@ describe('Tauri Production Configuration', () => {
         );
         fs.copyFileSync(process.execPath, path.join(fixtureResources, 'node.exe'));
         writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
+        const fixtureNpmVersion = '0.0.0-fixture';
+        const fixtureNpmRuntimeRoot = 'node_modules/waggle-node-runtime';
+        const fixtureNpmCli = `process.stdout.write(${JSON.stringify(fixtureNpmVersion)} + '\\n');\n`;
+        const fixtureNpmWrapper = (cli: 'npm' | 'npx') => [
+          '@ECHO OFF',
+          'SETLOCAL',
+          'SET "NODE_EXE=%~dp0\\..\\..\\..\\node.exe"',
+          `SET "NPM_CLI_JS=%~dp0\\..\\node_modules\\npm\\bin\\${cli}-cli.js"`,
+          '"%NODE_EXE%" "%NPM_CLI_JS%" %*',
+          'EXIT /B %ERRORLEVEL%',
+          '',
+        ].join('\r\n');
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/package.json`,
+          JSON.stringify({
+            name: 'waggle-node-runtime',
+            private: true,
+            version: process.versions.node,
+          }),
+        );
+        writeFixtureFile(fixtureResources, `${fixtureNpmRuntimeRoot}/NODE-LICENSE`, 'Node license');
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/package.json`,
+          JSON.stringify({ name: 'npm', version: fixtureNpmVersion }),
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/LICENSE`,
+          'npm license',
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/bin/npm-cli.js`,
+          fixtureNpmCli,
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/bin/npx-cli.js`,
+          fixtureNpmCli,
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/bin/npm.cmd`,
+          fixtureNpmWrapper('npm'),
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/bin/npx.cmd`,
+          fixtureNpmWrapper('npx'),
+        );
 
         const installedBetterSqlite = path.join(ROOT, 'node_modules', 'better-sqlite3');
         const fixtureBetterSqlite = path.join(fixtureResources, 'node_modules', 'better-sqlite3');
@@ -446,6 +498,19 @@ describe('Tauri Production Configuration', () => {
         });
 
         expect(runChecker().status).toBe(0);
+
+        const fixtureNpmRuntimeManifest = path.join(
+          fixtureResources,
+          ...`${fixtureNpmRuntimeRoot}/package.json`.split('/'),
+        );
+        const fixtureNpmRuntimeManifestContent = fs.readFileSync(fixtureNpmRuntimeManifest);
+        fs.rmSync(fixtureNpmRuntimeManifest);
+        const missingNpmRuntimeResult = runChecker();
+        expect(missingNpmRuntimeResult.status).toBe(1);
+        expect(missingNpmRuntimeResult.stderr).toContain(
+          'resources/node_modules/waggle-node-runtime/package.json',
+        );
+        fs.writeFileSync(fixtureNpmRuntimeManifest, fixtureNpmRuntimeManifestContent);
 
         const stagedBinding = path.join(
           fixtureBetterSqlite,
