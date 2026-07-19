@@ -277,6 +277,22 @@ describe('Team API', () => {
     expect(memberIds).not.toContain(memberId);
   });
 
+  it('does not let an admin demote the team owner', async () => {
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/teams/test-team-crud/members/${ownerId}`,
+      headers: { 'x-test-user-id': adminId },
+      payload: { role: 'member' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: 'Cannot change the team owner role' });
+
+    const [membership] = await server.db.select().from(teamMembers)
+      .where(sql`team_id = (SELECT id FROM teams WHERE slug = 'test-team-crud') AND user_id = ${ownerId}`);
+    expect(membership.role).toBe('owner');
+  });
+
   it('returns 401 without auth header', async () => {
     const response = await server.inject({
       method: 'GET',
