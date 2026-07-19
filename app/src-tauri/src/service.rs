@@ -80,6 +80,55 @@ struct ServiceScript {
     kind: ServiceScriptKind,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct BundledNpmEnvironment {
+    path: std::ffi::OsString,
+    npm_exec_path: PathBuf,
+    npm_prefix: PathBuf,
+    npm_cache: PathBuf,
+}
+
+fn bundled_npm_environment(
+    resources_dir: &Path,
+    configured_data_dir: Option<&OsStr>,
+    home_dir: Option<&OsStr>,
+    ambient_path: Option<&OsStr>,
+) -> Result<BundledNpmEnvironment, String> {
+    let data_dir = configured_data_dir
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            home_dir
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+                .map(|home| home.join(".waggle"))
+        })
+        .ok_or_else(|| "Unable to resolve writable npm data directory".to_string())?;
+    let runtime_dir = resources_dir
+        .join("node_modules")
+        .join("waggle-node-runtime");
+    let npm_root = data_dir.join("npm");
+    let separator = if cfg!(windows) { ";" } else { ":" };
+    let mut path = std::ffi::OsString::from(runtime_dir.join("bin"));
+    path.push(separator);
+    path.push(resources_dir);
+    if let Some(existing_path) = ambient_path.filter(|value| !value.is_empty()) {
+        path.push(separator);
+        path.push(existing_path);
+    }
+
+    Ok(BundledNpmEnvironment {
+        path,
+        npm_exec_path: runtime_dir
+            .join("node_modules")
+            .join("npm")
+            .join("bin")
+            .join("npm-cli.js"),
+        npm_prefix: npm_root.join("prefix"),
+        npm_cache: npm_root.join("cache"),
+    })
+}
+
 fn find_dev_service_script(current_dir: &Path) -> Option<PathBuf> {
     for dir in current_dir.ancestors() {
         let candidate = dir
@@ -152,6 +201,31 @@ fn build_service_command(port: u16) -> Result<Command, String> {
             let resources_dir = dir.join("resources");
             let native_dir = resources_dir.join("native");
             let node_modules_dir = resources_dir.join("node_modules");
+            let configured_data_dir = std::env::var_os("WAGGLE_DATA_DIR");
+            let home_dir = if cfg!(windows) {
+                std::env::var_os("USERPROFILE")
+                    .filter(|value| !value.is_empty())
+                    .or_else(|| std::env::var_os("HOME").filter(|value| !value.is_empty()))
+            } else {
+                std::env::var_os("HOME")
+                    .filter(|value| !value.is_empty())
+                    .or_else(|| std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()))
+            };
+            let ambient_path = std::env::var_os("PATH");
+            let npm_environment = bundled_npm_environment(
+                &resources_dir,
+                configured_data_dir.as_deref(),
+                home_dir.as_deref(),
+                ambient_path.as_deref(),
+            )?;
+            std::fs::create_dir_all(&npm_environment.npm_prefix)
+                .map_err(|error| format!("Unable to create bundled npm prefix: {error}"))?;
+            std::fs::create_dir_all(&npm_environment.npm_cache)
+                .map_err(|error| format!("Unable to create bundled npm cache: {error}"))?;
+            cmd.env("PATH", &npm_environment.path);
+            cmd.env("NPM_EXECPATH", &npm_environment.npm_exec_path);
+            cmd.env("NPM_CONFIG_PREFIX", &npm_environment.npm_prefix);
+            cmd.env("NPM_CONFIG_CACHE", &npm_environment.npm_cache);
 
             // NODE_PATH must include the staged production deps
             // (resources/node_modules — better-sqlite3, @fastify/static,
@@ -259,6 +333,77 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn bundled_npm_environment_uses_configured_data_dir_and_preserves_path() {
+        let resources = Path::new("waggle resources");
+        let data_dir = Path::new("waggle data");
+        let ambient_entries = vec![PathBuf::from("ambient-one"), PathBuf::from("ambient two")];
+        let ambient_path = std::env::join_paths(&ambient_entries).expect("joins ambient PATH");
+        let environment = bundled_npm_environment(
+            resources,
+            Some(data_dir.as_os_str()),
+            Some(OsStr::new("unused home")),
+            Some(ambient_path.as_os_str()),
+        )
+        .expect("bundled npm environment resolves");
+
+        assert_eq!(
+            environment.npm_exec_path,
+            resources
+                .join("node_modules")
+                .join("waggle-node-runtime")
+                .join("node_modules")
+                .join("npm")
+                .join("bin")
+                .join("npm-cli.js")
+        );
+        assert_eq!(environment.npm_prefix, data_dir.join("npm").join("prefix"));
+        assert_eq!(environment.npm_cache, data_dir.join("npm").join("cache"));
+        let mut expected_path_entries = vec![
+            resources
+                .join("node_modules")
+                .join("waggle-node-runtime")
+                .join("bin"),
+            resources.to_path_buf(),
+        ];
+        expected_path_entries.extend(ambient_entries);
+        assert_eq!(
+            std::env::split_paths(&environment.path).collect::<Vec<_>>(),
+            expected_path_entries
+        );
+    }
+
+    #[test]
+    fn bundled_npm_environment_falls_back_to_waggle_home() {
+        let resources = Path::new("resources");
+        let home = Path::new("home");
+        let environment = bundled_npm_environment(
+            resources,
+            Some(OsStr::new("")),
+            Some(home.as_os_str()),
+            None,
+        )
+        .expect("fallback npm environment resolves");
+
+        assert_eq!(
+            environment.npm_prefix,
+            home.join(".waggle").join("npm").join("prefix")
+        );
+        assert_eq!(
+            environment.npm_cache,
+            home.join(".waggle").join("npm").join("cache")
+        );
+    }
+
+    #[test]
+    fn bundled_npm_environment_requires_a_writable_home() {
+        let result = bundled_npm_environment(Path::new("resources"), None, None, None);
+        assert_eq!(
+            result,
+            Err("Unable to resolve writable npm data directory".to_string())
+        );
     }
 }
 

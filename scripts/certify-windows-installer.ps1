@@ -533,6 +533,12 @@ $installDir = Join-Path $scratchRoot 'install'
 $dataDir = Join-Path $scratchRoot 'data'
 $appExecutable = Join-Path $installDir 'waggle.exe'
 $serviceScript = Join-Path $installDir 'resources\service.js'
+$bundledNode = Join-Path $installDir 'resources\node.exe'
+$bundledNpmRuntime = Join-Path $installDir 'resources\node_modules\waggle-node-runtime'
+$bundledNpmCli = Join-Path $bundledNpmRuntime 'node_modules\npm\bin\npm-cli.js'
+$bundledNpxCli = Join-Path $bundledNpmRuntime 'node_modules\npm\bin\npx-cli.js'
+$bundledNpmWrapper = Join-Path $bundledNpmRuntime 'bin\npm.cmd'
+$bundledNpxWrapper = Join-Path $bundledNpmRuntime 'bin\npx.cmd'
 $uninstaller = Join-Path $installDir 'uninstall.exe'
 $dataMarker = Join-Path $dataDir 'installer-certificate-marker.txt'
 $profileDataDir = Join-Path $env:USERPROFILE '.waggle'
@@ -559,6 +565,12 @@ $environmentNamesToClear = @(
   'ZHIPU_API_KEY', 'MOONSHOT_API_KEY', 'PERPLEXITY_API_KEY',
   'OPENROUTER_API_KEY'
 )
+$environmentNamesToClear += @(
+  Get-ChildItem Env: |
+    Where-Object { $_.Name -match '(?i)^npm_' } |
+    ForEach-Object { $_.Name }
+)
+$environmentNamesToClear = @($environmentNamesToClear | Sort-Object -Unique)
 $isolatedEnvironmentNames = @(
   'PATH', 'WAGGLE_PORT', 'WAGGLE_DATA_DIR', 'WAGGLE_HOST',
   'OLLAMA_HOST', 'VLLM_HOST', 'WAGGLE_SKIP_MARKETPLACE_SYNC'
@@ -606,6 +618,7 @@ $receipt = [ordered]@{
   embeddingPayloadReady = $false
   embeddingPayload = $null
   managedModelVerified = $false
+  bundledNpm = $null
   checks = [ordered]@{}
   error = $null
 }
@@ -645,7 +658,11 @@ try {
     Assert-True ($repositoryRevision -eq $normalizedExpectedSourceRevision) `
       "Repository revision $repositoryRevision does not match expected source $normalizedExpectedSourceRevision."
     $trackedSourcePaths = @(
+      'scripts/bundle-node.mjs',
       'scripts/certify-windows-installer.ps1',
+      'scripts/check-sidecar-resources.mjs',
+      'scripts/stage-sidecar-deps.mjs',
+      'app/src-tauri/src/service.rs',
       'app/src-tauri/nsis/installer.nsi'
     )
     foreach ($trackedSourcePath in $trackedSourcePaths) {
@@ -769,7 +786,7 @@ try {
   }
 
   $unexpectedApplications = @(
-    @('node.exe', 'docker.exe', 'ollama.exe', 'python.exe') |
+    @('node.exe', 'npm.cmd', 'npx.cmd', 'docker.exe', 'ollama.exe', 'python.exe') |
       Where-Object { Get-Command $_ -CommandType Application -ErrorAction SilentlyContinue }
   )
   Assert-True ($unexpectedApplications.Count -eq 0) `
@@ -785,12 +802,90 @@ try {
   Wait-ForPathState $appExecutable $true
   Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'Installer did not create uninstall.exe'
   Assert-True (Test-Path -LiteralPath $serviceScript -PathType Leaf) 'Installer omitted resources/service.js'
-  Assert-True (Test-Path -LiteralPath (Join-Path $installDir 'resources\node.exe') -PathType Leaf) `
+  Assert-True (Test-Path -LiteralPath $bundledNode -PathType Leaf) `
     'Installer omitted the bundled Node.js runtime'
   Assert-True (Test-Path -LiteralPath (Join-Path $installDir 'resources\node_modules') -PathType Container) `
     'Installer omitted staged runtime dependencies'
+  $bundledRuntimeFiles = @(
+    (Join-Path $bundledNpmRuntime 'package.json'),
+    (Join-Path $bundledNpmRuntime 'NODE-LICENSE'),
+    (Join-Path $bundledNpmRuntime 'node_modules\npm\LICENSE'),
+    $bundledNpmCli,
+    $bundledNpxCli,
+    $bundledNpmWrapper,
+    $bundledNpxWrapper
+  )
+  foreach ($runtimeFile in $bundledRuntimeFiles) {
+    Assert-True (Test-Path -LiteralPath $runtimeFile -PathType Leaf) `
+      "Installer omitted bundled npm runtime file: $runtimeFile"
+  }
+
+  $npmVersionOutput = @(& $bundledNode $bundledNpmCli --version 2>$null)
+  Assert-True ($LASTEXITCODE -eq 0 -and $npmVersionOutput.Count -eq 1) `
+    'Bundled npm CLI did not execute through the installed Node runtime.'
+  $npxVersionOutput = @(& $bundledNode $bundledNpxCli --version 2>$null)
+  Assert-True ($LASTEXITCODE -eq 0 -and $npxVersionOutput.Count -eq 1) `
+    'Bundled npx CLI did not execute through the installed Node runtime.'
+  $npmVersion = ([string]$npmVersionOutput[0]).Trim()
+  $npxVersion = ([string]$npxVersionOutput[0]).Trim()
+  Assert-True ($npmVersion -match '^\d+\.\d+\.\d+$' -and $npmVersion -eq $npxVersion) `
+    "Bundled npm/npx versions do not match: npm=$npmVersion npx=$npxVersion"
+  $cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
+  Invoke-RawProcess $cmdExe ('/d /s /c ""{0}" --version"' -f $bundledNpmWrapper) 60
+  Invoke-RawProcess $cmdExe ('/d /s /c ""{0}" --version"' -f $bundledNpxWrapper) 60
+
+  $offlinePackageSource = Join-Path $scratchRoot 'offline-npm-package'
+  $offlineInstallRoot = Join-Path $scratchRoot 'offline-npm-install'
+  $offlineCache = Join-Path $scratchRoot 'offline-npm-cache'
+  $isolatedUserConfig = Join-Path $scratchRoot 'empty-user.npmrc'
+  $isolatedGlobalConfig = Join-Path $scratchRoot 'empty-global.npmrc'
+  New-Item -ItemType Directory -Path @(
+    $offlinePackageSource,
+    $offlineInstallRoot,
+    $offlineCache
+  ) -Force | Out-Null
+  Set-Content -LiteralPath $isolatedUserConfig -Value '' -NoNewline
+  Set-Content -LiteralPath $isolatedGlobalConfig -Value '' -NoNewline
+  $offlinePackageManifest = [ordered]@{
+    name = 'waggle-offline-install-probe'
+    version = '1.0.0'
+    scripts = [ordered]@{
+      install = "node -e `"require('node:fs').writeFileSync('lifecycle-ran.txt','unexpected')`""
+    }
+  }
+  $offlinePackageManifest | ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath (Join-Path $offlinePackageSource 'package.json') -Encoding UTF8
+  Assert-True (@(Get-ChildItem -LiteralPath $offlineCache -Force).Count -eq 0) `
+    'Offline npm certificate cache was not clean before the probe.'
+  $npmInstallOutput = @(
+    & $bundledNode $bundledNpmCli install --offline --ignore-scripts --no-audit --no-fund `
+      --package-lock=false --save=false --userconfig $isolatedUserConfig `
+      --globalconfig $isolatedGlobalConfig --cache $offlineCache --prefix $offlineInstallRoot `
+      -- $offlinePackageSource 2>&1
+  )
+  Assert-True ($LASTEXITCODE -eq 0) `
+    "Bundled npm offline local install failed: $($npmInstallOutput -join [Environment]::NewLine)"
+  $installedOfflinePackage = Join-Path $offlineInstallRoot 'node_modules\waggle-offline-install-probe'
+  Assert-True (Test-Path -LiteralPath (Join-Path $installedOfflinePackage 'package.json') -PathType Leaf) `
+    'Bundled npm did not install the local offline package.'
+  Assert-True (-not (Test-Path -LiteralPath (Join-Path $installedOfflinePackage 'lifecycle-ran.txt'))) `
+    'Bundled npm executed a lifecycle script despite --ignore-scripts.'
+  Assert-True (-not (Test-Path -LiteralPath (Join-Path $offlinePackageSource 'lifecycle-ran.txt'))) `
+    'Bundled npm executed a lifecycle script in the local package source.'
   $receipt.checks['silentInstall'] = $true
   $receipt.checks['bundledRuntimePayload'] = $true
+  $receipt.checks['bundledNpmCli'] = $true
+  $receipt.checks['bundledNpmWrappers'] = $true
+  $receipt.checks['bundledNpmOfflineInstall'] = $true
+  $receipt.checks['bundledNpmIgnoreScriptsFlagHonored'] = $true
+  $receipt.bundledNpm = [ordered]@{
+    version = $npmVersion
+    npmCli = $bundledNpmCli
+    npxCli = $bundledNpxCli
+    cacheWasClean = $true
+    offlinePackage = 'waggle-offline-install-probe@1.0.0'
+    ignoreScriptsFlagHonored = $true
+  }
   $installedAppFile = Get-Item -LiteralPath $appExecutable
   $installedAppSignature = Get-AuthenticodeSignature -LiteralPath $appExecutable
   $receipt.installedApp = [ordered]@{
@@ -874,6 +969,13 @@ try {
     $health = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $firstProcess.Refresh()
     Assert-True (-not $firstProcess.HasExited) 'The installed desktop process exited during first boot'
+    $sidecarNpmPrefix = Join-Path $dataDir 'npm\prefix'
+    $sidecarNpmCache = Join-Path $dataDir 'npm\cache'
+    Assert-True (Test-Path -LiteralPath $sidecarNpmPrefix -PathType Container) `
+      'First boot did not create the sidecar npm prefix directory.'
+    Assert-True (Test-Path -LiteralPath $sidecarNpmCache -PathType Container) `
+      'First boot did not create the sidecar npm cache directory.'
+    $receipt.checks['sidecarNpmDataDirectories'] = $true
     $vaultKeyPath = Join-Path $dataDir '.vault-key'
     Assert-VaultKeyAclRestricted $vaultKeyPath
     $receipt.checks['vaultKeyAclRestricted'] = $true
