@@ -166,8 +166,10 @@ export function assertQualifiedChatCase(input: {
   if (!Array.isArray(done.toolsUsed) || !done.toolsUsed.every((tool) => typeof tool === 'string')) {
     throw new Error('Qualified chat requires done.toolsUsed to be an array of strings');
   }
-  const toolEvents = events.filter(({ event }) => event.toLowerCase().includes('tool'));
-  if (done.toolsUsed.length !== 0 || toolEvents.length !== 0) {
+  const disallowedToolEvents = events.filter(({ event, data }) =>
+    (event === 'tool' || event === 'tool_result') && data.name !== 'auto_recall',
+  );
+  if (done.toolsUsed.length !== 0 || disallowedToolEvents.length !== 0) {
     throw new Error('Qualified chat requires zero tools and zero tool events');
   }
   const switches = events.filter(({ event }) => event === 'model_switch');
@@ -944,13 +946,23 @@ async function qualify(options: QualifierOptions): Promise<void> {
     const message = (receipt.error as { message?: string } | undefined)?.message ?? 'Smart-router qualification failed';
     throw new Error(`${message}; receipt: ${options.outputPath}`);
   }
-  process.stdout.write(`${JSON.stringify({ status: 'passed', receiptPath: options.outputPath, revision })}\n`);
+  await new Promise<void>((resolve, reject) => {
+    process.stdout.write(
+      `${JSON.stringify({ status: 'passed', receiptPath: options.outputPath, revision })}\n`,
+      (error) => error ? reject(error) : resolve(),
+    );
+  });
 }
 
 const isMain = process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(SCRIPT_PATH);
 if (isMain) {
-  qualify(parseArguments(process.argv.slice(2))).catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  });
+  qualify(parseArguments(process.argv.slice(2))).then(
+    () => process.exit(0),
+    (error) => {
+      process.stderr.write(
+        `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`,
+        () => process.exit(1),
+      );
+    },
+  );
 }

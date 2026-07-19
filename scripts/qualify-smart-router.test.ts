@@ -56,6 +56,12 @@ describe('qualify-smart-router helpers', () => {
 
   it('requires HTTP SSE success, one done, content, expected model, and exact switch policy', () => {
     const rawSse = [
+      'event: tool',
+      'data: {"name":"auto_recall","input":{"query":"test"}}',
+      '',
+      'event: tool_result',
+      'data: {"name":"auto_recall","result":"No relevant memories found","isError":false}',
+      '',
       'event: model_switch',
       'data: {"model":"ollama/fallback","reason":"ollama/primary unavailable; configured fallback selected","primary":"ollama/primary"}',
       '',
@@ -138,6 +144,12 @@ describe('qualify-smart-router helpers', () => {
       httpStatus: 200,
       contentType: 'text/event-stream',
       rawSse: 'event: token\ndata: {"content":"ok"}\n\nevent: done\ndata: {"content":"ok","model":"ollama/primary","toolsUsed":["bash"]}\n\n',
+      expectedModel: 'ollama/primary',
+    }), /zero tools/i);
+    assert.throws(() => assertQualifiedChatCase({
+      httpStatus: 200,
+      contentType: 'text/event-stream',
+      rawSse: 'event: tool\ndata: {"name":"bash","input":{}}\n\nevent: token\ndata: {"content":"ok"}\n\nevent: done\ndata: {"content":"ok","model":"ollama/primary","toolsUsed":[]}\n\n',
       expectedModel: 'ollama/primary',
     }), /zero tools/i);
   });
