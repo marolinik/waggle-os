@@ -162,6 +162,7 @@ import { agentRunsRoutes } from './routes/agent-runs.js';
 import { localInferenceRoutes } from './routes/local-inference.js';
 import { complianceRoutes } from './routes/compliance.js';
 import { OfflineManager } from './offline-manager.js';
+import { listOllamaChatModelIds } from './model-availability.js';
 import { log, createLogger } from './logger.js';
 import { installErrorHandler } from './error-handler.js';
 import { seedDefaultCrons } from './setup-crons.js';
@@ -2396,6 +2397,46 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     dataDir: fullConfig.dataDir,
     getLlmEndpoint: () => fullConfig.litellmUrl,
     getLlmApiKey: () => server.agentState?.litellmApiKey ?? '',
+    checkLlmReadiness: async () => {
+      const selectedModel = server.agentState.currentModel.trim();
+      const selectedOllama = selectedModel.toLowerCase().startsWith('ollama/');
+      const unselectedOllama = !selectedModel
+        && server.agentState.llmProvider.provider === 'ollama';
+      if (selectedOllama || unselectedOllama) {
+        const localModels = await listOllamaChatModelIds();
+        return selectedOllama
+          ? localModels.some(model => model.toLowerCase() === selectedModel.toLowerCase())
+          : localModels.length > 0;
+      }
+
+      const endpoint = fullConfig.litellmUrl.replace(/\/+$/, '');
+      const apiKey = server.agentState.litellmApiKey;
+      const headers: Record<string, string> = {};
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      const response = await fetch(`${endpoint}/health/readiness`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) return false;
+      if (server.agentState.llmProvider.provider !== 'litellm') return true;
+
+      // LiteLLM readiness alone only proves the router process is accepting
+      // traffic. Its local model catalog must also expose the selected route.
+      const modelsResponse = await fetch(`${endpoint}/models`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!modelsResponse.ok) return false;
+      const modelsPayload = await modelsResponse.json() as {
+        data?: Array<{ id?: string }>;
+      };
+      const modelIds = (modelsPayload.data ?? [])
+        .map(model => model.id)
+        .filter((model): model is string => typeof model === 'string');
+      return selectedModel ? modelIds.includes(selectedModel) : modelIds.length > 0;
+    },
     eventBus,
     checkIntervalMs: 30_000,
   });
@@ -2927,7 +2968,22 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       }
     })();
 
-    const overallStatus = llm.health === 'healthy' && dbHealthy
+    // Startup may resolve a provider after OfflineManager's initial probe.
+    // Once a later completion-readiness probe runs, it becomes authoritative.
+    const offlineState = offlineManager.state;
+    const providerCheckedAt = Date.parse(llm.checkedAt);
+    const readinessCheckedAt = Date.parse(offlineManager.lastCheck);
+    const providerStatusIsNewer = Number.isFinite(providerCheckedAt)
+      && providerCheckedAt > readinessCheckedAt;
+    const llmReachable = providerStatusIsNewer
+      ? llm.health === 'healthy'
+      : !offlineState.offline;
+    const effectiveOfflineState = {
+      ...offlineState,
+      offline: !llmReachable,
+      since: llmReachable ? null : offlineState.since,
+    };
+    const overallStatus = llmReachable && llm.health === 'healthy' && dbHealthy
       ? 'ok'
       : llm.health === 'unavailable' || !dbHealthy
         ? 'unavailable'
@@ -2980,14 +3036,14 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         health: llm.health,
         detail: llm.detail,
         checkedAt: llm.checkedAt,
-        reachable: llm.health === 'healthy' || !offlineManager.state.offline,
+        reachable: llmReachable,
         lastCheck: new Date().toISOString(),
       },
       database: { healthy: dbHealthy },
       memoryStats,
       serviceHealth,
       defaultModel: server.agentState.currentModel,
-      offline: offlineManager.state,
+      offline: effectiveOfflineState,
       // R1-001: wsToken intentionally NOT returned — /health is unauthenticated
       // and the token authenticates every other route. Localhost clients are
       // trusted by security-middleware and never needed it.

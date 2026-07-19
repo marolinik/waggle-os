@@ -139,6 +139,54 @@ describe('OfflineManager', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it('clears the probe timeout when fetch rejects immediately', async () => {
+    const originalFetch = globalThis.fetch;
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
+
+    try {
+      const mgr = new OfflineManager({
+        dataDir: tmpDir,
+        getLlmEndpoint: () => 'http://localhost:9999',
+        getLlmApiKey: () => 'test-key',
+        eventBus,
+      });
+
+      expect(await mgr.checkHealth()).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([401, 404])(
+    'does not treat built-in proxy /health status %i as model-ready',
+    async (status) => {
+      const originalFetch = globalThis.fetch;
+      const fetchMock = vi.fn().mockResolvedValue({ status });
+      globalThis.fetch = fetchMock;
+
+      try {
+        const mgr = new OfflineManager({
+          dataDir: tmpDir,
+          getLlmEndpoint: () => 'http://127.0.0.1:3333/v1',
+          getLlmApiKey: () => 'test-key',
+          eventBus,
+        });
+
+        expect(await mgr.checkHealth()).toBe(false);
+        expect(mgr.isOffline).toBe(true);
+        expect(fetchMock).toHaveBeenCalledWith(
+          'http://127.0.0.1:3333/v1/health',
+          expect.objectContaining({ method: 'GET' }),
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    },
+  );
+
   it('emits back_online notification when recovering', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-offline-recov-'));
     const bus = new EventEmitter();
@@ -193,11 +241,244 @@ describe('Offline REST routes', () => {
     mind.close();
 
     server = await buildLocalServer({ dataDir: tmpDir });
+    server.offlineManager.stop();
   });
 
   afterAll(async () => {
     await server.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('uses built-in proxy completion readiness over stale provider health', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalEndpoint = server.localConfig.litellmUrl;
+    const originalProvider = server.agentState.llmProvider;
+    const originalModel = server.agentState.currentModel;
+    const fetchMock = vi.fn().mockResolvedValue({ status: 503, ok: false });
+
+    server.localConfig.litellmUrl = 'http://127.0.0.1:3333/v1';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'Stale startup status',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
+    globalThis.fetch = fetchMock;
+
+    try {
+      expect(await server.offlineManager.checkHealth()).toBe(false);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:3333/v1/health/readiness',
+        expect.any(Object),
+      );
+      const health = await injectWithAuth(server, { method: 'GET', url: '/health' });
+      const healthBody = health.json();
+      expect(healthBody.llm.reachable).toBe(false);
+      expect(healthBody.offline.offline).toBe(true);
+      expect(healthBody.status).not.toBe('ok');
+    } finally {
+      globalThis.fetch = originalFetch;
+      server.localConfig.litellmUrl = originalEndpoint;
+      server.agentState.llmProvider = originalProvider;
+      server.agentState.currentModel = originalModel;
+    }
+  });
+
+  it('keeps /health reachability and offline projection consistent', async () => {
+    const offlineState = server.offlineManager as unknown as { _offline: boolean };
+    const originalOffline = offlineState._offline;
+    const originalProvider = server.agentState.llmProvider;
+
+    offlineState._offline = true;
+    server.agentState.llmProvider = {
+      provider: 'ollama',
+      health: 'healthy',
+      detail: 'Newer resolved provider',
+      checkedAt: new Date(Date.now() + 1_000).toISOString(),
+    };
+
+    try {
+      const health = await injectWithAuth(server, { method: 'GET', url: '/health' });
+      const body = health.json();
+      expect(body.llm.reachable).toBe(true);
+      expect(body.offline.offline).toBe(false);
+    } finally {
+      offlineState._offline = originalOffline;
+      server.agentState.llmProvider = originalProvider;
+    }
+  });
+
+  it('keeps LiteLLM online when its completion-readiness route succeeds', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalEndpoint = server.localConfig.litellmUrl;
+    const originalProvider = server.agentState.llmProvider;
+    const originalModel = server.agentState.currentModel;
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === 'http://127.0.0.1:4000/health/readiness') {
+        return { status: 200, ok: true };
+      }
+      if (url === 'http://127.0.0.1:4000/models') {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ data: [{ id: 'openai/gpt-5.4' }] }),
+        };
+      }
+      return { status: 404, ok: false };
+    });
+
+    server.localConfig.litellmUrl = 'http://127.0.0.1:4000';
+    server.agentState.llmProvider = {
+      provider: 'litellm',
+      health: 'healthy',
+      detail: 'LiteLLM test provider',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = 'openai/gpt-5.4';
+    globalThis.fetch = fetchMock;
+
+    try {
+      expect(await server.offlineManager.checkHealth()).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:4000/health/readiness',
+        expect.any(Object),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:4000/models',
+        expect.any(Object),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+      server.localConfig.litellmUrl = originalEndpoint;
+      server.agentState.llmProvider = originalProvider;
+      server.agentState.currentModel = originalModel;
+    }
+  });
+
+  it('keeps LiteLLM offline when the selected model route is absent', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalEndpoint = server.localConfig.litellmUrl;
+    const originalProvider = server.agentState.llmProvider;
+    const originalModel = server.agentState.currentModel;
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith('/health/readiness')) return { status: 200, ok: true };
+      if (url.endsWith('/models')) {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ data: [{ id: 'google/gemini-2.5-flash' }] }),
+        };
+      }
+      return { status: 404, ok: false };
+    });
+
+    server.localConfig.litellmUrl = 'http://127.0.0.1:4000';
+    server.agentState.llmProvider = {
+      provider: 'litellm',
+      health: 'healthy',
+      detail: 'LiteLLM test provider',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = 'openai/gpt-5.4';
+    globalThis.fetch = fetchMock;
+
+    try {
+      expect(await server.offlineManager.checkHealth()).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+      server.localConfig.litellmUrl = originalEndpoint;
+      server.agentState.llmProvider = originalProvider;
+      server.agentState.currentModel = originalModel;
+    }
+  });
+
+  it('keeps a selected installed Ollama model online without probing proxy liveness', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalOllamaHost = process.env.OLLAMA_HOST;
+    const originalProvider = server.agentState.llmProvider;
+    const originalModel = server.agentState.currentModel;
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url === 'http://127.0.0.1:11434/api/tags') {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ models: [{ name: 'qwen2.5:7b' }] }),
+        };
+      }
+      return { status: 404, ok: false };
+    });
+
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
+    server.agentState.llmProvider = {
+      provider: 'ollama',
+      health: 'healthy',
+      detail: 'Local Ollama model',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = 'ollama/qwen2.5:7b';
+    globalThis.fetch = fetchMock;
+
+    try {
+      expect(await server.offlineManager.checkHealth()).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:11434/api/tags',
+        expect.any(Object),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+      else process.env.OLLAMA_HOST = originalOllamaHost;
+      server.agentState.llmProvider = originalProvider;
+      server.agentState.currentModel = originalModel;
+    }
+  });
+
+  it('does not let a stale Ollama provider override a selected cloud route', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalEndpoint = server.localConfig.litellmUrl;
+    const originalProvider = server.agentState.llmProvider;
+    const originalModel = server.agentState.currentModel;
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith('/api/tags')) {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ models: [{ name: 'qwen2.5:7b' }] }),
+        };
+      }
+      return { status: 503, ok: false };
+    });
+
+    server.localConfig.litellmUrl = 'http://127.0.0.1:3333/v1';
+    server.agentState.llmProvider = {
+      provider: 'ollama',
+      health: 'healthy',
+      detail: 'Stale local provider status',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = 'openai/gpt-5.4';
+    globalThis.fetch = fetchMock;
+
+    try {
+      expect(await server.offlineManager.checkHealth()).toBe(false);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:3333/v1/health/readiness',
+        expect.any(Object),
+      );
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        expect.stringContaining('/api/tags'),
+        expect.any(Object),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      server.localConfig.litellmUrl = originalEndpoint;
+      server.agentState.llmProvider = originalProvider;
+      server.agentState.currentModel = originalModel;
+    }
   });
 
   it('GET /api/offline/status returns expected shape', async () => {
