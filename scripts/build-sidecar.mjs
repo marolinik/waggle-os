@@ -20,6 +20,8 @@ const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 const outFile = path.join(resourcesDir, 'service.js');
 const sourceMapFile = `${outFile}.map`;
 const entryPoint = path.join(root, 'packages', 'server', 'src', 'local', 'service.ts');
+const marketplaceDb = path.join(root, 'packages', 'marketplace', 'marketplace.db');
+const marketplaceResource = path.join(resourcesDir, 'marketplace.db');
 // Metafile goes to a temp path (NOT resources/) so it's neither bundled into
 // the app nor left as an untracked repo artifact. stage-sidecar-deps.mjs reads
 // it back from the same well-known path. Keep the two in sync.
@@ -62,6 +64,14 @@ const EXTERNAL = [
 ];
 
 try {
+  if (
+    !fs.existsSync(marketplaceDb)
+    || !fs.lstatSync(marketplaceDb).isFile()
+    || fs.lstatSync(marketplaceDb).isSymbolicLink()
+  ) {
+    throw new Error(`Required marketplace database is missing or unsafe: ${marketplaceDb}`);
+  }
+
   // Dynamic import esbuild (available via vite dependency)
   const esbuild = await import('esbuild');
 
@@ -117,12 +127,12 @@ try {
   const sizeMB = (stat.size / 1024 / 1024).toFixed(1);
   console.log(`[build-sidecar] Done. Output: ${sizeMB} MB`);
 
-  // Copy marketplace seed database if it exists
-  const marketplaceDb = path.join(root, 'packages', 'marketplace', 'seed', 'marketplace.db');
-  if (fs.existsSync(marketplaceDb)) {
-    fs.copyFileSync(marketplaceDb, path.join(resourcesDir, 'marketplace.db'));
-    console.log('[build-sidecar] Copied marketplace.db seed');
-  }
+  // Production startup seeds the user's writable DB from this immutable
+  // packaged resource. Remove a stale destination (including a symlink)
+  // before copying the tracked canonical database byte-for-byte.
+  fs.rmSync(marketplaceResource, { force: true });
+  fs.copyFileSync(marketplaceDb, marketplaceResource);
+  console.log('[build-sidecar] Copied canonical marketplace.db');
 } catch (err) {
   console.error('[build-sidecar] Build failed:', err.message);
   process.exit(1);

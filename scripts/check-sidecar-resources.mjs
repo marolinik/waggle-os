@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +53,10 @@ function listFiles(dir) {
 
 function resourceRelative(file) {
   return path.relative(resourcesDir, file).split(path.sep).join('/');
+}
+
+function sha256File(file) {
+  return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
 function readManifest(packageDir) {
@@ -166,6 +171,28 @@ if (!fs.existsSync(servicePath)) {
   if (/(?:\/\/|\/\*)[#@]\s*sourceMappingURL\s*=/.test(service)) {
     unsafe.push('resources/service.js contains a sourceMappingURL directive');
   }
+}
+
+const canonicalMarketplaceDb = path.join(root, 'packages', 'marketplace', 'marketplace.db');
+const marketplaceResource = path.join(resourcesDir, 'marketplace.db');
+const canonicalMarketplaceIsRegular = fs.existsSync(canonicalMarketplaceDb)
+  && fs.lstatSync(canonicalMarketplaceDb).isFile()
+  && !fs.lstatSync(canonicalMarketplaceDb).isSymbolicLink();
+const marketplaceResourceIsRegular = fs.existsSync(marketplaceResource)
+  && fs.lstatSync(marketplaceResource).isFile()
+  && !fs.lstatSync(marketplaceResource).isSymbolicLink();
+if (!canonicalMarketplaceIsRegular) {
+  missing.push('packages/marketplace/marketplace.db canonical build input');
+}
+if (!fs.existsSync(marketplaceResource)) {
+  missing.push('resources/marketplace.db (run: node scripts/build-sidecar.mjs)');
+} else if (!marketplaceResourceIsRegular) {
+  unsafe.push('resources/marketplace.db must be a regular file');
+} else if (
+  canonicalMarketplaceIsRegular
+  && sha256File(marketplaceResource) !== sha256File(canonicalMarketplaceDb)
+) {
+  unsafe.push('resources/marketplace.db does not match the canonical marketplace database');
 }
 
 const sourceArtifacts = fs.existsSync(resourcesDir)
@@ -424,6 +451,37 @@ if (!fs.existsSync(path.join(stagedBetterSqlite, 'package.json'))) {
 }
 if (!fs.existsSync(path.join(stagedOnnxRuntime, 'package.json'))) {
   missing.push('resources/node_modules/onnxruntime-node (run: node scripts/stage-sidecar-deps.mjs)');
+}
+if (
+  fs.existsSync(nodePath)
+  && fs.existsSync(path.join(stagedBetterSqlite, 'package.json'))
+  && marketplaceResourceIsRegular
+) {
+  try {
+    const marketplaceProbe = [
+      'const Database = require(process.argv[1]);',
+      'const database = new Database(process.argv[2], { readonly: true, fileMustExist: true });',
+      'const integrity = database.pragma("integrity_check", { simple: true });',
+      'if (integrity !== "ok") throw new Error(`integrity_check: ${integrity}`);',
+      'const foreignKeys = database.pragma("foreign_key_check");',
+      'if (foreignKeys.length !== 0) throw new Error("foreign_key_check failed");',
+      'const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = \'table\' AND name IN (\'sources\', \'packages\')").all();',
+      'database.close();',
+      'if (new Set(tables.map((row) => row.name)).size !== 2) throw new Error("required tables missing");',
+    ].join('');
+    execFileSync(nodePath, [
+      '-e',
+      marketplaceProbe,
+      stagedBetterSqlite,
+      marketplaceResource,
+    ], {
+      cwd: resourcesDir,
+      env: { ...process.env, NODE_PATH: stagedDepsDir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch {
+    unsafe.push('resources/marketplace.db failed its SQLite integrity/schema probe');
+  }
 }
 if (
   fs.existsSync(nodePath)

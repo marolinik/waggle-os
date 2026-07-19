@@ -582,6 +582,11 @@ $installDir = Join-Path $scratchRoot 'install'
 $dataDir = Join-Path $scratchRoot 'data'
 $appExecutable = Join-Path $installDir 'waggle.exe'
 $serviceScript = Join-Path $installDir 'resources\service.js'
+$canonicalMarketplaceDb = [System.IO.Path]::GetFullPath(
+  (Join-Path $PSScriptRoot '..\packages\marketplace\marketplace.db')
+)
+$installedMarketplaceDb = Join-Path $installDir 'resources\marketplace.db'
+$writableMarketplaceDb = Join-Path $dataDir 'marketplace.db'
 $bundledNode = Join-Path $installDir 'resources\node.exe'
 $bundledNpmRuntime = Join-Path $installDir 'resources\node_modules\waggle-node-runtime'
 $bundledNpmCli = Join-Path $bundledNpmRuntime 'node_modules\npm\bin\npm-cli.js'
@@ -711,10 +716,13 @@ try {
     Assert-True ($repositoryRevision -eq $normalizedExpectedSourceRevision) `
       "Repository revision $repositoryRevision does not match expected source $normalizedExpectedSourceRevision."
     $trackedSourcePaths = @(
+      'scripts/build-sidecar.mjs',
       'scripts/bundle-node.mjs',
       'scripts/certify-windows-installer.ps1',
       'scripts/check-sidecar-resources.mjs',
       'scripts/stage-sidecar-deps.mjs',
+      'packages/server/src/local/index.ts',
+      'packages/marketplace/marketplace.db',
       'app/src-tauri/src/service.rs',
       'app/src-tauri/nsis/installer.nsi'
     )
@@ -883,6 +891,23 @@ try {
   Wait-ForPathState $appExecutable $true
   Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'Installer did not create uninstall.exe'
   Assert-True (Test-Path -LiteralPath $serviceScript -PathType Leaf) 'Installer omitted resources/service.js'
+  Assert-True (Test-Path -LiteralPath $canonicalMarketplaceDb -PathType Leaf) `
+    'The tracked canonical marketplace database is missing.'
+  Assert-True (Test-Path -LiteralPath $installedMarketplaceDb -PathType Leaf) `
+    'Installer omitted resources\marketplace.db'
+  $installedMarketplaceFile = Get-Item -LiteralPath $installedMarketplaceDb
+  Assert-True (
+    ($installedMarketplaceFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0
+  ) 'Installed resources\marketplace.db must not be a reparse point.'
+  $marketplaceResourceSha256 = (
+    Get-FileHash -LiteralPath $canonicalMarketplaceDb -Algorithm SHA256
+  ).Hash
+  Assert-True (
+    (Get-FileHash -LiteralPath $installedMarketplaceDb -Algorithm SHA256).Hash -eq
+      $marketplaceResourceSha256
+  ) 'Installed resources\marketplace.db does not match the tracked canonical database.'
+  $receipt.evidence['marketplaceResourceSha256'] = $marketplaceResourceSha256
+  $receipt.checks['marketplaceResource'] = $true
   Assert-True (Test-Path -LiteralPath $bundledNode -PathType Leaf) `
     'Installer omitted the bundled Node.js runtime'
   Assert-True (Test-Path -LiteralPath (Join-Path $installDir 'resources\node_modules') -PathType Container) `
@@ -1070,6 +1095,22 @@ try {
       'Session-token bootstrap returned no token'
     $headers = @{ Authorization = "Bearer $($tokenResponse.token)" }
     $null = Invoke-JsonRequest "$baseUrl/api/tier" $headers
+    $marketplace = Invoke-JsonRequest `
+      "$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100" `
+      $headers
+    $marketplacePackages = @($marketplace.packages)
+    Assert-True ($marketplacePackages.Count -ge 1) `
+      'Clean installed marketplace API returned no trusted MCP catalog entries.'
+    $marketplaceNames = @($marketplacePackages | ForEach-Object { [string]$_.name })
+    Assert-True ($marketplaceNames -contains 'memory') `
+      'Clean installed marketplace API did not return the canonical memory MCP.'
+    Assert-True (Test-Path -LiteralPath $writableMarketplaceDb -PathType Leaf) `
+      'First boot did not create the writable marketplace database.'
+    Assert-True (
+      (Get-FileHash -LiteralPath $installedMarketplaceDb -Algorithm SHA256).Hash -eq
+        $marketplaceResourceSha256
+    ) 'First boot modified the immutable resources\marketplace.db payload.'
+    $receipt.checks['marketplaceApi'] = $true
     $chatProbeMessage = "installer-certificate-no-model-$runId"
     $chatResponse = Invoke-JsonPostRequest "$baseUrl/api/chat" @{
       message = $chatProbeMessage
@@ -1203,14 +1244,24 @@ try {
   # merely returning success while leaving a stale payload in place.
   $serviceHash = (Get-FileHash -LiteralPath $serviceScript -Algorithm SHA256).Hash
   Set-Content -LiteralPath $serviceScript -Value '// deliberately corrupted by installer certificate' -Encoding UTF8
+  Set-Content -LiteralPath $installedMarketplaceDb `
+    -Value 'deliberately corrupted by installer certificate' -Encoding UTF8
   Assert-True ((Get-FileHash -LiteralPath $serviceScript -Algorithm SHA256).Hash -ne $serviceHash) `
     'Could not prepare the repair probe'
+  Assert-True (
+    (Get-FileHash -LiteralPath $installedMarketplaceDb -Algorithm SHA256).Hash -ne
+      $marketplaceResourceSha256
+  ) 'Could not prepare the marketplace repair probe'
   Assert-NoForeignWaggleProcesses $appExecutable
   Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
   Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
     -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
   Assert-True ((Get-FileHash -LiteralPath $serviceScript -Algorithm SHA256).Hash -eq $serviceHash) `
     'Same-version repair did not restore resources/service.js'
+  Assert-True (
+    (Get-FileHash -LiteralPath $installedMarketplaceDb -Algorithm SHA256).Hash -eq
+      $marketplaceResourceSha256
+  ) 'Same-version repair did not restore resources/marketplace.db'
   Assert-True (Test-Path -LiteralPath $dataMarker -PathType Leaf) 'Repair removed user data'
   $repairRegistration = Get-ItemProperty -LiteralPath $uninstallRegistry
   Assert-True (

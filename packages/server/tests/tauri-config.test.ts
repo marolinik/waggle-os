@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import Database from 'better-sqlite3';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const TAURI_DIR = path.join(ROOT, 'app', 'src-tauri');
@@ -259,6 +260,15 @@ describe('Tauri Production Configuration', () => {
     expect(content).toContain('resources/service.js');
     expect(content).toContain('sourcemap: false');
     expect(content).toContain('fs.rmSync(sourceMapFile, { force: true })');
+    expect(content).toContain("path.join(root, 'packages', 'marketplace', 'marketplace.db')");
+    expect(content).not.toContain("'marketplace', 'seed', 'marketplace.db'");
+    expect(content).toContain('Required marketplace database is missing');
+
+    const serverIndex = fs.readFileSync(
+      path.join(ROOT, 'packages', 'server', 'src', 'local', 'index.ts'),
+      'utf-8',
+    );
+    expect(serverIndex).toContain("path.resolve(__dirname, 'marketplace.db')");
   });
 
   it('D12: the bundled sidecar is generated at build time, never tracked', () => {
@@ -350,6 +360,23 @@ describe('Tauri Production Configuration', () => {
         );
         fs.copyFileSync(process.execPath, path.join(fixtureResources, 'node.exe'));
         writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
+        const fixtureMarketplaceSource = path.join(
+          fixtureRoot,
+          'packages',
+          'marketplace',
+          'marketplace.db',
+        );
+        fs.mkdirSync(path.dirname(fixtureMarketplaceSource), { recursive: true });
+        const fixtureMarketplace = new Database(fixtureMarketplaceSource);
+        fixtureMarketplace.exec(`
+          CREATE TABLE sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+          CREATE TABLE packages (id INTEGER PRIMARY KEY, source_id INTEGER, name TEXT NOT NULL);
+          INSERT INTO sources (id, name) VALUES (1, 'mcp_registry');
+          INSERT INTO packages (id, source_id, name) VALUES (1, 1, 'memory');
+        `);
+        fixtureMarketplace.close();
+        const fixtureMarketplaceResource = path.join(fixtureResources, 'marketplace.db');
+        fs.copyFileSync(fixtureMarketplaceSource, fixtureMarketplaceResource);
         const fixtureNpmVersion = '0.0.0-fixture';
         const fixtureNpmRuntimeRoot = 'node_modules/waggle-node-runtime';
         const fixtureNpmCli = `process.stdout.write(${JSON.stringify(fixtureNpmVersion)} + '\\n');\n`;
@@ -498,6 +525,32 @@ describe('Tauri Production Configuration', () => {
         });
 
         expect(runChecker().status).toBe(0);
+
+        const fixtureMarketplaceContent = fs.readFileSync(fixtureMarketplaceResource);
+        fs.rmSync(fixtureMarketplaceResource);
+        const missingMarketplaceResult = runChecker();
+        expect(missingMarketplaceResult.status).toBe(1);
+        expect(missingMarketplaceResult.stderr).toContain('resources/marketplace.db');
+        fs.writeFileSync(fixtureMarketplaceResource, fixtureMarketplaceContent);
+
+        fs.appendFileSync(fixtureMarketplaceResource, 'tampered');
+        const mismatchedMarketplaceResult = runChecker();
+        expect(mismatchedMarketplaceResult.status).toBe(1);
+        expect(mismatchedMarketplaceResult.stderr).toContain(
+          'resources/marketplace.db does not match the canonical marketplace database',
+        );
+        fs.writeFileSync(fixtureMarketplaceResource, fixtureMarketplaceContent);
+
+        const fixtureMarketplaceSourceContent = fs.readFileSync(fixtureMarketplaceSource);
+        fs.writeFileSync(fixtureMarketplaceSource, 'not a SQLite database');
+        fs.writeFileSync(fixtureMarketplaceResource, 'not a SQLite database');
+        const invalidMarketplaceResult = runChecker();
+        expect(invalidMarketplaceResult.status).toBe(1);
+        expect(invalidMarketplaceResult.stderr).toContain(
+          'resources/marketplace.db failed its SQLite integrity/schema probe',
+        );
+        fs.writeFileSync(fixtureMarketplaceSource, fixtureMarketplaceSourceContent);
+        fs.writeFileSync(fixtureMarketplaceResource, fixtureMarketplaceContent);
 
         const fixtureNpmRuntimeManifest = path.join(
           fixtureResources,
@@ -1088,6 +1141,15 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain("'OPENROUTER_API_KEY'");
     expect(script).toContain("resources\\node.exe");
     expect(script).toContain("resources\\service.js");
+    expect(script).toContain("resources\\marketplace.db");
+    expect(script).toContain("Join-Path $dataDir 'marketplace.db'");
+    expect(script).toContain(
+      '$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100',
+    );
+    expect(script).toContain('marketplaceResourceSha256');
+    expect(script).toContain("$receipt.checks['marketplaceResource']");
+    expect(script).toContain("$receipt.checks['marketplaceApi']");
+    expect(script).toContain('Same-version repair did not restore resources/marketplace.db');
     expect(script).toContain('/v1/health/liveliness');
     expect(script).toContain('/api/auth/session-token');
     expect(script).toContain("$baseUrl/api/chat");
@@ -1148,6 +1210,9 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain('ExpectedSignerThumbprint');
     expect(script).toContain('ExpectedSourceRevision');
     expect(script).toContain('sourceFilesClean');
+    expect(script).toContain("'scripts/build-sidecar.mjs'");
+    expect(script).toContain("'packages/server/src/local/index.ts'");
+    expect(script).toContain("'packages/marketplace/marketplace.db'");
     expect(script).toMatch(
       /\$gitCommand\s*=\s*Get-Command git -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1/,
     );
