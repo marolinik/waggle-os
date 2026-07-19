@@ -34,20 +34,27 @@ interface ChatCompletionBody {
   temperature?: number;
 }
 
+interface AnthropicUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 /** Shape of a parsed Anthropic Messages API streaming (SSE) event. */
 interface AnthropicStreamEvent {
   type: string;
-  message?: { usage?: { input_tokens?: number } };
+  message?: { usage?: AnthropicUsage };
   content_block?: { type?: string; id?: string; name?: string };
   delta?: { type?: string; text?: string; partial_json?: string };
-  usage?: { output_tokens?: number };
+  usage?: AnthropicUsage;
 }
 
 /** Shape of a non-streaming Anthropic Messages API response. */
 interface AnthropicMessageResponse {
   content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
   stop_reason?: string;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: AnthropicUsage;
   model?: string;
 }
 
@@ -97,6 +104,27 @@ function completionEndpoint(baseUrl: string): string {
   if (normalized.endsWith('/chat/completions')) return normalized;
   if (normalized.endsWith('/models')) normalized = normalized.slice(0, -'/models'.length);
   return `${normalized}/chat/completions`;
+}
+
+function translateAnthropicUsage(usage: AnthropicUsage | undefined) {
+  const inputTokens = usage?.input_tokens ?? 0;
+  const cacheCreationTokens = usage?.cache_creation_input_tokens ?? 0;
+  const cacheReadTokens = usage?.cache_read_input_tokens ?? 0;
+  const promptTokens = inputTokens + cacheCreationTokens + cacheReadTokens;
+  const completionTokens = usage?.output_tokens ?? 0;
+  const translated: Record<string, unknown> = {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: promptTokens + completionTokens,
+  };
+  if (usage?.cache_read_input_tokens !== undefined) {
+    translated.prompt_tokens_details = { cached_tokens: cacheReadTokens };
+    translated.cache_read_input_tokens = cacheReadTokens;
+  }
+  if (usage?.cache_creation_input_tokens !== undefined) {
+    translated.cache_creation_input_tokens = cacheCreationTokens;
+  }
+  return translated;
 }
 
 function directProviderBaseUrl(server: FastifyInstance, providerId: string): string {
@@ -424,8 +452,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       const reader = anthropicRes.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let inputTokens = 0;
-      let outputTokens = 0;
+      let usage: AnthropicUsage = {};
       let currentToolId = '';
       let currentToolName = '';
       let toolCallIndex = -1;
@@ -450,7 +477,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
 
               // Translate Anthropic stream events to OpenAI format
               if (event.type === 'message_start') {
-                inputTokens = event.message?.usage?.input_tokens ?? 0;
+                usage = { ...usage, ...event.message?.usage };
               } else if (event.type === 'content_block_start') {
                 if (event.content_block?.type === 'text') {
                   // Text block start — nothing to emit yet
@@ -489,17 +516,13 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
                   })}\n\n`);
                 }
               } else if (event.type === 'message_delta') {
-                outputTokens = event.usage?.output_tokens ?? outputTokens;
+                usage = { ...usage, ...event.usage };
               } else if (event.type === 'message_stop') {
                 // Send usage chunk if requested
                 if (body.stream_options?.include_usage) {
                   raw.write(`data: ${JSON.stringify({
                     choices: [],
-                    usage: {
-                      prompt_tokens: inputTokens,
-                      completion_tokens: outputTokens,
-                      total_tokens: inputTokens + outputTokens,
-                    },
+                    usage: translateAnthropicUsage(usage),
                   })}\n\n`);
                 }
               }
@@ -546,11 +569,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
 
       return reply.send({
         choices: [choice],
-        usage: {
-          prompt_tokens: data.usage?.input_tokens ?? 0,
-          completion_tokens: data.usage?.output_tokens ?? 0,
-          total_tokens: (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0),
-        },
+        usage: translateAnthropicUsage(data.usage),
         model: data.model,
       });
     }
