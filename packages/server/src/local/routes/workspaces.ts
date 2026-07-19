@@ -4,7 +4,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { MindDB, createFileStore, reconcileFtsIndex } from '@waggle/core';
+import { MindDB, WaggleConfig, createFileStore, reconcileFtsIndex } from '@waggle/core';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
 import { validateBody } from '../../validate-body.js';
@@ -69,6 +69,18 @@ function isValidModelId(model: string): boolean {
   if (!model || model.length < 2) return false;
   // Accept any model that follows naming conventions (alphanumeric, hyphens, dots, slashes)
   return /^[a-zA-Z0-9][\w./-]*$/.test(model);
+}
+
+function normalizeTeamServerBaseUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      return null;
+    }
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -364,9 +376,29 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
       }
     }
 
+    let boundTeamServerUrl = teamServerUrl;
+    let teamServerToken: string | undefined;
+    const hasTeamId = typeof teamId === 'string' && teamId.trim().length > 0;
+    const hasTeamServerUrl = typeof teamServerUrl === 'string' && teamServerUrl.trim().length > 0;
+    if ((teamId !== undefined || teamServerUrl !== undefined) && (!hasTeamId || !hasTeamServerUrl)) {
+      return reply.status(400).send({ error: 'Team workspaces require both teamId and teamServerUrl' });
+    }
+    if (teamId && teamServerUrl) {
+      const configuredTeamServer = new WaggleConfig(server.localConfig.dataDir).getTeamServer();
+      const requestedBaseUrl = normalizeTeamServerBaseUrl(teamServerUrl);
+      const configuredBaseUrl = configuredTeamServer?.url
+        ? normalizeTeamServerBaseUrl(configuredTeamServer.url)
+        : null;
+      if (!requestedBaseUrl || !configuredBaseUrl || requestedBaseUrl !== configuredBaseUrl) {
+        return reply.status(400).send({ error: 'Team workspace URL must match the configured Team server' });
+      }
+      boundTeamServerUrl = configuredBaseUrl;
+      teamServerToken = configuredTeamServer?.token;
+    }
+
     const ws = server.workspaceManager.create({
       name, group, icon, model, personaId, directory, tone,
-      teamId, teamServerUrl, teamRole, teamUserId,
+      teamId, teamServerUrl: boundTeamServerUrl, teamRole, teamUserId,
       ...(resolvedTemplateId && { templateId: resolvedTemplateId }),
       ...(storageType && { storageType }),
       ...(storagePath && { storagePath }),
@@ -456,34 +488,29 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // Register workspace on team server (fire-and-forget)
-    if (teamId && teamServerUrl) {
+    if (teamId && boundTeamServerUrl && teamServerToken) {
       try {
-        const { WaggleConfig } = await import('@waggle/core');
-        const waggleConfig = new WaggleConfig(server.localConfig.dataDir);
-        const teamServer = waggleConfig.getTeamServer();
-        if (teamServer?.token) {
-          fetch(`${teamServerUrl}/api/teams/${teamId}/entities`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${teamServer.token}`,
+        fetch(`${boundTeamServerUrl}/api/teams/${teamId}/entities`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${teamServerToken}`,
+          },
+          body: JSON.stringify({
+            entityType: 'workspace',
+            name: ws.id,
+            properties: {
+              displayName: ws.name,
+              group: ws.group,
+              model: ws.model,
+              personaId: ws.personaId,
+              createdBy: teamUserId ?? 'local-user',
             },
-            body: JSON.stringify({
-              entityType: 'workspace',
-              name: ws.id,
-              properties: {
-                displayName: ws.name,
-                group: ws.group,
-                model: ws.model,
-                personaId: ws.personaId,
-                createdBy: teamUserId ?? 'local-user',
-              },
-            }),
-            signal: AbortSignal.timeout(5000),
-          }).catch(err => {
-            log.warn(`[waggle] Team workspace registration failed:`, err.message);
-          });
-        }
+          }),
+          signal: AbortSignal.timeout(5000),
+        }).catch(err => {
+          log.warn(`[waggle] Team workspace registration failed:`, err.message);
+        });
       } catch { /* team registration is best-effort */ }
     }
 

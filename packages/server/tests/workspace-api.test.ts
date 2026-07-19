@@ -18,7 +18,11 @@ describe('Workspace & Session API', () => {
     // Write a minimal config.json so WaggleConfig doesn't error
     fs.writeFileSync(
       path.join(dataDir, 'config.json'),
-      JSON.stringify({ defaultModel: 'test/model', providers: {} }),
+      JSON.stringify({
+        defaultModel: 'test/model',
+        providers: {},
+        teamServer: { url: 'https://team.example.com' },
+      }),
       'utf-8'
     );
 
@@ -961,8 +965,14 @@ describe('Workspace & Session API', () => {
     const createRes = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/workspaces',
-      payload: { name: 'Team WS', group: 'Team', teamId: 'team-test-123' },
+      payload: {
+        name: 'Team WS',
+        group: 'Team',
+        teamId: 'team-test-123',
+        teamServerUrl: 'https://team.example.com',
+      },
     });
+    expect(createRes.statusCode).toBe(201);
     const teamWsId = JSON.parse(createRes.body).id;
 
     // Get context

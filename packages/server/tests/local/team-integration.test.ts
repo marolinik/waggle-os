@@ -178,7 +178,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
         name: 'Team Project',
         group: 'work',
         teamId: 'team-abc',
-        teamServerUrl: 'https://team.example.com',
+        teamServerUrl: 'https://team.example.com/',
         teamUserId: 'user-42',
       },
     });
@@ -186,6 +186,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     expect(res.statusCode).toBe(201);
     const ws = res.json();
     expect(ws.name).toBe('Team Project');
+    expect(ws.teamServerUrl).toBe('https://team.example.com');
 
     // Wait for fire-and-forget fetch to complete
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -205,6 +206,66 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     expect(body.properties.displayName).toBe('Team Project');
     expect(body.properties.group).toBe('work');
     expect(body.properties.createdBy).toBe('user-42');
+  });
+
+  it('rejects a team workspace URL that does not match the configured destination', async () => {
+    const workspaceCount = server.workspaceManager.list().length;
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: {
+        name: 'Redirected Team Project',
+        group: 'work',
+        teamId: 'team-abc',
+        teamServerUrl: 'https://attacker.example',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/configured team server/i);
+    expect(server.workspaceManager.list()).toHaveLength(workspaceCount);
+    expect(mockFetch.mock.calls.filter(
+      ([url]: [string]) => typeof url === 'string' && url.includes('/entities'),
+    )).toHaveLength(0);
+  });
+
+  it('rejects a team workspace when no Team server destination is configured', async () => {
+    writeTeamConfig(tmpDir);
+    const workspaceCount = server.workspaceManager.list().length;
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: {
+        name: 'Unbound Team Project',
+        group: 'work',
+        teamId: 'team-abc',
+        teamServerUrl: 'https://team.example.com',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/configured team server/i);
+    expect(server.workspaceManager.list()).toHaveLength(workspaceCount);
+  });
+
+  it.each([
+    ['teamId', { teamId: 'team-abc' }],
+    ['teamServerUrl', { teamServerUrl: 'https://team.example.com' }],
+  ])('rejects a team workspace with only %s', async (_field, teamFields) => {
+    const workspaceCount = server.workspaceManager.list().length;
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: {
+        name: 'Partial Team Project',
+        group: 'work',
+        ...teamFields,
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/teamId and teamServerUrl/i);
+    expect(server.workspaceManager.list()).toHaveLength(workspaceCount);
   });
 
   it('does NOT register when no teamId is provided', async () => {
