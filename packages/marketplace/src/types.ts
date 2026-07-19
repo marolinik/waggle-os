@@ -186,6 +186,8 @@ export type InstallationType = 'skill' | 'plugin' | 'mcp';
 
 export interface InstallRequest {
   packageId: number;
+  /** Require the freshly loaded package snapshot to keep this install type. */
+  expectedInstallType?: InstallationType;
   /** Override install path (default: auto-detected from package) */
   installPath?: string;
   /** User-provided settings (API keys, etc.) */
@@ -206,6 +208,12 @@ export interface InstallResult {
   errors?: string[];
   /** Security scan result (attached when scan was performed) */
   scanResult?: import('./security.js').ScanResult;
+  /**
+   * Exact validated MCP source template used for installation. Environment
+   * values remain unresolved catalog templates, so this receipt never carries
+   * user secrets and can be safely normalized again at the server boundary.
+   */
+  mcpSourceConfig?: McpServerConfig;
 }
 
 export interface PackInstallResult {

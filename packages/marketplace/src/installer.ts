@@ -88,6 +88,13 @@ export class MarketplaceInstaller {
     this.ensureDirectories();
   }
 
+  static configureMcpServer(
+    source: McpServerConfig,
+    settings?: Record<string, string>,
+  ): McpServerConfig {
+    return configureMarketplaceMcpServer(source, settings);
+  }
+
   // ─── Public API ───────────────────────────────────────────────────
 
   /**
@@ -108,6 +115,18 @@ export class MarketplaceInstaller {
     }
 
     const installType = pkg.waggle_install_type as InstallationType;
+    if (request.expectedInstallType && installType !== request.expectedInstallType) {
+      const error = `Expected ${request.expectedInstallType} package but installer loaded ${installType}`;
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: error,
+        errors: [error],
+      };
+    }
     if (request.installPath !== undefined) {
       return {
         success: false,
@@ -139,7 +158,8 @@ export class MarketplaceInstaller {
     }
 
     // Check if already installed
-    if (!request.force && this.db.isInstalled(pkg.id)) {
+    const wasInstalled = this.db.isInstalled(pkg.id);
+    if (installType !== 'mcp' && !request.force && wasInstalled) {
       return {
         success: true,
         packageId: pkg.id,
@@ -210,12 +230,14 @@ export class MarketplaceInstaller {
       const settingKeys = Object.fromEntries(
         Object.keys(request.settings ?? {}).map((k) => [k, '[redacted]']),
       );
-      this.db.recordInstallation(
-        pkg.id,
-        pkg.version,
-        result.installPath,
-        settingKeys,
-      );
+      if (!(installType === 'mcp' && wasInstalled)) {
+        this.db.recordInstallation(
+          pkg.id,
+          pkg.version,
+          result.installPath,
+          settingKeys,
+        );
+      }
       // Attach scan result to install result
       result.scanResult = scanResult;
     }
@@ -518,6 +540,12 @@ export class MarketplaceInstaller {
         installType: 'mcp',
         installPath: mcpConfigPath(),
         message: `MCP server "${pkg.display_name}" added to ${mcpConfigPath()}`,
+        mcpSourceConfig: {
+          name: mcpConfig.name,
+          command: mcpConfig.command,
+          args: [...mcpConfig.args],
+          ...(mcpConfig.env && { env: { ...mcpConfig.env } }),
+        },
       };
     } catch (err) {
       return {

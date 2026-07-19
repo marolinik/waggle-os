@@ -226,6 +226,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       settings?: Record<string, string>;
       force?: boolean;
       forceInsecure?: boolean;
+      expectedInstallType?: InstallationType;
     };
 
     if (!body.packageId) {
@@ -377,6 +378,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       settings: body.settings,
       force: body.force,
       forceInsecure: body.forceInsecure,
+      expectedInstallType: body.expectedInstallType,
     });
 
     // Update security status in DB after successful install. Prefer the

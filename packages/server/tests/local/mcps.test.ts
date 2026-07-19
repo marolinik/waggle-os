@@ -27,15 +27,29 @@ import { mcpRoutes } from '../../src/local/routes/mcps.js';
 import { loadMcpConfig, saveMcpServerEntry } from '../../src/local/mcp-config.js';
 
 const childProcess = vi.hoisted(() => ({ execFileSync: vi.fn() }));
+const isolatedHome = vi.hoisted(() => {
+  const base = process.env.TEMP ?? process.env.TMPDIR ?? '/tmp';
+  const separator = process.platform === 'win32' ? '\\' : '/';
+  return `${base.replace(/[\\/]$/, '')}${separator}waggle-mcps-home-${process.pid}-${Date.now()}`;
+});
 vi.mock('node:child_process', async importOriginal => ({
   ...await importOriginal<typeof import('node:child_process')>(),
   ...childProcess,
+}));
+vi.mock('node:os', async importOriginal => ({
+  ...await importOriginal<typeof import('node:os')>(),
+  homedir: () => isolatedHome,
+}));
+vi.mock('os', async importOriginal => ({
+  ...await importOriginal<typeof import('os')>(),
+  homedir: () => isolatedHome,
 }));
 
 // Redirect the marketplace installer's module-level MCP_CONFIG_PATH away from
 // the real ~/.waggle BEFORE the installer module loads (it reads the env at
 // import time) — marketplace routes are therefore imported dynamically below.
 const installerTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-mcps-installer-'));
+fs.mkdirSync(isolatedHome, { recursive: true });
 process.env.WAGGLE_DATA_DIR = installerTmp;
 const { marketplaceRoutes } = await import('../../src/local/routes/marketplace.js');
 
@@ -115,6 +129,18 @@ function createFakeMarketplace() {
     (id, name, display_name, description, version, waggle_install_type, waggle_install_path, install_manifest)
     VALUES (3, 'rogue-mcp', 'Rogue MCP', 'A structurally valid but unsafe marketplace launcher', '0.1.0', 'mcp', '.mcp.json', ?)`)
     .run(JSON.stringify({ mcp_config: { name: 'rogue-mcp', command: 'powershell.exe', args: ['-NoProfile'] } }));
+  raw.prepare(`INSERT INTO packages
+    (id, name, display_name, description, version, waggle_install_type, waggle_install_path, install_manifest)
+    VALUES (4, 'slack', 'Slack', 'A curated catalog MCP server with two credentials', '1.0.0', 'mcp', '.mcp.json', ?)`)
+    .run(JSON.stringify({
+      npm_package: '@modelcontextprotocol/server-slack',
+      mcp_config: {
+        name: 'slack',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-slack'],
+        env: { SLACK_BOT_TOKEN: '', SLACK_TEAM_ID: '' },
+      },
+    }));
 
   // Minimal installations tracking so the install↔revoke/uninstall state-sync
   // contract is testable (the real db keeps an installations table).
@@ -193,6 +219,7 @@ describe('MCP Hub routes (Phase 4)', () => {
     // installer tmp dir must not pile up across runs.
     delete process.env.WAGGLE_DATA_DIR;
     fs.rmSync(installerTmp, { recursive: true, force: true });
+    fs.rmSync(isolatedHome, { recursive: true, force: true });
   });
 
   // ── GET /api/mcps ──────────────────────────────────────────────────────
@@ -452,6 +479,99 @@ describe('MCP Hub routes (Phase 4)', () => {
     // 'installed' audit row guaranteed even for a clean scan
     const audit = auditStore.getByCapability('github');
     expect(audit.some((e) => e.action === 'installed' && e.capability_type === 'mcp')).toBe(true);
+  });
+
+  it('maps multi-field marketplace settings only to exact keys in both stores and runtime', async () => {
+    // Exercise the installed-row shortcut too: MCP installs must re-normalize
+    // and return a validated receipt instead of skipping configuration.
+    marketplaceFake.recordInstallation(4);
+    const recordInstallation = vi.spyOn(marketplaceFake, 'recordInstallation');
+
+    const res = await server.inject({
+      method: 'POST', url: '/api/mcps/install',
+      payload: {
+        mcpId: 'slack',
+        settings: {
+          token: 'must-be-ignored',
+          SLACK_BOT_TOKEN: 'xoxb-test',
+          SLACK_TEAM_ID: 'T0123',
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const expectedEnv = { SLACK_BOT_TOKEN: 'xoxb-test', SLACK_TEAM_ID: 'T0123' };
+    expect(loadMcpConfig(installerTmp).mcpServers.slack.env).toEqual(expectedEnv);
+    expect(loadMcpConfig(tmpDir).mcpServers.slack.env).toEqual(expectedEnv);
+    expect(runtime.getServer('slack')?.config.env).toEqual(expectedEnv);
+    expect(recordInstallation).not.toHaveBeenCalled();
+  });
+
+  it('persists and starts only the installer-validated package snapshot', async () => {
+    const curated = marketplaceFake.getPackage(1)!;
+    const rogue = {
+      ...curated,
+      install_manifest: {
+        npm_package: '@modelcontextprotocol/server-github',
+        mcp_config: {
+          name: 'rogue-mcp',
+          command: 'powershell.exe',
+          args: ['-NoProfile'],
+        },
+      },
+    };
+    let calls = 0;
+    const getPackage = vi.spyOn(marketplaceFake, 'getPackage').mockImplementation(() => (
+      calls++ % 2 === 0 ? rogue : curated
+    ));
+
+    const res = await server.inject({
+      method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'github' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ installed: true, mcpId: 'github', server: 'github' });
+    expect(getPackage).toHaveBeenCalledTimes(2);
+    expect(loadMcpConfig(tmpDir).mcpServers.github).toMatchObject({
+      command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'],
+    });
+    expect(loadMcpConfig(tmpDir).mcpServers['rogue-mcp']).toBeUndefined();
+    expect(runtime.getServer('github')).toBeDefined();
+    expect(runtime.getServer('rogue-mcp')).toBeUndefined();
+  });
+
+  it('rejects an installer-loaded type swap before any marketplace or MCP side effect', async () => {
+    const curatedMcp = marketplaceFake.getPackage(1)!;
+    const swappedSkillName = `phase-b1-type-swap-${process.pid}`;
+    const swappedSkill = {
+      ...curatedMcp,
+      name: swappedSkillName,
+      display_name: 'Type-swapped skill',
+      description: 'A harmless inline skill used to prove the type boundary',
+      waggle_install_type: 'skill',
+      waggle_install_path: `${swappedSkillName}.md`,
+      install_manifest: {
+        skill_content: '# Safe helper\n\nSummarize a document.',
+      },
+    };
+    const swappedSkillPath = path.join(isolatedHome, '.waggle', 'skills', `${swappedSkillName}.md`);
+    expect(fs.existsSync(swappedSkillPath)).toBe(false);
+
+    let calls = 0;
+    vi.spyOn(marketplaceFake, 'getPackage').mockImplementation(() => (
+      calls++ % 2 === 0 ? curatedMcp : swappedSkill
+    ));
+
+    const res = await server.inject({
+      method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'github' },
+    });
+
+    expect.soft(res.statusCode).toBe(422);
+    expect.soft(res.json().message).toMatch(/expected.*mcp.*skill/i);
+    expect.soft(fs.existsSync(swappedSkillPath)).toBe(false);
+    expect.soft(marketplaceFake.isInstalled(1)).toBe(false);
+    expect.soft(loadMcpConfig(tmpDir).mcpServers.github).toBeUndefined();
+    expect.soft(runtime.getServer('github')).toBeUndefined();
   });
 
   it('rejects a marketplace-controlled executable before persistence or runtime start', async () => {

@@ -33,6 +33,7 @@ import {
 } from '@waggle/shared';
 import type { McpRuntime, McpServerState } from '@waggle/agent';
 import { scanForInjection, type RecordAuditInput } from '@waggle/core';
+import { MarketplaceInstaller, type McpServerConfig } from '@waggle/marketplace';
 import {
   loadMcpConfig,
   saveMcpServerEntry,
@@ -238,24 +239,6 @@ export async function mcpRoutes(fastify: FastifyInstance) {
       return reply.code(404).send({ error: `No marketplace MCP package named "${mcpId}"` });
     }
 
-    // Resolve + validate the manifest BEFORE delegating: a package whose
-    // mcp_config fails the same validation the C4 boot loader applies would
-    // install "successfully" now and then be skipped at every reboot. Reject
-    // it up front (422) instead of half-installing.
-    const pkg = db.getPackage(row.id);
-    const manifest = pkg?.install_manifest as { mcp_config?: { name: string; command: string; args: string[]; env?: Record<string, string> } } | null;
-    const mcpConfig = manifest?.mcp_config;
-    if (!mcpConfig) {
-      return reply.code(422).send({ installed: false, error: 'Package manifest has no mcp_config' });
-    }
-    const manifestInvalid = validateMcpEntry(mcpConfig.name, { command: mcpConfig.command, args: mcpConfig.args, env: mcpConfig.env });
-    if (manifestInvalid) {
-      return reply.code(422).send({
-        installed: false,
-        error: `Package mcp_config would not survive a restart (boot-loader validation): ${manifestInvalid}`,
-      });
-    }
-
     const res = await fastify.inject({
       method: 'POST',
       url: '/api/marketplace/install',
@@ -265,12 +248,14 @@ export async function mcpRoutes(fastify: FastifyInstance) {
         settings: body.settings,
         force: body.force,
         forceInsecure: body.forceInsecure,
+        expectedInstallType: 'mcp',
       },
     });
     const result = res.json() as {
       success?: boolean;
       blocked?: boolean;
       scanResult?: { blocked?: boolean; overall_severity?: string };
+      mcpSourceConfig?: McpServerConfig;
     };
     if (res.statusCode >= 400 || result.success === false) {
       // A SecurityGate block (route-level 403 OR installer-level 422 with
@@ -285,28 +270,47 @@ export async function mcpRoutes(fastify: FastifyInstance) {
       });
     }
 
-    // The installer wrote the .mcp.json entry; apply the same env templating
-    // so the runtime registration matches what was persisted.
-    const env = mcpConfig.env ? { ...mcpConfig.env } : undefined;
-    if (body.settings && env) {
-      for (const [key, value] of Object.entries(body.settings)) {
-        for (const envKey of Object.keys(env)) {
-          if (env[envKey] === `\${${key}}` || env[envKey] === '') env[envKey] = value;
-        }
-      }
+    // Only the installer's exact validated source snapshot may reach an
+    // execution sink. The receipt is secret-free; settings are normalized by
+    // the same pure helper used for the installer's own .mcp.json.
+    if (!result.mcpSourceConfig) {
+      return reply.code(500).send({
+        installed: false,
+        error: 'Marketplace installer returned no validated MCP source receipt',
+      });
     }
-    const entry: PersistedMcpEntry = { command: mcpConfig.command, args: mcpConfig.args, ...(env ? { env } : {}) };
+    let configured: McpServerConfig;
+    try {
+      configured = MarketplaceInstaller.configureMcpServer(result.mcpSourceConfig, body.settings);
+    } catch (err) {
+      return reply.code(422).send({
+        installed: false,
+        error: `Marketplace MCP receipt validation failed: ${(err as Error).message}`,
+      });
+    }
+    const entry: PersistedMcpEntry = {
+      command: configured.command,
+      args: configured.args,
+      ...(configured.env ? { env: configured.env } : {}),
+    };
+    const entryInvalid = validateMcpEntry(configured.name, entry);
+    if (entryInvalid) {
+      return reply.code(422).send({
+        installed: false,
+        error: `Configured marketplace MCP would not survive a restart (boot-loader validation): ${entryInvalid}`,
+      });
+    }
     // Persist at the server's dataDir too — the installer writes to
     // WAGGLE_DATA_DIR/~/.waggle, which may differ from a custom dataDir.
-    saveMcpServerEntry(dataDir(), mcpConfig.name, entry);
+    saveMcpServerEntry(dataDir(), configured.name, entry);
 
     const runtime = getRuntime();
     let status: McpServerState | 'unregistered' = 'unregistered';
     let startError: string | undefined;
     if (runtime) {
-      if (runtime.getServer(mcpConfig.name)) await runtime.removeServer(mcpConfig.name);
-      runtime.addServer({ name: mcpConfig.name, command: entry.command, args: entry.args, env: entry.env });
-      const instance = runtime.getServer(mcpConfig.name)!;
+      if (runtime.getServer(configured.name)) await runtime.removeServer(configured.name);
+      runtime.addServer({ name: configured.name, command: entry.command, args: entry.args, env: entry.env });
+      const instance = runtime.getServer(configured.name)!;
       try {
         await withTimeout(instance.start(), TEST_TIMEOUT_MS, 'MCP start');
       } catch (err) {
@@ -327,7 +331,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     const scanSeverity = result.scanResult?.overall_severity;
     const overrode = result.scanResult?.blocked === true;
     recordMcpAudit({
-      capabilityName: mcpConfig.name,
+      capabilityName: configured.name,
       source: 'marketplace',
       riskLevel: scanSeverity === 'CRITICAL' ? 'critical'
         : scanSeverity === 'HIGH' ? 'high'
@@ -344,7 +348,7 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     return {
       installed: true,
       mcpId,
-      server: mcpConfig.name,
+      server: configured.name,
       status,
       ...(startError ? { startError } : {}),
     };
