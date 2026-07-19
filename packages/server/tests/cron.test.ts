@@ -4,13 +4,16 @@ import { buildServer } from '../src/index.js';
 import { users, teams, teamMembers, cronSchedules, agentJobs } from '../src/db/schema.js';
 import { sql, eq } from 'drizzle-orm';
 import { CronRunner } from '../src/scheduler/cron-runner.js';
+import { CronService } from '../src/services/cron-service.js';
 
 describe('Cron Scheduler (Task 3.16)', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
   let ownerId: string;
   let memberId: string;
+  let attackerId: string;
   let teamSlug: string;
   let teamId: string;
+  let attackerTeamSlug: string;
 
   beforeAll(async () => {
     server = await buildServer();
@@ -40,6 +43,13 @@ describe('Cron Scheduler (Task 3.16)', () => {
     }).returning();
     memberId = member.id;
 
+    const [attacker] = await server.db.insert(users).values({
+      clerkId: 'crontest_attacker',
+      displayName: 'Cron Attacker',
+      email: 'crontest_attacker@test.com',
+    }).returning();
+    attackerId = attacker.id;
+
     // Create team
     const [team] = await server.db.insert(teams).values({
       name: 'Cron Test Team',
@@ -49,9 +59,17 @@ describe('Cron Scheduler (Task 3.16)', () => {
     teamId = team.id;
     teamSlug = team.slug;
 
+    const [attackerTeam] = await server.db.insert(teams).values({
+      name: 'Cron Attacker Team',
+      slug: 'crontest-attacker',
+      ownerId: attackerId,
+    }).returning();
+    attackerTeamSlug = attackerTeam.slug;
+
     await server.db.insert(teamMembers).values([
       { teamId, userId: ownerId, role: 'owner' },
       { teamId, userId: memberId, role: 'member' },
+      { teamId: attackerTeam.id, userId: attackerId, role: 'owner' },
     ]);
 
     // Override auth handler for testing
@@ -126,6 +144,43 @@ describe('Cron Scheduler (Task 3.16)', () => {
     expect(body.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('returns the same not-found response for missing and foreign-team schedule ids without mutation', async () => {
+    const createRes = await server.inject({
+      method: 'POST',
+      url: `/api/teams/${teamSlug}/cron`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: {
+        name: 'Victim Schedule',
+        cronExpr: '15 * * * *',
+        jobType: 'task',
+      },
+    });
+    const schedule = JSON.parse(createRes.body);
+
+    const foreignRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/teams/${attackerTeamSlug}/cron/${schedule.id}`,
+      headers: { 'x-test-user-id': attackerId },
+      payload: { name: 'Hijacked Schedule', enabled: false },
+    });
+    const missingRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/teams/${attackerTeamSlug}/cron/00000000-0000-4000-8000-000000000001`,
+      headers: { 'x-test-user-id': attackerId },
+      payload: { enabled: false },
+    });
+
+    expect(foreignRes.statusCode).toBe(404);
+    expect(foreignRes.json()).toEqual({ error: 'Schedule not found' });
+    expect(missingRes.statusCode).toBe(404);
+    expect(missingRes.json()).toEqual(foreignRes.json());
+
+    const [persisted] = await server.db.select().from(cronSchedules)
+      .where(eq(cronSchedules.id, schedule.id));
+    expect(persisted.name).toBe('Victim Schedule');
+    expect(persisted.enabled).toBe(true);
+  });
+
   it('disables a schedule via PATCH', async () => {
     // Create a schedule to disable
     const createRes = await server.inject({
@@ -151,6 +206,39 @@ describe('Cron Scheduler (Task 3.16)', () => {
     expect(patchRes.statusCode).toBe(200);
     const updated = JSON.parse(patchRes.body);
     expect(updated.enabled).toBe(false);
+  });
+
+  it.each(['cron', 'shell'])('rejects unsupported scheduled job type %s before persistence', async (jobType) => {
+    const name = `Unsupported ${jobType}`;
+    const response = await server.inject({
+      method: 'POST',
+      url: `/api/teams/${teamSlug}/cron`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: {
+        name,
+        cronExpr: '0 4 * * *',
+        jobType,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const schedules = await server.db.select().from(cronSchedules)
+      .where(eq(cronSchedules.teamId, teamId));
+    expect(schedules.some(schedule => schedule.name === name)).toBe(false);
+  });
+
+  it('CronService refuses unsupported job types outside route validation', async () => {
+    const cronService = new CronService(server.db);
+
+    await expect(cronService.create(teamId, ownerId, {
+      name: 'Direct Unsafe Schedule',
+      cronExpr: '0 5 * * *',
+      jobType: 'shell',
+    })).rejects.toThrow('Unsupported scheduled job type: shell');
+
+    const schedules = await server.db.select().from(cronSchedules)
+      .where(eq(cronSchedules.teamId, teamId));
+    expect(schedules.some(schedule => schedule.name === 'Direct Unsafe Schedule')).toBe(false);
   });
 
   it('CronRunner.tick() picks up due schedule and queues job', async () => {
@@ -212,6 +300,60 @@ describe('Cron Scheduler (Task 3.16)', () => {
     expect(new Date(updated.lastRunAt!).getTime()).toBeGreaterThan(pastDate.getTime());
     expect(updated.nextRunAt).toBeTruthy();
     expect(new Date(updated.nextRunAt!).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('skips an unsafe legacy schedule while queueing an allowed due schedule', async () => {
+    const pastDate = new Date(Date.now() - 60_000);
+    const [unsafeSchedule, validSchedule] = await server.db.insert(cronSchedules).values([
+      {
+        teamId,
+        createdBy: ownerId,
+        name: 'Legacy Recursive Cron',
+        cronExpr: '* * * * *',
+        jobType: 'cron',
+        jobConfig: { marker: 'blocked-recursive-cron' },
+        enabled: true,
+        nextRunAt: pastDate,
+      },
+      {
+        teamId,
+        createdBy: ownerId,
+        name: 'Allowed Due Chat',
+        cronExpr: '* * * * *',
+        jobType: 'chat',
+        jobConfig: { marker: 'allowed-due-chat', message: 'Scheduled read-only check' },
+        enabled: true,
+        nextRunAt: pastDate,
+      },
+    ]).returning();
+
+    const runner = new CronRunner(server.db, server.jobService);
+    let unsafeJob: typeof agentJobs.$inferSelect | undefined;
+    let validJob: typeof agentJobs.$inferSelect | undefined;
+
+    try {
+      const count = await runner.tick();
+      const jobs = await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      unsafeJob = jobs.find(job => (job.input as { marker?: string }).marker === 'blocked-recursive-cron');
+      validJob = jobs.find(job => (job.input as { marker?: string }).marker === 'allowed-due-chat');
+
+      expect(count).toBe(1);
+      expect(unsafeJob).toBeUndefined();
+      expect(validJob?.jobType).toBe('chat');
+
+      const [persistedUnsafe] = await server.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, unsafeSchedule.id));
+      const [persistedValid] = await server.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, validSchedule.id));
+      expect(persistedUnsafe.lastRunAt).toBeNull();
+      expect(persistedUnsafe.nextRunAt?.getTime()).toBe(pastDate.getTime());
+      expect(persistedValid.lastRunAt).toBeTruthy();
+      expect(persistedValid.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+    } finally {
+      if (unsafeJob) await server.jobService.cancelJob(unsafeJob.id);
+      if (validJob) await server.jobService.cancelJob(validJob.id);
+    }
   });
 
   it('rejects invalid cron expression', async () => {

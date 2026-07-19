@@ -4,6 +4,7 @@ const { parseExpression } = cronParser;
 import { cronSchedules } from '../db/schema.js';
 import type { Db } from '../db/connection.js';
 import type { JobService } from '../services/job-service.js';
+import { scheduledJobTypeSchema } from '@waggle/shared';
 
 export class CronRunner {
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -31,12 +32,16 @@ export class CronRunner {
         lte(cronSchedules.nextRunAt, now),
       ));
 
+    let queuedCount = 0;
     for (const schedule of due) {
+      const jobType = scheduledJobTypeSchema.safeParse(schedule.jobType);
+      if (!jobType.success) continue;
+
       // Queue the job via JobService
       await this.jobService.createJob(
         schedule.teamId,
         schedule.createdBy,
-        schedule.jobType,
+        jobType.data,
         schedule.jobConfig as Record<string, unknown>,
       );
 
@@ -46,8 +51,9 @@ export class CronRunner {
       await this.db.update(cronSchedules)
         .set({ lastRunAt: now, nextRunAt })
         .where(eq(cronSchedules.id, schedule.id));
+      queuedCount++;
     }
 
-    return due.length;
+    return queuedCount;
   }
 }
