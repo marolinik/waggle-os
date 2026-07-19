@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { resolveUsableModel } from '../model-availability.js';
+import { assertSafeSegment } from './validate.js';
 
 /**
  * Agent routes — status, cost tracking, model management.
@@ -80,6 +81,8 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
   }>('/api/history', async (request) => {
     const sessionId = request.query.session ?? request.query.workspace ?? 'default';
     const workspaceId = request.query.workspace ?? 'default';
+    assertSafeSegment(sessionId, 'session');
+    assertSafeSegment(workspaceId, 'workspace');
 
     // Try in-memory first
     let history = server.agentState.sessionHistories.get(sessionId);

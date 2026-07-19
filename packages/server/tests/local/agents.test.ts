@@ -143,6 +143,63 @@ describe('Agent entity routes (Phase 3)', () => {
     return res.json().agent;
   }
 
+  it('rejects workspace traversal before /api/history can read an escaped session file', async () => {
+    const escapedDir = path.join(dataDir, 'outside', 'sessions');
+    fs.mkdirSync(escapedDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(escapedDir, 'leak.jsonl'),
+      `${JSON.stringify({ role: 'assistant', content: 'outside-secret' })}\n`,
+    );
+
+    const res = await server.inject({
+      method: 'GET',
+      url: '/api/history?workspace=..%2Foutside&session=leak',
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).not.toContain('outside-secret');
+  });
+
+  it.each([
+    ['workspace', '..\\outside'],
+    ['workspace', 'C:\\outside'],
+    ['workspace', '\\\\server\\share'],
+    ['workspace', '/absolute'],
+    ['session', '../../../outside/leak'],
+    ['session', '..\\..\\..\\outside\\leak'],
+  ] as const)('rejects unsafe %s history segment %s', async (field, value) => {
+    const query = new URLSearchParams({ workspace: 'ws-safe', session: 'session-safe' });
+    query.set(field, value);
+
+    const res = await server.inject({
+      method: 'GET',
+      url: `/api/history?${query.toString()}`,
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('loads a valid on-disk history after segment validation', async () => {
+    const sessionDir = path.join(dataDir, 'workspaces', 'ws-safe', 'sessions');
+    fs.mkdirSync(sessionDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sessionDir, 'session-safe.jsonl'),
+      `${JSON.stringify({ role: 'assistant', content: 'inside-history' })}\n`,
+    );
+
+    const res = await server.inject({
+      method: 'GET',
+      url: '/api/history?workspace=ws-safe&session=session-safe',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      sessionId: 'session-safe',
+      count: 1,
+      messages: [{ role: 'assistant', content: 'inside-history' }],
+    });
+  });
+
   /** One-shot run helper — also pushes the spawn's session into the fake
    *  session manager so liveStatus/pause have something to act on. */
   async function runAgent(agent: { id: string }, payload: Record<string, unknown> = {}) {
