@@ -1,11 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve, win32 } from 'node:path';
 import {
   allHookBasenames,
   backupPathFor,
   hookCommandFor,
+  resolveHermesHome,
   resolvePaths,
 } from '../src/paths.js';
+
+describe('resolveHermesHome', () => {
+  it('prefers HERMES_HOME over the Windows default', () => {
+    expect(resolveHermesHome({
+      platform: 'win32',
+      home: 'C:\\Users\\tester',
+      env: {
+        HERMES_HOME: 'D:\\Hermes Data',
+        LOCALAPPDATA: 'C:\\Users\\tester\\AppData\\Local',
+      },
+    })).toBe(win32.normalize('D:\\Hermes Data'));
+  });
+
+  it('uses LOCALAPPDATA on Windows when HERMES_HOME is absent', () => {
+    expect(resolveHermesHome({
+      platform: 'win32',
+      home: 'C:\\Users\\tester',
+      env: { LOCALAPPDATA: 'C:\\Redirected\\Local' },
+    })).toBe(win32.join('C:\\Redirected\\Local', 'hermes'));
+  });
+
+  it('falls back to the conventional Windows local-app-data directory', () => {
+    expect(resolveHermesHome({
+      platform: 'win32',
+      home: 'C:\\Users\\tester',
+      env: {},
+    })).toBe(win32.join('C:\\Users\\tester', 'AppData', 'Local', 'hermes'));
+  });
+
+  it('uses ~/.hermes on non-Windows platforms', () => {
+    expect(resolveHermesHome({
+      platform: 'linux',
+      home: '/home/tester',
+      env: {},
+    })).toBe(posix.join('/home/tester', '.hermes'));
+  });
+
+  it('ignores blank environment overrides', () => {
+    expect(resolveHermesHome({
+      platform: 'win32',
+      home: 'C:\\Users\\tester',
+      env: { HERMES_HOME: '  ', LOCALAPPDATA: '  ' },
+    })).toBe(win32.join('C:\\Users\\tester', 'AppData', 'Local', 'hermes'));
+  });
+});
 
 describe('resolvePaths (hermes)', () => {
   it('places config.yaml + pointer under <home>/.hermes/', () => {
@@ -31,6 +77,17 @@ describe('resolvePaths (hermes)', () => {
   it('falls back to cwd/dist/hooks when neither moduleUrl nor hooksDir is given', () => {
     const paths = resolvePaths({ home: resolve('/h') });
     expect(paths.hooksDir).toBe(resolve(process.cwd(), 'dist', 'hooks'));
+  });
+
+  it('uses the runtime Hermes home when no explicit test home is supplied', () => {
+    const paths = resolvePaths({
+      platform: 'win32',
+      env: { LOCALAPPDATA: 'C:\\Redirected\\Local' },
+      hooksDir: resolve('/some/dist/hooks'),
+    });
+    expect(paths.hermesDir).toBe(win32.join('C:\\Redirected\\Local', 'hermes'));
+    expect(paths.configPath).toBe(win32.join(paths.hermesDir, 'config.yaml'));
+    expect(paths.pointerPath).toBe(win32.join(paths.hermesDir, 'hive-mind-install.json'));
   });
 });
 
