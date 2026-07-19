@@ -18,14 +18,15 @@
  * them as literals, so they fall through to `dns.lookup`, whose getaddrinfo
  * backend returns the canonical dotted form we then classify.
  *
- * Dependency-free (node builtins only). A structurally identical guard lives at
- * `packages/hive-mind-core/src/harvest/url-egress-guard.ts` for the OSS-mirrored
- * harvest adapter (which must not import from @waggle/agent). Keep the two in
- * sync — they share this spec.
+ * Socket pinning uses an Undici dispatcher whose connector consumes the same
+ * address records this guard validates. The OSS-mirrored harvest adapter keeps
+ * a separate implementation because it cannot import from @waggle/agent. Keep
+ * the two in sync — they share this spec.
  */
 
 import { lookup as dnsLookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
+import { Agent } from 'undici';
 
 export type AddressClass =
   | 'public'
@@ -201,6 +202,125 @@ async function defaultLookup(hostname: string): Promise<ResolvedAddress[]> {
   return results.map((r) => ({ address: r.address, family: r.family }));
 }
 
+async function resolveHostname(
+  hostname: string,
+  rawUrl: string,
+  lookupFn: LookupFn,
+): Promise<ResolvedAddress[]> {
+  try {
+    const addresses = await lookupFn(hostname);
+    if (!addresses || addresses.length === 0) {
+      throw new EgressBlockedError(
+        `DNS resolution returned no addresses for "${hostname}"`,
+        rawUrl,
+      );
+    }
+    return addresses;
+  } catch (err) {
+    if (err instanceof EgressBlockedError) throw err;
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new EgressBlockedError(
+      `DNS resolution failed for "${hostname}": ${detail}`,
+      rawUrl,
+    );
+  }
+}
+
+function validateResolvedAddresses(
+  addresses: ResolvedAddress[],
+  hostname: string,
+  rawUrl: string,
+  allowLocal: boolean,
+): void {
+  for (const { address } of addresses) {
+    const cls = classifyAddress(address);
+    if (!isAllowed(cls, allowLocal)) {
+      throw new EgressBlockedError(
+        `Blocked egress to ${cls} address ${address} (host "${hostname}")`,
+        rawUrl,
+        cls,
+      );
+    }
+  }
+}
+
+/**
+ * Resolve, validate, and return the exact same addresses to the socket layer.
+ * This removes the DNS validation/connect race: net/tls never performs a third
+ * lookup after the records have passed the egress policy.
+ */
+function createGuardedLookup(
+  allowLocal: boolean,
+  lookupFn: LookupFn,
+): LookupFunction {
+  return (hostname, options, callback) => {
+    void resolveHostname(hostname, hostname, lookupFn)
+      .then((addresses) => {
+        validateResolvedAddresses(addresses, hostname, hostname, allowLocal);
+
+        const requestedFamily = options.family === 4 || options.family === 'IPv4'
+          ? 4
+          : options.family === 6 || options.family === 'IPv6'
+            ? 6
+            : 0;
+        const candidates = requestedFamily === 0
+          ? addresses
+          : addresses.filter(({ family }) => family === requestedFamily);
+        if (candidates.length === 0) {
+          throw new EgressBlockedError(
+            `DNS resolution returned no IPv${requestedFamily} addresses for "${hostname}"`,
+            hostname,
+          );
+        }
+
+        if (options.all) {
+          callback(null, candidates);
+        } else {
+          const selected = candidates[0];
+          callback(null, selected.address, selected.family);
+        }
+      })
+      .catch((err: unknown) => {
+        callback(err as NodeJS.ErrnoException, '');
+      });
+  };
+}
+
+function createGuardedAgent(allowLocal: boolean, lookupFn: LookupFn): Agent {
+  return new Agent({
+    autoSelectFamily: true,
+    connect: { lookup: createGuardedLookup(allowLocal, lookupFn) },
+  });
+}
+
+const defaultGuardedAgents = new Map<boolean, Agent>();
+
+function getDefaultGuardedAgent(allowLocal: boolean): Agent {
+  const existing = defaultGuardedAgents.get(allowLocal);
+  if (existing) return existing;
+  const agent = createGuardedAgent(allowLocal, defaultLookup);
+  defaultGuardedAgents.set(allowLocal, agent);
+  return agent;
+}
+
+function findEgressBlockedError(
+  error: unknown,
+  seen = new Set<unknown>(),
+): EgressBlockedError | null {
+  if (error instanceof EgressBlockedError) return error;
+  if (typeof error !== 'object' || error === null || seen.has(error)) return null;
+  seen.add(error);
+
+  if (error instanceof AggregateError) {
+    for (const nested of error.errors) {
+      const blocked = findEgressBlockedError(nested, seen);
+      if (blocked) return blocked;
+    }
+  }
+
+  return findEgressBlockedError((error as { cause?: unknown }).cause, seen);
+}
+
 /**
  * Validate that `rawUrl` is an http(s) URL whose host resolves only to
  * fetchable public addresses. Throws {@link EgressBlockedError} otherwise.
@@ -238,34 +358,11 @@ export async function assertUrlAllowed(
     addresses = [{ address: hostname, family: literalFamily }];
   } else {
     const lookupFn = options.lookup ?? defaultLookup;
-    try {
-      addresses = await lookupFn(hostname);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      throw new EgressBlockedError(
-        `DNS resolution failed for "${hostname}": ${detail}`,
-        rawUrl,
-      );
-    }
-    if (!addresses || addresses.length === 0) {
-      throw new EgressBlockedError(
-        `DNS resolution returned no addresses for "${hostname}"`,
-        rawUrl,
-      );
-    }
+    addresses = await resolveHostname(hostname, rawUrl, lookupFn);
   }
 
   const allowLocal = options.allowLocal ?? false;
-  for (const { address } of addresses) {
-    const cls = classifyAddress(address);
-    if (!isAllowed(cls, allowLocal)) {
-      throw new EgressBlockedError(
-        `Blocked egress to ${cls} address ${address} (host "${hostname}")`,
-        rawUrl,
-        cls,
-      );
-    }
-  }
+  validateResolvedAddresses(addresses, hostname, rawUrl, allowLocal);
 
   return parsed;
 }
@@ -273,14 +370,78 @@ export async function assertUrlAllowed(
 export interface SafeFetchOptions extends EgressGuardOptions {
   /** Maximum redirect hops to follow (default 5). */
   maxRedirects?: number;
-  /** Injectable fetch (tests). Defaults to globalThis.fetch. */
-  fetchImpl?: typeof globalThis.fetch;
+}
+
+type FetchWithDispatcher = (
+  input: string | URL | Request,
+  init: RequestInit & { dispatcher: Agent },
+) => Promise<Response>;
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const CROSS_ORIGIN_SECRET_HEADERS = [
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'cookie2',
+  'x-api-key',
+  'api-key',
+] as const;
+const REQUEST_BODY_HEADERS = [
+  'content-encoding',
+  'content-language',
+  'content-length',
+  'content-location',
+  'content-type',
+] as const;
+
+function isNonReplayableBody(body: BodyInit): boolean {
+  const candidate = body as unknown as {
+    getReader?: unknown;
+    pipe?: unknown;
+    [Symbol.asyncIterator]?: unknown;
+  };
+  return typeof candidate.getReader === 'function'
+    || typeof candidate.pipe === 'function'
+    || typeof candidate[Symbol.asyncIterator] === 'function';
+}
+
+/** Apply Fetch's method/body policy and prevent credential forwarding. */
+function redirectRequestInit(
+  init: RequestInit,
+  status: number,
+  fromUrl: URL,
+  toUrl: URL,
+): RequestInit {
+  const next = { ...init };
+  const method = (next.method ?? 'GET').toUpperCase();
+  const rewriteToGet = ((status === 301 || status === 302) && method === 'POST')
+    || (status === 303 && method !== 'GET' && method !== 'HEAD');
+  const headersToDelete = new Set<string>(['host']);
+
+  if (rewriteToGet) {
+    next.method = 'GET';
+    delete next.body;
+    for (const name of REQUEST_BODY_HEADERS) headersToDelete.add(name);
+  } else if (next.body !== undefined && next.body !== null && isNonReplayableBody(next.body)) {
+    throw new TypeError('Cannot replay a streamed request body across a redirect');
+  }
+
+  if (fromUrl.origin !== toUrl.origin) {
+    for (const name of CROSS_ORIGIN_SECRET_HEADERS) headersToDelete.add(name);
+  }
+
+  const headers = new Headers(next.headers);
+  for (const name of headersToDelete) headers.delete(name);
+  next.headers = headers;
+  return next;
 }
 
 /**
  * SSRF-safe fetch. Validates the target before the request and re-validates
  * every redirect hop (`redirect: 'manual'`) so a public URL cannot redirect
- * into a private/link-local address. Caller-supplied `redirect` in `init` is
+ * into a private/link-local address. Native fetch is mandatory; proxy transports
+ * need an equivalent pinned connector rather than a global dispatcher override.
+ * Caller-supplied `redirect` in `init` is
  * ignored — this helper owns redirect handling.
  */
 export async function safeFetch(
@@ -288,16 +449,46 @@ export async function safeFetch(
   init: RequestInit = {},
   options: SafeFetchOptions = {},
 ): Promise<Response> {
+  if ('fetchImpl' in options) {
+    throw new TypeError('safeFetch fetchImpl injection is not supported; socket pinning requires native fetch');
+  }
   const maxRedirects = options.maxRedirects ?? 5;
-  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
-
   let currentUrl = rawUrl;
+  let currentInit = { ...init };
   for (let hop = 0; hop <= maxRedirects; hop++) {
     await assertUrlAllowed(currentUrl, options);
+    const allowLocal = options.allowLocal ?? false;
+    const temporaryAgent = options.lookup !== undefined;
+    const dispatcher = temporaryAgent
+      ? createGuardedAgent(allowLocal, options.lookup!)
+      : getDefaultGuardedAgent(allowLocal);
 
-    const response = await fetchImpl(currentUrl, { ...init, redirect: 'manual' });
+    let response: Response;
+    try {
+      response = await (globalThis.fetch as unknown as FetchWithDispatcher)(currentUrl, {
+        ...currentInit,
+        redirect: 'manual',
+        dispatcher,
+      });
+    } catch (err) {
+      if (temporaryAgent) {
+        await dispatcher.close().catch(() => undefined);
+      }
+      const blocked = findEgressBlockedError(err);
+      if (blocked) {
+        throw new EgressBlockedError(blocked.message, currentUrl, blocked.addressClass);
+      }
+      throw err;
+    }
 
-    const isRedirect = response.status >= 300 && response.status < 400;
+    // A custom resolver gets an isolated Agent so tests and one-off policies
+    // cannot contaminate pooled connections. close() is graceful: it waits for
+    // the returned response body without blocking or aborting the caller.
+    if (temporaryAgent) {
+      void dispatcher.close().catch(() => undefined);
+    }
+
+    const isRedirect = REDIRECT_STATUSES.has(response.status);
     const location = isRedirect ? response.headers.get('location') : null;
     if (!location) {
       return response;
@@ -310,16 +501,22 @@ export async function safeFetch(
       /* best-effort; ignore */
     }
 
-    let nextUrl: string;
+    let nextUrl: URL;
     try {
-      nextUrl = new URL(location, currentUrl).toString();
+      nextUrl = new URL(location, currentUrl);
     } catch {
       throw new EgressBlockedError(
         `Invalid redirect target "${location}"`,
         currentUrl,
       );
     }
-    currentUrl = nextUrl;
+    currentInit = redirectRequestInit(
+      currentInit,
+      response.status,
+      new URL(currentUrl),
+      nextUrl,
+    );
+    currentUrl = nextUrl.toString();
   }
 
   throw new EgressBlockedError(
