@@ -108,6 +108,8 @@ export interface ToolDetectionDeps {
   platform?: NodeJS.Platform;
   /** $HOME override (defaults to os.homedir()). */
   home?: string;
+  /** Environment override for platform-specific config roots. */
+  env?: NodeJS.ProcessEnv;
   /** Working directory override (defaults to process.cwd()). */
   cwd?: string;
   /**
@@ -272,6 +274,7 @@ export function selectPathLookupCandidate(
 interface ResolvedDeps {
   platform: NodeJS.Platform;
   home: string;
+  env: NodeJS.ProcessEnv;
   cwd: string;
   exists: (p: string) => Promise<boolean>;
   execVersion: (binary: string, args: string[]) => Promise<string | null>;
@@ -286,6 +289,7 @@ function resolveDeps(opts: ToolDetectionDeps): ResolvedDeps {
   return {
     platform: opts.platform ?? osPlatform(),
     home: opts.home ?? homedir(),
+    env: opts.env ?? process.env,
     cwd: opts.cwd ?? process.cwd(),
     exists: opts.exists ?? defaultExists,
     execVersion: opts.execVersion ?? defaultExecVersion,
@@ -308,18 +312,44 @@ function resolveDeps(opts: ToolDetectionDeps): ResolvedDeps {
 
 // ── Hook status (shared across all tools) ───────────────────────────
 
-// Hook-pointer paths + display names come from each tool's ToolManifest
-// (the registry — #5). probeHooks takes the resolved relative pointer directly,
-// so third-party adapters and the Claude Desktop MCP bridge need no per-tool map.
+// Hook-pointer paths + roots come from each tool's ToolManifest (the registry —
+// #5), so third-party adapters and the Claude Desktop MCP bridge need no map.
 
 interface HookProbe {
   hooksInstalled: boolean;
   hookPointerPath: string | null;
 }
 
-async function probeHooks(rel: string, deps: ResolvedDeps): Promise<HookProbe> {
+function nonBlankEnv(deps: ResolvedDeps, name: string): string | null {
+  const value = deps.env[name]?.trim();
+  return value ? value : null;
+}
+
+function localAppDataRoot(deps: ResolvedDeps): string {
+  return nonBlankEnv(deps, 'LOCALAPPDATA')
+    ?? joinForPlatform(deps.platform, deps.home, 'AppData', 'Local');
+}
+
+function hermesHome(deps: ResolvedDeps): string {
+  const configured = nonBlankEnv(deps, 'HERMES_HOME');
+  if (configured) {
+    return deps.platform === 'win32'
+      ? pathWin32.normalize(configured)
+      : pathPosix.normalize(configured);
+  }
+  return deps.platform === 'win32'
+    ? joinForPlatform(deps.platform, localAppDataRoot(deps), 'hermes')
+    : joinForPlatform(deps.platform, deps.home, '.hermes');
+}
+
+async function probeHooks(
+  rel: string,
+  deps: ResolvedDeps,
+  hookRoot: ToolManifest['hookRoot'] = 'user-home',
+): Promise<HookProbe> {
   if (!rel) return { hooksInstalled: false, hookPointerPath: null };
-  const pointerPath = joinForPlatform(deps.platform, deps.home, rel);
+  const root = hookRoot === 'hermes-home' ? hermesHome(deps) : deps.home;
+  const pointerPath = joinForPlatform(deps.platform, root, rel);
   if (!(await deps.exists(pointerPath))) {
     return { hooksInstalled: false, hookPointerPath: null };
   }
@@ -369,6 +399,7 @@ async function detectByPath(
   deps: ResolvedDeps,
   hookPointer: string,
   displayName: string,
+  hookRoot?: ToolManifest['hookRoot'],
 ): Promise<DetectedTool> {
   const base: DetectedTool = {
     id,
@@ -380,12 +411,12 @@ async function detectByPath(
     hookPointerPath: null,
   };
   const resolved = await deps.pathFromEnv(binaryName);
-  if (!resolved) return { ...base, ...(await probeHooks(hookPointer, deps)) };
+  if (!resolved) return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot)) };
   if (!(await deps.exists(resolved))) {
-    return { ...base, ...(await probeHooks(hookPointer, deps)) };
+    return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot)) };
   }
   const versionRaw = await deps.execVersion(resolved, ['--version']);
-  const hookProbe = await probeHooks(hookPointer, deps);
+  const hookProbe = await probeHooks(hookPointer, deps, hookRoot);
   const blockedWindowsAppsCodex =
     versionRaw === null && isBlockedWindowsAppsCodexPath(id, deps.platform, resolved);
   return {
@@ -402,13 +433,7 @@ async function detectByPath(
 }
 
 function hermesWindowsCandidatePaths(deps: ResolvedDeps): string[] {
-  const base = joinForPlatform(
-    deps.platform,
-    deps.home,
-    'AppData',
-    'Local',
-    'hermes',
-  );
+  const base = hermesHome(deps);
   return [
     joinForPlatform(deps.platform, base, 'bin', 'hermes.cmd'),
     joinForPlatform(deps.platform, base, 'hermes-agent', 'venv', 'Scripts', 'hermes.exe'),
@@ -421,6 +446,7 @@ async function detectHealthyWindowsHermes(
   deps: ResolvedDeps,
   hookPointer: string,
   displayName: string,
+  hookRoot?: ToolManifest['hookRoot'],
 ): Promise<DetectedTool> {
   const pathCandidate = await deps.pathFromEnv(binaryName);
   const candidates = [pathCandidate, ...hermesWindowsCandidatePaths(deps)]
@@ -440,7 +466,7 @@ async function detectHealthyWindowsHermes(
         installed: true,
         installedPath: candidate,
         version,
-        ...(await probeHooks(hookPointer, deps)),
+        ...(await probeHooks(hookPointer, deps, hookRoot)),
       };
     }
   }
@@ -453,7 +479,7 @@ async function detectHealthyWindowsHermes(
     version: null,
     launchable: firstExisting ? false : undefined,
     diagnostic: firstExisting ? HERMES_WINDOWS_HEALTH_DIAGNOSTIC : undefined,
-    ...(await probeHooks(hookPointer, deps)),
+    ...(await probeHooks(hookPointer, deps, hookRoot)),
   };
 }
 
@@ -500,12 +526,11 @@ async function claudeDesktopCandidatePaths(deps: ResolvedDeps): Promise<string[]
 
 function hermesDesktopCandidatePaths(deps: ResolvedDeps): string[] {
   if (deps.platform === 'win32') {
-    const localAppData = joinForPlatform(deps.platform, deps.home, 'AppData', 'Local');
+    const localAppData = localAppDataRoot(deps);
     return [
       joinForPlatform(
         deps.platform,
-        localAppData,
-        'hermes',
+        hermesHome(deps),
         'hermes-agent',
         'apps',
         'desktop',
@@ -562,6 +587,7 @@ async function detectByCandidates(
   withVersion: boolean,
   hookPointer: string,
   displayName: string,
+  hookRoot?: ToolManifest['hookRoot'],
 ): Promise<DetectedTool> {
   const base: DetectedTool = {
     id,
@@ -577,7 +603,7 @@ async function detectByCandidates(
       const versionRaw = withVersion
         ? await deps.execVersion(candidate, ['--version'])
         : null;
-      const hookProbe = await probeHooks(hookPointer, deps);
+      const hookProbe = await probeHooks(hookPointer, deps, hookRoot);
       return {
         ...base,
         installed: true,
@@ -589,7 +615,7 @@ async function detectByCandidates(
       };
     }
   }
-  return { ...base, ...(await probeHooks(hookPointer, deps)) };
+  return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot)) };
 }
 
 // ── Registry-driven detection ───────────────────────────────────────
@@ -628,19 +654,28 @@ async function detectFromManifest(m: ToolManifest, deps: ResolvedDeps): Promise<
           deps,
           m.hookPointer,
           m.displayName,
+          m.hookRoot,
         ),
         m,
       );
     }
     return withManifestMetadata(
-      await detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName),
+      await detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName, m.hookRoot),
       m,
     );
   }
   const resolver = CANDIDATE_RESOLVERS[m.id];
   const candidates = resolver ? await resolver(deps) : [];
   return withManifestMetadata(
-    await detectByCandidates(m.id, candidates, deps, /* withVersion */ false, m.hookPointer, m.displayName),
+    await detectByCandidates(
+      m.id,
+      candidates,
+      deps,
+      /* withVersion */ false,
+      m.hookPointer,
+      m.displayName,
+      m.hookRoot,
+    ),
     m,
   );
 }

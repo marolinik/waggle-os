@@ -30,6 +30,7 @@ function makeDeps(overrides: Partial<DetectOpts> = {}): DetectOpts {
   return {
     platform: 'win32',
     home: 'C:\\Users\\test',
+    env: {},
     cwd: 'D:\\projects\\waggle-os',
     exists: async () => false,
     execVersion: async () => null,
@@ -463,6 +464,73 @@ describe('extended-cohort detectors (Codex / Hermes / OpenClaw — Phase 4)', ()
       installed: true,
       installedPath: installed,
       version: '0.2.1',
+      launchable: true,
+    });
+  });
+
+  it('uses HERMES_HOME for the Windows CLI fallback and hook pointer', async () => {
+    const hermesHome = 'D:\\Hermes Data';
+    const installed = `${hermesHome}\\bin\\hermes.cmd`;
+    const pointer = `${hermesHome}\\hive-mind-install.json`;
+    const backup = `${hermesHome}\\config.yaml.hive-mind-backup.X`;
+    const existsSet = new Set([installed, pointer, backup]);
+    const result = await detectInstalledTools(makeDeps({
+      env: {
+        HERMES_HOME: hermesHome,
+        LOCALAPPDATA: 'C:\\Users\\test\\AppData\\Local',
+      },
+      exists: async (candidate) => existsSet.has(candidate),
+      execVersion: async (binary) => binary === installed ? '0.18.2' : null,
+      readJson: async (candidate) => candidate === pointer
+        ? { settings_backup: backup }
+        : null,
+    }));
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: installed,
+      version: '0.18.2',
+      hooksInstalled: true,
+      hookPointerPath: pointer,
+    });
+  });
+
+  it('uses redirected LOCALAPPDATA for the Windows CLI fallback and hook pointer', async () => {
+    const localAppData = 'E:\\Redirected\\Local';
+    const hermesHome = `${localAppData}\\hermes`;
+    const installed = `${hermesHome}\\hermes-agent\\venv\\Scripts\\hermes.exe`;
+    const pointer = `${hermesHome}\\hive-mind-install.json`;
+    const configPath = `${hermesHome}\\config.yaml`;
+    const existsSet = new Set([installed, pointer, configPath]);
+    const result = await detectInstalledTools(makeDeps({
+      env: { LOCALAPPDATA: localAppData },
+      exists: async (candidate) => existsSet.has(candidate),
+      execVersion: async (binary) => binary === installed ? '0.18.2' : null,
+      readJson: async (candidate) => candidate === pointer
+        ? { settings_backup: null, created_by_us: true, config_path: configPath }
+        : null,
+    }));
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: installed,
+      version: '0.18.2',
+      hooksInstalled: true,
+      hookPointerPath: pointer,
+    });
+  });
+
+  it('uses HERMES_HOME for the bundled Windows desktop app', async () => {
+    const hermesHome = 'D:\\Hermes Data';
+    const desktop = `${hermesHome}\\hermes-agent\\apps\\desktop\\release\\win-unpacked\\Hermes.exe`;
+    const result = await detectInstalledTools(makeDeps({
+      env: { HERMES_HOME: hermesHome },
+      exists: async (candidate) => candidate === desktop,
+    }));
+
+    expect(result.tools.find((tool) => tool.id === 'hermes-desktop')).toMatchObject({
+      installed: true,
+      installedPath: desktop,
       launchable: true,
     });
   });

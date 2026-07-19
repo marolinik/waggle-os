@@ -32,6 +32,8 @@ describe('BUILTIN_TOOL_MANIFESTS', () => {
     expect(cli).toMatchObject({
       displayName: 'Hermes Agent CLI',
       hookCapable: true,
+      hookRoot: 'hermes-home',
+      hookPointer: 'hive-mind-install.json',
       capabilities: { interactiveLaunch: true, headlessTask: true },
     });
     expect(desktop).toMatchObject({

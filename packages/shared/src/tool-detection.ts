@@ -87,6 +87,8 @@ export interface ToolManifest {
   displayName: string;
   launchable: boolean;
   hookCapable: boolean;
+  /** Built-in-only pointer root; third-party adapters always use the user home. */
+  hookRoot?: 'user-home' | 'hermes-home';
   hookPointer: string;
   detect: ToolDetectSpec;
   /**
@@ -159,7 +161,7 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
   },
   {
     id: 'hermes', displayName: 'Hermes Agent CLI', launchable: true, hookCapable: true,
-    hookPointer: '.hermes/hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true,
+    hookRoot: 'hermes-home', hookPointer: 'hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: false, resumable: true, liveWaggleDance: false },
     task: {
       argvTemplate: ['chat', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
