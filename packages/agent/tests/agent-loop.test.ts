@@ -3,6 +3,7 @@ import { runAgentLoop, type AgentLoopConfig, type PluginToolProvider } from '../
 import type { ToolDefinition } from '../src/tools.js';
 import { CapabilityRouter } from '../src/capability-router.js';
 import { HookRegistry } from '../src/hooks.js';
+import { needsConfirmationWithAutonomy } from '../src/confirmation.js';
 import Database from 'better-sqlite3';
 
 /**
@@ -399,6 +400,100 @@ describe('runAgentLoop', () => {
     expect(toolNames).toContain('plugin_tool');
     expect(toolNames).toHaveLength(2);
   });
+
+  it.each([
+    ['missing', undefined],
+    ['low', 'low'],
+    ['invalid', 'trusted'],
+  ])('normalizes %s plugin-provider risk to the medium confirmation floor', async (_label, riskLevel) => {
+    const pluginExecute = vi.fn(async () => 'MUTATION_RAN');
+    const pluginToolProvider: PluginToolProvider = {
+      getAllTools: () => [{
+        name: 'opaque_plugin_mutation',
+        description: 'Perform a plugin action',
+        parameters: { type: 'object', properties: {} },
+        execute: pluginExecute,
+        ...(riskLevel === undefined ? {} : { riskLevel }),
+      }],
+    };
+    const hooks = new HookRegistry();
+    let observedRisk: unknown;
+    hooks.on('pre:tool', (ctx) => {
+      observedRisk = ctx.riskLevel;
+      if (ctx.toolName && needsConfirmationWithAutonomy(
+        ctx.toolName,
+        ctx.args,
+        'normal',
+        ctx.riskLevel as 'low' | 'medium' | 'high' | 'critical' | undefined,
+      )) {
+        return { cancel: true, reason: 'external plugin risk requires approval' };
+      }
+    });
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{
+          id: 'call_plugin_risk',
+          function: { name: 'opaque_plugin_mutation', arguments: '{}' },
+        }],
+      },
+      { content: 'The plugin action was not approved.' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      hooks,
+      pluginTools: pluginToolProvider,
+    }));
+
+    expect(observedRisk).toBe('medium');
+    expect(pluginExecute).not.toHaveBeenCalled();
+    expect(result.toolsUsed).toEqual([]);
+    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    const toolResult = secondBody.messages.find(
+      (message: { role?: string; tool_call_id?: string }) =>
+        message.role === 'tool' && message.tool_call_id === 'call_plugin_risk',
+    );
+    expect(toolResult.content).toContain('[BLOCKED]');
+    expect(toolResult.content).toContain('requires approval');
+  });
+
+  it.each(['high', 'critical'] as const)(
+    'preserves valid %s plugin-provider risk through pre:tool',
+    async (riskLevel) => {
+      const pluginExecute = vi.fn(async () => 'MUTATION_RAN');
+      const pluginToolProvider: PluginToolProvider = {
+        getAllTools: () => [{
+          name: 'opaque_plugin_mutation',
+          description: 'Perform a plugin action',
+          parameters: { type: 'object', properties: {} },
+          execute: pluginExecute,
+          riskLevel,
+        }],
+      };
+      const hooks = new HookRegistry();
+      let observedRisk: unknown;
+      hooks.on('pre:tool', (ctx) => {
+        observedRisk = ctx.riskLevel;
+        return { cancel: true, reason: 'approval required' };
+      });
+      const fetch = mockFetch([
+        {
+          content: null,
+          tool_calls: [{
+            id: 'call_plugin_elevated_risk',
+            function: { name: 'opaque_plugin_mutation', arguments: '{}' },
+          }],
+        },
+        { content: 'The plugin action was not approved.' },
+      ]);
+
+      await runAgentLoop(makeConfig({ fetch, hooks, pluginTools: pluginToolProvider }));
+
+      expect(observedRisk).toBe(riskLevel);
+      expect(pluginExecute).not.toHaveBeenCalled();
+    },
+  );
 
   it('terminates with error after 3 consecutive 429 rate-limit responses', async () => {
     let callCount = 0;

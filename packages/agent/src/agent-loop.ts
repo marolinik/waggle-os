@@ -1,4 +1,5 @@
 import type { ToolDefinition } from './tools.js';
+import { RISK_LEVELS, riskAtLeast, type RiskLevel } from '@waggle/shared';
 import { LoopGuard } from './loop-guard.js';
 import { parseChatCompletionStream } from './sse-parser.js';
 import { maybeFireCompletionGate, initialGateState } from './loop-gates.js';
@@ -16,8 +17,18 @@ import {
 import { estimateTokens as estimateTextTokens } from './tool-output-compressor.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
+type PluginToolCandidate = Omit<ToolDefinition, 'riskLevel'> & { riskLevel?: unknown };
+
 export interface PluginToolProvider {
-  getAllTools(): Array<{ name: string; description: string; parameters: Record<string, unknown>; execute: (args: Record<string, unknown>) => Promise<string> }>;
+  getAllTools(): PluginToolCandidate[];
+}
+
+function normalizePluginToolRisk(value: unknown): RiskLevel {
+  if ((RISK_LEVELS as readonly unknown[]).includes(value)) {
+    const declared = value as RiskLevel;
+    if (riskAtLeast(declared, 'medium')) return declared;
+  }
+  return 'medium';
 }
 
 export interface AgentMessage {
@@ -278,7 +289,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
   // Merge plugin tools (if any) into the base tool set
   const tools: ToolDefinition[] = pluginToolProvider
-    ? [...configTools, ...pluginToolProvider.getAllTools()]
+    ? [
+        ...configTools,
+        ...pluginToolProvider.getAllTools().map((tool) => ({
+          ...tool,
+          riskLevel: normalizePluginToolRisk(tool.riskLevel),
+        })),
+      ]
     : configTools;
 
   const userRequest = [...inputMessages]
