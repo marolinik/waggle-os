@@ -41,11 +41,14 @@ export class ResourceService {
       .where(and(...conditions));
   }
 
-  async rate(resourceId: string, rating: number) {
+  async rate(teamId: string, resourceId: string, rating: number) {
     const [resource] = await this.db
       .select()
       .from(teamResources)
-      .where(eq(teamResources.id, resourceId))
+      .where(and(
+        eq(teamResources.id, resourceId),
+        eq(teamResources.teamId, teamId),
+      ))
       .limit(1);
     if (!resource) return null;
 
@@ -55,22 +58,31 @@ export class ResourceService {
 
     const [updated] = await this.db.update(teamResources)
       .set({ rating: newRating })
-      .where(eq(teamResources.id, resourceId))
+      .where(and(
+        eq(teamResources.id, resourceId),
+        eq(teamResources.teamId, teamId),
+      ))
       .returning();
     return updated;
   }
 
-  async incrementUseCount(resourceId: string) {
+  async incrementUseCount(teamId: string, resourceId: string) {
     const [resource] = await this.db
       .select()
       .from(teamResources)
-      .where(eq(teamResources.id, resourceId))
+      .where(and(
+        eq(teamResources.id, resourceId),
+        eq(teamResources.teamId, teamId),
+      ))
       .limit(1);
     if (!resource) return null;
 
     const [updated] = await this.db.update(teamResources)
       .set({ useCount: resource.useCount + 1 })
-      .where(eq(teamResources.id, resourceId))
+      .where(and(
+        eq(teamResources.id, resourceId),
+        eq(teamResources.teamId, teamId),
+      ))
       .returning();
     return updated;
   }

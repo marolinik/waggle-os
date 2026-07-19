@@ -67,12 +67,12 @@ export async function resourceRoutes(fastify: FastifyInstance) {
     }
 
     // Rate (uses running average) then increment use count
-    const rated = await resourceService.rate(id, body.rating);
+    const rated = await resourceService.rate(team.id, id, body.rating);
     if (!rated) {
       return reply.code(404).send({ error: 'Resource not found' });
     }
 
-    const updated = await resourceService.incrementUseCount(id);
+    const updated = await resourceService.incrementUseCount(team.id, id);
     return updated;
   });
 }
