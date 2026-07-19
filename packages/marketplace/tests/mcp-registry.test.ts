@@ -2,7 +2,8 @@
  * MCP Server Registry — Tests
  *
  * Validates:
- * - MCP_SERVERS has at least 15 entries
+ * - MCP_SERVERS contains only the exact approved local-stdio profiles
+ * - Every executable package selector is version-pinned in metadata and argv
  * - Each entry has required fields (name, display_name, description, install_manifest)
  * - Each install_manifest has mcp_config with command and args
  * - seedMcpServers inserts into a temp DB correctly
@@ -16,6 +17,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { MCP_SERVERS, seedMcpServers, type McpServerEntry } from '../src/mcp-registry';
 import { MarketplaceDB } from '../src/db';
+
+const EXACT_PACKAGE_VERSION = /(?:@|==)(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$/;
+const APPROVED_LOCAL_STDIO_SERVERS = [
+  'memory',
+  'sequential-thinking',
+  'brave-search',
+  'playwright',
+  'chrome-devtools',
+];
 
 // ── Schema: Create a temp marketplace DB with the real schema ────────
 
@@ -151,8 +161,8 @@ function createTempDb(): string {
 // ── Static Data Validation ──────────────────────────────────────────
 
 describe('MCP_SERVERS definitions', () => {
-  it('has at least 15 MCP server entries', () => {
-    expect(MCP_SERVERS.length).toBeGreaterThanOrEqual(15);
+  it('contains only the approved local stdio profiles', () => {
+    expect(MCP_SERVERS.map(server => server.name)).toEqual(APPROVED_LOCAL_STDIO_SERVERS);
   });
 
   it('has at most 25 entries (reasonable catalog size)', () => {
@@ -196,6 +206,28 @@ describe('MCP_SERVERS definitions', () => {
     }
   });
 
+  it('pins every executable package in both metadata and runtime argv', () => {
+    for (const server of MCP_SERVERS) {
+      const manifest = server.install_manifest!;
+      const packageSpec = manifest.npm_package!;
+      const versionMatch = EXACT_PACKAGE_VERSION.exec(packageSpec);
+
+      expect(versionMatch, `${server.name} package spec must use an exact version`).not.toBeNull();
+      expect(manifest.mcp_config!.args).toContain(packageSpec);
+      expect(server.version).toBe(versionMatch![1]);
+    }
+  });
+
+  it('disables lifecycle scripts for every npx-backed catalog profile', () => {
+    for (const server of MCP_SERVERS) {
+      const config = server.install_manifest!.mcp_config!;
+      if (config.command !== 'npx') continue;
+
+      expect(config.args).toContain('--yes');
+      expect(config.args).toContain('--ignore-scripts');
+    }
+  });
+
   it('all names are unique', () => {
     const names = MCP_SERVERS.map(s => s.name);
     expect(new Set(names).size).toBe(names.length);
@@ -228,22 +260,7 @@ describe('MCP_SERVERS definitions', () => {
 
   it('covers expected categories', () => {
     const categories = new Set(MCP_SERVERS.map(s => s.category));
-    expect(categories.has('developer-tools')).toBe(true);
-    expect(categories.has('web')).toBe(true);
-    expect(categories.has('productivity')).toBe(true);
-    expect(categories.has('knowledge')).toBe(true);
-    expect(categories.has('data')).toBe(true);
-  });
-
-  it('includes key well-known servers', () => {
-    const names = MCP_SERVERS.map(s => s.name);
-    expect(names).toContain('filesystem');
-    expect(names).toContain('github');
-    expect(names).toContain('brave-search');
-    expect(names).toContain('memory');
-    expect(names).toContain('sequential-thinking');
-    expect(names).toContain('puppeteer');
-    expect(names).toContain('slack');
+    expect(categories).toEqual(new Set(['knowledge', 'web', 'developer-tools']));
   });
 
   it('mcp_config command is npx or uvx', () => {
@@ -339,14 +356,193 @@ describe('seedMcpServers', () => {
     expect(results.total).toBe(MCP_SERVERS.length);
   });
 
+  it('refreshes a stale curated manifest and version in place', () => {
+    seedMcpServers(db);
+    const expected = MCP_SERVERS.find(server => server.name === 'memory')!;
+    const before = db.getPackageByName('memory')!;
+    const rawDb = db.getRawDb();
+    rawDb.prepare('UPDATE packages SET version = ?, install_manifest = ? WHERE id = ?').run(
+      '0.0.0',
+      JSON.stringify({
+        npm_package: '@modelcontextprotocol/server-memory',
+        mcp_config: {
+          name: 'memory',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-memory'],
+        },
+      }),
+      before.id,
+    );
+
+    expect(seedMcpServers(db)).toBe(0);
+
+    const refreshed = db.getPackage(before.id)!;
+    expect(refreshed.id).toBe(before.id);
+    expect(refreshed.version).toBe(expected.version);
+    expect(refreshed.install_manifest).toEqual(expected.install_manifest);
+  });
+
+  it('invalidates stale scan evidence when a curated executable profile changes', () => {
+    seedMcpServers(db);
+    const memory = db.getPackageByName('memory')!;
+    const rawDb = db.getRawDb();
+    rawDb.prepare(
+      `UPDATE packages SET
+         version = '0.0.0',
+         install_manifest = '{}',
+         security_status = 'clean',
+         security_score = 100,
+         last_scanned_at = '2026-07-18T12:00:00Z',
+         content_hash = 'stale-hash',
+         scan_engines = '["content_hash"]',
+         scan_findings = '[]',
+         scan_blocked = 1
+       WHERE id = ?`,
+    ).run(memory.id);
+
+    seedMcpServers(db);
+
+    const refreshed = rawDb.prepare(
+      `SELECT security_status, security_score, last_scanned_at, content_hash,
+              scan_engines, scan_findings, scan_blocked
+       FROM packages WHERE id = ?`,
+    ).get(memory.id) as Record<string, unknown>;
+    expect(refreshed).toEqual({
+      security_status: 'unscanned',
+      security_score: -1,
+      last_scanned_at: null,
+      content_hash: null,
+      scan_engines: null,
+      scan_findings: null,
+      scan_blocked: 0,
+    });
+  });
+
+  it('invalidates stale scan evidence when curated provenance changes', () => {
+    seedMcpServers(db);
+    const memory = db.getPackageByName('memory')!;
+    const rawDb = db.getRawDb();
+    rawDb.prepare(
+      `UPDATE packages SET
+         repository_url = 'https://example.invalid/stale-source',
+         security_status = 'clean',
+         security_score = 100,
+         last_scanned_at = '2026-07-18T12:00:00Z',
+         content_hash = 'stale-hash',
+         scan_engines = '["gen_trust_hub"]',
+         scan_findings = '[]',
+         scan_blocked = 0
+       WHERE id = ?`,
+    ).run(memory.id);
+
+    seedMcpServers(db);
+
+    const refreshed = rawDb.prepare(
+      `SELECT security_status, security_score, last_scanned_at, content_hash,
+              scan_engines, scan_findings, scan_blocked
+       FROM packages WHERE id = ?`,
+    ).get(memory.id) as Record<string, unknown>;
+    expect(refreshed).toEqual({
+      security_status: 'unscanned',
+      security_score: -1,
+      last_scanned_at: null,
+      content_hash: null,
+      scan_engines: null,
+      scan_findings: null,
+      scan_blocked: 0,
+    });
+  });
+
+  it('preserves current scan evidence during an identical startup reseed', () => {
+    seedMcpServers(db);
+    const memory = db.getPackageByName('memory')!;
+    const rawDb = db.getRawDb();
+    rawDb.prepare(
+      `UPDATE packages SET
+         security_status = 'clean',
+         security_score = 100,
+         last_scanned_at = '2026-07-18T12:00:00Z',
+         content_hash = 'current-hash',
+         scan_engines = '["content_hash"]',
+         scan_findings = '[]',
+         scan_blocked = 0
+       WHERE id = ?`,
+    ).run(memory.id);
+
+    seedMcpServers(db);
+
+    const preserved = rawDb.prepare(
+      `SELECT security_status, security_score, last_scanned_at, content_hash,
+              scan_engines, scan_findings, scan_blocked
+       FROM packages WHERE id = ?`,
+    ).get(memory.id) as Record<string, unknown>;
+    expect(preserved).toEqual({
+      security_status: 'clean',
+      security_score: 100,
+      last_scanned_at: '2026-07-18T12:00:00Z',
+      content_hash: 'current-hash',
+      scan_engines: '["content_hash"]',
+      scan_findings: '[]',
+      scan_blocked: 0,
+    });
+  });
+
+  it('preserves an active installation while refreshing its curated package row', () => {
+    seedMcpServers(db);
+    const memory = db.getPackageByName('memory')!;
+    const rawDb = db.getRawDb();
+    rawDb.prepare(
+      `INSERT INTO installations (package_id, installed_version, install_path, status, config)
+       VALUES (?, ?, ?, 'installed', '{}')`,
+    ).run(memory.id, 'legacy', '.mcp.json');
+    rawDb.prepare('UPDATE packages SET version = ? WHERE id = ?').run('legacy', memory.id);
+
+    seedMcpServers(db);
+
+    expect(db.getPackage(memory.id)!.version).toBe(
+      MCP_SERVERS.find(server => server.name === 'memory')!.version,
+    );
+    expect(db.isInstalled(memory.id)).toBe(true);
+  });
+
+  it('seeds a trusted source row when an external source already uses the same name', () => {
+    const rawDb = db.getRawDb();
+    const externalSource = rawDb.prepare(
+      `INSERT INTO sources (name, display_name, source_type, platform)
+       VALUES ('external', 'External', 'registry', 'npm')`,
+    ).run().lastInsertRowid;
+    rawDb.prepare(
+      `INSERT INTO packages (
+         source_id, name, display_name, description, package_type,
+         waggle_install_type, install_manifest
+       ) VALUES (?, 'memory', 'External Memory', 'Untrusted shadow row',
+         'mcp_server', 'mcp', ?)`,
+    ).run(
+      externalSource,
+      JSON.stringify({
+        npm_package: 'external-memory@1.0.0',
+        mcp_config: { name: 'memory', command: 'npx', args: ['external-memory@1.0.0'] },
+      }),
+    );
+
+    expect(seedMcpServers(db)).toBe(MCP_SERVERS.length);
+
+    const trustedRows = rawDb.prepare(
+      `SELECT p.* FROM packages p
+       INNER JOIN sources s ON s.id = p.source_id
+       WHERE s.name = 'mcp_registry' AND p.name = 'memory'`,
+    ).all();
+    expect(trustedRows).toHaveLength(1);
+  });
+
   it('partial seeding skips existing entries', () => {
     // First seed
     seedMcpServers(db);
 
     // Manually delete a few entries and re-seed
     const rawDb = db.getRawDb();
-    rawDb.prepare("DELETE FROM packages WHERE name = 'filesystem'").run();
-    rawDb.prepare("DELETE FROM packages WHERE name = 'github'").run();
+    rawDb.prepare("DELETE FROM packages WHERE name = 'memory'").run();
+    rawDb.prepare("DELETE FROM packages WHERE name = 'playwright'").run();
 
     // Re-seed should only add the 2 deleted ones back
     const added = seedMcpServers(db);
@@ -369,13 +565,13 @@ describe('seedMcpServers', () => {
     seedMcpServers(db);
 
     const devTools = db.search({ type: 'mcp', category: 'developer-tools', limit: 50 });
-    expect(devTools.total).toBeGreaterThanOrEqual(3); // filesystem, git, github, sqlite, postgres
+    expect(devTools.total).toBe(1); // chrome-devtools
 
     const web = db.search({ type: 'mcp', category: 'web', limit: 50 });
-    expect(web.total).toBeGreaterThanOrEqual(2); // brave-search, fetch, puppeteer
+    expect(web.total).toBe(2); // brave-search, playwright
 
-    const productivity = db.search({ type: 'mcp', category: 'productivity', limit: 50 });
-    expect(productivity.total).toBeGreaterThanOrEqual(3); // google-drive, slack, notion, gmail
+    const knowledge = db.search({ type: 'mcp', category: 'knowledge', limit: 50 });
+    expect(knowledge.total).toBe(2); // memory, sequential-thinking
   });
 
   it('facets include mcp type', () => {
@@ -404,7 +600,7 @@ describe('db.search — FTS5 query relaxation', () => {
   beforeEach(() => {
     ftsDbPath = createTempDb();
     ftsDb = new MarketplaceDB(ftsDbPath);
-    seedMcpServers(ftsDb); // seeds the 'filesystem' MCP server
+    seedMcpServers(ftsDb); // seeds the 'memory' MCP server
     // The bare test schema declares packages_fts as external-content FTS5
     // with no sync triggers (production ships them in the seed DB). Rebuild
     // the index from the content table so search() exercises real FTS —
@@ -422,31 +618,31 @@ describe('db.search — FTS5 query relaxation', () => {
     try { fs.unlinkSync(ftsDbPath + '-shm'); } catch { /* ignore */ }
   });
 
-  const hasFilesystem = (r: { packages: Array<{ name: string; description: string }> }) =>
-    r.packages.some(p => p.name === 'filesystem' || /filesystem/i.test(p.description));
+  const hasMemory = (r: { packages: Array<{ name: string; description: string }> }) =>
+    r.packages.some(p => p.name === 'memory' || /memory/i.test(p.description));
 
-  it('baseline: a single tight keyword finds the filesystem MCP server', () => {
-    const r = ftsDb.search({ query: 'filesystem', limit: 10 });
+  it('baseline: a single tight keyword finds the memory MCP server', () => {
+    const r = ftsDb.search({ query: 'memory', limit: 10 });
     expect(r.total).toBeGreaterThan(0);
-    expect(hasFilesystem(r)).toBe(true);
+    expect(hasMemory(r)).toBe(true);
   });
 
-  it('REGRESSION: a verbose natural-language need still surfaces the filesystem server', () => {
+  it('REGRESSION: a verbose natural-language need still surfaces the memory server', () => {
     // Exact shape acquire_capability feeds into searchMarketplace(need).
     const need =
-      'Access and read files from an external local filesystem path outside my managed workspace directory looking for an MCP filesystem connector or similar capability';
+      'Keep durable entities and relationships across many conversations using a persistent MCP memory knowledge graph';
     const r = ftsDb.search({ query: need, limit: 10 });
     expect(r.total).toBeGreaterThan(0);
-    expect(hasFilesystem(r)).toBe(true);
+    expect(hasMemory(r)).toBe(true);
   });
 
   it('ROBUSTNESS: a need with FTS-special chars (path with : and \\ and quotes) does not throw and still matches', () => {
     const need =
-      'read files at D:\\Projects\\PM-Waggle-OS — need a "filesystem" connector, not workspace-only access';
+      'remember D:\\Projects\\PM-Waggle-OS — need a "memory" knowledge graph: durable * context';
     expect(() => ftsDb.search({ query: need, limit: 10 })).not.toThrow();
     const r = ftsDb.search({ query: need, limit: 10 });
     expect(r.total).toBeGreaterThan(0);
-    expect(hasFilesystem(r)).toBe(true);
+    expect(hasMemory(r)).toBe(true);
   });
 
   it('EMPTY/garbage query degrades gracefully (no throw, no crash)', () => {

@@ -483,11 +483,8 @@ describe('MarketplaceInstaller security boundaries', () => {
     const name = `curated-mcp-plugin-${randomUUID()}`;
     const pluginDir = join(homedir(), '.waggle', 'plugins', name);
     cleanupPaths.push(pluginDir);
-    const curatedMcp = {
-      name: 'memory',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-memory'],
-    };
+    const curatedMcp = MCP_SERVERS.find(server => server.name === 'memory')!
+      .install_manifest!.mcp_config!;
     const { installer } = installerFor(packageFixture({
       name,
       package_type: 'plugin',
@@ -510,12 +507,13 @@ describe('MarketplaceInstaller security boundaries', () => {
     expect(childProcess.execFileSync).not.toHaveBeenCalled();
   });
 
-  it('maps embedded plugin MCP settings only to matching blank environment keys', async () => {
+  it('maps an embedded plugin MCP setting only to its matching blank environment key', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server offline')));
-    const name = `slack-plugin-${randomUUID()}`;
+    const name = `brave-plugin-${randomUUID()}`;
     const pluginDir = join(homedir(), '.waggle', 'plugins', name);
     cleanupPaths.push(pluginDir);
-    const slackConfig = MCP_SERVERS.find(server => server.name === 'slack')!.install_manifest!.mcp_config!;
+    const braveConfig = MCP_SERVERS.find(server => server.name === 'brave-search')!
+      .install_manifest!.mcp_config!;
     const { installer } = installerFor(packageFixture({
       name,
       package_type: 'plugin',
@@ -524,12 +522,11 @@ describe('MarketplaceInstaller security boundaries', () => {
         plugin_manifest: {
           name,
           version: '1.0.0',
-          description: 'Plugin with curated Slack MCP',
+          description: 'Plugin with curated Brave MCP',
           settingsSchema: {
-            SLACK_BOT_TOKEN: { type: 'string', description: 'Slack bot token' },
-            SLACK_TEAM_ID: { type: 'string', description: 'Slack team ID' },
+            BRAVE_API_KEY: { type: 'string', description: 'Brave API key' },
           },
-          mcpServers: [slackConfig],
+          mcpServers: [braveConfig],
         },
       },
     }));
@@ -538,17 +535,14 @@ describe('MarketplaceInstaller security boundaries', () => {
       packageId: 1,
       settings: {
         token: 'must-be-ignored',
-        SLACK_BOT_TOKEN: 'xoxb-plugin-token',
-        SLACK_TEAM_ID: 'T76543210',
+        BRAVE_API_KEY: 'brave-plugin-key',
       },
     });
 
     expect(result.success).toBe(true);
-    expect(JSON.parse(readFileSync(join(pluginDir, 'plugin.json'), 'utf8')).mcpServers[0].env).toEqual({
-      SLACK_BOT_TOKEN: 'xoxb-plugin-token',
-      SLACK_TEAM_ID: 'T76543210',
-    });
-    expect(slackConfig.env).toEqual({ SLACK_BOT_TOKEN: '', SLACK_TEAM_ID: '' });
+    expect(JSON.parse(readFileSync(join(pluginDir, 'plugin.json'), 'utf8')).mcpServers[0].env)
+      .toEqual({ BRAVE_API_KEY: 'brave-plugin-key' });
+    expect(braveConfig.env).toEqual({ BRAVE_API_KEY: '' });
   });
 
 
@@ -745,18 +739,18 @@ describe('MarketplaceInstaller security boundaries', () => {
   });
 
   it('rejects a catalog MCP profile with a preloaded environment value', async () => {
-    const github = MCP_SERVERS.find(server => server.name === 'github')!;
-    const manifest = github.install_manifest!;
+    const brave = MCP_SERVERS.find(server => server.name === 'brave-search')!;
+    const manifest = brave.install_manifest!;
     const { installer, recordInstallation } = installerFor(packageFixture({
-      name: github.name,
-      display_name: github.display_name,
+      name: brave.name,
+      display_name: brave.display_name,
       package_type: 'mcp_server',
       waggle_install_type: 'mcp',
       install_manifest: {
         ...manifest,
         mcp_config: {
           ...manifest.mcp_config!,
-          env: { GITHUB_PERSONAL_ACCESS_TOKEN: 'marketplace-controlled-secret' },
+          env: { BRAVE_API_KEY: 'marketplace-controlled-secret' },
         },
       },
     }));
@@ -768,31 +762,28 @@ describe('MarketplaceInstaller security boundaries', () => {
     expect(recordInstallation).not.toHaveBeenCalled();
   });
 
-  it('maps each multi-field MCP setting only to its matching environment key', async () => {
+  it('maps a direct MCP setting only to its matching environment key', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server offline')));
-    const slack = MCP_SERVERS.find(server => server.name === 'slack')!;
+    const brave = MCP_SERVERS.find(server => server.name === 'brave-search')!;
     const { installer } = installerFor(packageFixture({
-      name: slack.name,
-      display_name: slack.display_name,
+      name: brave.name,
+      display_name: brave.display_name,
       package_type: 'mcp_server',
       waggle_install_type: 'mcp',
-      install_manifest: slack.install_manifest ?? null,
+      install_manifest: brave.install_manifest ?? null,
     }));
 
     const result = await installer.install({
       packageId: 1,
       settings: {
         token: 'must-be-ignored',
-        SLACK_BOT_TOKEN: 'xoxb-test-token',
-        SLACK_TEAM_ID: 'T01234567',
+        BRAVE_API_KEY: 'brave-test-key',
       },
     });
 
     expect(result.success).toBe(true);
-    expect(JSON.parse(readFileSync(result.installPath, 'utf8')).mcpServers.slack.env).toEqual({
-      SLACK_BOT_TOKEN: 'xoxb-test-token',
-      SLACK_TEAM_ID: 'T01234567',
-    });
+    expect(JSON.parse(readFileSync(result.installPath, 'utf8')).mcpServers['brave-search'].env)
+      .toEqual({ BRAVE_API_KEY: 'brave-test-key' });
   });
 
   it('includes post-install hook bytes in the pre-install content hash', async () => {
