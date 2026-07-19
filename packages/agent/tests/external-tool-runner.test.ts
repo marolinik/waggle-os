@@ -196,11 +196,40 @@ describe('runExternalTool', () => {
     const result = await promise;
     expect(args).toEqual([
       '--ask-for-approval', 'never', '--sandbox', 'workspace-write', 'exec',
-      '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check',
+      '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
       '--json', '--color', 'never', '-C', 'C:\\workspace', '-',
     ]);
+    expect(args).not.toContain('--ephemeral');
     expect(child.stdin.value).toBe(baseRequest('codex').prompt);
     expect(result).toMatchObject({ status: 'completed', summary: 'Codex finished', sessionId: 'codex-session' });
+  });
+
+  it('resumes Codex with exec-level flags before the resume subcommand', async () => {
+    const child = new FakeChild();
+    let args: string[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('codex'),
+      sessionId: '00000000-0000-0000-0000-000000000000',
+    }, {
+      resolveWorkspacePath: () => 'C:\\workspace',
+      spawnProcess: (_binary, value) => {
+        args = value;
+        queueMicrotask(() => {
+          child.stdout.emit('data', '{"type":"item.completed","item":{"type":"agent_message","text":"Codex resumed"}}\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    await expect(promise).resolves.toMatchObject({ status: 'completed', summary: 'Codex resumed' });
+    expect(args).toEqual([
+      '--ask-for-approval', 'never', '--sandbox', 'read-only', 'exec',
+      '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
+      '--color', 'never', '-C', 'C:\\workspace', 'resume', '--json',
+      '00000000-0000-0000-0000-000000000000', '-',
+    ]);
+    expect(args).not.toContain('--ephemeral');
   });
 
   it('uses Hermes quiet query mode without unsafe yolo/oneshot flags', async () => {

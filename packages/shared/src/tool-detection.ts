@@ -141,8 +141,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'path', binaryName: 'codex' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
     task: {
-      argvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
-      resumeArgvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', 'resume', '{sessionId}', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
+      argvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
+      resumeArgvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--color', 'never', '-C', '{workspacePath}', 'resume', '--json', '{sessionId}', '-'],
       accessArgs: {
         'read-only': ['--ask-for-approval', 'never', '--sandbox', 'read-only'],
         'workspace-write': ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'],

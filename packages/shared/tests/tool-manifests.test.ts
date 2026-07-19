@@ -46,6 +46,14 @@ describe('BUILTIN_TOOL_MANIFESTS', () => {
     const cc = BUILTIN_TOOL_MANIFESTS.find((m) => m.id === 'claude-code')!;
     expect(cc.detect).toEqual({ kind: 'path', binaryName: 'claude' });
   });
+  it('keeps resumable Codex tasks persistent instead of ephemeral', () => {
+    const codex = BUILTIN_TOOL_MANIFESTS.find((m) => m.id === 'codex')!;
+
+    expect(codex.task?.resumable).toBe(true);
+    expect(codex.task?.argvTemplate).not.toContain('--ephemeral');
+    expect(codex.task?.resumeArgvTemplate).not.toContain('--ephemeral');
+    expect(codex.task?.resumeArgvTemplate).toContain('{sessionId}');
+  });
 });
 
 describe('applyPromptArgTemplate (#5 fast-follow)', () => {
