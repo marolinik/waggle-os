@@ -106,12 +106,17 @@ describe('harvest cache (M-08)', () => {
   });
 
   it('uses a unique temp file for successive writes to the same cache key', () => {
+    const writeFileSync = fs.writeFileSync.bind(fs);
     const renameSync = fs.renameSync.bind(fs);
     const tempPaths: string[] = [];
-    vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
-      tempPaths.push(String(from));
-      renameSync(from, to);
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((file, data, options) => {
+      tempPaths.push(String(file));
+      writeFileSync(file, data, options);
     });
+    vi.spyOn(fs, 'renameSync')
+      .mockImplementationOnce(() => { throw filesystemError('EBUSY'); })
+      .mockImplementation(renameSync);
+    vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
 
     writeHarvestCache(tmpDir, 'unique-temp', { version: 1 });
     writeHarvestCache(tmpDir, 'unique-temp', { version: 2 });
