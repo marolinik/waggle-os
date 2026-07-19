@@ -6,6 +6,19 @@ import { sql, eq } from 'drizzle-orm';
 import { CronRunner } from '../src/scheduler/cron-runner.js';
 import { CronService } from '../src/services/cron-service.js';
 
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  message: string,
+  timeoutMs = 1_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  throw new Error(message);
+}
+
 describe('Cron Scheduler (Task 3.16)', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
   let ownerId: string;
@@ -300,6 +313,100 @@ describe('Cron Scheduler (Task 3.16)', () => {
     expect(new Date(updated.lastRunAt!).getTime()).toBeGreaterThan(pastDate.getTime());
     expect(updated.nextRunAt).toBeTruthy();
     expect(new Date(updated.nextRunAt!).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('runs due schedules through the Fastify lifecycle without a manual tick', async () => {
+    const lifecycleConfig = { port: 0 };
+    const lifecycleServer = await buildServer(lifecycleConfig);
+    const marker = `lifecycle-${Date.now()}`;
+    let scheduleId: string | undefined;
+
+    try {
+      const [schedule] = await lifecycleServer.db.insert(cronSchedules).values({
+        teamId,
+        createdBy: ownerId,
+        name: 'Lifecycle Due Schedule',
+        cronExpr: '* * * * *',
+        jobType: 'task',
+        jobConfig: { marker, prompt: 'Lifecycle cron test' },
+        enabled: true,
+        nextRunAt: new Date(Date.now() - 60_000),
+      }).returning();
+      scheduleId = schedule.id;
+      expect(schedule.lastRunAt).toBeNull();
+
+      await lifecycleServer.ready();
+      await waitFor(async () => {
+        const [persisted] = await lifecycleServer.db.select().from(cronSchedules)
+          .where(eq(cronSchedules.id, schedule.id));
+        return persisted?.lastRunAt !== null;
+      }, 'Fastify lifecycle did not advance the due cron schedule');
+
+      const [advanced] = await lifecycleServer.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, schedule.id));
+      expect(advanced.nextRunAt?.getTime()).toBeGreaterThan(Date.now());
+
+      const jobs = await lifecycleServer.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      expect(jobs.some(job => (job.input as { marker?: string }).marker === marker)).toBe(true);
+    } finally {
+      const jobs = await lifecycleServer.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      for (const job of jobs.filter(item => (item.input as { marker?: string }).marker === marker)) {
+        await lifecycleServer.jobService.cancelJob(job.id);
+      }
+      if (scheduleId) {
+        await lifecycleServer.db.delete(cronSchedules)
+          .where(eq(cronSchedules.id, scheduleId));
+      }
+      await lifecycleServer.close();
+    }
+  });
+
+  it('skips a legacy invalid cron expression before queueing and continues later schedules', async () => {
+    const pastDate = new Date(Date.now() - 60_000);
+    const invalidMarker = `invalid-cron-${Date.now()}`;
+    const validMarker = `valid-after-invalid-${Date.now()}`;
+    const [invalidSchedule] = await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Legacy Invalid Cron',
+      cronExpr: 'not a cron expression',
+      jobType: 'task',
+      jobConfig: { marker: invalidMarker },
+      enabled: true,
+      nextRunAt: pastDate,
+    }).returning();
+    await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Valid After Invalid Cron',
+      cronExpr: '* * * * *',
+      jobType: 'task',
+      jobConfig: { marker: validMarker },
+      enabled: true,
+      nextRunAt: pastDate,
+    });
+    const errors: unknown[] = [];
+    const runner = new CronRunner(server.db, server.jobService, error => errors.push(error));
+    let validJob: typeof agentJobs.$inferSelect | undefined;
+
+    try {
+      await expect(runner.tick()).resolves.toBe(1);
+      const jobs = await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      expect(jobs.some(job => (job.input as { marker?: string }).marker === invalidMarker)).toBe(false);
+      validJob = jobs.find(job => (job.input as { marker?: string }).marker === validMarker);
+      expect(validJob?.status).toBe('queued');
+      expect(errors).toHaveLength(1);
+
+      const [persistedInvalid] = await server.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, invalidSchedule.id));
+      expect(persistedInvalid.lastRunAt).toBeNull();
+      expect(persistedInvalid.nextRunAt?.getTime()).toBe(pastDate.getTime());
+    } finally {
+      if (validJob) await server.jobService.cancelJob(validJob.id);
+    }
   });
 
   it('skips an unsafe legacy schedule while queueing an allowed due schedule', async () => {

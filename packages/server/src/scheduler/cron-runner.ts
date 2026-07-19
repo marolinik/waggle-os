@@ -8,18 +8,44 @@ import { scheduledJobTypeSchema } from '@waggle/shared';
 
 export class CronRunner {
   private interval: ReturnType<typeof setInterval> | null = null;
+  private tickInFlight: Promise<number> | null = null;
 
-  constructor(private db: Db, private jobService: JobService) {}
+  constructor(
+    private db: Db,
+    private jobService: JobService,
+    private onError: (error: unknown) => void = () => undefined,
+  ) {}
 
   start(intervalMs = 60_000) {
-    this.interval = setInterval(() => this.tick(), intervalMs);
+    if (this.interval) return;
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
+      throw new Error('Cron interval must be a positive number');
+    }
+
+    const runTick = () => {
+      if (this.tickInFlight) return;
+      const tick = this.tick()
+        .catch(error => {
+          this.onError(error);
+          return 0;
+        })
+        .finally(() => {
+          if (this.tickInFlight === tick) this.tickInFlight = null;
+        });
+      this.tickInFlight = tick;
+    };
+
+    runTick();
+    this.interval = setInterval(runTick, intervalMs);
+    this.interval.unref?.();
   }
 
-  stop() {
+  async stop() {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
     }
+    await this.tickInFlight;
   }
 
   async tick() {
@@ -37,21 +63,27 @@ export class CronRunner {
       const jobType = scheduledJobTypeSchema.safeParse(schedule.jobType);
       if (!jobType.success) continue;
 
-      // Queue the job via JobService
-      await this.jobService.createJob(
-        schedule.teamId,
-        schedule.createdBy,
-        jobType.data,
-        schedule.jobConfig as Record<string, unknown>,
-      );
+      try {
+        // Validate legacy rows before queueing so a poison cron expression
+        // cannot create a duplicate job on every scheduler pass.
+        const nextRunAt = parseExpression(schedule.cronExpr).next().toDate();
 
-      // Compute next run time and update the schedule
-      const nextRunAt = parseExpression(schedule.cronExpr).next().toDate();
+        await this.jobService.createJob(
+          schedule.teamId,
+          schedule.createdBy,
+          jobType.data,
+          schedule.jobConfig as Record<string, unknown>,
+        );
 
-      await this.db.update(cronSchedules)
-        .set({ lastRunAt: now, nextRunAt })
-        .where(eq(cronSchedules.id, schedule.id));
-      queuedCount++;
+        await this.db.update(cronSchedules)
+          .set({ lastRunAt: now, nextRunAt })
+          .where(eq(cronSchedules.id, schedule.id));
+        queuedCount++;
+      } catch (error) {
+        // One malformed or temporarily failing schedule must not starve the
+        // remaining due work. The lifecycle runner supplies the server logger.
+        this.onError(error);
+      }
     }
 
     return queuedCount;

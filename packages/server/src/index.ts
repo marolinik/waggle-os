@@ -1,4 +1,6 @@
 import Fastify from 'fastify';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { loadConfig, type ServerConfig } from './config.js';
@@ -21,6 +23,7 @@ import { capabilityGovernanceRoutes } from './routes/capability-governance.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { wsGateway } from './ws/gateway.js';
 import { JobService } from './services/job-service.js';
+import { CronRunner } from './scheduler/cron-runner.js';
 import { createLogger } from './local/logger.js';
 
 const log = createLogger('server');
@@ -56,7 +59,16 @@ export async function buildServer(configOverrides?: Partial<ServerConfig>) {
   // Job service (must be decorated before job routes)
   const jobService = new JobService(db, config.redisUrl);
   server.decorate('jobService', jobService);
-  server.addHook('onClose', async () => { await jobService.close(); });
+  const cronRunner = new CronRunner(db, jobService, error => {
+    server.log.error({ err: error }, 'Cron scheduler tick failed');
+  });
+  server.addHook('onReady', async () => {
+    cronRunner.start();
+  });
+  server.addHook('onClose', async () => {
+    await cronRunner.stop();
+    await jobService.close();
+  });
 
   await server.register(resourceRoutes);
   await server.register(jobRoutes);
@@ -75,8 +87,11 @@ export async function buildServer(configOverrides?: Partial<ServerConfig>) {
 }
 
 // Start server if run directly
-const isDirectRun = process.argv[1]?.replace(/\\/g, '/').includes('server/src/index');
-if (isDirectRun) {
+export function isDirectModule(entryPath: string | undefined, moduleUrl: string): boolean {
+  return entryPath !== undefined && pathToFileURL(resolve(entryPath)).href === moduleUrl;
+}
+
+if (isDirectModule(process.argv[1], import.meta.url)) {
   const server = await buildServer();
   await server.listen({ port: server.config.port, host: server.config.host });
   log.info(`Waggle server listening on ${server.config.host}:${server.config.port}`);
