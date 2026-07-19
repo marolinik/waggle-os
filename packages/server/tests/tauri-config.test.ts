@@ -966,6 +966,7 @@ describe('CI/CD Configuration', () => {
         workflow.indexOf(macJob),
       );
       const buildIndex = windowsSteps.indexOf('Build Tauri (Windows)');
+      const pruneIndex = windowsSteps.indexOf('Reclaim Windows build intermediates');
       const certificateIndex = windowsSteps.indexOf('certify-windows-installer.ps1');
       const signerCleanupIndex = windowsSteps.indexOf('Remove imported Windows code-signing certificates');
       const receiptIndex = windowsSteps.indexOf('windows-installer-certificate.json');
@@ -978,6 +979,8 @@ describe('CI/CD Configuration', () => {
 
       expect(buildIndex).toBeGreaterThanOrEqual(0);
       if (name === 'release.yml') {
+        expect(pruneIndex).toBeGreaterThan(buildIndex);
+        expect(pruneIndex).toBeLessThan(certificateIndex);
         expect(signerCleanupIndex).toBeGreaterThan(buildIndex);
         expect(signerCleanupIndex).toBeLessThan(certificateIndex);
       }
@@ -1021,6 +1024,9 @@ describe('CI/CD Configuration', () => {
         expect(windowsSteps).toContain('tauri.build-override.conf.json');
         expect(windowsSteps).toContain('-RequireAuthenticodeSignature');
         expect(windowsSteps).toContain('-ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT');
+        expect(windowsSteps).toContain('-VerifyManagedModel');
+        expect(windowsSteps).toContain('Refusing to prune outside the Tauri target');
+        expect(windowsSteps).toContain('$minimumFreeBytes = 8GB');
         expect(handoffStep).toContain('isDraft');
         expect(handoffStep).toContain('Refusing to modify a published release');
         expect(handoffStep).toContain('schemaVersion -ne 2');
@@ -1028,11 +1034,19 @@ describe('CI/CD Configuration', () => {
         expect(handoffStep).toContain("signatureType -ne 'Authenticode'");
         expect(handoffStep).toContain('nonPassingChecks');
         expect(handoffStep).toContain('generatedInstallerScriptSha256');
+        expect(handoffStep).toContain('managedModelVerified');
+        expect(handoffStep).toContain('managedModelDigest');
+        expect(handoffStep).toContain('noModelChatSetupRequired');
+        expect(handoffStep).toContain('windowsInboxTools');
+        expect(handoffStep).toContain('dockerIndependentRuntimePrerequisites');
+        expect(handoffStep).toContain('managedModelChat');
+        expect(handoffStep).toContain('managedRuntimeCleanup');
         expect(handoffStep).toContain('git ls-remote --tags origin');
         expect(handoffStep).toContain('--verify-tag');
         expect(handoffStep).not.toContain('--clobber');
       } else {
         expect(windowsSteps).not.toContain('-RequireAuthenticodeSignature');
+        expect(windowsSteps).not.toContain('-VerifyManagedModel');
       }
     }
   });
@@ -1093,6 +1107,18 @@ describe('CI/CD Configuration', () => {
     expect(script).not.toContain('$env:PATH = "$env:SystemRoot\\System32;$env:SystemRoot"');
     expect(script).toContain('/api/embedding/status');
     expect(script).toContain('/api/local-inference/status');
+    expect(script).toContain('/api/local-inference/bootstrap');
+    expect(script).toContain('/api/local-inference/pull');
+    expect(script).toContain('[switch]$VerifyManagedModel');
+    expect(script).toContain("[Environment]::GetFolderPath('System')");
+    expect(script).toContain("@('tar.exe', 'taskkill.exe')");
+    expect(script).toContain("$receipt.checks['windowsInboxTools']");
+    expect(script).toContain('$managedOperationTimeoutSeconds = 3600');
+    expect(script).toContain('$receipt.managedModelVerified = $true');
+    expect(script).toContain("$receipt.checks['managedModelChat']");
+    expect(script).toContain('managedModelDigest');
+    expect(script).toContain('managedRuntimeCleanup');
+    expect(script).toContain('Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot');
     expect(script).toContain('dockerRequired');
     expect(script).toContain('sameVersionRepair');
     expect(script).toContain('$firstProcess.HasExited');

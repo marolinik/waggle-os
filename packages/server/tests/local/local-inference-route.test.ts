@@ -281,7 +281,12 @@ describe('local-inference route — Waggle-managed runtime', () => {
 });
 
 describe('local-inference route — verified model installation', () => {
-  async function buildPullServer(models: string[]) {
+  async function buildPullServer(
+    models: string[],
+    modelDigests: Record<string, string> = Object.fromEntries(
+      models.map((model) => [model, `sha256:${'a'.repeat(64)}`]),
+    ),
+  ) {
     const server = Fastify({ logger: false });
     await server.register(localInferenceRoutes, {
       runtimeFactory: () => ({
@@ -295,6 +300,7 @@ describe('local-inference route — verified model installation', () => {
         available: true,
         url: 'http://127.0.0.1:11434',
         models,
+        modelDigests,
         cloudModels: [],
         version: 'test-1.0.0',
       }),
@@ -359,6 +365,7 @@ describe('local-inference route — verified model installation', () => {
       expect(response.json()).toMatchObject({
         ok: true,
         model: 'qwen3:1.7b',
+        digest: `sha256:${'a'.repeat(64)}`,
         verifiedGeneration: true,
         sample: 'OK',
       });
@@ -372,6 +379,74 @@ describe('local-inference route — verified model installation', () => {
         think: false,
         options: { temperature: 0, num_predict: 8 },
       });
+    } finally {
+      await server.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('binds a successful pull to the digest advertised by the live Ollama tag API', async () => {
+    const digest = `sha256:${'b'.repeat(64)}`;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/api/pull')) {
+        return new Response(JSON.stringify({ status: 'success' }), { status: 200 });
+      }
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [{ name: 'qwen3:1.7b', digest }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.endsWith('/api/version')) {
+        return new Response(JSON.stringify({ version: 'test-1.0.0' }), { status: 200 });
+      }
+      if (url.endsWith('/api/generate')) {
+        return new Response(JSON.stringify({ response: 'OK', done: true }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const server = Fastify({ logger: false });
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => ({ ...managedStatus(), installed: true, running: true }),
+        ensureReady: vi.fn(),
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      vllmProbe: async () => unavailableVllm,
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/local-inference/pull',
+        payload: { model: 'qwen3:1.7b' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ model: 'qwen3:1.7b', digest });
+    } finally {
+      await server.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fails closed when Ollama does not advertise an immutable model digest', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'success' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const server = await buildPullServer(['qwen3:1.7b'], {});
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/local-inference/pull',
+        payload: { model: 'qwen3:1.7b' },
+      });
+      expect(response.statusCode).toBe(502);
+      expect(response.json()).toMatchObject({
+        code: 'MODEL_DIGEST_UNAVAILABLE',
+        model: 'qwen3:1.7b',
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       await server.close();
       vi.unstubAllGlobals();
