@@ -12,13 +12,14 @@
 import { readFile, access } from 'node:fs/promises';
 import { constants, existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { join, resolve } from 'node:path';
 import { createLogger, type Logger } from '@waggle/hive-mind-shim-core';
 import { resolvePaths, allHookBasenames, type ResolvePathsOptions } from './paths.js';
 import {
-  HIVE_MIND_MARKER,
   HOOK_EVENT_BY_BASENAME,
+  generatedHookScriptPath,
+  isOwnedHiveGroup,
   type ClaudeCodeSettings,
-  type HookGroup,
 } from './settings-merger.js';
 
 export interface VerifyCheck {
@@ -44,13 +45,14 @@ async function fileReadable(p: string): Promise<boolean> {
   try { await access(p, constants.R_OK); return true; } catch { return false; }
 }
 
-function findHiveGroup(groups: HookGroup[] | undefined, command: string): HookGroup | undefined {
-  if (!Array.isArray(groups)) return undefined;
-  return groups.find((g) => g._hiveMindShim === HIVE_MIND_MARKER && g.hooks[0]?.command === command);
-}
-
 function isJsPath(p: string): boolean {
   return p.endsWith('.js') || p.endsWith('.mjs') || p.endsWith('.cjs');
+}
+
+function sameResolvedPath(left: string, right: string): boolean {
+  const a = resolve(left).replace(/\\/g, '/');
+  const b = resolve(right).replace(/\\/g, '/');
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
 function probeCliVersion(
@@ -124,28 +126,25 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
   for (const basename of allHookBasenames()) {
     const eventKey = HOOK_EVENT_BY_BASENAME[basename];
     const groups = parsed.hooks?.[eventKey];
-    const expectedCmdSuffix = `${basename}.js`;
-    const found = Array.isArray(groups)
-      ? groups.find((g) => g._hiveMindShim === HIVE_MIND_MARKER && g.hooks[0]?.command.includes(expectedCmdSuffix))
-      : undefined;
+    const expectedScriptPath = join(paths.hooksDir, `${basename}.js`);
+    const found = Array.isArray(groups) ? groups.find((group) => {
+      if (!isOwnedHiveGroup(group, basename)) return false;
+      const scriptPath = generatedHookScriptPath(group.hooks[0]?.command, basename);
+      return scriptPath !== undefined && sameResolvedPath(scriptPath, expectedScriptPath);
+    }) : undefined;
     if (!found) {
       checks.push({ name: `hooks.${eventKey} contains hive-mind entry`, ok: false });
       continue;
     }
     checks.push({ name: `hooks.${eventKey} contains hive-mind entry`, ok: true });
 
-    // Best-effort: extract path from `node "<path>"` and check file exists.
-    const m = found.hooks[0]?.command.match(/node "([^"]+)"/);
-    if (m && m[1]) {
-      const ok = await fileReadable(m[1]);
-      checks.push({
-        name: `${basename}.js readable on disk`,
-        ok,
-        detail: m[1],
-      });
-    }
-    // Also confirm we located the entry under the right top-level group key
-    void findHiveGroup;
+    const scriptPath = generatedHookScriptPath(found.hooks[0]?.command, basename);
+    const ok = scriptPath !== undefined && await fileReadable(scriptPath);
+    checks.push({
+      name: `${basename}.js readable on disk`,
+      ok,
+      ...(scriptPath !== undefined ? { detail: scriptPath } : {}),
+    });
   }
 
   // 3. hive-mind-cli responds to --help.
