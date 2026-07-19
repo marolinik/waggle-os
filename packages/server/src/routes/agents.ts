@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { AgentService } from '../services/agent-service.js';
+import { TeamService } from '../services/team-service.js';
 import { createAgentSchema, createAgentGroupSchema } from '@waggle/shared';
 
 export async function agentRoutes(fastify: FastifyInstance) {
   const agentService = new AgentService(fastify.db);
+  const teamService = new TeamService(fastify.db);
 
   // POST /api/agents — create sub-agent definition
   fastify.post('/api/agents', { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -133,6 +135,11 @@ export async function agentRoutes(fastify: FastifyInstance) {
     }
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.teamId)) {
       return reply.code(400).send({ error: 'teamId must be a valid UUID' });
+    }
+
+    const membership = await teamService.getMembership(body.teamId, request.userId);
+    if (!membership) {
+      return reply.code(404).send({ error: 'Team not found' });
     }
 
     // Build workflow template from group definition

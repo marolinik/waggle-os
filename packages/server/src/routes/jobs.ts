@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { queueJobSchema } from '@waggle/shared';
+import { AgentService } from '../services/agent-service.js';
 import { TeamService } from '../services/team-service.js';
 
 export async function jobRoutes(fastify: FastifyInstance) {
+  const agentService = new AgentService(fastify.db);
   const teamService = new TeamService(fastify.db);
 
   // GET /api/jobs?teamSlug=... - list jobs for a team
@@ -33,8 +35,30 @@ export async function jobRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
     }
 
+    const teamId = parsed.data.teamId;
+    if (!teamId) {
+      return reply.code(400).send({ error: 'teamId is required' });
+    }
+
+    const membership = await teamService.getMembership(teamId, request.userId);
+    if (!membership) {
+      return reply.code(404).send({ error: 'Team not found' });
+    }
+
+    if (parsed.data.jobType === 'group') {
+      const groupId = parsed.data.input.groupId;
+      if (typeof groupId !== 'string') {
+        return reply.code(400).send({ error: 'groupId is required for group jobs' });
+      }
+
+      const group = await agentService.getGroup(groupId, request.userId);
+      if (!group) {
+        return reply.code(404).send({ error: 'Agent group not found' });
+      }
+    }
+
     const job = await fastify.jobService.createJob(
-      parsed.data.teamId ?? '',
+      teamId,
       request.userId,
       parsed.data.jobType,
       parsed.data.input,
@@ -49,6 +73,9 @@ export async function jobRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const job = await fastify.jobService.getJob(id);
     if (!job) return reply.code(404).send({ error: 'Job not found' });
+
+    const membership = await teamService.getMembership(job.teamId, request.userId);
+    if (!membership) return reply.code(404).send({ error: 'Job not found' });
 
     if (job.status !== 'queued' && job.status !== 'running') {
       return reply.code(409).send({ error: `Cannot cancel job with status "${job.status}"` });
@@ -65,6 +92,10 @@ export async function jobRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const job = await fastify.jobService.getJob(id);
     if (!job) return reply.code(404).send({ error: 'Job not found' });
+
+    const membership = await teamService.getMembership(job.teamId, request.userId);
+    if (!membership) return reply.code(404).send({ error: 'Job not found' });
+
     return job;
   });
 }

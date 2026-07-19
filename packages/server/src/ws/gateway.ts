@@ -4,6 +4,7 @@ import { createClerkClient, verifyToken } from '@clerk/fastify';
 import { ConnectionManager } from './connection-manager.js';
 import { teams, messages, users } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { TeamService } from '../services/team-service.js';
 
 export const connectionManager = new ConnectionManager();
 
@@ -29,6 +30,8 @@ export function setWsTokenVerifier(verifier: WsTokenVerifier | null): void {
 }
 
 export async function wsGateway(fastify: FastifyInstance) {
+  const teamService = new TeamService(fastify.db);
+
   // Create Clerk client for JWT verification if secret key is available
   const clerkSecretKey = fastify.config.clerkSecretKey;
   const clerk = clerkSecretKey
@@ -121,6 +124,10 @@ export async function wsGateway(fastify: FastifyInstance) {
                 return;
               }
 
+              if (teamId && userId) {
+                connectionManager.remove(teamId, userId);
+              }
+              teamId = null;
               userId = user.id;
               socket.send(JSON.stringify({ type: 'authenticated', userId }));
             } catch {
@@ -146,6 +153,12 @@ export async function wsGateway(fastify: FastifyInstance) {
               .where(eq(teams.slug, event.teamSlug));
 
             if (!team) {
+              socket.send(JSON.stringify({ type: 'error', message: 'Team not found' }));
+              return;
+            }
+
+            const membership = await teamService.getMembership(team.id, userId);
+            if (!membership) {
               socket.send(JSON.stringify({ type: 'error', message: 'Team not found' }));
               return;
             }

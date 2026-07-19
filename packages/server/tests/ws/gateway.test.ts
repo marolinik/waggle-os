@@ -4,7 +4,7 @@ import type { WebSocket } from 'ws';
 import type { Task, SuggestionEntry } from '@waggle/shared';
 import type { AuthenticateFn } from '../../src/plugins/auth.js';
 import { ConnectionManager } from '../../src/ws/connection-manager.js';
-import { setWsTokenVerifier } from '../../src/ws/gateway.js';
+import { connectionManager, setWsTokenVerifier } from '../../src/ws/gateway.js';
 
 /** A minimal mock WebSocket exposing the surface ConnectionManager touches. */
 interface MockWebSocket {
@@ -250,10 +250,13 @@ describe('WebSocket Gateway (integration)', () => {
   let server: Awaited<ReturnType<typeof import('../../src/index.js').buildServer>>;
   let address: string;
   let userId: string;
+  let outsiderUserId: string;
   let clerkId: string;
   let teamSlug: string;
+  let teamId: string;
   /** A structurally valid JWT whose sub matches our test user's clerkId */
   let validJwt: string;
+  let outsiderJwt: string;
 
   beforeAll(async () => {
     const { buildServer } = await import('../../src/index.js');
@@ -295,8 +298,20 @@ describe('WebSocket Gateway (integration)', () => {
       .returning();
     userId = user.id;
 
+    const outsiderClerkId = `wstest_outsider_${suffix}`;
+    const [outsider] = await server.db
+      .insert(users)
+      .values({
+        clerkId: outsiderClerkId,
+        displayName: 'WS Outsider',
+        email: `wsoutsider_${suffix}@test.com`,
+      })
+      .returning();
+    outsiderUserId = outsider.id;
+
     // Build a valid test JWT with the user's clerkId as `sub`
     validJwt = makeTestJwt({ sub: clerkId, iat: Math.floor(Date.now() / 1000) });
+    outsiderJwt = makeTestJwt({ sub: outsiderClerkId, iat: Math.floor(Date.now() / 1000) });
 
     // Override the WS token verifier so tests don't need a real Clerk secret key.
     // The verifier accepts any structurally valid JWT and returns its decoded `sub`.
@@ -312,6 +327,7 @@ describe('WebSocket Gateway (integration)', () => {
       .insert(teams)
       .values({ name: 'WS Team', slug: teamSlug, ownerId: userId })
       .returning();
+    teamId = team.id;
 
     await server.db
       .insert(teamMembers)
@@ -403,6 +419,51 @@ describe('WebSocket Gateway (integration)', () => {
     await waitForMessages(messages, 2);
 
     expect(messages[1]).toEqual({ type: 'joined_team', teamSlug });
+
+    ws.close();
+  });
+
+  it('rejects an authenticated non-member joining an existing team', async () => {
+    const { ws, messages } = await connectWs();
+
+    ws.send(JSON.stringify({ type: 'authenticate', token: outsiderJwt }));
+    await waitForMessages(messages, 1);
+    expect(messages[0]).toEqual({ type: 'authenticated', userId: outsiderUserId });
+
+    ws.send(JSON.stringify({ type: 'join_team', teamSlug }));
+    await waitForMessages(messages, 2);
+
+    expect(messages[1]).toEqual({ type: 'error', message: 'Team not found' });
+    expect(connectionManager.getConnectedUsers(teamId)).not.toContain(outsiderUserId);
+
+    ws.close();
+  });
+
+  it('clears the joined team when a socket authenticates as a different user', async () => {
+    const { ws, messages } = await connectWs();
+
+    ws.send(JSON.stringify({ type: 'authenticate', token: validJwt }));
+    await waitForMessages(messages, 1);
+    ws.send(JSON.stringify({ type: 'join_team', teamSlug }));
+    await waitForMessages(messages, 2);
+
+    ws.send(JSON.stringify({ type: 'authenticate', token: outsiderJwt }));
+    await waitForMessages(messages, 3);
+
+    expect(messages[2]).toEqual({ type: 'authenticated', userId: outsiderUserId });
+    expect(connectionManager.getConnectedUsers(teamId)).not.toContain(userId);
+
+    ws.send(
+      JSON.stringify({
+        type: 'send_message',
+        teamSlug,
+        messageType: 'broadcast',
+        subtype: 'discovery',
+        content: { text: 'reauthenticated outsider' },
+      }),
+    );
+    await waitForMessages(messages, 4);
+    expect(messages[3]).toEqual({ type: 'error', message: 'Not in a team' });
 
     ws.close();
   });
