@@ -979,7 +979,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const budgetModel = pilotConfig.getBudgetModel();
       const budgetThreshold = pilotConfig.getBudgetThreshold();
 
-      // Budget check: if daily spend exceeds threshold, use budget model
+      // Resolve model selection before availability and fallback checks.
       let resolvedModel = primaryModel;
       let modelSwitchReason: string | null = null;
       let budgetModelSelected = false;
@@ -987,23 +987,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
         : false;
 
-      const dailyBudget = pilotConfig.getDailyBudget();
-      if (dailyBudget && dailyBudget > 0 && budgetModel && budgetRoutingAllowed) {
-        const spent = costTracker.getDailyTotal();
-        if (spent / dailyBudget >= budgetThreshold) {
-          resolvedModel = budgetModel;
-          budgetModelSelected = resolvedModel !== primaryModel;
-          modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
-        }
-      }
-
-      // Smart routing: simple messages → budget model (cost optimization)
-      if (!modelSwitchReason && budgetModel && budgetRoutingAllowed) {
-        const routing = routeMessage(message, resolvedModel, budgetModel);
+      // Classify first: spend pressure must never downgrade consequential work.
+      if (budgetModel && budgetRoutingAllowed) {
+        const routing = routeMessage(message, primaryModel, budgetModel);
         if (routing.reason === 'simple_turn') {
           resolvedModel = routing.model;
           budgetModelSelected = resolvedModel !== primaryModel;
-          // Smart routing is silent — no toast, no inline message
+          const dailyBudget = pilotConfig.getDailyBudget();
+          if (dailyBudget && dailyBudget > 0) {
+            const spent = costTracker.getDailyTotal();
+            if (spent / dailyBudget >= budgetThreshold) {
+              modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
+            }
+          }
+          // Under-threshold smart routing is silent; threshold routing keeps telemetry.
         }
       }
 

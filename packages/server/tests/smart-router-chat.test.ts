@@ -36,6 +36,8 @@ describe('chat smart-router integration', () => {
     config.setDefaultModel(primary);
     config.setBudgetModel(budget);
     config.clearFallbackModel();
+    config.setDailyBudget(null);
+    config.setBudgetThreshold(0.8);
     config.save();
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       capturedModel = agentConfig.model;
@@ -104,6 +106,48 @@ describe('chat smart-router integration', () => {
 
     expect(response.statusCode).toBe(200);
     expect(capturedModel).toBe('primary-test-model');
+  });
+
+  it.each([
+    ['destructive', 'Delete every stale branch except main.'],
+    ['legal', 'Is this non-compete enforceable in California?'],
+    ['privacy', "Summarize Alice's medical diagnosis."],
+    ['code', 'Why does this Promise resolve twice?'],
+    ['research', 'Find peer-reviewed evidence for this claim.'],
+  ])('keeps an over-budget %s turn on the configured primary model', async (_category, message) => {
+    const config = new WaggleConfig(tmpDir);
+    config.setDailyBudget(1);
+    config.setBudgetThreshold(0.8);
+    config.save();
+    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message, session: `over-budget-primary-route-${_category}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedModel).toBe('primary-test-model');
+  });
+
+  it('uses the budget model with threshold telemetry for an over-budget trivial turn', async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.setDailyBudget(1);
+    config.setBudgetThreshold(0.8);
+    config.save();
+    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'What is 19 * 23?', session: 'over-budget-trivial-route' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedModel).toBe('budget-test-model');
+    expect(response.body).toContain('event: model_switch');
+    expect(response.body).toContain('Budget 80% reached ($1.00/$1.00)');
   });
 
   it('never sends local conversation history to a cloud budget model implicitly', async () => {
