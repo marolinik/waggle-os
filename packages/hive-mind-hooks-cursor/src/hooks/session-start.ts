@@ -11,6 +11,7 @@
  */
 
 import {
+  isDirectExecution,
   makeSessionStartHandler,
   runHook,
   type HookRunOptions,
@@ -25,15 +26,6 @@ export async function runSessionStart(opts: Partial<HookRunOptions> = {}): Promi
   });
 }
 
-const isMain = (() => {
-  try {
-    if (typeof process.argv[1] !== 'string') return false;
-    const url = new URL(`file://${process.argv[1].replace(/\\/g, '/')}`);
-    return url.href === import.meta.url;
-  } catch {
-    return false;
-  }
-})();
-if (isMain) {
+if (isDirectExecution(import.meta.url)) {
   void runSessionStart();
 }
