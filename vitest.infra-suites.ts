@@ -9,7 +9,7 @@
  * ONLY these — locally (or a future Docker-provisioned CI lane) after
  * `docker-compose up -d postgres redis` + a schema migration.
  *
- * Canonical list captured from a no-Docker full run on 2026-06-01 (19 files).
+ * Canonical list captured from a no-Docker full run on 2026-06-01 (20 files).
  * When adding a new infra-dependent suite, add its path here.
  */
 export const INFRA_TEST_SUITES = [
@@ -24,6 +24,7 @@ export const INFRA_TEST_SUITES = [
   'packages/server/tests/db/schema.test.ts',
   'packages/server/tests/routes/agents.test.ts',
   'packages/server/tests/routes/analytics.test.ts',
+  'packages/server/tests/routes/capability-governance.test.ts',
   'packages/server/tests/routes/knowledge.test.ts',
   'packages/server/tests/routes/messages.test.ts',
   'packages/server/tests/routes/resources.test.ts',
