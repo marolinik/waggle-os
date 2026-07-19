@@ -111,6 +111,8 @@ describe('launchTool', () => {
           PATHEXT: '.COM;.EXE;.CMD',
           USERPROFILE: 'C:\\Users\\tester',
           APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+          LOCALAPPDATA: 'C:\\Redirected\\Local',
+          HERMES_HOME: 'D:\\Hermes Data',
           TERM: 'xterm-256color',
           ANTHROPIC_API_KEY: 'anthropic-secret',
           OPENAI_API_KEY: 'openai-secret',
@@ -134,6 +136,8 @@ describe('launchTool', () => {
       PATHEXT: '.COM;.EXE;.CMD',
       USERPROFILE: 'C:\\Users\\tester',
       APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Redirected\\Local',
+      HERMES_HOME: 'D:\\Hermes Data',
       TERM: 'xterm-256color',
       WAGGLE_WORKSPACE_ID: 'ws-isolated',
       WAGGLE_RUN_TOKEN: 'narrow-room-token',
@@ -332,7 +336,14 @@ describe('runHookCommand', () => {
       action: 'install',
       runtime,
       dataDir: '/waggle-data',
-      deps: { execCapture },
+      deps: {
+        baseEnv: {
+          LOCALAPPDATA: 'C:\\Redirected\\Local',
+          HERMES_HOME: 'D:\\Hermes Data',
+          OPENAI_API_KEY: 'must-not-cross',
+        },
+        execCapture,
+      },
     });
     expect(result.ok).toBe(true);
     expect(calls[0].binary).toBe(runtime.nodePath);
@@ -343,9 +354,12 @@ describe('runHookCommand', () => {
       runtime.cliEntry,
     ]);
     expect(calls[0].options?.env).toMatchObject({
+      LOCALAPPDATA: 'C:\\Redirected\\Local',
+      HERMES_HOME: 'D:\\Hermes Data',
       WAGGLE_HOOK_NODE_PATH: runtime.nodePath,
       HIVE_MIND_DATA_DIR: '/waggle-data',
     });
+    expect(calls[0].options?.env?.OPENAI_API_KEY).toBeUndefined();
   });
 
   it('routes verify and uninstall without install-only CLI arguments', async () => {

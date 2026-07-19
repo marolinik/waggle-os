@@ -512,7 +512,9 @@ describe('external adapter safety', () => {
     const env = buildExternalToolEnv(
       {
         PATH: 'C:\\Windows\\System32', USERPROFILE: 'C:\\Users\\tester',
-        APPDATA: 'C:\\Users\\tester\\AppData\\Roaming', TERM: 'xterm-256color',
+        APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+        LOCALAPPDATA: 'C:\\Redirected\\Local', HERMES_HOME: 'D:\\Hermes Data',
+        TERM: 'xterm-256color',
         ANTHROPIC_API_KEY: 'anthropic-secret', OPENAI_API_KEY: 'openai-secret',
         OPENROUTER_API_KEY: 'openrouter-secret', GOOGLE_API_KEY: 'google-secret',
         GEMINI_API_KEY: 'gemini-secret', XAI_API_KEY: 'xai-secret',
@@ -536,6 +538,8 @@ describe('external adapter safety', () => {
       PATH: 'C:\\Windows\\System32',
       USERPROFILE: 'C:\\Users\\tester',
       APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Redirected\\Local',
+      HERMES_HOME: 'D:\\Hermes Data',
       TERM: 'xterm-256color',
     });
     for (const name of [
