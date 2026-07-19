@@ -116,6 +116,40 @@ describe('workspace lifecycle routes', () => {
     expect(manager.get(wsId)?.group).toBe('Personal');
   });
 
+  it('PATCH normalizes the legacy persona alias and accepts safe type metadata', async () => {
+    const res = await server.inject({
+      method: 'PATCH',
+      url: `/api/workspaces/${wsId}`,
+      payload: { persona: 'coder', type: 'project' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const stored = manager.get(wsId);
+    expect(stored?.personaId).toBe('coder');
+    expect(stored?.type).toBe('project');
+    expect(stored).not.toHaveProperty('persona');
+  });
+
+  it.each([
+    ['storageType', 'local'],
+    ['storagePath', 'C:\\outside'],
+    ['storageConfig', { bucket: 'outside' }],
+    ['directory', 'C:\\outside'],
+  ] as const)('PUT and PATCH reject immutable %s updates', async (field, value) => {
+    const before = manager.get(wsId);
+
+    for (const method of ['PUT', 'PATCH'] as const) {
+      const res = await server.inject({
+        method,
+        url: `/api/workspaces/${wsId}`,
+        payload: { [field]: value },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(manager.get(wsId)).toEqual(before);
+    }
+  });
+
   it('PATCH on an unknown workspace returns 404', async () => {
     const res = await server.inject({
       method: 'PATCH',

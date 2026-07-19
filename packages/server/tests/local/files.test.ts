@@ -458,6 +458,43 @@ describe('File Management API', () => {
   });
 
   describe('local workspace filesystem boundary', () => {
+    it.each(['PUT', 'PATCH'] as const)(
+      '%s rejects storage-root rebinding before the files API can read outside data',
+      async (method) => {
+        const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-files-rebind-outside-'));
+        fs.writeFileSync(path.join(outside, 'sentinel.txt'), 'outside-secret');
+
+        try {
+          const created = await injectWithAuth(server, {
+            method: 'POST',
+            url: '/api/workspaces',
+            payload: { name: `Rebind ${method}`, group: 'Test' },
+          });
+          expect(created.statusCode).toBe(201);
+          const rebindWorkspaceId = created.json().id as string;
+
+          const update = await injectWithAuth(server, {
+            method,
+            url: `/api/workspaces/${rebindWorkspaceId}`,
+            payload: { storageType: 'local', storagePath: outside },
+          });
+
+          expect(update.statusCode).toBe(400);
+          expect(server.workspaceManager.get(rebindWorkspaceId)?.storageType).toBeUndefined();
+          expect(server.workspaceManager.get(rebindWorkspaceId)?.storagePath).toBeUndefined();
+
+          const sentinel = await injectWithAuth(server, {
+            method: 'GET',
+            url: `/api/workspaces/${rebindWorkspaceId}/files/download?path=/sentinel.txt`,
+          });
+          expect(sentinel.statusCode).toBe(404);
+          expect(sentinel.body).not.toContain('outside-secret');
+        } finally {
+          fs.rmSync(outside, { recursive: true, force: true });
+        }
+      },
+    );
+
     it('blocks sensitive files and escaping junctions through the real API', async () => {
       const linkedRoot = path.join(tmpDir, 'linked-security-root');
       const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-files-api-outside-'));

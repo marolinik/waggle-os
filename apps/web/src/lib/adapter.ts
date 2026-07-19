@@ -665,12 +665,12 @@ class LocalAdapter {
     return res.json();
   }
 
-  async updateWorkspace(id: string, data: Partial<Workspace>): Promise<Workspace> {
+  async updateWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'templateId' | 'name' | 'group' | 'model' | 'status' | 'description' | 'type'>>): Promise<Workspace> {
     const res = await this.fetch(`/api/workspaces/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     return res.json();
   }
 
-  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'templateId' | 'name' | 'group' | 'model' | 'status' | 'description'>>): Promise<Workspace> {
+  async patchWorkspace(id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'templateId' | 'name' | 'group' | 'model' | 'status' | 'description' | 'type'>>): Promise<Workspace> {
     const res = await this.fetch(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
     return res.json();
   }
