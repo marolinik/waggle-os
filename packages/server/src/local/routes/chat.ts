@@ -53,6 +53,7 @@ import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-avail
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import { getBoundTeamServer } from '../team-server-binding.js';
+import { fetchTeamServer } from '../team-server-egress.js';
 import type { GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 
@@ -2099,7 +2100,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                       authToken: teamServer.token,
                       userId: teamServer.userId ?? 'local-user',
                       displayName: teamServer.displayName ?? 'You',
-                    });
+                    }, fetchTeamServer);
                     // Fire-and-forget push — non-blocking
                     sync.pushFrame({
                       id: Date.now(),

@@ -423,13 +423,53 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     }
   });
 
+  it('routes save_memory TeamSync pushes through the guarded Team transport', async () => {
+    const teamServerUrl = 'https://93.184.216.34';
+    const workspace = server.workspaceManager.create({
+      name: 'Guarded Team Workspace',
+      group: 'work',
+      teamId: 'team-guarded',
+      teamServerUrl,
+    });
+    writeTeamConfig(tmpDir, 'guarded-team-token', teamServerUrl);
+    mockFetch.mockClear();
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'remote-frame' }) });
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      config.onToolResult?.('save_memory', {}, 'saved memory');
+      return { content: 'saved', toolsUsed: ['save_memory'], usage: { inputTokens: 1, outputTokens: 1 } };
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Remember this safely', workspace: workspace.id },
+      });
+      expect(res.statusCode).toBe(200);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const guardedPush = mockFetch.mock.calls.find(([url, options]) =>
+        String(url) === `${teamServerUrl}/api/teams/team-guarded/entities`
+        && options?.method === 'POST',
+      );
+      expect(guardedPush?.[1]?.headers?.Authorization).toBe('Bearer guarded-team-token');
+      expect(guardedPush?.[1]?.redirect).toBe('manual');
+      expect(guardedPush?.[1]?.dispatcher).toBeDefined();
+    } finally {
+      server.agentRunner = originalRunner;
+      mockFetch.mockResolvedValue({ ok: true });
+    }
+  });
+
   it('rebinds the TeamSync cache on token rotation and rejects a server change', async () => {
-    writeTeamConfig(tmpDir, 'server-a-token', 'https://team-a.example.com');
+    const teamServerUrl = 'https://93.184.216.34';
+    writeTeamConfig(tmpDir, 'server-a-token', teamServerUrl);
     const workspace = server.workspaceManager.create({
       name: 'Cached Server A Workspace',
       group: 'work',
       teamId: 'team-a',
-      teamServerUrl: 'https://team-a.example.com',
+      teamServerUrl,
     });
     mockFetch.mockResolvedValue({ ok: true, json: async () => [] });
 
@@ -437,7 +477,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
       server.agentState.activateWorkspaceMind(workspace.id);
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      writeTeamConfig(tmpDir, 'rotated-a-token', 'https://team-a.example.com');
+      writeTeamConfig(tmpDir, 'rotated-a-token', teamServerUrl);
       mockFetch.mockClear();
       await server.agentState.orchestrator.autoSaveFromExchange(
         'We decided to use the rotated credential guard for this workspace architecture.',
@@ -446,12 +486,16 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
       const rotatedPush = mockFetch.mock.calls.find(([, options]) => options?.method === 'POST');
       expect(rotatedPush?.[1]?.headers?.Authorization).toBe('Bearer rotated-a-token');
+      expect(rotatedPush?.[1]?.redirect).toBe('manual');
+      expect(rotatedPush?.[1]?.dispatcher).toBeDefined();
 
       mockFetch.mockClear();
       server.agentState.activateWorkspaceMind(workspace.id);
       await new Promise(resolve => setTimeout(resolve, 100));
       const rotatedPull = mockFetch.mock.calls.find(([url]) => String(url).includes('/entities?type=memory_frame'));
       expect(rotatedPull?.[1]?.headers?.Authorization).toBe('Bearer rotated-a-token');
+      expect(rotatedPull?.[1]?.redirect).toBe('manual');
+      expect(rotatedPull?.[1]?.dispatcher).toBeDefined();
 
       writeTeamConfig(tmpDir, 'server-b-token', 'https://team-b.example.com');
       mockFetch.mockClear();

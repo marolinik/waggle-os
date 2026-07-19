@@ -115,10 +115,12 @@ describe('TeamSync', () => {
   };
 
   let fetchSpy: ReturnType<typeof vi.fn>;
+  let globalFetchSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
+    globalFetchSpy = vi.fn().mockRejectedValue(new Error('raw global fetch used'));
+    vi.stubGlobal('fetch', globalFetchSpy);
   });
 
   afterEach(() => {
@@ -132,7 +134,7 @@ describe('TeamSync', () => {
         json: async () => ({ id: 'remote-uuid-1' }),
       });
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       const frame: MemoryFrame = {
         id: 1,
         frame_type: 'I',
@@ -150,6 +152,7 @@ describe('TeamSync', () => {
 
       expect(result).toEqual({ remoteId: 'remote-uuid-1' });
       expect(fetchSpy).toHaveBeenCalledOnce();
+      expect(globalFetchSpy).not.toHaveBeenCalled();
 
       const [url, opts] = fetchSpy.mock.calls[0];
       expect(url).toBe('https://team.waggle.dev/api/teams/test-team/entities');
@@ -171,7 +174,7 @@ describe('TeamSync', () => {
         statusText: 'Internal Server Error',
       });
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       const frame: MemoryFrame = {
         id: 1, frame_type: 'I', gop_id: 'test', t: 0, base_frame_id: null,
         content: 'x', importance: 'normal', access_count: 0,
@@ -185,7 +188,7 @@ describe('TeamSync', () => {
     it('returns null on network error', async () => {
       fetchSpy.mockRejectedValue(new Error('Network unreachable'));
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       const frame: MemoryFrame = {
         id: 1, frame_type: 'I', gop_id: 'test', t: 0, base_frame_id: null,
         content: 'x', importance: 'normal', access_count: 0,
@@ -217,7 +220,7 @@ describe('TeamSync', () => {
         ]),
       });
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       const frames = await sync.pullFrames();
 
       expect(frames).toHaveLength(2);
@@ -225,6 +228,7 @@ describe('TeamSync', () => {
       expect(frames[0].authorName).toBe('Marko');
       expect(frames[1].gopId).toBe('gop-b');
       expect(frames[1].authorName).toBe('Ana');
+      expect(globalFetchSpy).not.toHaveBeenCalled();
 
       const [url, opts] = fetchSpy.mock.calls[0];
       expect(url).toContain('/api/teams/test-team/entities?type=memory_frame');
@@ -248,7 +252,7 @@ describe('TeamSync', () => {
         ]),
       });
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       const frames = await sync.pullFrames('2026-03-12T00:00:00.000Z');
 
       // Only the frame after the since timestamp
@@ -259,7 +263,7 @@ describe('TeamSync', () => {
     it('returns empty array on server error', async () => {
       fetchSpy.mockResolvedValue({ ok: false, status: 500, statusText: 'Error' });
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       const frames = await sync.pullFrames();
       expect(frames).toEqual([]);
     });
@@ -267,7 +271,7 @@ describe('TeamSync', () => {
     it('returns empty array on network error', async () => {
       fetchSpy.mockRejectedValue(new Error('Offline'));
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       const frames = await sync.pullFrames();
       expect(frames).toEqual([]);
     });
@@ -275,21 +279,21 @@ describe('TeamSync', () => {
 
   describe('sync timestamp tracking', () => {
     it('starts with null timestamp', () => {
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       expect(sync.getLastSyncTimestamp()).toBeNull();
     });
 
     it('updates timestamp after successful pull', async () => {
       fetchSpy.mockResolvedValue({ ok: true, json: async () => ([]) });
 
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       await sync.pullFrames();
 
       expect(sync.getLastSyncTimestamp()).toBeTruthy();
     });
 
     it('allows manual timestamp setting', () => {
-      const sync = new TeamSync(mockConfig);
+      const sync = new TeamSync(mockConfig, fetchSpy);
       sync.setLastSyncTimestamp('2026-03-12T10:00:00.000Z');
       expect(sync.getLastSyncTimestamp()).toBe('2026-03-12T10:00:00.000Z');
     });

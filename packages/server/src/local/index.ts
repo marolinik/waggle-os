@@ -13,6 +13,7 @@ import websocket from '@fastify/websocket';
 import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, SuppressionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, harvestSetHash, type WorkspaceConfig } from '@waggle/core';
 import { corsOriginAllowed } from './cors-config.js';
 import { getBoundTeamServer } from './team-server-binding.js';
+import { fetchTeamServer } from './team-server-egress.js';
 import { getStorageProvider } from './storage/index.js';
 import { isLoopbackBind, resolveBindHost } from './net-config.js';
 import { isLocalRequest } from './origin-guard.js';
@@ -1279,7 +1280,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       authToken: teamServer.token,
       userId: teamServer.userId ?? 'local-user',
       displayName: teamServer.displayName ?? 'You',
-    });
+    }, fetchTeamServer);
     const pushFrame = sync.pushFrame.bind(sync);
     sync.pushFrame = async (frame) => {
       const currentWorkspace = wsManager.get(workspaceId);
