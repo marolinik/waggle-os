@@ -27,7 +27,7 @@ const mockFetch = vi.fn().mockResolvedValue({ ok: true });
  * Helper: write config.json with team server credentials into dataDir.
  * The real WaggleConfig will read this file.
  */
-function writeTeamConfig(dataDir: string, token?: string, url = 'https://team.example.com') {
+function writeTeamConfig(dataDir: string, token?: string, url = 'https://93.184.216.34') {
   const config: Record<string, unknown> = {
     defaultModel: 'claude-sonnet-4-6',
     providers: {},
@@ -62,7 +62,7 @@ describe('Team Integration — Audit Event Push (GAP-028)', () => {
           id: 'ws-team-1',
           name: 'Team WS',
           teamId: 'team-abc',
-          teamServerUrl: 'https://team.example.com',
+          teamServerUrl: 'https://93.184.216.34',
         }),
       },
       eventBus: { emit: vi.fn() },
@@ -79,7 +79,7 @@ describe('Team Integration — Audit Event Push (GAP-028)', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://team.example.com/api/teams/team-abc/audit');
+    expect(url).toBe('https://93.184.216.34/api/teams/team-abc/audit');
     expect(opts.method).toBe('POST');
     expect(opts.headers['Authorization']).toBe('Bearer test-token-123');
     const body = JSON.parse(opts.body);
@@ -134,6 +134,30 @@ describe('Team Integration — Audit Event Push (GAP-028)', () => {
       eventType: 'session_start',
     });
 
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('blocks a metadata-bound audit target before sending the Team token', async () => {
+    writeTeamConfig(tmpDir, 'metadata-token', 'https://169.254.169.254/latest/meta-data');
+    const fakeServer = {
+      localConfig: { dataDir: tmpDir },
+      workspaceManager: {
+        get: vi.fn().mockReturnValue({
+          id: 'ws-metadata',
+          name: 'Metadata Workspace',
+          teamId: 'team-metadata',
+          teamServerUrl: 'https://169.254.169.254/latest/meta-data',
+        }),
+      },
+      eventBus: { emit: vi.fn() },
+    } as unknown as FastifyInstance;
+
+    emitAuditEvent(fakeServer, {
+      workspaceId: 'ws-metadata',
+      eventType: 'tool_call',
+    });
     await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(mockFetch).not.toHaveBeenCalled();
@@ -203,7 +227,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
         name: 'Team Project',
         group: 'work',
         teamId: 'team-abc',
-        teamServerUrl: 'https://team.example.com/',
+        teamServerUrl: 'https://93.184.216.34/',
         teamUserId: 'user-42',
       },
     });
@@ -211,7 +235,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     expect(res.statusCode).toBe(201);
     const ws = res.json();
     expect(ws.name).toBe('Team Project');
-    expect(ws.teamServerUrl).toBe('https://team.example.com');
+    expect(ws.teamServerUrl).toBe('https://93.184.216.34');
 
     // Wait for fire-and-forget fetch to complete
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -223,7 +247,7 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
 
     expect(registrationCalls.length).toBeGreaterThanOrEqual(1);
     const [url, opts] = registrationCalls[0];
-    expect(url).toBe('https://team.example.com/api/teams/team-abc/entities');
+    expect(url).toBe('https://93.184.216.34/api/teams/team-abc/entities');
     expect(opts.method).toBe('POST');
     expect(opts.headers['Authorization']).toBe('Bearer ws-reg-token');
     const body = JSON.parse(opts.body);
@@ -231,6 +255,56 @@ describe('Team Integration — Workspace Registration (GAP-029)', () => {
     expect(body.properties.displayName).toBe('Team Project');
     expect(body.properties.group).toBe('work');
     expect(body.properties.createdBy).toBe('user-42');
+  });
+
+  it('blocks a metadata-bound workspace registration before sending the Team token', async () => {
+    writeTeamConfig(tmpDir, 'metadata-token', 'https://169.254.169.254/latest/meta-data');
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: {
+        name: 'Metadata Team Project',
+        group: 'work',
+        teamId: 'team-metadata',
+        teamServerUrl: 'https://169.254.169.254/latest/meta-data',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(mockFetch.mock.calls.filter(([url, options]) =>
+      String(url).startsWith('https://169.254.169.254/')
+      || options?.headers?.Authorization === 'Bearer metadata-token',
+    )).toHaveLength(0);
+  });
+
+  it('rejects a cleartext public configured Team destination without creating a workspace', async () => {
+    const previousAllowLocal = process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+    process.env.WAGGLE_ALLOW_LOCAL_FETCH = '1';
+    writeTeamConfig(tmpDir, 'cleartext-token', 'http://93.184.216.34');
+    const workspaceCount = server.workspaceManager.list().length;
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/workspaces',
+        payload: {
+          name: 'Cleartext Team Project',
+          group: 'work',
+          teamId: 'team-cleartext',
+          teamServerUrl: 'http://93.184.216.34',
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(server.workspaceManager.list()).toHaveLength(workspaceCount);
+      expect(mockFetch.mock.calls.filter(([url, options]) =>
+        String(url).startsWith('http://93.184.216.34/')
+        || options?.headers?.Authorization === 'Bearer cleartext-token',
+      )).toHaveLength(0);
+    } finally {
+      if (previousAllowLocal === undefined) delete process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+      else process.env.WAGGLE_ALLOW_LOCAL_FETCH = previousAllowLocal;
+    }
   });
 
   it('rejects a team workspace URL that does not match the configured destination', async () => {

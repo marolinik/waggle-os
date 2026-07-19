@@ -1,16 +1,5 @@
 import type { TeamServerConfig } from '@waggle/core';
-
-function normalizeTeamServerBaseUrl(value: string): string | null {
-  try {
-    const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-      return null;
-    }
-    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
-  } catch {
-    return null;
-  }
-}
+import { normalizeTeamServerBaseUrl } from './team-server-egress.js';
 
 /** Bind a stored workspace destination to the currently configured Team credentials. */
 export function getBoundTeamServer(

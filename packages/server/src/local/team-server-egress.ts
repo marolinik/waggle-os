@@ -9,6 +9,21 @@ function hasAllowedProtocol(url: URL, allowLocal: boolean): boolean {
   return url.protocol === 'https:' || (url.protocol === 'http:' && allowLocal && isExplicitLoopback);
 }
 
+export function normalizeTeamServerBaseUrl(
+  value: string,
+  allowLocal = allowLocalFromEnv(),
+): string | null {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash || !hasAllowedProtocol(url, allowLocal)) {
+      return null;
+    }
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTeamServer(url: string, init: RequestInit = {}): Promise<Response> {
   const parsed = new URL(url);
   const allowLocal = allowLocalFromEnv();

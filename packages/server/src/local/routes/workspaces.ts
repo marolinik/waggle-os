@@ -8,6 +8,8 @@ import { MindDB, WaggleConfig, createFileStore, reconcileFtsIndex } from '@waggl
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
 import { validateBody } from '../../validate-body.js';
+import { getBoundTeamServer } from '../team-server-binding.js';
+import { fetchTeamServer } from '../team-server-egress.js';
 
 /** POST /api/workspaces body — create a workspace (name + group required). Model
  *  format + local-path existence get deeper checks in the handler; enum fields
@@ -69,18 +71,6 @@ function isValidModelId(model: string): boolean {
   if (!model || model.length < 2) return false;
   // Accept any model that follows naming conventions (alphanumeric, hyphens, dots, slashes)
   return /^[a-zA-Z0-9][\w./-]*$/.test(model);
-}
-
-function normalizeTeamServerBaseUrl(value: string): string | null {
-  try {
-    const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-      return null;
-    }
-    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -385,15 +375,12 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     }
     if (teamId && teamServerUrl) {
       const configuredTeamServer = new WaggleConfig(server.localConfig.dataDir).getTeamServer();
-      const requestedBaseUrl = normalizeTeamServerBaseUrl(teamServerUrl);
-      const configuredBaseUrl = configuredTeamServer?.url
-        ? normalizeTeamServerBaseUrl(configuredTeamServer.url)
-        : null;
-      if (!requestedBaseUrl || !configuredBaseUrl || requestedBaseUrl !== configuredBaseUrl) {
+      const boundTeamServer = getBoundTeamServer(teamServerUrl, configuredTeamServer);
+      if (!boundTeamServer) {
         return reply.status(400).send({ error: 'Team workspace URL must match the configured Team server' });
       }
-      boundTeamServerUrl = configuredBaseUrl;
-      teamServerToken = configuredTeamServer?.token;
+      boundTeamServerUrl = boundTeamServer.url;
+      teamServerToken = boundTeamServer.token;
     }
 
     const ws = server.workspaceManager.create({
@@ -490,7 +477,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     // Register workspace on team server (fire-and-forget)
     if (teamId && boundTeamServerUrl && teamServerToken) {
       try {
-        fetch(`${boundTeamServerUrl}/api/teams/${teamId}/entities`, {
+        fetchTeamServer(`${boundTeamServerUrl}/api/teams/${teamId}/entities`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
