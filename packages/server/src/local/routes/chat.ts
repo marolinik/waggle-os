@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type ToolDefinition, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -1732,7 +1732,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // same unknown-external persona rails as MCP, and keep native names
           // first so a plugin cannot shadow a built-in implementation.
           spawnAvailableTools = effectiveTools;
-          let materializedPlugins = server.agentState.pluginRuntimeManager.getAllTools();
+          let materializedPlugins: ToolDefinition[] = server.agentState.pluginRuntimeManager.getAllTools();
           for (const tool of materializedPlugins) catalogToolNames.add(tool.name);
           if (activePersona) {
             materializedPlugins = filterMcpToolsForPersona(materializedPlugins, activePersona);
