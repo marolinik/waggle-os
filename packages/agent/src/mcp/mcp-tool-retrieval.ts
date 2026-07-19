@@ -116,6 +116,11 @@ function tokenize(text: string): Set<string> {
   return out;
 }
 
+interface RankedToolNames {
+  selectedToolNames: string[];
+  latestToolNames: string[];
+}
+
 export class McpToolRetriever {
   private readonly embedder: Embedder | null;
   private readonly maxConversations: number;
@@ -161,8 +166,9 @@ export class McpToolRetriever {
       const query = buildRetrievalQuery(messages);
       if (query) {
         const latestQuery = latestRetrievalQuery(messages) || query;
-        retrievedToolNames = await this.rank(mcpTools, query, latestQuery, cfg.topK);
-        for (const name of retrievedToolNames) acc.add(name);
+        const ranked = await this.rank(mcpTools, query, latestQuery, cfg.topK);
+        retrievedToolNames = ranked.latestToolNames;
+        for (const name of ranked.selectedToolNames) acc.add(name);
       }
     } catch {
       // Inject none new; the accumulated set below still stands the turn up.
@@ -178,7 +184,7 @@ export class McpToolRetriever {
     query: string,
     latestQuery: string,
     topK: number,
-  ): Promise<string[]> {
+  ): Promise<RankedToolNames> {
     if (!this.embedder || isMockEmbedder(this.embedder)) {
       return this.rankByKeyword(mcpTools, query, latestQuery, topK);
     }
@@ -191,23 +197,28 @@ export class McpToolRetriever {
     query: string,
     latestQuery: string,
     topK: number,
-  ): Promise<string[]> {
+  ): Promise<RankedToolNames> {
     const vectors = await this.ensureIndex(embedder, mcpTools);
     const [queryVec, latestQueryVec] = await embedder.embedBatch([query, latestQuery]);
-    if (!queryVec || !latestQueryVec) return [];
+    if (!queryVec || !latestQueryVec) return { selectedToolNames: [], latestToolNames: [] };
 
-    const scored: Array<{ name: string; score: number }> = [];
+    const scored: Array<{ name: string; score: number; latestScore: number }> = [];
     for (const tool of mcpTools) {
       const vec = vectors.get(tool.name);
       // Skip dim-mismatched vectors rather than scoring them as noise.
       if (!vec || vec.length !== queryVec.length || vec.length !== latestQueryVec.length) continue;
-      const score = cosine(latestQueryVec, vec) * 4 + cosine(queryVec, vec);
+      const latestScore = cosine(latestQueryVec, vec);
+      const score = latestScore * 4 + cosine(queryVec, vec);
       // Positive-similarity floor: an orthogonal tool shares no signal with the
       // query, so padding the top-k with it just re-bloats the pool #6 gates.
-      if (score > 0) scored.push({ name: tool.name, score });
+      if (score > 0) scored.push({ name: tool.name, score, latestScore });
     }
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK).map((s) => s.name);
+    const selected = scored.slice(0, topK);
+    return {
+      selectedToolNames: selected.map((item) => item.name),
+      latestToolNames: selected.filter((item) => item.latestScore > 0).map((item) => item.name),
+    };
   }
 
   /** Keyword-overlap fallback. Only tools with a hit are eligible — never a full dump. */
@@ -216,25 +227,31 @@ export class McpToolRetriever {
     query: string,
     latestQuery: string,
     topK: number,
-  ): string[] {
+  ): RankedToolNames {
     const words = tokenize(query);
     const latestWords = tokenize(latestQuery);
-    if (words.size === 0) return [];
+    if (words.size === 0) return { selectedToolNames: [], latestToolNames: [] };
 
-    const scored: Array<{ name: string; score: number }> = [];
+    const scored: Array<{ name: string; score: number; latestScore: number }> = [];
     for (const tool of mcpTools) {
       const haystack = `${tool.name} ${tool.description}`.toLowerCase();
       let score = 0;
       for (const word of words) {
         if (haystack.includes(word)) score++;
       }
+      let latestScore = 0;
       for (const word of latestWords) {
-        if (haystack.includes(word)) score += 4;
+        if (haystack.includes(word)) latestScore++;
       }
-      if (score > 0) scored.push({ name: tool.name, score });
+      score += latestScore * 4;
+      if (score > 0) scored.push({ name: tool.name, score, latestScore });
     }
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK).map((s) => s.name);
+    const selected = scored.slice(0, topK);
+    return {
+      selectedToolNames: selected.map((item) => item.name),
+      latestToolNames: selected.filter((item) => item.latestScore > 0).map((item) => item.name),
+    };
   }
 
   /** Build (or reuse) the tool-vector index. Rebuilt when the tool set changes. */
