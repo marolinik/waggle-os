@@ -268,16 +268,19 @@ describe('ConfluenceConnector', () => {
 describe('ObsidianConnector', () => {
   let connector: ObsidianConnector;
   let tmpDir: string;
+  let siblingDir: string;
 
   beforeEach(() => {
     connector = new ObsidianConnector();
     // Create a temp directory as a mock Obsidian vault
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-obsidian-test-'));
+    siblingDir = `${tmpDir}-evil`;
   });
 
   afterEach(() => {
     // Clean up temp directory
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(siblingDir, { recursive: true, force: true });
   });
 
   it('has correct id, name, and actions', () => {
@@ -501,6 +504,78 @@ describe('ObsidianConnector', () => {
     const result = await connector.execute('get_note', { path: '../../etc/passwd' });
     expect(result.success).toBe(false);
     expect(result.error).toContain('path traversal');
+  });
+
+  it('rejects sibling-prefix traversal outside the vault', async () => {
+    const vault = createMockVault('obsidian', { value: tmpDir, isExpired: false });
+    await connector.connect(vault);
+    fs.mkdirSync(siblingDir);
+    fs.writeFileSync(path.join(siblingDir, 'secret.md'), 'outside secret');
+
+    const siblingPath = path.relative(tmpDir, path.join(siblingDir, 'secret.md'));
+    const result = await connector.execute('get_note', { path: siblingPath });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('path traversal');
+  });
+
+  it('rejects absolute, drive-qualified, UNC, and mixed-separator paths', async () => {
+    const vault = createMockVault('obsidian', { value: tmpDir, isExpired: false });
+    await connector.connect(vault);
+    fs.mkdirSync(siblingDir);
+    fs.writeFileSync(path.join(tmpDir, 'inside.md'), 'inside');
+    fs.writeFileSync(path.join(siblingDir, 'secret.md'), 'outside secret');
+
+    const invalidPaths = [
+      path.join(tmpDir, 'inside.md'),
+      'C:relative.md',
+      '\\\\server\\share\\secret.md',
+      '/absolute/secret.md',
+      `..\\${path.basename(siblingDir)}/secret.md`,
+    ];
+
+    for (const invalidPath of invalidPaths) {
+      const result = await connector.execute('get_note', { path: invalidPath });
+      expect(result.success, invalidPath).toBe(false);
+      expect(result.error, invalidPath).toContain('path traversal');
+    }
+  });
+
+  it('rejects reads through an out-of-vault symlink or Windows junction', async () => {
+    const vault = createMockVault('obsidian', { value: tmpDir, isExpired: false });
+    await connector.connect(vault);
+    fs.mkdirSync(siblingDir);
+    fs.writeFileSync(path.join(siblingDir, 'secret.md'), 'outside secret');
+    fs.symlinkSync(
+      siblingDir,
+      path.join(tmpDir, 'linked-out'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const result = await connector.execute('get_note', { path: 'linked-out/secret.md' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('path traversal');
+  });
+
+  it('rejects writes below a dangling link', async () => {
+    const vault = createMockVault('obsidian', { value: tmpDir, isExpired: false });
+    await connector.connect(vault);
+    fs.mkdirSync(siblingDir);
+    fs.symlinkSync(
+      siblingDir,
+      path.join(tmpDir, 'dangling-out'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    fs.rmSync(siblingDir, { recursive: true, force: true });
+
+    const blocked = await connector.execute('create_note', {
+      path: 'dangling-out/blocked.md',
+      content: 'must not escape',
+    });
+
+    expect(blocked.success).toBe(false);
+    expect(blocked.error).toContain('path traversal');
   });
 
   it('toDefinition() maps correctly', () => {
