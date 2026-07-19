@@ -25,10 +25,12 @@ describe('Browser Companion auth bootstrap', () => {
   const originalExtIds = process.env.WAGGLE_BROWSER_EXT_IDS;
   const originalTrustLocalhost = process.env.WAGGLE_TRUST_LOCALHOST;
   const originalDevAllow = process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION;
+  const originalHost = process.env.WAGGLE_HOST;
 
   beforeEach(() => {
     process.env.WAGGLE_TRUST_LOCALHOST = '0';
     process.env.WAGGLE_BROWSER_EXT_IDS = EXTENSION_ID;
+    delete process.env.WAGGLE_HOST;
     delete process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION;
   });
 
@@ -39,6 +41,8 @@ describe('Browser Companion auth bootstrap', () => {
     else process.env.WAGGLE_TRUST_LOCALHOST = originalTrustLocalhost;
     if (originalDevAllow === undefined) delete process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION;
     else process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION = originalDevAllow;
+    if (originalHost === undefined) delete process.env.WAGGLE_HOST;
+    else process.env.WAGGLE_HOST = originalHost;
   });
 
   it('returns the session token to an explicitly allowlisted extension origin without an existing bearer', async () => {
@@ -52,6 +56,26 @@ describe('Browser Companion auth bootstrap', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ token: TEST_TOKEN });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not expose the process bearer to extension headers on a non-loopback bind', async () => {
+    process.env.WAGGLE_HOST = '0.0.0.0';
+    const server = await createBrowserExtServer();
+    try {
+      const res = await server.inject({
+        method: 'GET',
+        url: '/api/browser-ext/session-token',
+        headers: {
+          'x-waggle-extension-id': EXTENSION_ID,
+          'sec-fetch-site': 'none',
+        },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('SESSION_BOOTSTRAP_LOOPBACK_ONLY');
     } finally {
       await server.close();
     }

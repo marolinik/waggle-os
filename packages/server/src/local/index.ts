@@ -13,7 +13,7 @@ import websocket from '@fastify/websocket';
 import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, SuppressionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, harvestSetHash, type WorkspaceConfig } from '@waggle/core';
 import { corsOriginAllowed } from './cors-config.js';
 import { getStorageProvider } from './storage/index.js';
-import { resolveBindHost } from './net-config.js';
+import { isLoopbackBind, resolveBindHost } from './net-config.js';
 import { isLocalRequest } from './origin-guard.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -2437,6 +2437,12 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // response by CORS and rejected here by isLocalRequest. The Tauri webview reads
   // this once on connect() and sends the token as a Bearer on every other request.
   server.get('/api/auth/session-token', async (request, reply) => {
+    if (!isLoopbackBind()) {
+      return reply.code(403).send({
+        error: 'Session bootstrap is available only on a loopback-bound sidecar.',
+        code: 'SESSION_BOOTSTRAP_LOOPBACK_ONLY',
+      });
+    }
     if (!isLocalRequest(request)) {
       return reply.code(403).send({ error: 'Forbidden: external origin' });
     }
