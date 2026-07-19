@@ -2,9 +2,16 @@
   "name": "@waggle/waggle-dance",
   "version": "0.1.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --build --force",
     "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/waggle-dance/tests"
   },
   "dependencies": {
