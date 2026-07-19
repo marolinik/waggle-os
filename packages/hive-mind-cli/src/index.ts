@@ -23,7 +23,7 @@
  */
 
 import { parseArgs } from 'node:util';
-import { dispatch, type DispatchArgs } from './dispatch.js';
+import type { DispatchArgs } from './dispatch.js';
 
 const HELP_FLAGS = new Set(['--help', '-h']);
 
@@ -319,7 +319,9 @@ async function main(): Promise<void> {
   }
 
   try {
-    const output = await dispatch(args);
+    const output = args.subcommand === 'hook-call'
+      ? (await import('./commands/hook-call.js')).runHookCallCommand(args)
+      : await (await import('./dispatch.js')).dispatch(args);
     if (output !== undefined) process.stdout.write(output);
     if (output && !output.endsWith('\n')) process.stdout.write('\n');
     process.exit(0);
