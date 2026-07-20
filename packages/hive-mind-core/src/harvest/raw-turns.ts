@@ -33,7 +33,7 @@
 import type { FrameStore } from '../mind/frames.js';
 import type { UniversalImportItem } from './types.js';
 import { HARVEST_FRAME_CONTENT_CAP } from './types.js';
-import { scanForInjection } from '../injection-scanner.js';
+import { evaluateExternalMemoryIngress } from '../memory-ingress-guard.js';
 import { createCoreLogger } from '../logger.js';
 
 const log = createCoreLogger('raw-turns');
@@ -138,12 +138,12 @@ export function writeRawTurnFrames(
       result.capped = true;
       break;
     }
-    // Scan first 4KB — same probe budget as the harvest pipeline's Pass 0.
-    const scan = scanForInjection(text.slice(0, 4000), 'tool_output');
-    if (!scan.safe) {
+    const storedText = text.slice(0, HARVEST_FRAME_CONTENT_CAP);
+    const decision = evaluateExternalMemoryIngress({ content: storedText });
+    if (decision.action === 'block') {
       result.injectionDropped++;
       log.warn('dropping raw turn with injection payload', {
-        conv: convKey, turn, flags: scan.flags.join(','),
+        conv: convKey, turn, flags: decision.scan.flags,
       });
       continue;
     }
@@ -151,7 +151,7 @@ export function writeRawTurnFrames(
     const createdAt = isIsoTimestamp(msg.timestamp) ? msg.timestamp : itemTs;
     frames.createIFrame(
       gopId,
-      `${rawTurnHeader(convKey, turn, speaker)}\n${text.slice(0, HARVEST_FRAME_CONTENT_CAP)}`,
+      `${rawTurnHeader(convKey, turn, speaker)}\n${storedText}`,
       'normal',
       'import',
       createdAt,

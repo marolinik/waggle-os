@@ -16,7 +16,7 @@ import type {
 } from './types.js';
 import { CLASSIFY_PROMPT, EXTRACT_PROMPT, SYNTHESIZE_PROMPT } from './prompts.js';
 import { dedup } from './dedup.js';
-import { scanForInjection } from '../injection-scanner.js';
+import { evaluateExternalMemoryIngress } from '../memory-ingress-guard.js';
 import { createCoreLogger } from '../logger.js';
 
 const log = createCoreLogger('harvest-pipeline');
@@ -103,25 +103,23 @@ export class HarvestPipeline {
     log.info('harvest pipeline starting', { source, itemCount: items.length, batchSize: this.batchSize, concurrency: this.concurrency });
 
     // Pass 0: Injection scan — drop any item whose title or content carries a
-    // prompt-injection payload (role_override / prompt_extraction / instruction_injection).
+    // prompt-injection payload.
     // Harvest ingests UNTRUSTED external exports (ChatGPT/Claude/Gemini JSON dumps,
     // Perplexity shares, URL fetches). A hostile file must not flow through to the
     // LLM passes or into memory frames.
     const originalCount = items.length;
     items = items.filter((item) => {
-      // Scan title + first 4KB of content — enough to catch payloads hidden in either field.
-      // Using 'tool_output' context since imports are external data, weighted like tool output.
-      const probe = `${item.title ?? ''}\n${(item.content ?? '').slice(0, 4000)}`;
-      const scan = scanForInjection(probe, 'tool_output');
-      if (!scan.safe) {
-        const reason = scan.flags.join(',');
+      const decision = evaluateExternalMemoryIngress({
+        title: item.title,
+        content: item.content ?? '',
+      });
+      if (decision.action === 'block') {
         log.warn('dropping harvest item with injection payload', {
-          itemId: item.id,
-          title: item.title?.slice(0, 80),
-          flags: scan.flags,
-          score: scan.score,
+          itemId: String(item.id).slice(0, 80),
+          flags: decision.scan.flags,
+          score: decision.scan.score,
         });
-        errors.push(`Blocked item "${item.title?.slice(0, 40) ?? item.id}" — injection detected (${reason})`);
+        errors.push('Blocked imported item due to unsafe content.');
         return false;
       }
       return true;
