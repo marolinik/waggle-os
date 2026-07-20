@@ -104,30 +104,58 @@ export async function runMemoryLaneExtraction(
 
   const extraction = await extractMemoryLanes(parts.join('\n\n'), llmCall);
 
-  new SessionStore(db).ensure(LANE_SESSION_ID, 'system', 'Extracted memory lanes (facts/events/profiles)');
-  const written = writeMemoryLaneFrames(new FrameStore(db), LANE_SESSION_ID, extraction);
   const errors = [...extraction.errors];
 
   // D2 — KG entity pass over the SAME frame window (only the frames the lane
   // pass actually consumed, so this rides the single shared watermark).
   // extractKgEntities never throws (per-batch errors collected); the write is
   // belt-and-braces wrapped so a graph failure can't kill the cron.
-  let kgEntitiesWritten = 0;
+  let kgExtraction: Awaited<ReturnType<typeof extractKgEntities>> | undefined;
   try {
-    const kgExtraction = await extractKgEntities(
+    kgExtraction = await extractKgEntities(
       rows.slice(0, processed).map((r) => ({ id: r.id, content: r.content })),
       llmCall,
     );
     errors.push(...kgExtraction.errors);
-    const kgWritten = writeKgEntities(new KnowledgeGraph(db), kgExtraction);
-    kgEntitiesWritten = kgWritten.created + kgWritten.updated;
   } catch (e: unknown) {
     errors.push(`kg-entities: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // Advance the watermark ONLY past what we actually fed to the LLM — frames
   // beyond the input cap are picked up by the next run.
-  setWatermark(db, lastId);
+  // A failed pass makes this source window retryable. Partial lane writes
+  // combined with an advanced watermark would lose the failed lane; partial
+  // KG writes with a held watermark would inflate seen_count on the retry.
+  if (errors.length > 0 || !kgExtraction) {
+    return {
+      skipped: false,
+      framesProcessed: processed,
+      watermark,
+      kgEntitiesWritten: 0,
+      errors,
+    };
+  }
+
+  let written: WriteLaneFramesResult | undefined;
+  let kgEntitiesWritten = 0;
+  try {
+    raw.transaction(() => {
+      new SessionStore(db).ensure(LANE_SESSION_ID, 'system', 'Extracted memory lanes (facts/events/profiles)');
+      written = writeMemoryLaneFrames(new FrameStore(db), LANE_SESSION_ID, extraction);
+      const kgWritten = writeKgEntities(new KnowledgeGraph(db), kgExtraction);
+      kgEntitiesWritten = kgWritten.created + kgWritten.updated;
+      setWatermark(db, lastId);
+    })();
+  } catch (e: unknown) {
+    errors.push(`commit: ${e instanceof Error ? e.message : String(e)}`);
+    return {
+      skipped: false,
+      framesProcessed: processed,
+      watermark,
+      kgEntitiesWritten: 0,
+      errors,
+    };
+  }
 
   return { skipped: false, framesProcessed: processed, watermark: lastId, written, kgEntitiesWritten, errors };
 }

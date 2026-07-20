@@ -31,6 +31,7 @@ import {
   createSubAgentTools,
   createWorkflowTools,
   runAgentLoop,
+  parseOpenAiTextCompletion,
   ensureIdentity,
   loadSystemPrompt,
   loadSkills,
@@ -1734,8 +1735,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 }),
               });
               if (!res.ok) throw new Error(`lane-extract LLM HTTP ${res.status}`);
-              const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-              return data.choices?.[0]?.message?.content ?? '';
+              const data = await res.json() as unknown;
+              return parseOpenAiTextCompletion(data).content;
             };
             const minds: Array<{ label: string; db: import('@waggle/core').MindDB }> = [
               { label: 'personal', db: multiMind.personal },
@@ -1752,6 +1753,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               try {
                 const r = await runMemoryLaneExtraction(mind.db, llmCall);
                 if (!r.skipped) {
+                  if (r.errors.length > 0) {
+                    log.warn(
+                      `[cron] Memory lanes (${mind.label}) incomplete; watermark held for retry: ` +
+                      r.errors.join('; ').slice(0, 200)
+                    );
+                    continue;
+                  }
                   log.info(
                     `[cron] Memory lanes (${mind.label}): ${r.framesProcessed} frames → ` +
                     `facts=${r.written?.factsWritten ?? 0} events=${r.written?.eventsWritten ?? 0} ` +
@@ -1968,10 +1976,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                 if (!variantResponse.ok) {
                   log.warn(`[cron] GEPA variant generation failed: HTTP ${variantResponse.status}`);
                 } else {
-                  const variantBody = await variantResponse.json() as {
-                    choices?: Array<{ message?: { content?: string } }>;
-                  };
-                  const variantText = variantBody.choices?.[0]?.message?.content ?? '';
+                  const variantBody = await variantResponse.json() as unknown;
+                  const variantText = parseOpenAiTextCompletion(variantBody).content;
 
                   if (variantText.length > 100) {
                     // Store the variant in the optimization_log with a marker
@@ -2060,6 +2066,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             break;
           }
           let aiTaskSucceeded = false;
+          const targetErrors: unknown[] = [];
 
           for (const target of targetWorkspaces) {
             try {
@@ -2087,7 +2094,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                 // Delivery: origin channel first (stamped from the trusted
                 // turn-origin snapshot at create time), notification always.
                 const deliverTo = taskConfig.deliverTo as { platform?: string; chatId?: string } | undefined;
-                if (deliverTo?.platform && deliverTo?.chatId && output && isChannelPlatform(deliverTo.platform)) {
+                if (!turn.error && deliverTo?.platform && deliverTo?.chatId && output && isChannelPlatform(deliverTo.platform)) {
                   const sent = await server.channelManager
                     ?.sendTo(deliverTo.platform, deliverTo.chatId, `[${schedule.name}]\n${output}`)
                     .catch((e: unknown) => {
@@ -2104,7 +2111,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                   actionUrl: `/workspaces/${target.id}`,
                 });
                 if (turn.error) {
-                  log.warn(`[cron] ai_task "${schedule.name}" failed for workspace "${target.name}": ${turn.error}`);
+                  throw new Error(`ai_task failed for workspace "${target.name}": ${turn.error}`);
                 } else {
                   log.info(`[cron] ai_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
                 }
@@ -2130,10 +2137,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
               });
 
               if (response.ok) {
-                const body = await response.json() as {
-                  choices?: Array<{ message?: { content?: string } }>;
-                };
-                const output = body.choices?.[0]?.message?.content ?? '';
+                const body = await response.json() as unknown;
+                const output = parseOpenAiTextCompletion(body).content;
                 const summary = output.length > 200 ? output.slice(0, 197) + '...' : output;
 
                 emitNotification(server, {
@@ -2145,11 +2150,17 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
 
                 log.info(`[cron] agent_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
               } else {
-                log.warn(`[cron] agent_task "${schedule.name}" LLM call failed: HTTP ${response.status}`);
+                throw new Error(`agent_task LLM call failed: HTTP ${response.status}`);
               }
             } catch (wsErr) {
               log.warn(`[cron] agent_task "${schedule.name}" failed for workspace "${target.name}": ${(wsErr as Error).message}`);
+              targetErrors.push(wsErr);
             }
+          }
+
+          if (targetErrors.length === 1) throw targetErrors[0];
+          if (targetErrors.length > 1) {
+            throw new AggregateError(targetErrors, `agent_task failed in ${targetErrors.length} workspaces`);
           }
 
           // #17 once mode: one-shot ai_task disables itself after the first
@@ -2160,6 +2171,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           }
         } catch (err) {
           log.warn(`[cron] agent_task handler failed: ${(err as Error).message}`);
+          throw err;
         }
         break;
       }
@@ -2251,8 +2263,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             signal: AbortSignal.timeout(120_000),
           });
           if (!resp.ok) throw new Error(`Loop LLM call failed: HTTP ${resp.status}`);
-          const body = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
-          return body.choices?.[0]?.message?.content ?? '';
+          const body = await resp.json() as unknown;
+          return parseOpenAiTextCompletion(body).content;
         };
         const loopResult = await runLoopTick({ schedule, mindDb, embedder, chat: loopChat, log });
         if (!loopResult.skipped) {
