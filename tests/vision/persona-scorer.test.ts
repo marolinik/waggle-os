@@ -904,6 +904,31 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts the live labeled arrow chain as an explicit priority order', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Assumption:** No hard deadline stated for the customer close or a contractual SLA breach on the bug — treating this as normal prioritization by risk and reversibility.',
+      '',
+      '**Order:** production memory bug → close the customer → onboarding friction repair.',
+      '',
+      '**Why:** The memory bug is the only item with compounding, unbounded downside — left unaddressed it risks an outage, data loss, or degraded service that could itself tank the customer deal or worsen onboarding. It\'s also the fastest to scope today even if the fix takes longer. Closing the customer comes next because it\'s time-sensitive and revenue-critical, but it\'s safer to pursue once you\'ve confirmed the platform isn\'t actively at risk under load. Onboarding friction is real and worth fixing, but it\'s chronic rather than acute.',
+      '',
+      '**First action today:** Pull the last 24-48 hours of memory/heap metrics, GC logs, and error traces for the affected service to scope the leak.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'ordered-plan')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it('rejects a bare ordered list with a placeholder rationale', () => {
     const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
     const response = [

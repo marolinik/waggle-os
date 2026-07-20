@@ -122,7 +122,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'all-priorities', description: 'Addresses all three supplied priorities', kind: 'allPatterns', patterns: [/customer/i, /onboarding/i, /memory (?:bug|issue)/i], points: 10 },
-      { id: 'ordered-plan', description: 'Provides an explicit order', kind: 'pattern', pattern: /(?:priority order|\b1[.)]|\bfirst\b[\s\S]*\bsecond\b)/i, points: 10 },
+      { id: 'ordered-plan', description: 'Provides an explicit order', kind: 'pattern', pattern: /(?:priority order|\b1[.)]|\bfirst\b[\s\S]*\bsecond\b|(?:^|[\r\n])\s*(?:\*\*)?order(?:\*\*)?\s*:\s*[^\r\n]*(?:\u2192|->|=>)[^\r\n]*(?:\u2192|->|=>))/im, points: 10 },
       {
         id: 'justification',
         description: 'Links each priority to a relevant decision basis',
