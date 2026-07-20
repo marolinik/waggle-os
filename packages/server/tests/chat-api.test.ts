@@ -869,9 +869,50 @@ describe('conversational gated tool filtering', () => {
   });
 
   it('recognizes explicit memory recall requests separately from topical memory discussion', () => {
-    expect(isExplicitMemoryRecallRequest('What do you remember about me?')).toBe(true);
-    expect(isExplicitMemoryRecallRequest('Search memory for my product notes')).toBe(true);
-    expect(isExplicitMemoryRecallRequest('How does persistent memory affect agent reliability?')).toBe(false);
+    const positiveRequests = [
+      'What do you remember about me?',
+      'What memories have you saved about me?',
+      'Search memory for my product notes',
+      'Search in my memory for prior launch notes',
+      'Show me my memories',
+      'Recall our launch decision',
+      'Remember what I told you about launch timing',
+      'Do you remember when we selected the local model?',
+      'Find our saved launch decision',
+      'Retrieve my saved decision',
+    ];
+    const topicalRequests = [
+      'How does persistent memory affect agent reliability?',
+      'Compare precision and recall for these search results',
+      'Recall the formula for cosine similarity',
+      'Explain how to remember the order of operations',
+      'Investigate a product recall with current primary sources',
+      'Find the memory leak in this TypeScript service',
+      'Inspect memory usage for the local model',
+      'Search memory store benchmarks',
+      'Find my context window limit',
+      'Search prior history of SQLite',
+      'Retrieve my notes app installer',
+      'Compare desktop AI memory store architectures',
+      'Use current primary sources to compare SQLite vector search with PostgreSQL plus pgvector for a single-user desktop AI memory store.',
+    ];
+
+    for (const request of positiveRequests) {
+      expect(isExplicitMemoryRecallRequest(request), request).toBe(true);
+    }
+    for (const request of topicalRequests) {
+      expect(isExplicitMemoryRecallRequest(request), request).toBe(false);
+    }
+  });
+
+  it('does not spend a memory-tool round on an external vector-search comparison', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Use current primary sources to compare SQLite vector search with PostgreSQL plus pgvector for a single-user desktop AI memory store. Cite source URLs.',
+      'normal',
+    ).map(tool => tool.name);
+
+    expect(filtered).toEqual(['web_search', 'web_fetch']);
   });
 
   it('applies the same conversational narrowing to plugin tools', () => {

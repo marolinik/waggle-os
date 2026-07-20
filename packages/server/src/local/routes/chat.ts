@@ -210,7 +210,14 @@ function isExplicitPlanAuthoringRequest(message: string): boolean {
 }
 
 export function isExplicitMemoryRecallRequest(message: string): boolean {
-  return /\b(search|find|look up|recall|memories|saved memory|what do you know about me|what have you saved|what do you remember|do you remember|remember about)\b/i.test(message);
+  const directRecall = /\b(?:what do you know about me|what have you saved|what memor(?:y|ies) have you saved(?: about me)?|what do you remember about (?:me|us|my|our))\b/i.test(message)
+    || /\bwhat do you remember\s*[?.!,;:]?\s*$/i.test(message)
+    || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(message);
+  const explicitMemoryLookup = /\b(?:search|find|look up|show|list|open|inspect|retrieve)\s+(?:me\s+)?(?:(?:in|inside|within)\s+)?(?:(?:my|our|your|the|saved|previous|prior)\s+)?memor(?:y|ies)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|containing|regarding)\b))/i;
+  const ownedContextLookup = /\b(?:search|find|look up|recall|retrieve)\s+(?:(?:my|our)\s+(?:saved\s+)?|(?:saved|previous|prior)\s+)(?:[\w'-]+\s+){0,3}(?:notes?|preferences?|decisions?|history|context)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|on|containing|regarding)\b))/i;
+  return directRecall
+    || explicitMemoryLookup.test(message)
+    || ownedContextLookup.test(message);
 }
 
 export function isExplicitMemorySaveRequest(message: string): boolean {
