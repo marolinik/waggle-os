@@ -51,7 +51,7 @@ export function selectChatPromptPackageMode(input: ChatPromptPackageModeInput): 
   const message = input.message.trim();
   if (input.exclusiveSuppliedOnlyResponseContract) {
     if (!message || input.selectedToolCount !== 0) return 'full';
-    if (input.autonomyLevel !== 'normal' || input.isAutomatedTurn || input.explicitCapabilityRequest) return 'full';
+    if (input.autonomyLevel !== 'normal' || input.isAutomatedTurn) return 'full';
     return 'compact';
   }
   if (!message || message.length > 240) return 'full';

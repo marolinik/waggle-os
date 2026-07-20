@@ -79,6 +79,7 @@ describe('chat prompt packaging', () => {
     };
 
     expect(selectChatPromptPackageMode(input)).toBe('compact');
+    expect(selectChatPromptPackageMode({ ...input, explicitCapabilityRequest: true })).toBe('compact');
     expect(selectChatPromptPackageMode({ ...input, selectedToolCount: 1 })).toBe('full');
   });
 

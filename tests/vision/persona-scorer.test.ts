@@ -468,6 +468,24 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
     expect(result.criticalFailures).toEqual([]);
 
+    const distantCalculatedResult = [
+      '## Runway Calculation',
+      '**Formula:** Runway (months) = Cash Balance / Net Monthly Burn',
+      '**Inputs:** Cash on hand: $40,000.00; monthly burn: $10,000.00; revenue: $0.00.',
+      '**Calculation:** $40,000.00 / $10,000.00 = **4.00 months**',
+      '**Biggest assumption:** Net burn stays constant and revenue remains zero.',
+      '1. Cut monthly burn immediately.',
+      '2. Pull forward cash inflows through faster collections.',
+    ].join('\n\n');
+    expect(scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: distantCalculatedResult,
+      persistedResponse: distantCalculatedResult,
+      tokenStreamResponse: distantCalculatedResult,
+      renderedAssistantResponse: distantCalculatedResult,
+      requestPersonaId: finance.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
     const shouldResponse = [
       'Runway = 4.00 months.',
       String.raw`Formula: \text{Runway (months)} = \frac{\text{Cash Balance}}{\text{Net Monthly Burn}}.`,
@@ -495,7 +513,15 @@ describe('deterministic 100-point persona scorer', () => {
       'Biggest assumption: burn stays constant.',
       'Actions: I do not think we should cut monthly burn. I do not think we should pull forward cash inflows.',
     ].join(' ');
-    for (const invalidResponse of [misleading, scopedNegation]) {
+    const negatedCalculatedResult = [
+      '## Runway Calculation',
+      '**Formula:** Runway (months) = Cash Balance / Net Monthly Burn',
+      '**Calculation:** $40,000.00 / $10,000.00 = **4.00 months** is incorrect.',
+      '**Biggest assumption:** Net burn stays constant and revenue remains zero.',
+      '1. Do not cut monthly burn.',
+      '2. Do not pull forward cash inflows.',
+    ].join('\n\n');
+    for (const invalidResponse of [misleading, scopedNegation, negatedCalculatedResult]) {
       const misleadingResult = scorePersonaTrial(finance, evidence({
         prompt: finance.prompt,
         response: invalidResponse,
@@ -512,6 +538,39 @@ describe('deterministic 100-point persona scorer', () => {
       }
       expect(misleadingResult.passed).toBe(false);
     }
+  });
+
+  it.each([
+    [
+      'trailing denial',
+      '**Calculation:** $40,000.00 / $10,000.00 = **4.00 months** is not the runway.',
+    ],
+    [
+      'prefix distrust',
+      'Do not trust this calculation: $40,000.00 / $10,000.00 = **4.00 months**.',
+    ],
+  ])('rejects a negated explicit runway calculation: %s', (_label, calculation) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      '**Formula:** Cash Balance / Net Monthly Burn',
+      calculation,
+      '**Biggest assumption:** Net burn stays constant and revenue remains zero.',
+      '1. Cut monthly burn immediately.',
+      '2. Pull forward cash inflows through faster collections.',
+    ].join('\n\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'formula')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    expect(result).toMatchObject({ score: 90, rawScore: 90, passed: false });
   });
 
   it.each([
