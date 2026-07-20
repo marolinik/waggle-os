@@ -13,7 +13,11 @@ import {
   getWorkspaceMind,
   getWorkspaceManager,
 } from '../core/setup.js';
-import type { Importance, FrameSource } from '@waggle/core';
+import {
+  evaluateExternalMemoryIngress,
+  type Importance,
+  type FrameSource,
+} from '@waggle/core';
 
 export function registerMemoryTools(server: McpServer): void {
 
@@ -31,6 +35,16 @@ export function registerMemoryTools(server: McpServer): void {
         .describe('Workspace ID to save into. Omit for personal memory'),
     },
     async ({ content, importance, source, workspace }) => {
+      if (evaluateExternalMemoryIngress({ content }).action === 'block') {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Error: Memory content could not be saved.',
+          }],
+          isError: true,
+        };
+      }
+
       const imp = (importance ?? 'normal') as Importance;
       const src = (source ?? 'agent_inferred') as FrameSource;
 
