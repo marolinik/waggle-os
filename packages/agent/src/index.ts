@@ -19,8 +19,13 @@ export {
 } from './model-router.js';
 export {
   openaiChat,
+  parseOpenAiTextCompletion,
+  isIncompleteCompletionError,
   type ChatMessage,
   type ChatResponse,
+  type CompletionUsage,
+  type IncompleteCompletionError,
+  type ParsedOpenAiTextCompletion,
 } from './providers/openai-compat.js';
 export {
   classifyRateLimitError,

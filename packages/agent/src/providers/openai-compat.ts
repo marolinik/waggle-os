@@ -19,9 +19,21 @@ export interface ChatResponse {
   usage: { input_tokens: number; output_tokens: number };
 }
 
-type IncompleteCompletionError = Error & {
+export interface CompletionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalCostUsd: number;
+}
+
+export interface ParsedOpenAiTextCompletion {
+  content: string;
+  model: string;
+  usage: CompletionUsage;
+}
+
+export type IncompleteCompletionError = Error & {
   code: 'INCOMPLETE_COMPLETION';
-  usage: { inputTokens: number; outputTokens: number };
+  usage: CompletionUsage;
 };
 
 function incompleteCompletionError(
@@ -35,6 +47,93 @@ function incompleteCompletionError(
   error.code = 'INCOMPLETE_COMPLETION';
   error.usage = usage;
   return error;
+}
+
+export function isIncompleteCompletionError(error: unknown): error is IncompleteCompletionError {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
+}
+
+function usageNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+/**
+ * Validate a non-streaming OpenAI-compatible text completion.
+ *
+ * HTTP 200 is not sufficient evidence of a complete answer: only an explicit
+ * `finish_reason: "stop"` with non-blank text and no tool calls is accepted.
+ * Reported usage is attached to integrity failures so callers can account for
+ * paid partial responses without replaying them.
+ */
+export function parseOpenAiTextCompletion(rawData: unknown): ParsedOpenAiTextCompletion {
+  if (typeof rawData !== 'object' || rawData === null) {
+    throw incompleteCompletionError('invalid response body', {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalCostUsd: 0,
+    });
+  }
+
+  const data = rawData as {
+    error?: { message?: unknown } | string;
+    choices?: Array<{
+      finish_reason?: string | null;
+      message?: {
+        content?: string | null;
+        refusal?: string | null;
+        tool_calls?: unknown;
+      };
+    }>;
+    model?: unknown;
+    usage?: {
+      prompt_tokens?: unknown;
+      completion_tokens?: unknown;
+      total_cost?: unknown;
+    };
+  };
+  const usage: CompletionUsage = {
+    inputTokens: usageNumber(data.usage?.prompt_tokens),
+    outputTokens: usageNumber(data.usage?.completion_tokens),
+    totalCostUsd: usageNumber(data.usage?.total_cost),
+  };
+
+  if (data.error) {
+    const detail = typeof data.error === 'string'
+      ? data.error
+      : typeof data.error.message === 'string'
+        ? data.error.message
+        : 'upstream error payload';
+    throw incompleteCompletionError(detail, usage);
+  }
+
+  const choice = data.choices?.[0];
+  if (!choice) {
+    throw incompleteCompletionError('missing completion choice', usage);
+  }
+  if (choice.finish_reason !== 'stop') {
+    const reason = choice.finish_reason ?? 'missing';
+    throw incompleteCompletionError(`finish_reason=${reason}`, usage);
+  }
+  const toolCalls = choice.message?.tool_calls;
+  if (toolCalls !== undefined && toolCalls !== null
+    && (!Array.isArray(toolCalls) || toolCalls.length > 0)) {
+    throw incompleteCompletionError('finish_reason=stop with tool_calls', usage);
+  }
+  if (typeof choice.message?.refusal === 'string' && choice.message.refusal.trim().length > 0) {
+    throw incompleteCompletionError('assistant refusal', usage);
+  }
+  const content = choice.message?.content;
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    throw incompleteCompletionError('missing assistant text', usage);
+  }
+
+  return {
+    content,
+    model: typeof data.model === 'string' ? data.model : '',
+    usage,
+  };
 }
 
 /** Per-request wall-clock timeout before the request is aborted. */
@@ -146,50 +245,25 @@ export async function openaiChat(
       );
     }
 
-    const rawData = await res.json() as unknown;
-    if (typeof rawData !== 'object' || rawData === null) {
-      throw incompleteCompletionError('invalid response body', { inputTokens: 0, outputTokens: 0 });
+    let rawData: unknown;
+    try {
+      rawData = await res.json();
+    } catch {
+      throw incompleteCompletionError('invalid JSON response body', {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalCostUsd: 0,
+      });
     }
-    const data = rawData as {
-      choices: Array<{
-        finish_reason?: string | null;
-        message?: {
-          content?: string | null;
-          tool_calls?: unknown[];
-        };
-      }>;
-      model: string;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-
-    const usage = {
-      input_tokens: data.usage?.prompt_tokens ?? 0,
-      output_tokens: data.usage?.completion_tokens ?? 0,
-    };
-    const errorUsage = {
-      inputTokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-    };
-    const choice = data.choices?.[0];
-    if (!choice) {
-      throw incompleteCompletionError('missing completion choice', errorUsage);
-    }
-    if (choice.finish_reason !== 'stop') {
-      const reason = choice.finish_reason ?? 'missing';
-      throw incompleteCompletionError(`finish_reason=${reason}`, errorUsage);
-    }
-    if (choice.message?.tool_calls?.length) {
-      throw incompleteCompletionError('finish_reason=stop with tool_calls', errorUsage);
-    }
-    const content = choice.message?.content;
-    if (typeof content !== 'string' || content.trim().length === 0) {
-      throw incompleteCompletionError('missing assistant text', errorUsage);
-    }
+    const parsed = parseOpenAiTextCompletion(rawData);
 
     return {
-      content,
-      model: data.model,
-      usage,
+      content: parsed.content,
+      model: parsed.model || resolved.model,
+      usage: {
+        input_tokens: parsed.usage.inputTokens,
+        output_tokens: parsed.usage.outputTokens,
+      },
     };
   }
 }

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { openaiChat } from '../src/providers/openai-compat.js';
+import {
+  isIncompleteCompletionError,
+  openaiChat,
+  parseOpenAiTextCompletion,
+} from '../src/providers/openai-compat.js';
 import type { ResolvedModel } from '../src/model-router.js';
 
 const resolved: ResolvedModel = {
@@ -132,6 +136,18 @@ describe('openaiChat', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it('classifies malformed JSON from a successful HTTP response as incomplete without replay', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{', { status: 200 })) as unknown as typeof fetch;
+
+    await expect(openaiChat(
+      resolved,
+      [{ role: 'user', content: 'hey' }],
+      undefined,
+      { fetchImpl, sleepImpl: noSleep },
+    )).rejects.toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it('passes an AbortSignal (timeout) to fetch', async () => {
     const fetchImpl = vi.fn(async (_url: string | URL, init?: RequestInit) => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
@@ -192,5 +208,42 @@ describe('openaiChat', () => {
       openaiChat(resolved, [{ role: 'user', content: 'x' }], undefined, { fetchImpl, sleepImpl: noSleep }),
     ).rejects.toThrow(/400/);
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('parseOpenAiTextCompletion', () => {
+  it('returns complete text and normalized token/cost usage', () => {
+    expect(parseOpenAiTextCompletion({
+      choices: [{ finish_reason: 'stop', message: { content: 'Complete.' } }],
+      model: 'test-model',
+      usage: { prompt_tokens: 9, completion_tokens: 4, total_cost: 0.0123 },
+    })).toEqual({
+      content: 'Complete.',
+      model: 'test-model',
+      usage: { inputTokens: 9, outputTokens: 4, totalCostUsd: 0.0123 },
+    });
+  });
+
+  it('preserves paid usage on an incomplete provider error payload', () => {
+    try {
+      parseOpenAiTextCompletion({
+        error: { message: 'provider interrupted' },
+        usage: { prompt_tokens: 8, completion_tokens: 3, total_cost: 0.004 },
+      });
+      throw new Error('expected parser to reject');
+    } catch (error) {
+      expect(isIncompleteCompletionError(error)).toBe(true);
+      expect(error).toMatchObject({
+        code: 'INCOMPLETE_COMPLETION',
+        usage: { inputTokens: 8, outputTokens: 3, totalCostUsd: 0.004 },
+      });
+    }
+  });
+
+  it.each([
+    { finish_reason: 'stop', message: { content: 'text', refusal: 'blocked' } },
+    { finish_reason: 'stop', message: { content: 'text', tool_calls: { malformed: true } } },
+  ])('rejects terminal payload mismatches', (choice) => {
+    expect(() => parseOpenAiTextCompletion({ choices: [choice] })).toThrow(/rejected/i);
   });
 });

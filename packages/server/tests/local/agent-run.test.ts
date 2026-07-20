@@ -11,7 +11,8 @@
 // embeddingProvider + LiteLLM) are deferred to Phase 5 e2e validation —
 // current critical-path coverage is module + side-effect validation.
 
-import { describe, it, expect } from 'vitest';
+import Fastify from 'fastify';
+import { describe, it, expect, vi } from 'vitest';
 
 describe('agent-run.ts route module', () => {
   it('exports agentRunRoutes plugin function', async () => {
@@ -66,5 +67,71 @@ describe('agent-run.ts route module', () => {
     const expectedNames = ['claude-gen1-v1', 'qwen-thinking-gen1-v1'];
     expect(expectedNames.every((n) => n.includes('-gen1-v1'))).toBe(true);
     expect(expectedNames.every((n) => !n.includes('::'))).toBe(true);
+  });
+
+  it('accepts only complete text responses and preserves usage on failure', async () => {
+    const { parseAgentRunCompletion } = await import('../../src/local/routes/agent-run.js');
+    const usage = { prompt_tokens: 21, completion_tokens: 8, total_cost: 0.018 };
+
+    expect(parseAgentRunCompletion({
+      choices: [{ finish_reason: 'stop', message: { content: 'Final answer.' } }],
+      usage,
+    }, 17)).toEqual({
+      content: 'Final answer.',
+      inTokens: 21,
+      outTokens: 8,
+      costUsd: 0.018,
+      latencyMs: 17,
+    });
+
+    for (const choice of [
+      { message: { content: 'Missing terminal reason.' } },
+      { finish_reason: 'length', message: { content: 'Truncated answer.' } },
+      {
+        finish_reason: 'stop',
+        message: { content: 'Unsafe mismatch.', tool_calls: [{ id: 'call_1' }] },
+      },
+    ]) {
+      expect(() => parseAgentRunCompletion({ choices: [choice], usage }, 19)).toThrowError(
+        expect.objectContaining({
+          code: 'INCOMPLETE_COMPLETION',
+          usage: { inputTokens: 21, outputTokens: 8, totalCostUsd: 0.018 },
+          message: expect.stringMatching(/partial content was rejected/i),
+        }),
+      );
+    }
+
+    expect(() => parseAgentRunCompletion(null, 19)).toThrowError(
+      expect.objectContaining({ code: 'INCOMPLETE_COMPLETION' }),
+    );
+  });
+
+  it('does not replay a malformed HTTP-200 completion and reports done.ok=false', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{', { status: 200 }));
+    vi.stubGlobal('fetch', fetchImpl);
+    const server = Fastify({ logger: false });
+    server.decorate('multiMind', { personal: {} } as never);
+    server.decorate('embeddingProvider', { dimensions: 3 } as never);
+    server.decorate('agentState', { litellmApiKey: 'test-key' } as never);
+    server.decorate('localConfig', { litellmUrl: 'http://127.0.0.1:43123/v1' } as never);
+
+    try {
+      const { agentRunRoutes } = await import('../../src/local/routes/agent-run.js');
+      await server.register(agentRunRoutes);
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/agent/run',
+        payload: { question: 'Give me a complete answer.' },
+      });
+
+      expect(fetchImpl).toHaveBeenCalledOnce();
+      expect(response.body).toContain('event: error');
+      expect(response.body).toContain('INCOMPLETE_COMPLETION');
+      expect(response.body).toContain('data: {"ok":false}');
+      expect(response.body).not.toContain('event: finalized');
+    } finally {
+      vi.unstubAllGlobals();
+      await server.close();
+    }
   });
 });
