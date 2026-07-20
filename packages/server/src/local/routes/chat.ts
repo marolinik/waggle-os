@@ -36,12 +36,13 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { buildTemplateWelcomePrompt, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnMutationPolicy } from './chat-helpers.js';
+import { allowsAutomaticRecall, allowsConversationHistory, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, resolveTurnPersistencePermissions, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
   behavioralRulesForPromptPackage,
   composeClosedWorldChatPrompt,
+  composeEvidenceBoundedChatPrompt,
   composeChatPromptTail,
   selectChatPromptPackageMode,
   type ChatPromptPackageMode,
@@ -175,6 +176,15 @@ export function resolveChatAncestry(
   return name ? { project: name } : {};
 }
 
+/** Injected runners still need request-scoped evidence boundaries. */
+export function shouldPackageSystemPromptForTurn(
+  hasCustomRunner: boolean,
+  contextScope: TurnContextScope,
+  closedWorldRewrite: boolean,
+): boolean {
+  return !hasCustomRunner || contextScope !== 'default' || closedWorldRewrite;
+}
+
 export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
   if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
@@ -184,13 +194,6 @@ export function isExplicitGatedToolRequest(message: string): boolean {
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
     || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
     || isExplicitPlanAuthoringRequest(message);
-}
-
-function isExclusiveSuppliedOnlyResponseRequest(message: string): boolean {
-  const suppliedOnly = /\b(?:use only (?:the )?supplied|only supplied|supplied[_ -]only)\b/i.test(message);
-  const exclusiveEnvelope = /\b(?:return|emit|respond with)\b[\s\S]{0,240}\b(?:exactly one|one)\b[\s\S]{0,180}\b(?:json|xml|envelope|payload)\b/i.test(message);
-  const noSurroundingText = /\b(?:no text before or after|nothing (?:before or after|outside|else)|no surrounding (?:text|prose))\b/i.test(message);
-  return suppliedOnly && exclusiveEnvelope && noSurroundingText;
 }
 
 function isInlineTextOnlyDraftRequest(message: string): boolean {
@@ -243,11 +246,13 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
   message: string,
   autonomyLevel: AutonomyLevel,
   mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
+  externalToolNames: ReadonlySet<string> = new Set<string>(),
 ): T[] {
-  if (isExclusiveSuppliedOnlyResponseRequest(message)) return [];
-  let eligibleTools = mutationPolicy.denyMemoryPersistence
-    ? tools.filter(tool => tool.name !== 'save_memory')
-    : tools;
+  let eligibleTools = filterToolsByTurnMutationPolicy(
+    tools,
+    mutationPolicy,
+    externalToolNames,
+  );
   if (autonomyLevel === 'normal' && !isExplicitPlanAuthoringRequest(message)) {
     eligibleTools = eligibleTools.filter(tool => !PLAN_AUTHORING_TOOL_NAMES.has(tool.name));
   }
@@ -282,6 +287,10 @@ export function filterPluginToolsForConversationalTurn(
 ): PluginToolProvider {
   if (!mutationPolicy.denyAllMutations
     && !mutationPolicy.denyMemoryPersistence
+    && !mutationPolicy.denyFileWrites
+    && !mutationPolicy.denyCodeExecution
+    && !mutationPolicy.denyAgentLaunch
+    && mutationPolicy.contextScope === 'default'
     && !shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
 
   return {
@@ -290,11 +299,15 @@ export function filterPluginToolsForConversationalTurn(
       // Plugin capabilities are external and may mutate remote state. On a
       // conversational turn there is no safe static allowlist for arbitrary
       // plugin names, so defer all of them until the user requests an action.
-      const filtered = mutationPolicy.denyAllMutations
+      const pluginNames = new Set(pluginTools.map(tool => tool.name));
+      const policyFiltered = filterToolsByTurnMutationPolicy(
+        pluginTools,
+        mutationPolicy,
+        pluginNames,
+      );
+      const filtered = shouldNarrowToolsForConversationalTurn(message, autonomyLevel)
         ? []
-        : mutationPolicy.denyMemoryPersistence
-          ? pluginTools.filter(tool => tool.name !== 'save_memory')
-          : [];
+        : policyFiltered;
       if (filtered.length !== pluginTools.length) {
         onWithheld?.(pluginTools.length - filtered.length);
       }
@@ -547,10 +560,23 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     assembled?: AssembledPrompt | null,
     packageMode: ChatPromptPackageMode = 'full',
     closedWorldRewrite = false,
+    contextScope: TurnContextScope = 'default',
+    selectedToolCount = 0,
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
     const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
+
+    if (contextScope !== 'default') {
+      const evidenceBoundedPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+      return composeEvidenceBoundedChatPrompt({
+        persona: evidenceBoundedPersona,
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+        contextScope,
+        selectedToolCount,
+        workspacePath,
+      });
+    }
 
     if (closedWorldRewrite) {
       const closedWorldPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
@@ -821,7 +847,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
     // already sets it, so its review turns are gated even without `origin`.
-    // Execution traces + improvement-signal surfacing stay UNGATED.
+    // Compliance execution traces stay ungated. Learned memory, improvement
+    // signals, and skill capture are gated below by the resolved turn policy.
     const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
 
     // Phase B.5: resolve the effective autonomy level for this request.
@@ -883,8 +910,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
     }
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
-    const allowMemoryPersistence = !isAutomatedTurn && !turnMutationPolicy.denyMemoryPersistence;
-    const allowDerivedPersistence = !isAutomatedTurn && !turnMutationPolicy.denyAllMutations;
+    const requestClosedWorldRewrite = isClosedWorldRewriteRequest(message);
+    const turnPersonaId = personaOverride
+      ?? server.workspaceManager?.get(workspace ?? 'default')?.personaId
+      ?? null;
+    const turnPersona = turnPersonaId ? resolvePersona(turnPersonaId) : null;
+    const { allowMemoryPersistence, allowDerivedPersistence } = resolveTurnPersistencePermissions({
+      policy: turnMutationPolicy,
+      isAutomatedTurn,
+      personaIsReadOnly: turnPersona?.isReadOnly === true,
+      closedWorldRewrite: requestClosedWorldRewrite,
+    });
+    const allowResponseDecoration = allowsPostResponseDecoration(
+      turnMutationPolicy,
+      requestClosedWorldRewrite,
+    );
 
     // R6-001: path-traversal guard on the session-persistence path segments.
     // `workspace` and the resolved session alias come straight from the request body and are
@@ -1316,7 +1356,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (shouldRunAgentLoop) {
         // Use rerouted message if from a slash command, otherwise use original
         const agentMessage = reroutedMessage ?? message;
-        const closedWorldRewrite = isClosedWorldRewriteRequest(agentMessage);
+        const closedWorldRewrite = requestClosedWorldRewrite
+          || isClosedWorldRewriteRequest(agentMessage);
 
         // Waggle Dance: emit agent start signal
         emitWaggleSignal({ type: 'agent:started', workspaceId: effectiveWorkspace, content: agentMessage.slice(0, 200) });
@@ -1346,7 +1387,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // ── Automatic memory recall ─────────────────────────────
-        if (!hasCustomRunner && !closedWorldRewrite) {
+        if (!hasCustomRunner
+          && !closedWorldRewrite
+          && allowsAutomaticRecall(turnMutationPolicy)) {
           try {
             sendEvent('step', { content: 'Recalling relevant memories...' });
             sendEvent('tool', { name: 'auto_recall', input: { query: agentMessage } });
@@ -1407,7 +1450,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // GEPA has no conversation context and will misinterpret them as standalone
         // vague requests, generating phantom instructions the user never intended.
         let gepaExpanded: string | null = null;
-        if (!hasCustomRunner && isFirstUserMessage && !closedWorldRewrite) {
+        if (!hasCustomRunner
+          && isFirstUserMessage
+          && !closedWorldRewrite
+          && turnMutationPolicy.contextScope === 'default') {
           try {
             const optimizer = await getOptimizerService(server);
             if (optimizer) {
@@ -1433,7 +1479,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Build system prompt (with workspace path awareness + recalled memories)
         // GAP-006: Prepend ambiguity guard when user message is too brief/vague
-        const shouldCheckAmbiguity = isFirstUserMessage && !gepaExpanded && !closedWorldRewrite; // Skip when expansion or an explicit output boundary already resolves intent
+        const shouldCheckAmbiguity = isFirstUserMessage
+          && !gepaExpanded
+          && !closedWorldRewrite
+          && turnMutationPolicy.contextScope === 'default'; // Skip when expansion or an explicit evidence boundary already resolves intent
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
         // M2-7: Track session start on first user message
@@ -1446,7 +1495,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Template welcome context — inject on first message in a workspace with a template
         let templateContext = '';
-        if (!hasCustomRunner && isFirstUserMessage && !closedWorldRewrite) {
+        if (!hasCustomRunner
+          && isFirstUserMessage
+          && !closedWorldRewrite
+          && turnMutationPolicy.contextScope === 'default') {
           const wsTemplateId = server.workspaceManager?.get(effectiveWorkspace)?.templateId;
           if (wsTemplateId) {
             const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
@@ -1463,12 +1515,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // to the static system prompt — never block a chat turn on assembler errors.
         const turnTaskShape = detectTaskShape(agentMessage);
         let assembled: AssembledPrompt | null = null;
-        if (!hasCustomRunner && isEnabled('PROMPT_ASSEMBLER')) {
+        if (!hasCustomRunner
+          && turnMutationPolicy.contextScope === 'default'
+          && isEnabled('PROMPT_ASSEMBLER')) {
           try {
-            const wsConfigForAssembler = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
-            const personaIdForAssembler = personaOverride ?? wsConfigForAssembler?.personaId ?? null;
-            const personaForAssembler = personaIdForAssembler ? resolvePersona(personaIdForAssembler) : null;
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler });
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler });
             log.info(
               `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
               + `shape=${turnTaskShape.type ?? 'none'} conf=${turnTaskShape.confidence.toFixed(2)} `
@@ -1724,8 +1775,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Resolution order matches buildSystemPrompt (Phase A.2): per-window
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
-        const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
-        const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+        const activePersonaId = turnPersonaId;
+        const activePersona = turnPersona;
         if (!hasCustomRunner && activePersona) {
           effectiveTools = applyPersonaToolFilter(effectiveTools, activePersona);
         }
@@ -1755,6 +1806,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const retrievedToolNames = new Set<string>();
         if (!hasCustomRunner && !closedWorldRewrite) {
           effectiveTools = filterAvailableTools(effectiveTools);
+          spawnAvailableTools = effectiveTools;
 
           // Steal #6: relevance-gate connected MCP tools into the pool. This is
           // the FIRST point MCP tools enter effectiveTools. Runs after
@@ -1763,8 +1815,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // sub-agent inherits the selected MCP tools. Below the threshold the
           // retriever injects them all; above it, the conversation's union-only
           // accumulated top-k. Persona denylist / read-only rails still apply.
-          const runningMcpTools = server.agentState.mcpRuntime
-            .getToolsForWorkspace(effectiveWorkspace);
+          // Evidence-bounded turns use only built-in, workspace-rooted reads;
+          // do not spend retrieval work or expose ambient external metadata.
+          const runningMcpTools = turnMutationPolicy.contextScope === 'default'
+            ? server.agentState.mcpRuntime.getToolsForWorkspace(effectiveWorkspace)
+            : [];
           for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();
@@ -1790,7 +1845,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // same unknown-external persona rails as MCP, and keep native names
           // first so a plugin cannot shadow a built-in implementation.
           spawnAvailableTools = effectiveTools;
-          let materializedPlugins: ToolDefinition[] = server.agentState.pluginRuntimeManager.getAllTools();
+          let materializedPlugins: ToolDefinition[] = turnMutationPolicy.contextScope === 'default'
+            ? server.agentState.pluginRuntimeManager.getAllTools()
+            : [];
           for (const tool of materializedPlugins) catalogToolNames.add(tool.name);
           if (activePersona) {
             materializedPlugins = filterMcpToolsForPersona(materializedPlugins, activePersona);
@@ -1837,6 +1894,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           conservativeDefault: isLocalModel ? 8192 : 128_000,
         });
         if (!closedWorldRewrite
+          && turnMutationPolicy.contextScope === 'default'
           && compressionModel
           && isLocalModel
           && needsCompression(history, { maxContextTokens, compressionThreshold: 0.5 })) {
@@ -1848,6 +1906,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
         if (closedWorldRewrite) {
           windowedMessages = [{ role: 'user', content: agentMessage }];
+        } else if (!allowsConversationHistory(turnMutationPolicy)) {
+          windowedMessages = buildTurnMessageWindow(history, agentMessage, turnMutationPolicy);
         } else if (compressionModel) {
           // §B: size compaction to the actual model window so a local 4k/8k model
           // is not treated as a 128k model. Local (ollama/*) models with an unknown
@@ -1949,6 +2009,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             agentMessage,
             autonomyLevel,
             turnMutationPolicy,
+            externalToolNames,
           );
           if (effectiveTools.length !== beforeNarrowing) {
             log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
@@ -1981,12 +2042,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           toolCatalogCount = catalogToolNames.size;
           toolEligibleCount = effectiveTools.length;
           const sequenceHistory = sessionToolSequences.get(sessionId);
-          const previousToolSequence = sequenceHistory?.[sequenceHistory.length - 1] ?? [];
-          const recentMessages = history
-            .slice(0, -1)
-            .filter(entry => entry.role === 'user' || entry.role === 'assistant')
-            .slice(-4)
-            .map(entry => ({ role: entry.role, content: entry.content }));
+          const previousToolSequence = allowsConversationHistory(turnMutationPolicy)
+            ? sequenceHistory?.[sequenceHistory.length - 1] ?? []
+            : [];
+          const recentMessages = allowsConversationHistory(turnMutationPolicy)
+            ? history
+              .slice(0, -1)
+              .filter(entry => entry.role === 'user' || entry.role === 'assistant')
+              .slice(-4)
+              .map(entry => ({ role: entry.role, content: entry.content }))
+            : [];
           const selectorStartedAt = performance.now();
           const selection = selectToolsForTurn(effectiveTools, {
             message: agentMessage,
@@ -2012,7 +2077,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Package the prompt only after the executable tool set is final. A
         // genuinely conversational turn can stay compact; every tool-bearing,
         // agentic, sensitive, or complex turn retains the full operating spec.
-        if (!hasCustomRunner) {
+        if (shouldPackageSystemPromptForTurn(
+          hasCustomRunner,
+          turnMutationPolicy.contextScope,
+          closedWorldRewrite,
+        )) {
           const explicitCapabilityRequest = isExplicitGatedToolRequest(agentMessage)
             || isExplicitMemoryRecallRequest(agentMessage)
             || isExplicitMemorySaveRequest(agentMessage)
@@ -2037,8 +2106,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             assembled,
             packageMode,
             closedWorldRewrite,
+            turnMutationPolicy.contextScope,
+            effectiveTools.length,
           );
-          systemPrompt = closedWorldRewrite
+          systemPrompt = turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite
             ? packagedSystemPrompt
             : ambiguityPrefix
               + packagedSystemPrompt
@@ -2049,18 +2120,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Build routing suggestions from the exact executable/serialized set.
-        const capabilityRouter = hasCustomRunner ? undefined : new CapabilityRouter({
-          toolNames: effectiveTools.map(t => t.name),
-          skills: server.agentState.skills,
-          plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
-            name: p.getManifest().name,
-            description: p.getManifest().description ?? '',
-            skills: p.getContributedSkills(),
-          })),
-          mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
-          subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
-          mcpRuntime: server.agentState.mcpRuntime,
-        });
+        const capabilityRouter = hasCustomRunner
+          || !allowsConversationHistory(turnMutationPolicy)
+          ? undefined
+          : new CapabilityRouter({
+            toolNames: effectiveTools.map(t => t.name),
+            skills: server.agentState.skills,
+            plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
+              name: p.getManifest().name,
+              description: p.getManifest().description ?? '',
+              skills: p.getContributedSkills(),
+            })),
+            mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
+            subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
+            mcpRuntime: server.agentState.mcpRuntime,
+          });
 
         const iterBudget = new IterationBudget({
           maxIterations: 90,
@@ -2213,7 +2287,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Lazy-created per request so unit tests with no traceStore decorator
         // (legacy suites) still pass. Assigned to the hoisted outer-scope
         // variables so the outer catch can finalize with outcome='abandoned'
-        // on any exception path (H-07 G4 fix).
+        // on any exception path (H-07 G4 fix). This operational audit trail is
+        // intentionally retained for bounded/read-only turns; it is not learned
+        // memory or a user-work mutation.
         traceRecorder = server.traceStore ? new TraceRecorder(server.traceStore) : null;
         traceHandle = traceRecorder
           ? traceRecorder.start({
@@ -2245,7 +2321,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // the v2 bus so MCP-consuming external tools can adopt
           // the soon-to-be-authored skill. Failures are swallowed
           // upstream (agent-loop wraps in try/catch).
-          onSkillDistillationFire: server.signalBus
+          onSkillDistillationFire: allowDerivedPersistence && server.signalBus
             ? async ({ patternKey, toolsUsed, directive }) => {
                 const signalBus = server.signalBus;
                 if (!signalBus) return;
@@ -2478,13 +2554,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // M8: commit deferred signal markings now that model call succeeded
-        if (!hasCustomRunner) sessionOrch.commitSurfacedSignals();
+        if (!hasCustomRunner && allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
 
         // ── Post-response memory write-back ──────────────────────
         // If the agent didn't save memory itself, check if the exchange
         // contains save-worthy content and auto-save it.
-        // #13: skipped for automated turns — a headless re-analysis of an old
-        // transcript must not re-save its decision patterns as fresh memory.
+        // Skipped for automated, evidence-bounded, and persona-read-only turns:
+        // none may re-save this exchange as learned memory.
         if (!hasCustomRunner && allowMemoryPersistence) {
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
@@ -2522,7 +2598,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // end: a refusal / self-incapacity turn yields no plan. The signal
         // is recorded idempotently (skill_promotion) so recurring workflows
         // bubble up through the existing actionable-signal substrate.
-        // #13: skipped for automated turns (no real workflow to distill).
+        // Skipped whenever learned/derived persistence is disabled.
         if (!hasCustomRunner && allowDerivedPersistence) {
           const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
           if (distillPlan) {
@@ -2544,8 +2620,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Extract named entities from the agent response and add them to the
         // knowledge graph of the active workspace mind.
         // Non-blocking — KG enrichment never fails the response.
-        // #13: skipped for automated turns — review-turn output re-mentions
-        // transcript entities; re-extracting them inflates the graph.
+        // Skipped whenever learned/derived persistence is disabled; review and
+        // evidence-bounded output must not inflate the knowledge graph.
         if (!hasCustomRunner && allowDerivedPersistence && result.content && result.content.length > 100) {
           try {
             const knowledge = sessionOrch.getKnowledge();
@@ -2578,9 +2654,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // ── Correction detection ──────────────────────────────────
         // Analyze user message for corrections and record improvement signals.
         // Non-blocking — detection failure shouldn't affect the response.
-        // #13: skipped for automated turns — a review instruction embedding a
-        // transcript's old "no, that's wrong" lines would re-fire as fresh
-        // correction signals against the agent.
+        // Skipped whenever learned/derived persistence is disabled; a review
+        // instruction can quote old corrections that must not re-fire.
         if (!hasCustomRunner && allowDerivedPersistence) {
           try {
             const signalStore = sessionOrch.getImprovementSignals();
@@ -2600,7 +2675,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // ── Auto skill capture — detect repeatable workflow patterns ──
-        if (!hasCustomRunner && result.toolsUsed && result.toolsUsed.length > 0) {
+        if (!hasCustomRunner
+          && allowDerivedPersistence
+          && result.toolsUsed
+          && result.toolsUsed.length > 0) {
           try {
             // Track this session's tool sequence
             if (!sessionToolSequences.has(sessionId)) {
@@ -2648,7 +2726,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           'legal-professional': '\n\n---\n*This is AI-assisted legal analysis, not legal advice. This does not create an attorney-client relationship. Consult a licensed attorney for binding legal guidance.*',
           'finance-owner': '\n\n---\n*Financial figures are estimates based on available data. Verify with your accountant or financial advisor before making decisions.*',
         };
-        if (activePersonaId && REGULATED_DISCLAIMER_MAP[activePersonaId] && finalContent) {
+        if (allowResponseDecoration
+          && activePersonaId
+          && REGULATED_DISCLAIMER_MAP[activePersonaId]
+          && finalContent) {
           if (isRegulatedContent(finalContent, activePersonaId)) {
             const hasDisclaimer = finalContent.toLowerCase().includes('not legal advice') ||
               finalContent.toLowerCase().includes('attorney-client') ||
@@ -2662,7 +2743,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
-        if (!hasCustomRunner && finalContent && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
+        if (!hasCustomRunner
+          && allowResponseDecoration
+          && finalContent
+          && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
           finalContent += SCHEDULE_SUGGESTION;
         }
 
@@ -2674,7 +2758,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // honest hedge note; durations/percents only inform the log signal
         // (noisier — advice timelines like "2 weeks" would false-positive). The
         // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
-        if (!hasCustomRunner && finalContent && recalledContext) {
+        if (!hasCustomRunner && allowResponseDecoration && finalContent && recalledContext) {
           const grounding = checkGrounding(finalContent, recalledContext + '\n' + message);
           if (grounding.ungrounded.length > 0) {
             log.info('[grounding] reply asserts specifics absent from recalled memory', {
@@ -2856,11 +2940,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // HybridSearch now; embedded on the next cognify/distill pass). The 8-char
       // floor skips trivial acks ("ok", "thanks"). Best-effort: a persistence
       // failure must never mask the original error or break the SSE stream.
-      // #13: gated for automated turns — an idle-watcher review instruction
-      // embeds the ENTIRE session transcript, and review turns are the most
-      // likely to fail on context_length; persisting that here as a
-      // 'user_stated' frame would dump the transcript into memory at highest
-      // trust, exactly the pollution #13 exists to stop.
+      // Gated by the resolved persistence policy for automated, bounded, and
+      // persona-read-only turns. Persisting one of those prompts here as a
+      // 'user_stated' frame would bypass the happy-path memory boundary.
       if (activeSessionOrch && allowMemoryPersistence && message.trim().length >= 8) {
         try {
           const frames = activeSessionOrch.getFrames();

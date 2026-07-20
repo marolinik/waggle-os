@@ -8,14 +8,40 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  allowsAutomaticRecall,
+  allowsPostResponseDecoration,
+  buildTurnMessageWindow,
   canUseBudgetModelWithoutCloudEgress,
   classifyExplicitTurnMutationPolicy,
+  filterToolsByTurnMutationPolicy,
   isRegulatedContent,
   isRetryableError,
+  resolveTurnPersistencePermissions,
   shouldSuggestSchedule,
   describeToolUse,
+  type TurnMutationPolicy,
 } from '../../src/local/routes/chat-helpers.js';
 import { summarizeDroppedContext } from '../../src/local/routes/chat-context.js';
+import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
+
+const DEFAULT_TURN_POLICY: TurnMutationPolicy = {
+  denyAllMutations: false,
+  denyMemoryPersistence: false,
+  denyFileWrites: false,
+  denyCodeExecution: false,
+  denyAgentLaunch: false,
+  contextScope: 'default',
+};
+
+function expectedPolicy(overrides: Partial<TurnMutationPolicy> = {}): TurnMutationPolicy {
+  return { ...DEFAULT_TURN_POLICY, ...overrides };
+}
+
+function canonicalPrompt(id: 'coder' | 'data-engineer' | 'verifier' | 'coordinator'): string {
+  const acceptanceCase = PERSONA_CASES.find(item => item.id === id);
+  if (!acceptanceCase) throw new Error(`Missing canonical persona case: ${id}`);
+  return acceptanceCase.prompt;
+}
 
 // ─── isRegulatedContent ──────────────────────────────────────────────
 
@@ -224,7 +250,13 @@ describe('classifyExplicitTurnMutationPolicy', () => {
   it('denies tools and memory for the canonical broad no-change instruction', () => {
     expect(classifyExplicitTurnMutationPolicy(
       'Turn this goal into milestones and exit criteria. Do not create or edit anything.',
-    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
   });
 
   it('recognizes equivalent broad read-only instructions', () => {
@@ -233,53 +265,261 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       'Review the proposal without making any changes.',
       'Summarize it, but do not take any actions.',
     ]) {
-      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual({
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy({
         denyAllMutations: true,
         denyMemoryPersistence: true,
-      });
+        denyFileWrites: true,
+        denyCodeExecution: true,
+        denyAgentLaunch: true,
+      }));
     }
   });
 
   it('can prohibit memory without disabling unrelated requested actions', () => {
     expect(classifyExplicitTurnMutationPolicy('Write the report, but do not save this to memory.'))
-      .toEqual({ denyAllMutations: false, denyMemoryPersistence: true });
+      .toEqual(expectedPolicy({ denyMemoryPersistence: true }));
   });
 
-  it('does not broaden object-scoped or quoted constraints', () => {
+  it('does not broaden unrelated object-scoped or quoted constraints', () => {
     for (const message of [
       'Do not create a calendar event; remember this preference.',
-      'Do not create files or schedules.',
       'Explain why the phrase "do not create or edit anything" is ambiguous.',
     ]) {
-      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual({
-        denyAllMutations: false,
-        denyMemoryPersistence: false,
-      });
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy());
     }
+  });
+
+  it('treats a file-scoped prohibition granularly instead of denying every action', () => {
+    expect(classifyExplicitTurnMutationPolicy('Do not create files or schedules.'))
+      .toEqual(expectedPolicy({ denyFileWrites: true }));
   });
 
   it('lets a broad denial win over a conflicting memory request', () => {
     expect(classifyExplicitTurnMutationPolicy(
       'Remember this preference, but do not create or edit anything.',
-    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
   });
 
   it('keeps paired contractions actionable instead of treating them as quoted text', () => {
     expect(classifyExplicitTurnMutationPolicy(
       "Don't create or edit anything because it's unnecessary.",
-    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
     expect(classifyExplicitTurnMutationPolicy(
       'Don’t create or edit anything.',
-    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
   });
 
   it('ignores quoted prohibitions even when the quote contains a contraction', () => {
     expect(classifyExplicitTurnMutationPolicy(
       "Rewrite: 'Don't create or edit anything.'",
-    )).toEqual({ denyAllMutations: false, denyMemoryPersistence: false });
+    )).toEqual(expectedPolicy());
     expect(classifyExplicitTurnMutationPolicy(
       'Rewrite: ‘Don’t create or edit anything.’',
-    )).toEqual({ denyAllMutations: false, denyMemoryPersistence: false });
+    )).toEqual(expectedPolicy());
+    expect(classifyExplicitTurnMutationPolicy(
+      'Explain “Do not write files or execute code.”',
+    )).toEqual(expectedPolicy());
+    expect(classifyExplicitTurnMutationPolicy(
+      'Discuss “Inspect only this current virtual workspace.”',
+    )).toEqual(expectedPolicy());
+    expect(classifyExplicitTurnMutationPolicy(
+      'Explain “Return exactly one JSON envelope with evidenceScope supplied_only and no text before or after.”',
+    )).toEqual(expectedPolicy());
+  });
+
+  it('classifies the four canonical persona constraints without broadening them', () => {
+    const coder = classifyExplicitTurnMutationPolicy(canonicalPrompt('coder'));
+    expect(coder).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      contextScope: 'workspace-only',
+    }));
+    expect(allowsAutomaticRecall(coder)).toBe(false);
+
+    const dataEngineer = classifyExplicitTurnMutationPolicy(canonicalPrompt('data-engineer'));
+    expect(dataEngineer).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      denyCodeExecution: true,
+    }));
+    expect(allowsAutomaticRecall(dataEngineer)).toBe(true);
+
+    const verifier = classifyExplicitTurnMutationPolicy(canonicalPrompt('verifier'));
+    expect(verifier).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      contextScope: 'supplied-only',
+    }));
+    expect(allowsAutomaticRecall(verifier)).toBe(false);
+
+    const coordinator = classifyExplicitTurnMutationPolicy(canonicalPrompt('coordinator'));
+    expect(coordinator).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      denyAgentLaunch: true,
+    }));
+    expect(allowsAutomaticRecall(coordinator)).toBe(true);
+  });
+
+  it('filters the canonical policies before downstream tool selection', () => {
+    const tools = [
+      'read_file', 'search_files', 'search_content', 'git_status', 'git_diff', 'git_log',
+      'lsp_diagnostics', 'write_file', 'edit_file', 'multi_edit', 'generate_xlsx',
+      'bash', 'run_code', 'cli_execute', 'kill_task', 'search_memory', 'query_knowledge',
+      'spawn_agent', 'compose_workflow', 'orchestrate_workflow', 'execute_step', 'run_harness',
+      'mcp_sqlite_query',
+    ].map(name => ({ name }));
+    const external = new Set(['mcp_sqlite_query']);
+
+    const coderNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('coder')),
+      external,
+    ).map(tool => tool.name);
+    expect(coderNames).toEqual([
+      'read_file', 'search_files', 'search_content',
+    ]);
+
+    const dataEngineerNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('data-engineer')),
+      external,
+    ).map(tool => tool.name);
+    for (const denied of [
+      'write_file', 'edit_file', 'multi_edit', 'generate_xlsx', 'bash', 'run_code',
+      'cli_execute', 'kill_task', 'spawn_agent', 'orchestrate_workflow', 'execute_step',
+      'run_harness', 'mcp_sqlite_query',
+    ]) {
+      expect(dataEngineerNames, denied).not.toContain(denied);
+    }
+    expect(dataEngineerNames).toContain('read_file');
+    expect(dataEngineerNames).toContain('search_memory');
+
+    const coordinatorNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('coordinator')),
+      external,
+    ).map(tool => tool.name);
+    for (const denied of [
+      'write_file', 'edit_file', 'multi_edit', 'generate_xlsx', 'spawn_agent',
+      'compose_workflow', 'orchestrate_workflow', 'execute_step', 'run_harness',
+      'mcp_sqlite_query',
+    ]) {
+      expect(coordinatorNames, denied).not.toContain(denied);
+    }
+
+    expect(filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('verifier')),
+      external,
+    )).toEqual([]);
+  });
+
+  it('treats execution and delegation as indirect file-write paths', () => {
+    const tools = [
+      'read_file', 'search_files', 'search_content', 'write_file', 'bash', 'run_code',
+      'cli_execute', 'execute_step', 'spawn_agent', 'compose_workflow',
+      'orchestrate_workflow', 'run_harness',
+    ].map(name => ({ name }));
+    const filteredNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy('Do not write files.'),
+    ).map(tool => tool.name);
+
+    expect(filteredNames).toEqual(['read_file', 'search_files', 'search_content']);
+  });
+
+  it('removes prior-chat evidence from both bounded canonical turns', () => {
+    const history = [
+      { role: 'user', content: 'Prior user claim that must not become evidence.' },
+      { role: 'assistant', content: 'Prior assistant conclusion that must not become evidence.' },
+      { role: 'user', content: 'Current request as originally persisted.' },
+    ];
+
+    for (const id of ['coder', 'verifier'] as const) {
+      const currentPrompt = canonicalPrompt(id);
+      expect(buildTurnMessageWindow(
+        history,
+        currentPrompt,
+        classifyExplicitTurnMutationPolicy(currentPrompt),
+      ), id).toEqual([{ role: 'user', content: currentPrompt }]);
+    }
+
+    const unboundedPrompt = canonicalPrompt('data-engineer');
+    expect(buildTurnMessageWindow(
+      history,
+      unboundedPrompt,
+      classifyExplicitTurnMutationPolicy(unboundedPrompt),
+    )).toEqual(history);
+  });
+
+  it('suppresses learned state and response decorations for bounded or persona-read-only turns', () => {
+    for (const id of ['coder', 'verifier'] as const) {
+      const policy = classifyExplicitTurnMutationPolicy(canonicalPrompt(id));
+      expect(resolveTurnPersistencePermissions({
+        policy,
+        isAutomatedTurn: false,
+        personaIsReadOnly: false,
+      }), id).toEqual({
+        allowMemoryPersistence: false,
+        allowDerivedPersistence: false,
+      });
+      expect(allowsPostResponseDecoration(policy), id).toBe(false);
+    }
+    const verifierPrompt = canonicalPrompt('verifier');
+    expect(shouldSuggestSchedule('Repeat this verification weekly.', [], verifierPrompt)).toBe(true);
+    expect(allowsPostResponseDecoration(
+      classifyExplicitTurnMutationPolicy(verifierPrompt),
+    )).toBe(false);
+
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy(),
+      isAutomatedTurn: false,
+      personaIsReadOnly: true,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy(),
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+      closedWorldRewrite: true,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+    expect(allowsPostResponseDecoration(expectedPolicy(), true)).toBe(false);
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy({ denyMemoryPersistence: true }),
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy(),
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+    })).toEqual({
+      allowMemoryPersistence: true,
+      allowDerivedPersistence: true,
+    });
   });
 });
 

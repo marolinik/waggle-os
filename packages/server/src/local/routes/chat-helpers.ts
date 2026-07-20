@@ -106,9 +106,15 @@ export function isAmbiguousMessage(text: string): boolean {
 
 // ── Contextual Cron Suggestion (IMP-004) ──────────────────────────────
 
+export type TurnContextScope = 'default' | 'workspace-only' | 'supplied-only';
+
 export interface TurnMutationPolicy {
   denyAllMutations: boolean;
   denyMemoryPersistence: boolean;
+  denyFileWrites: boolean;
+  denyCodeExecution: boolean;
+  denyAgentLaunch: boolean;
+  contextScope: TurnContextScope;
 }
 
 function withoutQuotedText(text: string): string {
@@ -118,6 +124,71 @@ function withoutQuotedText(text: string): string {
     .replace(/“[^”\r\n]*”/g, ' ')
     .replace(/‘(?:[^’\r\n]|(?<=[\p{L}\p{M}\p{N}_])’(?=[\p{L}\p{M}\p{N}_]))*’/gu, ' ');
 }
+
+/** Whether a response contract explicitly excludes every source except supplied evidence. */
+export function isExclusiveSuppliedOnlyResponseRequest(message: string): boolean {
+  const actionable = withoutQuotedText(message);
+  const suppliedOnly = /\b(?:use only (?:the )?supplied|only supplied|supplied[_ -]only)\b/i.test(actionable)
+    || (/\bevidenceScope\b/i.test(actionable)
+      && /\bevidenceScope\s+["“'‘]supplied[_ -]only["”'’]/i.test(message));
+  const exclusiveEnvelope = /\b(?:return|emit|respond with)\b[\s\S]{0,240}\b(?:exactly one|one)\b[\s\S]{0,180}\b(?:json|xml|envelope|payload)\b/i.test(actionable);
+  const noSurroundingText = /\b(?:no text before or after|nothing (?:before or after|outside|else)|no surrounding (?:text|prose))\b/i.test(actionable);
+  return suppliedOnly && exclusiveEnvelope && noSurroundingText;
+}
+
+const WORKSPACE_READ_TOOL_NAMES = new Set([
+  'read_file',
+  'search_files',
+  'search_content',
+]);
+
+const FILE_WRITE_TOOL_NAMES = new Set([
+  'write_file',
+  'edit_file',
+  'multi_edit',
+  'generate_docx',
+  'generate_xlsx',
+  'generate_pptx',
+  'generate_pdf',
+  'git_branch',
+  'git_stash',
+  'git_pull',
+  'git_commit',
+  'git_push',
+  'git_merge',
+  'git_pr',
+  'create_skill',
+  'delete_skill',
+  'install_capability',
+  'acquire_capability',
+  'bash',
+  'run_code',
+  'cli_execute',
+  'execute_step',
+  'spawn_agent',
+  'compose_workflow',
+  'orchestrate_workflow',
+  'run_harness',
+]);
+
+const CODE_EXECUTION_TOOL_NAMES = new Set([
+  'bash',
+  'run_code',
+  'cli_execute',
+  'kill_task',
+  'spawn_agent',
+  'orchestrate_workflow',
+  'run_harness',
+  'execute_step',
+]);
+
+const AGENT_LAUNCH_TOOL_NAMES = new Set([
+  'spawn_agent',
+  'compose_workflow',
+  'orchestrate_workflow',
+  'run_harness',
+  'execute_step',
+]);
 
 /**
  * Detect explicit user constraints that make a turn advisory/read-only.
@@ -143,10 +214,114 @@ export function classifyExplicitTurnMutationPolicy(message: string): TurnMutatio
     || /\b(?:do not|don['’]t|never)\s+(?:save|store|persist|write)\b[^.;!?\r\n]{0,60}\b(?:to|in|into)\s+(?:my\s+)?memory\b/i.test(actionable)
     || /\b(?:do not|don['’]t|never)\s+(?:save|store|persist)\s+(?:this|that|it|anything)\b/i.test(actionable);
 
+  const fileDenial = /\b(?:do not|don['’]t|never)\s+(?:create|edit|modify|write|save|overwrite)(?:\s*(?:,|and|or)\s*(?:create|edit|modify|write|save|overwrite))*\s+(?:any\s+)?(?:files?|documents?|artifacts?)\b/i.test(actionable)
+    || /\bwithout\s+(?:creating|editing|modifying|writing|saving|overwriting)\s+(?:any\s+)?(?:files?|documents?|artifacts?)\b/i.test(actionable);
+  const codeExecutionDenial = /\b(?:do not|don['’]t|never)\b[^.;!?\r\n]{0,100}\b(?:execute|run)\s+(?:any\s+)?(?:code|commands?|scripts?|shell|bash|python)\b/i.test(actionable)
+    || /\bwithout\b[^.;!?\r\n]{0,100}\b(?:executing|running)\s+(?:any\s+)?(?:code|commands?|scripts?|shell|bash|python)\b/i.test(actionable);
+  const agentLaunchDenial = /\b(?:do not|don['’]t|never)\b[^.;!?\r\n]{0,100}\b(?:launch|spawn|start|run|delegate)\s+(?:any\s+)?(?:agents?|sub[- ]?agents?|workers?)\b/i.test(actionable)
+    || /\bwithout\b[^.;!?\r\n]{0,100}\b(?:launching|spawning|starting|running|delegating)\s+(?:any\s+)?(?:agents?|sub[- ]?agents?|workers?)\b/i.test(actionable);
+
+  const suppliedOnly = isExclusiveSuppliedOnlyResponseRequest(message)
+    || /\b(?:use|consider|rely on)\s+only\s+(?:the\s+)?(?:supplied|provided|given|included)\s+(?:evidence|facts?|information|context|content|text|input|materials?)\b/i.test(actionable)
+    || /\bonly\s+use\s+(?:the\s+)?(?:supplied|provided|given|included)\s+(?:evidence|facts?|information|context|content|text|input|materials?)\b/i.test(actionable);
+  const workspaceOnly = /\b(?:inspect|review|analy[sz]e|search|read)\s+only\s+(?:within\s+)?(?:this|the)\s+(?:current\s+)?(?:virtual\s+)?workspace\b/i.test(actionable);
+
+  const contextScope: TurnContextScope = suppliedOnly
+    ? 'supplied-only'
+    : workspaceOnly
+      ? 'workspace-only'
+      : 'default';
+
   return {
     denyAllMutations: broadDenial,
     denyMemoryPersistence: broadDenial || memoryDenial,
+    denyFileWrites: broadDenial || fileDenial,
+    denyCodeExecution: broadDenial || codeExecutionDenial,
+    denyAgentLaunch: broadDenial || agentLaunchDenial,
+    contextScope,
   };
+}
+
+/** Automatic recall is incompatible with an explicit evidence boundary. */
+export function allowsAutomaticRecall(policy: TurnMutationPolicy): boolean {
+  return allowsConversationHistory(policy);
+}
+
+/** Prior chat turns are ambient evidence and stay out of bounded requests. */
+export function allowsConversationHistory(policy: TurnMutationPolicy): boolean {
+  return policy.contextScope === 'default';
+}
+
+export function buildTurnMessageWindow(
+  history: ReadonlyArray<{ role: string; content: string }>,
+  currentUserMessage: string,
+  policy: TurnMutationPolicy,
+): Array<{ role: string; content: string }> {
+  return allowsConversationHistory(policy)
+    ? [...history]
+    : [{ role: 'user', content: currentUserMessage }];
+}
+
+export interface TurnPersistencePermissions {
+  allowMemoryPersistence: boolean;
+  allowDerivedPersistence: boolean;
+}
+
+/** Keep learned/derived state out of bounded and persona-read-only turns. */
+export function resolveTurnPersistencePermissions(options: {
+  policy: TurnMutationPolicy;
+  isAutomatedTurn: boolean;
+  personaIsReadOnly: boolean;
+  closedWorldRewrite?: boolean;
+}): TurnPersistencePermissions {
+  const readOnlyBoundary = options.isAutomatedTurn
+    || options.personaIsReadOnly
+    || options.closedWorldRewrite === true
+    || options.policy.contextScope !== 'default';
+  const allowMemoryPersistence = !readOnlyBoundary
+    && !options.policy.denyMemoryPersistence;
+  return {
+    allowMemoryPersistence,
+    allowDerivedPersistence: allowMemoryPersistence
+      && !options.policy.denyAllMutations,
+  };
+}
+
+/** Decorations can invalidate evidence-bounded exact response contracts. */
+export function allowsPostResponseDecoration(
+  policy: TurnMutationPolicy,
+  closedWorldRewrite = false,
+): boolean {
+  return policy.contextScope === 'default' && !closedWorldRewrite;
+}
+
+/**
+ * Apply request-scoped capability boundaries before any downstream selector.
+ * External tools are withheld for granular restrictions because their effects
+ * are not described by the local ToolDefinition metadata.
+ */
+export function filterToolsByTurnMutationPolicy<T extends { name: string }>(
+  tools: T[],
+  policy: TurnMutationPolicy,
+  externalToolNames: ReadonlySet<string> = new Set<string>(),
+): T[] {
+  if (policy.contextScope === 'supplied-only') return [];
+  if (policy.contextScope === 'workspace-only') {
+    return tools.filter(tool => WORKSPACE_READ_TOOL_NAMES.has(tool.name)
+      && !externalToolNames.has(tool.name));
+  }
+
+  const hasGranularRestriction = policy.denyFileWrites
+    || policy.denyCodeExecution
+    || policy.denyAgentLaunch;
+  return tools.filter((tool) => {
+    if (hasGranularRestriction && externalToolNames.has(tool.name)) return false;
+    if (policy.denyMemoryPersistence && tool.name === 'save_memory') return false;
+    if (policy.denyFileWrites && FILE_WRITE_TOOL_NAMES.has(tool.name)) return false;
+    if (policy.denyCodeExecution && CODE_EXECUTION_TOOL_NAMES.has(tool.name)) return false;
+    if (policy.denyAgentLaunch && AGENT_LAUNCH_TOOL_NAMES.has(tool.name)) return false;
+    return true;
+  });
 }
 
 /** Patterns indicating the user or agent discussed recurring/scheduled work */

@@ -34,6 +34,14 @@ interface ClosedWorldChatPromptOptions {
   behavioralSpec: BehavioralSpecForPackaging;
 }
 
+interface EvidenceBoundedChatPromptOptions {
+  persona: AgentPersona | null;
+  behavioralSpec: BehavioralSpecForPackaging;
+  contextScope: 'workspace-only' | 'supplied-only';
+  selectedToolCount: number;
+  workspacePath?: string;
+}
+
 const PROTECTED_TURN_SIGNAL = /\b(?:legal|law|lawyer|attorney|contract|clause|nda|gdpr|hipaa|liability|compliance|regulation|payroll|salary|wage|overtime|withholding|tax|medical|diagnosis|health|patient|private|privacy|confidential|secret|password|credential|token|api key|pii|ssn|code|function|class|module|api|debug|error|bug|promise|regex|sql|database|schema|query|git|docker|kubernetes|repository|research|analy[sz]e|review|compare|decide|plan|implement|build|deploy|verify|validate|audit|delete|remove|overwrite|publish|send|execute|install)\b/i;
 
 const CONVERSATIONAL_OPERATING_CONTRACT = `# CONVERSATIONAL OPERATING CONTRACT
@@ -128,4 +136,30 @@ export function composeClosedWorldChatPrompt(options: ClosedWorldChatPromptOptio
     behavioralRulesForPromptPackage(options.behavioralSpec, 'compact'),
     CLOSED_WORLD_REWRITE_CONTRACT,
   ].filter(Boolean).join('\n\n');
+}
+
+/**
+ * Build a fresh prompt for a request-scoped evidence boundary. Deliberately do
+ * not accept an assembled prompt: memory, history, goals, skills, and other
+ * ambient context must be impossible to carry into this package by mistake.
+ */
+export function composeEvidenceBoundedChatPrompt(options: EvidenceBoundedChatPromptOptions): string {
+  const personaPrompt = composePersonaPrompt('', options.persona).trim();
+  const mode: ChatPromptPackageMode = options.selectedToolCount === 0 ? 'compact' : 'full';
+  const behavioralRules = behavioralRulesForPromptPackage(options.behavioralSpec, mode);
+  const boundaryContract = options.contextScope === 'supplied-only'
+    ? `# SUPPLIED-ONLY EVIDENCE BOUNDARY
+
+The current user message is the complete evidence boundary for this turn. Do not use chat history, recalled memory, workspace content, goals, awareness, templates, skills, connectors, or outside knowledge as evidence. No tools are available. Do not invent missing evidence or imply that anything was inspected or verified.
+Do not mention this boundary.`
+    : `# WORKSPACE-ONLY EVIDENCE BOUNDARY
+
+The only permitted evidence is the current prompt and successful workspace-rooted read tools.
+Workspace root: ${options.workspacePath ?? '(current workspace root)'}
+Never inspect or read parent directories, repositories outside this workspace, recalled memory, or other ambient context. Do not infer files or results that a successful read tool did not return.
+Do not mention this boundary.`;
+
+  return [personaPrompt, behavioralRules, boundaryContract]
+    .filter(Boolean)
+    .join('\n\n');
 }

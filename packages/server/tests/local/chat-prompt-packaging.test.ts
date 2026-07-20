@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   behavioralRulesForPromptPackage,
   composeClosedWorldChatPrompt,
+  composeEvidenceBoundedChatPrompt,
   composeChatPromptTail,
   selectChatPromptPackageMode,
 } from '../../src/local/routes/chat-prompt-packaging.js';
@@ -10,14 +11,17 @@ import {
   AMBIGUITY_PROMPT,
   USER_RESPONSE_FORMAT_PRECEDENCE,
   buildTemplateWelcomePrompt,
+  classifyExplicitTurnMutationPolicy,
 } from '../../src/local/routes/chat-helpers.js';
 import {
   conversationalToolPolicyPrompt,
   filterGatedToolsForConversationalTurn,
   filterPluginToolsForConversationalTurn,
   isExplicitGatedToolRequest,
+  shouldPackageSystemPromptForTurn,
 } from '../../src/local/routes/chat.js';
 import { selectToolsForTurn } from '../../src/local/persona-tool-filter.js';
+import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
 
 const directReply = 'Reply exactly with WAGGLE_CHAT_OK and nothing else';
 
@@ -63,6 +67,18 @@ function assembled(system: string, responseScaffold: string | null): AssembledPr
       totalChars: system.length,
     },
   };
+}
+
+function canonicalPrompt(id: 'coder' | 'verifier'): string {
+  const acceptanceCase = PERSONA_CASES.find(item => item.id === id);
+  if (!acceptanceCase) throw new Error(`Missing canonical persona case: ${id}`);
+  return acceptanceCase.prompt;
+}
+
+function canonicalPersona(id: 'coder' | 'verifier'): AgentPersona {
+  const result = getPersona(id);
+  if (!result) throw new Error(`Missing canonical persona: ${id}`);
+  return result;
 }
 
 describe('chat prompt packaging', () => {
@@ -270,6 +286,71 @@ describe('chat prompt packaging', () => {
     expect(output).toContain(marker);
     expect(output).not.toContain('ASSEMBLED_WITHOUT_CONTRACT');
     expect(output.endsWith(CLOSED_WORLD_REWRITE_CONTRACT)).toBe(true);
+  });
+
+  it('packages the canonical verifier turn inside a supplied-only evidence boundary', () => {
+    const message = canonicalPrompt('verifier');
+    const policy = classifyExplicitTurnMutationPolicy(message);
+    expect(policy.contextScope).toBe('supplied-only');
+
+    const output = composeEvidenceBoundedChatPrompt({
+      persona: canonicalPersona('verifier'),
+      behavioralSpec: BEHAVIORAL_SPEC,
+      contextScope: 'supplied-only',
+      selectedToolCount: 0,
+    });
+
+    expect(output).toContain('Verifier');
+    expect(output).toMatch(/No tools are available/i);
+    expect(output).toMatch(/current user message is the complete evidence boundary/i);
+    expect(output).not.toContain('# Context From Your Memory');
+    expect(output).not.toContain('# Recalled Memories');
+    expect(output).not.toContain("# Why You're Here");
+    expect(output.endsWith('Do not mention this boundary.')).toBe(true);
+  });
+
+  it('packages the canonical coder turn for workspace-rooted reads without recalled context', () => {
+    const message = canonicalPrompt('coder');
+    const policy = classifyExplicitTurnMutationPolicy(message);
+    expect(policy.contextScope).toBe('workspace-only');
+
+    const output = composeEvidenceBoundedChatPrompt({
+      persona: canonicalPersona('coder'),
+      behavioralSpec: BEHAVIORAL_SPEC,
+      contextScope: 'workspace-only',
+      selectedToolCount: 3,
+      workspacePath: 'C:\\workspaces\\canonical-coder',
+    });
+
+    expect(output).toContain('Coder');
+    expect(output).toContain('C:\\workspaces\\canonical-coder');
+    expect(output).not.toMatch(/No tools are available in this compact turn/i);
+    expect(output).toMatch(/successful workspace-rooted read tools/i);
+    expect(output).toMatch(/never (?:inspect|read).*parent/i);
+    expect(output).not.toContain('# Context From Your Memory');
+    expect(output).not.toContain('# Recalled Memories');
+    expect(output).not.toContain("# Why You're Here");
+    expect(output.endsWith('Do not mention this boundary.')).toBe(true);
+  });
+
+  it('forces a tool-free bounded system package for an injected runner', () => {
+    expect(shouldPackageSystemPromptForTurn(true, 'workspace-only', false)).toBe(true);
+    expect(shouldPackageSystemPromptForTurn(true, 'supplied-only', false)).toBe(true);
+    expect(shouldPackageSystemPromptForTurn(true, 'default', true)).toBe(true);
+    expect(shouldPackageSystemPromptForTurn(true, 'default', false)).toBe(false);
+    expect(shouldPackageSystemPromptForTurn(false, 'default', false)).toBe(true);
+
+    const output = composeEvidenceBoundedChatPrompt({
+      persona: canonicalPersona('coder'),
+      behavioralSpec: BEHAVIORAL_SPEC,
+      contextScope: 'workspace-only',
+      selectedToolCount: 0,
+      workspacePath: 'C:\\workspaces\\custom-runner',
+    });
+
+    expect(output).toMatch(/No tools are available in this compact turn/i);
+    expect(output).toContain('C:\\workspaces\\custom-runner');
+    expect(output.endsWith('Do not mention this boundary.')).toBe(true);
   });
 
   it('preserves and selects an explicitly named calculator plugin tool', () => {
