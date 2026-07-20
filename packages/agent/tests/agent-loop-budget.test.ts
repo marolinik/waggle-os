@@ -334,6 +334,327 @@ describe('bounded agent loop synthesis', () => {
   });
 });
 
+describe('fetched source citations', () => {
+  const makeWebFetch = (
+    execute: ToolDefinition['execute'] = async args => `Fetched ${String(args.url)}`,
+  ): ToolDefinition => ({
+    name: 'web_fetch',
+    description: 'Fetch a source URL.',
+    parameters: { type: 'object', properties: { url: { type: 'string' } } },
+    execute: vi.fn(execute),
+  });
+
+  const citationConfig = (
+    fetchFn: typeof fetch,
+    webFetch: ToolDefinition,
+    request = 'Compare these projects and cite the source URLs.',
+  ): AgentLoopConfig => ({
+    litellmUrl: 'http://localhost:4000',
+    litellmApiKey: 'test-key',
+    model: 'test-model',
+    systemPrompt: 'Use fetched evidence.',
+    messages: [{ role: 'user', content: request }],
+    tools: [webFetch],
+    fetch: fetchFn,
+    verificationGate: false,
+    skillDistillationGate: false,
+  });
+
+  it('streams missing successful fetch URLs exactly once in the returned answer', async () => {
+    const sqliteUrl = 'https://github.com/asg017/sqlite-vec';
+    const pgvectorUrl = 'https://github.com/pgvector/pgvector';
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(streamResponse([
+        sse({ choices: [{ delta: { tool_calls: [{
+          index: 0,
+          id: 'fetch_sqlite',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: sqliteUrl }) },
+        }] } }] }),
+        sse({ choices: [{ delta: { tool_calls: [{
+          index: 1,
+          id: 'fetch_pgvector',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: pgvectorUrl }) },
+        }] } }] }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+        'data: [DONE]\n\n',
+      ]))
+      .mockResolvedValueOnce(streamResponse([
+        sse({ choices: [{ delta: { content: 'SQLite-vector comparison grounded in github.com sources.' } }] }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 150, completion_tokens: 30 },
+        }),
+        'data: [DONE]\n\n',
+      ])) as unknown as typeof fetch;
+    const webFetch = makeWebFetch();
+    const streamed: string[] = [];
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, webFetch),
+      stream: true,
+      onToken: token => streamed.push(token),
+      onToolResult: (_name, input) => {
+        input.url = 'https://mutated-by-callback.invalid';
+      },
+    });
+
+    const expected = [
+      'SQLite-vector comparison grounded in github.com sources.',
+      '',
+      'Sources fetched:',
+      `- ${sqliteUrl}`,
+      `- ${pgvectorUrl}`,
+    ].join('\n');
+    expect(result.content).toBe(expected);
+    expect(streamed.join('')).toBe(result.content);
+    expect(result.content.split(sqliteUrl)).toHaveLength(2);
+    expect(result.content.split(pgvectorUrl)).toHaveLength(2);
+    expect(webFetch.execute).toHaveBeenCalledTimes(2);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      name: 'does not duplicate a complete URL already in the answer',
+      request: 'Cite the source URL.',
+      answer: 'Primary project: https://primary.example/project',
+    },
+    {
+      name: 'does not append sources without explicit citation intent',
+      request: 'Compare these projects.',
+      answer: 'Primary project: primary.example/project',
+    },
+    {
+      name: 'honors an explicit request not to cite or include links',
+      request: 'Compare these projects, but do not include the source URLs.',
+      answer: 'Primary project: primary.example/project',
+    },
+    {
+      name: 'honors avoid-citations wording',
+      request: 'Compare these projects, but avoid citations.',
+      answer: 'Primary project: primary.example/project',
+    },
+    {
+      name: 'honors omit-citations wording',
+      request: 'Compare these projects and omit citations.',
+      answer: 'Primary project: primary.example/project',
+    },
+    {
+      name: 'honors never-include-links wording',
+      request: 'Compare these projects and never include links.',
+      answer: 'Primary project: primary.example/project',
+    },
+  ])('$name', async ({ request, answer }) => {
+    const sourceUrl = 'https://primary.example/project';
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'fetch_primary',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: sourceUrl }) },
+        }],
+      }, 100))
+      .mockResolvedValueOnce(jsonResponse({ role: 'assistant', content: answer }, 120)) as unknown as typeof fetch;
+
+    const result = await runAgentLoop(citationConfig(fetchFn, makeWebFetch(), request));
+
+    expect(result.content).toBe(answer);
+    expect(result.content).not.toContain('Sources fetched:');
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('excludes failed, sanitized, query-bearing, and credential-bearing fetches', async () => {
+    const cases = [
+      ['https://failed.example/source', 'Fetch failed (500): Nope'],
+      ['https://empty.example/source', 'Page fetched but no text content found.'],
+      ['https://blocked.example/source', '[BLOCKED] policy'],
+      ['https://sanitized.example/source', '[SECURITY] Content sanitized.'],
+      ['https://query.example/source?token=secret', 'Fetched signed source'],
+      ['https://user:pass@credential.example/source', 'Fetched credential source'],
+    ] as const;
+    const toolCalls = cases.map(([url], index) => ({
+      id: `fetch_${index}`,
+      type: 'function',
+      function: { name: 'web_fetch', arguments: JSON.stringify({ url }) },
+    }));
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ role: 'assistant', content: '', tool_calls: toolCalls }, 100))
+      .mockResolvedValueOnce(jsonResponse({ role: 'assistant', content: 'No safe source URL was available.' }, 120)) as unknown as typeof fetch;
+    const webFetch = makeWebFetch(async args => {
+      const match = cases.find(([url]) => url === args.url);
+      return match?.[1] ?? '';
+    });
+
+    const result = await runAgentLoop(citationConfig(fetchFn, webFetch));
+
+    expect(result.content).toBe('No safe source URL was available.');
+    expect(result.content).not.toContain('Sources fetched:');
+    expect(webFetch.execute).toHaveBeenCalledTimes(cases.length);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps fetched citations when provider usage crosses the hard budget on synthesis', async () => {
+    const sourceUrl = 'https://primary.example/budget-evidence';
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'fetch_budget_evidence',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: sourceUrl }) },
+        }],
+      }, 50, 10))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: 'Budget-crossing synthesis.',
+      }, 900, 100)) as unknown as typeof fetch;
+    const emitted: string[] = [];
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, makeWebFetch()),
+      maxTokenBudget: 1_000,
+      onToken: token => emitted.push(token),
+    });
+
+    expect(result.content).toBe(`Budget-crossing synthesis.\n\nSources fetched:\n- ${sourceUrl}`);
+    expect(emitted.join('')).toBe(result.content);
+    expect(result.usage).toEqual({ inputTokens: 950, outputTokens: 110 });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('streams the complete pre-dispatch budget stop after a successful fetch', async () => {
+    const sourceUrl = 'https://primary.example/pre-dispatch-budget';
+    const fetchFn = vi.fn(async () => streamResponse([
+      sse({ choices: [{ delta: { tool_calls: [{
+        index: 0,
+        id: 'fetch_pre_dispatch_budget',
+        function: { name: 'web_fetch', arguments: JSON.stringify({ url: sourceUrl }) },
+      }] } }] }),
+      sse({
+        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 450, completion_tokens: 10 },
+      }),
+      'data: [DONE]\n\n',
+    ])) as unknown as typeof fetch;
+    const emitted: string[] = [];
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, makeWebFetch()),
+      maxTokenBudget: 500,
+      stream: true,
+      onToken: token => emitted.push(token),
+    });
+
+    expect(result.content).toBe(
+      'Token budget exhausted before another safe provider request (used 460 tokens, limit 500).'
+      + `\n\nSources fetched:\n- ${sourceUrl}`,
+    );
+    expect(emitted.join('')).toBe(result.content);
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('streams the generated budget fallback when pending fetches are not executed', async () => {
+    const fetchFn = vi.fn(async () => streamResponse([
+      sse({ choices: [{ delta: { tool_calls: [{
+        index: 0,
+        id: 'must_not_run_over_budget',
+        function: { name: 'web_fetch', arguments: '{"url":"https://must-not-run.test"}' },
+      }] } }] }),
+      sse({
+        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 490, completion_tokens: 10 },
+      }),
+      'data: [DONE]\n\n',
+    ])) as unknown as typeof fetch;
+    const webFetch = makeWebFetch();
+    const emitted: string[] = [];
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, webFetch),
+      maxTokenBudget: 500,
+      stream: true,
+      onToken: token => emitted.push(token),
+    });
+
+    expect(result.content).toBe('Token budget exceeded (used 500 tokens, limit 500).');
+    expect(emitted.join('')).toBe(result.content);
+    expect(webFetch.execute).not.toHaveBeenCalled();
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('streams the complete max-turn fallback when no answer prose was emitted', async () => {
+    const sourceUrl = 'https://primary.example/fallback-evidence';
+    const fetchFn = vi.fn(async () => streamResponse([
+      sse({ choices: [{ delta: { tool_calls: [{
+        index: 0,
+        id: 'fetch_fallback_evidence',
+        function: { name: 'web_fetch', arguments: JSON.stringify({ url: sourceUrl }) },
+      }] } }] }),
+      sse({
+        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 100, completion_tokens: 20 },
+      }),
+      'data: [DONE]\n\n',
+    ])) as unknown as typeof fetch;
+    const emitted: string[] = [];
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, makeWebFetch()),
+      maxTurns: 1,
+      stream: true,
+      onToken: token => emitted.push(token),
+    });
+
+    expect(result.content).toBe(
+      `Max tool turns reached (1 turns, 1 tools used).\n\nSources fetched:\n- ${sourceUrl}`,
+    );
+    expect(emitted.join('')).toBe(result.content);
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('finalizes forced-synthesis prose without executing its phantom fetch', async () => {
+    const sourceUrl = 'https://primary.example/evidence';
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'fetch_evidence',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: JSON.stringify({ url: sourceUrl }) },
+        }],
+      }, 100))
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: 'Forced evidence synthesis.',
+        tool_calls: [{
+          id: 'phantom_fetch',
+          type: 'function',
+          function: { name: 'web_fetch', arguments: '{"url":"https://must-not-run.test"}' },
+        }],
+      }, 120)) as unknown as typeof fetch;
+    const webFetch = makeWebFetch();
+
+    const result = await runAgentLoop({
+      ...citationConfig(fetchFn, webFetch),
+      maxTurns: 2,
+      maxToolRounds: 1,
+      synthesisReserveTokens: 100,
+    });
+
+    expect(result.content).toBe(`Forced evidence synthesis.\n\nSources fetched:\n- ${sourceUrl}`);
+    expect(webFetch.execute).toHaveBeenCalledOnce();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(result.content).not.toContain('must-not-run');
+  });
+});
+
 describe('hard request dispatch budget', () => {
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
     'rejects invalid maxTokenBudget=%s before any provider call',

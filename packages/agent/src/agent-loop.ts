@@ -198,6 +198,36 @@ function containsRawToolCallMarkup(content: string): boolean {
     || /```(?:json|tool)?\s*\{[^`]*"tool"/is.test(content);
 }
 
+const EXPLICIT_CITATION_INTENT = /\b(?:cite|citations?|source\s+urls?|provide\s+(?:the\s+)?(?:sources?|links?)|include\s+(?:the\s+)?(?:sources?|links?))\b/i;
+const NEGATED_CITATION_INTENT = /\b(?:do\s+not|don't|dont|never|avoid|omit|without|no)\b(?:\s+\w+){0,4}\s+(?:cite|citations?|sources?|source\s+urls?|links?)\b/i;
+const UNUSABLE_FETCH_RESULT = /^(?:error\b|fetch\s+(?:failed|error)\b|page fetched but no text content found\b|\[(?:security|blocked)\]|tool\s+"[^"]+"\s+(?:is blocked|not found)\b)/i;
+
+function safeFetchedCitationUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    // Never reproduce credentials or signed/query-bearing URLs automatically.
+    if (parsed.username || parsed.password || parsed.search) return null;
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function appendFetchedSourceFooter(
+  content: string,
+  citationIntent: boolean,
+  fetchedUrls: ReadonlySet<string>,
+): { content: string; suffix: string } {
+  if (!citationIntent || fetchedUrls.size === 0) return { content, suffix: '' };
+  const missing = [...fetchedUrls].filter(url => !content.includes(url));
+  if (missing.length === 0) return { content, suffix: '' };
+  const suffix = `${content.endsWith('\n') ? '\n' : '\n\n'}Sources fetched:\n${missing.map(url => `- ${url}`).join('\n')}`;
+  return { content: `${content}${suffix}`, suffix };
+}
+
 const SUPPORTED_COMPLETION_FINISH_REASONS = new Set(['stop', 'tool_calls']);
 
 type IncompleteCompletionError = Error & {
@@ -268,6 +298,18 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     throw new RangeError('maxOutputTokens must be a positive finite number');
   }
 
+  const userRequest = [...inputMessages]
+    .reverse()
+    .find(message => message.role === 'user')?.content ?? '';
+  const citationIntent = EXPLICIT_CITATION_INTENT.test(userRequest)
+    && !NEGATED_CITATION_INTENT.test(userRequest);
+  const successfullyFetchedCitationUrls = new Set<string>();
+  let lastToolObservation: {
+    name: string;
+    citationUrl: string | null;
+    usableResult: boolean;
+  } | undefined;
+
   logTurnEvent(turnId, {
     stage: 'agent-loop.enter',
     model,
@@ -307,12 +349,20 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       }
     : userOnToolUse;
 
-  const onToolResult = traceCallbacks
-    ? (name: string, input: Record<string, unknown>, result: string) => {
-        traceCallbacks.onToolResult(name, input, result);
-        userOnToolResult?.(name, input, result);
-      }
-    : userOnToolResult;
+  const onToolResult = (
+    name: string,
+    input: Record<string, unknown>,
+    result: string,
+  ) => {
+    const trimmedResult = result.trim();
+    lastToolObservation = {
+      name,
+      citationUrl: safeFetchedCitationUrl(input.url),
+      usableResult: trimmedResult.length > 0 && !UNUSABLE_FETCH_RESULT.test(trimmedResult),
+    };
+    traceCallbacks?.onToolResult(name, input, result);
+    userOnToolResult?.(name, input, result);
+  };
 
   // Merge plugin tools (if any) into the base tool set
   const tools: ToolDefinition[] = pluginToolProvider
@@ -324,10 +374,6 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         })),
       ]
     : configTools;
-
-  const userRequest = [...inputMessages]
-    .reverse()
-    .find(message => message.role === 'user')?.content ?? '';
 
   // Build messages array with system prompt + input messages
   const messages: AgentMessage[] = [
@@ -387,11 +433,29 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     ? Math.floor(configuredOutputCeiling)
     : 8_192;
 
-  const budgetStopResponse = (usableContent?: string): AgentResponse => {
+  const budgetStopResponse = (
+    usableContent?: string,
+    usableContentWasStreamed = false,
+  ): AgentResponse => {
     const used = totalInputTokens + totalOutputTokens;
-    const content = gateState.preservedAnswerForDistillation
-      ?? usableContent?.trim()
+    const preservedContent = gateState.preservedAnswerForDistillation;
+    const usableAnswer = usableContent?.trim();
+    const baseContent = preservedContent
+      ?? usableAnswer
       ?? `Token budget exhausted before another safe provider request (used ${used} tokens, limit ${maxTokenBudget}).`;
+    const finalized = appendFetchedSourceFooter(
+      baseContent,
+      citationIntent,
+      successfullyFetchedCitationUrls,
+    );
+    if (stream && onToken) {
+      if (preservedContent || usableContentWasStreamed) {
+        if (finalized.suffix) onToken(finalized.suffix);
+      } else {
+        onToken(finalized.content);
+      }
+    }
+    const content = finalized.content;
     logTurnEvent(turnId, {
       stage: 'agent-loop.exit',
       reason: 'token-budget-exhausted',
@@ -683,6 +747,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           ?? (synthesisReserveTokens
             ? 'I gathered evidence but the token budget was exhausted before a reliable final synthesis.'
             : `Token budget exceeded (used ${totalInputTokens + totalOutputTokens} tokens, limit ${maxTokenBudget}).`),
+        Boolean(stream && usableContent),
       );
       if (!stream && onToken && result.content) onToken(result.content);
       return result;
@@ -731,13 +796,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
       // Once D1 has fired, surface the preserved user answer instead of the
       // internal skill-distillation summary produced by the current turn.
-      const finalContent = gateState.preservedAnswerForDistillation ?? acceptedContent;
+      const finalized = appendFetchedSourceFooter(
+        gateState.preservedAnswerForDistillation ?? acceptedContent,
+        citationIntent,
+        successfullyFetchedCitationUrls,
+      );
+      const finalContent = finalized.content;
 
       // In non-streaming mode, emit the full content as a single token
       if (!stream && onToken && finalContent) {
         onToken(finalContent);
-      } else if (stream && onToken && gate.contentSuffix) {
-        onToken(gate.contentSuffix);
+      } else if (stream && onToken) {
+        if (gate.contentSuffix) onToken(gate.contentSuffix);
+        if (finalized.suffix) onToken(finalized.suffix);
       }
       logTurnEvent(turnId, {
         stage: 'agent-loop.exit',
@@ -760,9 +831,18 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const synthesis = (assistantMessage.content ?? '').trim()
         || allStreamedContent
         || 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.';
-      if (!stream && onToken && synthesis) onToken(synthesis);
+      const finalized = appendFetchedSourceFooter(
+        gateState.preservedAnswerForDistillation ?? synthesis,
+        citationIntent,
+        successfullyFetchedCitationUrls,
+      );
+      if (!stream && onToken && finalized.content) {
+        onToken(finalized.content);
+      } else if (stream && onToken && finalized.suffix) {
+        onToken(finalized.suffix);
+      }
       return {
-        content: gateState.preservedAnswerForDistillation ?? synthesis,
+        content: finalized.content,
         toolsUsed,
         usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
       };
@@ -783,6 +863,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       ? new Map([...toolMap].filter(([name]) => name !== 'save_memory'))
       : toolMap;
     for (const toolCall of assistantMessage.tool_calls) {
+      lastToolObservation = undefined;
       const r = await executeToolCall(toolCall, {
         toolMap: turnToolMap,
         guard,
@@ -793,6 +874,21 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         onToolResult,
         turnId,
       });
+      const observation = lastToolObservation as {
+        name: string;
+        citationUrl: string | null;
+        usableResult: boolean;
+      } | undefined;
+      if (
+        citationIntent
+        && r.countedAsUsed
+        && r.toolName === 'web_fetch'
+        && observation?.name === 'web_fetch'
+        && observation.usableResult
+        && observation.citationUrl
+      ) {
+        successfullyFetchedCitationUrls.add(observation.citationUrl);
+      }
       if (r.countedAsUsed) toolsUsed.push(r.toolName);
       messages.push({
         role: 'tool',
@@ -824,11 +920,26 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // maxTurns reached — bounded runs must never expose an internal max-turn
   // message. Normally the reserved synthesis turn returns above; this fallback
   // is only for a malformed provider response during that final request.
-  return {
-    content: gateState.preservedAnswerForDistillation
+  const fallbackBaseWasStreamed = Boolean(
+    gateState.preservedAnswerForDistillation || allStreamedContent,
+  );
+  const finalized = appendFetchedSourceFooter(
+    gateState.preservedAnswerForDistillation
       ?? (allStreamedContent || (synthesisReserveTokens
         ? 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.'
         : `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`)),
+    citationIntent,
+    successfullyFetchedCitationUrls,
+  );
+  if (stream && onToken) {
+    if (fallbackBaseWasStreamed) {
+      if (finalized.suffix) onToken(finalized.suffix);
+    } else {
+      onToken(finalized.content);
+    }
+  }
+  return {
+    content: finalized.content,
     toolsUsed,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
   };
