@@ -7,7 +7,15 @@ import { GitLabConnector } from '../../src/connectors/gitlab-connector.js';
 import { BitbucketConnector } from '../../src/connectors/bitbucket-connector.js';
 import { DropboxConnector } from '../../src/connectors/dropbox-connector.js';
 import { PostgresConnector } from '../../src/connectors/postgres-connector.js';
+import { safeFetch } from '../../src/url-egress-guard.js';
 import type { VaultStore } from '@waggle/core';
+
+vi.mock('../../src/url-egress-guard.js', () => ({
+  safeFetch: vi.fn((url: string, init?: RequestInit) => globalThis.fetch(url, {
+    ...init,
+    redirect: 'manual',
+  })),
+}));
 
 function createMockVault(connectorId: string, cred?: { value: string; isExpired: boolean }, extras?: Record<string, string>): VaultStore {
   return {
@@ -95,6 +103,7 @@ describe('SalesforceConnector', () => {
   beforeEach(() => {
     connector = new SalesforceConnector();
     originalFetch = globalThis.fetch;
+    vi.mocked(safeFetch).mockClear();
   });
 
   afterEach(() => {
@@ -119,6 +128,10 @@ describe('SalesforceConnector', () => {
     expect(names).toContain('list_opportunities');
   });
 
+  it('marks arbitrary SOQL search as high risk', () => {
+    expect(connector.actions.find(action => action.name === 'search')?.riskLevel).toBe('high');
+  });
+
   it('execute returns error when not connected (no token)', async () => {
     const result = await connector.execute('search', { query: 'SELECT Id FROM Account' });
     expect(result.success).toBe(false);
@@ -141,9 +154,13 @@ describe('SalesforceConnector', () => {
     expect(def.tools).toHaveLength(6);
   });
 
-  it('execute(search) works with instance URL', async () => {
+  it.each([
+    'https://na123.salesforce.com',
+    'https://acme.my.salesforce.com/',
+    'https://acme--dev.sandbox.my.salesforce.com',
+  ])('execute(search) works with official instance origin %s without redirects', async (instanceUrl) => {
     const vault = createMockVault('salesforce', { value: 'token123', isExpired: false }, {
-      'connector:salesforce:instance_url': 'https://myco.salesforce.com',
+      'connector:salesforce:instance_url': instanceUrl,
     });
     await connector.connect(vault);
 
@@ -153,6 +170,126 @@ describe('SalesforceConnector', () => {
     const result = await connector.execute('search', { query: 'SELECT Id, Name FROM Account LIMIT 1' });
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockData);
+    expect(safeFetch).toHaveBeenCalledWith(
+      expect.stringMatching(/^https:\/\/[a-z0-9.-]+\.salesforce\.com\/services\/data\/v59\.0\/query\?q=/),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token123' }),
+      }),
+      { maxRedirects: 0 },
+    );
+  });
+
+  it('uses guarded no-redirect fetch for health checks', async () => {
+    const vault = createMockVault('salesforce', { value: 'token123', isExpired: false }, {
+      'connector:salesforce:instance_url': 'https://acme.my.salesforce.com',
+    });
+    await connector.connect(vault);
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 }) as unknown as typeof fetch;
+
+    expect((await connector.healthCheck()).status).toBe('connected');
+    expect(safeFetch).toHaveBeenCalledWith(
+      'https://acme.my.salesforce.com/services/data/v59.0/limits',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token123' }),
+      }),
+      { maxRedirects: 0 },
+    );
+  });
+
+  it.each([
+    'http://myco.salesforce.com',
+    'https://salesforce.com',
+    'https://salesforce.com.evil.test',
+    'https://user:pass@myco.salesforce.com',
+    'https://myco.salesforce.com:443',
+    'https://myco.salesforce.com/services/data',
+    'https://myco.salesforce.com/?redirect=https://evil.test',
+    'https://myco.salesforce.com/#fragment',
+  ])('rejects unsafe instance URL %s before the bearer token reaches fetch', async (instanceUrl) => {
+    const vault = createMockVault('salesforce', { value: 'secret-token', isExpired: false }, {
+      'connector:salesforce:instance_url': instanceUrl,
+    });
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    await connector.connect(vault);
+    const health = await connector.healthCheck();
+    const result = await connector.execute('search', { query: 'SELECT Id FROM Account' });
+
+    expect(health.status).toBe('disconnected');
+    expect(result.success).toBe(false);
+    expect(result.error).not.toContain('secret-token');
+    expect(safeFetch).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['fractional list limit', 'list_contacts', { limit: 1.5 }],
+    ['zero list limit', 'list_contacts', { limit: 0 }],
+    ['oversized list limit', 'list_opportunities', { limit: 2001 }],
+    ['SOQL-injected field list', 'list_contacts', { fields: 'Id,Name FROM User' }],
+    ['path-like object type', 'get_record', { objectType: '../limits', recordId: '003000000000001AAA' }],
+    ['path-like record ID', 'get_record', { objectType: 'Contact', recordId: '../limits' }],
+    ['invalid create field', 'create_record', { objectType: 'Contact', fields: { 'Name,Id': 'test' } }],
+    ['invalid update record ID', 'update_record', { objectType: 'Contact', recordId: 'not-an-id', fields: { Name: 'test' } }],
+    ['empty SOQL query', 'search', { query: '   ' }],
+  ] as const)('rejects %s before any outbound request', async (_label, action, params) => {
+    const vault = createMockVault('salesforce', { value: 'secret-token', isExpired: false }, {
+      'connector:salesforce:instance_url': 'https://acme.my.salesforce.com',
+    });
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    await connector.connect(vault);
+
+    const result = await connector.execute(action, params);
+
+    expect(result.success).toBe(false);
+    expect(result.error).not.toContain('secret-token');
+    expect(safeFetch).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('preserves valid typed record and list operations with encoded paths', async () => {
+    const vault = createMockVault('salesforce', { value: 'token123', isExpired: false }, {
+      'connector:salesforce:instance_url': 'https://acme.my.salesforce.com',
+    });
+    await connector.connect(vault);
+
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ records: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ Id: '003000000000001AAA' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ Id: '003000000000001' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: '003000000000001AAA' }) })
+      .mockResolvedValueOnce({ ok: true, status: 204 }) as unknown as typeof fetch;
+
+    expect((await connector.execute('list_contacts', {
+      limit: 50,
+      fields: 'Id,Account.Owner.Name,Custom_Field__c',
+    })).success).toBe(true);
+    expect((await connector.execute('get_record', {
+      objectType: 'Contact',
+      recordId: '003000000000001AAA',
+      fields: 'Id,Account.Name',
+    })).success).toBe(true);
+    expect((await connector.execute('get_record', {
+      objectType: 'Contact',
+      recordId: '003000000000001',
+    })).success).toBe(true);
+    expect((await connector.execute('create_record', {
+      objectType: 'Contact',
+      fields: { LastName: 'Example', Custom_Field__c: 'value' },
+    })).success).toBe(true);
+    expect((await connector.execute('update_record', {
+      objectType: 'Contact',
+      recordId: '003000000000001AAA',
+      fields: { LastName: 'Updated' },
+    })).success).toBe(true);
+
+    expect(safeFetch).toHaveBeenCalledTimes(5);
+    for (const [url, _init, options] of vi.mocked(safeFetch).mock.calls) {
+      expect(url).toMatch(/^https:\/\/acme\.my\.salesforce\.com\/services\/data\/v59\.0\//);
+      expect(options).toEqual({ maxRedirects: 0 });
+    }
   });
 });
 
