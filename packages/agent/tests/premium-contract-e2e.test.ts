@@ -38,6 +38,11 @@ const probe: ToolDefinition = {
   parameters: { type: 'object', properties: {}, required: [] },
   execute: async () => 'ok',
 };
+const runTests: ToolDefinition = {
+  name: 'run_tests', description: 'run the relevant test suite',
+  parameters: { type: 'object', properties: {}, required: [] },
+  execute: async () => 'tests passed',
+};
 // Distinct args — identical calls would (correctly) trip the LoopGuard.
 const fiveCalls = [1, 2, 3, 4, 5].map(n => ({ id: `c${n}`, function: { name: 'probe', arguments: JSON.stringify({ step: n }) } }));
 
@@ -45,7 +50,7 @@ function cfg(fetch: ReturnType<typeof mockFetch>): AgentLoopConfig {
   // BOTH gates default-on — the whole point of this fixture.
   return {
     litellmUrl: 'http://x', litellmApiKey: 'k', model: 'm', systemPrompt: 's',
-    tools: [probe], messages: [{ role: 'user', content: 'do the multi-step task' }],
+    tools: [probe, runTests], messages: [{ role: 'user', content: 'do the multi-step task' }],
     fetch: fetch as unknown as typeof globalThis.fetch,
   };
 }

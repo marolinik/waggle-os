@@ -22,7 +22,12 @@
  * reading as the conversation loop it conceptually is.
  */
 
-import { assertsUnverifiedCompletion, VERIFICATION_GATE_DIRECTIVE } from './verification-gate.js';
+import {
+  assertsUnverifiedCompletion,
+  isVerificationToolName,
+  VERIFICATION_GATE_DIRECTIVE,
+  VERIFICATION_NO_TOOL_DISCLOSURE,
+} from './verification-gate.js';
 import { planSkillDistillation } from './skill-distillation.js';
 import { logTurnEvent } from './turn-context.js';
 
@@ -72,6 +77,8 @@ export interface MaybeFireCompletionGateArgs {
   content: string;
   /** Names of tools used so far in this run (D1 reads length+set; D3 reads set for verification-class) */
   toolsUsed: readonly string[];
+  /** Names of tools the model can actually call in this run. */
+  availableToolNames?: readonly string[];
   /** Caller's message history — pushed to in-place when a gate fires */
   messages: GateMessage[];
   /** Current user-authored request, captured before internal directives are added. */
@@ -101,6 +108,8 @@ export interface GateResult {
   fired: boolean;
   /** New state object — copy of input state with one-shot flags + preserved answer updated. */
   state: GateState;
+  /** Deterministic local suffix used when a claim cannot be verified by any available tool. */
+  contentSuffix?: string;
 }
 
 /**
@@ -112,6 +121,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   const {
     content,
     toolsUsed,
+    availableToolNames = [],
     messages,
     userRequest = '',
     state,
@@ -127,6 +137,17 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     !state.verificationCorrectionUsed &&
     assertsUnverifiedCompletion(content, toolsUsed, userRequest)
   ) {
+    if (!availableToolNames.some(isVerificationToolName)) {
+      logTurnEvent(turnId, {
+        stage: 'agent-loop.verification-gate.disclosed',
+        contentChars: content.length,
+      });
+      return {
+        fired: false,
+        contentSuffix: VERIFICATION_NO_TOOL_DISCLOSURE,
+        state: { ...state, verificationCorrectionUsed: true },
+      };
+    }
     const systemMessage = messages.find(message => message.role === 'system');
     const internalDirective = `\n\n# Internal verification correction\n${VERIFICATION_GATE_DIRECTIVE}`;
     if (systemMessage && typeof systemMessage.content === 'string') {

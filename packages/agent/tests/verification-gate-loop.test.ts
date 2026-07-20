@@ -5,7 +5,10 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { runAgentLoop, type AgentLoopConfig } from '../src/agent-loop.js';
-import { VERIFICATION_GATE_DIRECTIVE } from '../src/verification-gate.js';
+import {
+  VERIFICATION_GATE_DIRECTIVE,
+  VERIFICATION_NO_TOOL_DISCLOSURE,
+} from '../src/verification-gate.js';
 import type { ToolDefinition } from '../src/tools.js';
 
 type MockTurn = string | null | {
@@ -41,13 +44,20 @@ function cfg(fetch: ReturnType<typeof mockFetch>, over: Partial<AgentLoopConfig>
   };
 }
 
+const runTests: ToolDefinition = {
+  name: 'run_tests',
+  description: 'Run the relevant test suite.',
+  parameters: { type: 'object', properties: {}, required: [] },
+  execute: async () => 'tests passed',
+};
+
 describe('D3 — verification-before-completion gate (structural, locked)', () => {
   it('does NOT accept an unverified completion claim — forces one corrective turn', async () => {
     const fetch = mockFetch([
       'All tests pass and the build succeeds.',           // unverified claim, no tools
       'UNVERIFIED — I cannot run the suite here; not checked.', // model corrects
     ]);
-    const result = await runAgentLoop(cfg(fetch));
+    const result = await runAgentLoop(cfg(fetch, { tools: [runTests] }));
 
     expect(fetch).toHaveBeenCalledTimes(2); // the claim was rejected, loop continued
     const secondBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
@@ -86,7 +96,7 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
       'UNVERIFIED — I did not run the suite.',
     ]);
 
-    const result = await runAgentLoop(cfg(fetch, { tools: [saveMemory] }));
+    const result = await runAgentLoop(cfg(fetch, { tools: [saveMemory, runTests] }));
 
     expect(fetch).toHaveBeenCalledTimes(3);
     for (const requestIndex of [1, 2]) {
@@ -104,7 +114,7 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
       'All tests pass.',                  // claim 1 → gated
       'Everything works, the suite is green.', // claim 2 → one-shot used, accepted
     ]);
-    const result = await runAgentLoop(cfg(fetch));
+    const result = await runAgentLoop(cfg(fetch, { tools: [runTests] }));
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(result.content).toBe('Everything works, the suite is green.');
   });
@@ -114,6 +124,22 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
     const result = await runAgentLoop(cfg(fetch));
     expect(fetch).toHaveBeenCalledTimes(1); // returned immediately
     expect(result.content).toBe('I updated the config as you asked.');
+  });
+
+  it('adds an honest local disclosure without a second model call when only non-verification tools exist', async () => {
+    const claim = 'All tests pass and the build succeeds.';
+    const fetch = mockFetch([claim]);
+    const createPlan: ToolDefinition = {
+      name: 'create_plan',
+      description: 'Create a project plan.',
+      parameters: { type: 'object', properties: {}, required: [] },
+      execute: async () => 'plan created',
+    };
+    const result = await runAgentLoop(cfg(fetch, { tools: [createPlan] }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe(`${claim}${VERIFICATION_NO_TOOL_DISCLOSURE}`);
+    expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
   });
 
   it('does not rewrite facts preserved from the current user request', async () => {

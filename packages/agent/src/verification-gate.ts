@@ -24,6 +24,10 @@
 /** Tool-name fragments that count as actually running a check. */
 const VERIFICATION_TOOL = /test|build|\brun\b|run_|verif|lint|typecheck|tsc|pytest|jest|vitest|exec|bash|compile|spec/i;
 
+export function isVerificationToolName(name: string): boolean {
+  return VERIFICATION_TOOL.test(name);
+}
+
 /** Explicit "the work is verified / passing / working" success assertions. */
 const SUCCESS_ASSERTION: RegExp[] = [
   /\b(?:all\s+)?(?:tests?|suite|specs?)\s+(?:(?:are|is)\s+)?(?:pass(?:ed|ing)?|green)\b/i,
@@ -189,7 +193,7 @@ export function assertsUnverifiedCompletion(
 ): boolean {
   if (!content || content.length < 12) return false;
   // A check actually ran this turn → the claim is grounded; do not fire.
-  if (toolsUsed.some(t => VERIFICATION_TOOL.test(t))) return false;
+  if (toolsUsed.some(isVerificationToolName)) return false;
   for (const assertion of SUCCESS_ASSERTION) {
     const flags = assertion.flags.includes('g') ? assertion.flags : `${assertion.flags}g`;
     for (const match of content.matchAll(new RegExp(assertion.source, flags))) {
@@ -212,3 +216,7 @@ export const VERIFICATION_GATE_DIRECTIVE =
   + 'run the check now (the tests / build / the original reproduction) and quote '
   + 'the real output, OR explicitly label the result UNVERIFIED and say what '
   + 'remains unchecked. Do not reassert success without evidence.';
+
+export const VERIFICATION_NO_TOOL_DISCLOSURE =
+  '\n\n**Verification: UNVERIFIED** — No verification-capable tool was available in this turn. '
+  + 'Any success or readiness condition above is therefore a proposed criterion, not a measured result.';

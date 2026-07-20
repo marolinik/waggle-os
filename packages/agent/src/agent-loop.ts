@@ -619,6 +619,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const gate = await maybeFireCompletionGate({
         content,
         toolsUsed,
+        availableToolNames: tools.map(tool => tool.name),
         messages,
         userRequest,
         state: gateState,
@@ -630,14 +631,18 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       gateState = gate.state;
       if (gate.fired) continue;
 
+      const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
+
       // In non-streaming mode, emit the full content as a single token
-      if (!stream && onToken && content) {
-        onToken(content);
+      if (!stream && onToken && acceptedContent) {
+        onToken(acceptedContent);
+      } else if (stream && onToken && gate.contentSuffix) {
+        onToken(gate.contentSuffix);
       }
       // Issue #4 — once D1 has fired, the user's answer was captured before
       // the distillation turn ran; the current `content` is the skill
       // summary, NOT the answer. Surface the preserved answer instead.
-      const finalContent = gateState.preservedAnswerForDistillation ?? content;
+      const finalContent = gateState.preservedAnswerForDistillation ?? acceptedContent;
       logTurnEvent(turnId, {
         stage: 'agent-loop.exit',
         contentChars: finalContent.length,
