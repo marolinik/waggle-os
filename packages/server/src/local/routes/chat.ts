@@ -82,6 +82,12 @@ function isClosedDbError(e: unknown): boolean {
   return /database (connection|handle) is not open|database is closed/i.test(msg);
 }
 
+function isIncompleteCompletionError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
+}
+
 const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'bash',
   'read_file',
@@ -2225,6 +2231,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           initialError: unknown,
           allowNonRetryableConfiguredFallback = false,
         ) => {
+          // The agent may already have executed tools before detecting a
+          // truncated final completion. Replaying the whole run on another
+          // model would repeat those side effects, so this signal is terminal.
+          if (isIncompleteCompletionError(initialError)) throw initialError;
           let failure = initialError;
           let failedBudgetModel: string | null = null;
 
@@ -2246,6 +2256,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             try {
               return await runAgentAttempt(configForModelAttempt(resolvedModel));
             } catch (primaryRunError) {
+              if (isIncompleteCompletionError(primaryRunError)) throw primaryRunError;
               failure = primaryRunError;
             }
           }
@@ -2298,6 +2309,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
           if (abortController.signal.aborted) throw primaryErr;
+          if (isIncompleteCompletionError(primaryErr)) throw primaryErr;
           // Report error to credential pool and try next key
           if (credPool && poolKey) {
             let failedKey = poolKey;
@@ -2334,6 +2346,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 break;
               } catch (nextCredentialError) {
                 if (abortController.signal.aborted) throw nextCredentialError;
+                if (isIncompleteCompletionError(nextCredentialError)) throw nextCredentialError;
                 failedKey = nextKey;
                 credentialError = nextCredentialError;
               }

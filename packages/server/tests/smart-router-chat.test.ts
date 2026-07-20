@@ -70,6 +70,11 @@ describe('chat smart-router integration', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    server.vault.delete('anthropic');
+    server.vault.delete('anthropic-2');
+    server.vault.delete('anthropic-3');
+    server.vault.delete('openrouter');
+    server.vault.delete('openrouter-2');
   });
 
   afterAll(async () => {
@@ -269,6 +274,34 @@ describe('chat smart-router integration', () => {
     expect(attempts).toEqual(['budget-test-model', 'primary-test-model']);
   });
 
+  it('never replays an incomplete budget-model run on the primary or fallback', async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.setFallbackModel('ollama/fallback-test-model');
+    config.save();
+    const attempts: string[] = [];
+    let simulatedMutations = 0;
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(agentConfig.model);
+      simulatedMutations++;
+      throw Object.assign(
+        new Error('LLM returned an incomplete completion; partial content was not accepted.'),
+        { code: 'INCOMPLETE_COMPLETION', status: 502 },
+      );
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'What is 19 * 23?', session: 'incomplete-budget-no-replay' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toEqual(['budget-test-model']);
+    expect(simulatedMutations).toBe(1);
+    expect(response.body).toContain('incomplete completion');
+    expect(response.body).not.toContain('fallback-test-model');
+  });
+
   it('uses the configured fallback only after both budget and primary runs fail', async () => {
     const config = new WaggleConfig(tmpDir);
     config.setFallbackModel('ollama/fallback-test-model');
@@ -349,6 +382,49 @@ describe('chat smart-router integration', () => {
       secondKey,
       thirdKey,
     ]);
+  });
+
+  it('never rotates credentials or models after an incomplete completion', async () => {
+    const firstKey = 'sk-openrouter-incomplete-first';
+    const secondKey = 'sk-openrouter-incomplete-second';
+    server.vault.set('openrouter', firstKey);
+    server.vault.set('openrouter-2', secondKey);
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'test',
+      checkedAt: new Date().toISOString(),
+    };
+    const config = new WaggleConfig(tmpDir);
+    config.setDefaultModel('openrouter/anthropic/claude-sonnet-5');
+    config.clearBudgetModel();
+    config.setFallbackModel('ollama/fallback-test-model');
+    config.save();
+    const attempts: Array<{ model: string; apiKey: string }> = [];
+    let simulatedMutations = 0;
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push({ model: agentConfig.model, apiKey: agentConfig.litellmApiKey });
+      simulatedMutations++;
+      throw Object.assign(
+        new Error('LLM returned an incomplete completion; partial content was not accepted.'),
+        { code: 'INCOMPLETE_COMPLETION', status: 502 },
+      );
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Review this detailed plan.', session: 'incomplete-credential-no-replay' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toEqual([{
+      model: 'openrouter/anthropic/claude-sonnet-5',
+      apiKey: firstKey,
+    }]);
+    expect(simulatedMutations).toBe(1);
+    expect(response.body).toContain('incomplete completion');
+    expect(response.body).not.toContain('API key rotated');
   });
 
   it('normalizes a configured Ollama fallback onto the local transport', async () => {

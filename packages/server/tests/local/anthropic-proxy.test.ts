@@ -343,6 +343,60 @@ describe('Anthropic Proxy Routes', () => {
       expect(body.choices[0].message.tool_calls[0].function.name).toBe('web_search');
       expect(JSON.parse(body.choices[0].message.tool_calls[0].function.arguments)).toEqual({ query: 'Waggle AI agent' });
     });
+
+    it('preserves Anthropic max_tokens as an incomplete OpenAI length reason', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-max-tokens';
+      server = createTestServer();
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'Partial answer' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'max_tokens',
+        usage: { input_tokens: 100, output_tokens: 50 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Answer fully' }],
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().choices[0].finish_reason).toBe('length');
+    });
+
+    it.each([
+      [undefined, 'anthropic_missing_stop_reason'],
+      [null, 'anthropic_missing_stop_reason'],
+      ['refusal', 'refusal'],
+      ['pause_turn', 'pause_turn'],
+      ['tool_use', 'anthropic_inconsistent_tool_use'],
+    ])('fails closed for non-stream stop reason %s', async (anthropicReason, openAiReason) => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-nonstream-stop-reason';
+      server = createTestServer();
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'Unaccepted partial answer' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: anthropicReason,
+        usage: { input_tokens: 100, output_tokens: 50 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Answer fully' }],
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().choices[0].finish_reason).toBe(openAiReason);
+    });
   });
 
   describe('POST /v1/chat/completions (streaming)', () => {
@@ -351,7 +405,7 @@ describe('Anthropic Proxy Routes', () => {
       server = createTestServer();
       const anthropicStream = [
         'data: {"type":"message_start","message":{"usage":{"input_tokens":100,"cache_creation_input_tokens":2000,"cache_read_input_tokens":5000}}}',
-        'data: {"type":"message_delta","usage":{"output_tokens":20}}',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":20}}',
         'data: {"type":"message_stop"}',
       ].join('\n\n') + '\n\n';
       globalThis.fetch = vi.fn(async () => new Response(anthropicStream, {
@@ -384,6 +438,187 @@ describe('Anthropic Proxy Routes', () => {
         cache_creation_input_tokens: 2_000,
         cache_read_input_tokens: 5_000,
       });
+    });
+
+    it.each([
+      ['end_turn', 'stop', false],
+      ['stop_sequence', 'stop', false],
+      ['tool_use', 'tool_calls', true],
+      ['tool_use', 'anthropic_inconsistent_tool_use', false],
+      ['max_tokens', 'length', false],
+      ['pause_turn', 'pause_turn', false],
+      ['refusal', 'refusal', false],
+    ])('translates streaming stop reason %s to %s before DONE', async (anthropicReason, openAiReason, withToolCall) => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-stream-stop-reason';
+      server = createTestServer();
+      const anthropicStream = [
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":100}}}',
+        ...(withToolCall
+          ? ['data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"toolu_1","name":"web_search"}}']
+          : []),
+        `data: ${JSON.stringify({
+          type: 'message_delta',
+          delta: { stop_reason: anthropicReason },
+          usage: { output_tokens: 20 },
+        })}`,
+        'data: {"type":"message_stop"}',
+      ].join('\n\n') + '\n\n';
+      globalThis.fetch = vi.fn(async () => new Response(anthropicStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Stream the answer' }],
+          stream: true,
+          stream_options: { include_usage: true },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const dataLines = res.body.split('\n').filter(line => line.startsWith('data: '));
+      const terminal = dataLines
+        .filter(line => line !== 'data: [DONE]')
+        .map(line => JSON.parse(line.slice(6)))
+        .find(chunk => chunk.choices?.[0]?.finish_reason);
+      expect(terminal?.choices[0].finish_reason).toBe(openAiReason);
+      expect(dataLines.at(-1)).toBe('data: [DONE]');
+    });
+
+    it('does not synthesize DONE when the upstream stream ends before message_stop', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-stream-premature-eof';
+      server = createTestServer();
+      const anthropicStream = [
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":100}}}',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Partial answer"}}',
+        'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":20}}',
+      ].join('\n\n') + '\n\n';
+      globalThis.fetch = vi.fn(async () => new Response(anthropicStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Stream the answer' }],
+          stream: true,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('Partial answer');
+      expect(res.body).not.toContain('finish_reason');
+      expect(res.body).not.toContain('data: [DONE]');
+    });
+
+    it('fails closed when message_stop arrives without a stop reason', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-stream-missing-stop-reason';
+      server = createTestServer();
+      const anthropicStream = [
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":100}}}',
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Partial answer"}}',
+        'data: {"type":"message_stop"}',
+      ].join('\n\n') + '\n\n';
+      globalThis.fetch = vi.fn(async () => new Response(anthropicStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Stream the answer' }],
+          stream: true,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('"finish_reason":"anthropic_missing_stop_reason"');
+      expect(res.body.trimEnd()).toMatch(/data: \[DONE\]$/);
+    });
+
+    it('cancels the upstream reader immediately after message_stop', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-stream-terminal-cancel';
+      server = createTestServer();
+      const cancel = vi.fn();
+      let delivered = false;
+      const hangingAfterTerminal = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (!delivered) {
+            delivered = true;
+            controller.enqueue(new TextEncoder().encode([
+              'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}',
+              'data: {"type":"message_stop"}',
+            ].join('\n\n') + '\n\n'));
+            return;
+          }
+          return new Promise(() => undefined);
+        },
+        cancel,
+      });
+      globalThis.fetch = vi.fn(async () => new Response(hangingAfterTerminal, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Stream the answer' }],
+          stream: true,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.trimEnd()).toMatch(/data: \[DONE\]$/);
+      expect(cancel).toHaveBeenCalledOnce();
+    }, 2_000);
+
+    it('does not synthesize DONE when the upstream stream reader fails', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-stream-read-failure';
+      server = createTestServer();
+      const encoder = new TextEncoder();
+      let pullCount = 0;
+      const failingStream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (pullCount++ === 0) {
+            controller.enqueue(encoder.encode(
+              'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Partial answer"}}\n\n',
+            ));
+          } else {
+            controller.error(new Error('upstream socket closed'));
+          }
+        },
+      });
+      globalThis.fetch = vi.fn(async () => new Response(failingStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Stream the answer' }],
+          stream: true,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('Partial answer');
+      expect(res.body).not.toContain('data: [DONE]');
     });
   });
 

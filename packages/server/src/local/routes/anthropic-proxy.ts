@@ -46,14 +46,14 @@ interface AnthropicStreamEvent {
   type: string;
   message?: { usage?: AnthropicUsage };
   content_block?: { type?: string; id?: string; name?: string };
-  delta?: { type?: string; text?: string; partial_json?: string };
+  delta?: { type?: string; text?: string; partial_json?: string; stop_reason?: string | null };
   usage?: AnthropicUsage;
 }
 
 /** Shape of a non-streaming Anthropic Messages API response. */
 interface AnthropicMessageResponse {
   content?: Array<{ type: string; text?: string; id?: string; name?: string; input?: unknown }>;
-  stop_reason?: string;
+  stop_reason?: string | null;
   usage?: AnthropicUsage;
   model?: string;
 }
@@ -125,6 +125,25 @@ function translateAnthropicUsage(usage: AnthropicUsage | undefined) {
     translated.cache_creation_input_tokens = cacheCreationTokens;
   }
   return translated;
+}
+
+function translateAnthropicStopReason(
+  stopReason: string | null | undefined,
+  hasToolCalls: boolean,
+): string {
+  if (!stopReason) return 'anthropic_missing_stop_reason';
+  if (stopReason === 'max_tokens') return 'length';
+  if (stopReason === 'tool_use') {
+    return hasToolCalls ? 'tool_calls' : 'anthropic_inconsistent_tool_use';
+  }
+  if (hasToolCalls) return `anthropic_inconsistent_${stopReason}`;
+  if (
+    stopReason === 'end_turn'
+    || stopReason === 'stop_sequence'
+  ) return 'stop';
+  // Preserve new Anthropic reasons instead of falsely claiming a normal stop.
+  // The agent loop rejects unsupported explicit reasons fail-closed.
+  return stopReason;
 }
 
 function directProviderBaseUrl(server: FastifyInstance, providerId: string): string {
@@ -456,9 +475,10 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       let currentToolId = '';
       let currentToolName = '';
       let toolCallIndex = -1;
+      let stopReason: string | undefined;
 
       try {
-        for (;;) {
+        streamRead: for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -517,7 +537,16 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
                 }
               } else if (event.type === 'message_delta') {
                 usage = { ...usage, ...event.usage };
+                if (typeof event.delta?.stop_reason === 'string') {
+                  stopReason = event.delta.stop_reason;
+                }
               } else if (event.type === 'message_stop') {
+                raw.write(`data: ${JSON.stringify({
+                  choices: [{
+                    delta: {},
+                    finish_reason: translateAnthropicStopReason(stopReason, toolCallIndex >= 0),
+                  }],
+                })}\n\n`);
                 // Send usage chunk if requested
                 if (body.stream_options?.include_usage) {
                   raw.write(`data: ${JSON.stringify({
@@ -525,15 +554,18 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
                     usage: translateAnthropicUsage(usage),
                   })}\n\n`);
                 }
+                raw.write('data: [DONE]\n\n');
+                void reader.cancel().catch(() => undefined);
+                break streamRead;
               }
             }
           }
         }
       } catch {
-        // Stream ended
+        // A read failure is not a protocol terminal event. End without [DONE]
+        // so the downstream completion-integrity check rejects partial output.
       }
 
-      raw.write('data: [DONE]\n\n');
       raw.end();
     } else {
       // Non-streaming — translate Anthropic response to OpenAI format
@@ -564,7 +596,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       }
       const choice = {
         message,
-        finish_reason: data.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
+        finish_reason: translateAnthropicStopReason(data.stop_reason, toolCalls.length > 0),
       };
 
       return reply.send({
