@@ -1352,6 +1352,21 @@ describe('deterministic 100-point persona scorer', () => {
       '**Verified (primary source successfully fetched):** pgvector supports exact search.\n**Inference:** SQLite should reduce desktop overhead.',
     ))).toBe(true);
     expect(rule.patterns.every(pattern => pattern.test(
+      '| Maturity | Fact — direct quote from the README |\n- **Facts supporting SQLite for this use case**: it is embedded.\n- **Inference, not fact**: embedded deployment should reduce overhead.',
+    ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
+      'This is not a fact — the source was unavailable.\n**Inference:** Treat the claim as tentative.',
+    ))).toBe(false);
+    for (const response of [
+      '| Basis | Fact — not verified |\n**Inference:** tentative.',
+      '- **Facts supporting no evidence**: none.\n**Inference:** tentative.',
+      'Fact-check failed.\n**Inference:** tentative.',
+      'Fact — unavailable.\nInference: tentative.',
+      '| Basis | Fact from no source |\nInference: tentative.',
+    ]) {
+      expect(rule.patterns.every(pattern => pattern.test(response))).toBe(false);
+    }
+    expect(rule.patterns.every(pattern => pattern.test(
       '## What\'s NOT Verified (sqlite-vec)\nNo source was fetched.\n**Inference:** Treat all feature claims as tentative.',
     ))).toBe(false);
     expect(rule.patterns.every(pattern => pattern.test(
