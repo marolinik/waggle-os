@@ -82,10 +82,10 @@ const ConnectorCard = ({
   const isConnected = conn.status === 'connected';
   const isExpired = conn.status === 'expired';
   const needsEmail = conn.id === 'jira';
-  const needsInstanceUrl = conn.id === 'salesforce';
+  const needsSiteUrl = conn.id === 'jira' || conn.id === 'salesforce';
   const credentialsComplete = Boolean(tokenInput.trim())
     && (!needsEmail || Boolean(emailInput.trim()))
-    && (!needsInstanceUrl || Boolean(instanceUrlInput.trim()));
+    && (!needsSiteUrl || Boolean(instanceUrlInput.trim()));
   const identity = getBrandIdentity(conn.id, conn.name, categoryLabel);
   const badge = connectorStatusBadge(conn.status, syncing);
 
@@ -120,8 +120,8 @@ const ConnectorCard = ({
 
   return (
     <div className="group rounded-xl border border-border/30 overflow-hidden transition-colors hover:border-primary/30 hover:bg-secondary/10">
-      <button onClick={handleExpand} aria-expanded={expanded}
-        className={cn('w-full flex items-center justify-between gap-3 p-2.5 transition-colors', CONTROL_FOCUS_CLASS)}>
+      <button onClick={handleExpand} aria-expanded={expanded} disabled={connecting}
+        className={cn('w-full flex items-center justify-between gap-3 p-2.5 disabled:cursor-not-allowed disabled:opacity-60 transition-colors', CONTROL_FOCUS_CLASS)}>
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <BrandTile identity={identity} size={36} connected={isConnected} />
           <div className="text-left min-w-0 flex-1">
@@ -227,19 +227,22 @@ const ConnectorCard = ({
                   needs an explicit aria-label. */}
               {needsEmail && (
                 <Input type="email" name="connectorEmail" autoComplete="email" inputMode="email" spellCheck={false}
+                  disabled={connecting}
                   value={emailInput} onChange={e => onEmailChange(e.target.value)} placeholder="Your Atlassian email"
                   aria-label="Atlassian account email"
                   className="w-full bg-muted/50 text-xs h-auto py-1" />
               )}
-              {needsInstanceUrl && (
-                <Input type="url" name="connectorInstanceUrl" autoComplete="url" inputMode="url" spellCheck={false}
+              {needsSiteUrl && (
+                <Input type="url" name={needsEmail ? 'connectorBaseUrl' : 'connectorInstanceUrl'} autoComplete="url" inputMode="url" spellCheck={false}
+                  disabled={connecting}
                   value={instanceUrlInput} onChange={e => onInstanceUrlChange(e.target.value)}
-                  placeholder="https://your-domain.my.salesforce.com"
-                  aria-label="Salesforce instance URL"
+                  placeholder={needsEmail ? 'https://your-team.atlassian.net' : 'https://your-domain.my.salesforce.com'}
+                  aria-label={needsEmail ? 'Jira site URL' : 'Salesforce instance URL'}
                   className="w-full bg-muted/50 text-xs h-auto py-1 font-mono" />
               )}
               <div className="flex gap-2">
                 <Input type="password" name="connectorToken" autoComplete="off" spellCheck={false}
+                  disabled={connecting}
                   value={tokenInput} onChange={e => onTokenChange(e.target.value)}
                   placeholder={hint?.placeholder ?? 'Paste token or API key'}
                   aria-label={`${conn.name} API token`}

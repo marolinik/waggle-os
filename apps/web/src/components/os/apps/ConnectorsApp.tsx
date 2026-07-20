@@ -129,6 +129,7 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   // Expand a connector (or collapse when re-clicking the open one). Resets the
   // credential inputs whenever the target connector changes (R4-007).
   const selectConnector = (id: string | null) => {
+    if (connecting) return;
     setExpanded(prev => {
       if (shouldResetCredentialInputs(prev, id)) {
         setTokenInput('');
@@ -166,7 +167,10 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
     try {
       await adapter.connectConnector(id, {
         token: tokenInput.trim(),
-        ...(id === 'jira' ? { email: emailInput.trim() } : {}),
+        ...(id === 'jira' ? {
+          email: emailInput.trim(),
+          baseUrl: instanceUrlInput.trim(),
+        } : {}),
         ...(id === 'salesforce' ? { instanceUrl: instanceUrlInput.trim() } : {}),
       });
       setTokenInput('');
@@ -371,7 +375,8 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
                 </p>
                 <button
                   onClick={() => selectConnector('composio')}
-                  className="px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-400 text-[11px] font-display hover:bg-violet-500/30 transition-colors"
+                  disabled={connecting}
+                  className="px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-400 text-[11px] font-display hover:bg-violet-500/30 disabled:opacity-50 transition-colors"
                 >
                   Set up Composio
                 </button>
