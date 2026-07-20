@@ -9,6 +9,11 @@
 // ── Logger + injection scanner (utilities used by substrate + Waggle agent) ──
 export { createCoreLogger, type CoreLogger } from './logger.js';
 export { scanForInjection, type ScanResult } from './injection-scanner.js';
+export {
+  evaluateExternalMemoryIngress,
+  type ExternalMemoryIngressDecision,
+  type ExternalMemoryIngressInput,
+} from './memory-ingress-guard.js';
 
 // ── mind/ — memory substrate (FrameStore, KnowledgeGraph, embedders, search, scoring) ──
 export {
