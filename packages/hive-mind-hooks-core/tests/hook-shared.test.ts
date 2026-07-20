@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildHookBridgeOptions,
   parseHookArgs,
   pickStringField,
   pickStringFromObject,
@@ -58,6 +59,27 @@ describe('parseHookArgs', () => {
 
   it('handles the flag in the middle of argv', () => {
     expect(parseHookArgs(['--foo', 'bar', '--cli-path', '/x.js', '--baz'])).toEqual({ cliPath: '/x.js' });
+  });
+});
+
+describe('buildHookBridgeOptions', () => {
+  it('keeps lifecycle CLI work single-attempt and inside a 5s host budget', () => {
+    const logger = makeMockLogger();
+    expect(buildHookBridgeOptions(logger, 'C:\\Program Files\\Hive Mind\\cli.js')).toEqual({
+      logger,
+      cli_path: 'C:\\Program Files\\Hive Mind\\cli.js',
+      timeout_ms: 2_500,
+      max_retries: 0,
+    });
+  });
+
+  it('omits cli_path when the installer did not pin one', () => {
+    const logger = makeMockLogger();
+    expect(buildHookBridgeOptions(logger)).toEqual({
+      logger,
+      timeout_ms: 2_500,
+      max_retries: 0,
+    });
   });
 });
 

@@ -36,10 +36,10 @@
 import {
   createCliBridge,
   createLogger,
-  type CliBridgeOptions,
   type MemoryHit,
 } from '@waggle/hive-mind-shim-core';
 import {
+  buildHookBridgeOptions,
   makeOpenclawHandler,
   type HookContext,
   type InternalHookEventLike,
@@ -138,9 +138,13 @@ function extractFor(
 function buildBridge(): ReturnType<typeof createCliBridge> {
   const logger = createLogger({ name: 'openclaw-hooks/handler' });
   const cliPath = process.env.WAGGLE_HIVE_MIND_CLI;
-  const opts: CliBridgeOptions = { logger };
-  if (typeof cliPath === 'string' && cliPath.length > 0) opts.cli_path = cliPath;
-  return createCliBridge(opts);
+  // OpenClaw shares its gateway event loop with hooks, so every bridge call â€”
+  // including pre-compact cleanup â€” is intentionally best-effort and bounded.
+  // A stalled CLI must release the gateway instead of delaying compaction.
+  return createCliBridge(buildHookBridgeOptions(
+    logger,
+    typeof cliPath === 'string' && cliPath.length > 0 ? cliPath : undefined,
+  ));
 }
 
 const handler = makeOpenclawHandler(openclawAdapter, {
