@@ -1083,6 +1083,7 @@ describe('deterministic 100-point persona scorer', () => {
     ['failed fetch', 'Fetch failed (503): unavailable'],
     ['sanitized fetch', '[SECURITY] Tool output flagged (prompt injection). Content sanitized.'],
     ['governance-blocked fetch', 'Tool "web_fetch" is blocked by your team governance policy.'],
+    ['navigation-only GitHub fetch', 'GitHub - asg017/sqlite-vec · GitHub\nSkip to content\nRepository navigation'],
   ])('does not count a %s as source evidence', (_label, failedResult) => {
     const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
     const response = [
@@ -1348,8 +1349,34 @@ describe('deterministic 100-point persona scorer', () => {
       '## What\'s Verified (pgvector)\nThe README confirms exact search.\n**Inference:** SQLite should reduce desktop overhead.',
     ))).toBe(true);
     expect(rule.patterns.every(pattern => pattern.test(
+      '**Verified (primary source successfully fetched):** pgvector supports exact search.\n**Inference:** SQLite should reduce desktop overhead.',
+    ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
       '## What\'s NOT Verified (sqlite-vec)\nNo source was fetched.\n**Inference:** Treat all feature claims as tentative.',
     ))).toBe(false);
+    expect(rule.patterns.every(pattern => pattern.test(
+      '**Not verified:** sqlite-vec indexing.\n**Inference:** Treat it as tentative.',
+    ))).toBe(false);
+    for (const negativeLabel of [
+      'Not yet verified',
+      'Claims not verified',
+      'Not independently confirmed',
+      'Never sourced',
+    ]) {
+      expect(rule.patterns.every(pattern => pattern.test(
+        `**${negativeLabel}:** sqlite-vec indexing.\n**Inference:** Treat it as tentative.`,
+      ))).toBe(false);
+    }
+    for (const evidenceGap of [
+      '**No facts were verified:**\n**Inference:** Treat all claims as tentative.',
+      '**Facts unavailable:**\n**Inference:** Treat all claims as tentative.',
+      '**Unverified facts:**\n**Inference:** Treat all claims as tentative.',
+      'No facts:\nInference: Treat all claims as tentative.',
+      '- Facts (not verified): none.\n- Inference: Treat all claims as tentative.',
+      '## Facts unavailable\nInference: Treat all claims as tentative.',
+    ]) {
+      expect(rule.patterns.every(pattern => pattern.test(evidenceGap))).toBe(false);
+    }
   });
 
   it('does not accept lookalike hostnames as primary-source evidence', () => {

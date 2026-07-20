@@ -39,6 +39,41 @@ export interface SystemToolDeps {
   fileBackend?: FileBackend;
 }
 
+/** Prefer a repository README over GitHub navigation chrome for exact repo-root fetches. */
+export function extractWebPageText(body: string, sourceUrl: string): string {
+  let content = body;
+  try {
+    const source = new URL(sourceUrl);
+    const pathSegments = source.pathname.split('/').filter(Boolean);
+    if (source.hostname.toLowerCase() === 'github.com' && pathSegments.length === 2) {
+      const readme = body.match(
+        /<article\b[^>]*class=(?:"[^"]*\bmarkdown-body\b[^"]*"|'[^']*\bmarkdown-body\b[^']*')[^>]*>([\s\S]*?)<\/article>/i,
+      )?.[1];
+      content = readme?.trim() ? readme : '';
+    }
+  } catch {
+    // URL validation happens in web_fetch; direct helper callers fall back to the full page.
+  }
+
+  return content
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<\/?(p|div|br|h[1-6]|li|tr|blockquote|section|article)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Module-level instances — shared across all tool invocations
 const searchCache = new SearchCache(300_000); // 5 min TTL
 const searchRateLimiter = new RateLimiter(10, 60_000); // 10 searches per minute
@@ -751,23 +786,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           }
 
           // HTML — extract text
-          const text = body
-            .replace(/<script[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[\s\S]*?<\/style>/gi, '')
-            .replace(/<nav[\s\S]*?<\/nav>/gi, '')
-            .replace(/<header[\s\S]*?<\/header>/gi, '')
-            .replace(/<footer[\s\S]*?<\/footer>/gi, '')
-            .replace(/<\/?(p|div|br|h[1-6]|li|tr|blockquote|section|article)[^>]*>/gi, '\n')
-            .replace(/<[^>]+>/g, '')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'")
-            .replace(/&nbsp;/g, ' ')
-            .replace(/[ \t]+/g, ' ')
-            .replace(/\n{3,}/g, '\n\n')
-            .trim();
+          const text = extractWebPageText(body, url);
 
           if (!text) return 'Page fetched but no text content found.';
           return truncateToTokenBudget(text, maxTokens);

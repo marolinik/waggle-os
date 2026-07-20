@@ -184,6 +184,18 @@ function primaryUrlIdentities(response: string, allowedDomains: readonly string[
   return unique;
 }
 
+function isUnusablePrimaryFetchResult(url: string, result: string): boolean {
+  try {
+    const source = new URL(url);
+    const pathSegments = source.pathname.split('/').filter(Boolean);
+    return source.hostname.toLowerCase() === 'github.com'
+      && pathSegments.length === 2
+      && /^GitHub\s+-[\s\S]{0,3000}\bSkip to content\b/i.test(result);
+  } catch {
+    return false;
+  }
+}
+
 function successfulPrimaryFetchIdentities(
   events: readonly CapturedSseEvent[],
   allowedDomains: readonly string[],
@@ -211,6 +223,7 @@ function successfulPrimaryFetchIdentities(
       !url
       || data.isError === true
       || isFailedToolResult(result)
+      || isUnusablePrimaryFetchResult(url, result)
     ) continue;
     const identity = primarySourceIdentity(url, allowedDomains);
     if (identity) successful.add(identity);

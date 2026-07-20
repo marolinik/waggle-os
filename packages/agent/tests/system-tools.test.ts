@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createSanitizedEnv, createSystemTools } from '../src/system-tools.js';
+import { createSanitizedEnv, createSystemTools, extractWebPageText } from '../src/system-tools.js';
 import { execFileWithTreeTimeout } from '../src/system-tools-helpers.js';
+import { capToolResultForModel } from '../src/agent-run-budget.js';
+import { untrustedContextWrapper } from '../src/untrusted-context.js';
 import type { ToolDefinition } from '../src/tools.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -533,5 +535,51 @@ describe('createSystemTools', () => {
         else process.env.WINDIR = originalWindir;
       }
     }, 10_000);
+  });
+});
+
+describe('extractWebPageText', () => {
+  const githubHtml = [
+    '<header>GitHub navigation chrome</header>',
+    `<main>Repository shell text ${'Repository navigation '.repeat(300)}`,
+    '<article class="markdown-body entry-content container-lg" itemprop="text">',
+    '<h1>sqlite-vec</h1><p>Vector search that runs anywhere &amp; stays embedded.</p>',
+    `<p>${'SQLite vector extension details. '.repeat(200)}</p>`,
+    '</article><aside>Uh oh! There was an error while loading.</aside></main>',
+  ].join('');
+
+  it('extracts the README article for an exact GitHub repository root', () => {
+    const text = extractWebPageText(githubHtml, 'https://github.com/asg017/sqlite-vec');
+
+    expect(text).toContain('sqlite-vec');
+    expect(text).toContain('Vector search that runs anywhere & stays embedded.');
+    expect(text).not.toContain('GitHub navigation chrome');
+    expect(text).not.toContain('Repository shell text');
+    expect(text).not.toContain('Uh oh!');
+  });
+
+  it('keeps README facts visible after untrusted wrapping and the research result cap', () => {
+    const extracted = extractWebPageText(githubHtml, 'https://github.com/asg017/sqlite-vec');
+    const modelVisible = capToolResultForModel(untrustedContextWrapper('web_fetch', extracted), 3_000);
+
+    expect(modelVisible.length).toBeLessThanOrEqual(3_000);
+    expect(modelVisible).toContain('Vector search that runs anywhere & stays embedded.');
+    expect(modelVisible).not.toContain('Repository shell text');
+  });
+
+  it('fails closed for an exact GitHub repository root without a README article', () => {
+    const text = extractWebPageText(
+      '<header>GitHub navigation chrome</header><main>Uh oh! There was an error while loading.</main>',
+      'https://github.com/asg017/sqlite-vec',
+    );
+
+    expect(text).toBe('');
+  });
+
+  it('keeps full-page extraction for non-root GitHub pages', () => {
+    const text = extractWebPageText(githubHtml, 'https://github.com/asg017/sqlite-vec/issues');
+
+    expect(text).toContain('Repository shell text');
+    expect(text).toContain('sqlite-vec');
   });
 });
