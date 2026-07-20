@@ -280,6 +280,58 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
 
   // ── SSE stream content ─────────────────────────────────────────────────
 
+  it('commits SSE headers before a slow first model token', async () => {
+    const originalRunner = serverInst.agentRunner;
+    let releaseRunner!: () => void;
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
+    const release = new Promise<void>((resolve) => { releaseRunner = resolve; });
+
+    serverInst.agentRunner = async (config): Promise<AgentResponse> => {
+      resolveStarted();
+      await release;
+      config.onToken?.('Delayed response');
+      return {
+        content: 'Delayed response',
+        toolsUsed: [],
+        usage: { inputTokens: 10, outputTokens: 2 },
+      };
+    };
+
+    try {
+      const responsePromise = fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          workspaceId: 'slow-first-token',
+          sessionId: 'slow-first-token',
+          persona: 'writer',
+          message: 'Rewrite this in fewer words and add no new claims: The launch is delayed.',
+        }),
+      });
+
+      await started;
+      const headersReady = await Promise.race([
+        responsePromise.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_000)),
+      ]);
+
+      releaseRunner();
+      const res = await responsePromise;
+      const body = await res.text();
+
+      expect(headersReady).toBe(true);
+      expect(res.headers.get('content-type')).toContain('text/event-stream');
+      expect(parseSSE(body).some(event => event.type === 'done')).toBe(true);
+    } finally {
+      releaseRunner?.();
+      serverInst.agentRunner = originalRunner;
+    }
+  });
+
   it('emits SSE content-type header', async () => {
     const res = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',

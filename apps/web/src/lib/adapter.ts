@@ -847,7 +847,7 @@ class LocalAdapter {
         method: 'POST',
         body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry }),
         signal: controller.signal,
-      });
+      }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
 
       if (!res.body) return;
       reader = res.body.getReader();

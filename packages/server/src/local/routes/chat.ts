@@ -959,6 +959,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': validateOrigin(request.headers.origin as string | undefined),
     });
+    // Commit the SSE response before provider time-to-first-token. Otherwise a
+    // slow model can look like an offline backend to clients waiting on headers.
+    raw.flushHeaders();
 
     // The response side owns the long-lived SSE socket. Cancelling its reader
     // closes reply.raw (request.raw already finished after the POST body), which

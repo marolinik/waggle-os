@@ -30,4 +30,25 @@ describe('model router request deadlines', () => {
       45_000,
     ]);
   });
+
+  it('allows chat time-to-first-token to exceed the generic request timeout', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response([
+      'event: done',
+      'data: {"content":"ok"}',
+      '',
+      '',
+    ].join('\n'), {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    }));
+
+    const events = [];
+    for await (const event of client.sendMessage('workspace-1', 'hello', 'session-1', 'writer')) {
+      events.push(event);
+    }
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0]?.[2]).toBe(45_000);
+    expect(events).toEqual([{ type: 'done', data: { content: 'ok' } }]);
+  });
 });
