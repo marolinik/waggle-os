@@ -85,7 +85,7 @@ import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
 import { runMemoryLaneExtraction } from './memory-lane-cron.js';
-import { runVectorBackfill } from './vector-backfill.js';
+import { VectorEnrichmentService } from './services/vector-enrichment-service.js';
 import { ingestRoutes, readFileRegistry } from './routes/ingest.js';
 import { mindRoutes } from './routes/mind.js';
 import { agentRoutes } from './routes/agent.js';
@@ -610,40 +610,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Decorate server with embedding provider for status endpoints
   server.decorate('embeddingProvider', embeddingProvider);
-
-  // Vec index rebuild when real provider activates (mock → real transition)
-  if (embeddingProvider.getActiveProvider() !== 'mock') {
-    try {
-      const db = multiMind.personal.getDatabase();
-      const vecRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames_vec').get() as { cnt: number } | undefined;
-      const totalRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number };
-      if (totalRow.cnt > 0 && (vecRow?.cnt ?? 0) < totalRow.cnt) {
-        log.info(` Re-indexing ${totalRow.cnt} frames with real embeddings (${embeddingProvider.getActiveProvider()})...`);
-        const { vecFixed } = await reconcileIndexes(multiMind.personal, embedder);
-        if (vecFixed > 0) {
-          log.info(` Re-indexed ${vecFixed} frames with real embeddings`);
-        }
-      }
-    } catch (err) {
-      log.warn(` Vec reconciliation deferred: ${(err as Error).message}`);
-    }
-  }
-
-  // D1 follow-up (2026-06-12): one-time vector repair + chunk backfill for the
-  // personal mind — mock-fingerprinted vectors get re-embedded for real, and
-  // pre-existing frames get chunk-indexed so the (default-ON) chunk lane has
-  // something to retrieve. Idempotent via a meta flag; workspace minds are
-  // covered by the daily memory_lane_extract cron. Fire-and-forget — boot
-  // must never block on (re-)embedding a large mind.
-  void runVectorBackfill(multiMind.personal, embeddingProvider).then((vb) => {
-    if (!vb.skipped) {
-      log.info(
-        ` Vector backfill (personal): repaired=${vb.vectorsRepaired} ` +
-        `reembedded=${vb.framesReembedded} chunks=${vb.chunksCreated}` +
-        (vb.errors.length ? ` errors=${vb.errors.join('; ')}` : '')
-      );
-    }
-  });
 
   // Orchestrator — connects to personal .mind
   const orchestrator = new Orchestrator({
@@ -1240,6 +1206,14 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     allowedRoot: path.join(fullConfig.dataDir, 'workspaces'),
   });
   server.decorate('mindCache', mindCache);
+  const vectorEnrichmentService = new VectorEnrichmentService({
+    personalMind: multiMind.personal,
+    embeddingProvider,
+    listWorkspaceIds: () => wsManager.list().map(workspace => workspace.id),
+    acquireWorkspaceMind: workspaceId => mindCache.acquire(workspaceId),
+    releaseWorkspaceMind: workspaceId => mindCache.release(workspaceId),
+    log: (level, message) => log[level](message),
+  });
   let activeWorkspaceId: string | null = null;
   const setActiveWorkspaceId = (workspaceId: string | null): void => {
     activeWorkspaceId = workspaceId;
@@ -1776,16 +1750,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             let laneProfiles = 0;
             for (const mind of minds) {
               try {
-                // D1 follow-up: one-time vector repair + chunk backfill per
-                // mind (no-op via meta flag after first success; retries here
-                // daily while the embedder is mock).
-                const vb = await runVectorBackfill(mind.db, server.embeddingProvider);
-                if (!vb.skipped) {
-                  log.info(
-                    `[cron] Vector backfill (${mind.label}): repaired=${vb.vectorsRepaired} ` +
-                    `reembedded=${vb.framesReembedded} chunks=${vb.chunksCreated}`
-                  );
-                }
                 const r = await runMemoryLaneExtraction(mind.db, llmCall);
                 if (!r.skipped) {
                   log.info(
@@ -3130,6 +3094,9 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     // Close all workspace sessions (new concurrent model)
     sessionManager.closeAll();
 
+    // Let the active bounded pass finish before closing any borrowed mind.
+    await vectorEnrichmentService.stop();
+
     // Close all cached workspace minds
     mindCache.closeAll();
     multiMind.close();
@@ -3144,6 +3111,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       try { marketplaceDb.close(); } catch { /* already closed */ }
     }
   });
+
+  vectorEnrichmentService.start();
 
   // ── Start Teams server if PostgreSQL is configured (TEAMS tier) ──
   // Skip in test environment to avoid port conflicts and addHook-after-listen errors
