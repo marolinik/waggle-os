@@ -419,6 +419,36 @@ describe('deterministic 100-point persona scorer', () => {
       requestPersonaId: writer.id,
     }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
 
+    const boldLabelResponse = [
+      '**Memo: Release Status Update**',
+      'We had planned to ship on Friday. Status of readiness:',
+      '- **API tests:** Passing.',
+      '- **Browser tests:** Two failures remain on Windows.',
+      '- **Smart router:** Not yet exercised without cloud credentials.',
+      '**Recommendation:** Delay release until the Windows browser test failures are resolved and the smart router has been validated without cloud credentials.',
+    ].join('\n\n');
+    expect(scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: boldLabelResponse,
+      persistedResponse: boldLabelResponse,
+      tokenStreamResponse: boldLabelResponse,
+      renderedAssistantResponse: boldLabelResponse,
+      requestPersonaId: writer.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const inventedRiskResponse = `${boldLabelResponse} Shipping before these gaps are closed carries unverified risk to release stability.`;
+    const inventedRiskResult = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: inventedRiskResponse,
+      persistedResponse: inventedRiskResponse,
+      tokenStreamResponse: inventedRiskResponse,
+      renderedAssistantResponse: inventedRiskResponse,
+      requestPersonaId: writer.id,
+    }));
+    expect(inventedRiskResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(inventedRiskResult.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+    expect(inventedRiskResult.passed).toBe(false);
+
     const misleading = [
       'We planned to ship Friday. API tests are passing.',
       'Browser tests pass on Windows; reports of two failures are incorrect.',

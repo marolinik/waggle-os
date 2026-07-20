@@ -207,6 +207,70 @@ describe('PromptAssembler.assemble', () => {
     expect(out.debug.scaffoldSuppressed).toBe(true);
   });
 
+  it('treats an explicitly bounded rewrite as closed-world and suppresses outside context', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Rewrite this into a crisp executive memo. Preserve the facts and add no new claims: API tests pass.',
+        tier: 'mid',
+        taskShape: shape('decide', 0.9),
+        context: {
+          ...emptyContext(),
+          stateFrames: [frame('State says shipping now is safe.')],
+          recentChanges: [frame('Recent changes say all gaps are closed.', { type: 'P' })],
+          activeWork: [{ category: 'task', content: 'Ship immediately.', priority: 1 }],
+        },
+        recalled: {
+          workspace: [],
+          personal: [],
+          scanSafe: true,
+          renderedText: '# Recalled Memories\n- Shipping now is safe.',
+        },
+      }),
+    );
+
+    expect(out.responseScaffold).toBeNull();
+    expect(out.debug.closedWorldRewrite).toBe(true);
+    expect(out.debug.scaffoldSuppressed).toBe(true);
+    expect(out.debug.sectionsIncluded).not.toContain('State');
+    expect(out.debug.sectionsIncluded).not.toContain('Recent changes');
+    expect(out.debug.sectionsIncluded).not.toContain('Active work');
+    expect(out.debug.sectionsIncluded).not.toContain('Recalled memory');
+    expect(out.system).not.toContain('State says shipping now is safe.');
+    expect(out.system).not.toContain('Recent changes say all gaps are closed.');
+    expect(out.system).not.toContain('Ship immediately.');
+    expect(out.system).not.toContain('Shipping now is safe.');
+    expect(out.system).toContain('# Closed-world rewrite');
+    expect(out.system).toContain('Do not add implications, explanations, rationale, risks');
+    expect(out.debug.sectionsIncluded.at(-1)).toBe('Closed-world rewrite');
+  });
+
+  it('does not infer a closed-world boundary from an ordinary rewrite request', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Rewrite this product launch note to sound clearer.',
+        tier: 'mid',
+        taskShape: shape('draft', 0.9),
+      }),
+    );
+
+    expect(out.debug.closedWorldRewrite).toBe(false);
+    expect(out.system).not.toContain('# Closed-world rewrite');
+  });
+
+  it('does not mistake a quoted transform phrase for a rewrite directive', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Explain what “rewrite this” means without adding new facts.',
+        tier: 'mid',
+        taskShape: shape('review', 0.9),
+      }),
+    );
+
+    expect(out.debug.closedWorldRewrite).toBe(false);
+    expect(out.responseScaffold).toBe(defaultScaffold('Briefly state assumption, then recommendation.'));
+    expect(out.system).not.toContain('# Closed-world rewrite');
+  });
+
   it('draft shape emits no scaffold at any tier', () => {
     for (const tier of ['small', 'mid', 'frontier'] as const) {
       const out = assembler.assemble(
