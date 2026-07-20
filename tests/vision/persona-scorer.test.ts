@@ -885,6 +885,25 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts deadline and immediate-payoff language as a customer decision basis', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Order: 1) Investigate the memory bug, 2) Close the customer, 3) Repair onboarding friction.',
+      'The memory bug comes first because its unknown severity creates outage risk.',
+      'The customer comes second because it has the hardest deadline and the clearest immediate payoff.',
+      'Onboarding comes third because it is structural friction that compounds over weeks, not hours.',
+      'First action today: timebox 60 minutes to reproduce and bound the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it('rejects a bare ordered list with a placeholder rationale', () => {
     const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
     const response = [
