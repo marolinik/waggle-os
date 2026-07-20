@@ -83,6 +83,14 @@ function createMockVault(credentials: Record<string, { value: string; isExpired:
   } as unknown as VaultStore;
 }
 
+async function registerAndHydrate(
+  registry: ConnectorRegistry,
+  connector: WaggleConnector,
+): Promise<void> {
+  registry.register(connector);
+  expect(await registry.hydrate(connector.id)).toBe(true);
+}
+
 // ─── WaggleConnector Interface ───────────────────────────────────────────
 
 describe('WaggleConnector interface', () => {
@@ -156,42 +164,42 @@ describe('ConnectorRegistry', () => {
     expect(registry.getAll()).toHaveLength(2);
   });
 
-  it('getConnected() returns only connectors with valid vault credentials', () => {
+  it('getConnected() returns only connectors with valid vault credentials', async () => {
     vault = createMockVault({ mock: { value: 'token123', isExpired: false } });
     registry = new ConnectorRegistry(vault);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     const connected = registry.getConnected();
     expect(connected).toHaveLength(1);
     expect(connected[0].id).toBe('mock');
   });
 
-  it('getConnected() excludes connectors with expired credentials', () => {
+  it('getConnected() excludes connectors with expired credentials', async () => {
     vault = createMockVault({ mock: { value: 'token123', isExpired: true } });
     registry = new ConnectorRegistry(vault);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     expect(registry.getConnected()).toHaveLength(0);
   });
 
-  it('getConnected() excludes connectors without credentials', () => {
-    registry.register(new MockConnector());
+  it('getConnected() excludes connectors without credentials', async () => {
+    await registerAndHydrate(registry, new MockConnector());
     expect(registry.getConnected()).toHaveLength(0);
   });
 
-  it('generateTools() returns ToolDefinition[] only for connected connectors', () => {
+  it('generateTools() returns ToolDefinition[] only for connected connectors', async () => {
     vault = createMockVault({ mock: { value: 'token123', isExpired: false } });
     registry = new ConnectorRegistry(vault);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     const tools = registry.generateTools();
     expect(tools).toHaveLength(3); // 3 actions = 3 tools
   });
 
-  it('generateTools() creates tools named connector_<id>_<action>', () => {
+  it('generateTools() creates tools named connector_<id>_<action>', async () => {
     vault = createMockVault({ mock: { value: 'token123', isExpired: false } });
     registry = new ConnectorRegistry(vault);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     const tools = registry.generateTools();
     const names = tools.map(t => t.name);
@@ -202,7 +210,7 @@ describe('ConnectorRegistry', () => {
     ]);
   });
 
-  it('propagates trusted action risk so declared-high actions stay gated at YOLO', () => {
+  it('propagates trusted action risk so declared-high actions stay gated at YOLO', async () => {
     vault = createMockVault({ mock: { value: 'token123', isExpired: false } });
     registry = new ConnectorRegistry(vault);
     const connector = new MockConnector();
@@ -220,7 +228,7 @@ describe('ConnectorRegistry', () => {
         riskLevel: 'high',
       },
     );
-    registry.register(connector);
+    await registerAndHydrate(registry, connector);
 
     const tools = registry.generateTools();
     const readTool = tools.find(tool => tool.name === 'connector_mock_read_action')!;
@@ -231,8 +239,8 @@ describe('ConnectorRegistry', () => {
     expect(tools.map(tool => tool.riskLevel)).toEqual(['low', 'high']);
   });
 
-  it('generateTools() returns empty array for disconnected connectors', () => {
-    registry.register(new MockConnector());
+  it('generateTools() returns empty array for disconnected connectors', async () => {
+    await registerAndHydrate(registry, new MockConnector());
     expect(registry.generateTools()).toEqual([]);
   });
 
@@ -259,10 +267,10 @@ describe('ConnectorRegistry', () => {
     expect(registry.getAll()).toHaveLength(0);
   });
 
-  it('getDefinitions() returns definitions with live status', () => {
+  it('getDefinitions() returns definitions with live status', async () => {
     vault = createMockVault({ mock: { value: 'tok', isExpired: false } });
     registry = new ConnectorRegistry(vault);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     const defs = registry.getDefinitions();
     expect(defs).toHaveLength(1);
@@ -278,7 +286,7 @@ describe('Dynamic tool generation', () => {
     const vault = createMockVault({ mock: { value: 'tok', isExpired: false } });
     const registry = new ConnectorRegistry(vault);
     const connector = new MockConnector();
-    registry.register(connector);
+    await registerAndHydrate(registry, connector);
 
     const tools = registry.generateTools();
     const listTool = tools.find(t => t.name === 'connector_mock_list_items')!;
@@ -290,10 +298,10 @@ describe('Dynamic tool generation', () => {
     expect(parsed.data.params).toEqual({ limit: 10 });
   });
 
-  it('tool input_schema matches ConnectorAction.inputSchema', () => {
+  it('tool input_schema matches ConnectorAction.inputSchema', async () => {
     const vault = createMockVault({ mock: { value: 'tok', isExpired: false } });
     const registry = new ConnectorRegistry(vault);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     const tools = registry.generateTools();
     const listTool = tools.find(t => t.name === 'connector_mock_list_items')!;
@@ -303,12 +311,13 @@ describe('Dynamic tool generation', () => {
     });
   });
 
-  it('tool parameters do NOT include _connectorMeta (security: prevents LLM injection)', () => {
+  it('tool parameters do NOT include _connectorMeta (security: prevents LLM injection)', async () => {
     const vault = createMockVault({ mock: { value: 'tok', isExpired: false } });
     const registry = new ConnectorRegistry(vault);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     const tools = registry.generateTools();
+    expect(tools).toHaveLength(3);
     // No tool should have _connectorMeta in its schema (risk is determined by tool name, not args)
     for (const tool of tools) {
       expect(tool.parameters._connectorMeta).toBeUndefined();
@@ -320,7 +329,7 @@ describe('Dynamic tool generation', () => {
     const auditLog = vi.fn();
     const auditLogger: AuditLogger = { log: auditLog };
     const registry = new ConnectorRegistry(vault, auditLogger);
-    registry.register(new MockConnector());
+    await registerAndHydrate(registry, new MockConnector());
 
     const tools = registry.generateTools();
     const createTool = tools.find(t => t.name === 'connector_mock_create_item')!;
@@ -340,7 +349,7 @@ describe('Dynamic tool generation', () => {
     // Create a connector that throws
     const connector = new MockConnector();
     connector.execute = async () => { throw new Error('API timeout'); };
-    registry.register(connector);
+    await registerAndHydrate(registry, connector);
 
     const tools = registry.generateTools();
     const listTool = tools.find(t => t.name === 'connector_mock_list_items')!;
@@ -353,7 +362,7 @@ describe('Dynamic tool generation', () => {
     const vault = createMockVault({ mock: { value: 'tok', isExpired: false } });
     const registry = new ConnectorRegistry(vault);
     const connector = new MockConnector();
-    registry.register(connector);
+    await registerAndHydrate(registry, connector);
 
     const tools = registry.generateTools();
     const createTool = tools.find(t => t.name === 'connector_mock_create_item')!;
