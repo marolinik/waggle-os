@@ -545,6 +545,35 @@ describe('hard request dispatch budget', () => {
     expect(onToken).not.toHaveBeenCalled();
   });
 
+  it('rejects a non-streaming completion without a terminal finish reason', async () => {
+    const fetchFn = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { role: 'assistant', content: 'Apparently complete.' } }],
+        usage: { prompt_tokens: 120, completion_tokens: 30 },
+      }),
+    } as unknown as Response)) as unknown as typeof fetch;
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Answer directly.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      verificationGate: false,
+      skillDistillationGate: false,
+    })).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 120, outputTokens: 30 },
+      message: expect.stringMatching(/missing finish_reason.*not accepted/i),
+    });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
   it('reports cumulative paid usage when a later completion is incomplete', async () => {
     const fetchFn = vi.fn()
       .mockResolvedValueOnce(jsonResponse({
@@ -687,6 +716,17 @@ describe('hard request dispatch budget', () => {
         }),
       ],
     },
+    {
+      name: 'DONE without a terminal finish reason',
+      events: [
+        sse({ choices: [{ delta: { content: 'Apparently complete answer.' } }] }),
+        sse({
+          choices: [{ delta: {} }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    },
   ])('rejects a streaming $name instead of resolving partial content', async ({ events }) => {
     const fetchFn = vi.fn(async () => streamResponse(events)) as unknown as typeof fetch;
 
@@ -706,7 +746,22 @@ describe('hard request dispatch budget', () => {
     expect(fetchFn).toHaveBeenCalledOnce();
   });
 
-  it('never executes a tool call from an incomplete stream', async () => {
+  it.each([
+    {
+      name: 'length termination',
+      terminal: sse({
+        choices: [{ delta: {}, finish_reason: 'length' }],
+        usage: { prompt_tokens: 100, completion_tokens: 20 },
+      }),
+    },
+    {
+      name: 'missing terminal finish reason',
+      terminal: sse({
+        choices: [{ delta: {} }],
+        usage: { prompt_tokens: 100, completion_tokens: 20 },
+      }),
+    },
+  ])('never executes a tool call after an incomplete stream with $name', async ({ terminal }) => {
     const mutate = vi.fn(async () => 'mutated');
     const events = [
       sse({
@@ -720,10 +775,7 @@ describe('hard request dispatch budget', () => {
           },
         }],
       }),
-      sse({
-        choices: [{ delta: {}, finish_reason: 'length' }],
-        usage: { prompt_tokens: 100, completion_tokens: 20 },
-      }),
+      terminal,
       'data: [DONE]\n\n',
     ];
     const fetchFn = vi.fn(async () => streamResponse(events)) as unknown as typeof fetch;

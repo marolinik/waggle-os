@@ -236,7 +236,7 @@ describe('SSE Stream Resilience', () => {
         }
         if (url.endsWith('/chat/completions')) {
           completionUrls.push(url);
-          const stream = 'data: {"choices":[{"delta":{"content":"Local model ready"}}]}\n\ndata: [DONE]\n\n';
+          const stream = 'data: {"choices":[{"delta":{"content":"Local model ready"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
           return new Response(stream, {
             status: 200,
             headers: { 'Content-Type': 'text/event-stream' },
@@ -318,7 +318,7 @@ describe('SSE Stream Resilience', () => {
             tools?: Array<{ function?: { name?: string } }>;
           };
           transmittedToolNames = body.tools?.flatMap(tool => tool.function?.name ?? []) ?? [];
-          const stream = 'data: {"choices":[{"delta":{"content":"Workspace tools ready"}}]}\n\ndata: [DONE]\n\n';
+          const stream = 'data: {"choices":[{"delta":{"content":"Workspace tools ready"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
           return new Response(stream, {
             status: 200,
             headers: { 'Content-Type': 'text/event-stream' },

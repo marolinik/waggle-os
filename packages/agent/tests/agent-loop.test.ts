@@ -194,7 +194,10 @@ describe('runAgentLoop', () => {
         status: 200,
         json: async () => ({
           choices: [
-            { message: { role: 'assistant', content: 'I can answer without that malformed tool call.' } },
+            {
+              message: { role: 'assistant', content: 'I can answer without that malformed tool call.' },
+              finish_reason: 'stop',
+            },
           ],
           usage: { prompt_tokens: 12, completion_tokens: 7 },
         }),

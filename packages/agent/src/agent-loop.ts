@@ -648,7 +648,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       ? 'finish_reason=length'
       : stream && !streamDoneObserved
         ? 'stream ended before data: [DONE]'
-        : completionFinishReason && !SUPPORTED_COMPLETION_FINISH_REASONS.has(completionFinishReason)
+        : completionFinishReason === null
+          ? 'missing finish_reason'
+          : !SUPPORTED_COMPLETION_FINISH_REASONS.has(completionFinishReason)
           ? `unsupported finish_reason=${completionFinishReason}`
           : null;
     if (incompleteReason) {
