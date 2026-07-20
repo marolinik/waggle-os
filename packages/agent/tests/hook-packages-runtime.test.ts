@@ -259,9 +259,15 @@ describe('hook package installed lifecycle UX', () => {
         expect(fs.existsSync(pointerPath)).toBe(true);
         if (hookPackage.id !== 'openclaw') {
           const installedConfig = fs.readFileSync(configPath, 'utf8');
+          const nodePathHaystack = process.platform === 'win32'
+            && (hookPackage.id === 'codex' || hookPackage.id === 'codex-desktop')
+            ? [...installedConfig.matchAll(/-EncodedCommand ([A-Za-z0-9+/=]+)/g)]
+                .map(match => Buffer.from(match[1], 'base64').toString('utf16le'))
+                .join('\n')
+            : installedConfig;
           expect(
-            installedConfig.includes(process.execPath)
-              || installedConfig.includes(process.execPath.replace(/\\/g, '\\\\')),
+            nodePathHaystack.includes(process.execPath)
+              || nodePathHaystack.includes(process.execPath.replace(/\\/g, '\\\\')),
             `${hookPackage.id} did not pin the bundled Node path`,
           ).toBe(true);
         }
