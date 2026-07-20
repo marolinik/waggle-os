@@ -3,6 +3,7 @@ import type {
   PersonaAcceptanceCase,
   PersonaResponseRule,
 } from './persona-cases';
+import { segmentText } from '../../apps/web/src/components/os/apps/chat-blocks/capability-request-parser';
 import { evaluateVerifierContract } from './verifier-contract';
 
 export interface CapturedSseEvent {
@@ -30,7 +31,12 @@ export interface PersonaTrialEvidence {
   persistedMessageCount: number;
   tokenStreamResponse: string;
   doneEventCount: number;
+  /** Exact source returned by the chat Copy action. */
   renderedAssistantResponse: string;
+  /** Text captured from the visible assistant DOM, never the clipboard source. */
+  visibleAssistantText: string;
+  /** Exact textContent of every visible inline/fenced code node, in DOM order. */
+  visibleCodeSegments: readonly string[];
   memoryEvidencePresent: boolean;
   workspaceLeak: boolean;
   completed: boolean;
@@ -358,10 +364,13 @@ function criticalFailures(
   if (
     !evidence.memoryEvidencePresent
     || normalizeResponse(evidence.renderedAssistantResponse) !== normalizeResponse(evidence.tokenStreamResponse)
+    || !normalizeResponse(evidence.visibleAssistantText)
+    || !visibleMarkdownPreservesText(evidence.response, evidence.visibleAssistantText)
+    || !markdownCodeSegmentsMatch(evidence.response, evidence.visibleCodeSegments)
   ) {
     failures.push({
       code: 'ui_journey_mismatch',
-      detail: 'Visible assistant output or the memory-specific UI journey did not match the captured stream.',
+      detail: 'Copy source, visible assistant DOM, or the memory-specific UI journey did not preserve the captured stream.',
     });
   }
 
@@ -511,6 +520,88 @@ export function scorePersonaTrial(
 export function extractPythonBlock(response: string): string | null {
   const match = response.match(/```(?:python|py)\s*\r?\n([\s\S]*?)```/i);
   return match?.[1]?.trim() || null;
+}
+
+function extractCodeFromTextSegment(markdown: string): string[] {
+  const segments: string[] = [];
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+  let fence: string[] | null = null;
+
+  for (const line of lines) {
+    if (fence) {
+      if (/^\s*```\s*$/.test(line)) {
+        segments.push(fence.join('\n'));
+        fence = null;
+      } else {
+        fence.push(line);
+      }
+      continue;
+    }
+
+    if (/^\s*```\s*[A-Za-z0-9_+-]*\s*$/.test(line)) {
+      fence = [];
+      continue;
+    }
+
+    for (const match of line.matchAll(/`([^`\n]+)`/g)) {
+      segments.push(match[1]);
+    }
+  }
+
+  if (fence) segments.push(fence.join('\n'));
+  return segments;
+}
+
+/** Extract the inline and fenced code that the chat renderer must display. */
+export function extractMarkdownCodeSegments(markdown: string): string[] {
+  return segmentText(markdown).flatMap(segment =>
+    segment.kind === 'text' ? extractCodeFromTextSegment(segment.content) : [],
+  );
+}
+
+function visibleWords(value: string): string[] {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase('en-US')
+    .match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function expectedVisibleWords(markdown: string): string[] {
+  const visibleSource = segmentText(markdown)
+    .filter(segment => segment.kind === 'text')
+    .map(segment => segment.content
+      // Fence metadata is not visible; the fenced body remains visible.
+      .replace(/^\s*```\s*[A-Za-z0-9_+-]*\s*$/gm, '')
+      // Link targets are attributes for safe links, not visible prose.
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'))
+    .join('\n');
+  return visibleWords(visibleSource);
+}
+
+/** Require every source word to survive in visible DOM order, allowing renderer UI chrome. */
+export function visibleMarkdownPreservesText(markdown: string, visibleText: string): boolean {
+  const expected = expectedVisibleWords(markdown);
+  const visible = visibleWords(visibleText);
+  let cursor = 0;
+
+  for (const word of expected) {
+    while (cursor < visible.length && visible[cursor] !== word) cursor += 1;
+    if (cursor >= visible.length) return false;
+    cursor += 1;
+  }
+  return true;
+}
+
+/** Compare exact DOM code text against independently parsed Markdown source. */
+export function markdownCodeSegmentsMatch(
+  markdown: string,
+  visibleSegments: readonly string[],
+): boolean {
+  const expected = extractMarkdownCodeSegments(markdown).map(segment => segment.replace(/\r\n?/g, '\n'));
+  const visible = visibleSegments.map(segment => segment.replace(/\r\n?/g, '\n'));
+  return expected.length === visible.length
+    && expected.every((segment, index) => segment === visible[index]);
 }
 
 /** Validate generated Python without executing it. */

@@ -9,7 +9,9 @@ import {
 } from './persona-cases';
 import {
   containsFailureCopy,
+  markdownCodeSegmentsMatch,
   scorePersonaTrial,
+  visibleMarkdownPreservesText,
   type CapturedSseEvent,
   type PersonaTrialEvidence,
 } from './persona-scorer';
@@ -232,6 +234,10 @@ function scoreWithCurrentScorer(artifact: Record<string, unknown>): ReceiptScore
     tokenStreamResponse: typeof response.tokenStreamExact === 'string' ? response.tokenStreamExact : '',
     doneEventCount,
     renderedAssistantResponse: typeof response.renderedAssistantExact === 'string' ? response.renderedAssistantExact : '',
+    visibleAssistantText: typeof response.visibleAssistantTextExact === 'string'
+      ? response.visibleAssistantTextExact
+      : '',
+    visibleCodeSegments: strings(response.visibleCodeSegmentsExact),
     memoryEvidencePresent: journey.memoryJourneyOk === true
       && typeof journey.memoryText === 'string'
       && journey.memoryText.trim().length > 0,
@@ -367,6 +373,22 @@ export function buildPersonaAcceptanceSeal(
     if (response.doneEventCount !== 1) reasons.push('chat stream did not contain exactly one done event');
     if (!Array.isArray(response.parseErrors) || response.parseErrors.length > 0) reasons.push('chat stream contained parse errors or omitted parse-error evidence');
     if (typeof response.exact !== 'string' || !response.exact.trim()) reasons.push('exact response is missing');
+    const exactResponse = typeof response.exact === 'string' ? response.exact : '';
+    const visibleAssistantText = typeof response.visibleAssistantTextExact === 'string'
+      ? response.visibleAssistantTextExact
+      : '';
+    if (!visibleAssistantText.trim()) reasons.push('visible assistant DOM text evidence is missing');
+    else if (!visibleMarkdownPreservesText(exactResponse, visibleAssistantText)) {
+      reasons.push('visible assistant DOM text did not preserve the response content');
+    }
+    if (
+      !Array.isArray(response.visibleCodeSegmentsExact)
+      || response.visibleCodeSegmentsExact.some(segment => typeof segment !== 'string')
+    ) {
+      reasons.push('visible assistant DOM code evidence is missing or malformed');
+    } else if (!markdownCodeSegmentsMatch(exactResponse, response.visibleCodeSegmentsExact as string[])) {
+      reasons.push('visible assistant DOM code did not match the response Markdown');
+    }
     const model = typeof response.model === 'string' ? response.model : '';
     if (!model || !allowedModels.includes(model)) reasons.push('response model is missing or not allowed');
     const costMicros = estimatedCostMicros(response.estimatedCostUsd);

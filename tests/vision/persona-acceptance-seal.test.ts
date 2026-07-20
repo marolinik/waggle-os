@@ -30,6 +30,9 @@ function artifact(personaId: string, repeat: number, overrides: Record<string, u
       exact: 'Answer',
       tokenStreamExact: 'Answer',
       renderedAssistantExact: 'Answer',
+      visibleAssistantTextExact: 'Answer',
+      expectedCodeSegmentsExact: [],
+      visibleCodeSegmentsExact: [],
       persistedExact: 'Answer',
       persistedPromptExact: 'Prompt',
       persistedSessionId: `session-${repeat}`,
@@ -203,6 +206,34 @@ describe('persona acceptance seal', () => {
     expect(seal.status).toBe('failed');
     expect(seal.invalidReceipts[0]?.reasons).toContain(
       'artifact was not captured from a clean relevant working tree',
+    );
+  });
+
+  it('rejects receipts without matching visible assistant DOM evidence', () => {
+    const missing = artifact('general-purpose', 1);
+    delete (missing.response as Record<string, unknown>).visibleAssistantTextExact;
+    delete (missing.response as Record<string, unknown>).visibleCodeSegmentsExact;
+    const missingSeal = buildPersonaAcceptanceSeal(manifest(writeArtifact(missing)), options);
+
+    expect(missingSeal.status).toBe('failed');
+    expect(missingSeal.invalidReceipts[0]?.reasons).toEqual(expect.arrayContaining([
+      'visible assistant DOM text evidence is missing',
+      'visible assistant DOM code evidence is missing or malformed',
+    ]));
+
+    const corrupted = artifact('general-purpose', 1, {
+      response: {
+        ...(artifact('general-purpose', 1).response as Record<string, unknown>),
+        exact: 'Use `search_files("**/*")`.',
+        visibleAssistantTextExact: 'Use search_files("*/").',
+        visibleCodeSegmentsExact: ['search_files("*/")'],
+      },
+    });
+    const corruptedSeal = buildPersonaAcceptanceSeal(manifest(writeArtifact(corrupted)), options);
+
+    expect(corruptedSeal.status).toBe('failed');
+    expect(corruptedSeal.invalidReceipts[0]?.reasons).toContain(
+      'visible assistant DOM code did not match the response Markdown',
     );
   });
 });

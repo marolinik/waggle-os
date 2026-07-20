@@ -21,6 +21,7 @@ import {
 } from './persona-cases';
 import {
   containsFailureCopy,
+  extractMarkdownCodeSegments,
   scorePersonaTrial,
   validatePythonSyntax,
   type CapturedSseEvent,
@@ -175,6 +176,10 @@ function finiteContextMetric(
 
 function normalizeText(value: string): string {
   return value.replace(/\r\n/g, '\n').trim();
+}
+
+function normalizeEol(value: string): string {
+  return value.replace(/\r\n?/g, '\n');
 }
 
 function reconstructTokenStream(events: readonly CapturedSseEvent[]): string {
@@ -450,6 +455,13 @@ async function sendAndCapture(
   try {
     await target.waitFor({ state: 'visible', timeout: 15_000 });
     await target.fill(prompt, { timeout: 30_000 });
+    const requestResult = page.waitForRequest(
+      request => request.method() === 'POST' && new URL(request.url()).pathname === '/api/chat',
+      { timeout: remainingDeadlineMs(deadlineAt, 'waiting for chat request') },
+    ).then(
+      request => ({ request, error: null }),
+      error => ({ request: null, error }),
+    );
     const responseResult = page.waitForResponse(
       response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/chat',
       { timeout: remainingDeadlineMs(deadlineAt, 'waiting for chat response headers') },
@@ -464,12 +476,18 @@ async function sendAndCapture(
       await target.press('Enter');
     }
 
-    const responseOutcome = await responseResult;
+    const [requestOutcome, responseOutcome] = await Promise.all([requestResult, responseResult]);
+    if (requestOutcome.request) {
+      requestUrl = requestOutcome.request.url();
+      requestPayload = parseRequestPayload(requestOutcome.request.postData());
+    }
     if (responseOutcome.error) throw responseOutcome.error;
     const response = responseOutcome.response;
     if (!response) throw new Error('Chat response headers were not captured.');
-    requestUrl = response.url();
-    requestPayload = parseRequestPayload(response.request().postData());
+    if (!requestOutcome.request) {
+      requestUrl = response.url();
+      requestPayload = parseRequestPayload(response.request().postData());
+    }
     httpStatus = response.status();
     // Playwright's response.text() can honor a missing/legacy HTTP charset and
     // mojibake UTF-8 punctuation on Windows. The chat wire contract is UTF-8;
@@ -557,7 +575,7 @@ async function waitForPersistedResponse(
   return latest;
 }
 
-async function readRenderedAssistantResponse(page: Page): Promise<string> {
+async function readCopiedAssistantResponse(page: Page): Promise<string> {
   try {
     await page.context().grantPermissions(
       ['clipboard-read', 'clipboard-write'],
@@ -576,6 +594,23 @@ async function readRenderedAssistantResponse(page: Page): Promise<string> {
     // The hard UI assertion below reports the missing rendered response.
   }
   return '';
+}
+
+interface VisibleAssistantEvidence {
+  text: string;
+  codeSegments: string[];
+}
+
+async function readVisibleAssistantEvidence(page: Page): Promise<VisibleAssistantEvidence> {
+  const copyButton = page.getByTestId('chat-msg-copy').last();
+  await copyButton.waitFor({ state: 'visible', timeout: 10_000 });
+  const turn = copyButton.locator('xpath=ancestor::div[contains(@class,"group/turn")][1]');
+  const content = turn.locator('xpath=.//div[contains(@class,"group/msg")][1]');
+  await content.waitFor({ state: 'visible', timeout: 10_000 });
+  return {
+    text: await content.innerText(),
+    codeSegments: await content.locator('code').allTextContents(),
+  };
 }
 
 function otherPersonaSnippets(persona: PersonaAcceptanceCase): string[] {
@@ -852,7 +887,9 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         );
         if (chatScreenshot) screenshots.push(chatScreenshot);
         const renderedConversation = await page.locator('body').innerText().catch(() => '');
-        const renderedAssistantResponse = await readRenderedAssistantResponse(page);
+        const copiedAssistantResponse = await readCopiedAssistantResponse(page);
+        const visibleAssistant = await readVisibleAssistantEvidence(page);
+        const expectedCodeSegments = extractMarkdownCodeSegments(responseText);
 
         await page.goto(
           `${BASE}/workspaces/${encodeURIComponent(workspace.workspaceId)}/memory?${SKIP_PARAMS}`,
@@ -906,7 +943,11 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           persistedMessageCount: history.length,
           tokenStreamResponse,
           doneEventCount,
-          renderedAssistantResponse,
+          // Kept as the exact copied source for scorer/backward compatibility;
+          // visible DOM fidelity is captured and asserted separately below.
+          renderedAssistantResponse: copiedAssistantResponse,
+          visibleAssistantText: visibleAssistant.text,
+          visibleCodeSegments: visibleAssistant.codeSegments,
           memoryEvidencePresent: memoryJourneyOk && memoryText.trim().length > 0,
           sseEvents: wire.events,
           toolsUsed,
@@ -959,7 +1000,11 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           response: {
             exact: responseText,
             tokenStreamExact: tokenStreamResponse,
-            renderedAssistantExact: renderedAssistantResponse,
+            renderedAssistantExact: copiedAssistantResponse,
+            copiedAssistantExact: copiedAssistantResponse,
+            visibleAssistantTextExact: visibleAssistant.text,
+            expectedCodeSegmentsExact: expectedCodeSegments,
+            visibleCodeSegmentsExact: visibleAssistant.codeSegments,
             persistedExact: persistedResponse,
             persistedPromptExact: persistedPrompt,
             persistedSessionId: historyResponse?.sessionId ?? null,
@@ -1038,9 +1083,23 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           'reconstructed SSE tokens exactly matched the done response',
         ).toBe(normalizeText(responseText));
         expect(
-          normalizeText(renderedAssistantResponse),
-          'rendered assistant message exactly matched the SSE token stream',
+          normalizeText(copiedAssistantResponse),
+          'copy action preserved the exact SSE token stream',
         ).toBe(normalizeText(tokenStreamResponse));
+        expect(
+          visibleAssistant.text.trim(),
+          'assistant response rendered substantive visible DOM text',
+        ).not.toBe('');
+        expect(
+          visibleAssistant.codeSegments.map(normalizeEol),
+          'visible inline and fenced code exactly matched the response Markdown',
+        ).toEqual(expectedCodeSegments.map(normalizeEol));
+        if (persona.id === 'coder' || persona.id === 'data-engineer') {
+          expect(
+            expectedCodeSegments.length,
+            `${persona.id} response included code that was verified in the visible DOM`,
+          ).toBeGreaterThan(0);
+        }
         expect(historyResponse?.sessionId, 'history echoed the exact browser session id').toBe(sessionId);
         expect(
           history.map(message => ({

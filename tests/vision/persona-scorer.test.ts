@@ -8,9 +8,12 @@ import {
 } from './persona-cases';
 import {
   containsFailureCopy,
+  extractMarkdownCodeSegments,
   extractPythonBlock,
+  markdownCodeSegmentsMatch,
   scorePersonaTrial,
   validatePythonSyntax,
+  visibleMarkdownPreservesText,
   type PersonaTrialEvidence,
 } from './persona-scorer';
 import {
@@ -59,6 +62,8 @@ function evidence(overrides: Partial<PersonaTrialEvidence> = {}): PersonaTrialEv
     tokenStreamResponse: response,
     doneEventCount: 1,
     renderedAssistantResponse: response,
+    visibleAssistantText: response,
+    visibleCodeSegments: extractMarkdownCodeSegments(response),
     memoryEvidencePresent: true,
     workspaceLeak: false,
     completed: true,
@@ -181,6 +186,8 @@ describe('deterministic 100-point persona scorer', () => {
     ['sse_integrity', evidence({ doneEventCount: 2 })],
     ['sse_integrity', evidence({ tokenStreamResponse: 'partial response' })],
     ['ui_journey_mismatch', evidence({ renderedAssistantResponse: 'partial response' })],
+    ['ui_journey_mismatch', evidence({ visibleAssistantText: '' })],
+    ['ui_journey_mismatch', evidence({ visibleAssistantText: 'alpha beta gamma delta' })],
     ['ui_journey_mismatch', evidence({ memoryEvidencePresent: false })],
     [
       'false_tool_claim',
@@ -1041,6 +1048,51 @@ describe('deterministic 100-point persona scorer', () => {
     }));
 
     expect(result).toMatchObject({ score: 100, passed: true });
+  });
+
+  it('extracts inline and fenced code in rendered source order', () => {
+    const response = [
+      'Run `search_files("**/*")` first.',
+      '```python',
+      'def retry(attempt: int) -> float:',
+      '    return base_backoff_s * (2 ** attempt)',
+      '```',
+      'Then inspect `result`.',
+    ].join('\n');
+
+    expect(extractMarkdownCodeSegments(response)).toEqual([
+      'search_files("**/*")',
+      'def retry(attempt: int) -> float:\n    return base_backoff_s * (2 ** attempt)',
+      'result',
+    ]);
+    expect(extractMarkdownCodeSegments('```python\nvalue = 2 ** attempt')).toEqual([
+      'value = 2 ** attempt',
+    ]);
+    expect(
+      extractMarkdownCodeSegments('Run `install_capability` with name "pdf" and source "starter-pack" now.'),
+    ).toEqual([]);
+  });
+
+  it('checks visible prose and code independently of copied Markdown', () => {
+    const response = [
+      '## Decision',
+      'Keep **all supplied facts** and use [`search_files("**/*")`](https://example.com).',
+      '```python',
+      'value = 2 ** attempt',
+      '```',
+    ].join('\n');
+    const visible = 'Decision\nKeep all supplied facts and use search_files("**/*").\nvalue = 2 ** attempt';
+
+    expect(visibleMarkdownPreservesText(response, visible)).toBe(true);
+    expect(visibleMarkdownPreservesText(response, 'Decision\nKeep supplied facts.')).toBe(false);
+    expect(markdownCodeSegmentsMatch(response, [
+      'search_files("**/*")',
+      'value = 2 ** attempt',
+    ])).toBe(true);
+    expect(markdownCodeSegmentsMatch(response, [
+      'search_files("*/")',
+      'value = 2 * attempt',
+    ])).toBe(false);
   });
 
   it('accepts exact raw GitHub README URLs only for allowlisted primary repositories', () => {
