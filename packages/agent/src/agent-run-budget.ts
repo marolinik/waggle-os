@@ -78,7 +78,7 @@ export function selectAgentRunBudget(input: AgentRunBudgetInput): AgentRunBudget
       toolContextBudget: {
         maxSingleResultChars: 3_000,
         recentResultCount: 1,
-        historicalResultChars: 400,
+        historicalResultChars: 900,
       },
     };
   }

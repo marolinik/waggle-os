@@ -5,6 +5,11 @@ import {
   selectAgentRunBudget,
 } from '../src/agent-run-budget.js';
 import type { ToolDefinition } from '../src/tools.js';
+import {
+  UNTRUSTED_GUARD_CLOSE,
+  UNTRUSTED_GUARD_OPEN,
+  untrustedContextWrapper,
+} from '../src/untrusted-context.js';
 
 function jsonResponse(
   message: Record<string, unknown>,
@@ -89,7 +94,7 @@ describe('agent run budget policy', () => {
     expect(policy.toolContextBudget).toEqual({
       maxSingleResultChars: 3_000,
       recentResultCount: 1,
-      historicalResultChars: 400,
+      historicalResultChars: 900,
     });
   });
 
@@ -146,6 +151,40 @@ describe('model-facing tool context', () => {
     expect(results[1].content).toBe('Error fetching https://broken.example: timed out');
     expect(results[2].content?.length).toBeGreaterThan(2_000);
     expect(results[3].content).toContain('TAIL_RECENT_2');
+  });
+
+  it('keeps leading source facts and guard fences in historical research excerpts', () => {
+    const policy = selectAgentRunBudget({
+      taskShape: 'research',
+      complexity: 'complex',
+      selectedToolNames: ['web_fetch'],
+    });
+    const representativeFact = 'Vector search that runs anywhere and stays embedded.';
+    const messages = [
+      { role: 'assistant' as const, content: '', tool_calls: [{ id: 'call_source', type: 'function' as const, function: { name: 'web_fetch', arguments: '{}' } }] },
+      {
+        role: 'tool' as const,
+        content: untrustedContextWrapper(
+          'web_fetch',
+          `${representativeFact}\n${'SQLite extension details. '.repeat(200)}\nSOURCE_TAIL`,
+        ),
+        tool_call_id: 'call_source',
+      },
+      { role: 'assistant' as const, content: '', tool_calls: [{ id: 'call_newer', type: 'function' as const, function: { name: 'web_fetch', arguments: '{}' } }] },
+      {
+        role: 'tool' as const,
+        content: untrustedContextWrapper('web_fetch', 'Newer PostgreSQL source.'),
+        tool_call_id: 'call_newer',
+      },
+    ];
+
+    const compacted = compactToolContextForModel(messages, policy.toolContextBudget);
+    const historical = compacted.find(message => message.tool_call_id === 'call_source');
+
+    expect(historical?.content.length).toBeLessThanOrEqual(900);
+    expect(historical?.content).toContain(UNTRUSTED_GUARD_OPEN);
+    expect(historical?.content).toContain(UNTRUSTED_GUARD_CLOSE);
+    expect(historical?.content).toContain(representativeFact);
   });
 });
 
