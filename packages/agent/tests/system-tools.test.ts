@@ -35,6 +35,37 @@ describe('createSystemTools', () => {
     return tool;
   }
 
+  function boundedHeartbeatChildCode(ready: string, heartbeat: string): string {
+    return [
+      `const fs = require('node:fs')`,
+      `fs.writeFileSync(${JSON.stringify(heartbeat)}, '0')`,
+      `fs.writeFileSync(${JSON.stringify(ready)}, String(process.pid))`,
+      'let beat = 0',
+      `setInterval(() => fs.writeFileSync(${JSON.stringify(heartbeat)}, String(++beat)), 75)`,
+      // Bound a deliberate cleanup regression without later targeting a possibly reused PID.
+      'setTimeout(() => process.exit(0), 15000)',
+    ].join(';');
+  }
+
+  function isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    }
+  }
+
+  async function expectDescendantStopped(ready: string, heartbeat: string): Promise<void> {
+    expect(fs.existsSync(ready)).toBe(true);
+    const descendantPid = Number(fs.readFileSync(ready, 'utf8'));
+    expect(Number.isSafeInteger(descendantPid) && descendantPid > 0).toBe(true);
+    expect(isProcessAlive(descendantPid)).toBe(false);
+    const heartbeatAtReturn = fs.readFileSync(heartbeat, 'utf8');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(fs.readFileSync(heartbeat, 'utf8')).toBe(heartbeatAtReturn);
+  }
+
   it('creates all system tools', () => {
     const names = tools.map((t) => t.name);
     expect(names).toContain('bash');
@@ -363,25 +394,25 @@ describe('createSystemTools', () => {
     }, 10_000);
 
     it.runIf(process.platform === 'win32')('kills descendant processes when execution times out', async () => {
-      const marker = path.join(workspace, 'orphan-marker.txt');
-      const childCode = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphaned'), 1500)`;
+      const ready = path.join(workspace, 'descendant-timeout-ready.txt');
+      const heartbeat = path.join(workspace, 'descendant-timeout-heartbeat.txt');
+      const childCode = boundedHeartbeatChildCode(ready, heartbeat);
       const code = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' }); setTimeout(() => {}, 30000)`;
       const runCode = getTool('run_code');
-      const result = await runCode.execute({ language: 'javascript', code, timeout: 1000 });
+      const execution = Promise.resolve(runCode.execute({ language: 'javascript', code, timeout: 1000 }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const result = await execution;
       expect(result.toLowerCase()).toContain('timed out');
-      await new Promise((resolve) => setTimeout(resolve, 1800));
-      expect(fs.existsSync(marker)).toBe(false);
+      await expectDescendantStopped(ready, heartbeat);
     }, 10_000);
 
-    it.runIf(process.platform === 'win32')('kills descendants on time while the main event loop is blocked', async () => {
+    it.runIf(process.platform === 'win32')('enforces descendant timeout while the main event loop is blocked', async () => {
       const ready = path.join(workspace, 'descendant-ready.txt');
-      const marker = path.join(workspace, 'starved-timeout-orphan.txt');
-      const childCode = [
-        `const fs = require('node:fs')`,
-        `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
-        `setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'orphaned'), 1600)`,
-        'setTimeout(() => {}, 30000)',
-      ].join(';');
+      const heartbeat = path.join(workspace, 'starved-timeout-heartbeat.txt');
+      const childCode = boundedHeartbeatChildCode(ready, heartbeat);
       const code = [
         `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' })`,
         'setTimeout(() => {}, 30000)',
@@ -396,14 +427,27 @@ describe('createSystemTools', () => {
       while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
-      expect(fs.existsSync(ready)).toBe(true);
+      const readyBeforeBlock = fs.existsSync(ready);
+      let descendantPid = Number.NaN;
+      if (readyBeforeBlock) {
+        try {
+          descendantPid = Number(fs.readFileSync(ready, 'utf8'));
+        } catch {
+          // Record invalid readiness now; assert only after execution settles.
+        }
+      }
+      const descendantPidValid = Number.isSafeInteger(descendantPid) && descendantPid > 0;
 
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_600);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 9_000);
+      const aliveAtUnblock = descendantPidValid && isProcessAlive(descendantPid);
       const result = await execution;
 
+      expect(readyBeforeBlock).toBe(true);
+      expect(descendantPidValid).toBe(true);
       expect(result.toLowerCase()).toContain('timed out');
-      expect(fs.existsSync(marker)).toBe(false);
-    }, 15_000);
+      expect(aliveAtUnblock).toBe(false);
+      await expectDescendantStopped(ready, heartbeat);
+    }, 20_000);
 
     it.runIf(process.platform === 'win32')('does not time out a process that exits while the main event loop is blocked', async () => {
       const ready = path.join(workspace, 'completion-ready.txt');
@@ -449,23 +493,24 @@ describe('createSystemTools', () => {
       const execution = Promise.resolve(runCode.execute({
         language: 'javascript',
         code,
-        timeout: 3000,
+        timeout: 7000,
       }));
 
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_800);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5_000);
       expect(fs.existsSync(finished)).toBe(true);
       const result = await execution;
 
       expect(result).toContain('cold-supervisor-complete');
       expect(result.toLowerCase()).not.toContain('timed out');
-    }, 10_000);
+    }, 15_000);
 
     it.runIf(process.platform === 'win32')('enforces timeout from a cold supervisor while the main event loop is blocked', async () => {
-      const ready = path.join(workspace, 'cold-timeout-ready.txt');
-      const marker = path.join(workspace, 'cold-timeout-orphan.txt');
-      const childCode = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphaned'), 1600)`;
+      const rootReady = path.join(workspace, 'cold-timeout-root-ready.txt');
+      const descendantReady = path.join(workspace, 'cold-timeout-descendant-ready.txt');
+      const heartbeat = path.join(workspace, 'cold-timeout-heartbeat.txt');
+      const childCode = boundedHeartbeatChildCode(descendantReady, heartbeat);
       const code = [
-        `require('node:fs').writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+        `require('node:fs').writeFileSync(${JSON.stringify(rootReady)}, 'ready')`,
         `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' })`,
         'setTimeout(() => {}, 30000)',
       ].join(';');
@@ -476,13 +521,28 @@ describe('createSystemTools', () => {
         timeout: 1000,
       }));
 
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_600);
-      expect(fs.existsSync(ready)).toBe(true);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 9_000);
+      const rootReadyAtUnblock = fs.existsSync(rootReady);
+      const descendantReadyAtUnblock = fs.existsSync(descendantReady);
+      let descendantPid = Number.NaN;
+      if (descendantReadyAtUnblock) {
+        try {
+          descendantPid = Number(fs.readFileSync(descendantReady, 'utf8'));
+        } catch {
+          // Record invalid readiness now; assert only after execution settles.
+        }
+      }
+      const descendantPidValid = Number.isSafeInteger(descendantPid) && descendantPid > 0;
+      const aliveAtUnblock = descendantPidValid && isProcessAlive(descendantPid);
       const result = await execution;
 
+      expect(rootReadyAtUnblock).toBe(true);
+      expect(descendantReadyAtUnblock).toBe(true);
+      expect(descendantPidValid).toBe(true);
       expect(result.toLowerCase()).toContain('timed out');
-      expect(fs.existsSync(marker)).toBe(false);
-    }, 10_000);
+      expect(aliveAtUnblock).toBe(false);
+      await expectDescendantStopped(descendantReady, heartbeat);
+    }, 20_000);
 
     it.runIf(process.platform === 'win32')('does not target a reused PID after the root exits with inherited output open', async () => {
       const descendantCode = [
