@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseChatCompletionStream } from '../src/sse-parser.js';
 
 /** Build a ReadableStream<Uint8Array> from raw SSE event strings. */
@@ -91,5 +91,54 @@ describe('parseChatCompletionStream', () => {
     expect(result.content).toBe('Looks complete');
     expect(result.finishReason).toBe('stop');
     expect(result.doneObserved).toBe(false);
+  });
+
+  it('classifies a reader failure before DONE as a non-retryable incomplete completion', async () => {
+    const encoder = new TextEncoder();
+    let pullCount = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pullCount++ === 0) {
+          controller.enqueue(encoder.encode(sse({
+            choices: [{ delta: { content: 'Partial answer' } }],
+            usage: { prompt_tokens: 120, completion_tokens: 50 },
+          })));
+        } else {
+          controller.error(new Error('upstream socket closed'));
+        }
+      },
+    });
+
+    await expect(parseChatCompletionStream(body)).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 120, outputTokens: 50 },
+      message: expect.stringMatching(/before data: \[DONE\].*not accepted/i),
+    });
+  });
+
+  it('cancels immediately at DONE and ignores bytes after the terminal event', async () => {
+    const cancel = vi.fn();
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode([
+          sse({ choices: [{ delta: { content: 'Complete answer' } }] }),
+          sse({
+            choices: [{ delta: {}, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 100, completion_tokens: 20 },
+          }),
+          'data: [DONE]\n\n',
+          sse({ choices: [{ delta: { content: 'MUST_NOT_APPEAR' } }] }),
+        ].join('')));
+      },
+      cancel,
+    });
+
+    const result = await parseChatCompletionStream(body);
+
+    expect(result.content).toBe('Complete answer');
+    expect(result.finishReason).toBe('stop');
+    expect(result.doneObserved).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });

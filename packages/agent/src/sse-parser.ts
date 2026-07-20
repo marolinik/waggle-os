@@ -37,6 +37,25 @@ export interface SseParseOptions {
   onToken?: (token: string) => void;
 }
 
+function incompleteStreamError(
+  inputTokens: number,
+  outputTokens: number,
+): Error & {
+  code: 'INCOMPLETE_COMPLETION';
+  usage: { inputTokens: number; outputTokens: number };
+} {
+  const error = new Error(
+    'LLM stream ended unexpectedly before data: [DONE]; partial content was not accepted.',
+  ) as Error & {
+    code: 'INCOMPLETE_COMPLETION';
+    usage: { inputTokens: number; outputTokens: number };
+  };
+  error.name = 'IncompleteCompletionError';
+  error.code = 'INCOMPLETE_COMPLETION';
+  error.usage = { inputTokens, outputTokens };
+  return error;
+}
+
 /**
  * Read an OpenAI-format SSE stream end-to-end and return assembled content +
  * tool calls + usage. Pure function over the stream — no caller state mutation
@@ -65,8 +84,14 @@ export async function parseChatCompletionStream(
   const decoder = new TextDecoder();
   let buffer = '';
 
-  for (;;) {
-    const { done, value } = await reader.read();
+  streamRead: for (;;) {
+    let readResult: ReadableStreamReadResult<Uint8Array>;
+    try {
+      readResult = await reader.read();
+    } catch {
+      throw incompleteStreamError(inputTokens, outputTokens);
+    }
+    const { done, value } = readResult;
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
@@ -82,7 +107,10 @@ export async function parseChatCompletionStream(
         const payload = line.slice(6).trim();
         if (payload === '[DONE]') {
           doneObserved = true;
-          continue;
+          if (typeof reader.cancel === 'function') {
+            void reader.cancel().catch(() => undefined);
+          }
+          break streamRead;
         }
 
         let chunk: unknown;
