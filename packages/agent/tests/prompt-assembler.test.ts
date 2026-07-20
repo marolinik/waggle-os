@@ -257,6 +257,20 @@ describe('PromptAssembler.assemble', () => {
     expect(out.system).not.toContain('# Closed-world rewrite');
   });
 
+  it('recognizes a boundary-first closed-world rewrite directive', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Using only the provided text, condense this into three bullets.',
+        tier: 'mid',
+        taskShape: shape('decide', 0.9),
+      }),
+    );
+
+    expect(out.debug.closedWorldRewrite).toBe(true);
+    expect(out.responseScaffold).toBeNull();
+    expect(out.system).toContain('# Closed-world rewrite');
+  });
+
   it('does not mistake a quoted transform phrase for a rewrite directive', () => {
     const out = assembler.assemble(
       baseInput({

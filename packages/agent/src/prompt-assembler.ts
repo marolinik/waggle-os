@@ -124,14 +124,18 @@ const CLOSED_WORLD_TRANSFORM_REQUEST = new RegExp([
   `${TRANSFORM_DIRECTIVE_START}${TRANSFORM_DIRECTIVE_COURTESY}${String.raw`(?:rewrite|rephrase|paraphrase|revise|edit|polish|tighten|condense|shorten|summari[sz]e|translate)\b`}`,
   `${TRANSFORM_DIRECTIVE_START}${TRANSFORM_DIRECTIVE_COURTESY}${String.raw`turn\b[\s\S]{0,80}\binto\b`}`,
 ].join('|'), 'i');
+const CLOSED_WORLD_BOUNDARY_FIRST_REQUEST = new RegExp([
+  `${TRANSFORM_DIRECTIVE_START}${String.raw`using\s+only\s+(?:the\s+)?(?:supplied|provided|source)\s+(?:text|facts?|material|content|information)[,:]\s+(?:please\s+)?(?:rewrite|rephrase|paraphrase|revise|edit|polish|tighten|condense|shorten|summari[sz]e|translate)\b`}`,
+  `${TRANSFORM_DIRECTIVE_START}${String.raw`without\s+(?:add(?:ing)?|introduc(?:ing)?|invent(?:ing)?)\s+(?:any\s+)?(?:new|additional)\s+(?:claims?|facts?|details?|information)[,:]\s+(?:please\s+)?(?:rewrite|rephrase|paraphrase|revise|edit|polish|tighten|condense|shorten|summari[sz]e|translate)\b`}`,
+].join('|'), 'i');
 const CLOSED_WORLD_EVIDENCE_BOUNDARY = new RegExp([
   String.raw`\bclosed[- ]world\b`,
   String.raw`\b(?:add|introduce|invent)\s+no\s+(?:new|additional)\s+(?:claims?|facts?|details?|information)\b`,
   String.raw`\b(?:do\s+not|don't|without)\s+(?:add(?:ing)?|introduc(?:e|ing)|invent(?:ing)?)\s+(?:any\s+)?(?:new|additional)\s+(?:claims?|facts?|details?|information)\b`,
-  String.raw`\buse\s+only\s+(?:the\s+)?(?:supplied|provided|source)\s+(?:text|facts?|material|content|information)\b`,
+  String.raw`\bus(?:e|ing)\s+only\s+(?:the\s+)?(?:supplied|provided|source)\s+(?:text|facts?|material|content|information)\b`,
   String.raw`\b(?:supplied|provided)\s+(?:text|facts?|material|content|information)\s+(?:is|are)\s+(?:the\s+)?(?:complete|entire|only)\s+(?:evidence|source|basis|input)\b`,
 ].join('|'), 'i');
-const CLOSED_WORLD_REWRITE_CONTRACT = [
+export const CLOSED_WORLD_REWRITE_CONTRACT = [
   '# Closed-world rewrite',
   "The user's supplied source text is the complete evidence boundary for this transformation.",
   '- Preserve every supplied fact, including its polarity, status, quantity, timing, recommendation, and original certainty.',
@@ -139,8 +143,9 @@ const CLOSED_WORLD_REWRITE_CONTRACT = [
   '- Output only the requested rewrite; omit commentary and follow-up offers unless the user explicitly requests them.',
 ].join('\n');
 
-function isClosedWorldRewriteRequest(query: string): boolean {
-  return CLOSED_WORLD_TRANSFORM_REQUEST.test(query)
+export function isClosedWorldRewriteRequest(query: string): boolean {
+  return (CLOSED_WORLD_TRANSFORM_REQUEST.test(query)
+      || CLOSED_WORLD_BOUNDARY_FIRST_REQUEST.test(query))
     && CLOSED_WORLD_EVIDENCE_BOUNDARY.test(query);
 }
 

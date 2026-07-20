@@ -86,6 +86,29 @@ describe('Orchestrator prompt paths — flag-off regression protection', () => {
     smallDb.close();
   });
 
+  it('buildAssembledPrompt() excludes all outside context from closed-world rewrites', async () => {
+    orchestrator.setGoalAncestry({ project: 'Outside project context' });
+    orchestrator.getAwareness().add('task', 'Ship immediately from prior context', 10);
+    await orchestrator.executeTool('save_memory', {
+      content: 'Outside memory says the release is safe.',
+      importance: 'important',
+    });
+
+    const ordinary = await orchestrator.buildAssembledPrompt('What is the current project context?', null);
+    const closedWorld = await orchestrator.buildAssembledPrompt(
+      'Rewrite this memo and add no new claims: API tests pass.',
+      null,
+    );
+
+    expect(ordinary.system).toContain('Outside project context');
+    expect(closedWorld.debug.closedWorldRewrite).toBe(true);
+    expect(closedWorld.system).toContain('# Closed-world rewrite');
+    expect(closedWorld.system).not.toContain('Outside project context');
+    expect(closedWorld.system).not.toContain('Ship immediately from prior context');
+    expect(closedWorld.system).not.toContain('Outside memory says the release is safe.');
+    expect(closedWorld.debug.sectionsIncluded).toEqual(['Closed-world rewrite']);
+  });
+
   it('buildSystemPrompt() and buildAssembledPrompt() produce different shapes (flag-off vs PA path)', async () => {
     const legacy = orchestrator.buildSystemPrompt();
     const assembled = await orchestrator.buildAssembledPrompt('compare MECE vs BPMN', null);

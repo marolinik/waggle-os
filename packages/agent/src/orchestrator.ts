@@ -52,6 +52,7 @@ import { logTurnEvent } from './turn-context.js';
 import { tierForModel, type ModelTier } from './model-tier.js';
 import type { AgentPersona } from './personas.js';
 import {
+  isClosedWorldRewriteRequest,
   PromptAssembler,
   type AssembleOptions,
   type AssembledPrompt,
@@ -380,11 +381,27 @@ export class Orchestrator {
     opts: AssembleOptions = {},
   ): Promise<AssembledPrompt> {
     const tier = tierForModel(this.model);
-    const corePrompt = this.buildSystemPrompt();
-    const context = this.loadRecentContextFrames();
+    const closedWorldRewrite = isClosedWorldRewriteRequest(query);
+    const corePrompt = closedWorldRewrite ? '' : this.buildSystemPrompt();
+    const context: ContextFramesImpl = closedWorldRewrite
+      ? {
+          stateFrames: [],
+          recentChanges: [],
+          activeWork: [],
+          keyEntities: [],
+          personalPreferences: [],
+        }
+      : this.loadRecentContextFrames();
 
     let recalled: RecalledMemory;
-    if (opts.recalledText !== undefined) {
+    if (closedWorldRewrite) {
+      recalled = {
+        workspace: [],
+        personal: [],
+        scanSafe: true,
+        renderedText: '',
+      };
+    } else if (opts.recalledText !== undefined) {
       // W4.5 (plan bug #9-2, double-compute): the caller already ran
       // recallMemory this turn — reuse its rendered multi-lane block instead
       // of re-running the searches. recallMemory scans for injection itself
