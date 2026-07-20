@@ -207,7 +207,7 @@ async function injectBootstrap(
     const arr = ctx.bootstrapFiles;
     if (Array.isArray(arr)) {
       // Mutate the host-owned array in place — this IS the injection seam.
-      (arr as unknown[]).push(text);
+      (arr as unknown[]).push(createRecallBootstrapFile(text));
     } else {
       // The host did not provide a mutable array; nothing to inject into.
       logger.debug('agent:bootstrap had no bootstrapFiles array — skipping inject');
@@ -215,6 +215,21 @@ async function injectBootstrap(
   } catch {
     // Fail-open: a recall failure must not block bootstrap.
   }
+}
+
+export interface OpenclawBootstrapFile {
+  path: string;
+  name: string;
+  content: string;
+}
+
+/** Build the virtual context file shape accepted by OpenClaw's sanitizer. */
+export function createRecallBootstrapFile(content: string): OpenclawBootstrapFile {
+  return {
+    path: 'HIVE_MIND_RECALL.md',
+    name: 'HIVE_MIND_RECALL.md',
+    content,
+  };
 }
 
 const PER_HIT_BUDGET = 240;

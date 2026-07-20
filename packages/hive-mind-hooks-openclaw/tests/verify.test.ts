@@ -2,10 +2,12 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import { install } from '../src/install.js';
+import { createRecallBootstrapFile } from '../src/handler.js';
 import { verify } from '../src/verify.js';
 
 interface TestEnv {
@@ -24,8 +26,8 @@ async function bootstrap(initial: string | undefined): Promise<TestEnv> {
   }
   const distDir = join(home, 'fake-dist');
   await mkdir(distDir, { recursive: true });
-  const handlerSource = join(distDir, 'handler.js');
-  await writeFile(handlerSource, 'export default async () => {};\n', 'utf-8');
+  const handlerSource = join(distDir, 'handler.bundle.cjs');
+  await writeFile(handlerSource, 'module.exports = async () => {};\n', 'utf-8');
   return { home, handlerSource, configPath };
 }
 
@@ -78,6 +80,7 @@ describe('verify (openclaw)', () => {
   it('passes after install — entry present, subsystem enabled, dir+HOOK.md+handler on disk, CLI reachable', async () => {
     const env = await bootstrap('{ "model": "opus", "hooks": {} }');
     envs.push(env);
+    await writeFile(join(env.home, 'package.json'), '{"type":"module"}\n', 'utf-8');
     await install({ home: env.home, handlerSourcePath: env.handlerSource });
     const result = await verify({
       home: env.home,
@@ -90,7 +93,78 @@ describe('verify (openclaw)', () => {
     expect(result.checks.find((c) => c.name === 'managed hook dir exists')?.ok).toBe(true);
     expect(result.checks.find((c) => c.name === 'HOOK.md readable on disk')?.ok).toBe(true);
     expect(result.checks.find((c) => c.name === 'handler.js readable on disk')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'handler.cjs readable on disk')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'handler.cjs matches trusted bundle')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'handler.js matches managed loader')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'hook package locks CommonJS mode')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'installed handler runtime-loads')?.ok).toBe(true);
     expect(result.checks.find((c) => c.name === 'hive-mind-cli reachable')?.ok).toBe(true);
+  });
+
+  it('rejects a tampered .cjs bundle without executing its side effect', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    await install({ home: env.home, handlerSourcePath: env.handlerSource });
+    const sideEffectPath = join(env.home, 'tampered-handler-executed.txt');
+    await writeFile(
+      join(env.home, '.openclaw', 'hooks', 'hive-mind', 'handler.cjs'),
+      [
+        "const { writeFileSync } = require('node:fs');",
+        `writeFileSync(${JSON.stringify(sideEffectPath)}, 'executed');`,
+        'module.exports = async () => {};',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+    const result = await verify({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      spawnImpl: mockSpawnImpl({ exitCode: 0 }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.checks.find((c) => c.name === 'handler.cjs matches trusted bundle')?.ok).toBe(false);
+    const runtimeCheck = result.checks.find((c) => c.name === 'installed handler runtime-loads');
+    expect(runtimeCheck?.ok).toBe(false);
+    expect(runtimeCheck?.detail).toContain('skipped');
+    expect(existsSync(sideEffectPath)).toBe(false);
+  });
+
+  it('runtime-loads trusted code without forwarding provider API secrets', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    const receiptPath = join(env.home, 'runtime-env.json');
+    await writeFile(env.handlerSource, [
+      "const { writeFileSync } = require('node:fs');",
+      'module.exports = async () => {',
+      `  writeFileSync(${JSON.stringify(receiptPath)}, JSON.stringify({`,
+      '    openrouter: process.env.OPENROUTER_API_KEY ?? null,',
+      '    anthropic: process.env.ANTHROPIC_API_KEY ?? null,',
+      '  }));',
+      '};',
+      '',
+    ].join('\n'), 'utf-8');
+    await install({ home: env.home, handlerSourcePath: env.handlerSource });
+    const previousOpenRouter = process.env['OPENROUTER_API_KEY'];
+    const previousAnthropic = process.env['ANTHROPIC_API_KEY'];
+    process.env['OPENROUTER_API_KEY'] = 'must-not-reach-runtime-probe';
+    process.env['ANTHROPIC_API_KEY'] = 'must-not-reach-runtime-probe';
+    try {
+      const result = await verify({
+        home: env.home,
+        handlerSourcePath: env.handlerSource,
+        spawnImpl: mockSpawnImpl({ exitCode: 0 }),
+      });
+      expect(result.ok).toBe(true);
+      expect(JSON.parse(await readFile(receiptPath, 'utf-8'))).toEqual({
+        openrouter: null,
+        anthropic: null,
+      });
+    } finally {
+      if (previousOpenRouter === undefined) delete process.env['OPENROUTER_API_KEY'];
+      else process.env['OPENROUTER_API_KEY'] = previousOpenRouter;
+      if (previousAnthropic === undefined) delete process.env['ANTHROPIC_API_KEY'];
+      else process.env['ANTHROPIC_API_KEY'] = previousAnthropic;
+    }
   });
 
   it('flags the activation advisory (FAIL) when internal.enabled is false even with the entry present', async () => {
@@ -147,24 +221,117 @@ describe('verify (openclaw)', () => {
     const cliPath = '/abs/from/pointer.js';
     await install({ home: env.home, handlerSourcePath: env.handlerSource, cliPath });
 
-    const records: Array<{ command: string; args: readonly string[] }> = [];
-    const recordingSpawn = ((cmd: string, args: readonly string[]) => {
-      records.push({ command: cmd, args });
+    const records: Array<{
+      command: string;
+      args: readonly string[];
+      options?: { env?: NodeJS.ProcessEnv; windowsHide?: boolean };
+    }> = [];
+    const recordingSpawn = ((cmd: string, args: readonly string[], options?: SpawnOptions) => {
+      records.push({
+        command: cmd,
+        args,
+        options,
+      });
       return mockSpawnImpl({ exitCode: 0 })(cmd, args);
-    }) as typeof import('node:child_process').spawn;
+    }) as unknown as typeof import('node:child_process').spawn;
 
+    const previousOpenRouter = process.env['OPENROUTER_API_KEY'];
+    const previousAnthropic = process.env['ANTHROPIC_API_KEY'];
+    process.env['OPENROUTER_API_KEY'] = 'must-not-reach-cli-probe';
+    process.env['ANTHROPIC_API_KEY'] = 'must-not-reach-cli-probe';
+    try {
+      const result = await verify({
+        home: env.home,
+        handlerSourcePath: env.handlerSource,
+        spawnImpl: recordingSpawn,
+      });
+      expect(result.ok).toBe(true);
+      const probeRecord = records[records.length - 1];
+      expect(probeRecord.command).toBe(process.execPath);
+      expect(probeRecord.args[0]).toBe(cliPath);
+      expect(probeRecord.args[1]).toBe('--help');
+      expect(probeRecord.options?.env?.['OPENROUTER_API_KEY']).toBeUndefined();
+      expect(probeRecord.options?.env?.['ANTHROPIC_API_KEY']).toBeUndefined();
+      expect(probeRecord.options?.windowsHide).toBe(true);
+      // Sanity: the pinned cli path was actually written into the pointer.
+      const pointer = JSON.parse(await readFile(join(env.home, '.openclaw', 'hive-mind-install.json'), 'utf-8')) as Record<string, unknown>;
+      expect(pointer['cli_path']).toBe(cliPath);
+    } finally {
+      if (previousOpenRouter === undefined) delete process.env['OPENROUTER_API_KEY'];
+      else process.env['OPENROUTER_API_KEY'] = previousOpenRouter;
+      if (previousAnthropic === undefined) delete process.env['ANTHROPIC_API_KEY'];
+      else process.env['ANTHROPIC_API_KEY'] = previousAnthropic;
+    }
+  });
+
+  it('rejects a tampered pointer cli_path without spawning it', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    const trustedCliPath = '/abs/trusted-cli.js';
+    await install({ home: env.home, handlerSourcePath: env.handlerSource, cliPath: trustedCliPath });
+
+    const pointerPath = join(env.home, '.openclaw', 'hive-mind-install.json');
+    const pointer = JSON.parse(await readFile(pointerPath, 'utf-8')) as Record<string, unknown>;
+    const tamperedCliPath = join(env.home, 'tampered-cli.js');
+    pointer['cli_path'] = tamperedCliPath;
+    await writeFile(pointerPath, `${JSON.stringify(pointer, null, 2)}\n`, 'utf-8');
+
+    const spawned: Array<{ command: string; args: readonly string[] }> = [];
+    const recordingSpawn = ((command: string, args: readonly string[], _options?: SpawnOptions) => {
+      spawned.push({ command, args });
+      return mockSpawnImpl({ exitCode: 0 })(command, args);
+    }) as unknown as typeof import('node:child_process').spawn;
     const result = await verify({
       home: env.home,
       handlerSourcePath: env.handlerSource,
       spawnImpl: recordingSpawn,
     });
-    expect(result.ok).toBe(true);
-    const probeRecord = records[records.length - 1];
-    expect(probeRecord.command).toBe(process.execPath);
-    expect(probeRecord.args[0]).toBe(cliPath);
-    expect(probeRecord.args[1]).toBe('--help');
-    // Sanity: the pinned cli path was actually written into the pointer.
-    const pointer = JSON.parse(await readFile(join(env.home, '.openclaw', 'hive-mind-install.json'), 'utf-8')) as Record<string, unknown>;
-    expect(pointer['cli_path']).toBe(cliPath);
+
+    expect(result.ok).toBe(false);
+    expect(result.checks.find((c) => c.name === 'install pointer cli_path matches managed config')?.ok).toBe(false);
+    expect(spawned.some(({ command, args }) => command === tamperedCliPath || args.includes(tamperedCliPath))).toBe(false);
+  });
+
+  it('escalates a timed-out CLI probe to SIGKILL before returning', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    await install({ home: env.home, handlerSourcePath: env.handlerSource });
+
+    const signals: NodeJS.Signals[] = [];
+    const hangingSpawn = (() => {
+      const emitter = new EventEmitter();
+      const child = Object.assign(emitter, {
+        stdout: Readable.from([]),
+        stderr: Readable.from([]),
+        kill: vi.fn((signal: NodeJS.Signals) => {
+          signals.push(signal);
+          if (signal === 'SIGKILL') setImmediate(() => emitter.emit('exit', null, 'SIGKILL'));
+          return true;
+        }),
+      }) as unknown as ChildProcess;
+      return child;
+    }) as unknown as typeof import('node:child_process').spawn;
+
+    const result = await verify({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      spawnImpl: hangingSpawn,
+      cliProbeTimeoutMs: 10,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+    expect(result.checks.find((c) => c.name === 'hive-mind-cli reachable')?.detail).toContain('timed out');
+  });
+});
+
+describe('OpenClaw 2026.6.11 bootstrap file contract', () => {
+  it('preserves recalled text in a path/name/content object accepted by the host sanitizer', () => {
+    const recalled = 'hive-mind: recalled exact text';
+    expect(createRecallBootstrapFile(recalled)).toEqual({
+      path: 'HIVE_MIND_RECALL.md',
+      name: 'HIVE_MIND_RECALL.md',
+      content: recalled,
+    });
   });
 });
