@@ -2562,7 +2562,7 @@ class LocalAdapter {
 
   async connectConnector(id: string, credentials?: {
     token?: string; apiKey?: string; refreshToken?: string;
-    expiresAt?: string; scopes?: string[]; email?: string;
+    expiresAt?: string; scopes?: string[]; email?: string; instanceUrl?: string;
   }): Promise<void> {
     await this.fetch(`/api/connectors/${id}/connect`, {
       method: 'POST',

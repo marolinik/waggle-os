@@ -8,7 +8,7 @@
  *
  * Per-row async state (sync, lazy health, audit history) lives HERE; the
  * shared credential inputs + the revoke confirm stay in the parent so the
- * R4-007 credential-isolation guarantee (one shared input pair, reset on
+ * R4-007 credential-isolation guarantee (one shared input set, reset on
  * target change) is preserved.
  */
 import { useState } from 'react';
@@ -52,11 +52,13 @@ interface ConnectorCardProps {
   hint?: ConnectorSetupHint;
   expanded: boolean;
   onToggle: () => void;
-  /** Shared credential inputs (single pair, parent-owned — R4-007). */
+  /** Shared credential inputs (single parent-owned set — R4-007). */
   tokenInput: string;
   emailInput: string;
+  instanceUrlInput: string;
   onTokenChange: (v: string) => void;
   onEmailChange: (v: string) => void;
+  onInstanceUrlChange: (v: string) => void;
   connecting: boolean;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -68,7 +70,8 @@ interface ConnectorCardProps {
 
 const ConnectorCard = ({
   conn, categoryLabel, hint, expanded, onToggle,
-  tokenInput, emailInput, onTokenChange, onEmailChange,
+  tokenInput, emailInput, instanceUrlInput,
+  onTokenChange, onEmailChange, onInstanceUrlChange,
   connecting, onConnect, onDisconnect, onRevoke, onSynced,
 }: ConnectorCardProps) => {
   const [syncing, setSyncing] = useState(false);
@@ -79,6 +82,10 @@ const ConnectorCard = ({
   const isConnected = conn.status === 'connected';
   const isExpired = conn.status === 'expired';
   const needsEmail = conn.id === 'jira';
+  const needsInstanceUrl = conn.id === 'salesforce';
+  const credentialsComplete = Boolean(tokenInput.trim())
+    && (!needsEmail || Boolean(emailInput.trim()))
+    && (!needsInstanceUrl || Boolean(instanceUrlInput.trim()));
   const identity = getBrandIdentity(conn.id, conn.name, categoryLabel);
   const badge = connectorStatusBadge(conn.status, syncing);
 
@@ -224,13 +231,20 @@ const ConnectorCard = ({
                   aria-label="Atlassian account email"
                   className="w-full bg-muted/50 text-xs h-auto py-1" />
               )}
+              {needsInstanceUrl && (
+                <Input type="url" name="connectorInstanceUrl" autoComplete="url" inputMode="url" spellCheck={false}
+                  value={instanceUrlInput} onChange={e => onInstanceUrlChange(e.target.value)}
+                  placeholder="https://your-domain.my.salesforce.com"
+                  aria-label="Salesforce instance URL"
+                  className="w-full bg-muted/50 text-xs h-auto py-1 font-mono" />
+              )}
               <div className="flex gap-2">
                 <Input type="password" name="connectorToken" autoComplete="off" spellCheck={false}
                   value={tokenInput} onChange={e => onTokenChange(e.target.value)}
                   placeholder={hint?.placeholder ?? 'Paste token or API key'}
                   aria-label={`${conn.name} API token`}
                   className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
-                <button onClick={onConnect} disabled={!tokenInput.trim() || connecting}
+                <button onClick={onConnect} disabled={!credentialsComplete || connecting}
                   className={cn('flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors', CONTROL_FOCUS_CLASS)}>
                   {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />} Connect
                 </button>
