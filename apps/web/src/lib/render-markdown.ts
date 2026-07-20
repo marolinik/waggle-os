@@ -21,19 +21,46 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** Inline rules (bold/italic/code/safe links) over ALREADY-ESCAPED text. */
-function applyInline(escaped: string): string {
+/** Non-code inline rules over ALREADY-ESCAPED text. */
+function applyStyledText(escaped: string, protectedHrefToken = ''): string {
   return escaped
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code class="px-1 py-0.5 rounded bg-muted text-xs font-mono">$1</code>')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label: string, url: string) => {
       const u = String(url).trim();
-      const safe = /^https?:\/\//i.test(u) || u.startsWith('/') || u.startsWith('#');
+      const safeScheme = /^https?:\/\//i.test(u) || u.startsWith('/') || u.startsWith('#');
+      // A protected inline-code token is valid in link text, but never in an
+      // href: restoring a <code> tag inside an attribute would be unsafe.
+      const safe = safeScheme && (!protectedHrefToken || !u.includes(protectedHrefToken));
       return safe
         ? `<a href="${u}" class="text-honey underline" target="_blank" rel="noopener noreferrer">${label}</a>`
         : `${label} (${u})`;
     });
+}
+
+/** Inline rules over ALREADY-ESCAPED text, with code isolated first. */
+function applyInline(escaped: string): string {
+  let placeholderPrefix = '\uE000WAGGLE_CODE_';
+  while (escaped.includes(placeholderPrefix)) placeholderPrefix = `\uE000${placeholderPrefix}`;
+  const codeSegments: string[] = [];
+  const codePattern = /`([^`\n]+)`/g;
+  const protectedText = escaped.replace(codePattern, (_match, code: string) => {
+    const index = codeSegments.push(code) - 1;
+    return `${placeholderPrefix}${index}\uE001`;
+  });
+  let rendered = applyStyledText(protectedText, placeholderPrefix);
+
+  for (let index = 0; index < codeSegments.length; index++) {
+    const token = `${placeholderPrefix}${index}\uE001`;
+    const code = `<code class="px-1 py-0.5 rounded bg-muted text-xs font-mono">${codeSegments[index]}</code>`;
+    rendered = rendered.split(token).join(code);
+  }
+  return rendered;
+}
+
+function renderCodeBlock(lines: string[], language: string): string {
+  const languageAttribute = language ? ` data-language="${language}"` : '';
+  return `<pre class="my-2 max-w-full overflow-x-auto rounded-lg bg-muted p-3 text-xs leading-relaxed"><code class="font-mono whitespace-pre"${languageAttribute}>${lines.join('\n')}</code></pre>`;
 }
 
 export function renderSimpleMarkdown(text: string): string {
@@ -51,7 +78,25 @@ export function renderSimpleMarkdown(text: string): string {
 export function renderChatMarkdown(text: string): string {
   const lines = escapeHtml(text).split('\n');
   const out: string[] = [];
+  let fence: { language: string; lines: string[] } | null = null;
+
   for (const line of lines) {
+    if (fence) {
+      if (/^\s*```\s*$/.test(line)) {
+        out.push(renderCodeBlock(fence.lines, fence.language));
+        fence = null;
+      } else {
+        fence.lines.push(line);
+      }
+      continue;
+    }
+
+    const fenceStart = /^\s*```\s*([A-Za-z0-9_+-]*)\s*$/.exec(line);
+    if (fenceStart) {
+      fence = { language: fenceStart[1], lines: [] };
+      continue;
+    }
+
     const h3 = /^###\s+(.*)$/.exec(line);
     const h2 = /^##\s+(.*)$/.exec(line);
     const h1 = /^#\s+(.*)$/.exec(line);
@@ -75,5 +120,10 @@ export function renderChatMarkdown(text: string): string {
       out.push(`<span class="block">${applyInline(line)}</span>`);
     }
   }
+
+  // During streaming, an opening fence may arrive before its closing marker.
+  // Render the partial body as code now; the next full-source render will close it.
+  if (fence) out.push(renderCodeBlock(fence.lines, fence.language));
+
   return out.join('');
 }

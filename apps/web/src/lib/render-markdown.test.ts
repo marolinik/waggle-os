@@ -74,4 +74,63 @@ describe('renderChatMarkdown', () => {
     const html = renderChatMarkdown('a\n\nb');
     expect(html).toContain('<span class="block h-2">');
   });
+
+  it('preserves wildcard operators inside inline code', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderChatMarkdown('Run `search_files("**/*")` without editing.');
+
+    expect(host.querySelector('code')?.textContent).toBe('search_files("**/*")');
+    expect(host.querySelector('code strong, code em')).toBeNull();
+  });
+
+  it('preserves emphasis and safe links wrapped around inline code', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderChatMarkdown('Use **`npm test`** or [`npm run build`](https://example.com).');
+
+    expect(host.querySelector('strong code')?.textContent).toBe('npm test');
+    expect(host.querySelector('a[href="https://example.com"] code')?.textContent).toBe('npm run build');
+  });
+
+  it('never restores an inline code tag inside a link attribute', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderChatMarkdown('[x](https://example.com/`fragment`)');
+
+    expect(host.querySelector('a')).toBeNull();
+    expect(host.querySelector('code')?.textContent).toBe('fragment');
+  });
+
+  it('preserves indentation and operators inside fenced code', () => {
+    const source = [
+      '```python',
+      'def retry(attempt: int) -> float:',
+      '    return base_backoff_s * (2 ** attempt)',
+      '```',
+    ].join('\n');
+    const host = document.createElement('div');
+    host.innerHTML = renderChatMarkdown(source);
+
+    expect(host.querySelector('pre code')?.textContent).toBe([
+      'def retry(attempt: int) -> float:',
+      '    return base_backoff_s * (2 ** attempt)',
+    ].join('\n'));
+    expect(host.querySelector('pre code strong, pre code em')).toBeNull();
+  });
+
+  it('renders an unfinished streaming fence as safe preformatted code', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderChatMarkdown('```python\nvalue = 2 ** attempt');
+
+    expect(host.querySelector('pre code')?.textContent).toBe('value = 2 ** attempt');
+  });
+
+  it('keeps fenced HTML inert and refuses unsafe language metadata', () => {
+    const safeHost = document.createElement('div');
+    safeHost.innerHTML = renderChatMarkdown('```html\n<script>alert(1)</script>\n```');
+    expect(safeHost.querySelector('script')).toBeNull();
+    expect(safeHost.querySelector('pre code')?.textContent).toBe('<script>alert(1)</script>');
+
+    const unsafeHtml = renderChatMarkdown('```\"><img src=x onerror=alert(1)>\nbody');
+    expect(unsafeHtml).not.toContain('<img');
+    expect(unsafeHtml).not.toContain('onerror="');
+  });
 });
