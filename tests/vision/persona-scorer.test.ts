@@ -998,13 +998,15 @@ describe('deterministic 100-point persona scorer', () => {
       response,
       persistedResponse: response,
       requestPersonaId: researcher.id,
-      toolsUsed: ['web_search'],
+      toolsUsed: ['web_fetch', 'web_fetch'],
       durationMs: 10_000,
       inputTokens: 5_000,
       sseEvents: [
-        { event: 'tool', data: { name: 'web_search', input: { query: 'SQLite pgvector primary docs' } } },
-        { event: 'tool_result', data: { name: 'web_search', result: 'two primary sources', isError: false } },
-        { event: 'done', data: { content: response, toolsUsed: ['web_search'] } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/sqliteai/sqlite-vector' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'SQLite primary source', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/pgvector/pgvector' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'pgvector primary source', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
       ],
     }));
 
@@ -1029,12 +1031,15 @@ describe('deterministic 100-point persona scorer', () => {
       response,
       persistedResponse: response,
       requestPersonaId: researcher.id,
-      toolsUsed: ['web_fetch'],
+      toolsUsed: ['web_fetch', 'web_fetch'],
       durationMs: 10_000,
       inputTokens: 5_000,
       sseEvents: [
-        { event: 'tool_result', data: { name: 'web_fetch', result: 'primary README', isError: false } },
-        { event: 'done', data: { content: response, toolsUsed: ['web_fetch'] } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://raw.githubusercontent.com/asg017/sqlite-vec/main/README.md' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'sqlite-vec primary README', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://raw.githubusercontent.com/pgvector/pgvector/master/README.md' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'pgvector primary README', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
       ],
     }));
 
@@ -1059,10 +1064,254 @@ describe('deterministic 100-point persona scorer', () => {
       response,
       persistedResponse: response,
       requestPersonaId: researcher.id,
-      toolsUsed: ['web_fetch'],
+      toolsUsed: ['web_fetch', 'web_fetch'],
       sseEvents: [
-        { event: 'tool_result', data: { name: 'web_fetch', result: 'one repository', isError: false } },
-        { event: 'done', data: { content: response, toolsUsed: ['web_fetch'] } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/pgvector/pgvector' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'canonical repository', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://raw.githubusercontent.com/pgvector/pgvector/master/README.md' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'raw repository README', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
+      ],
+    }));
+
+    expect(result.score).toBe(90);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+  });
+
+  it.each([
+    ['failed fetch', 'Fetch failed (503): unavailable'],
+    ['sanitized fetch', '[SECURITY] Tool output flagged (prompt injection). Content sanitized.'],
+    ['governance-blocked fetch', 'Tool "web_fetch" is blocked by your team governance policy.'],
+  ])('does not count a %s as source evidence', (_label, failedResult) => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Client/server |',
+      'Sources: https://github.com/asg017/sqlite-vec and https://github.com/pgvector/pgvector',
+      '## Inference',
+      'SQLite should reduce desktop operational overhead.',
+      '## Recommendation',
+      'Verify the missing source before deciding.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch', 'web_fetch'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/asg017/sqlite-vec' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: failedResult, isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/pgvector/pgvector' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'pgvector primary source', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
+      ],
+    }));
+
+    expect(result.score).toBe(90);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+  });
+
+  it('rejects missing web_fetch capability as both primary evidence and required-tool success', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Client/server |',
+      'Sources: https://github.com/asg017/sqlite-vec and https://github.com/pgvector/pgvector',
+      '## Inference',
+      'A recommendation requires functioning source access.',
+      '## Recommendation',
+      'Restore source access before deciding.',
+    ].join('\n');
+    const missingTool = 'Tool "web_fetch" not found. Here are alternatives: web_search.';
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: [],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/asg017/sqlite-vec' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: missingTool, isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/pgvector/pgvector' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: missingTool, isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: [] } },
+      ],
+    }));
+
+    expect(result.score).toBe(80);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'required-tools')?.passed).toBe(false);
+  });
+
+  it.each([
+    ['HTTP failure', 'Search failed (503): unavailable'],
+    ['transport error', 'Search error: connection reset'],
+    ['rate limit', 'Search rate limit exceeded. Please wait a moment before searching again.'],
+    ['empty results', 'No search results found.'],
+  ])('rejects a web_search %s as required-tool success', (_label, failedResult) => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Unknown | Unknown |',
+      'Sources: https://github.com/asg017/sqlite-vec and https://github.com/pgvector/pgvector',
+      '## Inference',
+      'No comparison is supportable without source access.',
+      '## Recommendation',
+      'Retry research before deciding.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: [],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_search', input: { query: 'SQLite pgvector primary docs' } } },
+        { event: 'tool_result', data: { name: 'web_search', result: failedResult, isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: [] } },
+      ],
+    }));
+
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'required-tools')?.passed).toBe(false);
+  });
+
+  it('does not credit successful fetches for different allowed sources than the citations', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Client/server |',
+      'Sources: https://github.com/asg017/sqlite-vec and https://github.com/pgvector/pgvector',
+      '## Inference',
+      'SQLite should reduce desktop operational overhead.',
+      '## Recommendation',
+      'Verify the cited sources before deciding.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch', 'web_fetch'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://sqlite.org/vector.html' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'SQLite documentation', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://postgresql.org/docs/current/index.html' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'PostgreSQL documentation', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
+      ],
+    }));
+
+    expect(result.score).toBe(90);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+  });
+
+  it('does not shift a later fetch result onto an earlier call that emitted no result', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Client/server |',
+      'Sources: https://github.com/asg017/sqlite-vec and https://github.com/pgvector/pgvector',
+      '## Inference',
+      'SQLite should reduce desktop operational overhead.',
+      '## Recommendation',
+      'Verify every cited source before deciding.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch', 'web_fetch'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/asg017/sqlite-vec' } } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/pgvector/pgvector' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'pgvector primary source', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://postgresql.org/docs/current/index.html' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'PostgreSQL documentation', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
+      ],
+    }));
+
+    expect(result.score).toBe(90);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+  });
+
+  it('does not count query and fragment variants of one primary page as separate evidence', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Unknown |',
+      'Sources: https://sqlite.org/vector.html?view=one and https://sqlite.org/vector.html#details',
+      '## Inference',
+      'More evidence is required for a comparison.',
+      '## Recommendation',
+      'Do not decide until the PostgreSQL source is fetched.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch', 'web_fetch'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://sqlite.org/vector.html?view=one' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'SQLite documentation', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://sqlite.org/vector.html#details' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'Same SQLite documentation', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
+      ],
+    }));
+
+    expect(result.score).toBe(90);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+  });
+
+  it('requires cited and fetched primary evidence for both comparison families', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Unknown |',
+      'Sources: https://github.com/asg017/sqlite-vec and https://sqlite.org/vector.html',
+      '## Inference',
+      'A PostgreSQL recommendation would be premature without its primary evidence.',
+      '## Recommendation',
+      'Fetch a PostgreSQL or pgvector primary source before deciding.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch', 'web_fetch'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://github.com/asg017/sqlite-vec' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'sqlite-vec primary source', isError: false } },
+        { event: 'tool', data: { name: 'web_fetch', input: { url: 'https://sqlite.org/vector.html' } } },
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'SQLite primary documentation', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch', 'web_fetch'] } },
       ],
     }));
 

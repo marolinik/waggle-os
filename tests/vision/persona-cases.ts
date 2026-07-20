@@ -35,9 +35,10 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'verifierContract' })
   | (BaseResponseRule & { kind: 'maxWords'; maxWords: number })
   | (BaseResponseRule & {
-      kind: 'primaryUrls';
+      kind: 'primaryEvidence';
       minimum: number;
       allowedDomains: readonly string[];
+      requiredSourceGroups?: readonly (readonly string[])[];
     })
   | (BaseResponseRule & { kind: 'codeValidation'; language: 'python' });
 
@@ -55,15 +56,23 @@ export interface PersonaAcceptanceCase {
   responseRules: readonly PersonaResponseRule[];
 }
 
-const primaryResearchDomains = [
+const sqlitePrimaryResearchDomains = [
   'sqlite.org',
   'sqlite.ai',
-  'postgresql.org',
   'github.com/sqliteai/sqlite-vector',
   'github.com/asg017/sqlite-vec',
-  'github.com/pgvector/pgvector',
   'raw.githubusercontent.com/asg017/sqlite-vec',
+] as const;
+
+const postgresPrimaryResearchDomains = [
+  'postgresql.org',
+  'github.com/pgvector/pgvector',
   'raw.githubusercontent.com/pgvector/pgvector',
+] as const;
+
+const primaryResearchDomains = [
+  ...sqlitePrimaryResearchDomains,
+  ...postgresPrimaryResearchDomains,
 ] as const;
 
 const runwayAssertionPrefix = String.raw`(?<!incorrect )(?<!wrong )\b(?:formula|runway(?:\s*\(months\))?)\b(?:(?!\b(?:do\s+not|don't|not|never|avoid|cannot|can't|incorrect|wrong)\b)[\s\S]){0,180}`;
@@ -150,7 +159,15 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 6_000,
     requiredToolPatterns: [/(?:search|fetch|browse)/i],
     responseRules: [
-      { id: 'primary-sources', description: 'Cites at least two distinct primary-source URLs', kind: 'primaryUrls', minimum: 2, allowedDomains: primaryResearchDomains, points: 10 },
+      {
+        id: 'primary-sources',
+        description: 'Cites and fetches primary evidence for both sides of the comparison',
+        kind: 'primaryEvidence',
+        minimum: 2,
+        allowedDomains: primaryResearchDomains,
+        requiredSourceGroups: [sqlitePrimaryResearchDomains, postgresPrimaryResearchDomains],
+        points: 10,
+      },
       { id: 'decision-table', description: 'Includes a comparison or decision table', kind: 'pattern', pattern: /(?:decision table|\|\s*(?:criterion|dimension|factor|consideration)\s*\|)/i, points: 10 },
       { id: 'recommendation', description: 'Makes a recommendation for the stated desktop use case', kind: 'pattern', pattern: /recommend(?:ation|ed)?/i, points: 10 },
       {

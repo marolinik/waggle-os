@@ -110,6 +110,11 @@ function recordData(event: CapturedSseEvent): Record<string, unknown> | null {
     : null;
 }
 
+function isFailedToolResult(result: string): boolean {
+  const normalized = result.trim();
+  return !normalized || /^(?:error(?::|\s)|fetch (?:failed|error)|search (?:failed|error|rate limit exceeded)|no (?:search results|relevant memories) found|page fetched but no text content found|\[security\] tool output flagged|\[blocked\]|tool "[^"]+" (?:not found|is blocked))/i.test(normalized);
+}
+
 function successfulToolNames(events: readonly CapturedSseEvent[]): Set<string> {
   const names = new Set<string>();
   for (const event of events) {
@@ -117,7 +122,7 @@ function successfulToolNames(events: readonly CapturedSseEvent[]): Set<string> {
     const data = recordData(event);
     const name = typeof data?.name === 'string' ? data.name : '';
     const result = typeof data?.result === 'string' ? data.result : '';
-    if (!name || data?.isError === true || /no relevant memories found/i.test(result)) continue;
+    if (!name || data?.isError === true || isFailedToolResult(result)) continue;
     names.add(name);
   }
   return names;
@@ -144,35 +149,73 @@ function isMutationTool(name: string): boolean {
   return !READ_ONLY_EPHEMERAL_TOOLS.has(name) && MUTATION_TOOL.test(name);
 }
 
-function primaryUrlCount(response: string, allowedDomains: readonly string[]): number {
-  const unique = new Set<string>();
-  const urls = response.match(/https?:\/\/[^\s)\]}>"']+/gi) ?? [];
-  for (const raw of urls) {
-    try {
-      const url = new URL(raw.replace(/[.,;:]+$/, ''));
-      const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-      const pathname = url.pathname.toLowerCase().replace(/\/+$/, '');
-      const allowed = allowedDomains.some((domain) => {
-        const [allowedHostname, ...pathSegments] = domain.toLowerCase().split('/');
-        const allowedPath = pathSegments.length > 0 ? `/${pathSegments.join('/')}` : '';
-        return hostname === allowedHostname
-          && (!allowedPath || pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
-      });
-      if (allowed) {
-        const pathSegments = pathname.split('/').filter(Boolean);
-        const sourceIdentity = (
-          (hostname === 'github.com' || hostname === 'raw.githubusercontent.com')
-          && pathSegments.length >= 2
-        )
-          ? `github.com/${pathSegments[0]}/${pathSegments[1]}`
-          : url.toString();
-        unique.add(sourceIdentity);
-      }
-    } catch {
-      // A malformed URL is not objective source evidence.
-    }
+function primarySourceIdentity(raw: string, allowedDomains: readonly string[]): string | null {
+  try {
+    const url = new URL(raw.replace(/[.,;:]+$/, ''));
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    const pathname = url.pathname.toLowerCase().replace(/\/+$/, '');
+    const allowed = allowedDomains.some((domain) => {
+      const [allowedHostname, ...pathSegments] = domain.toLowerCase().split('/');
+      const allowedPath = pathSegments.length > 0 ? `/${pathSegments.join('/')}` : '';
+      return hostname === allowedHostname
+        && (!allowedPath || pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
+    });
+    if (!allowed) return null;
+
+    const pathSegments = pathname.split('/').filter(Boolean);
+    return (
+      (hostname === 'github.com' || hostname === 'raw.githubusercontent.com')
+      && pathSegments.length >= 2
+    )
+      ? `github.com/${pathSegments[0]}/${pathSegments[1]}`
+      : `${hostname}${pathname || '/'}`;
+  } catch {
+    return null;
   }
-  return unique.size;
+}
+
+function primaryUrlIdentities(response: string, allowedDomains: readonly string[]): Set<string> {
+  const unique = new Set<string>();
+  const urls = response.match(/https?:\/\/[^\s)\]}>"'`]+/gi) ?? [];
+  for (const raw of urls) {
+    const identity = primarySourceIdentity(raw, allowedDomains);
+    if (identity) unique.add(identity);
+  }
+  return unique;
+}
+
+function successfulPrimaryFetchIdentities(
+  events: readonly CapturedSseEvent[],
+  allowedDomains: readonly string[],
+): Set<string> {
+  let pendingUrl: string | null = null;
+  const successful = new Set<string>();
+  for (const event of events) {
+    const data = recordData(event);
+    if (event.event === 'tool') {
+      const input = data?.input && typeof data.input === 'object'
+        ? data.input as Record<string, unknown>
+        : null;
+      pendingUrl = data?.name === 'web_fetch' && typeof input?.url === 'string'
+        ? input.url
+        : null;
+      continue;
+    }
+    if ((event.event !== 'tool_result' && event.event !== 'tool_end') || data?.name !== 'web_fetch') {
+      continue;
+    }
+    const url = pendingUrl;
+    pendingUrl = null;
+    const result = typeof data.result === 'string' ? data.result.trim() : '';
+    if (
+      !url
+      || data.isError === true
+      || isFailedToolResult(result)
+    ) continue;
+    const identity = primarySourceIdentity(url, allowedDomains);
+    if (identity) successful.add(identity);
+  }
+  return successful;
 }
 
 function evaluateResponseRule(
@@ -190,8 +233,16 @@ function evaluateResponseRule(
       return evaluateVerifierContract(evidence.response).passed;
     case 'maxWords':
       return responseWordCount(evidence.response) <= rule.maxWords;
-    case 'primaryUrls':
-      return primaryUrlCount(evidence.response, rule.allowedDomains) >= rule.minimum;
+    case 'primaryEvidence': {
+      const cited = primaryUrlIdentities(evidence.response, rule.allowedDomains);
+      const fetched = successfulPrimaryFetchIdentities(evidence.sseEvents, rule.allowedDomains);
+      if ([...cited].filter(identity => fetched.has(identity)).length < rule.minimum) return false;
+      return (rule.requiredSourceGroups ?? []).every((group) => {
+        const groupCitations = primaryUrlIdentities(evidence.response, group);
+        const groupFetches = successfulPrimaryFetchIdentities(evidence.sseEvents, group);
+        return [...groupCitations].some(identity => groupFetches.has(identity));
+      });
+    }
     case 'codeValidation':
       return rule.language === 'python'
         && evidence.codeValidation.pythonSyntaxValid === true
