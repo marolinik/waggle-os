@@ -11,6 +11,11 @@ import { HIVE_MIND_MARKER } from '../src/adapter.js';
 
 const execFileAsync = promisify(execFile);
 
+function decodedHookCommand(command: string): string {
+  const match = /^%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command);
+  return match ? Buffer.from(match[1], 'base64').toString('utf16le') : command;
+}
+
 // This file's last test spawns the COMPILED CLI (dist/bin/codex-hooks.js).
 // dist/ is gitignored and a clean CI checkout runs no build step, so the
 // artifact is absent there — skip (don't fail) when it's missing. The other
@@ -153,8 +158,18 @@ describe('install (codex)', () => {
     const after = JSON.parse(await readFile(env.configPath, 'utf-8')) as {
       hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
     };
-    expect(after.hooks.SessionStart[0].hooks[0].command).toContain(`--cli-path "${cliPath}"`);
-    expect(after.hooks.Stop[0].hooks[0].command).toContain(`--cli-path "${cliPath}"`);
+    for (const command of [
+      after.hooks.SessionStart[0].hooks[0].command,
+      after.hooks.Stop[0].hooks[0].command,
+    ]) {
+      if (process.platform === 'win32') {
+        expect(command).toMatch(/^%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe .* -EncodedCommand [A-Za-z0-9+/=]+$/);
+        expect(command).not.toContain('"');
+      }
+      const payload = decodedHookCommand(command);
+      expect(payload).toContain('--cli-path');
+      expect(payload).toContain(cliPath);
+    }
 
     const pointer = JSON.parse(await readFile(result.pointerPath, 'utf-8')) as Record<string, unknown>;
     expect(pointer['cli_path']).toBe(cliPath);
