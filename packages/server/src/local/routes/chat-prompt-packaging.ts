@@ -1,4 +1,5 @@
 import {
+  CLOSED_WORLD_REWRITE_CONTRACT,
   composePersonaPrompt,
   type AgentPersona,
   type AssembledPrompt,
@@ -25,6 +26,12 @@ interface ChatPromptTailOptions {
   persona: AgentPersona | null;
   workspaceTone?: string;
   assembled: AssembledPrompt | null;
+}
+
+interface ClosedWorldChatPromptOptions {
+  persona: AgentPersona | null;
+  assembled: AssembledPrompt | null;
+  behavioralSpec: BehavioralSpecForPackaging;
 }
 
 const PROTECTED_TURN_SIGNAL = /\b(?:legal|law|lawyer|attorney|contract|clause|nda|gdpr|hipaa|liability|compliance|regulation|payroll|salary|wage|overtime|withholding|tax|medical|diagnosis|health|patient|private|privacy|confidential|secret|password|credential|token|api key|pii|ssn|code|function|class|module|api|debug|error|bug|promise|regex|sql|database|schema|query|git|docker|kubernetes|repository|research|analy[sz]e|review|compare|decide|plan|implement|build|deploy|verify|validate|audit|delete|remove|overwrite|publish|send|execute|install)\b/i;
@@ -94,4 +101,31 @@ export function composeChatPromptTail(prompt: string, options: ChatPromptTailOpt
     output += `\n\n## Response shape\n${scaffold}`;
   }
   return output;
+}
+
+/**
+ * Build the minimal system prompt for an explicitly closed-world rewrite.
+ * Any unexpected assembler section fails closed to a fresh persona-only base;
+ * the evidence-boundary contract is always the final system instruction.
+ */
+export function composeClosedWorldChatPrompt(options: ClosedWorldChatPromptOptions): string {
+  const allowedSections = new Set(['Persona', 'Closed-world rewrite']);
+  const safeAssembled = options.assembled?.debug.closedWorldRewrite === true
+    && options.assembled.debug.sectionsIncluded.every(section => allowedSections.has(section))
+    && options.assembled.system.endsWith(CLOSED_WORLD_REWRITE_CONTRACT)
+    ? options.assembled
+    : null;
+  const assembledWithoutContract = safeAssembled
+    ? safeAssembled.system.slice(0, -CLOSED_WORLD_REWRITE_CONTRACT.length).trimEnd()
+    : '';
+  const personaAlreadyAssembled = safeAssembled?.debug.sectionsIncluded.includes('Persona') ?? false;
+  const personaPrompt = composePersonaPrompt(
+    assembledWithoutContract,
+    personaAlreadyAssembled ? null : options.persona,
+  ).trim();
+  return [
+    personaPrompt,
+    behavioralRulesForPromptPackage(options.behavioralSpec, 'compact'),
+    CLOSED_WORLD_REWRITE_CONTRACT,
+  ].filter(Boolean).join('\n\n');
 }

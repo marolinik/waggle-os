@@ -16,7 +16,7 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
-import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
+import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, isClosedWorldRewriteRequest, type AssembledPrompt } from '@waggle/agent';
 
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
@@ -41,6 +41,7 @@ import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
   behavioralRulesForPromptPackage,
+  composeClosedWorldChatPrompt,
   composeChatPromptTail,
   selectChatPromptPackageMode,
   type ChatPromptPackageMode,
@@ -545,10 +546,20 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
      */
     assembled?: AssembledPrompt | null,
     packageMode: ChatPromptPackageMode = 'full',
+    closedWorldRewrite = false,
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
     const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
+
+    if (closedWorldRewrite) {
+      const closedWorldPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+      return composeClosedWorldChatPrompt({
+        persona: closedWorldPersona,
+        assembled: assembled ?? null,
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+      });
+    }
 
     // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona.
     // Skip cache entirely when assembled is provided — it reflects per-turn
@@ -1302,6 +1313,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (shouldRunAgentLoop) {
         // Use rerouted message if from a slash command, otherwise use original
         const agentMessage = reroutedMessage ?? message;
+        const closedWorldRewrite = isClosedWorldRewriteRequest(agentMessage);
 
         // Waggle Dance: emit agent start signal
         emitWaggleSignal({ type: 'agent:started', workspaceId: effectiveWorkspace, content: agentMessage.slice(0, 200) });
@@ -1331,7 +1343,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // ── Automatic memory recall ─────────────────────────────
-        if (!hasCustomRunner) {
+        if (!hasCustomRunner && !closedWorldRewrite) {
           try {
             sendEvent('step', { content: 'Recalling relevant memories...' });
             sendEvent('tool', { name: 'auto_recall', input: { query: agentMessage } });
@@ -1392,7 +1404,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // GEPA has no conversation context and will misinterpret them as standalone
         // vague requests, generating phantom instructions the user never intended.
         let gepaExpanded: string | null = null;
-        if (!hasCustomRunner && isFirstUserMessage) {
+        if (!hasCustomRunner && isFirstUserMessage && !closedWorldRewrite) {
           try {
             const optimizer = await getOptimizerService(server);
             if (optimizer) {
@@ -1418,7 +1430,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Build system prompt (with workspace path awareness + recalled memories)
         // GAP-006: Prepend ambiguity guard when user message is too brief/vague
-        const shouldCheckAmbiguity = isFirstUserMessage && !gepaExpanded; // Skip ambiguity check if GEPA already expanded
+        const shouldCheckAmbiguity = isFirstUserMessage && !gepaExpanded && !closedWorldRewrite; // Skip when expansion or an explicit output boundary already resolves intent
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
         // M2-7: Track session start on first user message
@@ -1431,7 +1443,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Template welcome context — inject on first message in a workspace with a template
         let templateContext = '';
-        if (!hasCustomRunner && isFirstUserMessage) {
+        if (!hasCustomRunner && isFirstUserMessage && !closedWorldRewrite) {
           const wsTemplateId = server.workspaceManager?.get(effectiveWorkspace)?.templateId;
           if (wsTemplateId) {
             const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
@@ -1714,6 +1726,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!hasCustomRunner && activePersona) {
           effectiveTools = applyPersonaToolFilter(effectiveTools, activePersona);
         }
+        if (closedWorldRewrite) {
+          effectiveTools = [];
+          spawnAvailableTools = [];
+        }
 
         // #17: schedule-originated turns must not schedule further work — an
         // ai_task turn re-invoking create_schedule could self-replicate, and
@@ -1734,7 +1750,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
         const externalToolNames = new Set<string>();
         const retrievedToolNames = new Set<string>();
-        if (!hasCustomRunner) {
+        if (!hasCustomRunner && !closedWorldRewrite) {
           effectiveTools = filterAvailableTools(effectiveTools);
 
           // Steal #6: relevance-gate connected MCP tools into the pool. This is
@@ -1817,7 +1833,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
           conservativeDefault: isLocalModel ? 8192 : 128_000,
         });
-        if (compressionModel
+        if (!closedWorldRewrite
+          && compressionModel
           && isLocalModel
           && needsCompression(history, { maxContextTokens, compressionThreshold: 0.5 })) {
           const verifiedCompressionModel = await resolveExplicitRoutableModel(server, compressionModel);
@@ -1826,7 +1843,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? verifiedCompressionModel
             : null;
         }
-        if (compressionModel) {
+        if (closedWorldRewrite) {
+          windowedMessages = [{ role: 'user', content: agentMessage }];
+        } else if (compressionModel) {
           // §B: size compaction to the actual model window so a local 4k/8k model
           // is not treated as a 128k model. Local (ollama/*) models with an unknown
           // window get a conservative 8k floor; non-local/unknown cloud ids we don't
@@ -2002,13 +2021,27 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             isAutomatedTurn,
             explicitCapabilityRequest,
             taskComplexity: turnTaskShape.complexity,
-            exclusiveSuppliedOnlyResponseContract: isExclusiveSuppliedOnlyResponseRequest(agentMessage),
+            exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
+              || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
           });
-          systemPrompt = ambiguityPrefix
-            + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled, packageMode)
-            + templateContext
-            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
-            + (assembled ? '' : recalledContext);
+          const packagedSystemPrompt = buildSystemPrompt(
+            sessionOrch,
+            workspacePath,
+            sessionId,
+            history.length,
+            effectiveWorkspace,
+            personaOverride,
+            assembled,
+            packageMode,
+            closedWorldRewrite,
+          );
+          systemPrompt = closedWorldRewrite
+            ? packagedSystemPrompt
+            : ambiguityPrefix
+              + packagedSystemPrompt
+              + templateContext
+              + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
+              + (assembled ? '' : recalledContext);
           log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
         }
 

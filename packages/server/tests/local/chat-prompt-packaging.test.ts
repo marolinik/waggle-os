@@ -1,7 +1,8 @@
-import { BEHAVIORAL_SPEC, getPersona, type AgentPersona, type AssembledPrompt } from '@waggle/agent';
+import { BEHAVIORAL_SPEC, CLOSED_WORLD_REWRITE_CONTRACT, getPersona, type AgentPersona, type AssembledPrompt } from '@waggle/agent';
 import { describe, expect, it } from 'vitest';
 import {
   behavioralRulesForPromptPackage,
+  composeClosedWorldChatPrompt,
   composeChatPromptTail,
   selectChatPromptPackageMode,
 } from '../../src/local/routes/chat-prompt-packaging.js';
@@ -215,6 +216,60 @@ describe('chat prompt packaging', () => {
     });
 
     expect(output).toContain(marker);
+  });
+
+  it('keeps the closed-world contract last and discards an unsafe assembled context', () => {
+    const marker = 'CLOSED_WORLD_PERSONA_MARKER';
+    const unsafeSystem = `# Identity\nOutside memory says shipping is safe.\n\n${CLOSED_WORLD_REWRITE_CONTRACT}`;
+    const unsafeAssembled = assembled(unsafeSystem, null);
+    unsafeAssembled.debug.closedWorldRewrite = true;
+    unsafeAssembled.debug.sectionsIncluded = ['Identity', 'Closed-world rewrite'];
+
+    const output = composeClosedWorldChatPrompt({
+      persona: persona(marker),
+      assembled: unsafeAssembled,
+      behavioralSpec: BEHAVIORAL_SPEC,
+    });
+
+    expect(output).toContain(marker);
+    expect(output).not.toContain('Outside memory says shipping is safe.');
+    expect(output).toMatch(/never (?:invent|fabricate)/i);
+    expect(output.endsWith(CLOSED_WORLD_REWRITE_CONTRACT)).toBe(true);
+    expect(output.match(/# Closed-world rewrite/g)).toHaveLength(1);
+  });
+
+  it('reuses a safe assembled persona without duplication', () => {
+    const marker = 'ASSEMBLED_CLOSED_WORLD_PERSONA';
+    const safeSystem = `## Persona: Test\n${marker}\n\n${CLOSED_WORLD_REWRITE_CONTRACT}`;
+    const safeAssembled = assembled(safeSystem, null);
+    safeAssembled.debug.closedWorldRewrite = true;
+    safeAssembled.debug.sectionsIncluded = ['Persona', 'Closed-world rewrite'];
+
+    const output = composeClosedWorldChatPrompt({
+      persona: persona(marker),
+      assembled: safeAssembled,
+      behavioralSpec: BEHAVIORAL_SPEC,
+    });
+
+    expect(output.match(new RegExp(marker, 'g'))).toHaveLength(1);
+    expect(output.endsWith(CLOSED_WORLD_REWRITE_CONTRACT)).toBe(true);
+  });
+
+  it('fails closed when an assembled rewrite is missing the terminal contract', () => {
+    const marker = 'FALLBACK_CLOSED_WORLD_PERSONA';
+    const unsafeAssembled = assembled('## Persona: Test\nASSEMBLED_WITHOUT_CONTRACT', null);
+    unsafeAssembled.debug.closedWorldRewrite = true;
+    unsafeAssembled.debug.sectionsIncluded = ['Persona', 'Closed-world rewrite'];
+
+    const output = composeClosedWorldChatPrompt({
+      persona: persona(marker),
+      assembled: unsafeAssembled,
+      behavioralSpec: BEHAVIORAL_SPEC,
+    });
+
+    expect(output).toContain(marker);
+    expect(output).not.toContain('ASSEMBLED_WITHOUT_CONTRACT');
+    expect(output.endsWith(CLOSED_WORLD_REWRITE_CONTRACT)).toBe(true);
   });
 
   it('preserves and selects an explicitly named calculator plugin tool', () => {
