@@ -130,6 +130,8 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     onSkillDistillationFire,
     turnId,
   } = args;
+  let nextState = state;
+  let contentSuffix: string | undefined;
 
   // ── D3 verification-before-completion gate ──
   if (
@@ -142,31 +144,30 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
         stage: 'agent-loop.verification-gate.disclosed',
         contentChars: content.length,
       });
+      contentSuffix = VERIFICATION_NO_TOOL_DISCLOSURE;
+      nextState = { ...state, verificationCorrectionUsed: true };
+    } else {
+      const systemMessage = messages.find(message => message.role === 'system');
+      const internalDirective = `\n\n# Internal verification correction\n${VERIFICATION_GATE_DIRECTIVE}`;
+      if (systemMessage && typeof systemMessage.content === 'string') {
+        systemMessage.content += internalDirective;
+      } else {
+        messages.unshift({ role: 'system', content: internalDirective.trim() });
+      }
+      logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
       return {
-        fired: false,
-        contentSuffix: VERIFICATION_NO_TOOL_DISCLOSURE,
+        fired: true,
         state: { ...state, verificationCorrectionUsed: true },
       };
     }
-    const systemMessage = messages.find(message => message.role === 'system');
-    const internalDirective = `\n\n# Internal verification correction\n${VERIFICATION_GATE_DIRECTIVE}`;
-    if (systemMessage && typeof systemMessage.content === 'string') {
-      systemMessage.content += internalDirective;
-    } else {
-      messages.unshift({ role: 'system', content: internalDirective.trim() });
-    }
-    logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
-    return {
-      fired: true,
-      state: { ...state, verificationCorrectionUsed: true },
-    };
   }
 
   // ── D1 Hermes-parity closed learning loop (mechanical closure) ──
-  if (enableSkillDistillation && !state.skillDistillationUsed) {
-    const distillPlan = planSkillDistillation(toolsUsed, content);
+  if (enableSkillDistillation && !nextState.skillDistillationUsed) {
+    const acceptedContent = `${content}${contentSuffix ?? ''}`;
+    const distillPlan = planSkillDistillation(toolsUsed, acceptedContent);
     if (distillPlan) {
-      messages.push({ role: 'assistant', content });
+      messages.push({ role: 'assistant', content: acceptedContent });
       messages.push({ role: 'user', content: distillPlan.directive });
       logTurnEvent(turnId, { stage: 'agent-loop.skill-distillation.fired', toolCalls: toolsUsed.length });
 
@@ -186,15 +187,16 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
 
       return {
         fired: true,
+        contentSuffix,
         state: {
-          ...state,
+          ...nextState,
           skillDistillationUsed: true,
-          preservedAnswerForDistillation: content,
+          preservedAnswerForDistillation: acceptedContent,
         },
       };
     }
   }
 
   // No gate fired — caller can accept completion.
-  return { fired: false, state };
+  return { fired: false, state: nextState, contentSuffix };
 }

@@ -6,6 +6,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runAgentLoop, type AgentLoopConfig } from '../src/agent-loop.js';
 import {
+  isVerificationToolName,
   VERIFICATION_GATE_DIRECTIVE,
   VERIFICATION_NO_TOOL_DISCLOSURE,
 } from '../src/verification-gate.js';
@@ -50,6 +51,19 @@ const runTests: ToolDefinition = {
   parameters: { type: 'object', properties: {}, required: [] },
   execute: async () => 'tests passed',
 };
+
+describe('verification tool classification', () => {
+  it.each([
+    ['run_tests', true],
+    ['bash', true],
+    ['lsp_diagnostics', true],
+    ['inspect_file', false],
+    ['execute_action', false],
+    ['create_plan', false],
+  ])('classifies %s as %s', (name, expected) => {
+    expect(isVerificationToolName(name)).toBe(expected);
+  });
+});
 
 describe('D3 — verification-before-completion gate (structural, locked)', () => {
   it('does NOT accept an unverified completion claim — forces one corrective turn', async () => {
@@ -138,6 +152,21 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
     const result = await runAgentLoop(cfg(fetch, { tools: [createPlan] }));
 
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe(`${claim}${VERIFICATION_NO_TOOL_DISCLOSURE}`);
+    expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+  });
+
+  it('uses tools exposed on the current request, not configured tools withheld for synthesis', async () => {
+    const claim = 'All tests pass and the build succeeds.';
+    const fetch = mockFetch([claim]);
+    const result = await runAgentLoop(cfg(fetch, {
+      tools: [runTests],
+      maxToolRounds: 0,
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.tools).toBeUndefined();
     expect(result.content).toBe(`${claim}${VERIFICATION_NO_TOOL_DISCLOSURE}`);
     expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
   });

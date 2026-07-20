@@ -453,7 +453,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       messages: requestMessages,
       max_tokens: outputTokenLimit,
     };
-    if (turnOpenAiTools.length > 0 && !synthesisForced) {
+    const currentRequestToolNames = synthesisForced
+      ? []
+      : turnOpenAiTools.map(tool => tool.function.name);
+    if (currentRequestToolNames.length > 0) {
       body.tools = turnOpenAiTools;
     }
     if (stream) {
@@ -619,7 +622,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const gate = await maybeFireCompletionGate({
         content,
         toolsUsed,
-        availableToolNames: tools.map(tool => tool.name),
+        availableToolNames: currentRequestToolNames,
         messages,
         userRequest,
         state: gateState,
@@ -629,20 +632,22 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         turnId,
       });
       gateState = gate.state;
-      if (gate.fired) continue;
+      if (gate.fired) {
+        if (stream && onToken && gate.contentSuffix) onToken(gate.contentSuffix);
+        continue;
+      }
 
       const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
+      // Once D1 has fired, surface the preserved user answer instead of the
+      // internal skill-distillation summary produced by the current turn.
+      const finalContent = gateState.preservedAnswerForDistillation ?? acceptedContent;
 
       // In non-streaming mode, emit the full content as a single token
-      if (!stream && onToken && acceptedContent) {
-        onToken(acceptedContent);
+      if (!stream && onToken && finalContent) {
+        onToken(finalContent);
       } else if (stream && onToken && gate.contentSuffix) {
         onToken(gate.contentSuffix);
       }
-      // Issue #4 — once D1 has fired, the user's answer was captured before
-      // the distillation turn ran; the current `content` is the skill
-      // summary, NOT the answer. Surface the preserved answer instead.
-      const finalContent = gateState.preservedAnswerForDistillation ?? acceptedContent;
       logTurnEvent(turnId, {
         stage: 'agent-loop.exit',
         contentChars: finalContent.length,

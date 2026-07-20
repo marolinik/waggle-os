@@ -21,11 +21,29 @@
  * so the bar to fire is deliberately high.
  */
 
-/** Tool-name fragments that count as actually running a check. */
-const VERIFICATION_TOOL = /test|build|\brun\b|run_|verif|lint|typecheck|tsc|pytest|jest|vitest|exec|bash|compile|spec/i;
+/** Exact general-purpose tools that can run or inspect a real check. */
+const VERIFICATION_TOOL_EXACT = new Set([
+  'bash',
+  'shell',
+  'terminal',
+  'powershell',
+  'cmd',
+  'run',
+  'run_code',
+  'run_harness',
+  'exec',
+  'exec_command',
+  'execute_command',
+  'cli_execute',
+  'lsp_diagnostics',
+]);
+
+/** Verification-specific whole name segments; avoids `inspect_*` matching `spec`. */
+const VERIFICATION_TOOL_SEGMENT = /(?:^|[_:-])(?:tests?|build|verification?|verify|lint|typecheck|tsc|pytest|jest|vitest|compile|diagnostics?|spec)(?:$|[_:-])/i;
 
 export function isVerificationToolName(name: string): boolean {
-  return VERIFICATION_TOOL.test(name);
+  const normalized = name.trim().toLowerCase();
+  return VERIFICATION_TOOL_EXACT.has(normalized) || VERIFICATION_TOOL_SEGMENT.test(normalized);
 }
 
 /** Explicit "the work is verified / passing / working" success assertions. */

@@ -13,7 +13,10 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { runAgentLoop, type AgentLoopConfig } from '../src/agent-loop.js';
-import { VERIFICATION_GATE_DIRECTIVE } from '../src/verification-gate.js';
+import {
+  VERIFICATION_GATE_DIRECTIVE,
+  VERIFICATION_NO_TOOL_DISCLOSURE,
+} from '../src/verification-gate.js';
 import { planSkillDistillation } from '../src/skill-distillation.js';
 import type { ToolDefinition } from '../src/tools.js';
 
@@ -46,12 +49,13 @@ const runTests: ToolDefinition = {
 // Distinct args — identical calls would (correctly) trip the LoopGuard.
 const fiveCalls = [1, 2, 3, 4, 5].map(n => ({ id: `c${n}`, function: { name: 'probe', arguments: JSON.stringify({ step: n }) } }));
 
-function cfg(fetch: ReturnType<typeof mockFetch>): AgentLoopConfig {
+function cfg(fetch: ReturnType<typeof mockFetch>, over: Partial<AgentLoopConfig> = {}): AgentLoopConfig {
   // BOTH gates default-on — the whole point of this fixture.
   return {
     litellmUrl: 'http://x', litellmApiKey: 'k', model: 'm', systemPrompt: 's',
     tools: [probe, runTests], messages: [{ role: 'user', content: 'do the multi-step task' }],
     fetch: fetch as unknown as typeof globalThis.fetch,
+    ...over,
   };
 }
 
@@ -66,7 +70,8 @@ describe('premium contract — D3 + D1 compose at the completion boundary (stand
       { content: 'Distilled the reusable skill.' }, // both gates spent → loop returns
     ]);
 
-    const result = await runAgentLoop(cfg(fetch));
+    const emitted: string[] = [];
+    const result = await runAgentLoop(cfg(fetch, { onToken: token => emitted.push(token) }));
 
     expect(fetch).toHaveBeenCalledTimes(4);
     const body3 = JSON.parse((fetch.mock.calls[2][1] as RequestInit).body as string).messages as Array<{ role: string; content: string }>;
@@ -86,6 +91,30 @@ describe('premium contract — D3 + D1 compose at the completion boundary (stand
     // D1's distillation runs as a side-effect that does NOT overwrite the
     // delivered answer with the skill summary.
     expect(result.content).toBe(honest);
+    expect(emitted).toEqual([honest]);
+    expect(result.toolsUsed.length).toBe(5);
+  });
+
+  it('adds local disclosure and still runs D1 when no verification tool is available', async () => {
+    const unverified = 'All tests pass and the build succeeds.';
+    const onSkillDistillationFire = vi.fn();
+    const fetch = mockFetch([
+      { content: null, tool_calls: fiveCalls },
+      { content: unverified },
+      { content: 'Distilled the reusable skill.' },
+    ]);
+
+    const result = await runAgentLoop(cfg(fetch, {
+      tools: [probe],
+      onSkillDistillationFire,
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const body3 = JSON.parse((fetch.mock.calls[2][1] as RequestInit).body as string).messages as Array<{ role: string; content: string }>;
+    const accepted = `${unverified}${VERIFICATION_NO_TOOL_DISCLOSURE}`;
+    expect(body3.some(message => message.role === 'assistant' && message.content === accepted)).toBe(true);
+    expect(onSkillDistillationFire).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe(accepted);
     expect(result.toolsUsed.length).toBe(5);
   });
 
