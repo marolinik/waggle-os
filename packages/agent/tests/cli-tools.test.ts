@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { createCliTools } from '../src/cli-tools.js';
 import { resolveToolCommandInvocationFromPath } from '../src/tool-command.js';
 
+// The Windows supervisor gives taskkill /T /F up to 5s to finish walking the
+// process tree. Keep the orphan sentinel beyond that documented cleanup budget.
+const WINDOWS_DESCENDANT_SENTINEL_MS = 6_500;
+const WINDOWS_DESCENDANT_ASSERT_MS = 7_000;
+
 describe('Windows CLI command resolution', () => {
   it('resolves npm 11 shims without cmd.exe and isolates the lookup environment', async () => {
     let lookupEnv: NodeJS.ProcessEnv | undefined;
@@ -242,7 +247,7 @@ describe('cli_execute', () => {
 
   it.runIf(process.platform === 'win32')('terminates descendants when an allowed CLI times out', async () => {
     const marker = join(tmpdir(), `waggle-cli-orphan-${process.pid}-${Date.now()}.txt`);
-    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), 1200)`;
+    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), ${WINDOWS_DESCENDANT_SENTINEL_MS})`;
     const parentScript = [
       'const { spawn } = require("node:child_process")',
       `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { detached: true, stdio: 'ignore' })`,
@@ -260,16 +265,16 @@ describe('cli_execute', () => {
       }));
       expect(result.success).toBe(false);
       expect(result.error).toContain('timeout');
-      await new Promise(resolve => setTimeout(resolve, 1650));
+      await new Promise(resolve => setTimeout(resolve, WINDOWS_DESCENDANT_ASSERT_MS));
       expect(existsSync(marker)).toBe(false);
     } finally {
       rmSync(marker, { force: true });
     }
-  });
+  }, 20_000);
 
   it.runIf(process.platform === 'win32')('terminates descendants before rejecting oversized CLI output', async () => {
     const marker = join(tmpdir(), `waggle-cli-maxbuffer-orphan-${process.pid}-${Date.now()}.txt`);
-    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), 1200)`;
+    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), ${WINDOWS_DESCENDANT_SENTINEL_MS})`;
     const parentScript = [
       'const { spawn } = require("node:child_process")',
       `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { detached: true, stdio: 'ignore' })`,
@@ -290,12 +295,12 @@ describe('cli_execute', () => {
       expect(result.exitCode).toBe(-1);
       expect(result.error).toContain('maxBuffer');
       expect(result.stdout.length).toBeLessThanOrEqual(1024 * 1024);
-      await new Promise(resolve => setTimeout(resolve, 1650));
+      await new Promise(resolve => setTimeout(resolve, WINDOWS_DESCENDANT_ASSERT_MS));
       expect(existsSync(marker)).toBe(false);
     } finally {
       rmSync(marker, { force: true });
     }
-  }, 10_000);
+  }, 20_000);
 
   it.runIf(process.platform === 'win32')('terminates descendants on time while the main event loop is blocked', async () => {
     const suffix = `${process.pid}-${Date.now()}`;
@@ -304,7 +309,7 @@ describe('cli_execute', () => {
     const childScript = [
       `const fs = require('node:fs')`,
       `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
-      `setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'orphan'), 1600)`,
+      `setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'orphan'), ${WINDOWS_DESCENDANT_SENTINEL_MS})`,
       'setTimeout(() => {}, 30000)',
     ].join(';');
     const parentScript = [
@@ -326,7 +331,7 @@ describe('cli_execute', () => {
       }
       expect(existsSync(ready)).toBe(true);
 
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_600);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, WINDOWS_DESCENDANT_ASSERT_MS);
       const result = JSON.parse(await execution);
 
       expect(result.success).toBe(false);
@@ -336,7 +341,7 @@ describe('cli_execute', () => {
       rmSync(ready, { force: true });
       rmSync(marker, { force: true });
     }
-  }, 15_000);
+  }, 20_000);
 
   it.runIf(process.platform === 'win32')('preserves CLI success when completion delivery is event-loop blocked', async () => {
     const suffix = `${process.pid}-${Date.now()}`;
