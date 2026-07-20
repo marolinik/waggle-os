@@ -1,6 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Importance, MemoryFrame } from '@waggle/core';
-import { FrameStore, HarvestSourceStore, MindErasure, RawArchive, SessionStore, SuppressionStore, readArchiveUids } from '@waggle/core';
+import {
+  evaluateExternalMemoryIngress,
+  FrameStore,
+  HarvestSourceStore,
+  MindErasure,
+  RawArchive,
+  readArchiveUids,
+  SessionStore,
+  SuppressionStore,
+} from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
 import { redactSkillContent } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -46,7 +55,7 @@ const VALID_IMPORTANCE: readonly Importance[] = [
 
 // Defense-in-depth caps on free-form metadata (S04 review LOW). The 1 MiB Fastify
 // body limit already bounds the request, but capping here keeps the metadata blob
-// small and coerces non-string array members to strings (matching read-back).
+// small after route-level runtime shape validation.
 const MAX_TITLE_LEN = 500;
 const MAX_TAGS = 30;
 const MAX_TAG_LEN = 80;
@@ -55,6 +64,20 @@ const MAX_EVIDENCE_ITEM_LEN = 2000;
 const clampStr = (s: unknown, max: number): string => String(s ?? '').slice(0, max);
 const clampStrArray = (a: unknown, maxItems: number, maxLen: number): string[] =>
   Array.isArray(a) ? a.slice(0, maxItems).map((x) => clampStr(x, maxLen)) : [];
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string');
+
+function isSafeMemoryIngress(
+  content: string,
+  title?: string,
+  tags?: string[],
+  evidence?: string[],
+): boolean {
+  return evaluateExternalMemoryIngress({
+    title,
+    content: [content, ...(tags ?? []), ...(evidence ?? [])].join('\n'),
+  }).action === 'allow';
+}
 
 const asKind = (v: unknown): MemoryKind | undefined =>
   MEMORY_KINDS.includes(v as MemoryKind) ? (v as MemoryKind) : undefined;
@@ -262,10 +285,18 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     };
   }>('/api/memory', async (request, reply) => {
     const b = request.body ?? {};
-    if (!b.content || !b.content.trim()) {
+    if (typeof b.content !== 'string' || !b.content.trim()) {
       return reply.status(400).send({ error: 'content is required' });
     }
+    if (b.tags !== undefined && !isStringArray(b.tags)) {
+      return reply.status(400).send({ error: 'tags must be an array of strings' });
+    }
     const content = sanitizeFrameContent(b.content.trim());
+    const title = b.title ? clampStr(b.title, MAX_TITLE_LEN) : undefined;
+    const tags = b.tags !== undefined ? clampStrArray(b.tags, MAX_TAGS, MAX_TAG_LEN) : undefined;
+    if (!isSafeMemoryIngress(content, title, tags)) {
+      return reply.status(400).send({ error: 'Memory content could not be saved.' });
+    }
     const workspace = b.workspace ?? b.workspaceId;
 
     let targetDb = workspace ? server.agentState.getWorkspaceMindDb(workspace) : undefined;
@@ -293,8 +324,8 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       kind: asKind(b.kind) ?? 'fact',
       scope: asScope(b.scope) ?? (mind === 'workspace' ? 'workspace' : 'personal'),
       status: 'active' satisfies MemoryStatus,
-      ...(b.title ? { title: clampStr(b.title, MAX_TITLE_LEN) } : {}),
-      ...(Array.isArray(b.tags) ? { tags: clampStrArray(b.tags, MAX_TAGS, MAX_TAG_LEN) } : {}),
+      ...(title ? { title } : {}),
+      ...(tags ? { tags } : {}),
       ...(typeof b.confidence === 'number' ? { confidence: b.confidence } : {}),
     };
     frames.setMetadata(frame.id, JSON.stringify(meta));
@@ -326,6 +357,15 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     const frameId = parseInt(request.params.id, 10);
     if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
     const b = request.body ?? {};
+    if (b.content !== undefined && typeof b.content !== 'string') {
+      return reply.status(400).send({ error: 'content must be a string' });
+    }
+    if (b.tags !== undefined && !isStringArray(b.tags)) {
+      return reply.status(400).send({ error: 'tags must be an array of strings' });
+    }
+    if (b.evidence !== undefined && !isStringArray(b.evidence)) {
+      return reply.status(400).send({ error: 'evidence must be an array of strings' });
+    }
     if (b.importance !== undefined && !asImportance(b.importance)) {
       return reply.status(400).send({ error: `Invalid importance "${b.importance}"` });
     }
@@ -343,18 +383,33 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       const existing = c.store.getById(frameId);
       if (!existing) continue;
 
+      const merged = parseFrameMetadata(existing.metadata);
+      const content = b.content !== undefined ? sanitizeFrameContent(b.content) : existing.content;
+      const title = b.title !== undefined
+        ? clampStr(b.title, MAX_TITLE_LEN)
+        : typeof merged.title === 'string' ? merged.title : undefined;
+      const tags = b.tags !== undefined
+        ? clampStrArray(b.tags, MAX_TAGS, MAX_TAG_LEN)
+        : stringArray(merged.tags);
+      const evidence = b.evidence !== undefined
+        ? clampStrArray(b.evidence, MAX_EVIDENCE_ITEMS, MAX_EVIDENCE_ITEM_LEN)
+        : stringArray(merged.evidence);
+      if ((b.content !== undefined || b.importance !== undefined || b.title !== undefined
+        || b.tags !== undefined || b.evidence !== undefined)
+        && !isSafeMemoryIngress(content, title, tags, evidence)) {
+        return reply.status(400).send({ error: 'Memory content could not be saved.' });
+      }
+
       if (b.content !== undefined || b.importance !== undefined) {
-        const content = b.content !== undefined ? sanitizeFrameContent(b.content) : existing.content;
         c.store.update(frameId, content, asImportance(b.importance));
       }
 
-      const merged = parseFrameMetadata(c.store.getById(frameId)?.metadata);
       if (b.kind !== undefined) merged.kind = b.kind;
       if (b.scope !== undefined) merged.scope = b.scope;
-      if (b.tags !== undefined) merged.tags = clampStrArray(b.tags, MAX_TAGS, MAX_TAG_LEN);
+      if (b.tags !== undefined) merged.tags = tags;
       if (b.status !== undefined) merged.status = b.status;
-      if (b.title !== undefined) merged.title = clampStr(b.title, MAX_TITLE_LEN);
-      if (b.evidence !== undefined) merged.evidence = clampStrArray(b.evidence, MAX_EVIDENCE_ITEMS, MAX_EVIDENCE_ITEM_LEN);
+      if (b.title !== undefined) merged.title = title;
+      if (b.evidence !== undefined) merged.evidence = evidence;
       merged.updatedAt = new Date().toISOString();
       c.store.setMetadata(frameId, JSON.stringify(merged));
 
@@ -731,7 +786,10 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     Body: { ids?: Array<string | number>; workspace?: string; workspaceId?: string; title?: string; mind?: string };
   }>('/api/memory/merge', async (request, reply) => {
     const b = request.body ?? {};
-    const ids = (b.ids ?? []).map((x) => parseInt(String(x), 10)).filter((n) => !isNaN(n));
+    if (!Array.isArray(b.ids)) {
+      return reply.status(400).send({ error: 'merge requires at least 2 memory ids' });
+    }
+    const ids = b.ids.map((x) => parseInt(String(x), 10)).filter((n) => !isNaN(n));
     if (ids.length < 2) {
       return reply.status(400).send({ error: 'merge requires at least 2 memory ids' });
     }
@@ -757,6 +815,10 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     }
 
     const mergedContent = sanitizeFrameContent(frames.map((f) => f.content).join('\n\n---\n\n'));
+    const mergedTitle = b.title ? clampStr(b.title, MAX_TITLE_LEN) : undefined;
+    if (!isSafeMemoryIngress(mergedContent, mergedTitle)) {
+      return reply.status(400).send({ error: 'Memory content could not be saved.' });
+    }
     const targetDb =
       chosen.mind === 'workspace' && workspace
         ? server.agentState.getWorkspaceMindDb(workspace)
@@ -782,7 +844,7 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       scope: asScope(firstMeta.scope) ?? (chosen.mind === 'workspace' ? 'workspace' : 'personal'),
       status: 'active' satisfies MemoryStatus,
       relatedMemoryIds: ids.map(String),
-      ...(b.title ? { title: b.title } : {}),
+      ...(mergedTitle ? { title: mergedTitle } : {}),
     };
     chosen.store.setMetadata(newFrame.id, JSON.stringify(mergedMeta));
 

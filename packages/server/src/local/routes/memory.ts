@@ -1,6 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { SearchScope, Importance, FrameSource, MemoryFrame } from '@waggle/core';
-import { FrameStore, SessionStore, KnowledgeGraph, AwarenessLayer } from '@waggle/core';
+import {
+  AwarenessLayer,
+  evaluateExternalMemoryIngress,
+  FrameStore,
+  KnowledgeGraph,
+  SessionStore,
+} from '@waggle/core';
 import { extractEntities } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
 
@@ -10,23 +16,128 @@ const QUICK_CAPTURE_KINDS: readonly QuickCaptureKind[] = ['note', 'task', 'link'
 
 /**
  * M4: Sanitize memory frame content to prevent stored XSS.
- * Strips script tags, event handlers, and dangerous URI schemes.
+ * Removes script blocks and retains only a small formatting-tag allowlist,
+ * without attributes. Unknown tags are escaped as text.
  * Preserves normal text and markdown formatting.
  *
  * Exported so the Memory-Center route plugin (`memory-center.ts`) reuses the
  * SAME filter — duplicating a security primitive across two files is a drift
  * risk (a fix to one would silently miss the other).
  */
+const SAFE_MEMORY_HTML_TAGS = new Set([
+  'a', 'b', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'h1', 'h2', 'h3',
+  'h4', 'h5', 'h6', 'hr', 'i', 'li', 'ol', 'p', 'pre', 's', 'span', 'strong',
+  'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul',
+]);
+
+function foldAsciiCase(value: string): string {
+  return value.replace(/[A-Z]/g, char => char.toLowerCase());
+}
+
+function findMarkupEnd(value: string, start: number): number {
+  let quote: '"' | "'" | undefined;
+  for (let index = start; index < value.length; index++) {
+    const char = value[index];
+    if (quote) {
+      if (char === quote) quote = undefined;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '>') {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function escapeMarkup(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function findClosingScript(value: string, folded: string, start: number): number {
+  let cursor = start;
+  while (cursor < value.length) {
+    const close = folded.indexOf('</script', cursor);
+    if (close === -1) return -1;
+    let nameEnd = close + 8;
+    while (/[a-z0-9:_-]/.test(folded[nameEnd] ?? '')) nameEnd++;
+    if (nameEnd !== close + 8) {
+      cursor = nameEnd;
+      continue;
+    }
+    return findMarkupEnd(value, nameEnd);
+  }
+  return -1;
+}
+
 export function sanitizeFrameContent(content: string): string {
-  return content
-    // Remove <script> tags and their content
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    // Remove event handler attributes (onclick, onerror, onload, etc.)
-    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    // Remove javascript: and data: URI schemes in href/src attributes
-    .replace(/(href|src)\s*=\s*["']?\s*(?:javascript|data|vbscript)\s*:/gi, '$1="')
-    // Remove standalone <iframe>, <object>, <embed> tags
-    .replace(/<\s*\/?\s*(?:iframe|object|embed|form|input|textarea|button)\b[^>]*>/gi, '');
+  // Scan monotonically. Regexes that search for a closing delimiter from every
+  // possible opening tag become quadratic on near-limit malformed input.
+  const folded = foldAsciiCase(content);
+  const chunks: string[] = [];
+  let cursor = 0;
+  while (cursor < content.length) {
+    const open = content.indexOf('<', cursor);
+    if (open === -1) {
+      chunks.push(content.slice(cursor));
+      break;
+    }
+    chunks.push(content.slice(cursor, open));
+
+    if (folded.startsWith('<!--', open)) {
+      const commentEnd = folded.indexOf('-->', open + 4);
+      if (commentEnd === -1) break;
+      cursor = commentEnd + 3;
+      continue;
+    }
+
+    let nameStart = open + 1;
+    let closing = false;
+    if (folded[nameStart] === '/') {
+      closing = true;
+      nameStart++;
+    }
+    if (!/[a-z]/.test(folded[nameStart] ?? '')) {
+      const specialEnd = (folded[nameStart] === '!' || folded[nameStart] === '?')
+        ? findMarkupEnd(content, nameStart + 1)
+        : -1;
+      if (specialEnd >= 0) {
+        chunks.push(escapeMarkup(content.slice(open, specialEnd + 1)));
+        cursor = specialEnd + 1;
+      } else {
+        chunks.push('&lt;');
+        cursor = open + 1;
+      }
+      continue;
+    }
+
+    let nameEnd = nameStart;
+    while (/[a-z0-9:_-]/.test(folded[nameEnd] ?? '')) nameEnd++;
+    const tagName = folded.slice(nameStart, nameEnd);
+    const tagEnd = findMarkupEnd(content, nameEnd);
+    if (tagEnd === -1) {
+      if (!closing && tagName === 'script') break;
+      chunks.push(escapeMarkup(content.slice(open)));
+      break;
+    }
+
+    if (!closing && tagName === 'script') {
+      const closeEnd = findClosingScript(content, folded, tagEnd + 1);
+      if (closeEnd === -1) break;
+      cursor = closeEnd + 1;
+      continue;
+    }
+
+    if (SAFE_MEMORY_HTML_TAGS.has(tagName)) {
+      chunks.push(closing ? `</${tagName}>` : `<${tagName}>`);
+    } else {
+      chunks.push(escapeMarkup(content.slice(open, tagEnd + 1)));
+    }
+    cursor = tagEnd + 1;
+  }
+  return chunks.join('');
 }
 
 /** Normalize SQLite snake_case MemoryFrame fields to camelCase UI Frame shape. */
@@ -272,11 +383,18 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     // P0-4: Accept both 'workspace' and 'workspaceId'
     const { content: rawContent, workspace: ws, workspaceId: wsId, importance, source } = request.body ?? {};
     const workspace = ws ?? wsId;
-    if (!rawContent) {
+    if (typeof rawContent !== 'string' || !rawContent) {
       return reply.status(400).send({ error: 'content is required' });
     }
     // M4: Sanitize content to prevent stored XSS
     const content = sanitizeFrameContent(rawContent);
+    // This is the exact full projection that can reach FrameStore, FTS, entity
+    // extraction, and audit persistence. Reject it before any of those stores
+    // (including the otherwise-created active session) can be mutated.
+    const ingressDecision = evaluateExternalMemoryIngress({ content });
+    if (ingressDecision.action !== 'allow') {
+      return reply.status(400).send({ error: 'Memory content could not be saved.' });
+    }
 
     const VALID_IMPORTANCE: readonly Importance[] = ['critical', 'important', 'normal', 'temporary', 'deprecated'];
     const imp: Importance = VALID_IMPORTANCE.includes(importance as Importance)
@@ -494,12 +612,15 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
 
     const { content: rawContent, importance } = request.body ?? {};
-    if (!rawContent) {
+    if (typeof rawContent !== 'string' || !rawContent) {
       return reply.status(400).send({ error: 'content is required' });
     }
 
     // M4: Sanitize content to prevent stored XSS
     const content = sanitizeFrameContent(rawContent);
+    if (evaluateExternalMemoryIngress({ content }).action !== 'allow') {
+      return reply.status(400).send({ error: 'Memory content could not be saved.' });
+    }
 
     // D6: Validate importance if provided
     const VALID_IMPORTANCE: readonly Importance[] = ['critical', 'important', 'normal', 'temporary', 'deprecated'];
@@ -634,7 +755,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     Body: { kind?: string; content?: string; workspaceId?: string };
   }>('/api/quick-capture', async (request, reply) => {
     const { kind: rawKind, content: rawContent, workspaceId } = request.body ?? {};
-    if (!rawContent || !rawContent.trim()) {
+    if (typeof rawContent !== 'string' || !rawContent.trim()) {
       return reply.status(400).send({ error: 'content is required' });
     }
     const kind: QuickCaptureKind = QUICK_CAPTURE_KINDS.includes(rawKind as QuickCaptureKind)
@@ -643,6 +764,9 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
 
     // M4: Sanitize content to prevent stored XSS (same path as /memory/frames).
     const content = sanitizeFrameContent(rawContent.trim());
+    if (evaluateExternalMemoryIngress({ content }).action !== 'allow') {
+      return reply.status(400).send({ error: 'Memory content could not be saved.' });
+    }
 
     // Resolve the target mind — workspace when provided + open, else personal.
     let targetDb;
