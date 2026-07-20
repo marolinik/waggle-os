@@ -1370,6 +1370,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
           let saved = 0;
           let couldNotVerify = 0;
+          let skippedUnsafe = 0;
           for (const item of items) {
             // #7 sticky erasure: distinguish a confirmed erasure MATCH from a
             // fail-closed read ERROR — both skip the write, but a broken-DB read
@@ -1381,14 +1382,18 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             }
             // #7 Art.17: stamp the subject key (metadata.sourceId) so a subject-mode
             // DSAR can reach this auto-synced summary — shared with the cron path.
-            writeAutoSyncSummaryFrame(personalFrameStore, item);
+            if (!writeAutoSyncSummaryFrame(personalFrameStore, item)) {
+              skippedUnsafe++;
+              continue;
+            }
             saved++;
           }
           // R3-004: store the content digest so the manual harvest route can
           // skip an unchanged re-scan on the next sync.
           harvestStore.recordSync(src.source, items.length, saved, harvestSetHash(items));
           log.info(`[harvest-auto-sync] ${src.source}: imported ${saved} items`
-            + (couldNotVerify > 0 ? ` (${couldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : ''));
+            + (couldNotVerify > 0 ? ` (${couldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : '')
+            + (skippedUnsafe > 0 ? ` (${skippedUnsafe} unsafe items skipped)` : ''));
         } catch (err) {
           log.debug(`[harvest-auto-sync] ${src.source} failed:`, err);
         }
@@ -1643,6 +1648,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             let totalFrames = 0;
             let sourcesScanned = 0;
             let totalCouldNotVerify = 0;
+            let totalSkippedUnsafe = 0;
             for (const src of stale) {
               if (src.source !== 'claude-code' || !src.sourcePath) continue;
               try {
@@ -1659,7 +1665,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                   }
                   // #7 Art.17: stamp the subject key (metadata.sourceId) so a
                   // subject-mode DSAR reaches this cron-synced summary — shared helper.
-                  writeAutoSyncSummaryFrame(personalFrames, item);
+                  if (!writeAutoSyncSummaryFrame(personalFrames, item)) {
+                    totalSkippedUnsafe++;
+                    continue;
+                  }
                   saved++;
                 }
                 // R3-004: store the content digest for next-sync skip.
@@ -1673,7 +1682,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             }
             if (sourcesScanned > 0) {
               log.info(`[cron] Harvest sync: ${totalFrames} frames from ${totalItems} items across ${sourcesScanned} source(s)`
-                + (totalCouldNotVerify > 0 ? ` (${totalCouldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : ''));
+                + (totalCouldNotVerify > 0 ? ` (${totalCouldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : '')
+                + (totalSkippedUnsafe > 0 ? ` (${totalSkippedUnsafe} unsafe items skipped)` : ''));
             }
             dreamJournal.record('harvest_sync', {
               framesSaved: totalFrames,
