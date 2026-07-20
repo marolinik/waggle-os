@@ -26,12 +26,18 @@ describe('codex session-start handler', () => {
     expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 1, scope: 'personal', workspace: null });
     expect(cap.stdout).toHaveLength(1);
     const parsed = JSON.parse(cap.stdout[0]) as {
-      hookSpecificOutput: { source: string; additionalContext: string };
+      hookSpecificOutput: { hookEventName: string; additionalContext: string };
     };
-    // Codex has no custom formatInject ⇒ the default CC hookSpecificOutput shape,
-    // stamped with source 'codex'.
-    expect(parsed.hookSpecificOutput.source).toBe('codex');
-    expect(parsed.hookSpecificOutput.additionalContext).toContain('past observation');
+    expect(parsed).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: expect.stringContaining('past observation'),
+      },
+    });
+    expect(Object.keys(parsed.hookSpecificOutput).sort()).toEqual([
+      'additionalContext',
+      'hookEventName',
+    ]);
     expect(cap.exits).toEqual([0]);
   });
 

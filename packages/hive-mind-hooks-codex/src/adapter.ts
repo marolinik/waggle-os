@@ -76,8 +76,15 @@ export const codexAdapter: EventAdapter = {
   extractParent(payload): string | undefined {
     return pickStringField(payload, 'parent_frame_id', 'prompt_frame_id');
   },
-  // formatInject omitted ⇒ the shared SessionStart body uses CC's default
-  // hookSpecificOutput shape (codex honors the CC inject convention).
+
+  formatInject(additionalContext): unknown {
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext,
+      },
+    };
+  },
 };
 
 /**
