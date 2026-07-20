@@ -198,6 +198,71 @@ describe('Chat Streaming API', () => {
     }
   });
 
+  it('denies sensitive system-tool reads for persisted directory and legacy storagePath links', async () => {
+    const linkedDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-linked-secret-'));
+    fs.writeFileSync(path.join(linkedDirectory, '.env'), 'LINKED_SECRET');
+    fs.writeFileSync(path.join(linkedDirectory, 'README.md'), 'linked readme');
+    const directoryWorkspace = server.workspaceManager.create({
+      name: `Directory secret policy ${Date.now()}`,
+      group: 'test',
+      directory: linkedDirectory,
+    });
+    const storageWorkspace = server.workspaceManager.create({
+      name: `StoragePath secret policy ${Date.now()}`,
+      group: 'test',
+    });
+    server.workspaceManager.update(storageWorkspace.id, {
+      storageType: 'local',
+      storagePath: linkedDirectory,
+    });
+
+    try {
+      for (const workspaceId of [directoryWorkspace.id, storageWorkspace.id]) {
+        const workspaceTools = server.agentState.buildToolsForWorkspace(
+          linkedDirectory,
+          undefined,
+          workspaceId,
+        );
+        const readFile = workspaceTools.find(tool => tool.name === 'read_file');
+        expect(readFile).toBeDefined();
+        expect(await readFile!.execute({ path: '.env' }), workspaceId)
+          .toBe('Error: Access to sensitive file denied');
+        expect(await readFile!.execute({ path: 'README.md' }), workspaceId)
+          .toBe('linked readme');
+      }
+    } finally {
+      fs.rmSync(linkedDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps sensitive-name reads available in managed workspace storage', async () => {
+    const workspace = server.workspaceManager.create({
+      name: `Managed secret-name control ${Date.now()}`,
+      group: 'test',
+    });
+    const managedRoot = path.join(tmpDir, 'workspaces', workspace.id, 'files');
+    fs.mkdirSync(managedRoot, { recursive: true });
+    fs.writeFileSync(path.join(managedRoot, '.env'), 'MANAGED_FIXTURE');
+
+    const workspaceTools = server.agentState.buildToolsForWorkspace(
+      managedRoot,
+      undefined,
+      workspace.id,
+    );
+    const readFile = workspaceTools.find(tool => tool.name === 'read_file');
+    expect(readFile).toBeDefined();
+    expect(await readFile!.execute({ path: '.env' })).toBe('MANAGED_FIXTURE');
+  });
+
+  it('protects the initial home-directory system-tool pool', async () => {
+    const readFile = server.agentState.allTools.find(tool => tool.name === 'read_file');
+    expect(readFile).toBeDefined();
+
+    // This probe need not exist: the policy must reject it before touching disk.
+    const result = await readFile!.execute({ path: `.env.waggle-policy-probe-${process.pid}` });
+    expect(result).toBe('Error: Access to sensitive file denied');
+  });
+
   it('fails closed when a configured linked workspace directory is unavailable', async () => {
     const missingDirectory = path.join(os.tmpdir(), `waggle-missing-linked-${Date.now()}`);
     const workspace = server.workspaceManager.create({

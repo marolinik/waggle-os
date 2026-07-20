@@ -29,10 +29,14 @@ describe('createSystemTools', () => {
     }
   });
 
-  function getTool(name: string): ToolDefinition {
-    const tool = tools.find((t) => t.name === name);
+  function getToolFrom(toolSet: ToolDefinition[], name: string): ToolDefinition {
+    const tool = toolSet.find((t) => t.name === name);
     if (!tool) throw new Error(`Tool "${name}" not found`);
     return tool;
+  }
+
+  function getTool(name: string): ToolDefinition {
+    return getToolFrom(tools, name);
   }
 
   function boundedHeartbeatChildCode(ready: string, heartbeat: string): string {
@@ -139,6 +143,98 @@ describe('createSystemTools', () => {
       } finally {
         fs.rmSync(outside, { recursive: true, force: true });
       }
+    });
+
+    it('denies canonical secret paths in linked workspaces while preserving safe files and managed storage', async () => {
+      const sensitiveFiles = [
+        '.env',
+        '.npmrc',
+        '.env.production',
+        path.join('.ssh', 'id_ed25519'),
+        'credentials.json',
+        'server.pem',
+      ];
+      const safeFiles = ['README.md', '.env.example', 'id_rsa.pub'];
+
+      for (const file of [...sensitiveFiles, ...safeFiles]) {
+        fs.mkdirSync(path.dirname(path.join(workspace, file)), { recursive: true });
+        fs.writeFileSync(path.join(workspace, file), `contents:${file}`);
+      }
+
+      const linkedTools = createSystemTools({ workspace, denySensitiveFiles: true });
+      const linkedRead = getToolFrom(linkedTools, 'read_file');
+      for (const file of sensitiveFiles) {
+        const result = await linkedRead.execute({ path: file });
+        expect(result, file).toBe('Error: Access to sensitive file denied');
+        expect(result, file).not.toContain(`contents:${file}`);
+      }
+      expect(await linkedRead.execute({ path: path.join('safe', '..', '.env') }))
+        .toBe('Error: Access to sensitive file denied');
+      for (const file of safeFiles) {
+        expect(await linkedRead.execute({ path: file }), file).toBe(`contents:${file}`);
+      }
+
+      // The same names remain legitimate inside Waggle-managed sandbox storage.
+      expect(await getTool('read_file').execute({ path: '.env' })).toBe('contents:.env');
+    });
+
+    it('denies a benign symlink that resolves to a sensitive file when symlinks are supported', async () => {
+      const sensitiveDirectory = path.join(workspace, '.ssh');
+      fs.mkdirSync(sensitiveDirectory, { recursive: true });
+      fs.writeFileSync(path.join(sensitiveDirectory, 'config.txt'), 'SYMLINK_SECRET');
+      const alias = path.join(workspace, 'public-config');
+      try {
+        fs.symlinkSync(
+          sensitiveDirectory,
+          alias,
+          process.platform === 'win32' ? 'junction' : 'dir',
+        );
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'EPERM' || code === 'EACCES' || code === 'ENOSYS') return;
+        throw error;
+      }
+
+      const linkedTools = createSystemTools({ workspace, denySensitiveFiles: true });
+      const readResult = await getToolFrom(linkedTools, 'read_file').execute({ path: 'public-config/config.txt' });
+      expect(readResult).toBe('Error: Access to sensitive file denied');
+
+      const filesResult = await getToolFrom(linkedTools, 'search_files').execute({ pattern: 'public-config/config.txt' });
+      expect(filesResult).toBe('No files found.');
+      expect(filesResult).not.toContain('public-config');
+
+      const contentResult = await getToolFrom(linkedTools, 'search_content').execute({
+        pattern: 'SYMLINK_SECRET',
+        glob: 'public-config/config.txt',
+      });
+      expect(contentResult).toBe('No matches found.');
+      expect(contentResult).not.toContain('public-config');
+      expect(contentResult).not.toContain('SYMLINK_SECRET');
+    });
+
+    it('applies the same sensitive-read policy before a storage backend is called', async () => {
+      const backendReads: string[] = [];
+      const backend = {
+        read: async (filePath: string) => {
+          backendReads.push(filePath);
+          return Buffer.from(filePath === '/README.md' ? 'backend readme' : 'BACKEND_SECRET');
+        },
+        write: async () => { throw new Error('write not expected'); },
+        exists: async () => true,
+        delete: async () => { throw new Error('delete not expected'); },
+      };
+      const backendTools = createSystemTools({
+        workspace,
+        fileBackend: backend,
+        denySensitiveFiles: true,
+      });
+      const readFile = getToolFrom(backendTools, 'read_file');
+
+      expect(await readFile.execute({ path: '.env' }))
+        .toBe('Error: Access to sensitive file denied');
+      expect(backendReads).toEqual([]);
+      expect(await readFile.execute({ path: 'README.md' })).toBe('backend readme');
+      expect(backendReads).toEqual(['/README.md']);
     });
   });
 
@@ -296,6 +392,36 @@ describe('createSystemTools', () => {
         fs.rmSync(outside, { recursive: true, force: true });
       }
     });
+
+    it('omits sensitive matches without disclosing their filenames', async () => {
+      fs.writeFileSync(path.join(workspace, 'README.md'), 'public');
+      const sensitiveFiles = [
+        '.env',
+        '.npmrc',
+        '.env.production',
+        '.ssh/id_ed25519',
+        'credentials.json',
+        'server.pem',
+      ];
+      for (const file of sensitiveFiles) {
+        fs.mkdirSync(path.dirname(path.join(workspace, file)), { recursive: true });
+        fs.writeFileSync(path.join(workspace, file), 'private');
+      }
+      const linkedSearch = getToolFrom(
+        createSystemTools({ workspace, denySensitiveFiles: true }),
+        'search_files',
+      );
+
+      const broad = await linkedSearch.execute({ pattern: '**/*' });
+      expect(broad).toContain('README.md');
+      for (const file of sensitiveFiles) {
+        expect(broad, file).not.toContain(path.basename(file));
+
+        const exact = await linkedSearch.execute({ pattern: file });
+        expect(exact, file).toBe('No files found.');
+        expect(exact, file).not.toContain(path.basename(file));
+      }
+    });
   });
 
   describe('search_content', () => {
@@ -333,6 +459,48 @@ describe('createSystemTools', () => {
         expect(result).not.toContain('content-secret');
       } finally {
         fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('omits sensitive content in every output mode without filename disclosure', async () => {
+      fs.writeFileSync(path.join(workspace, 'README.md'), 'SHARED_MARKER PUBLIC_VALUE');
+      const sensitiveFiles = [
+        '.env',
+        '.npmrc',
+        '.env.production',
+        '.ssh/id_ed25519',
+        'credentials.json',
+        'server.pem',
+      ];
+      for (const file of sensitiveFiles) {
+        fs.mkdirSync(path.dirname(path.join(workspace, file)), { recursive: true });
+        fs.writeFileSync(path.join(workspace, file), `SHARED_MARKER PRIVATE_VALUE:${file}`);
+      }
+      const linkedSearch = getToolFrom(
+        createSystemTools({ workspace, denySensitiveFiles: true }),
+        'search_content',
+      );
+
+      for (const outputMode of ['content', 'files', 'count']) {
+        const broad = await linkedSearch.execute({
+          pattern: 'SHARED_MARKER',
+          glob: '**/*',
+          output_mode: outputMode,
+        });
+        expect(broad, outputMode).toContain('README.md');
+        expect(broad, outputMode).not.toContain('PRIVATE_VALUE');
+        for (const file of sensitiveFiles) {
+          expect(broad, `${outputMode}:${file}`).not.toContain(path.basename(file));
+
+          const exact = await linkedSearch.execute({
+            pattern: 'PRIVATE_VALUE',
+            glob: file,
+            output_mode: outputMode,
+          });
+          expect(exact, `${outputMode}:${file}`).toBe('No matches found.');
+          expect(exact, `${outputMode}:${file}`).not.toContain(path.basename(file));
+          expect(exact, `${outputMode}:${file}`).not.toContain('PRIVATE_VALUE');
+        }
       }
     });
   });

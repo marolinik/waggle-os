@@ -2,6 +2,7 @@ import { execFile, execFileSync, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { isSensitiveFilePath } from '@waggle/core';
 
 /** Image file extensions (binary, should not be read as text) */
 export const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']);
@@ -450,7 +451,27 @@ export function truncateOutput(output: string): string {
  * Resolve a relative path within a workspace, rejecting traversal outside it.
  * Returns the resolved absolute path or throws.
  */
-export function resolveSafe(workspace: string, filePath: string): string {
+export interface ResolveSafeOptions {
+  /** Deny well-known secret material when the workspace is linked to user storage. */
+  denySensitiveFiles?: boolean;
+}
+
+export class SensitiveFileAccessError extends Error {
+  constructor() {
+    super('Access to sensitive file denied');
+    this.name = 'SensitiveFileAccessError';
+  }
+}
+
+export function assertNonSensitiveFilePath(filePath: string): void {
+  if (isSensitiveFilePath(filePath)) throw new SensitiveFileAccessError();
+}
+
+export function resolveSafe(
+  workspace: string,
+  filePath: string,
+  options: ResolveSafeOptions = {},
+): string {
   const workspaceRoot = path.resolve(workspace);
   const resolved = path.resolve(workspaceRoot, filePath);
   const relative = path.relative(workspaceRoot, resolved);
@@ -479,6 +500,11 @@ export function resolveSafe(workspace: string, filePath: string): string {
     || path.isAbsolute(realRelative);
   if (escapesThroughLink) {
     throw new Error(`Path resolves outside workspace through a link or junction: ${filePath}`);
+  }
+
+  if (options.denySensitiveFiles) {
+    assertNonSensitiveFilePath(relative);
+    assertNonSensitiveFilePath(path.relative(realWorkspace, realAncestor));
   }
   return resolved;
 }

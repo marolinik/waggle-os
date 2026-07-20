@@ -626,7 +626,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const defaultWorkspace = os.homedir();
   const waggleHome = fullConfig.dataDir || path.join(os.homedir(), '.waggle');
   const mindTools = orchestrator.getTools();
-  const systemTools = createSystemTools(defaultWorkspace);
+  const systemTools = createSystemTools({
+    workspace: defaultWorkspace,
+    denySensitiveFiles: true,
+  });
   const planTools = createPlanTools();
   const gitTools = createGitTools(defaultWorkspace);
   const documentTools = [
@@ -1064,10 +1067,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // L-18: when the workspace is team-backed, route file tools through the
     // shared provider. Otherwise pass only the cwd (fs fallback).
     const fileBackend = buildFileBackendForWorkspace(workspaceId);
+    const wsMeta = workspaceId ? wsManager.get(workspaceId) : null;
+    const denySensitiveFiles = Boolean(wsMeta?.directory || wsMeta?.storagePath);
 
     const wsBase = [
       ...mindToolsForRequest,
-      ...createSystemTools({ workspace: wsPath, fileBackend }),
+      ...createSystemTools({ workspace: wsPath, fileBackend, denySensitiveFiles }),
       ...createPlanTools(),
       ...createGitTools(wsPath),
       ...createDocumentTools(wsPath),

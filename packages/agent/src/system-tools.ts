@@ -10,7 +10,7 @@ import { safeFetch, allowLocalFromEnv, EgressBlockedError } from './url-egress-g
 import {
   IMAGE_EXTENSIONS, DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
   checkDeniedBinaries, createSanitizedEnv, execFileWithTreeTimeout, terminateProcessTree,
-  truncateOutput, resolveSafe,
+  truncateOutput, resolveSafe, assertNonSensitiveFilePath,
 } from './system-tools-helpers.js';
 
 /**
@@ -37,6 +37,8 @@ export interface SystemToolDeps {
   /** Optional storage backend (team S3/MinIO). If present, file-content
    * tools route through it instead of node:fs. */
   fileBackend?: FileBackend;
+  /** Deny reads of well-known secret material for user-linked workspace roots. */
+  denySensitiveFiles?: boolean;
 }
 
 /** Prefer a repository README over GitHub navigation chrome for exact repo-root fetches. */
@@ -132,7 +134,7 @@ export function cleanupStaleTasks(): number {
 
 export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefinition[] {
   const deps: SystemToolDeps = typeof wsOrDeps === 'string' ? { workspace: wsOrDeps } : wsOrDeps;
-  const { workspace, fileBackend } = deps;
+  const { workspace, fileBackend, denySensitiveFiles = false } = deps;
 
   // Normalize a user-supplied path to a backend key. The fs-level resolveSafe
   // can't be used here because backend keys are virtual paths (e.g. S3 object
@@ -149,6 +151,33 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
       throw new Error(`Path resolves outside workspace: ${userPath}`);
     }
     return '/' + parts.join('/');
+  };
+
+  const resolveReadableBackendKey = (userPath: string): string => {
+    if (denySensitiveFiles) assertNonSensitiveFilePath(userPath);
+    return resolveBackendKey(userPath);
+  };
+
+  const resolveReadablePath = (userPath: string): string => resolveSafe(
+    workspace,
+    userPath,
+    { denySensitiveFiles },
+  );
+
+  const filterReadableSearchPaths = (filePaths: string[]): string[] => {
+    if (!denySensitiveFiles) {
+      for (const filePath of filePaths) resolveSafe(workspace, filePath);
+      return filePaths;
+    }
+    return filePaths.filter((filePath) => {
+      try {
+        resolveReadablePath(filePath);
+        return true;
+      } catch {
+        // Search must not disclose sensitive or link-escaped filenames.
+        return false;
+      }
+    });
   };
 
   const validateWorkspaceGlob = (pattern: string): string => {
@@ -283,7 +312,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           // backend routing for text files; images/PDFs stay on local disk until
           // Bucket 2 adds binary-stream support in the backend contract.
           if (!fileBackend) {
-            const resolved = resolveSafe(workspace, filePath);
+            const resolved = resolveReadablePath(filePath);
 
             if (IMAGE_EXTENSIONS.has(ext)) {
               const stat = fs.statSync(resolved);
@@ -316,11 +345,11 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             if (ext === '.pdf') {
               return `[PDF file: ${filePath}, backend-routed read does not yet extract PDF text. Download the file to inspect it.]`;
             }
-            const key = resolveBackendKey(filePath);
+            const key = resolveReadableBackendKey(filePath);
             const buf = await fileBackend.read(key);
             content = buf.toString('utf-8');
           } else {
-            const resolved = resolveSafe(workspace, filePath);
+            const resolved = resolveReadablePath(filePath);
             content = fs.readFileSync(resolved, 'utf-8');
           }
 
@@ -465,12 +494,12 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
       execute: async (args) => {
         try {
           const pattern = validateWorkspaceGlob(args.pattern as string);
-          const matches = await glob(pattern, {
+          const globMatches = await glob(pattern, {
             cwd: workspace,
             ignore: ['node_modules/**', '.git/**'],
             nodir: true,
           });
-          for (const match of matches) resolveSafe(workspace, match);
+          const matches = filterReadableSearchPaths(globMatches);
           if (matches.length === 0) return 'No files found.';
           // A3: Cap file list to prevent token overflow
           const MAX_FILE_RESULTS = 200;
@@ -526,19 +555,19 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           validateWorkspaceGlob(filePattern);
 
-          const files = await glob(filePattern, {
+          const globMatches = await glob(filePattern, {
             cwd: workspace,
             ignore: ['node_modules/**', '.git/**'],
             nodir: true,
           });
-          for (const file of files) resolveSafe(workspace, file);
+          const files = filterReadableSearchPaths(globMatches);
 
           if (outputMode === 'files') {
             // Return only file paths that contain matches
             const matchingFiles: string[] = [];
             for (const file of files) {
               if (maxResults !== undefined && matchingFiles.length >= maxResults) break;
-              const absPath = resolveSafe(workspace, file);
+              const absPath = resolveReadablePath(file);
               try {
                 const content = fs.readFileSync(absPath, 'utf-8');
                 if (regex.test(content)) {
@@ -556,7 +585,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             // Return file paths with match counts
             const counts: string[] = [];
             for (const file of files) {
-              const absPath = resolveSafe(workspace, file);
+              const absPath = resolveReadablePath(file);
               try {
                 const content = fs.readFileSync(absPath, 'utf-8');
                 const lines = content.split('\n');
@@ -582,7 +611,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           for (const file of files) {
             if (maxResults !== undefined && totalResults >= maxResults) break;
-            const absPath = resolveSafe(workspace, file);
+            const absPath = resolveReadablePath(file);
             try {
               const content = fs.readFileSync(absPath, 'utf-8');
               const lines = content.split('\n');
