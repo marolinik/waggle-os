@@ -348,8 +348,9 @@ describe('shouldSuggestSchedule', () => {
     expect(shouldSuggestSchedule('This is a recurring task.', [], '')).toBe(true);
   });
 
-  it('returns true for "scheduled" pattern', () => {
-    expect(shouldSuggestSchedule('The meeting is already scheduled for then.', [], '')).toBe(true);
+  it('does not treat a one-time scheduled action as recurring work', () => {
+    expect(shouldSuggestSchedule('The meeting is already scheduled for then.', [], '')).toBe(false);
+    expect(shouldSuggestSchedule('Monitor the issue and schedule a fix.', [], '')).toBe(false);
   });
 
   it('returns true for "every month" pattern', () => {

@@ -150,7 +150,7 @@ export function classifyExplicitTurnMutationPolicy(message: string): TurnMutatio
 }
 
 /** Patterns indicating the user or agent discussed recurring/scheduled work */
-const RECURRING_PATTERNS = /\b(every\s+day|daily|weekly|every\s+week|each\s+morning|every\s+morning|regularly|recurring|scheduled?|every\s+month|monthly)\b/i;
+const RECURRING_PATTERNS = /\b(every\s+day|daily|weekly|every\s+week|each\s+morning|every\s+morning|regularly|recurring|every\s+month|monthly)\b/i;
 
 const SCHEDULE_OBJECT = /\b(?:schedules?|scheduling|recurring\s+tasks?|calendar\s+events?)\b|\/schedule\b/i;
 const SCHEDULE_ACTION = /^(?:schedule|create|make|add|set\s+up|suggest|recommend|append|include|propose|offer|mention|use)\b/i;
