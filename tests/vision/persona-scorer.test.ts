@@ -1023,6 +1023,18 @@ describe('deterministic 100-point persona scorer', () => {
     expect(rule.patterns.every(pattern => pattern.test(
       '### Key Facts from Primary Sources:\nSQLite is embedded.\n**Reduced Overhead (Inference):** A separate service adds operational cost.',
     ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
+      '| Architecture | Client-server | Fact (pgvector): confirmed in the README. |\n| Desktop fit | Embedded | Inference (SQLite): lower operational overhead. |',
+    ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
+      '- Fact (pgvector): confirmed in the README.\n- Inference (SQLite): lower operational overhead.',
+    ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
+      'Fact (Inference): uncertain.',
+    ))).toBe(false);
+    expect(rule.patterns.every(pattern => pattern.test(
+      'Inference (Fact): uncertain.',
+    ))).toBe(false);
   });
 
   it('does not accept lookalike hostnames as primary-source evidence', () => {

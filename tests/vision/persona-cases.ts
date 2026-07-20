@@ -156,8 +156,8 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
         description: 'Separates sourced facts from inference',
         kind: 'allPatterns',
         patterns: [
-          /(?:(?:^|\n)#{1,6}\s*(?:key\s+)?facts?\b|\*\*[^*\r\n]{0,80}\bfacts?(?:\s*\/\s*inference)?\b[^*\r\n]{0,80}\*\*|\(\s*facts?(?:\s*\/\s*inference)?\b[^)]{0,200}\)|\bfacts?\s*(?:\/\s*inference\s*)?[:)])/im,
-          /(?:(?:^|\n)#{1,6}\s*(?:key\s+)?inferences?\b|\*\*[^*\r\n]{0,80}\binferences?(?:\s*\/\s*fact)?\b[^*\r\n]{0,80}\*\*|\(\s*inferences?(?:\s*\/\s*fact)?\b[^)]{0,200}\)|\binferences?\s*(?:\/\s*fact\s*)?[:)])/im,
+          /(?:(?:^|\n)#{1,6}\s*(?:key\s+)?facts?\b|\*\*[^*\r\n]{0,80}\bfacts?(?:\s*\/\s*inference)?\b[^*\r\n]{0,80}\*\*|\(\s*facts?(?:\s*\/\s*inference)?\b[^)]{0,200}\)|\bfacts?\s*(?:\/\s*inference\s*)?[:)]|(?:^|[|\r\n.])[ \t]*(?:[-*+][ \t]+)?(?:\*\*)?facts?[ \t]*\((?![^\r\n)]{0,80}\binferences?\b)[^\r\n)]{1,80}\))/im,
+          /(?:(?:^|\n)#{1,6}\s*(?:key\s+)?inferences?\b|\*\*[^*\r\n]{0,80}\binferences?(?:\s*\/\s*fact)?\b[^*\r\n]{0,80}\*\*|\(\s*inferences?(?:\s*\/\s*fact)?\b[^)]{0,200}\)|\binferences?\s*(?:\/\s*fact\s*)?[:)]|(?:^|[|\r\n.])[ \t]*(?:[-*+][ \t]+)?(?:\*\*)?inferences?[ \t]*\((?![^\r\n)]{0,80}\bfacts?\b)[^\r\n)]{1,80}\))/im,
         ],
         points: 10,
       },
