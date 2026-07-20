@@ -10,15 +10,34 @@ function jsonResponse(
   message: Record<string, unknown>,
   promptTokens: number,
   completionTokens = 100,
+  finishReason = message.tool_calls ? 'tool_calls' : 'stop',
 ): Response {
   return {
     ok: true,
     status: 200,
     json: async () => ({
-      choices: [{ message, finish_reason: message.tool_calls ? 'tool_calls' : 'stop' }],
+      choices: [{ message, finish_reason: finishReason }],
       usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens },
     }),
   } as unknown as Response;
+}
+
+function streamResponse(events: string[]): Response {
+  const encoder = new TextEncoder();
+  return {
+    ok: true,
+    status: 200,
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const event of events) controller.enqueue(encoder.encode(event));
+        controller.close();
+      },
+    }),
+  } as unknown as Response;
+}
+
+function sse(payload: unknown): string {
+  return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
 function jsonResponseWithoutUsage(message: Record<string, unknown>): Response {
@@ -226,12 +245,14 @@ describe('bounded agent loop synthesis', () => {
     expect(result.content).not.toMatch(/max(?:imum)? tool turns/i);
   });
 
-  it('uses the token reserve to synthesize before cumulative input crosses 60k', async () => {
+  it('reserves a replay-sized final input and output budget before another evidence round', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
     let toolCall = 0;
     const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as { tools?: unknown[] };
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestBodies.push(body);
       if (!body.tools) {
-        return jsonResponse({ role: 'assistant', content: 'Budget-aware synthesis.' }, 8_000);
+        return jsonResponse({ role: 'assistant', content: 'Budget-aware synthesis.' }, 13_500, 1_000);
       }
       const current = toolCall++;
       return jsonResponse({
@@ -242,7 +263,7 @@ describe('bounded agent loop synthesis', () => {
           type: 'function',
           function: { name: 'web_fetch', arguments: JSON.stringify({ url: `https://budget.test/${current}` }) },
         }],
-      }, 28_000);
+      }, 13_500, 500);
     }) as unknown as typeof fetch;
     const webFetch: ToolDefinition = {
       name: 'web_fetch',
@@ -253,10 +274,24 @@ describe('bounded agent loop synthesis', () => {
 
     const result = await runAgentLoop(researchConfig(fetchFn, webFetch));
 
-    expect(webFetch.execute).toHaveBeenCalledTimes(1);
-    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(webFetch.execute).toHaveBeenCalledTimes(2);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
     expect(result.content).toBe('Budget-aware synthesis.');
-    expect(result.usage.inputTokens).toBe(36_000);
+    expect(result.usage).toEqual({ inputTokens: 40_500, outputTokens: 2_000 });
+    expect(requestBodies.map(body => Boolean(body.tools))).toEqual([true, true, false]);
+    expect(Number(requestBodies.at(-1)?.max_tokens)).toBeGreaterThanOrEqual(8_000);
+
+    const finalMessages = requestBodies.at(-1)?.messages as Array<{ role: string; content: string }>;
+    const directive = finalMessages.at(-1);
+    expect(directive?.role).toBe('user');
+    const answerIndex = directive?.content.indexOf('First sentence') ?? -1;
+    const deliverablesIndex = directive?.content.indexOf('every other explicit user deliverable') ?? -1;
+    const detailIndex = directive?.content.indexOf('Only then') ?? -1;
+    expect(answerIndex).toBeGreaterThanOrEqual(0);
+    expect(deliverablesIndex).toBeGreaterThan(answerIndex);
+    expect(detailIndex).toBeGreaterThan(deliverablesIndex);
+    expect(directive?.content).toMatch(/recommendation or decision/i);
+    expect(directive?.content).toMatch(/do not open with sources, process, or evidence gaps/i);
   });
 });
 
@@ -475,6 +510,123 @@ describe('hard request dispatch budget', () => {
 
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(result.content).toBe('Usable final answer.');
+  });
+
+  it('rejects a non-streaming length completion before budget-stop can preserve it', async () => {
+    const onToken = vi.fn();
+    const fetchFn = vi.fn(async () => jsonResponse(
+      { role: 'assistant', content: 'Partial answer presented as complete.' },
+      300,
+      150,
+      'length',
+    )) as unknown as typeof fetch;
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Answer directly.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      onToken,
+      maxTurns: 3,
+      maxTokenBudget: 400,
+      synthesisReserveTokens: 100,
+      verificationGate: false,
+      skillDistillationGate: false,
+    })).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      message: expect.stringMatching(/finish_reason=length.*not accepted/i),
+    });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: 'length termination with DONE',
+      events: [
+        sse({ choices: [{ delta: { content: 'Partial streamed answer.' } }] }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'length' }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+        'data: [DONE]\n\n',
+      ],
+    },
+    {
+      name: 'physical EOF before DONE',
+      events: [
+        sse({ choices: [{ delta: { content: 'Apparently complete answer.' } }] }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+      ],
+    },
+  ])('rejects a streaming $name instead of resolving partial content', async ({ events }) => {
+    const fetchFn = vi.fn(async () => streamResponse(events)) as unknown as typeof fetch;
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Answer directly.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      stream: true,
+      verificationGate: false,
+      skillDistillationGate: false,
+    })).rejects.toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('never executes a tool call from an incomplete stream', async () => {
+    const mutate = vi.fn(async () => 'mutated');
+    const events = [
+      sse({
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              id: 'must_not_run',
+              function: { name: 'mutate_state', arguments: '{}' },
+            }],
+          },
+        }],
+      }),
+      sse({
+        choices: [{ delta: {}, finish_reason: 'length' }],
+        usage: { prompt_tokens: 100, completion_tokens: 20 },
+      }),
+      'data: [DONE]\n\n',
+    ];
+    const fetchFn = vi.fn(async () => streamResponse(events)) as unknown as typeof fetch;
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Use tools safely.',
+      messages: [{ role: 'user', content: 'Make a change.' }],
+      tools: [{
+        name: 'mutate_state',
+        description: 'Mutates state.',
+        parameters: { type: 'object', properties: {} },
+        execute: mutate,
+      }],
+      fetch: fetchFn,
+      stream: true,
+      verificationGate: false,
+      skillDistillationGate: false,
+    })).rejects.toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('preserves forced synthesis prose when an exhausted provider adds a phantom tool call', async () => {

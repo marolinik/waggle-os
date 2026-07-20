@@ -198,6 +198,17 @@ function containsRawToolCallMarkup(content: string): boolean {
     || /```(?:json|tool)?\s*\{[^`]*"tool"/is.test(content);
 }
 
+const SUPPORTED_COMPLETION_FINISH_REASONS = new Set(['stop', 'tool_calls']);
+
+function incompleteCompletionError(reason: string): Error & { code: 'INCOMPLETE_COMPLETION' } {
+  const error = new Error(
+    `LLM returned an incomplete completion (${reason}); partial content was not accepted.`,
+  ) as Error & { code: 'INCOMPLETE_COMPLETION' };
+  error.name = 'IncompleteCompletionError';
+  error.code = 'INCOMPLETE_COMPLETION';
+  return error;
+}
+
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
   const {
     litellmUrl,
@@ -386,10 +397,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     messages.push({
       role: 'user',
       content: [
-        'Evidence collection is complete. Produce the final answer now using only the evidence already present.',
-        'Do not call more tools. Cite source URLs found in the evidence, distinguish verified facts from inference,',
-        'state any remaining evidence gaps, and do not mention internal turn or token budgets.',
-      ].join(' '),
+        'Evidence collection is complete. Do not call more tools. Produce the final answer now using only the evidence already present.',
+        'Use this truncation-safe order:',
+        '1. First sentence: directly answer the user\'s main question and state any requested recommendation or decision. If the evidence cannot support one, say that there.',
+        '2. Immediately complete every other explicit user deliverable, as compactly as the request allows, including requested tables.',
+        '3. Only then add source inventories, methodology, detailed fact-versus-inference discussion, evidence gaps, caveats, or other supporting detail.',
+        'Do not open with sources, process, or evidence gaps. Cite source URLs alongside supported claims, distinguish verified facts from inference, and do not mention internal turn or token budgets.',
+      ].join('\n'),
     });
     logTurnEvent(turnId, {
       stage: 'agent-loop.synthesis-forced',
@@ -428,23 +442,30 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         : Math.max(lastRequestInputTokens, serializedEstimate);
     };
     let estimatedNextRequestTokens = estimateNextRequestTokens();
+    // A tool turn is not safe merely because its own request fits: the next
+    // no-tools synthesis must be able to replay comparable context and still
+    // retain the configured completion allowance.
+    let futureSynthesisReserve = !synthesisForced && turnOpenAiTools.length > 0 && synthesisReserveTokens
+      ? estimatedNextRequestTokens + synthesisReserveTokens
+      : 0;
     if (
       !synthesisForced
-      && toolRoundCount > 0
+      && turnOpenAiTools.length > 0
       && maxTokenBudget
       && synthesisReserveTokens
-      && usedBeforeRequest + estimatedNextRequestTokens + synthesisReserveTokens >= maxTokenBudget
+      && usedBeforeRequest + estimatedNextRequestTokens + futureSynthesisReserve >= maxTokenBudget
     ) {
       forceSynthesis('token-reserve');
       requestMessages = compactToolContextForModel(messages, toolContextBudget);
       estimatedNextRequestTokens = estimateNextRequestTokens();
+      futureSynthesisReserve = 0;
     }
 
     const outputTokenLimit = maxTokenBudget === undefined
       ? outputTokenCeiling
       : Math.min(
           outputTokenCeiling,
-          Math.floor(maxTokenBudget - usedBeforeRequest - estimatedNextRequestTokens),
+          Math.floor(maxTokenBudget - usedBeforeRequest - estimatedNextRequestTokens - futureSynthesisReserve),
         );
     if (outputTokenLimit < 1) return budgetStopResponse();
 
@@ -517,6 +538,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     };
     let turnInputTokens = 0;
     let turnOutputTokens = 0;
+    let completionFinishReason: string | null = null;
+    let streamDoneObserved = !stream;
 
     if (stream) {
       const parsed = await parseChatCompletionStream(response.body!, {
@@ -527,6 +550,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       });
       turnInputTokens = parsed.usage.inputTokens;
       turnOutputTokens = parsed.usage.outputTokens;
+      completionFinishReason = parsed.finishReason;
+      streamDoneObserved = parsed.doneObserved;
       // Use empty string (not null) when there are tool_calls — some LLM
       // proxies (LiteLLM→Anthropic) mishandle null content alongside tool_use.
       assistantMessage = {
@@ -537,6 +562,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       // Non-streaming path: parse the single chat completion response.
       const data = await response.json() as {
         choices?: Array<{
+          finish_reason?: string | null;
           message: {
             content: string | null;
             tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
@@ -550,6 +576,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         );
       }
       assistantMessage = data.choices[0].message;
+      completionFinishReason = data.choices[0].finish_reason ?? null;
       turnInputTokens = data.usage?.prompt_tokens ?? 0;
       turnOutputTokens = data.usage?.completion_tokens ?? 0;
     }
@@ -565,6 +592,25 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         toolsUsed,
         usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
       };
+    }
+
+    const incompleteReason = completionFinishReason === 'length'
+      ? 'finish_reason=length'
+      : stream && !streamDoneObserved
+        ? 'stream ended before data: [DONE]'
+        : completionFinishReason && !SUPPORTED_COMPLETION_FINISH_REASONS.has(completionFinishReason)
+          ? `unsupported finish_reason=${completionFinishReason}`
+          : null;
+    if (incompleteReason) {
+      logTurnEvent(turnId, {
+        stage: 'agent-loop.incomplete-completion',
+        reason: incompleteReason,
+        finishReason: completionFinishReason,
+        streamDoneObserved,
+        inputTokens: turnInputTokens,
+        outputTokens: turnOutputTokens,
+      });
+      throw incompleteCompletionError(incompleteReason);
     }
 
     // Some OpenAI-compatible providers omit usage entirely. Do not interpret

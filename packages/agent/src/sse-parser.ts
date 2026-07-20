@@ -26,6 +26,10 @@ export interface ParsedChatCompletionStream {
   toolCalls: StreamedToolCall[] | undefined;
   /** Usage from the final chunk carrying a `usage` block */
   usage: { inputTokens: number; outputTokens: number };
+  /** Provider termination reason from the final choice chunk, when supplied. */
+  finishReason: string | null;
+  /** True only when the stream contained the protocol terminal `data: [DONE]` event. */
+  doneObserved: boolean;
 }
 
 export interface SseParseOptions {
@@ -47,6 +51,8 @@ export async function parseChatCompletionStream(
   let content = '';
   let inputTokens = 0;
   let outputTokens = 0;
+  let finishReason: string | null = null;
+  let doneObserved = false;
   const toolCalls = new Map<number, StreamedToolCall>();
   // Synthetic slot assignment for providers that omit `tc.index` on parallel
   // tool-call deltas: each distinct `tc.id` gets its own stable slot so their
@@ -74,7 +80,10 @@ export async function parseChatCompletionStream(
       for (const line of part.split('\n')) {
         if (!line.startsWith('data: ')) continue;
         const payload = line.slice(6).trim();
-        if (payload === '[DONE]') continue;
+        if (payload === '[DONE]') {
+          doneObserved = true;
+          continue;
+        }
 
         let chunk: unknown;
         try {
@@ -86,6 +95,7 @@ export async function parseChatCompletionStream(
         const c = chunk as {
           usage?: { prompt_tokens?: number; completion_tokens?: number };
           choices?: Array<{
+            finish_reason?: string | null;
             delta?: {
               content?: string;
               tool_calls?: Array<{
@@ -102,7 +112,10 @@ export async function parseChatCompletionStream(
           outputTokens = c.usage.completion_tokens ?? outputTokens;
         }
 
-        const delta = c.choices?.[0]?.delta;
+        const choice = c.choices?.[0];
+        if (choice?.finish_reason != null) finishReason = choice.finish_reason;
+
+        const delta = choice?.delta;
         if (!delta) continue;
 
         if (delta.content) {
@@ -154,5 +167,7 @@ export async function parseChatCompletionStream(
     content,
     toolCalls: toolCallsArray,
     usage: { inputTokens, outputTokens },
+    finishReason,
+    doneObserved,
   };
 }
