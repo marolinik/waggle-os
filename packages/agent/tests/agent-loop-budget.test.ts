@@ -537,11 +537,132 @@ describe('hard request dispatch budget', () => {
       skillDistillationGate: false,
     })).rejects.toMatchObject({
       code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 300, outputTokens: 150 },
       message: expect.stringMatching(/finish_reason=length.*not accepted/i),
     });
 
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it('reports cumulative paid usage when a later completion is incomplete', async () => {
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: 'read_before_truncation',
+          type: 'function',
+          function: { name: 'read_file', arguments: '{}' },
+        }],
+      }, 100, 20))
+      .mockResolvedValueOnce(jsonResponse(
+        { role: 'assistant', content: 'Partial final answer.' },
+        200,
+        50,
+        'length',
+      )) as unknown as typeof fetch;
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read evidence.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'evidence'),
+    };
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Use evidence.',
+      messages: [{ role: 'user', content: 'Answer with evidence.' }],
+      tools: [readFile],
+      fetch: fetchFn,
+      verificationGate: false,
+      skillDistillationGate: false,
+    })).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 300, outputTokens: 70 },
+    });
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(readFile.execute).toHaveBeenCalledOnce();
+  });
+
+  it('conservatively accounts a tool-call-only stream when the reader fails without usage', async () => {
+    const encoder = new TextEncoder();
+    const brokenToolCall = sse({
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            id: 'partial_mutation',
+            function: { name: 'mutate_state', arguments: JSON.stringify({ value: 'x'.repeat(1_000) }) },
+          }],
+        },
+      }],
+    });
+    let pullCount = 0;
+    const brokenResponse = {
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (pullCount++ === 0) controller.enqueue(encoder.encode(brokenToolCall));
+          else controller.error(new Error('upstream socket closed'));
+        },
+      }),
+    } as unknown as Response;
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(streamResponse([
+        sse({
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: 'read_first',
+                function: { name: 'read_file', arguments: '{}' },
+              }],
+            },
+          }],
+        }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }),
+        'data: [DONE]\n\n',
+      ]))
+      .mockResolvedValueOnce(brokenResponse) as unknown as typeof fetch;
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read evidence.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'evidence'),
+    };
+    let caught: unknown;
+
+    try {
+      await runAgentLoop({
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        model: 'test-model',
+        systemPrompt: 'Use evidence.',
+        messages: [{ role: 'user', content: 'Answer with evidence.' }],
+        tools: [readFile],
+        fetch: fetchFn,
+        stream: true,
+        verificationGate: false,
+        skillDistillationGate: false,
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+    const usage = (caught as { usage: { inputTokens: number; outputTokens: number } }).usage;
+    expect(usage.inputTokens).toBeGreaterThan(100);
+    expect(usage.outputTokens).toBeGreaterThan(200);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(readFile.execute).toHaveBeenCalledOnce();
   });
 
   it.each([

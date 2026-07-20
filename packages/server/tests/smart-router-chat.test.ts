@@ -280,12 +280,18 @@ describe('chat smart-router integration', () => {
     config.save();
     const attempts: string[] = [];
     let simulatedMutations = 0;
+    const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
+    const addTokens = vi.spyOn(server.sessionManager, 'addTokens');
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(agentConfig.model);
       simulatedMutations++;
       throw Object.assign(
         new Error('LLM returned an incomplete completion; partial content was not accepted.'),
-        { code: 'INCOMPLETE_COMPLETION', status: 502 },
+        {
+          code: 'INCOMPLETE_COMPLETION',
+          status: 502,
+          usage: { inputTokens: 13_500, outputTokens: 500 },
+        },
       );
     };
 
@@ -300,6 +306,15 @@ describe('chat smart-router integration', () => {
     expect(simulatedMutations).toBe(1);
     expect(response.body).toContain('incomplete completion');
     expect(response.body).not.toContain('fallback-test-model');
+    expect(addUsage).toHaveBeenCalledOnce();
+    expect(addUsage).toHaveBeenCalledWith(
+      'ollama/budget-test-model',
+      13_500,
+      500,
+      'default',
+    );
+    expect(addTokens).toHaveBeenCalledOnce();
+    expect(addTokens).toHaveBeenCalledWith('default', 14_000);
   });
 
   it('uses the configured fallback only after both budget and primary runs fail', async () => {

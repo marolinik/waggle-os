@@ -88,6 +88,29 @@ function isIncompleteCompletionError(error: unknown): boolean {
     && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
 }
 
+function getIncompleteCompletionUsage(
+  error: unknown,
+): { inputTokens: number; outputTokens: number } | null {
+  if (!isIncompleteCompletionError(error)) return null;
+  const usage = (error as {
+    usage?: { inputTokens?: unknown; outputTokens?: unknown };
+  }).usage;
+  if (!usage
+    || typeof usage.inputTokens !== 'number'
+    || !Number.isFinite(usage.inputTokens)
+    || usage.inputTokens < 0
+    || typeof usage.outputTokens !== 'number'
+    || !Number.isFinite(usage.outputTokens)
+    || usage.outputTokens < 0
+    || usage.inputTokens + usage.outputTokens <= 0) {
+    return null;
+  }
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+  };
+}
+
 const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'bash',
   'read_file',
@@ -971,6 +994,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const activeSessionId = requestedSessionId ?? workspace ?? 'default';
     const activeWorkspaceId = workspace ?? 'default';
     let activeHistory: Array<{ role: string; content: string }> | undefined;
+    let activeAttemptModel: string | null = null;
 
     try {
       const hasCustomRunner = !!server.agentRunner;
@@ -2220,6 +2244,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         const runAgentAttempt = async (config: typeof runConfig) => {
           bufferedAgentTokens = [];
+          activeAttemptModel = resolvedModel;
           const attemptedResult = await agentRunner(config);
           if (abortController.signal.aborted) {
             throw abortController.signal.reason ?? new Error('Chat request aborted');
@@ -2700,6 +2725,26 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
       }
     } catch (err) {
+      const incompleteUsage = getIncompleteCompletionUsage(err);
+      if (incompleteUsage && activeAttemptModel) {
+        try {
+          costTracker.addUsage(
+            activeAttemptModel,
+            incompleteUsage.inputTokens,
+            incompleteUsage.outputTokens,
+            activeWorkspaceId,
+          );
+          server.sessionManager?.addTokens(
+            activeWorkspaceId,
+            incompleteUsage.inputTokens + incompleteUsage.outputTokens,
+          );
+        } catch (accountingError) {
+          log.warn(
+            '[chat] incomplete completion usage accounting failed:',
+            accountingError instanceof Error ? accountingError.message : String(accountingError),
+          );
+        }
+      }
       // A user Stop/client disconnect is not an assistant answer or generation
       // failure. Keep the already-persisted user turn, but never fabricate an
       // authoritative assistant/error turn from partial work.

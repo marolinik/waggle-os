@@ -200,12 +200,28 @@ function containsRawToolCallMarkup(content: string): boolean {
 
 const SUPPORTED_COMPLETION_FINISH_REASONS = new Set(['stop', 'tool_calls']);
 
-function incompleteCompletionError(reason: string): Error & { code: 'INCOMPLETE_COMPLETION' } {
+type IncompleteCompletionError = Error & {
+  code: 'INCOMPLETE_COMPLETION';
+  usage?: AgentResponse['usage'];
+  partialToolCalls?: unknown;
+};
+
+function isIncompleteCompletionError(error: unknown): error is IncompleteCompletionError {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
+}
+
+function incompleteCompletionError(
+  reason: string,
+  usage: AgentResponse['usage'],
+): IncompleteCompletionError {
   const error = new Error(
     `LLM returned an incomplete completion (${reason}); partial content was not accepted.`,
-  ) as Error & { code: 'INCOMPLETE_COMPLETION' };
+  ) as IncompleteCompletionError;
   error.name = 'IncompleteCompletionError';
   error.code = 'INCOMPLETE_COMPLETION';
+  error.usage = usage;
   return error;
 }
 
@@ -540,14 +556,37 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     let turnOutputTokens = 0;
     let completionFinishReason: string | null = null;
     let streamDoneObserved = !stream;
+    let currentTurnStreamedContent = '';
 
     if (stream) {
-      const parsed = await parseChatCompletionStream(response.body!, {
-        onToken: (token) => {
-          allStreamedContent += token;
-          if (onToken) onToken(token);
-        },
-      });
+      let parsed: Awaited<ReturnType<typeof parseChatCompletionStream>>;
+      try {
+        parsed = await parseChatCompletionStream(response.body!, {
+          onToken: (token) => {
+            currentTurnStreamedContent += token;
+            allStreamedContent += token;
+            if (onToken) onToken(token);
+          },
+        });
+      } catch (error) {
+        if (!isIncompleteCompletionError(error)) throw error;
+        const observedInput = error.usage?.inputTokens ?? 0;
+        const observedOutput = error.usage?.outputTokens ?? 0;
+        const failedInputTokens = observedInput > 0
+          ? observedInput
+          : estimatedNextRequestTokens;
+        const failedOutputTokens = observedOutput > 0
+          ? observedOutput
+          : Math.max(1, estimateTextTokens(JSON.stringify({
+            content: currentTurnStreamedContent,
+            tool_calls: error.partialToolCalls ?? [],
+          })));
+        error.usage = {
+          inputTokens: totalInputTokens + failedInputTokens,
+          outputTokens: totalOutputTokens + failedOutputTokens,
+        };
+        throw error;
+      }
       turnInputTokens = parsed.usage.inputTokens;
       turnOutputTokens = parsed.usage.outputTokens;
       completionFinishReason = parsed.finishReason;
@@ -594,6 +633,17 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     }
 
+    // Some OpenAI-compatible providers omit usage entirely. Do not interpret
+    // missing counters as free work: fall back to the pre-dispatch input
+    // estimate and a conservative serialization estimate for the response.
+    if (turnInputTokens <= 0) turnInputTokens = estimatedNextRequestTokens;
+    if (turnOutputTokens <= 0) {
+      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
+    }
+
+    totalInputTokens += turnInputTokens;
+    totalOutputTokens += turnOutputTokens;
+
     const incompleteReason = completionFinishReason === 'length'
       ? 'finish_reason=length'
       : stream && !streamDoneObserved
@@ -610,19 +660,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         inputTokens: turnInputTokens,
         outputTokens: turnOutputTokens,
       });
-      throw incompleteCompletionError(incompleteReason);
+      throw incompleteCompletionError(incompleteReason, {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      });
     }
 
-    // Some OpenAI-compatible providers omit usage entirely. Do not interpret
-    // missing counters as free work: fall back to the pre-dispatch input
-    // estimate and a conservative serialization estimate for the response.
-    if (turnInputTokens <= 0) turnInputTokens = estimatedNextRequestTokens;
-    if (turnOutputTokens <= 0) {
-      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
-    }
-
-    totalInputTokens += turnInputTokens;
-    totalOutputTokens += turnOutputTokens;
     lastRequestInputTokens = turnInputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
 

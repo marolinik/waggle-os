@@ -40,19 +40,23 @@ export interface SseParseOptions {
 function incompleteStreamError(
   inputTokens: number,
   outputTokens: number,
+  partialToolCalls: StreamedToolCall[] | undefined,
 ): Error & {
   code: 'INCOMPLETE_COMPLETION';
   usage: { inputTokens: number; outputTokens: number };
+  partialToolCalls?: StreamedToolCall[];
 } {
   const error = new Error(
     'LLM stream ended unexpectedly before data: [DONE]; partial content was not accepted.',
   ) as Error & {
     code: 'INCOMPLETE_COMPLETION';
     usage: { inputTokens: number; outputTokens: number };
+    partialToolCalls?: StreamedToolCall[];
   };
   error.name = 'IncompleteCompletionError';
   error.code = 'INCOMPLETE_COMPLETION';
   error.usage = { inputTokens, outputTokens };
+  error.partialToolCalls = partialToolCalls;
   return error;
 }
 
@@ -89,7 +93,11 @@ export async function parseChatCompletionStream(
     try {
       readResult = await reader.read();
     } catch {
-      throw incompleteStreamError(inputTokens, outputTokens);
+      throw incompleteStreamError(
+        inputTokens,
+        outputTokens,
+        toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined,
+      );
     }
     const { done, value } = readResult;
     if (done) break;
