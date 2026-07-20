@@ -11,8 +11,10 @@ export { createCoreLogger, type CoreLogger } from './logger.js';
 export { scanForInjection, type ScanResult } from './injection-scanner.js';
 export {
   evaluateExternalMemoryIngress,
+  projectExternalMemoryContent,
   type ExternalMemoryIngressDecision,
   type ExternalMemoryIngressInput,
+  type ExternalMemoryProjectionInput,
 } from './memory-ingress-guard.js';
 
 // ── mind/ — memory substrate (FrameStore, KnowledgeGraph, embedders, search, scoring) ──

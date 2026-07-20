@@ -17,8 +17,9 @@ export {
   // Logger + injection scanner
   createCoreLogger, type CoreLogger,
   scanForInjection, type ScanResult,
-  evaluateExternalMemoryIngress,
+  evaluateExternalMemoryIngress, projectExternalMemoryContent,
   type ExternalMemoryIngressDecision, type ExternalMemoryIngressInput,
+  type ExternalMemoryProjectionInput,
   // mind/ — memory substrate
   MindDB, EmbeddingDimMismatchError,
   type EmbeddingFingerprint, type FingerprintCheck,
