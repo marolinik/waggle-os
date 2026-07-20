@@ -358,7 +358,13 @@ describe('Tauri Production Configuration', () => {
           path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs'),
           fixtureChecker,
         );
-        fs.copyFileSync(process.execPath, path.join(fixtureResources, 'node.exe'));
+        const fixtureNode = path.join(fixtureResources, 'node.exe');
+        try {
+          // Preserve the trusted file identity across repeated Windows runtime probes.
+          fs.linkSync(process.execPath, fixtureNode);
+        } catch {
+          fs.copyFileSync(process.execPath, fixtureNode);
+        }
         writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
         const fixtureMarketplaceSource = path.join(
           fixtureRoot,
@@ -520,9 +526,15 @@ describe('Tauri Production Configuration', () => {
         };
         writeCoreManifest('dist/index.js');
 
-        const runChecker = () => spawnSync(process.execPath, [fixtureChecker], {
-          encoding: 'utf-8',
-        });
+        const runChecker = () => {
+          const result = spawnSync(process.execPath, [fixtureChecker], {
+            encoding: 'utf-8',
+            timeout: 15_000,
+            windowsHide: true,
+          });
+          if (result.error) throw result.error;
+          return result;
+        };
 
         expect(runChecker().status).toBe(0);
 
@@ -789,7 +801,7 @@ describe('Tauri Production Configuration', () => {
         fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }
     },
-    60_000,
+    180_000,
   );
 
   it('staged sidecar resources have Windows MSI codepage-safe relative paths', () => {
