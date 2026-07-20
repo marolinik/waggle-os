@@ -31,6 +31,14 @@ interface VaultRecord {
   updatedAt: string;
 }
 
+interface ConnectorCredentialInput {
+  type: 'api_key' | 'oauth2' | 'bearer' | 'basic';
+  value: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  scopes?: string[];
+}
+
 export class VaultStore {
   private dataDir: string;
   private vaultPath: string;
@@ -310,26 +318,55 @@ export class VaultStore {
     return name in vault;
   }
 
-  /** Set a connector credential with typed metadata */
-  setConnectorCredential(connectorId: string, credential: {
-    type: 'api_key' | 'oauth2' | 'bearer' | 'basic';
-    value: string;
-    refreshToken?: string;
-    expiresAt?: string;
-    scopes?: string[];
-  }): void {
-    this.set(`connector:${connectorId}`, credential.value, {
-      credentialType: credential.type,
-      expiresAt: credential.expiresAt,
-      scopes: credential.scopes,
-    });
-    // Store refresh token as a separate encrypted entry (never in plaintext metadata)
-    if (credential.refreshToken) {
-      this.set(`connector:${connectorId}:refresh`, credential.refreshToken);
-    } else {
-      // Clear any previously stored refresh token if not provided
-      this.delete(`connector:${connectorId}:refresh`);
+  /** Set a connector credential with typed metadata. */
+  setConnectorCredential(connectorId: string, credential: ConnectorCredentialInput): void {
+    this.setConnectorCredentialBundle(connectorId, credential);
+  }
+
+  /**
+   * Persist a connector credential and its encrypted companion values with one
+   * vault-file replacement. This prevents a multi-field credential (for
+   * example Jira token + email + site origin) from being partially updated.
+   */
+  setConnectorCredentialBundle(
+    connectorId: string,
+    credential: ConnectorCredentialInput,
+    relatedSecrets: Readonly<Record<string, string>> = {},
+  ): void {
+    const secretEntries = Object.entries(relatedSecrets);
+    if (secretEntries.some(([suffix]) => !/^[a-z][a-z0-9_]*$/.test(suffix))) {
+      throw new TypeError('Invalid connector credential suffix');
     }
+
+    const vault = this.readVault();
+    const updatedAt = new Date().toISOString();
+    vault[`connector:${connectorId}`] = {
+      encrypted: this.encrypt(credential.value),
+      metadata: {
+        credentialType: credential.type,
+        expiresAt: credential.expiresAt,
+        scopes: credential.scopes,
+      },
+      updatedAt,
+    };
+
+    const refreshKey = `connector:${connectorId}:refresh`;
+    if (credential.refreshToken) {
+      vault[refreshKey] = {
+        encrypted: this.encrypt(credential.refreshToken),
+        updatedAt,
+      };
+    } else {
+      delete vault[refreshKey];
+    }
+
+    for (const [suffix, value] of secretEntries) {
+      vault[`connector:${connectorId}:${suffix}`] = {
+        encrypted: this.encrypt(value),
+        updatedAt,
+      };
+    }
+    this.writeVault(vault);
   }
 
   /** Get a connector credential with typed metadata */

@@ -5,9 +5,41 @@
 
 import { BaseConnector, type ConnectorAction, type ConnectorResult } from '../connector-sdk.js';
 import type { VaultStore } from '@waggle/core';
-import type { ConnectorHealth } from '@waggle/shared';
+import type { ConnectorDefinition, ConnectorHealth, ConnectorStatus } from '@waggle/shared';
 
 export class JiraConnector extends BaseConnector {
+  static normalizeSiteOrigin(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const candidate = value.trim();
+    const originMatch = /^https:\/\/([^/?#]+)\/?$/i.exec(candidate);
+    if (!originMatch || originMatch[1].includes('@') || originMatch[1].includes(':')) return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(candidate);
+    } catch {
+      return null;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    const labels = hostname.split('.');
+    if (
+      parsed.protocol !== 'https:'
+      || parsed.username !== ''
+      || parsed.password !== ''
+      || parsed.port !== ''
+      || parsed.pathname !== '/'
+      || parsed.search !== ''
+      || parsed.hash !== ''
+      || !hostname.endsWith('.atlassian.net')
+      || labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
+    ) {
+      return null;
+    }
+
+    return `https://${hostname}`;
+  }
+
   readonly id = 'jira';
   readonly name = 'Jira';
   readonly description = "Manage Jira issues, projects, and sprints. Search issues with JQL, create and update tickets, transition statuses, and add comments across all Jira projects.";
@@ -91,6 +123,13 @@ export class JiraConnector extends BaseConnector {
   private authHeader: string | null = null;
   private baseUrl: string | null = null;
 
+  override toDefinition(status: ConnectorStatus): ConnectorDefinition {
+    const effectiveStatus = status === 'connected' && (!this.authHeader || !this.baseUrl)
+      ? 'disconnected'
+      : status;
+    return super.toDefinition(effectiveStatus);
+  }
+
   async connect(vault: VaultStore): Promise<void> {
     const cred = vault.getConnectorCredential(this.id);
     if (!cred) {
@@ -100,15 +139,16 @@ export class JiraConnector extends BaseConnector {
     }
 
     const emailEntry = vault.get(`connector:${this.id}:email`);
-    const email = emailEntry?.value ?? '';
-    const apiToken = cred.value;
+    const email = emailEntry?.value.trim() ?? '';
+    const apiToken = cred.value.trim();
 
-    // Jira Cloud uses email:apiToken as basic auth
-    this.authHeader = `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`;
-
-    // Base URL from vault or default
+    // Jira Cloud uses email:apiToken as basic auth and only accepts a tenant
+    // origin under *.atlassian.net.
     const urlEntry = vault.get(`connector:${this.id}:base_url`);
-    this.baseUrl = urlEntry?.value ?? null;
+    this.baseUrl = JiraConnector.normalizeSiteOrigin(urlEntry?.value);
+    this.authHeader = email && apiToken && this.baseUrl
+      ? `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`
+      : null;
   }
 
   async healthCheck(): Promise<ConnectorHealth> {

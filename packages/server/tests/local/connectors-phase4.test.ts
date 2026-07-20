@@ -17,6 +17,7 @@ import {
   ConnectorRegistry,
   BaseConnector,
   GoogleCalendarConnector,
+  JiraConnector,
   SalesforceConnector,
   type ConnectorAction,
   type ConnectorResult,
@@ -86,6 +87,7 @@ describe('Connector routes — Phase 4 extensions', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await server.close();
     db.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -186,6 +188,112 @@ describe('Connector routes — Phase 4 extensions', () => {
     await incompleteRestart.hydrate('salesforce');
     expect(incompleteRestart.getDefinitions().find(def => def.id === 'salesforce')?.status).toBe('disconnected');
     expect(incompleteRestart.getConnected().some(connector => connector.id === 'salesforce')).toBe(false);
+  });
+
+  it('rejects unsafe Jira site origins without partial writes, then accepts a corrected retry', async () => {
+    const jira = new JiraConnector();
+    registry.register(jira);
+    vault.setConnectorCredential('jira', { type: 'bearer', value: 'old-token' });
+    vault.set('connector:jira:email', 'old@example.com');
+    vault.set('connector:jira:base_url', 'https://old-team.atlassian.net');
+    await registry.hydrate('jira');
+
+    const blankToken = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/jira/connect',
+      payload: {
+        token: '   ',
+        email: 'new@example.com',
+        baseUrl: 'https://new-team.atlassian.net',
+      },
+    });
+
+    expect(blankToken.statusCode).toBe(400);
+    expect(blankToken.json()).toEqual({ error: 'token or apiKey required' });
+    expect(vault.getConnectorCredential('jira')?.value).toBe('old-token');
+    expect(vault.get('connector:jira:email')?.value).toBe('old@example.com');
+    expect(vault.get('connector:jira:base_url')?.value).toBe('https://old-team.atlassian.net');
+
+    const rejected = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/jira/connect',
+      payload: {
+        token: 'new-token',
+        email: 'new@example.com',
+        baseUrl: 'https://new-team.atlassian.net.evil.test',
+      },
+    });
+
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json()).toEqual({ error: 'Valid Jira baseUrl required' });
+    expect(vault.getConnectorCredential('jira')?.value).toBe('old-token');
+    expect(vault.get('connector:jira:email')?.value).toBe('old@example.com');
+    expect(vault.get('connector:jira:base_url')?.value).toBe('https://old-team.atlassian.net');
+
+    const accepted = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/jira/connect',
+      payload: {
+        token: ' new-token ',
+        email: ' new@example.com ',
+        baseUrl: ' HTTPS://New-Team.Atlassian.Net/ ',
+      },
+    });
+
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({ connected: true, connectorId: 'jira' });
+    expect(vault.getConnectorCredential('jira')?.value).toBe('new-token');
+    expect(vault.get('connector:jira:email')?.value).toBe('new@example.com');
+    expect(vault.get('connector:jira:base_url')?.value).toBe('https://new-team.atlassian.net');
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('connected');
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ issues: [{ key: 'WG-1' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await jira.execute('search', { jql: 'project = WG' });
+
+    expect(result).toEqual({ success: true, data: { issues: [{ key: 'WG-1' }] } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://new-team.atlassian.net/rest/api/3/search',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from('new@example.com:new-token').toString('base64')}`,
+        }),
+      }),
+    );
+  });
+
+  it('does not advertise Jira as usable when email or a safe site origin is missing', async () => {
+    const jira = new JiraConnector();
+    registry.register(jira);
+    vault.setConnectorCredential('jira', { type: 'bearer', value: 'jira-token' });
+    vault.set('connector:jira:base_url', 'https://team.atlassian.net');
+    await registry.hydrate('jira');
+
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('disconnected');
+    expect(registry.getConnected()).not.toContain(jira);
+
+    vault.set('connector:jira:email', 'user@example.com');
+    vault.set('connector:jira:base_url', 'https://team.atlassian.net.evil.test');
+    await registry.hydrate('jira');
+
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('disconnected');
+    expect(registry.getConnected()).not.toContain(jira);
+    await expect(jira.execute('list_issues', {})).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('Not connected'),
+    });
+
+    vault.setConnectorCredential('jira', { type: 'bearer', value: '   ' });
+    vault.set('connector:jira:base_url', 'https://team.atlassian.net');
+    await registry.hydrate('jira');
+
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('disconnected');
+    expect(registry.getConnected()).not.toContain(jira);
+    expect(registry.generateTools().some(tool => tool.name.startsWith('connector_jira_'))).toBe(false);
   });
 
   it('waits for startup hydration before health checks or issued-tool execution', async () => {

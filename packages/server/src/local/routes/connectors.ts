@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ConnectorHealth } from '@waggle/shared';
 import { getCapabilities, parseTier, type Tier } from '@waggle/shared';
 import type { RecordAuditInput } from '@waggle/core';
-import { SalesforceConnector } from '@waggle/agent';
+import { JiraConnector, SalesforceConnector } from '@waggle/agent';
 
 /**
  * Tier cap for connecting connectors. All current tiers (Solo + Team) have an
@@ -132,11 +132,15 @@ export async function connectorRoutes(fastify: FastifyInstance) {
       expiresAt?: string;
       scopes?: string[];
       email?: string; // For Jira (basic auth)
+      baseUrl?: string; // Jira Cloud site origin
       instanceUrl?: string; // Salesforce API origin
     };
 
     const value = body.token ?? body.apiKey;
     if (!value) return reply.code(400).send({ error: 'token or apiKey required' });
+    if (id === 'jira' && value.trim() === '') {
+      return reply.code(400).send({ error: 'token or apiKey required' });
+    }
 
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
@@ -147,6 +151,23 @@ export async function connectorRoutes(fastify: FastifyInstance) {
       salesforceInstanceUrl = SalesforceConnector.normalizeInstanceOrigin(instanceUrl);
       if (!salesforceInstanceUrl) {
         return reply.code(400).send({ error: 'Valid Salesforce instanceUrl required' });
+      }
+    }
+
+    let jiraEmail: string | null = null;
+    let jiraBaseUrl: string | null = null;
+    if (id === 'jira') {
+      const storedEmail = fastify.vault.get('connector:jira:email')?.value;
+      jiraEmail = (body.email === undefined ? storedEmail : body.email)?.trim() ?? '';
+      if (!jiraEmail) {
+        return reply.code(400).send({ error: 'Jira email required' });
+      }
+
+      const storedBaseUrl = fastify.vault.get('connector:jira:base_url')?.value;
+      const baseUrl = body.baseUrl === undefined ? storedBaseUrl : body.baseUrl;
+      jiraBaseUrl = JiraConnector.normalizeSiteOrigin(baseUrl);
+      if (!jiraBaseUrl) {
+        return reply.code(400).send({ error: 'Valid Jira baseUrl required' });
       }
     }
 
@@ -179,20 +200,29 @@ export async function connectorRoutes(fastify: FastifyInstance) {
     const connector = registry?.get(id);
     const authType = connector?.authType ?? 'bearer';
 
-    fastify.vault.setConnectorCredential(id, {
+    const credential = {
       type: authType,
-      value,
+      value: id === 'jira' ? value.trim() : value,
       refreshToken: body.refreshToken,
       expiresAt: body.expiresAt,
       scopes: body.scopes,
-    });
+    };
+
+    if (jiraEmail && jiraBaseUrl) {
+      fastify.vault.setConnectorCredentialBundle(id, credential, {
+        email: jiraEmail,
+        base_url: jiraBaseUrl,
+      });
+    } else {
+      fastify.vault.setConnectorCredential(id, credential);
+    }
 
     if (salesforceInstanceUrl) {
       fastify.vault.set('connector:salesforce:instance_url', salesforceInstanceUrl);
     }
 
     // Store extra metadata (e.g., email for Jira basic auth)
-    if (body.email) {
+    if (body.email && id !== 'jira') {
       fastify.vault.set(`connector:${id}:email`, body.email);
     }
 
