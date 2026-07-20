@@ -16,7 +16,10 @@ import type {
 } from './types.js';
 import { CLASSIFY_PROMPT, EXTRACT_PROMPT, SYNTHESIZE_PROMPT } from './prompts.js';
 import { dedup } from './dedup.js';
-import { evaluateExternalMemoryIngress } from '../memory-ingress-guard.js';
+import {
+  evaluateExternalMemoryIngress,
+  projectExternalMemoryContent,
+} from '../memory-ingress-guard.js';
 import { createCoreLogger } from '../logger.js';
 
 const log = createCoreLogger('harvest-pipeline');
@@ -102,16 +105,26 @@ export class HarvestPipeline {
     const errors: string[] = [];
     log.info('harvest pipeline starting', { source, itemCount: items.length, batchSize: this.batchSize, concurrency: this.concurrency });
 
-    // Pass 0: Injection scan — drop any item whose title or content carries a
-    // prompt-injection payload.
+    // Pass 0: Injection scan — drop any item whose untrusted title or message
+    // text carries a prompt-injection payload. Structured conversation adapters
+    // synthesize item.content with trusted `user:` / `assistant:` labels; scan
+    // their original message text instead so those labels are not mistaken for
+    // attacker-supplied authority markers. Unstructured items still scan their
+    // complete content. The exact-serialization check prevents a partial
+    // messages projection from hiding extra attacker-controlled content.
     // Harvest ingests UNTRUSTED external exports (ChatGPT/Claude/Gemini JSON dumps,
     // Perplexity shares, URL fetches). A hostile file must not flow through to the
     // LLM passes or into memory frames.
     const originalCount = items.length;
     items = items.filter((item) => {
+      const untrustedContent = projectExternalMemoryContent({
+        content: item.content ?? '',
+        messages: item.messages,
+        parseMethod: item.metadata?.parseMethod,
+      });
       const decision = evaluateExternalMemoryIngress({
         title: item.title,
-        content: item.content ?? '',
+        content: untrustedContent,
       });
       if (decision.action === 'block') {
         log.warn('dropping harvest item with injection payload', {
