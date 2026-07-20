@@ -18,7 +18,11 @@ import {
   getPersonalDb,
   getAdapter,
 } from '../core/setup.js';
-import { UrlAdapter } from '@waggle/hive-mind-core';
+import {
+  evaluateExternalMemoryIngress,
+  projectExternalMemoryContent,
+  UrlAdapter,
+} from '@waggle/hive-mind-core';
 import type { PdfAdapter } from '@waggle/hive-mind-core';
 import type { UniversalImportItem } from '@waggle/hive-mind-core';
 
@@ -231,6 +235,60 @@ export function registerIngestTools(server: McpServer): void {
         };
       }
 
+      const preparedItems = items.map((item) => {
+        const storedContent = item.content.slice(0, 3000);
+        const frameContent = item.title
+          ? `[${detectedType}] ${item.title}: ${storedContent}`
+          : `[${detectedType}] ${storedContent}`;
+        const ingressContent = projectExternalMemoryContent({
+          content: item.content,
+          messages: item.messages,
+          parseMethod: item.metadata?.parseMethod,
+          maxChars: 3000,
+        });
+        const ingressFrameContent = item.title
+          ? `[${detectedType}] ${item.title}: ${ingressContent}`
+          : `[${detectedType}] ${ingressContent}`;
+        const entityProjections: Array<{ type: string; name: string; recalled: string }> = [];
+        if (Array.isArray(item.metadata?.entities)) {
+          for (const entity of item.metadata.entities) {
+            if (!entity || typeof entity !== 'object') continue;
+            const { name, type } = entity as Record<string, unknown>;
+            if (typeof name !== 'string') continue;
+            const storedType = typeof type === 'string' && type ? type : 'concept';
+            entityProjections.push({
+              type: storedType,
+              name,
+              recalled: `${storedType}: ${name}`,
+            });
+          }
+        }
+        return { item, frameContent, ingressContent, ingressFrameContent, entityProjections };
+      });
+      const sourcePath = input.startsWith('http') ? input : undefined;
+      const hasUnsafeContent = (sourcePath !== undefined
+        && evaluateExternalMemoryIngress({ content: sourcePath }).action === 'block')
+        || preparedItems.some(({
+        item, ingressContent, ingressFrameContent, entityProjections,
+      }) => {
+        if (evaluateExternalMemoryIngress({ content: ingressFrameContent }).action === 'block'
+          || evaluateExternalMemoryIngress({ title: item.title, content: ingressContent }).action === 'block') {
+          return true;
+        }
+        return entityProjections.some(({ type, name, recalled }) =>
+          evaluateExternalMemoryIngress({ content: recalled }).action === 'block'
+          || evaluateExternalMemoryIngress({ title: type, content: name }).action === 'block');
+      });
+      if (hasUnsafeContent) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Error: imported content was blocked by the memory safety policy.',
+          }],
+          isError: true,
+        };
+      }
+
       // Store items as frames
       const frameStore = getFrameStore();
       const sessions = getSessions();
@@ -252,11 +310,7 @@ export function registerIngestTools(server: McpServer): void {
       const maxBefore =
         (rawDb.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM memory_frames').get() as { m: number }).m;
 
-      for (const item of items) {
-        const frameContent = item.title
-          ? `[${detectedType}] ${item.title}: ${item.content.slice(0, 3000)}`
-          : `[${detectedType}] ${item.content.slice(0, 3000)}`;
-
+      for (const { frameContent, entityProjections } of preparedItems) {
         const frame = frameStore.createIFrame(
           sessionId,
           frameContent,
@@ -275,11 +329,10 @@ export function registerIngestTools(server: McpServer): void {
           } catch { /* non-fatal */ }
 
           // Extract entities from metadata
-          const metaEntities = item.metadata?.entities;
-          if (Array.isArray(metaEntities)) {
-            for (const ent of metaEntities as { name: string; type: string }[]) {
+          if (entityProjections.length > 0) {
+            for (const entity of entityProjections) {
               try {
-                kg.createEntity(ent.type || 'concept', ent.name, {
+                kg.createEntity(entity.type, entity.name, {
                   source: detectedType,
                   ...(tags && { tags }),
                 });
@@ -297,7 +350,7 @@ export function registerIngestTools(server: McpServer): void {
       harvestStore.upsert(
         sourceKey as Parameters<typeof harvestStore.upsert>[0],
         items[0]?.title ?? detectedType,
-        input.startsWith('http') ? input : undefined,
+        sourcePath,
       );
       harvestStore.recordSync(
         sourceKey as Parameters<typeof harvestStore.recordSync>[0],
