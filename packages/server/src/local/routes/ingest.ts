@@ -20,8 +20,17 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
 import zlib from 'node:zlib';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { assertSafeSegment } from './validate.js';
+import {
+  capExtractedOfficeText,
+  OFFICE_ARCHIVE_LIMITS,
+  officeArchiveLimit,
+  OfficeArchiveError,
+  type VerifiedOfficeArchive,
+  verifyOfficeArchive,
+  withOfficeArchiveSlot,
+} from '../utils/office-archive-guard.js';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -41,6 +50,7 @@ interface IngestFileResult {
   type: string;
   summary: string;
   content?: string;
+  truncated?: boolean;
 }
 
 // ── Extension → category mapping ────────────────────────────────────
@@ -166,6 +176,14 @@ function processImage(name: string, ext: string, b64: string): IngestFileResult 
   };
 }
 
+function rejectInvalidOfficeArchive(name: string): never {
+  throw new OfficeArchiveError({
+    statusCode: 422,
+    code: 'invalid_office_archive',
+    file: name,
+  });
+}
+
 async function processPdf(name: string, b64: string): Promise<IngestFileResult> {
   try {
     // pdf-parse is a CJS module — use createRequire for ESM compat
@@ -189,43 +207,37 @@ async function processPdf(name: string, b64: string): Promise<IngestFileResult> 
   }
 }
 
-async function processDocx(name: string, b64: string): Promise<IngestFileResult> {
+async function processDocx(name: string, buffer: Buffer): Promise<IngestFileResult> {
   try {
     const require = createRequire(import.meta.url);
     const mammoth = require('mammoth');
-    const buffer = Buffer.from(b64, 'base64');
     const result = await mammoth.extractRawText({ buffer });
     const text = result.value?.trim() ?? '';
     if (!text) {
       return { name, type: 'document', summary: 'DOCX — empty or no extractable text' };
     }
     const lineCount = text.split('\n').filter((l: string) => l.trim()).length;
+    const capped = capExtractedOfficeText(text);
     return {
       name,
       type: 'document',
       summary: `DOCX — ${lineCount} paragraphs, ${text.length} chars`,
-      content: text,
+      content: capped.text,
+      truncated: capped.truncated,
     };
   } catch {
-    return { name, type: 'document', summary: 'DOCX document (extraction failed)' };
+    return rejectInvalidOfficeArchive(name);
   }
 }
 
-async function processPptx(name: string, b64: string): Promise<IngestFileResult> {
+async function processPptx(name: string, archive: VerifiedOfficeArchive): Promise<IngestFileResult> {
   // PPTX is a ZIP containing XML slide files. Extract text from slide XMLs.
   try {
     // Use a simple ZIP approach — PPTX slides are in ppt/slides/slideN.xml
-    const AdmZip = await tryLoadAdmZip();
-    if (!AdmZip) {
-      return { name, type: 'document', summary: 'PPTX presentation (install adm-zip for text extraction)' };
-    }
-    const buffer = Buffer.from(b64, 'base64');
-    const zip = new AdmZip(buffer);
-    const entries = zip.getEntries();
     const slideTexts: string[] = [];
-    for (const entry of entries) {
-      if (entry.entryName.match(/^ppt\/slides\/slide\d+\.xml$/)) {
-        const xml = entry.getData().toString('utf-8');
+    for (const [entryName, entryData] of archive.entries) {
+      if (entryName.match(/^ppt\/slides\/slide\d+\.xml$/)) {
+        const xml = entryData.toString('utf-8');
         // Extract text between <a:t> tags
         const texts = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g)?.map(
           (m: string) => m.replace(/<[^>]+>/g, '')
@@ -239,42 +251,23 @@ async function processPptx(name: string, b64: string): Promise<IngestFileResult>
       return { name, type: 'document', summary: 'PPTX — no extractable text' };
     }
     const text = slideTexts.map((t, i) => `--- Slide ${i + 1} ---\n${t}`).join('\n\n');
+    const capped = capExtractedOfficeText(text);
     return {
       name,
       type: 'document',
       summary: `PPTX — ${slideTexts.length} slides, ${text.length} chars`,
-      content: text,
+      content: capped.text,
+      truncated: capped.truncated,
     };
   } catch {
-    return { name, type: 'document', summary: 'PPTX presentation (extraction failed)' };
+    return rejectInvalidOfficeArchive(name);
   }
 }
 
-/** Minimal slice of the adm-zip API used here (the package is loaded at runtime via createRequire). */
-interface AdmZipEntry {
-  entryName: string;
-  getData(): Buffer;
-}
-interface AdmZipInstance {
-  getEntries(): AdmZipEntry[];
-}
-type AdmZipConstructor = new (buffer: Buffer) => AdmZipInstance;
-
-/** Try to load adm-zip if available, otherwise return null */
-async function tryLoadAdmZip(): Promise<AdmZipConstructor | null> {
-  try {
-    const require = createRequire(import.meta.url);
-    return require('adm-zip') as AdmZipConstructor;
-  } catch {
-    return null;
-  }
-}
-
-async function processXlsx(name: string, b64: string): Promise<IngestFileResult> {
+async function processXlsx(name: string, buffer: Buffer): Promise<IngestFileResult> {
   try {
     const require = createRequire(import.meta.url);
     const ExcelJS = require('exceljs');
-    const buffer = Buffer.from(b64, 'base64');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
 
@@ -301,14 +294,16 @@ async function processXlsx(name: string, b64: string): Promise<IngestFileResult>
       return { name, type: 'spreadsheet', summary: 'Spreadsheet — empty (no data)' };
     }
     const text = sheetTexts.join('\n\n');
+    const capped = capExtractedOfficeText(text);
     return {
       name,
       type: 'spreadsheet',
       summary: `Spreadsheet — ${workbook.worksheets.length} sheet(s), ${text.length} chars`,
-      content: text,
+      content: capped.text,
+      truncated: capped.truncated,
     };
   } catch {
-    return { name, type: 'spreadsheet', summary: 'Spreadsheet (extraction failed)' };
+    return rejectInvalidOfficeArchive(name);
   }
 }
 
@@ -376,18 +371,24 @@ function processZip(name: string, b64: string): IngestFileResult {
 
 // ── Main router ─────────────────────────────────────────────────────
 
-async function processFile(input: IngestFileInput): Promise<IngestFileResult> {
+async function processFile(
+  input: IngestFileInput,
+  officeArchive?: VerifiedOfficeArchive,
+): Promise<IngestFileResult> {
   const ext = extOf(input.name);
   const cat = categoryOf(ext);
   switch (cat) {
     case 'image': return processImage(input.name, ext, input.content);
     case 'document': {
       if (ext === 'pdf') return processPdf(input.name, input.content);
-      if (ext === 'docx') return processDocx(input.name, input.content);
-      if (ext === 'pptx') return processPptx(input.name, input.content);
+      if (ext === 'docx') return processDocx(input.name, officeArchive!.buffer);
+      if (ext === 'pptx') return processPptx(input.name, officeArchive!);
       return { name: input.name, type: 'document', summary: `Document (.${ext}) — text extraction not available` };
     }
-    case 'spreadsheet': return processXlsx(input.name, input.content);
+    case 'spreadsheet': {
+      if (ext === 'xlsx') return processXlsx(input.name, officeArchive!.buffer);
+      return { name: input.name, type: 'spreadsheet', summary: `Spreadsheet (.${ext}) — text extraction not available` };
+    }
     case 'csv': return processCsv(input.name, input.content);
     case 'text': return processText(input.name, ext, input.content);
     case 'archive': return processZip(input.name, input.content);
@@ -397,6 +398,53 @@ async function processFile(input: IngestFileInput): Promise<IngestFileResult> {
 }
 
 // ── Route ───────────────────────────────────────────────────────────
+
+function isOfficeArchive(input: IngestFileInput): boolean {
+  const ext = extOf(input.name);
+  return ext === 'docx' || ext === 'pptx' || ext === 'xlsx';
+}
+
+async function processFiles(files: IngestFileInput[]): Promise<IngestFileResult[]> {
+  const officeIndexes = files
+    .map((file, index) => isOfficeArchive(file) ? index : -1)
+    .filter((index) => index >= 0);
+  if (officeIndexes.length === 0) return Promise.all(files.map((file) => processFile(file)));
+
+  return withOfficeArchiveSlot(files[officeIndexes[0]].name, async () => {
+    const verifiedArchives = new Map<number, VerifiedOfficeArchive>();
+    let requestUncompressedBytes = 0;
+    for (const index of officeIndexes) {
+      const file = files[index];
+      const verified = verifyOfficeArchive(
+        file.name,
+        Buffer.from(file.content, 'base64'),
+        requestUncompressedBytes,
+      );
+      requestUncompressedBytes += verified.uncompressedBytes;
+      verifiedArchives.set(index, verified);
+    }
+
+    const results: IngestFileResult[] = [];
+    for (let index = 0; index < files.length; index++) {
+      results.push(await processFile(files[index], verifiedArchives.get(index)));
+    }
+    return results;
+  });
+}
+
+function sendOfficeArchiveError(reply: FastifyReply, error: OfficeArchiveError): unknown {
+  if (error.statusCode === 503) reply.header('Retry-After', '1');
+  return reply.status(error.statusCode).send({
+    error: error.message,
+    code: error.code,
+    file: error.file,
+    ...(error.metric === undefined ? {} : {
+      metric: error.metric,
+      limit: error.limit,
+      actual: error.actual,
+    }),
+  });
+}
 
 export const ingestRoutes: FastifyPluginAsync = async (server) => {
   server.post<{ Body: IngestBody }>('/api/ingest', {
@@ -411,6 +459,14 @@ export const ingestRoutes: FastifyPluginAsync = async (server) => {
 
     if (!files || !Array.isArray(files) || files.length === 0) {
       return reply.status(400).send({ error: 'files array is required' });
+    }
+    if (files.length > OFFICE_ARCHIVE_LIMITS.filesPerRequest) {
+      return sendOfficeArchiveError(reply, officeArchiveLimit(
+        'request',
+        'files_per_request',
+        OFFICE_ARCHIVE_LIMITS.filesPerRequest,
+        files.length,
+      ));
     }
 
     // Validate each file entry
@@ -429,7 +485,13 @@ export const ingestRoutes: FastifyPluginAsync = async (server) => {
       }
     }
 
-    const results = await Promise.all(files.map(processFile));
+    let results: IngestFileResult[];
+    try {
+      results = await processFiles(files);
+    } catch (error) {
+      if (error instanceof OfficeArchiveError) return sendOfficeArchiveError(reply, error);
+      throw error;
+    }
 
     // F2: Write to workspace file registry
     if (workspaceId && workspaceId !== 'default') {
