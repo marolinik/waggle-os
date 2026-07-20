@@ -1011,6 +1011,66 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, passed: true });
   });
 
+  it('accepts exact raw GitHub README URLs only for allowlisted primary repositories', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Embedded | Client/server |',
+      'Sources: https://raw.githubusercontent.com/asg017/sqlite-vec/main/README.md and https://raw.githubusercontent.com/pgvector/pgvector/master/README.md',
+      '## Inference',
+      'SQLite should reduce desktop operational overhead.',
+      '## Recommendation',
+      'Use SQLite vector search for the stated use case.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch'],
+      durationMs: 10_000,
+      inputTokens: 5_000,
+      sseEvents: [
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'primary README', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch'] } },
+      ],
+    }));
+
+    expect(result).toMatchObject({ score: 100, passed: true });
+  });
+
+  it('does not count canonical and raw URLs for one GitHub repository as two sources', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const response = [
+      '## Facts',
+      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
+      '|---|---|---|',
+      '| Deployment | Unknown | Client/server |',
+      'Sources: https://github.com/pgvector/pgvector and https://raw.githubusercontent.com/pgvector/pgvector/master/README.md',
+      '## Inference',
+      'An embedded store should reduce desktop operational overhead.',
+      '## Recommendation',
+      'Do not decide until the missing SQLite primary source is fetched.',
+    ].join('\n');
+    const result = scorePersonaTrial(researcher, evidence({
+      prompt: researcher.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: researcher.id,
+      toolsUsed: ['web_fetch'],
+      sseEvents: [
+        { event: 'tool_result', data: { name: 'web_fetch', result: 'one repository', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['web_fetch'] } },
+      ],
+    }));
+
+    expect(result.score).toBe(90);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find(check => check.id === 'primary-sources')?.passed).toBe(false);
+  });
+
   it('recognizes explicit inline fact and inference markers', () => {
     const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
     const rule = researcher.responseRules.find(candidate => candidate.id === 'fact-inference');
@@ -1035,6 +1095,12 @@ describe('deterministic 100-point persona scorer', () => {
     expect(rule.patterns.every(pattern => pattern.test(
       'Inference (Fact): uncertain.',
     ))).toBe(false);
+    expect(rule.patterns.every(pattern => pattern.test(
+      '## What\'s Verified (pgvector)\nThe README confirms exact search.\n**Inference:** SQLite should reduce desktop overhead.',
+    ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
+      '## What\'s NOT Verified (sqlite-vec)\nNo source was fetched.\n**Inference:** Treat all feature claims as tentative.',
+    ))).toBe(false);
   });
 
   it('does not accept lookalike hostnames as primary-source evidence', () => {
@@ -1044,7 +1110,7 @@ describe('deterministic 100-point persona scorer', () => {
       '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
       '|---|---|---|',
       '| Deployment | Embedded | Client/server |',
-      'Sources: https://sqlite.org.evil.example/vec1 and https://postgresql.org.evil.example/vector',
+      'Sources: https://sqlite.org.evil.example/vec1, https://postgresql.org.evil.example/vector, and https://raw.githubusercontent.com/attacker/asg017/sqlite-vec/main/README.md',
       '## Inference',
       'This is an inference for the stated desktop use case.',
       '## Recommendation',

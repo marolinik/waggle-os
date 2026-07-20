@@ -132,6 +132,14 @@ describe('Prompt composition', () => {
     expect(result.indexOf(corePrompt)).toBeLessThan(result.indexOf('Persona: Researcher'));
   });
 
+  it('gives Researcher an exact GitHub README recovery path', () => {
+    const result = composePersonaPrompt(corePrompt, getPersona('researcher')!);
+
+    expect(result).toContain('raw.githubusercontent.com');
+    expect(result).toContain('before declaring an evidence gap');
+    expect(result).toContain('every compared item');
+  });
+
   it('combined prompt stays under 32000 chars', () => {
     for (const persona of PERSONAS) {
       const result = composePersonaPrompt(corePrompt, persona);

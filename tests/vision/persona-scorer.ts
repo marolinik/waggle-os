@@ -159,7 +159,14 @@ function primaryUrlCount(response: string, allowedDomains: readonly string[]): n
           && (!allowedPath || pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
       });
       if (allowed) {
-        unique.add(url.toString());
+        const pathSegments = pathname.split('/').filter(Boolean);
+        const sourceIdentity = (
+          (hostname === 'github.com' || hostname === 'raw.githubusercontent.com')
+          && pathSegments.length >= 2
+        )
+          ? `github.com/${pathSegments[0]}/${pathSegments[1]}`
+          : url.toString();
+        unique.add(sourceIdentity);
       }
     } catch {
       // A malformed URL is not objective source evidence.
