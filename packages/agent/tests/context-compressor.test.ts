@@ -26,11 +26,19 @@ function makeHistory(count: number, contentSize = 100): CompressibleMessage[] {
   return messages;
 }
 
-function mockFetch(responseContent: string, ok = true): typeof globalThis.fetch {
+function mockFetch(
+  responseContent: string | null,
+  ok = true,
+  finishReason: string | null | 'missing' = 'stop',
+  toolCalls?: unknown[],
+): typeof globalThis.fetch {
   return vi.fn().mockResolvedValue({
     ok,
     json: async () => ({
-      choices: [{ message: { content: responseContent } }],
+      choices: [{
+        message: { content: responseContent, ...(toolCalls ? { tool_calls: toolCalls } : {}) },
+        ...(finishReason === 'missing' ? {} : { finish_reason: finishReason }),
+      }],
     }),
   }) as unknown as typeof globalThis.fetch;
 }
@@ -249,6 +257,119 @@ describe('summarizeMiddle', () => {
 
     expect(summary).toContain('Compressed Region');
     expect(summary).toContain('2 messages');
+  });
+
+  it.each(['missing', null, 'length', 'content_filter', 'tool_calls'])(
+    'uses deterministic fallback for non-final finish reason %s',
+    async (finishReason) => {
+      const middle = [msg('user', 'Tell me about Y'), msg('assistant', 'Y is a topic')];
+      const fetchMock = mockFetch('Partial summary must not persist.', true, finishReason);
+
+      const summary = await summarizeMiddle(middle, {
+        budgetModel: 'test',
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'key',
+        fetch: fetchMock,
+      });
+
+      expect(summary).toContain('Compressed Region');
+      expect(summary).not.toContain('Partial summary must not persist.');
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([null, '', '   '])('uses deterministic fallback for unusable text %s', async (content) => {
+    const middle = [msg('user', 'Tell me about Y'), msg('assistant', 'Y is a topic')];
+    const fetchMock = mockFetch(content, true, 'stop');
+
+    const summary = await summarizeMiddle(middle, {
+      budgetModel: 'test',
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'key',
+      fetch: fetchMock,
+    });
+
+    expect(summary).toContain('Compressed Region');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('uses deterministic fallback for missing text or inconsistent tool calls', async () => {
+    const middle = [msg('user', 'Tell me about Y'), msg('assistant', 'Y is a topic')];
+    const payloads = [
+      { choices: [{ finish_reason: 'stop', message: {} }] },
+      {
+        choices: [{
+          finish_reason: 'stop',
+          message: { content: 'Partial summary.', tool_calls: [{ id: 'call_1' }] },
+        }],
+      },
+    ];
+
+    for (const payload of payloads) {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
+      const summary = await summarizeMiddle(middle, {
+        budgetModel: 'test',
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'key',
+        fetch: fetchMock,
+      });
+
+      expect(summary).toContain('Compressed Region');
+      expect(fetchMock).toHaveBeenCalledOnce();
+    }
+  });
+
+  it.each(['network failure', 'invalid JSON'])('uses deterministic fallback on %s', async (failure) => {
+    const middle = [msg('user', 'Tell me about Y'), msg('assistant', 'Y is a topic')];
+    const fetchMock = failure === 'network failure'
+      ? vi.fn().mockRejectedValue(new Error('socket closed'))
+      : vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => { throw new SyntaxError('bad JSON'); },
+      });
+
+    const summary = await summarizeMiddle(middle, {
+      budgetModel: 'test',
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'key',
+      fetch: fetchMock,
+    });
+
+    expect(summary).toContain('Compressed Region');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('bounds the summarizer request and falls back when it aborts', async () => {
+    const middle = [msg('user', 'Tell me about Y'), msg('assistant', 'Y is a topic')];
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      throw new DOMException('timed out', 'AbortError');
+    });
+
+    const summary = await summarizeMiddle(middle, {
+      budgetModel: 'test',
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'key',
+      fetch: fetchMock,
+    });
+
+    expect(summary).toContain('Compressed Region');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('uses deterministic fallback for a null JSON response', async () => {
+    const middle = [msg('user', 'Tell me about Y'), msg('assistant', 'Y is a topic')];
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => null });
+
+    const summary = await summarizeMiddle(middle, {
+      budgetModel: 'test',
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'key',
+      fetch: fetchMock,
+    });
+
+    expect(summary).toContain('Compressed Region');
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it('returns previous summary when middle is empty', async () => {

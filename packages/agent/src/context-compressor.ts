@@ -268,14 +268,21 @@ export async function summarizeMiddle(
     temperature: 0.1,
   };
 
-  const response = await fetchFn(`${config.litellmUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.litellmApiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetchFn(`${config.litellmUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.litellmApiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (error) {
+    log.warn(`Summarizer request failed: ${error instanceof Error ? error.message : String(error)}`);
+    return buildFallbackSummary(middle, previousSummary);
+  }
 
   if (!response.ok) {
     try {
@@ -285,11 +292,39 @@ export async function summarizeMiddle(
     return buildFallbackSummary(middle, previousSummary);
   }
 
-  const result = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
+  let result: {
+    choices?: Array<{
+      finish_reason?: string | null;
+      message?: {
+        content?: string | null;
+        tool_calls?: unknown[];
+      };
+    }>;
   };
-  const content = result.choices?.[0]?.message?.content;
-  if (!content) {
+  try {
+    const parsed = await response.json() as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      log.warn('Summarizer response was not a JSON object; using deterministic fallback');
+      return buildFallbackSummary(middle, previousSummary);
+    }
+    result = parsed as typeof result;
+  } catch (error) {
+    log.warn(`Summarizer response was not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return buildFallbackSummary(middle, previousSummary);
+  }
+  const choice = result.choices?.[0];
+  if (choice?.finish_reason !== 'stop') {
+    log.warn(
+      `Summarizer returned an incomplete completion (finish_reason=${choice?.finish_reason ?? 'missing'}); using deterministic fallback`,
+    );
+    return buildFallbackSummary(middle, previousSummary);
+  }
+  if (choice.message?.tool_calls?.length) {
+    log.warn('Summarizer returned tool calls with finish_reason=stop; using deterministic fallback');
+    return buildFallbackSummary(middle, previousSummary);
+  }
+  const content = choice.message?.content;
+  if (typeof content !== 'string' || content.trim().length === 0) {
     return buildFallbackSummary(middle, previousSummary);
   }
 

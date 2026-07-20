@@ -9,10 +9,13 @@ const resolved: ResolvedModel = {
   baseUrl: 'https://api.example.com/v1',
 };
 
-function okBody(content = 'hi') {
+function okBody(content: string | null = 'hi', finishReason: string | null | 'missing' = 'stop') {
   return new Response(
     JSON.stringify({
-      choices: [{ message: { content } }],
+      choices: [{
+        message: { content },
+        ...(finishReason === 'missing' ? {} : { finish_reason: finishReason }),
+      }],
       model: 'gpt-4o-mini',
       usage: { prompt_tokens: 12, completion_tokens: 5 },
     }),
@@ -28,6 +31,105 @@ describe('openaiChat', () => {
     const res = await openaiChat(resolved, [{ role: 'user', content: 'hey' }], undefined, { fetchImpl });
     expect(res.content).toBe('hello');
     expect(res.usage).toEqual({ input_tokens: 12, output_tokens: 5 });
+  });
+
+  it.each(['missing', null, 'length', 'content_filter', 'tool_calls'])(
+    'rejects a 200 response with non-final finish reason %s without replay',
+    async (finishReason) => {
+      const fetchImpl = vi.fn(async () => okBody('Partial content', finishReason)) as unknown as typeof fetch;
+
+      await expect(openaiChat(
+        resolved,
+        [{ role: 'user', content: 'hey' }],
+        undefined,
+        { fetchImpl, sleepImpl: noSleep },
+      )).rejects.toMatchObject({
+        code: 'INCOMPLETE_COMPLETION',
+        usage: { inputTokens: 12, outputTokens: 5 },
+        message: expect.stringMatching(/finish_reason=.*partial content was rejected/i),
+      });
+
+      expect(fetchImpl).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([null, '', '   '])('rejects stop with unusable assistant text %s', async (content) => {
+    const fetchImpl = vi.fn(async () => okBody(content, 'stop')) as unknown as typeof fetch;
+
+    await expect(openaiChat(
+      resolved,
+      [{ role: 'user', content: 'hey' }],
+      undefined,
+      { fetchImpl, sleepImpl: noSleep },
+    )).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 12, outputTokens: 5 },
+    });
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('rejects stop with missing assistant text or tool calls without replay', async () => {
+    const payloads = [
+      { choices: [{ finish_reason: 'stop', message: {} }] },
+      {
+        choices: [{
+          finish_reason: 'stop',
+          message: {
+            content: 'Text plus an unsupported tool call.',
+            tool_calls: [{ id: 'call_1' }],
+          },
+        }],
+      },
+    ];
+
+    for (const payload of payloads) {
+      const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+        ...payload,
+        model: 'gpt-4o-mini',
+        usage: { prompt_tokens: 12, completion_tokens: 5 },
+      }), { status: 200 })) as unknown as typeof fetch;
+
+      await expect(openaiChat(
+        resolved,
+        [{ role: 'user', content: 'hey' }],
+        undefined,
+        { fetchImpl, sleepImpl: noSleep },
+      )).rejects.toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+      expect(fetchImpl).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('classifies an empty paid choice set as incomplete and preserves usage', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      choices: [],
+      model: 'gpt-4o-mini',
+      usage: { prompt_tokens: 12, completion_tokens: 5 },
+    }), { status: 200 })) as unknown as typeof fetch;
+
+    await expect(openaiChat(
+      resolved,
+      [{ role: 'user', content: 'hey' }],
+      undefined,
+      { fetchImpl, sleepImpl: noSleep },
+    )).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 12, outputTokens: 5 },
+      message: expect.stringMatching(/missing completion choice/i),
+    });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a null JSON response without replay', async () => {
+    const fetchImpl = vi.fn(async () => new Response('null', { status: 200 })) as unknown as typeof fetch;
+
+    await expect(openaiChat(
+      resolved,
+      [{ role: 'user', content: 'hey' }],
+      undefined,
+      { fetchImpl, sleepImpl: noSleep },
+    )).rejects.toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it('passes an AbortSignal (timeout) to fetch', async () => {

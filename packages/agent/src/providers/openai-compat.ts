@@ -19,6 +19,24 @@ export interface ChatResponse {
   usage: { input_tokens: number; output_tokens: number };
 }
 
+type IncompleteCompletionError = Error & {
+  code: 'INCOMPLETE_COMPLETION';
+  usage: { inputTokens: number; outputTokens: number };
+};
+
+function incompleteCompletionError(
+  reason: string,
+  usage: IncompleteCompletionError['usage'],
+): IncompleteCompletionError {
+  const error = new Error(
+    `OpenAI-compatible completion was not complete (${reason}); partial content was rejected.`,
+  ) as IncompleteCompletionError;
+  error.name = 'IncompleteCompletionError';
+  error.code = 'INCOMPLETE_COMPLETION';
+  error.usage = usage;
+  return error;
+}
+
 /** Per-request wall-clock timeout before the request is aborted. */
 const DEFAULT_TIMEOUT_MS = 60_000;
 /** Additional attempts after the first on a transient failure. */
@@ -128,24 +146,50 @@ export async function openaiChat(
       );
     }
 
-    const data = (await res.json()) as {
-      choices: Array<{ message: { content: string } }>;
+    const rawData = await res.json() as unknown;
+    if (typeof rawData !== 'object' || rawData === null) {
+      throw incompleteCompletionError('invalid response body', { inputTokens: 0, outputTokens: 0 });
+    }
+    const data = rawData as {
+      choices: Array<{
+        finish_reason?: string | null;
+        message?: {
+          content?: string | null;
+          tool_calls?: unknown[];
+        };
+      }>;
       model: string;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
+    const usage = {
+      input_tokens: data.usage?.prompt_tokens ?? 0,
+      output_tokens: data.usage?.completion_tokens ?? 0,
+    };
+    const errorUsage = {
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+    };
     const choice = data.choices?.[0];
     if (!choice) {
-      throw new Error('No choices returned from API');
+      throw incompleteCompletionError('missing completion choice', errorUsage);
+    }
+    if (choice.finish_reason !== 'stop') {
+      const reason = choice.finish_reason ?? 'missing';
+      throw incompleteCompletionError(`finish_reason=${reason}`, errorUsage);
+    }
+    if (choice.message?.tool_calls?.length) {
+      throw incompleteCompletionError('finish_reason=stop with tool_calls', errorUsage);
+    }
+    const content = choice.message?.content;
+    if (typeof content !== 'string' || content.trim().length === 0) {
+      throw incompleteCompletionError('missing assistant text', errorUsage);
     }
 
     return {
-      content: choice.message.content,
+      content,
       model: data.model,
-      usage: {
-        input_tokens: data.usage?.prompt_tokens ?? 0,
-        output_tokens: data.usage?.completion_tokens ?? 0,
-      },
+      usage,
     };
   }
 }
