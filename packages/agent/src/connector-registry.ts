@@ -14,8 +14,16 @@ export interface AuditLogger {
   log(entry: { actionType: string; description: string; requiresApproval?: boolean }): void;
 }
 
+const ALWAYS_CONNECTED_CONNECTOR_IDS = new Set(['slack-mock', 'teams-mock', 'discord-mock']);
+
+interface ConnectorHydration {
+  promise: Promise<void>;
+  status: 'pending' | 'ready' | 'failed';
+}
+
 export class ConnectorRegistry {
   private connectors = new Map<string, WaggleConnector>();
+  private hydration = new WeakMap<WaggleConnector, ConnectorHydration>();
   private vault: VaultStore;
   private auditLogger?: AuditLogger;
 
@@ -27,6 +35,19 @@ export class ConnectorRegistry {
   /** Register a connector in the registry */
   register(connector: WaggleConnector): void {
     this.connectors.set(connector.id, connector);
+    void this.beginHydration(connector);
+  }
+
+  /** Reload a registered connector's in-memory state from the vault. */
+  async hydrate(id: string): Promise<boolean> {
+    const connector = this.connectors.get(id);
+    if (!connector) return false;
+    try {
+      await this.beginHydration(connector);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Remove a connector from the registry */
@@ -44,15 +65,64 @@ export class ConnectorRegistry {
     return this.connectors.get(id);
   }
 
+  private beginHydration(connector: WaggleConnector): Promise<void> {
+    const previous = this.hydration.get(connector)?.promise;
+    const promise = (async () => {
+      if (previous) {
+        try {
+          await previous;
+        } catch {
+          // A fresh vault read can recover from a failed earlier hydration.
+        }
+      }
+      await connector.connect(this.vault);
+    })();
+    const hydration: ConnectorHydration = { promise, status: 'pending' };
+    this.hydration.set(connector, hydration);
+    void promise.then(
+      () => {
+        if (this.hydration.get(connector) === hydration) hydration.status = 'ready';
+      },
+      () => {
+        if (this.hydration.get(connector) === hydration) hydration.status = 'failed';
+      },
+    );
+    return promise;
+  }
+
+  private async waitForHydration(connector: WaggleConnector): Promise<void> {
+    while (true) {
+      const hydration = this.hydration.get(connector);
+      if (!hydration) return;
+      try {
+        await hydration.promise;
+      } catch (err) {
+        if (this.hydration.get(connector) !== hydration) continue;
+        throw err;
+      }
+      if (this.hydration.get(connector) === hydration) return;
+    }
+  }
+
+  private isConnected(connector: WaggleConnector): boolean {
+    try {
+      if (this.connectors.get(connector.id) !== connector) return false;
+      if (this.hydration.get(connector)?.status !== 'ready') return false;
+      if (ALWAYS_CONNECTED_CONNECTOR_IDS.has(connector.id)) return true;
+      const cred = this.vault.getConnectorCredential(connector.id);
+      return Boolean(
+        cred
+        && !cred.isExpired
+        && connector.toDefinition('connected').status === 'connected',
+      );
+    } catch {
+      return false;
+    }
+  }
+
   /** Get connectors that have valid (non-expired) credentials in vault OR are mock channel connectors */
   getConnected(): WaggleConnector[] {
-    // Mock channel connector IDs that are always available without credentials
-    const ALWAYS_CONNECTED = new Set(['slack-mock', 'teams-mock', 'discord-mock']);
-    return [...this.connectors.values()].filter(c => {
-      if (ALWAYS_CONNECTED.has(c.id)) return true;
-      const cred = this.vault.getConnectorCredential(c.id);
-      return cred && !cred.isExpired;
-    });
+    return [...this.connectors.values()].filter(connector => this.isConnected(connector));
   }
 
   /** Get ConnectorDefinition[] with live status from vault (for REST API responses) */
@@ -61,7 +131,7 @@ export class ConnectorRegistry {
       const cred = this.vault.getConnectorCredential(c.id);
       let status: ConnectorDefinition['status'] = 'disconnected';
       if (cred) {
-        status = cred.isExpired ? 'expired' : 'connected';
+        status = cred.isExpired ? 'expired' : (this.isConnected(c) ? 'connected' : 'disconnected');
       }
       return c.toDefinition(status);
     });
@@ -71,6 +141,8 @@ export class ConnectorRegistry {
   async healthCheck(id: string): Promise<ConnectorHealth | null> {
     const connector = this.connectors.get(id);
     if (!connector) return null;
+    await this.waitForHydration(connector);
+    if (this.connectors.get(id) !== connector) return null;
     return connector.healthCheck();
   }
 
@@ -95,6 +167,24 @@ export class ConnectorRegistry {
             ...(action.inputSchema as Record<string, unknown>),
           },
           execute: async (args: Record<string, unknown>) => {
+            try {
+              await this.waitForHydration(connector);
+            } catch {
+              const disconnected: ConnectorResult = {
+                success: false,
+                error: 'Connector is not connected',
+              };
+              return JSON.stringify(disconnected);
+            }
+
+            if (!this.isConnected(connector)) {
+              const disconnected: ConnectorResult = {
+                success: false,
+                error: 'Connector is not connected',
+              };
+              return JSON.stringify(disconnected);
+            }
+
             const cleanArgs = { ...args };
 
             // Audit log every connector execution

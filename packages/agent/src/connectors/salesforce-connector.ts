@@ -7,7 +7,7 @@
 import { BaseConnector, type ConnectorAction, type ConnectorResult } from '../connector-sdk.js';
 import { safeFetch } from '../url-egress-guard.js';
 import type { VaultStore } from '@waggle/core';
-import type { ConnectorHealth } from '@waggle/shared';
+import type { ConnectorDefinition, ConnectorHealth, ConnectorStatus } from '@waggle/shared';
 
 const API_VERSION = 'v59.0';
 const MAX_LIST_LIMIT = 2_000;
@@ -15,38 +15,6 @@ const MAX_SOQL_LENGTH = 20_000;
 const MAX_FIELD_LIST_LENGTH = 2_048;
 const MAX_FIELDS = 200;
 const SALESFORCE_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]{0,79}$/;
-
-function normalizeInstanceOrigin(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const candidate = value.trim();
-  const originMatch = /^https:\/\/([^/?#]+)\/?$/i.exec(candidate);
-  if (!originMatch || originMatch[1].includes('@') || originMatch[1].includes(':')) return null;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(candidate);
-  } catch {
-    return null;
-  }
-
-  const hostname = parsed.hostname.toLowerCase();
-  const labels = hostname.split('.');
-  if (
-    parsed.protocol !== 'https:'
-    || parsed.username !== ''
-    || parsed.password !== ''
-    || parsed.port !== ''
-    || parsed.pathname !== '/'
-    || parsed.search !== ''
-    || parsed.hash !== ''
-    || !hostname.endsWith('.salesforce.com')
-    || labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
-  ) {
-    return null;
-  }
-
-  return `https://${hostname}`;
-}
 
 function requireIdentifier(value: unknown, label: string): string {
   if (typeof value !== 'string' || !SALESFORCE_IDENTIFIER.test(value)) {
@@ -118,6 +86,38 @@ function requireSoqlQuery(value: unknown): string {
 }
 
 export class SalesforceConnector extends BaseConnector {
+  static normalizeInstanceOrigin(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const candidate = value.trim();
+    const originMatch = /^https:\/\/([^/?#]+)\/?$/i.exec(candidate);
+    if (!originMatch || originMatch[1].includes('@') || originMatch[1].includes(':')) return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(candidate);
+    } catch {
+      return null;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    const labels = hostname.split('.');
+    if (
+      parsed.protocol !== 'https:'
+      || parsed.username !== ''
+      || parsed.password !== ''
+      || parsed.port !== ''
+      || parsed.pathname !== '/'
+      || parsed.search !== ''
+      || parsed.hash !== ''
+      || !hostname.endsWith('.salesforce.com')
+      || labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))
+    ) {
+      return null;
+    }
+
+    return `https://${hostname}`;
+  }
+
   readonly id = 'salesforce';
   readonly name = 'Salesforce';
   readonly description = "Query and manage Salesforce objects using SOQL. Access leads, contacts, opportunities, accounts, and custom objects with full CRM visibility.";
@@ -206,13 +206,20 @@ export class SalesforceConnector extends BaseConnector {
   private token: string | null = null;
   private instanceUrl: string | null = null;
 
+  override toDefinition(status: ConnectorStatus): ConnectorDefinition {
+    const effectiveStatus = status === 'connected' && (!this.token || !this.instanceUrl)
+      ? 'disconnected'
+      : status;
+    return super.toDefinition(effectiveStatus);
+  }
+
   async connect(vault: VaultStore): Promise<void> {
     const cred = vault.getConnectorCredential(this.id);
     this.token = cred?.value ?? null;
 
     // Instance URL from vault metadata (e.g., "https://mycompany.salesforce.com")
     const urlEntry = vault.get(`connector:${this.id}:instance_url`);
-    this.instanceUrl = normalizeInstanceOrigin(urlEntry?.value);
+    this.instanceUrl = SalesforceConnector.normalizeInstanceOrigin(urlEntry?.value);
   }
 
   async healthCheck(): Promise<ConnectorHealth> {

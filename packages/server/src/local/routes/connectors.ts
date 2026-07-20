@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ConnectorHealth } from '@waggle/shared';
 import { getCapabilities, parseTier, type Tier } from '@waggle/shared';
 import type { RecordAuditInput } from '@waggle/core';
+import { SalesforceConnector } from '@waggle/agent';
 
 /**
  * Tier cap for connecting connectors. All current tiers (Solo + Team) have an
@@ -131,12 +132,23 @@ export async function connectorRoutes(fastify: FastifyInstance) {
       expiresAt?: string;
       scopes?: string[];
       email?: string; // For Jira (basic auth)
+      instanceUrl?: string; // Salesforce API origin
     };
 
     const value = body.token ?? body.apiKey;
     if (!value) return reply.code(400).send({ error: 'token or apiKey required' });
 
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
+
+    let salesforceInstanceUrl: string | null = null;
+    if (id === 'salesforce') {
+      const storedInstanceUrl = fastify.vault.get('connector:salesforce:instance_url')?.value;
+      const instanceUrl = body.instanceUrl === undefined ? storedInstanceUrl : body.instanceUrl;
+      salesforceInstanceUrl = SalesforceConnector.normalizeInstanceOrigin(instanceUrl);
+      if (!salesforceInstanceUrl) {
+        return reply.code(400).send({ error: 'Valid Salesforce instanceUrl required' });
+      }
+    }
 
     // Tier cap — connectors are unlimited on all current tiers (Solo + Team);
     // gate retained for any future finite cap. Count REAL credentialed
@@ -175,18 +187,18 @@ export async function connectorRoutes(fastify: FastifyInstance) {
       scopes: body.scopes,
     });
 
+    if (salesforceInstanceUrl) {
+      fastify.vault.set('connector:salesforce:instance_url', salesforceInstanceUrl);
+    }
+
     // Store extra metadata (e.g., email for Jira basic auth)
     if (body.email) {
       fastify.vault.set(`connector:${id}:email`, body.email);
     }
 
     // Re-initialize the connector with the new credentials
-    if (connector) {
-      try {
-        await connector.connect(fastify.vault);
-      } catch {
-        // Connection failure after credential storage is non-fatal
-      }
+    if (registry && !(await registry.hydrate(id))) {
+      return reply.code(502).send({ error: 'Connector initialization failed' });
     }
 
     // Phase 4 (S07): connect now leaves an install-audit trail entry.
@@ -223,6 +235,7 @@ export async function connectorRoutes(fastify: FastifyInstance) {
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
     const { deleted, cleanedKeys } = deleteConnectorCredentials(id);
+    await fastify.connectorRegistry?.hydrate(id);
     return { disconnected: deleted, connectorId: id, cleanedKeys };
   });
 
@@ -304,6 +317,7 @@ export async function connectorRoutes(fastify: FastifyInstance) {
     for (const key of [`${provider}_oauth_token`, `${provider}_oauth_refresh_token`]) {
       if (fastify.vault.delete(key)) oauthPurged++;
     }
+    await fastify.connectorRegistry?.hydrate(id);
 
     // Nothing existed under this id (or its provider): no audit row for a
     // revocation that revoked nothing, and an honest 404.
