@@ -43,10 +43,20 @@ function makeDeps(overrides: Partial<DetectOpts> = {}): DetectOpts {
   };
 }
 
-function activeClaudeHookSettings() {
+type ClaudeHookCommandBuilder = (basename: string, scriptPath: string) => string;
+
+function activeClaudeHookSettings(
+  commandBuilder: ClaudeHookCommandBuilder = (_basename, scriptPath) => `node "${scriptPath}"`,
+) {
   const group = (basename: string) => [{
     _hiveMindShim: '@hive-mind/claude-code-hooks',
-    hooks: [{ type: 'command', command: `node "/hooks/${basename}.js"` }],
+    hooks: [{
+      type: 'command',
+      command: commandBuilder(
+        basename,
+        `/opt/waggle/hive-mind-hooks-claude-code/dist/hooks/${basename}.js`,
+      ),
+    }],
   }];
   return {
     hooks: {
@@ -56,6 +66,58 @@ function activeClaudeHookSettings() {
       PreCompact: group('pre-compact'),
     },
   };
+}
+
+function markerStrippedClaudeHookSettings(
+  packageName = 'hive-mind-hooks-claude-code',
+  commandBuilder: ClaudeHookCommandBuilder = (_basename, scriptPath) => `node "${scriptPath}"`,
+  entryType = 'command',
+) {
+  const group = (basename: string) => [{
+    hooks: [{
+      type: entryType,
+      command: commandBuilder(
+        basename,
+        `D:\\Waggle\\packages\\${packageName}\\dist\\hooks\\${basename}.js`,
+      ),
+    }],
+  }];
+  return {
+    hooks: {
+      SessionStart: group('session-start'),
+      UserPromptSubmit: group('user-prompt-submit'),
+      Stop: group('stop'),
+      PreCompact: group('pre-compact'),
+    },
+  };
+}
+
+async function detectClaudeHookStatus(
+  settingsValue: unknown,
+  platform: NodeJS.Platform = 'win32',
+): Promise<boolean | undefined> {
+  const windows = platform === 'win32';
+  const home = windows ? 'C:\\Users\\test' : '/Users/test';
+  const installed = windows ? `${home}\\AppData\\Roaming\\npm\\claude.cmd` : '/usr/local/bin/claude';
+  const pointer = windows ? `${home}\\.claude\\hive-mind-install.json` : `${home}/.claude/hive-mind-install.json`;
+  const backup = windows
+    ? `${home}\\.claude\\settings.json.hive-mind-backup.X`
+    : `${home}/.claude/settings.json.hive-mind-backup.X`;
+  const settings = windows ? `${home}\\.claude\\settings.json` : `${home}/.claude/settings.json`;
+  const existsSet = new Set([installed, pointer, backup, settings]);
+  const result = await detectInstalledTools(makeDeps({
+    platform,
+    home,
+    exists: async (candidate) => existsSet.has(candidate),
+    pathFromEnv: () => installed,
+    execVersion: async () => 'claude 2.1.214',
+    readJson: async (candidate) => {
+      if (candidate === pointer) return { settings_backup: backup };
+      if (candidate === settings) return settingsValue;
+      return null;
+    },
+  }));
+  return result.tools.find((tool) => tool.id === 'claude-code')?.hooksInstalled;
 }
 
 describe('detectInstalledTools', () => {
@@ -225,6 +287,161 @@ describe('claude-code detector', () => {
     const t = result.tools.find((x) => x.id === 'claude-code')!;
     expect(t.hooksInstalled).toBe(true);
     expect(t.hookPointerPath).toBe(pointer);
+  });
+
+  it('keeps hooksInstalled=true after Claude strips private markers from Waggle hook groups', async () => {
+    const installed = 'C:\\Users\\test\\AppData\\Roaming\\npm\\claude.cmd';
+    const pointer = 'C:\\Users\\test\\.claude\\hive-mind-install.json';
+    const backup = 'C:\\Users\\test\\.claude\\settings.json.hive-mind-backup.X';
+    const settings = 'C:\\Users\\test\\.claude\\settings.json';
+    const existsSet = new Set([installed, pointer, backup, settings]);
+
+    const result = await detectInstalledTools(makeDeps({
+      exists: async (candidate) => existsSet.has(candidate),
+      pathFromEnv: () => installed,
+      execVersion: async () => 'claude 2.1.214',
+      readJson: async (candidate) => {
+        if (candidate === pointer) return { settings_backup: backup };
+        if (candidate === settings) return markerStrippedClaudeHookSettings();
+        return null;
+      },
+    }));
+
+    expect(result.tools.find((tool) => tool.id === 'claude-code')?.hooksInstalled).toBe(true);
+  });
+
+  it.each([
+    [
+      'a pinned mixed-case Node executable, hook path, and cli path',
+      (_basename: string, scriptPath: string) => {
+        const spacedPath = scriptPath.replace('D:\\Waggle', 'D:\\Program Files\\Waggle').toUpperCase();
+        return `"C:\\Program Files\\nodejs\\node.EXE" "${spacedPath}" --cli-path "D:\\Program Files\\Hive Mind\\cli.JS"`;
+      },
+    ],
+    [
+      'safe unquoted absolute paths without spaces',
+      (_basename: string, scriptPath: string) => `C:\\Node\\node.exe ${scriptPath} --cli-path D:\\HiveMind\\cli.js`,
+    ],
+  ])('accepts marker-stripped hooks using %s', async (_label, commandBuilder) => {
+    expect(await detectClaudeHookStatus(
+      markerStrippedClaudeHookSettings('hive-mind-hooks-claude-code', commandBuilder),
+    )).toBe(true);
+  });
+
+  it('accepts a canonical marker-stripped POSIX command', async () => {
+    const settings = markerStrippedClaudeHookSettings(
+      'hive-mind-hooks-claude-code',
+      (basename) =>
+        `"/usr/local/bin/node" "/opt/waggle/hive-mind-hooks-claude-code/dist/hooks/${basename}.js" --cli-path "/opt/waggle/hive-mind-cli.js"`,
+    );
+    expect(await detectClaudeHookStatus(settings, 'linux')).toBe(true);
+  });
+
+  it('finds the canonical command entry when Claude preserves another entry first', async () => {
+    const settings = markerStrippedClaudeHookSettings();
+    for (const groups of Object.values(settings.hooks)) {
+      groups[0].hooks.unshift({ type: 'prompt', command: 'not executable' });
+    }
+    expect(await detectClaudeHookStatus(settings)).toBe(true);
+  });
+
+  it.each<Array<[string, ClaudeHookCommandBuilder]>>([
+    ['echo text', (_basename, scriptPath) => `echo "${scriptPath}"`],
+    ['a Node wrapper comment', (_basename, scriptPath) => `node "D:\\wrapper.js" --comment "${scriptPath}"`],
+    ['a cmd wrapper', (_basename, scriptPath) => `cmd /c node "${scriptPath}"`],
+    ['a PowerShell wrapper', (_basename, scriptPath) => `powershell -Command node "${scriptPath}"`],
+    ['node -e text', (_basename, scriptPath) => `node -e "${scriptPath}"`],
+    ['a backup extension', (_basename, scriptPath) => `node "${scriptPath}.bak"`],
+    ['the wrong hook basename', (_basename, scriptPath) => `node "${scriptPath.replace(/[^\\]+\.js$/, 'other.js')}"`],
+    ['an unknown argument', (_basename, scriptPath) => `node "${scriptPath}" --verbose`],
+    ['a shell AND chain', (_basename, scriptPath) => `node "${scriptPath}" && echo done`],
+    ['a shell semicolon chain', (_basename, scriptPath) => `node "${scriptPath}"; echo done`],
+    ['a shell pipe', (_basename, scriptPath) => `node "${scriptPath}" | tee out`],
+    ['a shell redirect', (_basename, scriptPath) => `node "${scriptPath}" > out`],
+    ['a newline command', (_basename, scriptPath) => `node "${scriptPath}"\necho done`],
+    ['an unmatched quote', (_basename, scriptPath) => `node "${scriptPath}`],
+    [
+      'an unquoted path with spaces',
+      (_basename, scriptPath) => `node ${scriptPath.replace('D:\\Waggle', 'D:\\Program Files\\Waggle')}`,
+    ],
+  ])('rejects marker-stripped hook commands containing %s', async (_label, commandBuilder) => {
+    expect(await detectClaudeHookStatus(
+      markerStrippedClaudeHookSettings('hive-mind-hooks-claude-code', commandBuilder),
+    )).toBe(false);
+  });
+
+  it('rejects a canonical-looking entry whose type is not command', async () => {
+    expect(await detectClaudeHookStatus(
+      markerStrippedClaudeHookSettings(
+        'hive-mind-hooks-claude-code',
+        (_basename, scriptPath) => `node "${scriptPath}"`,
+        'prompt',
+      ),
+    )).toBe(false);
+  });
+
+  it('rejects an arbitrary same-basename script even when the Waggle marker is present', async () => {
+    const settings = activeClaudeHookSettings(
+      (basename) => `node "C:\\malware\\${basename}.js"`,
+    );
+    expect(await detectClaudeHookStatus(settings)).toBe(false);
+  });
+
+  it.each<Array<[string, ClaudeHookCommandBuilder]>>([
+    [
+      'quoted command substitution',
+      (basename) => `node "/tmp/$(echo owned)/hive-mind-hooks-claude-code/dist/hooks/${basename}.js"`,
+    ],
+    [
+      'quoted backtick substitution',
+      (basename) => `node "/tmp/` + '`echo owned`' + `/hive-mind-hooks-claude-code/dist/hooks/${basename}.js"`,
+    ],
+    [
+      'unquoted command substitution',
+      (basename) => `node /tmp/$(echo)/hive-mind-hooks-claude-code/dist/hooks/${basename}.js`,
+    ],
+    [
+      'an unquoted glob',
+      (basename) => `node /opt/*/hive-mind-hooks-claude-code/dist/hooks/${basename}.js`,
+    ],
+  ])('rejects POSIX hook paths containing %s', async (_label, commandBuilder) => {
+    const settings = markerStrippedClaudeHookSettings(
+      'hive-mind-hooks-claude-code',
+      commandBuilder,
+    );
+    expect(await detectClaudeHookStatus(settings, 'linux')).toBe(false);
+  });
+
+  it('rejects node.exe as a POSIX hook executable', async () => {
+    const settings = markerStrippedClaudeHookSettings(
+      'hive-mind-hooks-claude-code',
+      (basename) =>
+        `/usr/local/bin/node.exe /opt/waggle/hive-mind-hooks-claude-code/dist/hooks/${basename}.js`,
+    );
+    expect(await detectClaudeHookStatus(settings, 'linux')).toBe(false);
+  });
+
+  it('rejects marker-stripped hook commands from a lookalike package', async () => {
+    const installed = 'C:\\Users\\test\\AppData\\Roaming\\npm\\claude.cmd';
+    const pointer = 'C:\\Users\\test\\.claude\\hive-mind-install.json';
+    const backup = 'C:\\Users\\test\\.claude\\settings.json.hive-mind-backup.X';
+    const settings = 'C:\\Users\\test\\.claude\\settings.json';
+    const existsSet = new Set([installed, pointer, backup, settings]);
+
+    const result = await detectInstalledTools(makeDeps({
+      exists: async (candidate) => existsSet.has(candidate),
+      pathFromEnv: () => installed,
+      execVersion: async () => 'claude 2.1.214',
+      readJson: async (candidate) => {
+        if (candidate === pointer) return { settings_backup: backup };
+        if (candidate === settings) {
+          return markerStrippedClaudeHookSettings('hive-mind-hooks-claude-code-copy');
+        }
+        return null;
+      },
+    }));
+
+    expect(result.tools.find((tool) => tool.id === 'claude-code')?.hooksInstalled).toBe(false);
   });
 
   it('reports hooksInstalled=false when a stale pointer survives but active Claude hooks are gone', async () => {

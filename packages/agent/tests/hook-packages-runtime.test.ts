@@ -56,6 +56,7 @@ async function runInCwd(
       HOME: home,
       USERPROFILE: home,
       APPDATA: path.join(home, 'AppData', 'Roaming'),
+      HERMES_HOME: path.join(home, '.hermes'),
       NO_COLOR: '1',
       ...(stripPath ? {
         PATH: '',

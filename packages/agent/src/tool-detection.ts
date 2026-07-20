@@ -320,7 +320,6 @@ interface HookProbe {
   hookPointerPath: string | null;
 }
 
-const CLAUDE_CODE_HOOK_MARKER = '@hive-mind/claude-code-hooks';
 const CLAUDE_CODE_HOOKS = [
   ['SessionStart', 'session-start'],
   ['UserPromptSubmit', 'user-prompt-submit'],
@@ -334,7 +333,80 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function hasActiveClaudeCodeHooks(settings: unknown): boolean {
+function tokenizeHookCommand(command: string): string[] | null {
+  if (/[\r\n\0]/.test(command)) return null;
+
+  const tokens: string[] = [];
+  let index = 0;
+  while (index < command.length) {
+    while (command[index] === ' ' || command[index] === '\t') index += 1;
+    if (index >= command.length) break;
+
+    if (command[index] === '"') {
+      const end = command.indexOf('"', index + 1);
+      if (end === -1 || end === index + 1) return null;
+      const token = command.slice(index + 1, end);
+      if (/[$`%!]/.test(token)) return null;
+      tokens.push(token);
+      index = end + 1;
+      if (index < command.length && command[index] !== ' ' && command[index] !== '\t') return null;
+      continue;
+    }
+
+    const start = index;
+    while (index < command.length && command[index] !== ' ' && command[index] !== '\t') {
+      if (/['";&|<>`^#$%!*?()[\]{}]/.test(command[index])) return null;
+      index += 1;
+    }
+    if (index === start) return null;
+    tokens.push(command.slice(start, index));
+  }
+
+  return tokens;
+}
+
+function isAbsolutePathForPlatform(platform: NodeJS.Platform, candidate: string): boolean {
+  return platform === 'win32'
+    ? pathWin32.isAbsolute(candidate)
+    : pathPosix.isAbsolute(candidate);
+}
+
+function normalizedHookPath(platform: NodeJS.Platform, candidate: string): string {
+  const normalized = platform === 'win32' ? candidate.replace(/\\/g, '/') : candidate;
+  return platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isNodeExecutable(platform: NodeJS.Platform, candidate: string): boolean {
+  const normalized = platform === 'win32' ? candidate.toLowerCase() : candidate;
+  const allowedBasenames = platform === 'win32' ? ['node', 'node.exe'] : ['node'];
+  if (allowedBasenames.includes(normalized)) return true;
+  if (!isAbsolutePathForPlatform(platform, candidate)) return false;
+  const basename = platform === 'win32'
+    ? pathWin32.basename(candidate).toLowerCase()
+    : pathPosix.basename(candidate);
+  return allowedBasenames.includes(basename);
+}
+
+function isClaudeCodeHookCommand(
+  command: string,
+  basename: string,
+  platform: NodeJS.Platform,
+): boolean {
+  const tokens = tokenizeHookCommand(command);
+  if (!tokens || (tokens.length !== 2 && tokens.length !== 4)) return false;
+  if (!isNodeExecutable(platform, tokens[0])) return false;
+  if (!isAbsolutePathForPlatform(platform, tokens[1])) return false;
+  if (tokens.length === 4) {
+    if (tokens[2] !== '--cli-path' || !isAbsolutePathForPlatform(platform, tokens[3])) return false;
+  }
+
+  const scriptPath = normalizedHookPath(platform, tokens[1]);
+  const expected = `/hive-mind-hooks-claude-code/dist/hooks/${basename}.js`;
+  const normalizedExpected = platform === 'win32' ? expected.toLowerCase() : expected;
+  return scriptPath.endsWith(normalizedExpected);
+}
+
+function hasActiveClaudeCodeHooks(settings: unknown, platform: NodeJS.Platform): boolean {
   const settingsRecord = objectRecord(settings);
   const hooks = objectRecord(settingsRecord?.hooks);
   if (!hooks) return false;
@@ -344,12 +416,16 @@ function hasActiveClaudeCodeHooks(settings: unknown): boolean {
     if (!Array.isArray(groups)) return false;
     return groups.some((group) => {
       const groupRecord = objectRecord(group);
-      if (groupRecord?._hiveMindShim !== CLAUDE_CODE_HOOK_MARKER) return false;
+      if (!groupRecord) return false;
       const entries = groupRecord.hooks;
       if (!Array.isArray(entries)) return false;
-      const firstEntry = objectRecord(entries[0]);
-      return typeof firstEntry?.command === 'string'
-        && firstEntry.command.includes(`${basename}.js`);
+      return entries.some((entry) => {
+        const entryRecord = objectRecord(entry);
+        const command = entryRecord?.command;
+        return entryRecord?.type === 'command'
+          && typeof command === 'string'
+          && isClaudeCodeHookCommand(command, basename, platform);
+      });
     });
   });
 }
@@ -357,7 +433,7 @@ function hasActiveClaudeCodeHooks(settings: unknown): boolean {
 async function activeClaudeCodeHooksHealthy(deps: ResolvedDeps): Promise<boolean> {
   const settingsPath = joinForPlatform(deps.platform, deps.home, '.claude', 'settings.json');
   if (!(await deps.exists(settingsPath))) return false;
-  return hasActiveClaudeCodeHooks(await deps.readJson(settingsPath));
+  return hasActiveClaudeCodeHooks(await deps.readJson(settingsPath), deps.platform);
 }
 
 async function activeHooksHealthy(
