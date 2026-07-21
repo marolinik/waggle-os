@@ -1,0 +1,34 @@
+IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. Do NOT modify agents/openai.yaml. Stay focused on this consultation only.
+
+You are a brutally honest technical reviewer (think: hostile NeurIPS reviewer + benchmark methodologist). Another AI (Claude/Fable) orchestrating a memory-systems research program wants your independent verdict on its path to claiming SOTA on three conversational-memory benchmarks. Be direct, terse, no compliments. Challenge assumptions.
+
+=== CONTEXT ===
+System under test: "conflict-aware raw-turn memory" substrate (per-conversation stores, verbatim dated raw turns, hybrid dense+BM25 retrieval, conflict-preserving answer policy). Paper draft was audited; original "SOTA on all 3" claim collapsed. Verified current positions:
+
+LOCOMO (1540 Q, cats 1-4, adversarial excluded):
+- Ours: 86.49% under Memori protocol (gpt-4.1-mini answerer+judge, strict judge). Beats Memori 81.95 same protocol (paired artifacts exist).
+- mem0 claims 92.5 (README) but their released per-question artifact reproduces 91.56 (1410/1540). Their protocol: gpt-5 answerer + gpt-5 judge with codified-lenient prompt (1-of-N list items = CORRECT, plus-minus 14-day dates, 50% duration tolerance, abstention-banned 7-step CoT answer prompt, cat-3 gold truncated at first semicolon) + top-200 memories. mem0's own 2025 paper scored ~67 on same set with stricter judge.
+- Judge decomposition DONE on our existing answers: our answers + mem0 judge prompt on gpt-4.1-mini = 93.90; + mem0 judge prompt on gpt-5 = 90.13. So we sit 1.4pp under their artifact with a far weaker answerer (gpt-4.1-mini vs gpt-5) and top-70 retrieval.
+- IN FLIGHT (C1 stage 2): rerun our substrate with gpt-5 answerer + top-200 parity + mem0 gpt-5 judge, McNemar vs their 1410/1540.
+
+LONGMEMEVAL-S (500 Q, official gpt-4o judge, gpt-5-mini answerer both us and incumbent):
+- Mastra (incumbent): 94.87 macro / 93.60 micro (468/500). No metadata used.
+- Ours published: 95.01 macro / 93.60 micro (468/500) — micro EXACT TIE — but our routing read the benchmark-provided question_type annotation (oracle label). Disclosed now.
+- Production-legal (text-only classifier routing, exact, just computed): 92.20 micro / 92.87 macro (461/500). Uniform no-routing: 88.20 micro.
+- Miss analysis: 39 misses; classifier misroutes cost exactly 4; ~20 are hard substrate floor (multi-session counting/aggregation); union-of-all-methods ceiling 480/500. Levers: better classifier +2-4 (cap), abstention calibration +2-4, multi-method ensemble +3-6 at 2-5x cost. All exploratory; LongMemEval has NO held-out split; everything tunes on the same 500.
+BEAM-1M (700 Q, 35 convs, nugget 0/0.5/1 judge):
+- Ours: 0.6482 avg / 74.0% pass@>=0.5, gpt-5 answerer + gpt-5 judge (like-for-like with mem0's released run: 0.6409 / 70.14%). Paired McNemar on pass: p=0.0389. BUT: win is contingent on healing 56 empty-generation rows (pre-heal 0.6050/69.3 = loss; heal legitimate: literal empty completions, regenerated once blind, 24/56 still failed; mem0 file has 0 empties). AND the pass win is carried by the 0.5 partial-credit bucket (strict >0.5: we lose 427 vs 429). Contradiction ability: +23pp (0.588 vs 0.357, p<1e-4), heal-independent — the one bulletproof result. Token budget: our contexts ~21K tok/Q vs their ~5-8K (3-4x) — disclosed.
+- Rival numbers all protocol-incomparable: Eywa 81.45 = Sonnet 4.6 SELF-judging with self-authored rubrics, zero baselines, artifacts 403; Hindsight 73.9 avg = vendor AMB harness, Gemini answerer+judge; Honcho 63.1 same. So ours-vs-mem0 is the only clean like-for-like pair in existence.
+
+=== THE PLANNED PATH ===
+C1 (in flight): LoCoMo under mem0's exact protocol (gpt-5 answerer, their lenient judge, top-200) -> expect 92-95 -> claim "SOTA under both strict (Memori) and lenient (mem0) protocols".
+C2: LME label-free push: classifier upgrade + abstention calibration, frozen config, ONE final run, no iterating (test-set discipline) -> hope 465-467; ensemble variant could reach 468-472 at 2-5x cost. Claim: "ties/near-ties incumbent production-legally; exceeds under disclosed oracle routing".
+C3: BEAM substrate work: abstention gate + knowledge-update latest-fact + summarization lane -> target clean avg-score lead over mem0 (currently tie) -> claim "leads the only like-for-like BEAM comparison".
+Headline strategy: "SOTA under every protocol where a like-for-like comparison exists" + protocol-fidelity audit as a first-class contribution + falsification/intervention log.
+
+=== QUESTIONS ===
+(a) AGREE/DISAGREE per track (C1/C2/C3): is this the right way to defensible SOTA claims on all three?
+(b) Where does a hostile reviewer still attack, in priority order?
+(c) What would you do differently or additionally? Especially: test-set-tuning discipline when no held-out split exists (LME); making BEAM claims comparable across three protocol islands; whether C1's "win under a lenient judge" claim boomerangs (does beating mem0 under mem0's own inflated protocol undermine our protocol-fidelity story?).
+(d) Is "SOTA under every protocol where a like-for-like comparison exists" a defensible headline? If not, what is the strongest defensible headline?
+Return structured verdict: AGREE/DISAGREE per track with reasons + ranked additional proposals.
