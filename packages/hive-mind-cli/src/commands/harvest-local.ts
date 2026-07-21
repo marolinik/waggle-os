@@ -14,6 +14,8 @@ import {
   GeminiAdapter,
   UniversalAdapter,
   SuppressionStore,
+  evaluateExternalMemoryIngress,
+  projectExternalMemoryContent,
   type UniversalImportItem,
 } from '@waggle/hive-mind-core';
 import { openPersonalMind, type CliEnv } from '../setup.js';
@@ -47,6 +49,22 @@ export interface HarvestLocalResult {
   suppressedSkipped: number;
   errors: string[];
 }
+
+// Sprint 9 Task 0.5: preview cap raised from 2000 → 10_000 chars.
+// Rationale: the 2000-char cap surfaced as the dominant secondary
+// failure mode after the Task 0 timestamp fix (Stage 0 re-run on
+// 2026-04-21 produced Tier 3 FAIL on Q1 because the detailed
+// editorial analysis sat past the 2000-char window on the
+// correctly-retrieved December 2025 frames). 10_000 is the
+// "option (a) simple raise" target from PM response §2.1 —
+// cheapest fix that unblocks extractive Q&A on real Claude
+// export sessions (median Marko-side session ~15K chars opening;
+// 10K covers the session setup + editor-persona context + first
+// substantive assistant response, which is where the dated
+// structural elements live). Option (b) content-column
+// extension and option (c) rank-warranted expansion remain
+// queued for Sprint 10+ if this raise leaves residual gaps.
+const PREVIEW_CAP_CHARS = 10_000;
 
 function parseWithAdapter(source: HarvestSource, pathOrJson: string): UniversalImportItem[] {
   const errors: string[] = [];
@@ -134,6 +152,49 @@ export async function runHarvestLocal(options: HarvestLocalOptions): Promise<Har
       };
     }
 
+    // External exports are untrusted and become recallable summary frames.
+    // Prepare and scan the complete parsed batch before sessions.ensure or any
+    // frame/source write so one hostile late item cannot leave a partial import.
+    // projectExternalMemoryContent strips only adapter-authored role prefixes;
+    // its scan projection uses the same 10K boundary as the persisted preview.
+    const preparedItems = items.map((item) => {
+      const preview = item.content.slice(0, PREVIEW_CAP_CHARS);
+      const framePrefix = item.title
+        ? `[${item.source}] ${item.title}: `
+        : `[${item.source}] `;
+      const projectedPreview = projectExternalMemoryContent({
+        content: item.content,
+        messages: item.messages,
+        parseMethod: item.metadata?.parseMethod,
+        maxChars: PREVIEW_CAP_CHARS,
+      });
+      return {
+        item,
+        content: `${framePrefix}${preview}`,
+        ingressContent: `${framePrefix}${projectedPreview}`,
+        projectedPreview,
+      };
+    });
+    const hasUnsafeContent = evaluateExternalMemoryIngress({ content: resolved }).action !== 'allow'
+      || preparedItems.some(({
+        item, ingressContent, projectedPreview,
+      }) => evaluateExternalMemoryIngress({ content: ingressContent }).action !== 'allow'
+        || evaluateExternalMemoryIngress({
+          title: item.title,
+          content: projectedPreview,
+        }).action !== 'allow');
+    if (hasUnsafeContent) {
+      return {
+        source: options.source,
+        path: resolved,
+        itemsFound: items.length,
+        framesCreated: 0,
+        duplicatesSkipped: 0,
+        suppressedSkipped: 0,
+        errors: ['Imported content was rejected because it is unsafe.'],
+      };
+    }
+
     const session = env.sessions.ensure(
       `harvest:${options.source}`,
       undefined,
@@ -157,27 +218,8 @@ export async function runHarvestLocal(options: HarvestLocalOptions): Promise<Har
     // or a re-import here would re-materialize an Art.17-erased subject.
     const suppression = new SuppressionStore(env.db);
 
-    for (const item of items) {
+    for (const { item, content } of preparedItems) {
       if (suppression.isSuppressed(item.source, item.id)) { suppressedSkipped++; continue; }
-      // Sprint 9 Task 0.5: preview cap raised from 2000 → 10_000 chars.
-      // Rationale: the 2000-char cap surfaced as the dominant secondary
-      // failure mode after the Task 0 timestamp fix (Stage 0 re-run on
-      // 2026-04-21 produced Tier 3 FAIL on Q1 because the detailed
-      // editorial analysis sat past the 2000-char window on the
-      // correctly-retrieved December 2025 frames). 10_000 is the
-      // "option (a) simple raise" target from PM response §2.1 —
-      // cheapest fix that unblocks extractive Q&A on real Claude
-      // export sessions (median Marko-side session ~15K chars opening;
-      // 10K covers the session setup + editor-persona context + first
-      // substantive assistant response, which is where the dated
-      // structural elements live). Option (b) content-column
-      // extension and option (c) rank-warranted expansion remain
-      // queued for Sprint 10+ if this raise leaves residual gaps.
-      const PREVIEW_CAP_CHARS = 10_000;
-      const preview = item.content.slice(0, PREVIEW_CAP_CHARS);
-      const content = item.title
-        ? `[${item.source}] ${item.title}: ${preview}`
-        : `[${item.source}] ${preview}`;
 
       // Preserve the original source timestamp (e.g. Claude `create_time`,
       // ChatGPT `created_at`) on the resulting frame so downstream
