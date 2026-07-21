@@ -35,6 +35,7 @@ import {
 import { buildLocalServer } from '../../packages/server/src/local/index.js';
 import type { AgentRunner } from '../../packages/server/src/local/routes/chat.js';
 import type { AgentResponse } from '../../packages/agent/src/agent-loop.js';
+import { loadSessionMessages } from '../../packages/server/src/local/routes/chat-persistence.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ const echoRunner: AgentRunner = async (config): Promise<AgentResponse> => {
 
 /** AgentRunner that exercises tool callbacks before returning. */
 const toolRunner: AgentRunner = async (config): Promise<AgentResponse> => {
+  config.onToken?.('I will inspect the relevant memories first. ');
   config.onToolUse?.('search_memory', { query: 'test query' });
   config.onToolResult?.('search_memory', { query: 'test query' }, 'Found 2 memories');
   config.onToken?.('Done.');
@@ -305,6 +307,10 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     // Must have at least one token event
     const tokenEvents = events.filter(e => e.type === 'token');
     expect(tokenEvents.length).toBeGreaterThanOrEqual(1);
+    const tokenChunks = tokenEvents.map(
+      e => (e.data as { content: string }).content,
+    );
+    expect(tokenChunks).toEqual(['Hello ', 'from ', 'Waggle!']);
 
     // Must have exactly one done event
     const doneEvents = events.filter(e => e.type === 'done');
@@ -313,6 +319,7 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     // Done event must include content, usage, and toolsUsed
     const done = doneEvents[0].data as { content: string; usage: object; toolsUsed: string[] };
     expect(done.content).toBe('Hello from Waggle!');
+    expect(tokenChunks.join('')).toBe(done.content);
     expect(done.usage).toBeDefined();
     expect(Array.isArray(done.toolsUsed)).toBe(true);
   });
@@ -320,27 +327,133 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
   it('emits step + tool + tool_result events when runner uses tool callbacks', async () => {
     // Swap to the tool runner for this test
     serverInst.agentRunner = toolRunner;
+    try {
+      const res = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: 'search my memory', workspace: 'default' }),
+      });
+      const body = await res.text();
+      const events = parseSSE(body);
+      const toolIndex = events.findIndex(e => e.type === 'tool');
+      const toolResultIndex = events.findIndex(e => e.type === 'tool_result');
+      const tokenIndex = events.findIndex(e => e.type === 'token');
+      const tokenContent = events
+        .filter(e => e.type === 'token')
+        .map(e => (e.data as { content: string }).content)
+        .join('');
+      const doneEvents = events.filter(e => e.type === 'done');
 
-    const res = await fetch(`${baseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ message: 'search my memory', workspace: 'default' }),
-    });
-    const body = await res.text();
-    const events = parseSSE(body);
+      expect(toolIndex).toBeGreaterThanOrEqual(0);
+      expect(toolResultIndex).toBeGreaterThan(toolIndex);
+      expect(tokenIndex).toBeGreaterThan(toolResultIndex);
+      expect(doneEvents).toHaveLength(1);
 
-    expect(events.some(e => e.type === 'tool')).toBe(true);
-    expect(events.some(e => e.type === 'tool_result')).toBe(true);
-    expect(events.some(e => e.type === 'done')).toBe(true);
-
-    // Restore echo runner for subsequent tests
-    serverInst.agentRunner = echoRunner;
+      const done = doneEvents[0].data as { content: string };
+      expect(tokenContent).toBe('Done.');
+      expect(tokenContent).not.toContain('I will inspect');
+      expect(tokenContent).toBe(done.content);
+    } finally {
+      // Restore echo runner for subsequent tests even when an assertion fails.
+      serverInst.agentRunner = echoRunner;
+    }
   });
 
   // ── Session history ────────────────────────────────────────────────────
+
+  it('aborts active provider/tool work without persisting a partial assistant turn', async () => {
+    const originalRunner = serverInst.agentRunner;
+    const session = `session-abort-test-${Date.now()}`;
+    const message = 'stop this active tool run';
+    let releaseRunner: (() => void) | undefined;
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
+    let resolveStopped!: () => void;
+    const stopped = new Promise<void>((resolve) => { resolveStopped = resolve; });
+    let workTicks = 0;
+
+    serverInst.agentRunner = (config) => new Promise<AgentResponse>((resolve, reject) => {
+      config.onToken?.('partial answer that is not authoritative');
+      const interval = setInterval(() => { workTicks++; }, 5);
+      resolveStarted();
+
+      const stopWork = () => {
+        clearInterval(interval);
+        resolveStopped();
+        const error = new Error('chat aborted');
+        error.name = 'AbortError';
+        reject(error);
+      };
+      if (config.signal?.aborted) stopWork();
+      else config.signal?.addEventListener('abort', stopWork, { once: true });
+
+      releaseRunner = () => {
+        clearInterval(interval);
+        resolve({
+          content: 'fabricated completion after the client left',
+          toolsUsed: ['slow_tool'],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        });
+      };
+    });
+
+    const previousLocalStorage = globalThis.localStorage;
+    const storageValues = new Map<string, string>();
+    const testStorage: Storage = {
+      get length() { return storageValues.size; },
+      clear: () => storageValues.clear(),
+      getItem: (key) => storageValues.get(key) ?? null,
+      key: (index) => [...storageValues.keys()][index] ?? null,
+      removeItem: (key) => { storageValues.delete(key); },
+      setItem: (key, value) => { storageValues.set(key, value); },
+    };
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: testStorage });
+    let client: InstanceType<(typeof import('../../apps/web/src/lib/adapter.js'))['default']> | undefined;
+    let events: AsyncGenerator<import('../../apps/web/src/lib/types.js').StreamEvent> | undefined;
+    try {
+      const { default: LocalAdapter } = await import('../../apps/web/src/lib/adapter.js');
+      client = new LocalAdapter(baseUrl);
+      events = client.sendMessage('default', message, session);
+      const pendingEvent = events.next().then(
+        (result) => result,
+        (error: unknown) => error,
+      );
+      await started;
+
+      await client.abortAgent('default');
+      await Promise.race([
+        stopped,
+        new Promise<never>((_, reject) => setTimeout(
+          () => reject(new Error('agent work did not stop after client abort')),
+          1_000,
+        )),
+      ]);
+
+      const ticksAtStop = workTicks;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(workTicks).toBe(ticksAtStop);
+      await expect(pendingEvent).resolves.toMatchObject({ name: 'AbortError' });
+
+      // Let the route's abort catch/finally finish before inspecting both stores.
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(serverInst.agentState.sessionHistories.get(session)).toEqual([
+        { role: 'user', content: message },
+      ]);
+      expect(loadSessionMessages(serverInst.localConfig.dataDir, 'default', session)).toEqual([
+        expect.objectContaining({ role: 'user', content: message }),
+      ]);
+    } finally {
+      await client?.abortAgent('default');
+      await events?.return(undefined);
+      releaseRunner?.();
+      serverInst.agentRunner = originalRunner;
+      if (previousLocalStorage === undefined) Reflect.deleteProperty(globalThis, 'localStorage');
+      else Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: previousLocalStorage });
+    }
+  });
 
   it('accumulates session history across multiple turns in the same session', async () => {
     const session = `session-history-test-${Date.now()}`;

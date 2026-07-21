@@ -4,9 +4,11 @@ import { FrameStore, SessionStore } from '@waggle/core';
 import {
   TraceRecorder,
   detectTaskShape,
+  filterAvailableTools,
   isEnabled,
   listPersonas,
   runAgentLoop,
+  selectAgentRunBudget,
   type AgentResponse,
 } from '@waggle/agent';
 import type {
@@ -15,7 +17,7 @@ import type {
   GoalAncestry,
   WaggleMessage,
 } from '@waggle/shared';
-import { applyPersonaToolFilter } from './persona-tool-filter.js';
+import { applyPersonaToolFilter, selectToolsForTurn } from './persona-tool-filter.js';
 import { resolveWorkspaceExecutionRoot } from './workspace-execution-root.js';
 import { persistMessage } from './routes/chat-persistence.js';
 import { emitWaggleSignal } from './routes/waggle-signals.js';
@@ -211,10 +213,20 @@ async function executeFleetRun(
     const persona = listPersonas().find((item) => item.id === personaId) ?? null;
     let tools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
     if (persona) tools = applyPersonaToolFilter(tools, persona);
+    tools = filterAvailableTools(tools);
+    tools = selectToolsForTurn(tools, {
+      message: task,
+      preferredToolNames: persona?.tools ?? [],
+    }).tools;
+    const taskShape = detectTaskShape(task);
+    const runBudget = selectAgentRunBudget({
+      taskShape: taskShape.type,
+      complexity: taskShape.complexity,
+      selectedToolNames: tools.map(tool => tool.name),
+    });
     orchestrator.setGoalAncestry(buildFleetAncestry(server.workspaceManager.get(run.workspaceId)?.name, goal));
     let systemPrompt: string;
     if (isEnabled('PROMPT_ASSEMBLER')) {
-      const taskShape = detectTaskShape(task);
       const assembled = await orchestrator.buildAssembledPrompt(task, persona, { taskShape });
       systemPrompt = assembled.system + (assembled.responseScaffold ? `\n\n## Response shape\n${assembled.responseScaffold}` : '');
     } else {
@@ -251,7 +263,7 @@ async function executeFleetRun(
       systemPrompt,
       tools,
       messages: [{ role: 'user', content: task }],
-      maxTurns: 10,
+      ...runBudget,
       signal: controller.signal,
       ...(traceRecorder && traceId !== undefined ? {
         traceRecording: { recorder: traceRecorder, handle: { id: traceId, startedAt: Date.now() } },

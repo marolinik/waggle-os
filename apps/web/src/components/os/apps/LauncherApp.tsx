@@ -1,10 +1,11 @@
 /**
  * AI-OS Phase 2B — LauncherApp.
  *
- * Dock surface for the AI-OS tool launcher. Lists every supported
- * AI tool — all 7 are launchable; 6 (all but claude-desktop) also
- * support hook install/verify/uninstall — with detection status,
- * hook-install status, and per-tool actions:
+ * Dock surface for the AI-OS tool launcher. Lists every supported AI execution
+ * surface. All 8 are launchable; Hermes Desktop is the only one without hook
+ * management, while desktop-only surfaces remain ineligible for captured
+ * headless tasks. Each card includes detection status, hook-install status,
+ * and its supported actions:
  *
  *   Launch in workspace X / Install hooks / Verify hooks / Uninstall hooks
  *
@@ -44,8 +45,8 @@ import {
 
 // #5 — derived from the shared manifest registry (single source of truth),
 // replacing the hand-maintained local copies. LAUNCH_COHORT = launchable tools;
-// HOOKS_COHORT = tools whose hive-mind hook package ships a bin (hookCapable —
-// claude-desktop is the only one excluded). Mirrors the backend cohorts, which
+// HOOKS_COHORT = tools whose hive-mind hook package ships a bin (hookCapable).
+// Hermes Desktop is intentionally excluded. Mirrors the backend cohorts, which
 // derive from the same BUILTIN_TOOL_MANIFESTS.
 const LAUNCH_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id);
 const HOOKS_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m) => m.id);
@@ -139,6 +140,7 @@ const defaultAccessForTool = (tool: DetectedTool): ExternalToolAccess | null => 
 
 const toolCanRunCapturedTask = (tool: DetectedTool): boolean =>
   tool.installed &&
+  tool.launchable !== false &&
   tool.capabilities?.headlessTask === true &&
   (tool.permissionModes?.length ?? 0) > 0;
 
@@ -906,8 +908,8 @@ const LauncherApp = ({ activeWorkspaceId, workspaces = [], onOpenRoom }: Launche
                     </div>
                     {launchOnly && (
                       <div className="text-[11px] text-muted-foreground">
-                        {tool.id === 'claude-desktop'
-                          ? 'Hooks are not supported for Claude Desktop yet.'
+                        {tool.id === 'hermes-desktop'
+                          ? 'Hook management is not supported for Hermes Desktop.'
                           : 'Hook management is not supported for this tool yet.'}
                       </div>
                     )}

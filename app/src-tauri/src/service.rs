@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
@@ -18,12 +19,21 @@ impl ServiceState {
     }
 }
 
+fn valid_node_override(custom: Option<&OsStr>) -> Option<PathBuf> {
+    let custom_path = PathBuf::from(custom?);
+    custom_path.is_file().then_some(custom_path)
+}
+
 /// Resolve the Node.js binary path.
 /// Priority: WAGGLE_NODE_PATH env → bundled resources/node[.exe] → system PATH "node"
 fn resolve_node_path() -> String {
     // 1. Explicit env override (development/advanced users)
-    if let Ok(custom) = std::env::var("WAGGLE_NODE_PATH") {
-        return custom;
+    let custom = std::env::var_os("WAGGLE_NODE_PATH");
+    if let Some(custom_path) = valid_node_override(custom.as_deref()) {
+        return custom_path.to_string_lossy().to_string();
+    }
+    if custom.as_deref().is_some_and(|value| !value.is_empty()) {
+        eprintln!("[waggle] Ignoring WAGGLE_NODE_PATH because it is not a runtime file");
     }
 
     // 2. Bundled Node.js in resources/ directory (next to exe)
@@ -220,6 +230,33 @@ mod tests {
         std::fs::create_dir_all(&nested).expect("creates nested cwd");
 
         assert_eq!(find_dev_service_script(&nested), Some(script));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn invalid_node_overrides_do_not_shadow_runtime_fallbacks() {
+        let directory_override = std::env::temp_dir();
+        assert_eq!(valid_node_override(None), None);
+        assert_eq!(valid_node_override(Some(OsStr::new(""))), None);
+        assert_eq!(
+            valid_node_override(Some(directory_override.as_os_str())),
+            None
+        );
+    }
+
+    #[test]
+    fn existing_node_override_is_accepted() {
+        let root =
+            std::env::temp_dir().join(format!("waggle-node-override-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("creates temp runtime dir");
+        let runtime = root.join(if cfg!(windows) { "node.exe" } else { "node" });
+        std::fs::write(&runtime, b"runtime").expect("writes temp runtime");
+
+        assert_eq!(
+            valid_node_override(Some(runtime.as_os_str())),
+            Some(runtime.clone())
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

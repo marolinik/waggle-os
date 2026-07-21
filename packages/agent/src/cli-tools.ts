@@ -8,11 +8,69 @@
  * in config.json. All executions are logged to the audit trail.
  */
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { ToolDefinition } from './tools.js';
+import {
+  resolveToolCommandInvocation,
+  resolveToolCommandInvocationFromPath,
+  type ToolCommandInvocation,
+} from './tool-command.js';
+import { createSanitizedEnv, execFileWithTreeTimeout } from './system-tools-helpers.js';
 
-const execFileAsync = promisify(execFile);
+async function execCliInvocation(
+  invocation: ToolCommandInvocation,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string }> {
+  const result = await execFileWithTreeTimeout(invocation.binary, invocation.args, {
+    cwd: process.cwd(),
+    env,
+    maxBuffer: 1024 * 1024,
+    windowsHide: true,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
+  }, timeoutMs);
+
+  if (result.timedOut) {
+    throw Object.assign(new Error(`Killed after ${timeoutMs / 1000}s timeout`), {
+      cleanupDegraded: result.cleanupDegraded,
+      killed: true,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+  if (result.errorMessage) {
+    throw Object.assign(new Error(result.errorMessage), {
+      cleanupDegraded: result.cleanupDegraded,
+      code: result.errorCode ?? undefined,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+  }
+  return { stdout: result.stdout, stderr: result.stderr };
+}
+
+async function execCliFile(
+  program: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string }> {
+  const env = createSanitizedEnv();
+  const direct = resolveToolCommandInvocation(program, args, process.platform, { env });
+  try {
+    return await execCliInvocation(direct, env, timeoutMs);
+  } catch (err) {
+    const code = (err as { code?: string | number }).code;
+    if (process.platform !== 'win32' || code !== 'ENOENT') throw err;
+
+    const resolved = await resolveToolCommandInvocationFromPath(
+      program,
+      args,
+      process.platform,
+      { env },
+    );
+    if (resolved.binary === direct.binary && resolved.args === direct.args) throw err;
+    return execCliInvocation(resolved, env, timeoutMs);
+  }
+}
 
 /** Well-known CLIs to detect on the system */
 const KNOWN_CLIS = [
@@ -44,6 +102,8 @@ const KNOWN_CLIS = [
   { name: 'ffmpeg', versionFlag: '-version' },
 ];
 
+const CLI_DISCOVERY_CONCURRENCY = 8;
+
 export interface CliToolsConfig {
   /** Programs the agent is allowed to execute (empty = none allowed) */
   allowlist: string[];
@@ -69,26 +129,43 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
         const allowlist = getAllowlist();
         const allowSet = new Set(allowlist.map(s => s.toLowerCase()));
 
-        // Probe every known CLI in parallel. Sequentially this was up to
-        // KNOWN_CLIS.length × 5s (~130s) — far over the 30s test budget on CI
-        // runners (where most of these CLIs are present), which made the
-        // cli_discover test flaky. Promise.all bounds wall-time to the slowest
-        // single probe (~5s) and preserves KNOWN_CLIS order in the output.
-        const settled = await Promise.all(
-          KNOWN_CLIS.map(async (cli): Promise<CliResult | null> => {
-            try {
-              const args = cli.versionFlag.split(' ');
-              const { stdout } = await execFileAsync(cli.name, args, { timeout: 5000 });
-              return {
-                name: cli.name,
-                version: stdout.trim().split('\n')[0],
-                allowed: allowSet.has('*') || allowSet.has(cli.name),
-              };
-            } catch {
-              return null; // CLI not found — skip
-            }
-          }),
-        );
+        // Bound concurrent probes because each Windows invocation owns a
+        // Worker. Batching preserves KNOWN_CLIS output order.
+        const settled: Array<CliResult | null> = [];
+        for (let offset = 0; offset < KNOWN_CLIS.length; offset += CLI_DISCOVERY_CONCURRENCY) {
+          const batch = await Promise.all(
+            KNOWN_CLIS.slice(offset, offset + CLI_DISCOVERY_CONCURRENCY)
+              .map(async (cli): Promise<CliResult | null> => {
+                const args = cli.versionFlag.split(' ');
+                const env = createSanitizedEnv();
+                const invocation = await resolveToolCommandInvocationFromPath(
+                  cli.name,
+                  args,
+                  process.platform,
+                  { env, fallbackToWhere: false },
+                );
+                const resolvedFromPath = invocation.binary !== cli.name;
+                try {
+                  const { stdout, stderr } = await execCliInvocation(invocation, env, 2_000);
+                  return {
+                    name: cli.name,
+                    version: (stdout || stderr).trim().split(/\r?\n/)[0],
+                    allowed: allowSet.has('*') || allowSet.has(cli.name),
+                  };
+                } catch {
+                  if (process.platform === 'win32' && resolvedFromPath) {
+                    return {
+                      name: cli.name,
+                      version: 'Installed (version probe unavailable)',
+                      allowed: allowSet.has('*') || allowSet.has(cli.name),
+                    };
+                  }
+                  return null; // CLI not found - skip
+                }
+              }),
+          );
+          settled.push(...batch);
+        }
         const results = settled.filter((r): r is CliResult => r !== null);
 
         return JSON.stringify({
@@ -112,8 +189,11 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
       },
       execute: async (params: Record<string, unknown>) => {
         const program = String(params.program ?? '').trim();
-        const args = (params.args as string[]) ?? [];
-        const timeoutSec = Math.min(Number(params.timeout) || 30, 120);
+        const args = Array.isArray(params.args) ? params.args.map(String) : [];
+        const requestedTimeout = Number(params.timeout);
+        const timeoutSec = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+          ? Math.min(requestedTimeout, 120)
+          : 30;
         const allowlist = getAllowlist();
         const allowSet = new Set(allowlist.map(s => s.toLowerCase()));
 
@@ -138,10 +218,7 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
         });
 
         try {
-          const { stdout, stderr } = await execFileAsync(program, args, {
-            timeout: timeoutSec * 1000,
-            maxBuffer: 1024 * 1024, // 1 MB
-          });
+          const { stdout, stderr } = await execCliFile(program, args, timeoutSec * 1000);
 
           return JSON.stringify({
             success: true,
@@ -152,13 +229,27 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
             stderr: stderr.trim(),
           });
         } catch (err: unknown) {
-          const execErr = err as { code?: string; killed?: boolean; signal?: string; stdout?: string; stderr?: string };
+          const execErr = err as {
+            cleanupDegraded?: boolean;
+            code?: string | number;
+            killed?: boolean;
+            signal?: string;
+            stdout?: string;
+            stderr?: string;
+          };
+          const cleanupWarning = execErr.cleanupDegraded
+            ? ' Process-tree cleanup degraded to the root process; descendants may still be running.'
+            : '';
           return JSON.stringify({
             success: false,
             program,
             args,
-            exitCode: execErr.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? -1 : 1,
-            error: execErr.killed ? `Killed after ${timeoutSec}s timeout` : (err instanceof Error ? err.message : String(err)),
+            exitCode: execErr.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+              ? -1
+              : (typeof execErr.code === 'number' ? execErr.code : 1),
+            error: execErr.killed
+              ? `Killed after ${timeoutSec}s timeout.${cleanupWarning}`
+              : `${err instanceof Error ? err.message : String(err)}${cleanupWarning}`,
             stdout: execErr.stdout?.trim() ?? '',
             stderr: execErr.stderr?.trim() ?? '',
           });

@@ -41,12 +41,14 @@
     "test:visual": "node node_modules/playwright/cli.js test tests/visual --project=chromium --reporter=list",
     "test:all": "node node_modules/playwright/cli.js test --reporter=list",
     "test:retry": "node node_modules/playwright/cli.js test --last-failed --reporter=list",
-    "test:fast": "node node_modules/playwright/cli.js test -c playwright-e2e.config.ts --project=chromium --grep-invert=\"4\\.9|B8\\.5\" --reporter=list"
+    "test:fast": "node node_modules/playwright/cli.js test -c playwright-e2e.config.ts --project=chromium --grep-invert=\"4\\.9|B8\\.5\" --reporter=list",
+    "persona:seal": "tsx scripts/seal-persona-acceptance.ts"
   },
   "author": "Marko Markovic",
   "license": "MIT",
   "overrides": {
-    "protobufjs": ">=7.6.1 <8",
+    "protobufjs": ">=7.6.3 <8",
+    "tar": ">=7.5.16 <8",
     "js-cookie": ">=3.0.6 <4",
     "lodash": ">=4.17.24 <5",
     "tmp": ">=0.2.6 <0.3",
@@ -85,13 +87,18 @@
     "@tailwindcss/vite": "^4.2.2",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "5.1.1",
     "stripe": "^21.0.1",
     "tailwind-merge": "^3.5.0"
   },
   "//optionalDependencies": "Platform-specific native binaries — optional so npm SKIPS them on os/cpu mismatch (Linux/macOS CI) instead of failing install with EBADPLATFORM. See docs/audits/2026-06-01-full-repo-verification-sweep.md.",
   "optionalDependencies": {
     "@rolldown/binding-win32-x64-msvc": "^1.0.0-rc.13",
+    "@rollup/rollup-darwin-arm64": "4.60.4",
+    "@rollup/rollup-darwin-x64": "4.60.4",
+    "@rollup/rollup-linux-x64-gnu": "4.60.4",
+    "@rollup/rollup-linux-x64-musl": "4.60.4",
+    "@rollup/rollup-win32-x64-msvc": "4.60.4",
     "@swc/core-win32-x64-msvc": "^1.15.21",
     "lightningcss-win32-x64-msvc": "^1.32.0",
     "sqlite-vec-windows-x64": "^0.1.9"

@@ -1141,7 +1141,9 @@ const ChatApp = ({
               <p className="text-xs text-muted-foreground">Your memory and agents live inside a workspace</p>
             </div>
           )}
-          {messages.map((msg, msgIdx) => (
+          {messages.map((msg, msgIdx) => {
+            const messagePersona = msg.persona ? getPersonaById(msg.persona) : undefined;
+            return (
             <div key={msg.id} className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
               onDoubleClick={() => {
                 if (onContextRail && msg.content) {
@@ -1165,12 +1167,12 @@ const ChatApp = ({
                       : ''
                   }`}
                 >
-                  {/* I1 fix 2: the active persona's bee sprite on every assistant
-                      turn (22 unique mascots); unknown/custom personas fall back
-                      to the letter/Bot mark below. */}
-                  {persona && <AvatarImage src={getPersonaAvatar(persona.id)} alt={`${persona.name} avatar`} />}
+                  {/* The authoring persona is immutable message provenance. A
+                      later persona switch must never relabel an earlier turn;
+                      legacy/unknown messages fall back to the Bot mark. */}
+                  {messagePersona && <AvatarImage src={getPersonaAvatar(messagePersona.id)} alt={`${messagePersona.name} avatar`} />}
                   <AvatarFallback className="text-[11px] bg-primary/20">
-                    {persona ? persona.name[0] : <Bot className="w-3.5 h-3.5" aria-hidden="true" />}
+                    {messagePersona ? messagePersona.name[0] : <Bot className="w-3.5 h-3.5" aria-hidden="true" />}
                   </AvatarFallback>
                 </Avatar>
               )}
@@ -1184,7 +1186,7 @@ const ChatApp = ({
                 {msg.role === 'assistant' && (
                   <div className="mb-1 flex items-center gap-1.5 font-mono text-[11.5px] text-[var(--text-muted)]">
                     <span className="font-semibold text-[var(--text-2)]">Waggle</span>
-                    {persona?.name && <span>· {persona.name}</span>}
+                    {messagePersona?.name && <span>· {messagePersona.name}</span>}
                     {currentModel && <span>· {formatModelLabel(currentModel)}</span>}
                   </div>
                 )}
@@ -1298,7 +1300,8 @@ const ChatApp = ({
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {/* Router arc B2: locally injected route proposals (composer Best fit). */}
           {routeProposals.map(rp => (

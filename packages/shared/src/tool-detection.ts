@@ -17,8 +17,8 @@
  */
 
 /**
- * Canonical AI-tool IDs that hive-mind has shipped hook packages for.
- * See packages/hive-mind-hooks-* for the matching installers.
+ * Canonical built-in AI-tool execution surfaces. CLI and desktop surfaces use
+ * distinct ids whenever they have different launch/task capabilities.
  */
 export const SUPPORTED_TOOLS = [
   'claude-code',
@@ -27,6 +27,7 @@ export const SUPPORTED_TOOLS = [
   'codex',
   'codex-desktop',
   'hermes',
+  'hermes-desktop',
   'openclaw',
 ] as const;
 
@@ -103,7 +104,8 @@ export interface ToolManifest {
 }
 
 /**
- * The canonical 7 built-in tools — the source of truth for their per-tool data.
+ * The canonical 8 built-in execution surfaces — the source of truth for their
+ * per-tool data.
  * SUPPORTED_TOOLS (above) stays the `as const` type anchor; the cohort/name/
  * pointer consts derive from these manifests.
  */
@@ -113,8 +115,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     hookPointer: '.claude/hive-mind-install.json', detect: { kind: 'path', binaryName: 'claude' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
     task: {
-      argvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--no-session-persistence', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
-      resumeArgvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--resume', '{sessionId}', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      argvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      resumeArgvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--resume', '{sessionId}', '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
       accessArgs: {
         'read-only': ['--permission-mode', 'plan'],
         'workspace-write': ['--permission-mode', 'acceptEdits'],
@@ -156,7 +158,7 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
   {
-    id: 'hermes', displayName: 'Hermes Agent', launchable: true, hookCapable: true,
+    id: 'hermes', displayName: 'Hermes Agent CLI', launchable: true, hookCapable: true,
     hookPointer: '.hermes/hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: false, resumable: true, liveWaggleDance: false },
     task: {
@@ -165,6 +167,11 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
       accessArgs: { native: [] }, promptTransport: 'arg', outputDialect: 'hermes-text', workspaceBinding: 'cwd',
       permissionModes: ['native'], resumable: true,
     },
+  },
+  {
+    id: 'hermes-desktop', displayName: 'Hermes Desktop', launchable: true, hookCapable: false,
+    hookPointer: '', detect: { kind: 'candidates' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
   {
     id: 'openclaw', displayName: 'OpenClaw', launchable: true, hookCapable: true,
@@ -183,10 +190,9 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
  * Tools the launcher dock + hook installer support end-to-end.
  *
  * Phase 1 shipped with 3 entries (Claude Code, Cursor, Claude
- * Desktop — D3). Phase 4 extends to all 7 because (a) each tool
- * already has a published hook-installer package
- * (@waggle/hive-mind-hooks-<id>), and (b) the marginal cost per
- * additional detector is one PATH lookup or candidate-path entry.
+ * Desktop — D3). Phase 4 extends to every built-in launch surface. Hook support
+ * remains independently capability-gated because desktop-only surfaces need
+ * not have a hook installer.
  */
 export const LAUNCH_COHORT: readonly ToolId[] =
   BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id as ToolId);
@@ -232,7 +238,7 @@ export interface DetectedTool {
   launchable?: boolean;
   /** True when the tool manifest declares hook support. */
   hookCapable?: boolean;
-  /** True for the built-in seven tools; false for loaded adapters. */
+  /** True for built-in execution surfaces; false for loaded adapters. */
   builtin?: boolean;
   /** True when the manifest can accept the launch prompt inline. */
   acceptsInlinePrompt?: boolean;

@@ -74,6 +74,8 @@ export interface MaybeFireCompletionGateArgs {
   toolsUsed: readonly string[];
   /** Caller's message history — pushed to in-place when a gate fires */
   messages: GateMessage[];
+  /** Current user-authored request, captured before internal directives are added. */
+  userRequest?: string;
   /** Current gate state (returned with one-shot flags flipped if a gate fires) */
   state: GateState;
   /** Default true — set false to opt out of D3 */
@@ -111,6 +113,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     content,
     toolsUsed,
     messages,
+    userRequest = '',
     state,
     enableVerification = true,
     enableSkillDistillation = true,
@@ -122,10 +125,15 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   if (
     enableVerification &&
     !state.verificationCorrectionUsed &&
-    assertsUnverifiedCompletion(content, toolsUsed)
+    assertsUnverifiedCompletion(content, toolsUsed, userRequest)
   ) {
-    messages.push({ role: 'assistant', content });
-    messages.push({ role: 'user', content: VERIFICATION_GATE_DIRECTIVE });
+    const systemMessage = messages.find(message => message.role === 'system');
+    const internalDirective = `\n\n# Internal verification correction\n${VERIFICATION_GATE_DIRECTIVE}`;
+    if (systemMessage && typeof systemMessage.content === 'string') {
+      systemMessage.content += internalDirective;
+    } else {
+      messages.unshift({ role: 'system', content: internalDirective.trim() });
+    }
     logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
     return {
       fired: true,

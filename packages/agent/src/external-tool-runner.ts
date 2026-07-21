@@ -10,7 +10,7 @@ import type {
 } from '@waggle/shared';
 import { resolveToolCommandInvocation } from './tool-command.js';
 import { stripAnsi } from './tool-output-buffer.js';
-import { resolvedShellPath, mergePathValue } from './shell-env.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
 
 const MAX_STDOUT = 256 * 1024;
 const MAX_STDERR = 64 * 1024;
@@ -19,13 +19,6 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1_000;
 const DEFAULT_STALL_AFTER_MS = 120_000;
 const MIN_STALL_AFTER_MS = 30_000;
-
-const ENV_ALLOWLIST = new Set([
-  'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE',
-  'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'TERM',
-  'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY',
-  'OPENROUTER_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY',
-]);
 
 export type ExternalRunEventType =
   | 'started' | 'progress' | 'message' | 'tool'
@@ -72,6 +65,7 @@ export interface ExternalToolRunResult {
   status: 'completed' | 'failed' | 'cancelled' | 'timed_out';
   exitCode: number | null;
   summary: string;
+  error?: string;
   sessionId?: string;
   stdoutTail: string;
   stderrTail: string;
@@ -136,7 +130,7 @@ export async function runExternalTool(
     promptFile?.path,
     timeoutMs,
   );
-  const env = buildExternalToolEnv(deps.baseEnv ?? process.env, request, workspacePath);
+  const env = buildExternalToolEnv(deps.baseEnv ?? process.env, request, workspacePath, platform);
   const spawnProcess = deps.spawnProcess ?? defaultSpawnProcess;
   const killTree = deps.killTree ?? defaultKillTree;
   const parseState: ParseState = { finalText: '' };
@@ -256,23 +250,50 @@ export async function runExternalTool(
       }
       promptFile?.cleanup();
 
+      if (
+        task.outputDialect === 'claude-stream-json' &&
+        exitCode === 0 &&
+        !timedOut &&
+        !abortRequested &&
+        !spawnError &&
+        !parseState.finalText &&
+        !parseState.error
+      ) {
+        parseState.error = 'Claude Code completed without a final response';
+      }
+
       const cleanStdout = redact(stdout, env);
       const cleanStderr = redact(stderr, env);
-      const summary = truncate(
-        stripAnsi(
-          redact(parseState.finalText, env) ||
-          (cleanStdout.trim() || cleanStderr.trim() || spawnError?.message || ''),
-        ).trim(),
-        MAX_STDOUT,
-      );
       let status: ExternalToolRunResult['status'];
       if (timedOut) status = 'timed_out';
       else if (abortRequested) status = 'cancelled';
       else if (spawnError || exitCode !== 0 || parseState.error) status = 'failed';
       else status = 'completed';
-      emit(status, status === 'completed' ? summary : (parseState.error || spawnError?.message || cleanStderr || summary));
+      const terminalError = status === 'failed'
+        ? truncate(stripAnsi(
+          (parseState.error ? redact(parseState.error, env) : '') ||
+          (spawnError ? redact(spawnError.message, env) : '') ||
+          cleanStderr.trim() ||
+          (exitCode !== null && exitCode !== 0
+            ? `${request.manifest.displayName} exited with code ${exitCode}`
+            : ''),
+        ).trim(), MAX_STDERR)
+        : undefined;
+      const stdoutFallback = task.outputDialect === 'claude-stream-json' ? '' : cleanStdout.trim();
+      const summary = truncate(
+        stripAnsi(
+          redact(parseState.finalText, env) ||
+          stdoutFallback ||
+          cleanStderr.trim() ||
+          terminalError ||
+          '',
+        ).trim(),
+        MAX_STDOUT,
+      );
+      emit(status, status === 'completed' ? summary : (terminalError || summary));
       resolve({
         ...terminalResult(status, exitCode, summary, cleanStdout, cleanStderr, now() - startedAt),
+        ...(terminalError ? { error: terminalError } : {}),
         ...(parseState.sessionId ? { sessionId: parseState.sessionId } : {}),
       });
     };
@@ -285,20 +306,9 @@ export function buildExternalToolEnv(
   base: NodeJS.ProcessEnv,
   request: Pick<ExternalToolRunRequest, 'runId' | 'roomId' | 'workspaceId' | 'dance' | 'dataDir'>,
   workspacePath: string,
+  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(base)) {
-    if (value !== undefined && ENV_ALLOWLIST.has(key.toUpperCase())) env[key] = value;
-  }
-  // POSIX GUI-launched sidecars inherit a bare PATH. Merge the
-  // resolved login-shell PATH so spawned CLIs resolve their shims; the value
-  // stays ENV_ALLOWLIST-scoped (PATH only). No-op on win32 / before resolve.
-  if (process.platform !== 'win32') {
-    const shellPath = resolvedShellPath();
-    if (shellPath) env.PATH = mergePathValue(shellPath, env.PATH);
-  }
-  return {
-    ...env,
+  return buildExternalProcessEnv(base, {
     WAGGLE_RUN_ID: request.runId,
     WAGGLE_ROOM_ID: request.roomId,
     WAGGLE_WORKSPACE_ID: request.workspaceId,
@@ -314,7 +324,7 @@ export function buildExternalToolEnv(
     ...(request.dataDir ? { HIVE_MIND_DATA_DIR: request.dataDir } : {}),
     WAGGLE_SIGNAL_EMIT: '0',
     NO_COLOR: '1',
-  };
+  }, platform);
 }
 
 function requireTaskSpec(
@@ -425,17 +435,26 @@ function parseJsonValue(
 
   if (dialect === 'claude-stream-json') {
     if (type === 'result') {
-      state.finalText = stringValue(record.result) ?? state.finalText;
-      if (record.is_error === true) state.error = state.finalText || 'Claude Code reported an error';
+      const result = stringValue(record.result);
+      const subtype = stringValue(record.subtype);
+      if (result) state.finalText = result;
+      if (record.is_error === true || subtype?.startsWith('error_')) {
+        state.error = stringValue(record.error) || result || subtype || 'Claude Code reported an error';
+      }
       return;
     }
     const blocks = ((record.message as Record<string, unknown> | undefined)?.content ?? record.content) as unknown;
+    const assistantText: string[] = [];
     for (const block of Array.isArray(blocks) ? blocks : []) {
       if (!block || typeof block !== 'object') continue;
       const item = block as Record<string, unknown>;
-      if (item.type === 'text' && typeof item.text === 'string') emit('message', item.text);
+      if (item.type === 'text' && typeof item.text === 'string') {
+        assistantText.push(item.text);
+        emit('message', item.text);
+      }
       if (item.type === 'tool_use') emit('tool', String(item.name ?? 'tool'));
     }
+    if (assistantText.length > 0) state.finalText = assistantText.join('\n');
     return;
   }
   if (dialect === 'codex-jsonl') {

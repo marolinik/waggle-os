@@ -73,7 +73,7 @@ const MAX_COMBINED_CHARS = 32000; // ~8000 tokens
 const SEPARATOR = '\n\n---\n\n';
 
 /** Hint appended to every composed prompt — encourages DOCX generation for structured content */
-const DOCX_HINT = '\n\nWhen generating long, structured content (reports, proposals, analyses), proactively offer to save it as a DOCX document using the generate_docx tool.';
+const DOCX_HINT = '\n\nOffer DOCX for long content only if generate_docx exists and file writes/offers are allowed. Never add it to exclusive/no-prose output unless the payload requires DOCX.';
 
 /** W7.3: Tone instruction map — maps workspace tone presets to system prompt instructions */
 const TONE_INSTRUCTIONS: Record<string, string> = {

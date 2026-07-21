@@ -92,7 +92,7 @@ describe('Chat Streaming API', () => {
       url: '/api/chat',
       payload: { message: 'Hello' },
     });
-    expect(res.headers['content-type']).toBe('text/event-stream');
+    expect(res.headers['content-type']).toBe('text/event-stream; charset=utf-8');
     expect(res.headers['cache-control']).toBe('no-cache');
     expect(res.headers['connection']).toBe('keep-alive');
   });
@@ -123,6 +123,97 @@ describe('Chat Streaming API', () => {
     expect(doneData.content).toBe('Hello world');
     expect(doneData.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
     expect(doneData.toolsUsed).toEqual([]);
+    expect(Object.keys(doneData.contextMetrics).sort()).toEqual([
+      'agentLatencyMs',
+      'estimatedSystemPromptTokens',
+      'estimatedToolSchemaTokens',
+      'finalSystemPromptChars',
+      'packageMode',
+      'providerInputTokens',
+      'providerOutputTokens',
+      'selectorLatencyMs',
+      'timeToFirstTokenMs',
+      'toolCatalogCount',
+      'toolEligibleCount',
+      'toolOmittedCount',
+      'toolSelectedCount',
+      'totalServerLatencyMs',
+      'transmittedToolSchemaChars',
+    ].sort());
+    expect(doneData.contextMetrics).toMatchObject({
+      toolCatalogCount: 0,
+      toolEligibleCount: 0,
+      toolSelectedCount: 0,
+      toolOmittedCount: 0,
+      transmittedToolSchemaChars: 0,
+      estimatedToolSchemaTokens: 0,
+      finalSystemPromptChars: 'You are a helpful AI assistant.'.length,
+      estimatedSystemPromptTokens: Math.ceil('You are a helpful AI assistant.'.length / 4),
+      packageMode: 'custom',
+      selectorLatencyMs: 0,
+      providerInputTokens: 10,
+      providerOutputTokens: 5,
+    });
+    expect(Number.isFinite(doneData.contextMetrics.timeToFirstTokenMs)).toBe(true);
+    expect(Number.isFinite(doneData.contextMetrics.agentLatencyMs)).toBe(true);
+    expect(Number.isFinite(doneData.contextMetrics.totalServerLatencyMs)).toBe(true);
+    expect(doneData.contextMetrics.totalServerLatencyMs).toBeGreaterThanOrEqual(
+      doneData.contextMetrics.timeToFirstTokenMs,
+    );
+    expect(doneData.contextMetrics.totalServerLatencyMs).toBeGreaterThanOrEqual(
+      doneData.contextMetrics.agentLatencyMs,
+    );
+  });
+
+  it('allows a configured linked workspace directory outside managed storage', async () => {
+    const linkedDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-linked-chat-'));
+    const workspace = server.workspaceManager.create({
+      name: `Linked chat ${Date.now()}`,
+      group: 'test',
+      directory: linkedDirectory,
+    });
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async (): Promise<AgentResponse> => ({
+      content: 'linked ok',
+      toolsUsed: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Inspect the linked workspace.',
+          workspaceId: workspace.id,
+          workspacePath: path.join(os.tmpdir(), 'request-path-must-not-override-config'),
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(parseSSE(res.body).some(event => event.event === 'done')).toBe(true);
+    } finally {
+      server.agentRunner = originalRunner;
+      fs.rmSync(linkedDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed when a configured linked workspace directory is unavailable', async () => {
+    const missingDirectory = path.join(os.tmpdir(), `waggle-missing-linked-${Date.now()}`);
+    const workspace = server.workspaceManager.create({
+      name: `Missing linked chat ${Date.now()}`,
+      group: 'test',
+      directory: missingDirectory,
+    });
+
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Inspect the linked workspace.', workspaceId: workspace.id },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'WORKSPACE_ROOT_UNAVAILABLE' });
   });
 
   it('validates message is required', async () => {
@@ -237,11 +328,46 @@ describe('Chat Streaming API', () => {
     expect(persisted!.content).toContain('my horse is named Comet');
   });
 
+  it('keeps a failed broad no-change request in chat history without writing it to memory', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const sessionId = `no-mutation-failure-${Date.now()}`;
+    const seed = `Analyze this release plan (${Date.now()}). Do not create or edit anything.`;
+    server.agentRunner = async () => {
+      throw new Error('LiteLLM is not available');
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: seed, workspace: 'default', session: sessionId },
+      });
+
+      expect(parseSSE(res.body).filter(event => event.event === 'error')).toHaveLength(1);
+      expect(server.agentState.orchestrator.getFrames().findDuplicate(seed)).toBeNull();
+      const transcript = loadSessionMessages(tmpDir, 'default', sessionId);
+      expect(transcript[0]).toEqual({ role: 'user', content: seed });
+      expect(transcript[1].role).toBe('assistant');
+      expect(transcript[1].content).toContain('Generation failed: LiteLLM is not available');
+    } finally {
+      server.agentRunner = originalRunner;
+    }
+  });
+
   // #4: a locally-selected Ollama model must route to Ollama's OpenAI-compatible
   // endpoint (graceful degradation / sovereignty), NOT LiteLLM which doesn't have
   // it — and the 'ollama/' routing prefix must be stripped to the bare tag.
   it('routes an Ollama-selected model to the local Ollama endpoint, not LiteLLM (#4)', async () => {
     resetRateLimiter(server);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
+          status: 200,
+        });
+      }
+      return new Response('', { status: 503 });
+    });
     let capturedUrl: string | undefined;
     let capturedModel: string | undefined;
     const originalRunner = server.agentRunner;
@@ -604,6 +730,8 @@ describe('conversational gated tool filtering', () => {
     { name: 'git_push' },
     { name: 'create_plan' },
     { name: 'spawn_agent' },
+    { name: 'run_code' },
+    { name: 'get_task_output' },
   ];
 
   it('hides gated system tools for normal conversational turns', () => {
@@ -650,13 +778,84 @@ describe('conversational gated tool filtering', () => {
 
   it('keeps gated tools when the user explicitly asks for an action', () => {
     expect(isExplicitGatedToolRequest('Write this as a file and export a document')).toBe(true);
+    for (const request of [
+      'Fix the failing TypeScript test',
+      'Build a roadmap with dependencies',
+      'Prepare a meeting brief from prior notes',
+      'Verify this implementation with evidence',
+      'Delegate parallel research to agents',
+    ]) {
+      expect(isExplicitGatedToolRequest(request), request).toBe(true);
+    }
     const filtered = filterGatedToolsForConversationalTurn(
       tools,
       'Write this as a file and export a document',
       'normal',
     ).map(t => t.name);
 
-    expect(filtered).toEqual(tools.map(t => t.name));
+    expect(filtered).toContain('write_file');
+    expect(filtered).not.toContain('create_plan');
+  });
+
+  it('withholds plan authoring for an inline advisory plan but keeps explicit plan creation', () => {
+    const advisory = filterGatedToolsForConversationalTurn(
+      tools,
+      'Choose the order, justify it in one concise plan, and identify the first action for today.',
+      'normal',
+    ).map(tool => tool.name);
+    expect(advisory).not.toContain('create_plan');
+
+    const explicit = filterGatedToolsForConversationalTurn(
+      tools,
+      'Create a product launch plan and a concise launch memo.',
+      'normal',
+    ).map(tool => tool.name);
+    expect(explicit).toContain('create_plan');
+  });
+
+  it('does not treat a prioritization plan as authorization to execute tools', () => {
+    const message = 'I have three priorities this week: close one customer, repair onboarding friction, and investigate a production memory bug. Choose the order, justify it in one concise plan, and identify the first action for today. Do not ask clarifying questions; make reasonable assumptions.';
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    expect(isExplicitExternalResearchRequest(message)).toBe(false);
+
+    const filtered = filterGatedToolsForConversationalTurn(tools, message, 'normal')
+      .map(tool => tool.name);
+    expect(filtered).toEqual([]);
+  });
+
+  it('treats a broad no-change clause as authoritative at every autonomy level', () => {
+    const message = 'Turn this goal into milestones and exit criteria. Do not create or edit anything.';
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    for (const autonomy of ['normal', 'trusted', 'yolo'] as const) {
+      const filtered = filterGatedToolsForConversationalTurn(tools, message, autonomy)
+        .map(tool => tool.name);
+      expect(filtered, autonomy).toContain('search_memory');
+      expect(filtered, autonomy).toContain('git_log');
+      for (const mutation of ['save_memory', 'write_file', 'bash', 'git_push', 'create_plan', 'spawn_agent']) {
+        expect(filtered, `${autonomy}:${mutation}`).not.toContain(mutation);
+      }
+    }
+  });
+
+  it('can deny memory persistence without blocking another explicit action', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Write this as a file, but do not save this to memory.',
+      'normal',
+    ).map(tool => tool.name);
+
+    expect(filtered).toContain('write_file');
+    expect(filtered).not.toContain('save_memory');
+  });
+
+  it('does not broaden a calendar-only prohibition into a memory ban', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Remember this preference, but do not create a calendar event.',
+      'normal',
+    ).map(tool => tool.name);
+
+    expect(filtered).toContain('save_memory');
   });
 
   it('keeps gated tools when elevated autonomy is active', () => {
@@ -681,6 +880,8 @@ describe('conversational gated tool filtering', () => {
         { name: 'bash', description: '', parameters: {}, execute: async () => 'ok' },
         { name: 'web_search', description: '', parameters: {}, execute: async () => 'ok' },
         { name: 'save_memory', description: '', parameters: {}, execute: async () => 'ok' },
+        { name: 'plugin_slack_send_message', description: 'Send a Slack message', parameters: {}, execute: async () => 'ok' },
+        { name: 'mcp_github_create_issue', description: 'Create a GitHub issue', parameters: {}, execute: async () => 'ok' },
       ],
     };
     const withheld: number[] = [];
@@ -693,6 +894,6 @@ describe('conversational gated tool filtering', () => {
     );
 
     expect(filteredProvider.getAllTools().map(t => t.name)).toEqual([]);
-    expect(withheld).toEqual([3]);
+    expect(withheld).toEqual([5]);
   });
 });

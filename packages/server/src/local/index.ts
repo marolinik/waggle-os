@@ -199,6 +199,8 @@ export interface LocalConfig {
   manageLiteLLM?: boolean;
   /** Stable child-process port, retained even while requests use a fallback proxy. */
   managedLiteLLMPort?: number;
+  /** Route all agent-loop traffic through this server's built-in provider proxy. */
+  useBuiltInProxy?: boolean;
 }
 
 /** Pending approval request — resolved when user approves or denies. */
@@ -568,7 +570,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const stopMarketplaceBackgroundSync = scheduleMarketplaceBackgroundSync({ marketplaceDb, log });
 
   // ── Agent state (matches CLI initialization) ────────────────────────
-  const litellmApiKey = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
+  const wsSessionToken = crypto.randomBytes(32).toString('hex');
+  const litellmApiKey = fullConfig.useBuiltInProxy
+    ? wsSessionToken
+    : process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
   const litellmUrl = fullConfig.litellmUrl;
 
   // Build embedding config from WaggleConfig + Vault keys
@@ -1505,7 +1510,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       detail: 'Not yet initialized',
       checkedAt: new Date().toISOString(),
     },
-    wsSessionToken: crypto.randomBytes(32).toString('hex'),
+    wsSessionToken,
   });
   activateWorkspaceMindWithWeaver(defaultWorkspaceId);
 
@@ -2893,7 +2898,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     const llm = { ...server.agentState.llmProvider };
 
     // P0-3: If provider is anthropic-proxy and claims healthy, validate the key actually works
-    if (llm.provider === 'anthropic-proxy' && llm.health === 'healthy') {
+    if (
+      llm.provider === 'anthropic-proxy'
+      && llm.health === 'healthy'
+      && llm.detail.startsWith('Built-in Anthropic proxy')
+    ) {
       const keyValid = freshAnthropicValidation();
       if (keyValid === false) {
         llm.health = 'degraded';

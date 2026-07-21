@@ -1,7 +1,9 @@
 import { EventEmitter } from 'events';
-import { spawn, type StdioOptions } from 'node:child_process';
+import { ChildProcess, spawn, type StdioOptions } from 'node:child_process';
 import type { Readable, Writable } from 'stream';
 import type { ToolDefinition } from '../tools.js';
+import { resolveToolCommandInvocationFromPath } from '../tool-command.js';
+import { createSanitizedEnv, terminateProcessTree } from '../system-tools-helpers.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -51,8 +53,14 @@ export interface McpProcess {
 export type SpawnFn = (
   command: string,
   args: string[],
-  options: { env?: Record<string, string>; stdio: string[] },
+  options: {
+    env?: Record<string, string>;
+    stdio: string[];
+    windowsVerbatimArguments?: boolean;
+  },
 ) => McpProcess;
+
+export type McpTerminateFn = (process: McpProcess) => void;
 
 // ── McpServerInstance ──────────────────────────────────────────────────
 
@@ -61,6 +69,7 @@ export class McpServerInstance extends EventEmitter {
   private state: McpServerState = 'stopped';
   private process: McpProcess | null = null;
   private spawnFn: SpawnFn;
+  private terminateFn: McpTerminateFn;
   private nextId = 1;
   private pendingRequests = new Map<number, {
     resolve: (value: unknown) => void;
@@ -69,6 +78,7 @@ export class McpServerInstance extends EventEmitter {
   }>();
   private tools: McpToolInfo[] = [];
   private stdoutBuffer = '';
+  private lifecycleGeneration = 0;
   private autoRestart: boolean;
   private toolCallTimeoutMs: number;
 
@@ -76,6 +86,7 @@ export class McpServerInstance extends EventEmitter {
     config: McpServerConfig,
     options?: {
       spawn?: SpawnFn;
+      terminate?: McpTerminateFn;
       autoRestart?: boolean;
       toolCallTimeoutMs?: number;
     },
@@ -83,6 +94,7 @@ export class McpServerInstance extends EventEmitter {
     super();
     this.config = config;
     this.spawnFn = options?.spawn ?? defaultSpawn;
+    this.terminateFn = options?.terminate ?? defaultTerminate;
     this.autoRestart = options?.autoRestart ?? false;
     this.toolCallTimeoutMs = options?.toolCallTimeoutMs ?? 30_000;
   }
@@ -102,15 +114,25 @@ export class McpServerInstance extends EventEmitter {
   async start(): Promise<void> {
     if (this.state === 'ready' || this.state === 'starting') return;
 
+    const generation = ++this.lifecycleGeneration;
     this.setState('starting');
 
     try {
-      this.process = this.spawnFn(
+      const env = createMcpEnvironment(this.config.env);
+      const invocation = await resolveToolCommandInvocationFromPath(
         this.config.command,
         this.config.args ?? [],
+        process.platform,
+        { env },
+      );
+      if (generation !== this.lifecycleGeneration) return;
+      this.process = this.spawnFn(
+        invocation.binary,
+        invocation.args,
         {
-          env: this.config.env ? { ...process.env, ...this.config.env } as Record<string, string> : undefined,
+          env,
           stdio: ['pipe', 'pipe', 'pipe'],
+          windowsVerbatimArguments: invocation.windowsVerbatimArguments,
         },
       );
 
@@ -161,7 +183,7 @@ export class McpServerInstance extends EventEmitter {
           this.process.stdout?.removeAllListeners('data');
           this.process.removeAllListeners('exit');
           this.process.removeAllListeners('error');
-          this.process.kill();
+          this.terminateFn(this.process);
           this.process = null;
         }
         this.tools = [];
@@ -189,6 +211,7 @@ export class McpServerInstance extends EventEmitter {
   async stop(): Promise<void> {
     if (this.state === 'stopped') return;
 
+    this.lifecycleGeneration++;
     // Prevent auto-restart during intentional stop
     const wasAutoRestart = this.autoRestart;
     this.autoRestart = false;
@@ -200,7 +223,7 @@ export class McpServerInstance extends EventEmitter {
       this.process.removeAllListeners('exit');
       this.process.removeAllListeners('error');
       this.process.stdin?.end();
-      this.process.kill();
+      this.terminateFn(this.process);
       this.process = null;
     }
 
@@ -326,16 +349,19 @@ export class McpRuntime extends EventEmitter {
   private servers = new Map<string, McpServerInstance>();
   private configs = new Map<string, McpServerConfig>();
   private spawnFn: SpawnFn;
+  private terminateFn: McpTerminateFn;
   private autoRestart: boolean;
   private toolCallTimeoutMs: number;
 
   constructor(options?: {
     spawn?: SpawnFn;
+    terminate?: McpTerminateFn;
     autoRestart?: boolean;
     toolCallTimeoutMs?: number;
   }) {
     super();
     this.spawnFn = options?.spawn ?? defaultSpawn;
+    this.terminateFn = options?.terminate ?? defaultTerminate;
     this.autoRestart = options?.autoRestart ?? false;
     this.toolCallTimeoutMs = options?.toolCallTimeoutMs ?? 30_000;
   }
@@ -347,6 +373,7 @@ export class McpRuntime extends EventEmitter {
     this.configs.set(config.name, config);
     const instance = new McpServerInstance(config, {
       spawn: this.spawnFn,
+      terminate: this.terminateFn,
       autoRestart: this.autoRestart,
       toolCallTimeoutMs: this.toolCallTimeoutMs,
     });
@@ -457,10 +484,32 @@ export class McpRuntime extends EventEmitter {
 function defaultSpawn(
   command: string,
   args: string[],
-  options: { env?: Record<string, string>; stdio: string[] },
+  options: {
+    env?: Record<string, string>;
+    stdio: string[];
+    windowsVerbatimArguments?: boolean;
+  },
 ): McpProcess {
   return spawn(command, args, {
     env: options.env as NodeJS.ProcessEnv | undefined,
     stdio: options.stdio as StdioOptions,
+    windowsHide: true,
+    windowsVerbatimArguments: options.windowsVerbatimArguments === true,
   }) as unknown as McpProcess;
+}
+
+function createMcpEnvironment(explicit?: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(createSanitizedEnv())) {
+    if (value !== undefined) env[key] = value;
+  }
+  return { ...env, ...(explicit ?? {}) };
+}
+
+function defaultTerminate(process: McpProcess): void {
+  if (process instanceof ChildProcess) {
+    terminateProcessTree(process);
+    return;
+  }
+  process.kill();
 }

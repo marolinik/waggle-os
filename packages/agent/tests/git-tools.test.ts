@@ -44,6 +44,43 @@ describe('createGitTools', () => {
     expect(result).toContain('hello.txt');
   });
 
+  it('git_status refuses to discover a repository above the active workspace', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'private-parent-file.txt'), 'must stay private');
+    const nestedWorkspace = path.join(tmpDir, 'managed', 'workspace', 'files');
+    fs.mkdirSync(nestedWorkspace, { recursive: true });
+
+    const nestedTools = createGitTools(nestedWorkspace);
+    const status = nestedTools.find(t => t.name === 'git_status')!;
+    const result = await status.execute({});
+
+    expect(result).toBe('Error: No Git repository exists inside the active workspace.');
+    expect(result).not.toContain('private-parent-file.txt');
+  });
+
+  it('git_commit cannot stage or commit changes in a repository above the workspace', async () => {
+    const parentFile = path.join(tmpDir, 'private-parent-file.txt');
+    fs.writeFileSync(parentFile, 'initial');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'parent baseline'], { cwd: tmpDir });
+    fs.writeFileSync(parentFile, 'sensitive change');
+
+    const nestedWorkspace = path.join(tmpDir, 'managed', 'workspace', 'files');
+    fs.mkdirSync(nestedWorkspace, { recursive: true });
+    const nestedTools = createGitTools(nestedWorkspace);
+    const commit = nestedTools.find(t => t.name === 'git_commit')!;
+    const result = await commit.execute({ message: 'must not commit parent' });
+
+    expect(result).toBe('Error: No Git repository exists inside the active workspace.');
+    expect(execFileSync('git', ['diff', '--cached', '--name-only'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim()).toBe('');
+    expect(execFileSync('git', ['log', '-1', '--pretty=%s'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim()).toBe('parent baseline');
+  });
+
   it('git_diff shows changes for modified file', async () => {
     // Create initial commit so diff works
     fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');

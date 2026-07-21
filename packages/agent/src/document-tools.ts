@@ -32,8 +32,10 @@ import type { ToolDefinition } from './tools.js';
  * Resolve a relative path within a workspace, rejecting traversal outside it.
  */
 function resolveSafe(workspace: string, filePath: string): string {
-  const resolved = path.resolve(workspace, filePath);
-  if (!resolved.startsWith(path.resolve(workspace))) {
+  const root = path.resolve(workspace);
+  const resolved = path.resolve(root, filePath);
+  const relative = path.relative(root, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error(`Path resolves outside workspace: ${filePath}`);
   }
   return resolved;

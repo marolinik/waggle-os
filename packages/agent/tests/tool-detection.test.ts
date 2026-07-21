@@ -15,7 +15,11 @@ import {
 import { resolveToolCommandInvocation } from '../src/tool-command.js';
 import type { ManifestLoaderDeps } from '../src/tool-manifest-loader.js';
 
-type DetectOpts = ToolDetectionDeps & { manifestLoader?: ManifestLoaderDeps };
+type WindowsAppExecutables = Readonly<Record<string, readonly string[]>>;
+type DetectOpts = ToolDetectionDeps & {
+  manifestLoader?: ManifestLoaderDeps;
+  windowsAppExecutables?: () => WindowsAppExecutables | Promise<WindowsAppExecutables>;
+};
 
 /**
  * Build a deps object that defaults to "nothing exists anywhere".
@@ -31,6 +35,7 @@ function makeDeps(overrides: Partial<DetectOpts> = {}): DetectOpts {
     execVersion: async () => null,
     readJson: async () => null,
     pathFromEnv: () => null,
+    windowsAppExecutables: () => ({}),
     // Hermetic: no third-party adapters unless a test injects them.
     manifestLoader: { readDir: () => [] },
     ...overrides,
@@ -322,12 +327,43 @@ describe('claude-desktop detector', () => {
     expect(t.installed).toBe(true);
     expect(t.installedPath).toBe(installed);
   });
+
+  it('detects Claude Desktop from its registered Windows AppX executable', async () => {
+    const installed =
+      'C:\\Program Files\\WindowsApps\\Claude_1.22209.0.0_x64__pzs8sxrjxfjjc\\app\\Claude.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        exists: async (p) => p === installed,
+        windowsAppExecutables: () => ({ 'claude-desktop': [installed] }),
+      }),
+    );
+    const t = result.tools.find((x) => x.id === 'claude-desktop')!;
+    expect(t.installed).toBe(true);
+    expect(t.installedPath).toBe(installed);
+  });
+
+  it('keeps conventional detection available when AppX discovery throws synchronously', async () => {
+    const installed =
+      'C:\\Users\\test\\AppData\\Local\\AnthropicClaude\\Claude.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        exists: async (p) => p === installed,
+        windowsAppExecutables: () => { throw new Error('AppX unavailable'); },
+      }),
+    );
+    expect(result.tools.find((tool) => tool.id === 'claude-desktop')).toMatchObject({
+      installed: true,
+      installedPath: installed,
+    });
+  });
 });
 
-describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw â€” Phase 4)', () => {
+describe('extended-cohort detectors (Codex / Hermes / OpenClaw â€” Phase 4)', () => {
   // Default makeDeps reports nothing installed â€” the envelope is still
   // present per the stable-shape contract.
-  it.each<ToolId>(['codex', 'codex-desktop', 'hermes', 'openclaw'])(
+  it.each<ToolId>(['codex', 'codex-desktop', 'hermes', 'hermes-desktop', 'openclaw'])(
     'reports %s as not installed on a clean machine',
     async (id) => {
       const result = await detectInstalledTools(makeDeps());
@@ -413,6 +449,99 @@ describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw â
     expect(t.version).toBe('0.2.1');
   });
 
+  it('detects a healthy Hermes Windows fallback when PATH is empty', async () => {
+    const installed =
+      'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\hermes.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === installed,
+        execVersion: async (binary) => binary === installed ? '0.2.1' : null,
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: installed,
+      version: '0.2.1',
+      launchable: true,
+    });
+  });
+
+  it('skips a broken PATH Hermes shim for a healthy Windows fallback', async () => {
+    const broken = 'C:\\broken\\hermes.exe';
+    const healthy = 'C:\\Users\\test\\AppData\\Local\\hermes\\bin\\hermes.cmd';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === broken || p === healthy,
+        pathFromEnv: (name) => name === 'hermes' ? broken : null,
+        execVersion: async (binary) => binary === healthy ? '0.2.1' : null,
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: healthy,
+      version: '0.2.1',
+      launchable: true,
+    });
+  });
+
+  it('reports an all-broken Hermes Windows install as unlaunchable', async () => {
+    const broken = 'C:\\broken\\hermes.exe';
+    const fallback =
+      'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\hermes.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === broken || p === fallback,
+        pathFromEnv: (name) => name === 'hermes' ? broken : null,
+      }),
+    );
+
+    const tool = result.tools.find((candidate) => candidate.id === 'hermes');
+    expect(tool).toMatchObject({
+      installed: true,
+      installedPath: broken,
+      version: null,
+      launchable: false,
+    });
+    expect(tool?.diagnostic).toMatch(/hermes doctor|reinstall Hermes/i);
+  });
+
+  it('separates an installed Hermes Desktop from a broken Hermes CLI', async () => {
+    const cli = 'C:\\Users\\test\\AppData\\Local\\hermes\\bin\\hermes.cmd';
+    const desktop =
+      'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\apps\\desktop\\release\\win-unpacked\\Hermes.exe';
+    const versionProbes: string[] = [];
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === cli || p === desktop,
+        pathFromEnv: (name) => name === 'hermes' ? cli : null,
+        execVersion: async (binary) => {
+          versionProbes.push(binary);
+          return null;
+        },
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: cli,
+      version: null,
+      launchable: false,
+      capabilities: { headlessTask: true },
+    });
+    expect(result.tools.find((tool) => tool.id === 'hermes-desktop')).toMatchObject({
+      installed: true,
+      installedPath: desktop,
+      version: null,
+      launchable: true,
+      hookCapable: false,
+      capabilities: { interactiveLaunch: true, headlessTask: false },
+    });
+    expect(versionProbes).toContain(cli);
+    expect(versionProbes).not.toContain(desktop);
+  });
+
   it('detects openclaw CLI when present on PATH', async () => {
     const installed = '/usr/local/bin/openclaw';
     const result = await detectInstalledTools(
@@ -457,6 +586,62 @@ describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw â
     const t = result.tools.find((x) => x.id === 'codex-desktop')!;
     expect(t.installed).toBe(true);
     expect(t.installedPath).toBe(installed);
+  });
+
+  it('derives Codex Desktop from the blocked Microsoft Store CLI resource', async () => {
+    const cli =
+      'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.12708.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe';
+    const desktop =
+      'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.12708.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === cli || p === desktop,
+        pathFromEnv: (name) => name === 'codex' ? cli : null,
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'codex')).toMatchObject({
+      installed: true,
+      installedPath: cli,
+      launchable: false,
+    });
+    expect(result.tools.find((tool) => tool.id === 'codex-desktop')).toMatchObject({
+      installed: true,
+      installedPath: desktop,
+      launchable: true,
+    });
+  });
+
+  it('detects Codex Desktop AppX when a healthy npm Codex CLI shadows the Store resource', async () => {
+    const cli = 'C:\\Users\\test\\AppData\\Roaming\\npm\\codex.cmd';
+    const desktop =
+      'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.715.2305.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe';
+    let appxQueries = 0;
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        exists: async (p) => p === cli || p === desktop,
+        pathFromEnv: (name) => name === 'codex' ? cli : null,
+        execVersion: async (binary) => binary === cli ? 'codex-cli 0.144.1' : null,
+        windowsAppExecutables: () => {
+          appxQueries++;
+          return { 'codex-desktop': [desktop] };
+        },
+      }),
+    );
+
+    expect(appxQueries).toBe(1);
+    expect(result.tools.find((tool) => tool.id === 'codex')).toMatchObject({
+      installed: true,
+      installedPath: cli,
+      version: 'codex-cli 0.144.1',
+      launchable: true,
+    });
+    expect(result.tools.find((tool) => tool.id === 'codex-desktop')).toMatchObject({
+      installed: true,
+      installedPath: desktop,
+      launchable: true,
+    });
   });
 });
 

@@ -1,14 +1,16 @@
 /**
- * anthropic-proxy.ts — Built-in OpenAI-compatible proxy backed by Anthropic API.
+ * anthropic-proxy.ts — Built-in OpenAI-compatible provider proxy.
  *
- * Translates OpenAI /chat/completions format to Anthropic Messages API.
- * This replaces the need for LiteLLM when using Anthropic models directly.
+ * Translates Claude requests to Anthropic Messages and directly forwards other
+ * discovered OpenAI-compatible providers. This is the no-Python Solo route.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FastifyPluginAsync, FastifyInstance } from 'fastify';
+import type { FastifyPluginAsync, FastifyInstance, FastifyReply } from 'fastify';
 import { validateOrigin } from '../cors-config.js';
+import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
+import { PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -49,6 +51,180 @@ interface AnthropicMessageResponse {
   model?: string;
 }
 
+interface ProviderRoute {
+  providerId: string;
+  model: string;
+}
+
+const PROVIDER_ALIASES: Readonly<Record<string, string>> = {
+  gemini: 'google',
+};
+
+function inferProvider(model: string): string | null {
+  const normalized = model.toLowerCase();
+  if (normalized.startsWith('claude-')) return 'anthropic';
+  if (normalized.startsWith('gpt-') || /^o\d/.test(normalized)) return 'openai';
+  if (normalized.startsWith('gemini-')) return 'google';
+  if (normalized.startsWith('deepseek-')) return 'deepseek';
+  if (normalized.startsWith('grok-')) return 'xai';
+  if (normalized.startsWith('mistral-') || normalized.startsWith('codestral-')) return 'mistral';
+  if (normalized.startsWith('qwen')) return 'alibaba';
+  if (normalized.startsWith('minimax-')) return 'minimax';
+  if (normalized.startsWith('glm-')) return 'zhipu';
+  if (normalized.startsWith('kimi-')) return 'moonshot';
+  if (normalized.startsWith('sonar')) return 'perplexity';
+  return null;
+}
+
+/** Resolve exactly one routing prefix; nested ids (OpenRouter) stay intact. */
+function resolveProviderRoute(model: string): ProviderRoute | null {
+  const trimmed = model.trim();
+  if (!trimmed) return null;
+  const slash = trimmed.indexOf('/');
+  if (slash > 0) {
+    const prefix = trimmed.slice(0, slash).toLowerCase();
+    const providerId = PROVIDER_ALIASES[prefix] ?? prefix;
+    if (!PROVIDER_MODEL_CATALOGS[providerId]) return null;
+    const upstreamModel = trimmed.slice(slash + 1);
+    return upstreamModel ? { providerId, model: upstreamModel } : null;
+  }
+  const providerId = inferProvider(trimmed);
+  return providerId ? { providerId, model: trimmed } : null;
+}
+
+function completionEndpoint(baseUrl: string): string {
+  let normalized = baseUrl.trim().replace(/\/+$/, '');
+  if (normalized.endsWith('/chat/completions')) return normalized;
+  if (normalized.endsWith('/models')) normalized = normalized.slice(0, -'/models'.length);
+  return `${normalized}/chat/completions`;
+}
+
+function directProviderBaseUrl(server: FastifyInstance, providerId: string): string {
+  const entry = server.vault?.get(providerId);
+  const customBaseUrl = typeof entry?.metadata?.baseUrl === 'string'
+    ? entry.metadata.baseUrl.trim()
+    : '';
+  if (customBaseUrl) return customBaseUrl;
+  // Google's native catalog is not under its OpenAI-compatibility namespace.
+  if (providerId === 'google') return 'https://generativelanguage.googleapis.com/v1beta/openai';
+  return PROVIDER_MODEL_CATALOGS[providerId].endpoint;
+}
+
+async function forwardCompatibleProvider(
+  server: FastifyInstance,
+  route: ProviderRoute,
+  body: ChatCompletionBody,
+  origin: string | undefined,
+  reply: FastifyReply,
+): Promise<unknown> {
+  const apiKeys = getProviderApiKeys(route.providerId, server.vault);
+  if (apiKeys.length === 0) {
+    return reply.status(500).send({
+      error: {
+        message: `No ${route.providerId} API key configured. Add one in Settings > API Keys.`,
+      },
+    });
+  }
+
+  const url = completionEndpoint(directProviderBaseUrl(server, route.providerId));
+  const outboundBody: Record<string, unknown> = { ...body, model: route.model };
+  if (
+    route.providerId === 'openai'
+    && body.max_tokens !== undefined
+    && /^(?:gpt-5|o\d|codex-mini-)/i.test(route.model)
+  ) {
+    outboundBody.max_completion_tokens = body.max_tokens;
+    delete outboundBody.max_tokens;
+  }
+  let upstream: Response | null = null;
+  let credentialRejected = false;
+  for (let index = 0; index < apiKeys.length; index += 1) {
+    const apiKey = apiKeys[index];
+    try {
+      upstream = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          ...(body.stream ? { Accept: 'text/event-stream' } : {}),
+        },
+        body: JSON.stringify(outboundBody),
+      });
+    } catch (error) {
+      return reply.status(502).send({
+        error: {
+          message: `${route.providerId} API request failed: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      });
+    }
+
+    credentialRejected = upstream.status === 401 || upstream.status === 403;
+    if (!credentialRejected && upstream.status === 400) {
+      const detail = await upstream.clone().text().catch(() => '');
+      credentialRejected = /please pass a valid api key|api key (?:is )?(?:invalid|not valid|expired)/i.test(detail);
+    }
+    if (!credentialRejected) {
+      applyProviderKeyToEnv(route.providerId, apiKey, true);
+      if (server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+        server.agentState.llmProvider = {
+          provider: 'anthropic-proxy',
+          health: 'healthy',
+          detail: `Built-in provider proxy (${route.providerId} credential verified)`,
+          checkedAt: new Date().toISOString(),
+        };
+      }
+      break;
+    }
+    if (index < apiKeys.length - 1) {
+      await upstream.body?.cancel().catch(() => undefined);
+      upstream = null;
+    }
+  }
+
+  if (!upstream) {
+    return reply.status(502).send({
+      error: { message: `${route.providerId} rejected every configured API key.` },
+    });
+  }
+  if (credentialRejected && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: `Built-in provider proxy (${route.providerId} API key invalid or expired)`,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  const contentType = upstream.headers.get('content-type')
+    ?? (body.stream ? 'text/event-stream' : 'application/json');
+  if (body.stream && upstream.body) {
+    await reply.hijack();
+    reply.raw.writeHead(upstream.status, {
+      'Content-Type': contentType,
+      'Cache-Control': upstream.headers.get('cache-control') ?? 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': validateOrigin(origin),
+    });
+    const reader = upstream.body.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        reply.raw.write(Buffer.from(value));
+      }
+    } catch {
+      // Upstream or client closed the stream; the finally block terminates it.
+    } finally {
+      reply.raw.end();
+    }
+    return;
+  }
+
+  const payload = Buffer.from(await upstream.arrayBuffer());
+  reply.code(upstream.status).header('Content-Type', contentType);
+  return reply.send(payload);
+}
+
 /** Map model names (from various formats) to Anthropic model IDs */
 function mapModel(model: string): string {
   // Strip provider prefix (e.g., "anthropic/claude-sonnet-4.6" → "claude-sonnet-4.6")
@@ -82,6 +258,24 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   // POST /v1/chat/completions — translate to Anthropic Messages API
   server.post<{ Body: ChatCompletionBody }>('/v1/chat/completions', async (request, reply) => {
     const body = request.body;
+    const route = resolveProviderRoute(body.model);
+    if (!route) {
+      return reply.status(400).send({
+        error: {
+          message: `Model "${body.model}" does not identify a supported provider. Select a discovered provider/model id.`,
+        },
+      });
+    }
+    if (route.providerId !== 'anthropic') {
+      return forwardCompatibleProvider(
+        server,
+        route,
+        body,
+        request.headers.origin as string | undefined,
+        reply,
+      );
+    }
+
     const apiKey = getAnthropicKey(server);
 
     if (!apiKey) {
@@ -90,19 +284,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     }
 
-    // Non-Anthropic model guard. This proxy only fronts the Anthropic API;
-    // without the guard, ids like "alibaba/qwen3.7-max-…" get prefix-stripped,
-    // dot-mangled, and sent to Anthropic, which replies with an opaque
-    // 404 not_found_error instead of anything actionable.
-    const mappedModel = mapModel(body.model);
-    if (!mappedModel.startsWith('claude-')) {
-      return reply.status(400).send({
-        error: {
-          message: `Model "${body.model}" is not an Anthropic model — the built-in proxy only serves Claude models. `
-            + 'The LiteLLM router is not running (it handles non-Claude providers): restart the app or pick a Claude model.',
-        },
-      });
-    }
+    const mappedModel = mapModel(route.model);
 
     // Extract system prompt from messages
     let system = '';

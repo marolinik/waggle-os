@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -15,7 +16,7 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
-import { listPersonas, composePersonaPrompt, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
+import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
 
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
@@ -35,14 +36,21 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse } from './chat-helpers.js';
+import { buildTemplateWelcomePrompt, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnMutationPolicy } from './chat-helpers.js';
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
+import {
+  behavioralRulesForPromptPackage,
+  composeChatPromptTail,
+  selectChatPromptPackageMode,
+  type ChatPromptPackageMode,
+} from './chat-prompt-packaging.js';
 import { getGovernancePermissions } from './chat-governance.js';
-import { applyPersonaToolFilter, filterMcpToolsForPersona } from '../persona-tool-filter.js';
+import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
-import { resolveUsableModel } from '../model-availability.js';
+import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
+import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import type { GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
@@ -118,6 +126,8 @@ const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'list_workspace_files',
   'read_other_workspace_file',
 ]);
+const EXPLICIT_READ_ONLY_TOOL_NAMES = new Set([...READONLY_TOOLS, 'read_skill']);
+const PLAN_AUTHORING_TOOL_NAMES = new Set(['create_plan', 'add_plan_step']);
 
 /**
  * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
@@ -133,9 +143,58 @@ export function resolveChatAncestry(
   return name ? { project: name } : {};
 }
 
+export function hasRegulatedDisclaimer(content: string): boolean {
+  const normalized = content.toLowerCase();
+  const regulatedAdvisor = '(?:accountant|financial advisor|legal team)';
+  const recommendationLead = '(?:^|[.!?;\\r\\n]\\s*|,\\s*|[-*]\\s+)(?:(?:please|you should|you may want to|(?:i|we) recommend (?:that )?you)\\s+)?';
+  return normalized.includes('not legal advice')
+    || /\bnot (?:financial(?: or investment)?|investment(?: or financial)?) advice\b/.test(normalized)
+    || new RegExp(`${recommendationLead}consult\\s+(?:(?:with\\s+)?(?:your|a|an|the)\\s+)?(?:licensed\\s+)?${regulatedAdvisor}\\b(?!['’]s\\b)`).test(normalized)
+    || new RegExp(`${recommendationLead}(?:verify|check|confirm|review|discuss)(?:\\s+(?:this|it|these|those|the (?:figures?|analysis|advice|decision|matter|plan)))?\\s+with\\s+(?:(?:your|a|an|the)\\s+)?${regulatedAdvisor}\\b(?!['’]s\\b)`).test(normalized)
+    || /\b(?:does not|will not|not intended to) create (?:an? )?attorney-client relationship\b/.test(normalized);
+}
+
 export function isExplicitGatedToolRequest(message: string): boolean {
-  return /\b(write|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|cross-workspace|other workspace)\b/i.test(message)
-    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message);
+  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
+  if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
+  if (isInlineTextOnlyDraftRequest(message)) return false;
+  const affirmativeMessage = message.replace(
+    /\b(?:(?:do\s+not|don't|don’t|never)\s+|without\s+)(?:use|using|call|calling|invoke|invoking|create|write|edit|read|browse|search|schedule|send|post|commit|push|delete|remove|run|execute)\b(?:(?!\b(?:but|however|instead)\b)[^.;!?\r\n])*/giu,
+    ' ',
+  );
+  const directCalculation = /\b(?:calculate|compute)\b/i.test(affirmativeMessage);
+  const explicitCalculationCapability = /\b(?:calculator|python|code|script|spreadsheet|workbook|xlsx)\b/i.test(affirmativeMessage);
+  return /\b(write|read|edit|modify|create|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculator|cross-workspace|other workspace)\b/i.test(affirmativeMessage)
+    || (directCalculation && explicitCalculationCapability)
+    || /\b(?:use|using|call|invoke|run)\s+(?:(?:the|a|an)\s+)?(?:calculator|python|code|script|spreadsheet|workbook|xlsx)\b/i.test(affirmativeMessage)
+    || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(affirmativeMessage)
+    || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(affirmativeMessage)
+    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(affirmativeMessage)
+    || isExplicitPlanAuthoringRequest(affirmativeMessage);
+}
+
+function isExclusiveSuppliedOnlyResponseRequest(message: string): boolean {
+  const suppliedOnly = /\b(?:use only (?:the )?supplied|only supplied|supplied[_ -]only)\b/i.test(message);
+  const exclusiveEnvelope = /\b(?:return|emit|respond with)\b[\s\S]{0,240}\b(?:exactly one|one)\b[\s\S]{0,180}\b(?:json|xml|envelope|payload)\b/i.test(message);
+  const noSurroundingText = /\b(?:no text before or after|nothing (?:before or after|outside|else)|no surrounding (?:text|prose))\b/i.test(message);
+  return suppliedOnly && exclusiveEnvelope && noSurroundingText;
+}
+
+function isInlineTextOnlyDraftRequest(message: string): boolean {
+  if (!/\b(?:draft|prepare|write)\b/i.test(message) || isExplicitPlanAuthoringRequest(message)) {
+    return false;
+  }
+  const affirmativeRequest = message.replace(
+    /\b(?:do not|don't|never|without)\b[^.?!]*(?:[.?!]|$)/gi,
+    ' ',
+  );
+  return !/\b(?:file|docx|pdf|document|artifact|export|download|code|bug|repo(?:sitory)?|terminal|shell|bash|command|test suite|database|sql|etl|pipeline|previous|prior|saved|memory|notes?|schedule|calendar|send|post|delegate|agent|browser|website|url|calculate|calculator|compute)\b/i.test(affirmativeRequest);
+}
+
+function isExplicitPlanAuthoringRequest(message: string): boolean {
+  return /\/plan\b/i.test(message)
+    || /\b(?:create|make|build|draft|prepare|write|generate|develop|set up)\b[^.?!\r\n]{0,100}\bplan\b/i.test(message)
+    || /\bplan(?:ning)?\s+(?:this|that|the|a|an|my|our|your)\b/i.test(message);
 }
 
 export function isExplicitMemoryRecallRequest(message: string): boolean {
@@ -148,13 +207,14 @@ export function isExplicitMemorySaveRequest(message: string): boolean {
 
 export function isExplicitExternalResearchRequest(message: string): boolean {
   return /https?:\/\//i.test(message)
-    || /\b(web|internet|online|current|latest|today|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|investigate|look up|find out|dig into|study|survey|external)\b/i.test(message);
+    || /\b(web|internet|online|current|latest|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|look up|find out|dig into|study|survey|external)\b/i.test(message);
 }
 
 export function shouldNarrowToolsForConversationalTurn(
   message: string,
   autonomyLevel: AutonomyLevel,
 ): boolean {
+  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return true;
   return autonomyLevel === 'normal' && !isExplicitGatedToolRequest(message);
 }
 
@@ -162,18 +222,33 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
   tools: T[],
   message: string,
   autonomyLevel: AutonomyLevel,
+  mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): T[] {
-  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return tools;
+  if (isExclusiveSuppliedOnlyResponseRequest(message)) return [];
+  let eligibleTools = mutationPolicy.denyMemoryPersistence
+    ? tools.filter(tool => tool.name !== 'save_memory')
+    : tools;
+  if (autonomyLevel === 'normal' && !isExplicitPlanAuthoringRequest(message)) {
+    eligibleTools = eligibleTools.filter(tool => !PLAN_AUTHORING_TOOL_NAMES.has(tool.name));
+  }
+  if (mutationPolicy.denyAllMutations) {
+    return eligibleTools.filter(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name));
+  }
+  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return eligibleTools;
   const allowMemorySearch = isExplicitMemoryRecallRequest(message);
   const allowMemorySave = isExplicitMemorySaveRequest(message);
   const allowExternalResearch = isExplicitExternalResearchRequest(message);
-  return tools.filter((tool) => {
+  eligibleTools = eligibleTools.filter((tool) => {
     if (CONVERSATIONAL_GATED_TOOL_NAMES.has(tool.name)) return false;
     if (tool.name === 'search_memory' && !allowMemorySearch) return false;
     if (tool.name === 'save_memory' && !allowMemorySave) return false;
     if ((tool.name === 'web_search' || tool.name === 'web_fetch') && !allowExternalResearch) return false;
-    return true;
+    return tool.name === 'search_memory'
+      || tool.name === 'save_memory'
+      || tool.name === 'web_search'
+      || tool.name === 'web_fetch';
   });
+  return eligibleTools;
 }
 
 type PluginToolProvider = NonNullable<AgentLoopConfig['pluginTools']>;
@@ -183,13 +258,23 @@ export function filterPluginToolsForConversationalTurn(
   message: string,
   autonomyLevel: AutonomyLevel,
   onWithheld?: (count: number) => void,
+  mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): PluginToolProvider {
-  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
+  if (!mutationPolicy.denyAllMutations
+    && !mutationPolicy.denyMemoryPersistence
+    && !shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
 
   return {
     getAllTools: () => {
       const pluginTools = provider.getAllTools();
-      const filtered = filterGatedToolsForConversationalTurn(pluginTools, message, autonomyLevel);
+      // Plugin capabilities are external and may mutate remote state. On a
+      // conversational turn there is no safe static allowlist for arbitrary
+      // plugin names, so defer all of them until the user requests an action.
+      const filtered = mutationPolicy.denyAllMutations
+        ? []
+        : mutationPolicy.denyMemoryPersistence
+          ? pluginTools.filter(tool => tool.name !== 'save_memory')
+          : [];
       if (filtered.length !== pluginTools.length) {
         onWithheld?.(pluginTools.length - filtered.length);
       }
@@ -198,8 +283,15 @@ export function filterPluginToolsForConversationalTurn(
   };
 }
 
-function conversationalToolPolicyPrompt(message: string, autonomyLevel: AutonomyLevel): string {
+export function conversationalToolPolicyPrompt(
+  message: string,
+  autonomyLevel: AutonomyLevel,
+  selectedToolCount: number,
+): string {
   if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return '';
+  if (selectedToolCount === 0) {
+    return `\n\n# Current Turn Tool Policy\nNo executable tools are available in this turn. Answer the user directly in plain text. Never emit tool-call syntax, tool names as control tokens, or a request to run an absent tool. Do not mention this policy or claim that a tool was used.`;
+  }
   return `\n\n# Current Turn Tool Policy\nThis is a normal conversational turn. Some action, inspection, plugin, planning, and external research tools may be intentionally hidden until the user asks for a concrete action or lookup. Do not mention this policy. Do not infer or tell the user that a capability is missing because a tool is absent on this turn. If the user asks what Waggle can do, answer at the product level and offer one concrete next step.`;
 }
 
@@ -239,12 +331,14 @@ interface ApprovalWaitOptions {
   policy: ApprovalTimeoutPolicy;
   sendEvent: (event: 'approval_held', data: Record<string, unknown>) => void;
   onHeld: (expiresAt: string) => void;
+  signal?: AbortSignal;
 }
 
 export async function waitForApprovalDecision(options: ApprovalWaitOptions): Promise<{ approved: boolean; held: boolean; timedOut: boolean }> {
   let held = false;
   let timedOut = false;
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let abortHandler: (() => void) | undefined;
   const approved = await new Promise<boolean>((resolve) => {
     options.pendingApprovals.set(options.requestId, {
       resolve,
@@ -252,6 +346,16 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
       input: options.input,
       timestamp: Date.now(),
     });
+
+    abortHandler = () => {
+      if (!options.pendingApprovals.delete(options.requestId)) return;
+      resolve(false);
+    };
+    if (options.signal?.aborted) {
+      abortHandler();
+      return;
+    }
+    options.signal?.addEventListener('abort', abortHandler, { once: true });
 
     timeout = setTimeout(() => {
       if (!options.pendingApprovals.delete(options.requestId)) return;
@@ -288,6 +392,7 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
     }, options.policy.timeoutMs);
   });
   if (timeout) clearTimeout(timeout);
+  if (abortHandler) options.signal?.removeEventListener('abort', abortHandler);
   return { approved, held, timedOut };
 }
 
@@ -352,7 +457,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // C3: Cache the base system prompt per session to avoid rebuilding on every message
-  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined }>();
+  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode }>();
 
   // Profile cache (review Major #4): was fs.readFileSync on every buildSystemPrompt call —
   // blocks the Node event loop on every concurrent SSE request. Load once per mtime change,
@@ -414,12 +519,13 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
      * FR #4: when PROMPT_ASSEMBLER is on, the caller pre-fetches a structured
      * AssembledPrompt via `orch.buildAssembledPrompt(query, persona, opts)`.
      * If provided, its `system` replaces the basic `orch.buildSystemPrompt()`
-     * call below — the rest of the wrapper (profile, skills, workspaceNow,
-     * behavioralSpec rules, persona) still layers on top because the assembler
-     * does not include those. Caching is skipped when assembled is provided
-     * because memory recall results vary per turn.
+     * call below. The wrapper adds only context that is not already represented
+     * by the assembler, so persona and response-shape instructions stay singular.
+     * Caching is skipped when assembled is provided because memory recall results
+     * vary per turn.
      */
     assembled?: AssembledPrompt | null,
+    packageMode: ChatPromptPackageMode = 'full',
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
@@ -431,7 +537,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     const cacheKey = sessionId ?? 'default';
     if (!assembled) {
       const cached = systemPromptCache.get(cacheKey);
-      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength) {
+      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode) {
         return cached.prompt;
       }
     }
@@ -449,9 +555,8 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Orchestrator's built prompt (identity + self-awareness + preloaded context).
     // FR #4: when PromptAssembler is on, swap in the structured assembled prompt
     // — adds Identity + Persona + State + Recent + Memory sections via the
-    // sixth-layer assembler. The remaining wrapper layers (profile, skills,
-    // workspaceNow, behavioralSpec, persona-via-composePersonaPrompt) still
-    // run below because the assembler does not include those.
+    // sixth-layer assembler. Wrapper-only profile, runtime, workspace, active
+    // behavioral, and correction context is layered below.
     // AI-OS #6 — supply the durable "why" (project ← workspace name) before the
     // orchestrator renders its system prompt. Empty ancestry self-suppresses.
     orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
@@ -492,7 +597,20 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
       }
     } catch { /* profile shape unexpected — continue without */ }
 
-    prompt += `
+    if (packageMode === 'compact') {
+      prompt += `
+
+# Runtime Context
+- Date: ${dateStr}
+- Time: ${timeStr}
+- Platform: ${process.platform} (${process.arch})
+- Working directory: ${workspacePath ?? 'not set'}
+${sessionId ? `- Session: ${sessionId}` : ''}
+${historyLength && historyLength > 0 ? `- Continuing conversation: ${historyLength} previous messages are in context.` : '- New conversation.'}
+${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId}` : ''}
+`;
+    } else {
+      prompt += `
 
 # Who You Are
 
@@ -518,17 +636,18 @@ ${sessionId ? `- Session: ${sessionId}` : ''}
 ${historyLength && historyLength > 0 ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.` : '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'}
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailor responses to this domain.` : ''}
 `;
+    }
 
     // Behavioral rules from the ACTIVE spec — baseline with any deployed
     // self-evolution overrides applied. Falls back to the compiled
     // BEHAVIORAL_SPEC when the server hasn't decorated activeBehavioralSpec
     // (legacy test harness).
     const activeSpec = server.activeBehavioralSpec ?? BEHAVIORAL_SPEC;
-    prompt += '\n' + activeSpec.rules;
+    prompt += '\n' + behavioralRulesForPromptPackage(activeSpec, packageMode);
 
     // Token monitoring
     const estimatedTokens = Math.ceil(prompt.length / 4);
-    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (behavioral-spec v${activeSpec.version})`);
+    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (${packageMode}, behavioral-spec v${activeSpec.version})`);
     if (estimatedTokens > 12000) {
       log.warn(`[Orchestrator] System prompt exceeds 12K tokens (${estimatedTokens}). Consider trimming.`);
     }
@@ -537,7 +656,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Dead code removed — the old 250-line inline spec lived here
 
     // Append loaded skills with active integration instructions
-    prompt += buildSkillPromptSection(skills);
+    if (packageMode === 'full') {
+      prompt += buildSkillPromptSection(skills);
+    }
 
     // Workspace Now — inject structured context so the agent is grounded on first turn
     if (workspaceId) {
@@ -576,29 +697,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     } catch { /* non-blocking */ }
 
-    // W1.3: Apply active persona instructions (extends, not replaces, core prompt)
-    // W7.3: Pass workspace tone to composePersonaPrompt
+    // W1.3/W7.3: add persona only on the legacy path; assembler-owned persona
+    // content stays singular. DOCX and workspace-tone guidance always applies.
     const workspaceTone = wsConfig?.tone;
-    if (activePersonaId) {
-      const persona = resolvePersona(activePersonaId);
-      prompt = composePersonaPrompt(prompt, persona, undefined, workspaceTone);
-    } else if (workspaceTone) {
-      // Even without a persona, apply tone if workspace has one set
-      prompt = composePersonaPrompt(prompt, null, undefined, workspaceTone);
-    }
-
-    // FR #4: append the assembler's task-shape responseScaffold as a final
-    // response-shape note. The scaffold guides the model toward the format
-    // the task type calls for ("Cite source. Answer." etc.). Empty when the
-    // task shape has low confidence or the tier is frontier.
-    if (assembled?.responseScaffold) {
-      prompt += '\n\n## Response shape\n' + assembled.responseScaffold;
-    }
+    const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+    prompt = composeChatPromptTail(prompt, {
+      persona: activePersona,
+      workspaceTone,
+      assembled: assembled ?? null,
+    });
 
     // C3: Cache the built prompt — only when there's no per-turn assembler
     // input. Caching an assembled prompt would replay stale memory recall.
     if (!assembled) {
-      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength });
+      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength, packageMode });
     }
 
     return prompt;
@@ -612,6 +724,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       workspaceId?: string;
       model?: string;
       session?: string;
+      /** Browser client alias retained alongside the legacy `session` key. */
+      sessionId?: string;
       workspacePath?: string;
       persona?: string;
       /**
@@ -657,16 +771,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       channel?: { platform: string; chatId: string };
     };
   }>('/api/chat', async (request, reply) => {
+    const totalServerStartedAt = performance.now();
+    let firstTokenAt: number | null = null;
+
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
     // Phase A.2: `persona` is an optional per-window override — takes precedence
     // over the workspace's default persona for this single request only.
     const {
       message, workspace: _ws, workspaceId: _wsId, model, session,
+      sessionId: sessionIdAlias,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
       autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
       origin, channel: channelMeta,
     } = request.body ?? {};
     const workspace = _ws ?? _wsId;
+    const requestedSessionId = session ?? sessionIdAlias;
+    if (workspace) assertSafeSegment(workspace, 'workspace');
 
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
@@ -696,14 +816,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
-    let workspacePath = explicitWorkspacePath;
-    if (!workspacePath && workspace) {
+    let workspacePath = workspace ? undefined : explicitWorkspacePath;
+    let workspacePathFromTrustedConfig = false;
+    if (workspace) {
       const wsConfig = server.workspaceManager?.get(workspace);
-      if (wsConfig?.directory && fs.existsSync(wsConfig.directory)) {
-        workspacePath = wsConfig.directory; // linked mode
+      const configuredPath = wsConfig?.directory || wsConfig?.storagePath;
+      if (wsConfig && configuredPath) {
+        try {
+          workspacePath = resolveWorkspaceExecutionRoot(server.localConfig.dataDir, wsConfig);
+          workspacePathFromTrustedConfig = true;
+        } catch (error) {
+          log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
+          return reply.status(409).send({
+            error: 'Configured workspace directory is unavailable',
+            code: 'WORKSPACE_ROOT_UNAVAILABLE',
+          });
+        }
       } else if (workspace !== 'default') {
         // Virtual workspace storage — managed files directory
         workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
+      } else {
+        // Legacy default-workspace callers may still supply an anchored managed path.
+        workspacePath = explicitWorkspacePath;
       }
     }
 
@@ -718,16 +852,24 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     if (message.length > MAX_MESSAGE_LENGTH) {
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
     }
+    const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+    const allowMemoryPersistence = !isAutomatedTurn && !turnMutationPolicy.denyMemoryPersistence;
+    const allowDerivedPersistence = !isAutomatedTurn && !turnMutationPolicy.denyAllMutations;
 
     // R6-001: path-traversal guard on the session-persistence path segments.
-    // `workspace` and `session` come straight from the request body and are
+    // `workspace` and the resolved session alias come straight from the request body and are
     // joined into dataDir/workspaces/<workspace>/sessions/<session>.jsonl by
     // chat-persistence (persistMessage / loadSessionMessages). A crafted
     // "../evil" segment would escape the sessions dir on both write and read.
     // Reuse the shared guard; runs BEFORE reply.hijack() so the thrown
     // {statusCode:400} is converted to a 400 by Fastify's default error handler.
-    if (workspace) assertSafeSegment(workspace, 'workspace');
-    if (session) assertSafeSegment(session, 'session');
+    if (session && sessionIdAlias && session !== sessionIdAlias) {
+      return reply.status(400).send({
+        error: 'session and sessionId must match when both are provided',
+        code: 'SESSION_ID_CONFLICT',
+      });
+    }
+    if (requestedSessionId) assertSafeSegment(requestedSessionId, 'session');
 
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
@@ -756,13 +898,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     }
 
-    // Review Critical #1: path-traversal guard on workspacePath.
-    // A client can supply "../../../../etc" or on Windows "C:\\Windows\\System32".
-    // Both the explicit-path and workspace-derived branches must be anchored to dataDir.
+    // Review Critical #1: request-supplied paths stay anchored to dataDir.
+    // A workspace directory loaded from persisted config is an explicit user
+    // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
     if (workspacePath) {
       const resolved = path.resolve(workspacePath);
       const allowed = path.resolve(server.localConfig.dataDir);
-      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+      if (!workspacePathFromTrustedConfig
+        && resolved !== allowed
+        && !resolved.startsWith(allowed + path.sep)) {
         log.warn(`[security] Path traversal attempt blocked: ${workspacePath}`);
         return reply.status(400).send({
           error: 'Invalid workspace path',
@@ -779,23 +923,30 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Set SSE headers via raw response (include CORS since hijack bypasses Fastify plugins)
     const raw = reply.raw;
     raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
+      'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': validateOrigin(request.headers.origin as string | undefined),
     });
 
+    // The response side owns the long-lived SSE socket. Cancelling its reader
+    // closes reply.raw (request.raw already finished after the POST body), which
+    // must abort the provider/tool run immediately.
+    const abortController = new AbortController();
+    raw.once('close', () => {
+      if (!raw.writableEnded) abortController.abort();
+    });
+    if (raw.destroyed) abortController.abort();
+
     // Helper to write SSE events
     const sendEvent = (event: string, data: unknown) => {
+      if (abortController.signal.aborted || raw.destroyed || raw.writableEnded) return;
+      if (event === 'token' && firstTokenAt === null) {
+        firstTokenAt = performance.now();
+      }
       raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-
-    // Graceful shutdown: abort agent loop when client disconnects
-    const abortController = new AbortController();
-    request.raw.on('close', () => {
-      abortController.abort();
-    });
 
     // Declare at handler scope so error handler can surface recalled memories (P1-4)
     let recalledContext = '';
@@ -828,7 +979,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Turn-scoped pin for the shared orchestrator's workspace mind (default/
     // no-workspace chats). Hoisted so the outer finally can release it.
     let pinnedSharedMindId: string | null = null;
-    const activeSessionId = session ?? workspace ?? 'default';
+    const activeSessionId = requestedSessionId ?? workspace ?? 'default';
     const activeWorkspaceId = workspace ?? 'default';
     let activeHistory: Array<{ role: string; content: string }> | undefined;
 
@@ -850,27 +1001,53 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Budget check: if daily spend exceeds threshold, use budget model
       let resolvedModel = primaryModel;
       let modelSwitchReason: string | null = null;
+      let budgetModelSelected = false;
+      const budgetRoutingAllowed = budgetModel
+        ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
+        : false;
 
       const dailyBudget = pilotConfig.getDailyBudget();
-      if (dailyBudget && dailyBudget > 0 && budgetModel) {
+      if (dailyBudget && dailyBudget > 0 && budgetModel && budgetRoutingAllowed) {
         const spent = costTracker.getDailyTotal();
         if (spent / dailyBudget >= budgetThreshold) {
           resolvedModel = budgetModel;
+          budgetModelSelected = resolvedModel !== primaryModel;
           modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
         }
       }
 
       // Smart routing: simple messages → budget model (cost optimization)
-      if (!modelSwitchReason && budgetModel) {
+      if (!modelSwitchReason && budgetModel && budgetRoutingAllowed) {
         const routing = routeMessage(message, resolvedModel, budgetModel);
         if (routing.reason === 'simple_turn') {
           resolvedModel = routing.model;
+          budgetModelSelected = resolvedModel !== primaryModel;
           // Smart routing is silent — no toast, no inline message
         }
       }
 
       // ── Conversation history management (moved before LLM check so echo mode also persists) ──
-      resolvedModel = await resolveUsableModel(server, resolvedModel);
+      try {
+        resolvedModel = await resolveUsableModel(server, resolvedModel);
+      } catch (selectedResolutionError) {
+        const unavailableModel = resolvedModel;
+        if (budgetModelSelected && unavailableModel !== primaryModel) {
+          try {
+            resolvedModel = await resolveUsableModel(server, primaryModel);
+            budgetModelSelected = false;
+            modelSwitchReason = `${unavailableModel} unavailable; primary selected`;
+          } catch (primaryResolutionError) {
+            if (!fallbackModel || fallbackModel === unavailableModel) throw primaryResolutionError;
+            resolvedModel = await resolveUsableModel(server, fallbackModel);
+            budgetModelSelected = false;
+            modelSwitchReason = `${unavailableModel} and ${primaryModel} unavailable; configured fallback selected`;
+          }
+        } else {
+          if (!fallbackModel || fallbackModel === unavailableModel) throw selectedResolutionError;
+          resolvedModel = await resolveUsableModel(server, fallbackModel);
+          modelSwitchReason = `${unavailableModel} unavailable; configured fallback selected`;
+        }
+      }
 
       const sessionId = activeSessionId;
       const effectiveWorkspace = activeWorkspaceId;
@@ -983,7 +1160,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               healthHeaders['Authorization'] = `Bearer ${token}`;
             }
             const healthRes = await fetch(`${getLitellmUrl()}/health/liveliness`, {
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.any([abortController.signal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
             litellmAvailable = healthRes.ok;
@@ -994,6 +1171,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // ── Slash command routing (works even in echo mode) ──
+      if (abortController.signal.aborted) return;
       const { commandRegistry } = server.agentState;
       if (commandRegistry.isCommand(message)) {
         // Build a lightweight command context (same as commands.ts route)
@@ -1042,9 +1220,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           const words = friendlyError.split(' ');
           for (const word of words) {
+            if (abortController.signal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
+          if (abortController.signal.aborted) return;
           history.push({ role: 'assistant', content: friendlyError });
           persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: friendlyError });
           sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
@@ -1054,9 +1234,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Stream the command result as SSE tokens
           const cmdWords = cmdResult.split(' ');
           for (const word of cmdWords) {
+            if (abortController.signal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
+          if (abortController.signal.aborted) return;
           // Persist command result
           history.push({ role: 'assistant', content: cmdResult });
           persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: cmdResult });
@@ -1079,9 +1261,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const echoResponse = `**Waggle is running in local mode** (no LLM proxy connected).\n\nYour message: "${message}"\n\nTo enable AI responses, configure an API key in Settings > API Keys.`;
         const words = echoResponse.split(' ');
         for (const word of words) {
+          if (abortController.signal.aborted) return;
           sendEvent('token', { content: word + ' ' });
           await new Promise((r) => setTimeout(r, 15));
         }
+        if (abortController.signal.aborted) return;
         // Persist echo response so session continuity is maintained
         history.push({ role: 'assistant', content: echoResponse });
         persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: echoResponse });
@@ -1230,10 +1414,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
             const tpl = BUILT_IN_TEMPLATES?.find?.((t) => t.id === wsTemplateId);
             if (tpl) {
-              templateContext = `\n\n# Workspace Template: ${tpl.name}\nThis workspace uses the "${tpl.name}" template. ${tpl.description ?? ''}\nGreet the user with a warm, template-appropriate welcome that shows you understand their domain.\n`;
-              if (tpl.starterMemory?.length) {
-                templateContext += '\nStarter context:\n' + tpl.starterMemory.map((m: string) => `- ${m}`).join('\n') + '\n';
-              }
+              templateContext = buildTemplateWelcomePrompt(tpl);
             }
           }
         }
@@ -1242,17 +1423,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // The assembler runs sixth-layer prompt packaging (Identity + Persona +
         // memory sections + task-shape scaffold). Failures fall back gracefully
         // to the static system prompt — never block a chat turn on assembler errors.
+        const turnTaskShape = detectTaskShape(agentMessage);
         let assembled: AssembledPrompt | null = null;
         if (!hasCustomRunner && isEnabled('PROMPT_ASSEMBLER')) {
           try {
             const wsConfigForAssembler = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
             const personaIdForAssembler = personaOverride ?? wsConfigForAssembler?.personaId ?? null;
             const personaForAssembler = personaIdForAssembler ? resolvePersona(personaIdForAssembler) : null;
-            const taskShape = detectTaskShape(agentMessage);
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape, turnId, recalledText: recallTextForAssembler });
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler });
             log.info(
               `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
-              + `shape=${taskShape.type ?? 'none'} conf=${taskShape.confidence.toFixed(2)} `
+              + `shape=${turnTaskShape.type ?? 'none'} conf=${turnTaskShape.confidence.toFixed(2)} `
               + `tier=${assembled.debug.tier} sections=${assembled.debug.sectionsIncluded.length} `
               + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`
             );
@@ -1265,13 +1446,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // W4.5 (plan bug #9-1, double-inject): when the assembler ran, the
         // recall block is already INSIDE the assembled prompt — appending
         // recalledContext again injected every recalled memory twice.
-        const systemPrompt = hasCustomRunner
-          ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix
-            + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled)
-            + templateContext
-            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel)
-            + (assembled ? '' : recalledContext);
+        let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -1450,6 +1625,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             },
             policy: approvalTimeoutPolicy,
             sendEvent,
+            signal: abortController.signal,
             onHeld: (expiresAt) => {
               log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — moved to Approvals inbox`);
               emitAuditEvent(server, {
@@ -1463,6 +1639,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             },
           });
 
+          if (abortController.signal.aborted) {
+            return { cancel: true, reason: 'Chat request cancelled' };
+          }
           if (!approved) {
             if (held) {
               return { cancel: true, reason: `Approval for ${toolName} moved to Approvals inbox` };
@@ -1485,6 +1664,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? wsSession?.tools
               ?? server.agentState.buildToolsForWorkspace(workspacePath, sessionOrch, effectiveWorkspace)
             : allTools;
+        const catalogToolNames = new Set(effectiveTools.map(tool => tool.name));
+        let toolCatalogCount = catalogToolNames.size;
+        let toolEligibleCount = 0;
+        let toolSelectedCount = 0;
+        let toolOmittedCount = 0;
+        let transmittedToolSchemaChars = 0;
+        let selectorLatencyMs = 0;
+        let packageMode: ChatPromptPackageMode | 'custom' = 'custom';
         let spawnAvailableTools = effectiveTools;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
@@ -1496,11 +1683,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
         const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
-        if (!hasCustomRunner && activePersonaId) {
-          const persona = resolvePersona(activePersonaId);
-          if (persona) {
-            effectiveTools = applyPersonaToolFilter(effectiveTools, persona);
-          }
+        const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+        if (!hasCustomRunner && activePersona) {
+          effectiveTools = applyPersonaToolFilter(effectiveTools, activePersona);
         }
 
         // #17: schedule-originated turns must not schedule further work — an
@@ -1520,6 +1705,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // conversational narrowing (a UX heuristic) must not shrink a
         // sub-agent's legitimate toolset for its explicit task.
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
+        const externalToolNames = new Set<string>();
         if (!hasCustomRunner) {
           effectiveTools = filterAvailableTools(effectiveTools);
 
@@ -1531,53 +1717,43 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // retriever injects them all; above it, the conversation's union-only
           // accumulated top-k. Persona denylist / read-only rails still apply.
           const runningMcpTools = server.agentState.mcpRuntime.getAllTools();
+          for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();
             let selectedMcp = await server.agentState.mcpToolRetriever.selectTools(
               runningMcpTools, history, sessionId, retrievalCfg,
             );
-            const mcpPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
-            if (mcpPersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, mcpPersona);
+            if (activePersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, activePersona);
+            selectedMcp = filterAvailableTools(selectedMcp);
             if (selectedMcp.length > 0) {
               const present = new Set(effectiveTools.map(t => t.name));
-              effectiveTools = [...effectiveTools, ...selectedMcp.filter(t => !present.has(t.name))];
+              const additions = selectedMcp.filter(t => !present.has(t.name));
+              for (const candidate of additions) externalToolNames.add(candidate.name);
+              effectiveTools = [...effectiveTools, ...additions];
             }
           }
 
+          // Plugins remain parent-only. Materialize exactly once, apply the
+          // same unknown-external persona rails as MCP, and keep native names
+          // first so a plugin cannot shadow a built-in implementation.
           spawnAvailableTools = effectiveTools;
-          spawnAllowedToolNames = new Set(effectiveTools.map(t => t.name));
-          const beforeNarrowing = effectiveTools.length;
-          effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
-          if (effectiveTools.length !== beforeNarrowing) {
-            log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          let materializedPlugins = server.agentState.pluginRuntimeManager.getAllTools();
+          for (const tool of materializedPlugins) catalogToolNames.add(tool.name);
+          if (activePersona) {
+            materializedPlugins = filterMcpToolsForPersona(materializedPlugins, activePersona);
+          }
+          materializedPlugins = filterAvailableTools(materializedPlugins);
+          if (materializedPlugins.length > 0) {
+            const present = new Set(effectiveTools.map(t => t.name));
+            const additions = materializedPlugins.filter(t => !present.has(t.name));
+            for (const candidate of additions) externalToolNames.add(candidate.name);
+            effectiveTools = [...effectiveTools, ...additions];
           }
         }
-        const pluginTools = hasCustomRunner
-          ? undefined
-          : filterPluginToolsForConversationalTurn(
-            server.agentState.pluginRuntimeManager,
-            agentMessage,
-            autonomyLevel,
-            (count) => log.info(`[chat] conversational turn: withheld ${count} deferred plugin tools until explicitly requested`),
-          );
 
         // Track tool execution times for duration reporting
         const toolStartTimes = new Map<string, number>();
         let toolStartCounter = 0;
-
-        // Build capability router for intelligent tool-not-found handling
-        const capabilityRouter = hasCustomRunner ? undefined : new CapabilityRouter({
-          toolNames: effectiveTools.map(t => t.name),
-          skills: server.agentState.skills,
-          plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
-            name: p.getManifest().name,
-            description: p.getManifest().description ?? '',
-            skills: p.getContributedSkills(),
-          })),
-          mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
-          subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
-          mcpRuntime: server.agentState.mcpRuntime,
-        });
 
         // B1-B7: If this is a rerouted slash command, replace the last user message
         // with the enriched agent prompt so the LLM gets better instructions
@@ -1598,20 +1774,37 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // When conversation exceeds 50% of context window: prune tool results,
         // protect head/tail, LLM-summarize the middle using budget model ($0 cost).
         let windowedMessages: Array<{ role: string; content: string }>;
-        if (budgetModel) {
+        let compressionModel = budgetModel
+          && canUseBudgetModelWithoutCloudEgress(resolvedModel, budgetModel)
+          ? budgetModel
+          : null;
+        const discoveredWindow = getModelContextWindow(resolvedModel);
+        const isLocalModel = isOfflineOllamaModelReference(resolvedModel);
+        const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
+          conservativeDefault: isLocalModel ? 8192 : 128_000,
+        });
+        if (compressionModel
+          && isLocalModel
+          && needsCompression(history, { maxContextTokens, compressionThreshold: 0.5 })) {
+          const verifiedCompressionModel = await resolveExplicitRoutableModel(server, compressionModel);
+          compressionModel = verifiedCompressionModel
+            && isOfflineOllamaModelReference(verifiedCompressionModel)
+            ? verifiedCompressionModel
+            : null;
+        }
+        if (compressionModel) {
           // §B: size compaction to the actual model window so a local 4k/8k model
           // is not treated as a 128k model. Local (ollama/*) models with an unknown
           // window get a conservative 8k floor; non-local/unknown cloud ids we don't
           // map yet (deepseek/mistral/openrouter/…) keep the prior 128k baseline so
           // they aren't over-compacted.
-          const discoveredWindow = getModelContextWindow(resolvedModel);
-          const isLocalModel = resolvedModel.trim().toLowerCase().startsWith('ollama/');
-          const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
-            conservativeDefault: isLocalModel ? 8192 : 128_000,
-          });
+          const compressionUsesOllama = compressionModel.trim().toLowerCase().startsWith('ollama/');
+          const ollamaHost = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
           const compressionConfig = createDefaultCompressionConfig({
-            budgetModel,
-            litellmUrl: getLitellmUrl(),
+            budgetModel: compressionUsesOllama
+              ? compressionModel.slice('ollama/'.length)
+              : compressionModel,
+            litellmUrl: compressionUsesOllama ? ollamaHost : getLitellmUrl(),
             litellmApiKey: server.agentState.litellmApiKey,
             maxContextTokens,
           });
@@ -1632,7 +1825,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               // tool/connector output, so scan it before it can enter durable
               // memory; fail-soft with the W4A closed-DB guard so persistence
               // never fails the turn.
-              if (!hasCustomRunner && !isAutomatedTurn) {
+              if (!hasCustomRunner && allowMemoryPersistence) {
                 const summaryScan = scanForInjection(compressionResult.summary, 'tool_output');
                 if (summaryScan.score >= 0.7) {
                   log.warn(`[context-compression] summary NOT persisted — injection score ${summaryScan.score} (session=${sessionId})`);
@@ -1684,6 +1877,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           } catch { /* governance not available — allow all */ }
         }
 
+        if (!hasCustomRunner) {
+          // Remove governance-blocked definitions before serialization, while
+          // retaining the executor's deny check as defense in depth.
+          const blockedTools = new Set(governancePolicies?.blockedTools ?? []);
+          if (blockedTools.size > 0) {
+            effectiveTools = effectiveTools.filter(tool => !blockedTools.has(tool.name));
+            spawnAvailableTools = spawnAvailableTools.filter(tool => !blockedTools.has(tool.name));
+          }
+          spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
+
+          const beforeNarrowing = effectiveTools.length;
+          effectiveTools = filterGatedToolsForConversationalTurn(
+            effectiveTools,
+            agentMessage,
+            autonomyLevel,
+            turnMutationPolicy,
+          );
+          if (effectiveTools.length !== beforeNarrowing) {
+            log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          }
+        }
+
         // Bind collaboration producers to THIS request's workspace, session,
         // security policy, and runner. Static startup tools are replaced only
         // when their names survived persona/availability/intent filtering.
@@ -1706,12 +1921,93 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Iteration budget — prevents runaway agent loops
+        if (!hasCustomRunner) {
+          toolCatalogCount = catalogToolNames.size;
+          toolEligibleCount = effectiveTools.length;
+          const sequenceHistory = sessionToolSequences.get(sessionId);
+          const previousToolSequence = sequenceHistory?.[sequenceHistory.length - 1] ?? [];
+          const recentMessages = history
+            .slice(0, -1)
+            .filter(entry => entry.role === 'user' || entry.role === 'assistant')
+            .slice(-4)
+            .map(entry => ({ role: entry.role, content: entry.content }));
+          const selectorStartedAt = performance.now();
+          const selection = selectToolsForTurn(effectiveTools, {
+            message: agentMessage,
+            recentMessages,
+            recentToolNames: previousToolSequence,
+            preferredToolNames: activePersona?.tools ?? [],
+            mandatoryToolNames: isExplicitGatedToolRequest(agentMessage)
+              && !turnMutationPolicy.denyAllMutations
+              && !activePersona?.isReadOnly
+              ? ['search_skills', 'create_skill']
+              : [],
+            externalToolNames: [...externalToolNames],
+          });
+          selectorLatencyMs = Math.max(0, Math.round(performance.now() - selectorStartedAt));
+          effectiveTools = selection.tools;
+          toolSelectedCount = effectiveTools.length;
+          toolOmittedCount = selection.omittedCount;
+          transmittedToolSchemaChars = toolSelectedCount > 0 ? selection.schemaChars : 0;
+          log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
+        }
+
+        // Package the prompt only after the executable tool set is final. A
+        // genuinely conversational turn can stay compact; every tool-bearing,
+        // agentic, sensitive, or complex turn retains the full operating spec.
+        if (!hasCustomRunner) {
+          const explicitCapabilityRequest = isExplicitGatedToolRequest(agentMessage)
+            || isExplicitMemoryRecallRequest(agentMessage)
+            || isExplicitMemorySaveRequest(agentMessage)
+            || isExplicitExternalResearchRequest(agentMessage);
+          packageMode = selectChatPromptPackageMode({
+            message: agentMessage,
+            selectedToolCount: effectiveTools.length,
+            autonomyLevel,
+            isAutomatedTurn,
+            explicitCapabilityRequest,
+            taskComplexity: turnTaskShape.complexity,
+            exclusiveSuppliedOnlyResponseContract: isExclusiveSuppliedOnlyResponseRequest(agentMessage),
+          });
+          systemPrompt = ambiguityPrefix
+            + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled, packageMode)
+            + templateContext
+            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
+            + (assembled ? '' : recalledContext);
+          log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
+        }
+
+        // Build routing suggestions from the exact executable/serialized set.
+        const capabilityRouter = hasCustomRunner ? undefined : new CapabilityRouter({
+          toolNames: effectiveTools.map(t => t.name),
+          skills: server.agentState.skills,
+          plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
+            name: p.getManifest().name,
+            description: p.getManifest().description ?? '',
+            skills: p.getContributedSkills(),
+          })),
+          mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
+          subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
+          mcpRuntime: server.agentState.mcpRuntime,
+        });
+
         const iterBudget = new IterationBudget({
           maxIterations: 90,
           freeToolCalls: ['execute_code'],
         });
+        const agentRunBudget = selectAgentRunBudget({
+          taskShape: turnTaskShape.type,
+          complexity: turnTaskShape.complexity,
+          selectedToolNames: effectiveTools.map(tool => tool.name),
+        });
+        log.info(
+          `[chat] agent budget: turns=${agentRunBudget.maxTurns} `
+          + `toolRounds=${agentRunBudget.maxToolRounds} tokens=${agentRunBudget.maxTokenBudget}`,
+        );
 
         // Build agent loop config — with windowed conversation history + hooks
+        let bufferedAgentTokens: string[] = [];
+
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
           litellmApiKey: server.agentState.litellmApiKey,
@@ -1720,16 +2016,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           tools: effectiveTools,
           messages: windowedMessages,
           stream: true,
-          maxTurns: 200, // Persistent agents need many turns for complex research + document generation
+          ...agentRunBudget,
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
-          pluginTools,
           signal: abortController.signal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
           onToken: (token: string) => {
-            sendEvent('token', { content: token });
+            if (firstTokenAt === null) firstTokenAt = performance.now();
+            bufferedAgentTokens.push(token);
           },
           onGiveUp: (giveUpMessage: string) => {
             // Steal #9 T3 — the tiered loop-guard aborted the run after a
@@ -1905,6 +2201,70 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : undefined,
         };
 
+        const configForModelAttempt = (
+          logicalModel: string,
+          apiKey = effectiveApiKey,
+        ): typeof runConfig => {
+          const useOllama = logicalModel.trim().toLowerCase().startsWith('ollama/');
+          return {
+            ...runConfig,
+            model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
+            litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
+            litellmApiKey: apiKey,
+          };
+        };
+
+        const runAgentAttempt = async (config: typeof runConfig) => {
+          bufferedAgentTokens = [];
+          const attemptedResult = await agentRunner(config);
+          if (abortController.signal.aborted) {
+            throw abortController.signal.reason ?? new Error('Chat request aborted');
+          }
+          return attemptedResult;
+        };
+
+        const runModelFallbackChain = async (
+          initialError: unknown,
+          allowNonRetryableConfiguredFallback = false,
+        ) => {
+          let failure = initialError;
+          let failedBudgetModel: string | null = null;
+
+          if (budgetModelSelected && resolvedModel !== primaryModel) {
+            failedBudgetModel = resolvedModel;
+            try {
+              resolvedModel = await resolveUsableModel(server, primaryModel);
+              budgetModelSelected = false;
+              modelSwitchReason = `${failedBudgetModel} failed; primary selected`;
+            } catch (primaryResolutionError) {
+              failure = primaryResolutionError;
+              budgetModelSelected = false;
+              if (!fallbackModel || fallbackModel === failedBudgetModel) throw failure;
+              resolvedModel = await resolveUsableModel(server, fallbackModel);
+              modelSwitchReason = `${failedBudgetModel} failed and ${primaryModel} unavailable; configured fallback selected`;
+              return await runAgentAttempt(configForModelAttempt(resolvedModel));
+            }
+
+            try {
+              return await runAgentAttempt(configForModelAttempt(resolvedModel));
+            } catch (primaryRunError) {
+              failure = primaryRunError;
+            }
+          }
+
+          if ((allowNonRetryableConfiguredFallback || isRetryableError(failure))
+            && fallbackModel
+            && fallbackModel !== failedBudgetModel
+            && resolvedModel !== fallbackModel) {
+            const failedModel = resolvedModel;
+            resolvedModel = await resolveUsableModel(server, fallbackModel);
+            modelSwitchReason = `${failedModel} failed (${(failure as { status?: number }).status ?? 'timeout'}); configured fallback selected`;
+            return await runAgentAttempt(configForModelAttempt(resolvedModel));
+          }
+
+          throw failure;
+        };
+
         // SEC: publish the request-scoped security context so sub-agents /
         // workflow workers spawned during this run inherit the SAME approval
         // gate, governance denylist, and persona allowlist as the main loop.
@@ -1931,47 +2291,63 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         };
 
         // ── Run agent with credential pool + fallback chain ──
-        let result;
+        let result: AgentResponse;
+        const agentStartedAt = performance.now();
+        let agentLatencyMs = 0;
         try {
-          result = await agentRunner(runConfig);
+          result = await runAgentAttempt(runConfig);
           // Report success to credential pool
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
+          if (abortController.signal.aborted) throw primaryErr;
           // Report error to credential pool and try next key
-          const errStatus = extractStatusCode(primaryErr);
-          if (credPool && poolKey && errStatus) {
-            const keyName = credPool.getNameForKey(poolKey) ?? poolKey;
-            const hasMore = credPool.reportError(poolKey, errStatus, (primaryErr as Error).message);
-            log.warn(`[credential-pool] Key ${keyName} failed (${errStatus}), cooldown applied. More keys: ${hasMore}`);
+          if (credPool && poolKey) {
+            let failedKey = poolKey;
+            let credentialError = primaryErr;
+            let credentialResult: AgentResponse | null = null;
+            let poolExhausted = false;
 
-            if (hasMore) {
-              const nextKey = credPool.getKey();
-              if (nextKey) {
-                sendEvent('step', { content: `API key rotated — retrying with next credential` });
-                result = await agentRunner({ ...runConfig, litellmApiKey: nextKey });
-                credPool.reportSuccess(nextKey);
-              } else {
-                throw primaryErr;
+            for (let failureIndex = 0; failureIndex < credPool.size; failureIndex++) {
+              const errorStatus = extractStatusCode(credentialError);
+              if (!errorStatus) break;
+
+              const keyName = credPool.getNameForKey(failedKey) ?? failedKey;
+              const hasMore = credPool.reportError(
+                failedKey,
+                errorStatus,
+                (credentialError as Error).message,
+              );
+              log.warn(`[credential-pool] Key ${keyName} failed (${errorStatus}), cooldown applied. More keys: ${hasMore}`);
+
+              if (!hasMore || failureIndex === credPool.size - 1) {
+                poolExhausted = true;
+                break;
               }
-            } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
-              // No pool keys left — fall back to different model
-              modelSwitchReason = `${resolvedModel} failed (${errStatus}), all keys exhausted`;
-              resolvedModel = fallbackModel;
-              // #4: the fallback is a LiteLLM/cloud model — reset litellmUrl in
-              // case the original was an Ollama model routed to the local endpoint.
-              result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
-            } else {
-              throw primaryErr;
+
+              const nextKey = credPool.getKey();
+              if (!nextKey) {
+                poolExhausted = true;
+                break;
+              }
+              sendEvent('step', { content: `API key rotated — retrying with next credential` });
+              try {
+                credentialResult = await runAgentAttempt({ ...runConfig, litellmApiKey: nextKey });
+                credPool.reportSuccess(nextKey);
+                break;
+              } catch (nextCredentialError) {
+                if (abortController.signal.aborted) throw nextCredentialError;
+                failedKey = nextKey;
+                credentialError = nextCredentialError;
+              }
             }
-          } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
-            modelSwitchReason = `${resolvedModel} failed (${(primaryErr as { status?: number }).status ?? 'timeout'})`;
-            resolvedModel = fallbackModel;
-            // #4: reset litellmUrl — the fallback is a LiteLLM/cloud model even
-            // if the original selection was a local Ollama model.
-            result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
+
+            result = credentialResult
+              ?? await runModelFallbackChain(credentialError, poolExhausted);
           } else {
-            throw primaryErr;
+            result = await runModelFallbackChain(primaryErr);
           }
+        } finally {
+          agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));
         }
 
         // Notify client of model switch
@@ -2030,7 +2406,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // contains save-worthy content and auto-save it.
         // #13: skipped for automated turns — a headless re-analysis of an old
         // transcript must not re-save its decision patterns as fresh memory.
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        if (!hasCustomRunner && allowMemoryPersistence) {
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
@@ -2068,7 +2444,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // is recorded idempotently (skill_promotion) so recurring workflows
         // bubble up through the existing actionable-signal substrate.
         // #13: skipped for automated turns (no real workflow to distill).
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        if (!hasCustomRunner && allowDerivedPersistence) {
           const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
           if (distillPlan) {
             sendEvent('step', { content: distillPlan.directive });
@@ -2091,7 +2467,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Non-blocking — KG enrichment never fails the response.
         // #13: skipped for automated turns — review-turn output re-mentions
         // transcript entities; re-extracting them inflates the graph.
-        if (!hasCustomRunner && !isAutomatedTurn && result.content && result.content.length > 100) {
+        if (!hasCustomRunner && allowDerivedPersistence && result.content && result.content.length > 100) {
           try {
             const knowledge = sessionOrch.getKnowledge();
             const entities = extractEntities(result.content);
@@ -2126,7 +2502,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // #13: skipped for automated turns — a review instruction embedding a
         // transcript's old "no, that's wrong" lines would re-fire as fresh
         // correction signals against the agent.
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        if (!hasCustomRunner && allowDerivedPersistence) {
           try {
             const signalStore = sessionOrch.getImprovementSignals();
             analyzeAndRecordCorrection(signalStore, message);
@@ -2195,19 +2571,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         };
         if (activePersonaId && REGULATED_DISCLAIMER_MAP[activePersonaId] && finalContent) {
           if (isRegulatedContent(finalContent, activePersonaId)) {
-            const hasDisclaimer = finalContent.toLowerCase().includes('not legal advice') ||
-              finalContent.toLowerCase().includes('attorney-client') ||
-              finalContent.toLowerCase().includes('verify with your accountant') ||
-              finalContent.toLowerCase().includes('financial advisor') ||
-              finalContent.toLowerCase().includes('legal team');
-            if (!hasDisclaimer) {
+            if (!hasRegulatedDisclaimer(finalContent)) {
               finalContent += REGULATED_DISCLAIMER_MAP[activePersonaId];
             }
           }
         }
 
         // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
-        if (!hasCustomRunner && finalContent && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [])) {
+        if (!hasCustomRunner && finalContent && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
           finalContent += SCHEDULE_SUGGESTION;
         }
 
@@ -2235,6 +2606,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
+        // The agent loop streams every model turn, including provisional prose
+        // before tools, retries, and completion-gate corrections. Reconcile at
+        // the HTTP boundary so token events contain only the exact content in
+        // the authoritative done event. Preserve the original chunking when it
+        // already matches the fully post-processed response.
+        if (abortController.signal.aborted) return;
+        const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
+          ? bufferedAgentTokens
+          : finalContent ? [finalContent] : [];
+        for (const token of finalTokenChunks) {
+          sendEvent('token', { content: token });
+        }
+        bufferedAgentTokens = [];
+
         // Add assistant response to history (maintains context for next turn) and persist
         history.push({ role: 'assistant', content: finalContent });
         persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: finalContent });
@@ -2243,11 +2628,31 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const messageCost = result.usage
           ? costTracker.calculateCost(result.usage.inputTokens, result.usage.outputTokens, resolvedModel)
           : undefined;
+        const doneAt = performance.now();
         sendEvent('done', {
           content: finalContent,
           usage: result.usage,
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
+          contextMetrics: {
+            toolCatalogCount,
+            toolEligibleCount,
+            toolSelectedCount,
+            toolOmittedCount,
+            transmittedToolSchemaChars,
+            estimatedToolSchemaTokens: Math.ceil(transmittedToolSchemaChars / 4),
+            finalSystemPromptChars: systemPrompt.length,
+            estimatedSystemPromptTokens: Math.ceil(systemPrompt.length / 4),
+            packageMode,
+            selectorLatencyMs,
+            timeToFirstTokenMs: firstTokenAt === null
+              ? null
+              : Math.max(0, Math.round(firstTokenAt - totalServerStartedAt)),
+            agentLatencyMs,
+            totalServerLatencyMs: Math.max(0, Math.round(doneAt - totalServerStartedAt)),
+            providerInputTokens: result.usage.inputTokens,
+            providerOutputTokens: result.usage.outputTokens,
+          },
           ...(messageCost !== undefined && {
             cost: Math.round(messageCost * 1_000_000) / 1_000_000,
             tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
@@ -2279,6 +2684,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
       }
     } catch (err) {
+      // A user Stop/client disconnect is not an assistant answer or generation
+      // failure. Keep the already-persisted user turn, but never fabricate an
+      // authoritative assistant/error turn from partial work.
+      if (abortController.signal.aborted) {
+        log.info(`[chat] turn ${turnId} cancelled by client`);
+        return;
+      }
       // H-07 G4: finalize aborted trace so the evolution dataset builder can
       // mine it as a negative example. Without this the row stays 'pending'
       // and GEPA never sees it — starving the loop of counterexamples.
@@ -2345,7 +2757,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // likely to fail on context_length; persisting that here as a
       // 'user_stated' frame would dump the transcript into memory at highest
       // trust, exactly the pollution #13 exists to stop.
-      if (activeSessionOrch && !isAutomatedTurn && message.trim().length >= 8) {
+      if (activeSessionOrch && allowMemoryPersistence && message.trim().length >= 8) {
         try {
           const frames = activeSessionOrch.getFrames();
           const sessions = activeSessionOrch.getSessions();
@@ -2390,7 +2802,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
 
     // End the SSE stream
-    raw.end();
+    if (!raw.destroyed && !raw.writableEnded) raw.end();
   });
 
   // DELETE /api/chat/history — clear session history AND all per-session in-process state.

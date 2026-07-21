@@ -201,6 +201,100 @@ describe('McpServerInstance', () => {
     expect(instance.getTools()).toHaveLength(0);
   });
 
+  it('does not spawn when stop wins the async command-resolution race', async () => {
+    const mock = createMockSpawn();
+    const spawn = vi.fn(mock.spawn);
+    const instance = new McpServerInstance(baseConfig, { spawn });
+
+    const starting = instance.start();
+    await instance.stop();
+    await starting;
+
+    expect(spawn).not.toHaveBeenCalled();
+    expect(instance.getState()).toBe('stopped');
+  });
+
+  it('uses the configured process-tree terminator when stopping', async () => {
+    const { spawn, lastProcess } = createMockSpawn();
+    const terminate = vi.fn();
+    const instance = new McpServerInstance(baseConfig, { spawn, terminate });
+
+    await instance.start();
+    await instance.stop();
+
+    expect(terminate).toHaveBeenCalledWith(lastProcess().mockProcess);
+  });
+
+  it('uses the configured process-tree terminator when startup fails', async () => {
+    const stdin = new PassThrough();
+    const silentProcess: McpProcess = {
+      stdin,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      pid: 12346,
+      kill: vi.fn(() => true),
+      on: vi.fn(() => silentProcess),
+      removeAllListeners: vi.fn(() => silentProcess),
+    };
+    const terminate = vi.fn();
+    const instance = new McpServerInstance(baseConfig, {
+      spawn: () => silentProcess,
+      terminate,
+      toolCallTimeoutMs: 25,
+    });
+
+    await expect(instance.start()).rejects.toThrow(/Timeout/);
+    expect(terminate).toHaveBeenCalledWith(silentProcess);
+  });
+
+  it('passes only sanitized ambient env plus explicitly configured MCP env', async () => {
+    const previous = process.env.WAGGLE_PHASE2_AMBIENT_SECRET;
+    process.env.WAGGLE_PHASE2_AMBIENT_SECRET = 'must-not-leak';
+    let capturedEnv: Record<string, string> | undefined;
+    const mock = createMockSpawn();
+    const spawn: SpawnFn = (command, args, options) => {
+      capturedEnv = options.env;
+      return mock.spawn(command, args, options);
+    };
+    const instance = new McpServerInstance({
+      ...baseConfig,
+      env: { WAGGLE_MCP_DECLARED_SECRET: 'declared-for-this-server' },
+    }, { spawn });
+
+    try {
+      await instance.start();
+      expect(capturedEnv?.WAGGLE_PHASE2_AMBIENT_SECRET).toBeUndefined();
+      expect(capturedEnv?.WAGGLE_MCP_DECLARED_SECRET).toBe('declared-for-this-server');
+      expect(Object.keys(capturedEnv ?? {}).some(key => key.toUpperCase() === 'PATH')).toBe(true);
+    } finally {
+      await instance.stop();
+      if (previous === undefined) delete process.env.WAGGLE_PHASE2_AMBIENT_SECRET;
+      else process.env.WAGGLE_PHASE2_AMBIENT_SECRET = previous;
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('resolves bare npx to a spawnable Windows shim invocation', async () => {
+    let capturedCommand = '';
+    let capturedArgs: string[] = [];
+    const mock = createMockSpawn();
+    const spawn: SpawnFn = (command, args, options) => {
+      capturedCommand = command;
+      capturedArgs = args;
+      return mock.spawn(command, args, options);
+    };
+    const instance = new McpServerInstance({
+      ...baseConfig,
+      command: 'npx',
+      args: ['--version'],
+    }, { spawn });
+
+    await instance.start();
+    expect(capturedCommand.toLowerCase()).toMatch(/(?:^|[\\/])node(?:\.exe)?$/);
+    expect(capturedArgs[0].toLowerCase()).toMatch(/npx-cli\.js$/);
+    expect(capturedArgs.slice(1)).toEqual(['--version']);
+    await instance.stop();
+  });
+
   it('emits state change events', async () => {
     const { spawn } = createMockSpawn();
     const instance = new McpServerInstance(baseConfig, { spawn });

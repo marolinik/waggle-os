@@ -8,7 +8,10 @@
 
 import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
+import { selectAgentRunBudget } from './agent-run-budget.js';
 import type { HookRegistry } from './hooks.js';
+import { detectTaskShape } from './task-shape.js';
+import { filterAvailableTools, selectToolsForTurn } from './tool-filter.js';
 
 /**
  * Request-scoped security context threaded into a spawned sub-agent / workflow
@@ -270,7 +273,11 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
             description: 'Tool names to give the sub-agent (only used with role="custom"). Defaults to role preset.',
           },
           model: { type: 'string', description: 'Model to use (default: same as parent)' },
-          max_turns: { type: 'number', description: 'Max turns before stopping (default: 50)' },
+          max_turns: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Optional upper bound; the task-aware safety budget may lower it.',
+          },
         },
         required: ['name', 'role', 'task'],
       },
@@ -280,7 +287,6 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
         const task = args.task as string;
         const context = args.context as string ?? '';
         const model = args.model as string ?? defaultModel ?? 'claude-sonnet-4-6';
-        const maxTurns = (args.max_turns as number) ?? 50;
 
         // Resolve tools for this sub-agent
         let toolNames: string[];
@@ -295,7 +301,25 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
         // sub-agent — the blocked/denied tools are simply absent from its pool.
         const secCtx = deps.getSpawnSecurityContext?.();
         toolNames = filterSpawnToolNames(toolNames, secCtx);
-        const subTools = availableTools.filter(t => toolNames.includes(t.name));
+        const eligibleTools = filterAvailableTools(
+          availableTools.filter(t => toolNames.includes(t.name)),
+        );
+        const subTools = selectToolsForTurn(eligibleTools, {
+          message: task,
+          preferredToolNames: toolNames,
+          fallbackToEligible: true,
+        }).tools;
+        const taskShape = detectTaskShape(task);
+        const runBudget = selectAgentRunBudget({
+          taskShape: taskShape.type,
+          complexity: taskShape.complexity,
+          selectedToolNames: subTools.map(tool => tool.name),
+        });
+        const normalizedMaxTurns = Math.floor(Number(args.max_turns));
+        const requestedMaxTurns = Number.isFinite(normalizedMaxTurns) && normalizedMaxTurns >= 1
+          ? normalizedMaxTurns
+          : runBudget.maxTurns;
+        const maxTurns = Math.min(requestedMaxTurns, runBudget.maxTurns);
 
         // Generate a provisional ID. Hosts with a durable run registry replace
         // it with their canonical public run ID before execution starts.
@@ -367,7 +391,9 @@ ${task}
             systemPrompt,
             tools: subTools,
             messages: [{ role: 'user', content: task }],
+            ...runBudget,
             maxTurns,
+            maxToolRounds: Math.min(runBudget.maxToolRounds, Math.max(0, maxTurns - 1)),
             stream: false, // Sub-agents don't stream to the user
             signal: runHandle?.signal,
             // W2.9 + SEC: sub-agents respect approval gates and memory validation

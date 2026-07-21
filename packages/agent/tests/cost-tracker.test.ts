@@ -58,6 +58,18 @@ describe('CostTracker', () => {
       expect(DEFAULT_MODEL_PRICING['claude-haiku-4-5']).toBeDefined();
     });
 
+    it('uses provider rates for the live Gemini and Codex acceptance models', () => {
+      expect(DEFAULT_MODEL_PRICING['google/gemini-2.5-flash'])
+        .toEqual({ inputPer1k: 0.0003, outputPer1k: 0.0025 });
+      expect(DEFAULT_MODEL_PRICING['openrouter/openai/gpt-5.3-codex'])
+        .toEqual({ inputPer1k: 0.00175, outputPer1k: 0.014 });
+
+      const tracker = new CostTracker();
+      tracker.addUsage('google/gemini-2.5-flash', 1000, 1000);
+      tracker.addUsage('openrouter/openai/gpt-5.3-codex', 1000, 1000);
+      expect(tracker.getStats().estimatedCost).toBeCloseTo(0.01855, 6);
+    });
+
     it('warns once and uses family-aware fallback for an unknown Opus id', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const tracker = new CostTracker();

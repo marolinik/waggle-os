@@ -171,6 +171,13 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
           message: `${manifest.displayName} was not found.`,
         });
       }
+      if (tool.launchable === false) {
+        return reply.code(409).send({
+          error: 'tool_not_launchable', toolId: input.toolId,
+          message: tool.diagnostic
+            ?? `${manifest.displayName} was found but cannot be launched safely.`,
+        });
+      }
       const workspaceIds = [...new Set(input.workspaceIds)];
       for (const workspaceId of workspaceIds) {
         const key = `${manifest.id}\0${workspaceId}`;
@@ -589,7 +596,7 @@ async function executeExternalRun(
     if (status === 'completed') {
       server.executorRegistry?.noteHealthy(manifest.id);
     } else if (status === 'failed') {
-      const assessment = classifyRateLimitError(result.stderrTail || result.summary, Date.now());
+      const assessment = classifyRateLimitError(result.error || result.stderrTail || result.summary, Date.now());
       if (assessment.isRateLimit) {
         server.executorRegistry?.noteRateLimit(manifest.id, assessment.resetAtMs);
       }
@@ -600,7 +607,7 @@ async function executeExternalRun(
         summary: result.summary,
         sessionId: result.sessionId,
         exitCode: result.exitCode,
-        ...(status === 'failed' ? { error: result.stderrTail || result.summary || `${manifest.displayName} failed` } : {}),
+        ...(status === 'failed' ? { error: result.error || result.stderrTail || result.summary || `${manifest.displayName} failed` } : {}),
       },
       progress: null,
     });

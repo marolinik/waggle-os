@@ -80,16 +80,99 @@ describe('runExternalTool', () => {
 
     const result = await promise;
     expect(captured?.args).toEqual([
-      '-p', '--safe-mode', '--disable-slash-commands', '--no-session-persistence',
-      '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format',
+      '-p', '--safe-mode', '--disable-slash-commands',
+      '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format',
       'stream-json', '--verbose', '--permission-mode', 'plan',
     ]);
+    expect(captured?.args).not.toContain('--no-session-persistence');
     expect(child.stdin.value).toBe(baseRequest('claude-code').prompt);
     expect(result).toMatchObject({ status: 'completed', summary: 'Claude finished', sessionId: 'claude-session' });
     expect(events).toContain('tool');
     expect(events.at(-1)).toBe('completed');
     expect(captured?.env.SUPER_SECRET).toBeUndefined();
+    expect(captured?.env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(captured?.env.WAGGLE_RUN_ID).toBe('run-1');
+  });
+
+  it('retains Claude assistant text while surfacing a zero-exit budget failure', async () => {
+    const child = new FakeChild();
+    const events: ExternalRunEvent[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      onEvent: (event) => events.push(event),
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => {
+        queueMicrotask(() => {
+          child.stdout.emit('data', '{"type":"system","session_id":"claude-budget-session"}\n');
+          child.stdout.emit('data', '{"type":"assistant","message":{"content":[{"type":"text","text":"OK"}]}}\n');
+          child.stdout.emit('data', '{"type":"result","subtype":"error_max_budget_usd","is_error":false}\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    const result = await promise;
+    expect(result).toMatchObject({
+      status: 'failed',
+      summary: 'OK',
+      error: 'error_max_budget_usd',
+      sessionId: 'claude-budget-session',
+    });
+    expect(result.summary).not.toContain('"type":"system"');
+    expect(events.at(-1)).toMatchObject({ type: 'failed', text: 'error_max_budget_usd' });
+  });
+
+  it('fails an empty Claude structured result without exposing protocol JSON', async () => {
+    const child = new FakeChild();
+    const promise = runExternalTool(baseRequest('claude-code'), {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => {
+        queueMicrotask(() => {
+          child.stdout.emit('data', '{"type":"system","session_id":"empty-session"}\n');
+          child.stdout.emit('data', '{"type":"result","subtype":"success","is_error":false}\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    const result = await promise;
+    expect(result).toMatchObject({
+      status: 'failed',
+      summary: 'Claude Code completed without a final response',
+      error: 'Claude Code completed without a final response',
+      sessionId: 'empty-session',
+    });
+    expect(result.summary).not.toContain('"type":"system"');
+    expect(result.stdoutTail).toContain('"type":"system"');
+  });
+
+  it('resumes the persisted Claude session without weakening safe mode', async () => {
+    const child = new FakeChild();
+    let args: string[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      sessionId: 'claude-session',
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: (_binary, value) => {
+        args = value;
+        queueMicrotask(() => {
+          child.stdout.emit('data', '{"type":"result","result":"Resumed","is_error":false}\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    await expect(promise).resolves.toMatchObject({ status: 'completed', summary: 'Resumed' });
+    expect(args).toEqual([
+      '-p', '--safe-mode', '--disable-slash-commands', '--resume', 'claude-session',
+      '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format',
+      'stream-json', '--verbose', '--permission-mode', 'plan',
+    ]);
   });
 
   it('runs Codex through exec with an explicit workspace sandbox', async () => {
@@ -396,9 +479,19 @@ describe('runExternalTool', () => {
 });
 
 describe('external adapter safety', () => {
-  it('passes only an explicit environment allowlist plus run identity', () => {
+  it('passes OS context and explicit run identity but no ambient secrets', () => {
     const env = buildExternalToolEnv(
-      { PATH: '/bin', OPENAI_API_KEY: 'allowed-provider-key', DATABASE_URL: 'must-not-pass' },
+      {
+        PATH: 'C:\\Windows\\System32', USERPROFILE: 'C:\\Users\\tester',
+        APPDATA: 'C:\\Users\\tester\\AppData\\Roaming', TERM: 'xterm-256color',
+        ANTHROPIC_API_KEY: 'anthropic-secret', OPENAI_API_KEY: 'openai-secret',
+        OPENROUTER_API_KEY: 'openrouter-secret', GOOGLE_API_KEY: 'google-secret',
+        GEMINI_API_KEY: 'gemini-secret', XAI_API_KEY: 'xai-secret',
+        STRIPE_SECRET_KEY: 'stripe-secret', AWS_SECRET_ACCESS_KEY: 'aws-secret',
+        DATABASE_URL: 'database-secret', SSH_AUTH_SOCK: 'credential-socket',
+        GIT_ASKPASS: 'credential-helper', HTTPS_PROXY: 'https://user:secret@proxy.invalid',
+        NODE_OPTIONS: '--require C:\\malicious.js', WAGGLE_RUN_TOKEN: 'stale-token',
+      },
       {
         runId: 'run', roomId: 'room', workspaceId: 'workspace',
         dance: {
@@ -408,16 +501,36 @@ describe('external adapter safety', () => {
         dataDir: '/waggle-data',
       },
       '/workspace',
+      'win32',
     );
-    expect(env.PATH).toBe('/bin');
-    expect(env.OPENAI_API_KEY).toBe('allowed-provider-key');
-    expect(env.DATABASE_URL).toBeUndefined();
+    expect(env).toMatchObject({
+      PATH: 'C:\\Windows\\System32',
+      USERPROFILE: 'C:\\Users\\tester',
+      APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+      TERM: 'xterm-256color',
+    });
+    for (const name of [
+      'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY',
+      'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY',
+      'STRIPE_SECRET_KEY', 'AWS_SECRET_ACCESS_KEY', 'DATABASE_URL',
+      'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'HTTPS_PROXY', 'NODE_OPTIONS',
+    ]) {
+      expect(env[name], name).toBeUndefined();
+    }
     expect(env.WAGGLE_DANCE_TEAM_ID).toBe('room::room');
     expect(env.WAGGLE_DANCE_URL).toBe('http://127.0.0.1:3333');
     expect(env.WAGGLE_RUN_TOKEN).toBe('run-token-123456789012345678901234');
     expect(env.WAGGLE_CLI_NODE_PATH).toBe('/runtime/node');
     expect(env.WAGGLE_CLI_ENTRY).toBe('/runtime/hive-mind-cli.js');
     expect(env.HIVE_MIND_DATA_DIR).toBe('/waggle-data');
+
+    const withoutDance = buildExternalToolEnv(
+      { WAGGLE_RUN_TOKEN: 'stale-ambient-token' },
+      { runId: 'run', roomId: 'room', workspaceId: 'workspace' },
+      '/workspace',
+      'win32',
+    );
+    expect(withoutDance.WAGGLE_RUN_TOKEN).toBeUndefined();
   });
 
   it('loads only data-only generic task specs with known placeholders', () => {

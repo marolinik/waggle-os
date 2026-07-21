@@ -89,6 +89,25 @@ describe('Task Shape Classifier', () => {
       const shape = detectTaskShape('What would you recommend for our CI pipeline?');
       expect(shape.type).toBe('decide');
     });
+
+    it('treats the persona acceptance prioritization prompt as a decision', () => {
+      const shape = detectTaskShape(
+        'I have three priorities this week: close one customer, repair onboarding friction, and investigate a production memory bug. Choose the order, justify it in one concise plan, and identify the first action for today.',
+      );
+      expect(shape.type).toBe('decide');
+    });
+
+    it.each([
+      'Rank the priorities for this release.',
+      'Set the order for these tasks.',
+    ])('detects strong ordering intent in %s', (message) => {
+      expect(detectTaskShape(message).type).toBe('decide');
+    });
+
+    it('keeps a pure investigation request classified as research', () => {
+      const shape = detectTaskShape('Investigate the production memory bug and report the evidence.');
+      expect(shape.type).toBe('research');
+    });
   });
 
   describe('plan-execute detection', () => {

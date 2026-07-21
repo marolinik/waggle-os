@@ -232,8 +232,8 @@ describe('external tool run routes', () => {
       });
       if (request.manifest.id === 'codex') {
         return {
-          status: 'failed', exitCode: 1, summary: 'Provider quota exhausted',
-          stdoutTail: '', stderrTail: '', durationMs: 5,
+          status: 'failed', exitCode: 1, summary: 'Partial provider answer',
+          error: 'Provider quota exhausted', stdoutTail: '', stderrTail: '', durationMs: 5,
         };
       }
       if (request.prompt.includes('Peer findings delivered through WaggleDance')) {
@@ -284,7 +284,7 @@ describe('external tool run routes', () => {
     const codexRun = body.runs.find((run) => run.toolId === 'codex');
     expect(registry.get(codexRun!.runId)).toMatchObject({
       status: 'failed',
-      result: { summary: 'Provider quota exhausted', error: 'Provider quota exhausted' },
+      result: { summary: 'Partial provider answer', error: 'Provider quota exhausted' },
     });
     const synthesisCall = calls.find((call) => call.prompt.includes('Peer findings delivered through WaggleDance'));
     expect(synthesisCall?.prompt).toContain('Claude Code found HONEY-17');
@@ -324,8 +324,8 @@ describe('external tool run routes', () => {
       tools: [{ id: 'codex', displayName: 'Codex CLI', installed: true, installedPath: 'codex.cmd', version: 'test', hooksInstalled: false, hookPointerPath: null }],
     }));
     server.decorate('externalToolRunner', async () => ({
-      status: 'failed', exitCode: 1, summary: 'Request failed', stdoutTail: '',
-      stderrTail: '429 rate limit exceeded\nRetry-After: 120', durationMs: 5,
+      status: 'failed', exitCode: 1, summary: 'Partial provider answer', stdoutTail: '',
+      error: '429 rate limit exceeded\nRetry-After: 120', stderrTail: '', durationMs: 5,
     }));
     server.decorate('externalResultRecorder', async ({ run }) => ({
       status: 'complete', personalFrameIds: [], workspaceFrameIds: { [run.workspaceId]: [] },
@@ -472,6 +472,43 @@ describe('external tool run routes', () => {
     });
     expect(response.statusCode).toBe(409);
     expect(response.json().error).toBe('TOOL_NOT_HEADLESS');
+    await server.close();
+  });
+
+  it('rejects a dynamically blocked headless tool before workspace or run side effects', async () => {
+    const dataDir = tempDir();
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const workspaceLookup = vi.fn();
+    const runner = vi.fn();
+    const server = Fastify({ logger: false });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', { get: workspaceLookup } as never);
+    server.decorate('externalToolDetector', async () => ({
+      platform: 'win32', detectedAt: new Date().toISOString(),
+      tools: [{
+        id: 'codex', displayName: 'Codex CLI', installed: true,
+        installedPath: 'C:\\Program Files\\WindowsApps\\OpenAI.Codex\\resources\\codex.exe',
+        version: null, hooksInstalled: false, hookPointerPath: null,
+        launchable: false, diagnostic: 'The Store resource CLI cannot launch outside its package.',
+      }],
+    }));
+    server.decorate('externalToolRunner', runner);
+    await server.register(externalToolRunRoutes);
+
+    const response = await server.inject({
+      method: 'POST', url: '/api/tools/run',
+      payload: { toolId: 'codex', workspaceIds: ['alpha'], prompt: 'Do work' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: 'tool_not_launchable',
+      toolId: 'codex',
+      message: 'The Store resource CLI cannot launch outside its package.',
+    });
+    expect(workspaceLookup).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+    expect(registry.snapshot().runs).toHaveLength(0);
     await server.close();
   });
 });

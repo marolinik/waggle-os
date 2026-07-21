@@ -1,11 +1,9 @@
 /**
  * Programmatic uninstall entry point.
  *
- * Round-trip guarantee: after uninstall, `~/.claude/settings.json` is
- * byte-identical to the pre-install state. We achieve this by reading
- * the backup the installer wrote and copying it back. Uninstall refuses
- * to delete the backup unless the in-place readback matches the backup
- * content.
+ * Round-trip guarantee: after uninstall, pre-existing settings are
+ * byte-identical to their pre-install state, while a settings file created by
+ * this installer is removed. Ownership is recorded in the install pointer.
  */
 
 import { readFile, writeFile, unlink } from 'node:fs/promises';
@@ -16,6 +14,7 @@ import { resolvePaths, type ResolvePathsOptions, type ShimPaths } from './paths.
 export interface UninstallResult {
   paths: ShimPaths;
   restoredFrom: string;
+  settingsRemoved: boolean;
   pointerRemoved: boolean;
   backupRemoved: boolean;
 }
@@ -29,7 +28,9 @@ export interface UninstallOptions extends ResolvePathsOptions {
 interface InstallPointer {
   version: string;
   installed_at: string;
+  config_path?: string;
   settings_backup: string;
+  created_by_us?: boolean;
   hooks_dir: string;
   installed_hooks: readonly string[];
 }
@@ -37,7 +38,9 @@ interface InstallPointer {
 function isPointer(value: unknown): value is InstallPointer {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
-  return typeof v['settings_backup'] === 'string';
+  const createdByUs = v['created_by_us'];
+  return typeof v['settings_backup'] === 'string'
+    && (createdByUs === undefined || typeof createdByUs === 'boolean');
 }
 
 export async function uninstall(opts: UninstallOptions = {}): Promise<UninstallResult> {
@@ -69,18 +72,30 @@ export async function uninstall(opts: UninstallOptions = {}): Promise<UninstallR
   }
 
   const backupContent = await readFile(pointer.settings_backup, 'utf-8');
-  await writeFile(paths.settingsPath, backupContent, 'utf-8');
+  const settingsRemoved = pointer.created_by_us === true;
+  if (settingsRemoved) {
+    if (existsSync(paths.settingsPath)) await unlink(paths.settingsPath);
+    if (existsSync(paths.settingsPath)) {
+      throw new Error(
+        `uninstall verification failed: installer-created ${paths.settingsPath} still exists. ` +
+        `Backup was NOT removed; clean up manually if needed.`,
+      );
+    }
+    log.info('installer-created settings removed', { settings: paths.settingsPath });
+  } else {
+    await writeFile(paths.settingsPath, backupContent, 'utf-8');
 
-  // Round-trip verification: read what we just wrote and compare bytes.
-  const verify = await readFile(paths.settingsPath, 'utf-8');
-  if (verify !== backupContent) {
-    throw new Error(
-      `uninstall verification failed: ${paths.settingsPath} content differs ` +
-      `from backup ${pointer.settings_backup}. Backup was NOT removed; ` +
-      `restore manually if needed.`,
-    );
+    // Round-trip verification: read what we just wrote and compare bytes.
+    const verify = await readFile(paths.settingsPath, 'utf-8');
+    if (verify !== backupContent) {
+      throw new Error(
+        `uninstall verification failed: ${paths.settingsPath} content differs ` +
+        `from backup ${pointer.settings_backup}. Backup was NOT removed; ` +
+        `restore manually if needed.`,
+      );
+    }
+    log.info('settings restored byte-identical', { settings: paths.settingsPath });
   }
-  log.info('settings restored byte-identical', { settings: paths.settingsPath });
 
   let backupRemoved = false;
   if (cleanup) {
@@ -92,6 +107,7 @@ export async function uninstall(opts: UninstallOptions = {}): Promise<UninstallR
   return {
     paths,
     restoredFrom: pointer.settings_backup,
+    settingsRemoved,
     pointerRemoved: true,
     backupRemoved,
   };

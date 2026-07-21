@@ -65,6 +65,10 @@ export interface McpToolRetrievalSettings {
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
+function getNonBlankEnv(name: string): string | undefined {
+  return process.env[name]?.trim() || undefined;
+}
+
 function getDefaultConfigDir(): string {
   const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
   return path.join(home, '.waggle');
@@ -247,15 +251,15 @@ export class WaggleConfig {
   getEmbeddingConfig(): EmbeddingProviderConfig {
     const emb = this.data.embedding;
     const config: EmbeddingProviderConfig = {
-      provider: (process.env.EMBEDDING_PROVIDER as EmbeddingProviderType | 'auto' | undefined) ?? emb?.provider ?? 'auto',
+      provider: (getNonBlankEnv('EMBEDDING_PROVIDER') as EmbeddingProviderType | 'auto' | undefined) ?? emb?.provider ?? 'auto',
       targetDimensions: 1024,
       inprocess: {
-        model: process.env.EMBEDDING_MODEL ?? emb?.inprocessModel,
+        model: getNonBlankEnv('EMBEDDING_MODEL') ?? emb?.inprocessModel,
         cacheDir: path.join(this.configDir, 'models'),
       },
       ollama: {
-        baseUrl: process.env.OLLAMA_HOST ?? emb?.ollamaUrl,
-        model: process.env.OLLAMA_EMBED_MODEL ?? emb?.ollamaModel,
+        baseUrl: getNonBlankEnv('OLLAMA_HOST') ?? emb?.ollamaUrl,
+        model: getNonBlankEnv('OLLAMA_EMBED_MODEL') ?? emb?.ollamaModel,
       },
       // API keys injected separately from Vault — not stored in config.json
     };

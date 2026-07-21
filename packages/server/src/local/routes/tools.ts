@@ -314,6 +314,14 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
           message: `${manifest.displayName} was not found. Run tool detection again after installing it.`,
         });
       }
+      if (installed.launchable === false) {
+        return reply.code(409).send({
+          error: 'tool_not_launchable',
+          toolId: body.id,
+          message: installed.diagnostic
+            ?? `${manifest.displayName} was found but cannot be launched safely.`,
+        });
+      }
       installedPath = installed.installedPath;
     } catch (err) {
       server.log.error({ err }, 'tool detection before launch failed');

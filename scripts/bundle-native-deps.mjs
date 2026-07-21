@@ -9,6 +9,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,25 +33,48 @@ if (arch === 'universal') {
   );
   process.exit(1);
 }
+if (platform === 'darwin' && arch !== 'arm64' && arch !== 'x64') {
+  throw new Error(`[bundle-native-deps] FATAL — unsupported macOS target architecture: ${arch}`);
+}
 
 console.log(`[bundle-native-deps] Platform: ${platform}-${arch}`);
 
-// Ensure output directory
+// A previous matrix leg must never satisfy this build with stale native files.
+fs.rmSync(nativeDir, { recursive: true, force: true });
 fs.mkdirSync(nativeDir, { recursive: true });
 fs.mkdirSync(path.join(nativeDir, 'onnxruntime'), { recursive: true });
+fs.writeFileSync(path.join(nativeDir, '.gitkeep'), '');
+fs.writeFileSync(path.join(nativeDir, 'onnxruntime', '.gitkeep'), '');
 
 let totalFiles = 0;
 let totalBytes = 0;
+
+function assertDarwinArchitecture(srcPath) {
+  if (platform !== 'darwin' || !/\.(?:dylib|node)$/i.test(srcPath)) return;
+  const expected = arch === 'x64' ? 'x86_64' : 'arm64';
+  const architectures = execFileSync('/usr/bin/lipo', ['-archs', srcPath], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim().split(/\s+/);
+  if (!architectures.includes(expected)) {
+    throw new Error(
+      `[bundle-native-deps] FATAL — ${path.relative(root, srcPath)} has Mach-O architecture `
+      + `${architectures.join(', ') || 'unknown'}, expected ${expected}`,
+    );
+  }
+}
 
 function copyFile(src, destName) {
   const srcPath = path.join(root, src);
   const destPath = path.join(nativeDir, destName);
 
   if (!fs.existsSync(srcPath)) {
-    console.warn(`[bundle-native-deps] WARNING: ${src} not found — skipping`);
-    return false;
+    throw new Error(`[bundle-native-deps] FATAL — required native dependency ${src} is missing`);
   }
 
+  const sourceSize = fs.statSync(srcPath).size;
+  if (sourceSize === 0) throw new Error(`[bundle-native-deps] FATAL — required native dependency ${src} is empty`);
+  assertDarwinArchitecture(srcPath);
   fs.copyFileSync(srcPath, destPath);
   const size = fs.statSync(destPath).size;
   totalBytes += size;
@@ -62,24 +86,28 @@ function copyFile(src, destName) {
 function copyDir(srcDir, destSubDir) {
   const srcPath = path.join(root, srcDir);
   if (!fs.existsSync(srcPath)) {
-    console.warn(`[bundle-native-deps] WARNING: ${srcDir} not found — skipping`);
-    return;
+    throw new Error(`[bundle-native-deps] FATAL — required native dependency directory ${srcDir} is missing`);
   }
 
   const destPath = path.join(nativeDir, destSubDir);
   fs.mkdirSync(destPath, { recursive: true });
 
+  let copied = 0;
   for (const file of fs.readdirSync(srcPath)) {
     const fullSrc = path.join(srcPath, file);
     const stat = fs.statSync(fullSrc);
     if (stat.isFile()) {
+      if (stat.size === 0) throw new Error(`[bundle-native-deps] FATAL — required native dependency ${fullSrc} is empty`);
+      assertDarwinArchitecture(fullSrc);
       const destFile = path.join(destPath, file);
       fs.copyFileSync(fullSrc, destFile);
       totalBytes += stat.size;
       totalFiles++;
+      copied++;
       console.log(`  ${destSubDir}/${file} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
     }
   }
+  if (copied === 0) throw new Error(`[bundle-native-deps] FATAL — required native dependency directory ${srcDir} is empty`);
 }
 
 // 1. better-sqlite3
@@ -89,10 +117,9 @@ copyFile('node_modules/better-sqlite3/build/Release/better_sqlite3.node', 'bette
 // 2. sqlite-vec
 console.log('[bundle-native-deps] sqlite-vec:');
 const vecOs = platform === 'win32' ? 'windows' : platform === 'darwin' ? 'darwin' : 'linux';
-const vecArch = arch === 'arm64' ? 'aarch64' : 'x64';
 const vecExt = platform === 'win32' ? 'dll' : platform === 'darwin' ? 'dylib' : 'so';
 copyFile(
-  `node_modules/sqlite-vec-${vecOs}-${vecArch}/vec0.${vecExt}`,
+  `node_modules/sqlite-vec-${vecOs}-${arch}/vec0.${vecExt}`,
   `vec0.${vecExt}`,
 );
 

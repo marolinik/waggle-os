@@ -18,6 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 const outFile = path.join(resourcesDir, 'service.js');
+const sourceMapFile = `${outFile}.map`;
 const entryPoint = path.join(root, 'packages', 'server', 'src', 'local', 'service.ts');
 // Metafile goes to a temp path (NOT resources/) so it's neither bundled into
 // the app nor left as an untracked repo artifact. stage-sidecar-deps.mjs reads
@@ -26,6 +27,10 @@ const metaFile = path.join(os.tmpdir(), 'waggle-sidecar-meta.json');
 
 // Ensure resources directory exists
 fs.mkdirSync(resourcesDir, { recursive: true });
+// Production resources are shipped verbatim by Tauri. Remove maps left by an
+// older build before bundling so full TypeScript sources cannot ride along in
+// an installer even when the resources directory is reused.
+fs.rmSync(sourceMapFile, { force: true });
 
 console.log('[build-sidecar] Bundling server into', outFile);
 
@@ -80,7 +85,7 @@ try {
       '@waggle/shared': path.join(root, 'packages', 'shared', 'src', 'index.ts'),
       '@waggle/hive-mind-core': path.join(root, 'packages', 'hive-mind-core', 'src', 'index.ts'),
     },
-    sourcemap: true,
+    sourcemap: false,
     minify: true,
     // metafile lets stage-sidecar-deps.mjs enumerate exactly which of the
     // EXTERNAL packages the bundle actually `require()`s at runtime, so it

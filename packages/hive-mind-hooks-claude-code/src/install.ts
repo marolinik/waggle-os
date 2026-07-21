@@ -2,7 +2,8 @@
  * Programmatic install entry point.
  *
  * Steps:
- *   1. Read existing `~/.claude/settings.json` (must exist + be valid JSON).
+ *   1. Read existing `~/.claude/settings.json`, or create a minimal one when
+ *      Claude Code has not written it yet.
  *   2. Write a byte-identical backup at
  *      `~/.claude/settings.json.hive-mind-backup.<timestamp>`.
  *   3. Compute the four hive-mind hook command strings (absolute paths
@@ -13,9 +14,10 @@
  *   6. Drop a pointer file at `~/.claude/hive-mind-install.json` so a
  *      future `uninstall` knows which backup to restore.
  *
- * Round-trip guarantee: the pre-install settings.json content equals
- * the byte-identical content written to the backup. `uninstall` simply
- * copies the backup over.
+ * Round-trip guarantee: pre-existing settings content equals the
+ * byte-identical content written to the backup. The pointer records whether
+ * settings were pre-existing or installer-created so uninstall can restore
+ * the former and remove the latter.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -64,8 +66,45 @@ export interface InstallOptions extends ResolvePathsOptions {
 
 const DEFAULT_HOOK_TIMEOUT_S = 5;
 
+interface ActiveInstallPointer {
+  createdByUs: boolean;
+  installedAt?: string;
+  settingsBackup: string;
+}
+
 async function ensureDir(p: string): Promise<void> {
   if (!existsSync(p)) await mkdir(p, { recursive: true });
+}
+
+async function readActiveInstallPointer(pointerPath: string): Promise<ActiveInstallPointer | null> {
+  if (!existsSync(pointerPath)) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(pointerPath, 'utf-8')) as unknown;
+  } catch (err) {
+    throw new Error(
+      `existing install pointer at ${pointerPath} is unreadable: `
+      + (err instanceof Error ? err.message : String(err)),
+    );
+  }
+  if (!value || typeof value !== 'object') {
+    throw new Error(`existing install pointer at ${pointerPath} is malformed`);
+  }
+  const pointer = value as Record<string, unknown>;
+  const settingsBackup = pointer['settings_backup'];
+  const createdByUs = pointer['created_by_us'];
+  if (typeof settingsBackup !== 'string' || !existsSync(settingsBackup)) {
+    throw new Error(`existing install pointer at ${pointerPath} has no readable settings backup`);
+  }
+  if (createdByUs !== undefined && typeof createdByUs !== 'boolean') {
+    throw new Error(`existing install pointer at ${pointerPath} has invalid settings ownership`);
+  }
+  const installedAt = pointer['installed_at'];
+  return {
+    createdByUs: createdByUs ?? false,
+    settingsBackup,
+    ...(typeof installedAt === 'string' ? { installedAt } : {}),
+  };
 }
 
 export async function install(opts: InstallOptions = {}): Promise<InstallResult> {
@@ -82,30 +121,44 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
 
   log.info('install starting', { settings: paths.settingsPath, hooksDir: paths.hooksDir });
 
-  if (!existsSync(paths.settingsPath)) {
+  const activeInstall = await readActiveInstallPointer(paths.pointerPath);
+  const settingsExisted = existsSync(paths.settingsPath);
+  if (activeInstall && !activeInstall.createdByUs && !settingsExisted) {
     throw new Error(
-      `expected Claude Code settings at ${paths.settingsPath}, file not found. ` +
-      `Run Claude Code at least once before installing this shim.`,
+      `existing install pointer at ${paths.pointerPath} owns a pre-existing settings file, `
+      + `but ${paths.settingsPath} is missing; uninstall to restore it before reinstalling`,
     );
   }
-
-  const originalContent = await readFile(paths.settingsPath, 'utf-8');
-  let parsed: ClaudeCodeSettings;
-  try {
-    parsed = JSON.parse(originalContent) as ClaudeCodeSettings;
-  } catch (err) {
-    throw new Error(
-      `failed to parse existing ${paths.settingsPath} as JSON: ` +
-      (err instanceof Error ? err.message : String(err)),
-    );
+  const createdByUs = activeInstall?.createdByUs ?? !settingsExisted;
+  let originalContent = '{}\n';
+  let parsed: ClaudeCodeSettings = {};
+  if (settingsExisted) {
+    originalContent = await readFile(paths.settingsPath, 'utf-8');
+    try {
+      parsed = JSON.parse(originalContent) as ClaudeCodeSettings;
+    } catch (err) {
+      throw new Error(
+        `failed to parse existing ${paths.settingsPath} as JSON: ` +
+        (err instanceof Error ? err.message : String(err)),
+      );
+    }
   }
-
-  await ensureDir(dirname(paths.pointerPath));
-  const backupPath = backupPathFor(paths.settingsPath, now().toISOString());
-  await writeFile(backupPath, originalContent, 'utf-8');
-  log.info('settings backed up', { backupPath });
 
   const cliPath = normalizeCliPath(opts.cliPath);
+  await ensureDir(dirname(paths.pointerPath));
+  if (!settingsExisted) {
+    await writeFile(paths.settingsPath, originalContent, 'utf-8');
+    log.info('minimal settings created', { settings: paths.settingsPath });
+  }
+  const backupPath = activeInstall?.settingsBackup
+    ?? backupPathFor(paths.settingsPath, now().toISOString());
+  if (!activeInstall) {
+    await writeFile(backupPath, originalContent, 'utf-8');
+    log.info('settings backed up', { backupPath });
+  } else {
+    log.info('existing rollback state preserved', { backupPath, createdByUs });
+  }
+
   const entries = defaultHookEntries(
     paths.hooksDir,
     opts.hookTimeoutSeconds ?? DEFAULT_HOOK_TIMEOUT_S,
@@ -118,8 +171,10 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
 
   const pointer: Record<string, unknown> = {
     version: '0.1.0',
-    installed_at: now().toISOString(),
+    installed_at: activeInstall?.installedAt ?? now().toISOString(),
+    config_path: paths.settingsPath,
     settings_backup: backupPath,
+    created_by_us: createdByUs,
     hooks_dir: paths.hooksDir,
     installed_hooks: entries.map((e) => e.basename),
     cli_path: cliPath ?? null,
@@ -133,7 +188,7 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
     backupPath,
     pointerPath: paths.pointerPath,
     installedHooks: entries.map((e) => e.basename),
-    alreadyInstalled: false,
+    alreadyInstalled: activeInstall !== null,
   };
   if (cliPath !== undefined) result.cliPath = cliPath;
   return result;

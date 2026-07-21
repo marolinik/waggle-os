@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { FrameStore, MindDB } from '@waggle/core';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/agent';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { localJobRoutes } from '../../src/local/routes/jobs.js';
 import { agentGroupRoutes } from '../../src/local/routes/agent-groups.js';
@@ -17,7 +17,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function createServer(runLoop: (config: { systemPrompt: string }) => Promise<AgentResponse>) {
+function createServer(
+  runLoop: (config: AgentLoopConfig) => Promise<AgentResponse>,
+  allTools: ToolDefinition[] = [],
+) {
   const server = Fastify({ logger: false });
   const store = new LocalJobStore();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-groups-'));
@@ -29,7 +32,7 @@ function createServer(runLoop: (config: { systemPrompt: string }) => Promise<Age
   });
   server.decorate('localJobStore', store);
   server.decorate('agentState', {
-    allTools: [],
+    allTools,
     currentModel: 'test-model',
     litellmApiKey: 'test-key',
     hookRegistry: undefined,
@@ -110,6 +113,97 @@ describe('local agent group execution', () => {
     expect(prompts[0]).toContain('Agent Instructions');
   });
 
+  it('enforces read-only persona policy before group tools reach the runner', async () => {
+    const calls: AgentLoopConfig[] = [];
+    const allTools = ['bash', 'read_file', 'write_file', 'create_plan'].map((name) => ({
+      name,
+      description: name,
+      parameters: { type: 'object', properties: {} },
+      execute: async () => 'ok',
+    } satisfies ToolDefinition));
+    server = createServer(async (config) => {
+      calls.push(config);
+      return {
+        content: 'done',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    }, allTools);
+
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      payload: {
+        name: 'Read-only review pair',
+        strategy: 'parallel',
+        members: [
+          { agentId: 'planner', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'verifier', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const started = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+      payload: { task: 'Inspect the release plan without changing anything' },
+    });
+    const job = await waitForJob(server, (started.json() as { jobId: string }).jobId);
+
+    expect(job.status).toBe('completed');
+    expect(calls).toHaveLength(2);
+    expect(calls.some((config) => config.tools.some((tool) => tool.name === 'create_plan')))
+      .toBe(true);
+    for (const config of calls) {
+      const names = config.tools.map((tool) => tool.name);
+      expect(names).toContain('read_file');
+      expect(names).not.toContain('bash');
+      expect(names).not.toContain('write_file');
+    }
+  });
+
+  it('does not grant an implicit synthesizer write tools for a read-only coordinator group', async () => {
+    const calls: AgentLoopConfig[] = [];
+    const allTools = ['bash', 'read_file', 'write_file', 'save_memory', 'create_plan'].map((name) => ({
+      name,
+      description: name,
+      parameters: { type: 'object', properties: {} },
+      execute: async () => 'ok',
+    } satisfies ToolDefinition));
+    server = createServer(async (config) => {
+      calls.push(config);
+      return {
+        content: 'done',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    }, allTools);
+
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      payload: {
+        name: 'Read-only coordinator pair',
+        strategy: 'coordinator',
+        members: [
+          { agentId: 'planner', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'verifier', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const started = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+      payload: { task: 'Inspect the release plan without changing anything' },
+    });
+    const job = await waitForJob(server, (started.json() as { jobId: string }).jobId);
+
+    expect(job.status).toBe('completed');
+    expect(calls).toHaveLength(3);
+    const synthesizer = calls.at(-1)!;
+    expect(synthesizer.systemPrompt).toContain('Sub-Agent: Synthesizer');
+    expect(synthesizer.tools).toEqual([]);
+  });
+
   it('runs a parallel group in one durable Room with Dance events and two-mind result attribution', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-room-'));
     const workspaceDir = path.join(dataDir, 'project');
@@ -120,6 +214,12 @@ describe('local agent group execution', () => {
     const workspaceMind = new MindDB(':memory:');
     const calls: Array<{ config: AgentLoopConfig; finish: ReturnType<typeof deferred<AgentResponse>> }> = [];
     const toolBuilds: Array<{ cwd: string; workspaceId?: string }> = [];
+    const sessionOnlyTool = {
+      name: 'web_search',
+      description: 'Search the web',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => 'result',
+    } satisfies ToolDefinition;
 
     server = Fastify({ logger: false });
     server.decorate('localConfig', {
@@ -152,7 +252,7 @@ describe('local agent group execution', () => {
       createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
       buildToolsForSession: (_orchestrator: unknown, cwd: string, workspaceId?: string) => {
         toolBuilds.push({ cwd, workspaceId });
-        return [];
+        return [sessionOnlyTool];
       },
     } as never);
     server.decorate('agentRunner', (config: AgentLoopConfig) => {
@@ -191,6 +291,8 @@ describe('local agent group execution', () => {
     expect(toolBuilds).toEqual([{
       cwd: fs.realpathSync(workspaceDir), workspaceId: 'workspace-1',
     }]);
+    expect(calls.some(({ config }) => config.tools.some((tool) => tool.name === 'web_search')))
+      .toBe(true);
     expect(calls.every(({ config }) => config.model === 'claude-sonnet-4-6')).toBe(true);
     expect(registry.get(startBody.roomId)?.status).toBe('running');
     expect(startBody.runIds.map((id) => registry.get(id)?.status)).toEqual(['running', 'running']);

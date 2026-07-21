@@ -1,8 +1,8 @@
 /**
  * AI-OS Phase 4 — HOOKS_COHORT regression (R8-001 / R8-002 / R8-003).
  *
- * Bug (R8-001): hook install/verify/uninstall was gated on LAUNCH_COHORT
- * (all 7 tools), but at the time only @waggle/hive-mind-hooks-claude-code
+ * Bug (R8-001): hook install/verify/uninstall was gated on LAUNCH_COHORT,
+ * but at the time only @waggle/hive-mind-hooks-claude-code
  * shipped a `bin`; the other hook packages were Wave 2/3 `export {}` stubs
  * with no bin, so `npx @waggle/hive-mind-hooks-<id>` ALWAYS failed for the
  * user. HOOKS_COHORT fixed this by gating hook actions on the tools whose
@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -36,6 +36,7 @@ const PACKAGES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function hookPackageHasBin(id: ToolId): boolean {
   const pkgPath = join(PACKAGES_DIR, `hive-mind-hooks-${id}`, 'package.json');
+  if (!existsSync(pkgPath)) return false;
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { bin?: unknown };
   return pkg.bin != null && Object.keys(pkg.bin as object).length > 0;
 }

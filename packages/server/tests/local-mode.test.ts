@@ -147,7 +147,7 @@ describe('Local Server Mode', () => {
         url: '/api/chat',
         payload: { message: 'Hello world', workspace: 'test-ws' },
       });
-      expect(res.headers['content-type']).toBe('text/event-stream');
+      expect(res.headers['content-type']).toBe('text/event-stream; charset=utf-8');
       expect(res.body).toContain('event: token');
       expect(res.body).toContain('event: done');
 

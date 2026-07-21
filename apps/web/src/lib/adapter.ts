@@ -64,6 +64,31 @@ export interface AgentGroupRunResult {
   message?: string;
 }
 
+export interface ManagedLocalRuntimeStatus {
+  source: 'waggle-managed';
+  supported: boolean;
+  installed: boolean;
+  running: boolean;
+  targetVersion: string | null;
+  version: string | null;
+  artifactSizeBytes: number | null;
+  downloadRequired: boolean;
+  dockerRequired: false;
+  reason?: string;
+}
+
+export interface LocalInferenceStatus {
+  servers: Array<Record<string, unknown>>;
+  ollamaInstalled: boolean;
+  ollamaRunning: boolean;
+  totalLocalModels: number;
+  offlineReady: boolean;
+  dockerRequired: false;
+  managedRuntime: ManagedLocalRuntimeStatus;
+  setupRequired: boolean;
+  setupMessage: string | null;
+}
+
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
  * Tauri command's string enum. Inverse of IMPORTANCE_MAP.
@@ -253,6 +278,12 @@ class LocalAdapter {
   private ws: WebSocket | null = null;
   /** P1b-SSE: one ref-counted reconnecting stream per (path, eventName). */
   private sseStreams = new Map<string, { close: () => void; listeners: Set<(data: unknown) => void> }>();
+  /** Active chat requests, session-scoped with workspace-wide Stop fallback. */
+  private activeChatControllers = new Map<string, Set<AbortController>>();
+
+  private chatControllerKey(workspaceId: string, sessionId?: string): string {
+    return `${workspaceId}\u0000${sessionId ?? ''}`;
+  }
   private _connected = false;
   private _connectAttempted = false;
   // P1b D3 gate state. _connectPromise doubles as the deferral gate: kept
@@ -801,49 +832,81 @@ class LocalAdapter {
     // runRetrievalAgentLoop; carrying it now means A3.1 is a one-line server
     // change with no client redeploy needed.
     const shape = getSelectedShape();
-    const res = await this.fetch('/api/chat', {
-      method: 'POST',
-      body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry }),
-    });
+    const controller = new AbortController();
+    const chatControllerKey = this.chatControllerKey(workspaceId, sessionId);
+    let controllers = this.activeChatControllers.get(chatControllerKey);
+    if (!controllers) {
+      controllers = new Set();
+      this.activeChatControllers.set(chatControllerKey, controllers);
+    }
+    controllers.add(controller);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
-    if (!res.body) return;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let currentEventType = '';
+    try {
+      const res = await this.fetch('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry }),
+        signal: controller.signal,
+      });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEventType = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            // Map SSE event types to StreamEvent types expected by useChat
-            let type = currentEventType;
-            if (type === 'token') type = 'token';
-            else if (type === 'tool') type = 'tool_start';
-            else if (type === 'tool_result') type = 'tool_end';
-            else if (type === 'done') type = 'done';
-            else if (type === 'error') type = 'error';
-            else if (type === 'step') type = 'step';
-            else if (type === 'approval_request') type = 'approval_request';
+      if (!res.body) return;
+      reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEventType = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              // Map SSE event types to StreamEvent types expected by useChat
+              let type = currentEventType;
+              if (type === 'token') type = 'token';
+              else if (type === 'tool') type = 'tool_start';
+              else if (type === 'tool_result') type = 'tool_end';
+              else if (type === 'done') type = 'done';
+              else if (type === 'error') type = 'error';
+              else if (type === 'step') type = 'step';
+              else if (type === 'approval_request') type = 'approval_request';
 
-            yield { type, data } as StreamEvent;
-            currentEventType = '';
-          } catch { /* skip malformed */ }
+              yield { type, data } as StreamEvent;
+              currentEventType = '';
+            } catch { /* skip malformed */ }
+          }
         }
+      }
+    } finally {
+      controller.abort();
+      controllers.delete(controller);
+      if (controllers.size === 0 && this.activeChatControllers.get(chatControllerKey) === controllers) {
+        this.activeChatControllers.delete(chatControllerKey);
+      }
+      if (reader) {
+        try { await reader.cancel(); } catch { /* stream already closed */ }
+        try { reader.releaseLock(); } catch { /* reader already released */ }
       }
     }
   }
 
-  async abortAgent(workspaceId: string): Promise<void> {
-    await this.fetch(`/api/agent/abort`, { method: 'POST', body: JSON.stringify({ workspaceId }) });
+  async abortAgent(workspaceId: string, sessionId?: string): Promise<void> {
+    const controllerKeys = sessionId !== undefined
+      ? [this.chatControllerKey(workspaceId, sessionId)]
+      : [...this.activeChatControllers.keys()].filter(
+          key => key.startsWith(`${workspaceId}\u0000`),
+        );
+    for (const controllerKey of controllerKeys) {
+      const controllers = this.activeChatControllers.get(controllerKey);
+      if (!controllers) continue;
+      this.activeChatControllers.delete(controllerKey);
+      for (const controller of controllers) controller.abort();
+    }
   }
 
   async clearHistory(sessionId: string): Promise<void> {
@@ -1202,13 +1265,32 @@ class LocalAdapter {
     return res.json();
   }
 
-  async getLocalInferenceStatus(): Promise<{ servers: Array<Record<string, unknown>>; ollamaInstalled: boolean; totalLocalModels: number }> {
+  async getLocalInferenceStatus(): Promise<LocalInferenceStatus> {
     const res = await this.fetch('/api/local-inference/status');
     return res.json();
   }
 
-  async pullLocalModel(model: string): Promise<{ ok: boolean }> {
-    const res = await this.fetch('/api/local-inference/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) });
+  async bootstrapLocalRuntime(): Promise<{
+    ok: boolean;
+    installedNow: boolean;
+    startedNow: boolean;
+    endpoint: string;
+    dockerRequired: false;
+  }> {
+    const res = await this.fetch(
+      '/api/local-inference/bootstrap',
+      { method: 'POST' },
+      45 * 60_000,
+    );
+    return res.json();
+  }
+
+  async pullLocalModel(model: string): Promise<{ ok: boolean; model: string; verifiedGeneration: boolean }> {
+    const res = await this.fetch(
+      '/api/local-inference/pull',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) },
+      50 * 60_000,
+    );
     return res.json();
   }
 

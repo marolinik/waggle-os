@@ -11,10 +11,10 @@
  *   npx playwright test tests/e2e                    # E2E user journeys only
  *   npx playwright test --update-snapshots           # Update visual baselines
  *
- * The webServer config builds apps/web and auto-starts the Waggle server
+ * The webServer config builds workspace packages plus apps/web, then auto-starts the Waggle server
  * (with --skip-litellm for CI). The server serves the freshly-built React
  * frontend from <root>/dist/ at localhost:3333 — matching the canonical
- * `npm run build` target so tests always run against the latest source.
+ * `npm run build:all` target so tests always run against the latest source.
  */
 
 import { defineConfig, devices } from '@playwright/test';
@@ -36,6 +36,7 @@ const e2ePort = Number.parseInt(
   10,
 ) || 3333;
 const e2eSkipLiteLLM = process.env.WAGGLE_E2E_SKIP_LITELLM !== '0';
+const e2eReuseExistingServer = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER !== '0';
 const e2eEnv = { ...process.env };
 // Keep the test runner's terminal quiet without changing production logging.
 e2eEnv.FORCE_COLOR = undefined;
@@ -74,19 +75,20 @@ export default defineConfig({
   /* Auto-start the Waggle server before tests run.
    * --skip-litellm ensures tests don't need a real LLM provider.
    *
-   * The command builds apps/web first (root `npm run build` → <root>/dist)
-   * so Playwright always runs against the current source. `reuseExisting-
+   * The command builds workspace packages and apps/web first (`npm run build:all`)
+   * so Playwright always runs against current package and web source. `reuseExisting-
    * Server: true` skips this when a dev server is already running on :3333
    * (developer runs `npm run dev` in another terminal + `npx playwright test`;
-   * the config notices the port is occupied and skips build+start).
+   * the config notices the port is occupied and skips build+start). Set
+   * WAGGLE_E2E_REUSE_EXISTING_SERVER=0 for isolated acceptance runs.
    *
    * The server auto-detects <root>/dist per packages/server/src/local/
    * index.ts — no WAGGLE_FRONTEND_DIR override needed. */
   webServer: {
-    command: `npm run build && npx tsx packages/server/src/local/start.ts${e2eSkipLiteLLM ? ' --skip-litellm' : ''}`,
+    command: `npm run build:all && npx tsx packages/server/src/local/start.ts${e2eSkipLiteLLM ? ' --skip-litellm' : ''}`,
     port: e2ePort,
-    reuseExistingServer: true,
-    timeout: 180_000, // Vite build + cold tsx sidecar import can exceed 2 min on Windows
+    reuseExistingServer: e2eReuseExistingServer,
+    timeout: 300_000, // Full workspace build + cold tsx sidecar import can exceed 3 min on Windows
     stdout: 'pipe',
     stderr: 'pipe',
     // D1: the e2e suite drives /api/* routes directly (no token bootstrap), so

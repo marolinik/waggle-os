@@ -160,6 +160,23 @@ describe('useChat — send queue (never locks, never drops)', () => {
     const users = result.current.messages.filter(m => m.role === 'user').map(m => m.content);
     expect(users).toEqual(['one', 'two', 'three']);
   });
+
+  it('stamps the authoring persona on the assistant turn', async () => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'done', data: { content: 'Research answer' } };
+    });
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-persona',
+      persona: 'researcher',
+    }));
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await result.current.sendMessage('Investigate this'); });
+
+    const assistant = result.current.messages.find((message) => message.role === 'assistant');
+    expect(assistant?.persona).toBe('researcher');
+  });
 });
 
 // ── useChat thread cache (contract 4) ───────────────────────────────────────

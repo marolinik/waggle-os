@@ -36,6 +36,13 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
   'claude-haiku-4-5-20251001': { inputPer1k: 0.001, outputPer1k: 0.005 },
   'claude-haiku-3-5': { inputPer1k: 0.00025, outputPer1k: 0.00125 },
   'claude-3-5-haiku-20241022': { inputPer1k: 0.00025, outputPer1k: 0.00125 },
+  // Gemini 2.5 Flash standard text rates ($0.30/$2.50 per 1M)
+  'gemini-2.5-flash': { inputPer1k: 0.0003, outputPer1k: 0.0025 },
+  'google/gemini-2.5-flash': { inputPer1k: 0.0003, outputPer1k: 0.0025 },
+  // GPT-5.3-Codex standard text rates ($1.75/$14 per 1M)
+  'gpt-5.3-codex': { inputPer1k: 0.00175, outputPer1k: 0.014 },
+  'openai/gpt-5.3-codex': { inputPer1k: 0.00175, outputPer1k: 0.014 },
+  'openrouter/openai/gpt-5.3-codex': { inputPer1k: 0.00175, outputPer1k: 0.014 },
 };
 
 /**

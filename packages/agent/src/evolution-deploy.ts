@@ -270,5 +270,22 @@ export function applyBehavioralSpecOverrides(
 function writeAtomic(filePath: string, contents: string): void {
   const tmpPath = `${filePath}.tmp`;
   fs.writeFileSync(tmpPath, contents, 'utf-8');
-  fs.renameSync(tmpPath, filePath);
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
+  try {
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        fs.renameSync(tmpPath, filePath);
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 4) throw error;
+        // Windows antivirus and indexers can briefly hold an exclusive handle.
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmpPath, { force: true }); } catch { /* best-effort cleanup */ }
+  }
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createSubAgentTools } from '../src/subagent-tools.js';
 import type { ToolDefinition } from '../src/tools.js';
 import type { AgentLoopConfig, AgentResponse } from '../src/agent-loop.js';
+import { measureOpenAiToolSchemaChars } from '../src/tool-filter.js';
 
 function makeMockTools(): ToolDefinition[] {
   return [
@@ -133,7 +134,7 @@ describe('subagent-tools', () => {
     expect(config.systemPrompt).toContain('Project is about AI agents');
   });
 
-  it('spawn_agent respects max_turns', async () => {
+  it('spawn_agent respects valid max_turns and rejects fractional zero-turn limits', async () => {
     const runner = makeMockRunner();
     const tools = createTools(runner);
     await run(tools, 'spawn_agent', {
@@ -142,8 +143,63 @@ describe('subagent-tools', () => {
       task: 'Quick task',
       max_turns: 5,
     });
+    await run(tools, 'spawn_agent', {
+      name: 'Fractional Bot',
+      role: 'researcher',
+      task: 'Quick task',
+      max_turns: 0.5,
+    });
+    expect(runner.mock.calls[0][0].maxTurns).toBe(5);
+    expect(runner.mock.calls[1][0].maxTurns).toBe(9);
+  });
+
+  it('bounds a large custom tool pool and caps requested turns with the task policy', async () => {
+    const availableTools = [
+      ...Array.from({ length: 37 }, (_, index) => ({
+        name: `code_tool_${index}`,
+        description: `Run code tests and inspect this implementation.${' x'.repeat(120)}`,
+        parameters: { type: 'object', properties: {} },
+        execute: async () => 'ok',
+      } satisfies ToolDefinition)),
+      {
+        name: 'read_file',
+        description: 'Read a file for code inspection.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => 'content',
+      } satisfies ToolDefinition,
+    ];
+    const runner = makeMockRunner();
+    const tools = createSubAgentTools({
+      availableTools,
+      runLoop: runner,
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      defaultModel: 'test-model',
+    });
+
+    await run(tools, 'spawn_agent', {
+      name: 'Bounded Coder',
+      role: 'custom',
+      task: 'Run code tests and inspect this implementation',
+      tools: availableTools.map((tool) => tool.name),
+      max_turns: 50,
+    });
+
     const config = runner.mock.calls[0][0];
-    expect(config.maxTurns).toBe(5);
+    expect(config.tools.length).toBeLessThanOrEqual(14);
+    expect(config.tools.map((tool) => tool.name)).toContain('read_file');
+    expect(measureOpenAiToolSchemaChars(config.tools)).toBeLessThanOrEqual(8_000);
+    expect(config).toMatchObject({
+      maxTurns: 9,
+      maxToolRounds: 8,
+      maxTokenBudget: 80_000,
+      synthesisReserveTokens: 14_000,
+      toolContextBudget: {
+        maxSingleResultChars: 8_000,
+        recentResultCount: 2,
+        historicalResultChars: 750,
+      },
+    });
   });
 
   // Gap L (Skills 2.0 verification): sub-agent results must persist beyond

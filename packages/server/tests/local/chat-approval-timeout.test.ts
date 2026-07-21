@@ -31,7 +31,7 @@ describe('chat approval timeout policy', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function wait(policy = resolveApprovalTimeoutPolicy({}), onSseEvent?: () => void) {
+  function wait(policy = resolveApprovalTimeoutPolicy({}), onSseEvent?: () => void, signal?: AbortSignal) {
     const sseEvents: Array<{ event: string; data: Record<string, unknown> }> = [];
     const decision = waitForApprovalDecision({
       pendingApprovals,
@@ -55,6 +55,7 @@ describe('chat approval timeout policy', () => {
         message: 'Moved to Approvals inbox',
       },
       policy,
+      signal,
       sendEvent: (event, data) => {
         sseEvents.push({ event, data });
         onSseEvent?.();
@@ -130,5 +131,18 @@ describe('chat approval timeout policy', () => {
       WAGGLE_APPROVAL_TIMEOUT_MS: 'not-a-number',
       WAGGLE_APPROVAL_TIMEOUT_ACTION: 'execute',
     })).toEqual({ timeoutMs: 300_000, action: 'deny' });
+  });
+
+  it('settles immediately and removes the pending approval when chat is aborted', async () => {
+    const controller = new AbortController();
+    const { decision, sseEvents } = wait(resolveApprovalTimeoutPolicy({}), undefined, controller.signal);
+    expect(pendingApprovals.has('approval-1')).toBe(true);
+
+    controller.abort();
+
+    await expect(decision).resolves.toEqual({ approved: false, held: false, timedOut: false });
+    expect(pendingApprovals.has('approval-1')).toBe(false);
+    expect(cronStore.getPendingAction('approval-1')).toBeUndefined();
+    expect(sseEvents).toEqual([]);
   });
 });

@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import {
   resolveSkillSource,
   classifySource,
@@ -53,6 +54,7 @@ description: A demo skill for tests.
 
 Do the thing.
 `;
+const runtimeRequire = createRequire(import.meta.url);
 
 // ── Grammar classification ───────────────────────────────────────────
 
@@ -211,6 +213,25 @@ describe('isSafeZipEntry', () => {
 describe('resolveSkillSource — zip', () => {
   const url = 'https://example.com/pkg.zip';
   const zipBytes = Buffer.from('PK-fake-zip');
+
+  it('uses the patched bundled zip parser for a real archive', async () => {
+    const packageMeta = runtimeRequire('adm-zip/package.json') as { version: string };
+    const [major, minor] = packageMeta.version.split('.').map(Number);
+    expect(major > 0 || minor >= 6, `adm-zip ${packageMeta.version} includes CVE-2026-39244`).toBe(true);
+
+    const AdmZip = runtimeRequire('adm-zip') as new () => {
+      addFile(name: string, content: Buffer): void;
+      toBuffer(): Buffer;
+    };
+    const archive = new AdmZip();
+    archive.addFile('SKILL.md', Buffer.from(SKILL, 'utf-8'));
+    const realZip = archive.toBuffer();
+    const res = await resolveSkillSource(url, {
+      fetchImpl: fetcherFor({ [url]: binResponse(realZip) }),
+    });
+
+    expect(res.content).toContain('name: demo-skill');
+  });
 
   it('extracts the shallowest SKILL.md from a zip', async () => {
     const res = await resolveSkillSource(url, {

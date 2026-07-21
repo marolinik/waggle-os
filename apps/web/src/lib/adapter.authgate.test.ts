@@ -17,6 +17,7 @@ import LocalAdapter, {
   adapter as singletonAdapter,
   resolveDefaultServerUrl,
 } from './adapter';
+import { fetchWithTimeout } from './fetch-utils';
 
 const BASE = 'http://test-server:4242';
 
@@ -286,6 +287,72 @@ describe('P1b auth gate', () => {
       return events;
     };
     await expect(consume()).rejects.toThrow(AdapterHttpError);
+  });
+
+  it('fetchWithTimeout preserves fresh and pre-aborted caller cancellation without AbortSignal.any', async () => {
+    const anyDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
+    Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    fetchSpy.mockImplementation(async (_url, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      if (!(signal instanceof AbortSignal)) throw new Error('missing request signal');
+      if (signal.aborted) {
+        reject(new DOMException('The operation was aborted', 'AbortError'));
+        return;
+      }
+      signal.addEventListener(
+        'abort',
+        () => reject(new DOMException('The operation was aborted', 'AbortError')),
+        { once: true },
+      );
+    }));
+
+    try {
+      const request = fetchWithTimeout(`${BASE}/slow`, { signal: caller.signal });
+      caller.abort();
+      await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+
+      const preAborted = new AbortController();
+      preAborted.abort();
+      await expect(fetchWithTimeout(`${BASE}/already-stopped`, {
+        signal: preAborted.signal,
+      })).rejects.toMatchObject({ name: 'AbortError' });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      if (anyDescriptor) Object.defineProperty(AbortSignal, 'any', anyDescriptor);
+      else Reflect.deleteProperty(AbortSignal, 'any');
+    }
+  });
+
+  it('abortAgent cancels only the requested chat session', async () => {
+    const a = new LocalAdapter(BASE);
+    const requestSignals: AbortSignal[] = [];
+    fetchSpy.mockImplementation(async (_url, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      if (!(signal instanceof AbortSignal)) throw new Error('missing request signal');
+      requestSignals.push(signal);
+      signal.addEventListener(
+        'abort',
+        () => reject(new DOMException('The operation was aborted', 'AbortError')),
+        { once: true },
+      );
+    }));
+
+    const sessionA = a.sendMessage('ws1', 'first', 'session-a');
+    const sessionB = a.sendMessage('ws1', 'second', 'session-b');
+    const resultA = sessionA.next().catch((error: unknown) => error);
+    const resultB = sessionB.next().catch((error: unknown) => error);
+
+    await vi.waitFor(() => expect(requestSignals).toHaveLength(2));
+    await a.abortAgent('ws1', 'session-a');
+    expect(requestSignals[0].aborted).toBe(true);
+    expect(requestSignals[1].aborted).toBe(false);
+    await expect(resultA).resolves.toMatchObject({ name: 'AbortError' });
+
+    await a.abortAgent('ws1');
+    expect(requestSignals[1].aborted).toBe(true);
+    await expect(resultB).resolves.toMatchObject({ name: 'AbortError' });
   });
 
   // ── Body-envelope getters (fetchRaw contract — ApprovalModal flow et al) ──

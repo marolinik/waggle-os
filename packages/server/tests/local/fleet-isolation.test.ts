@@ -3,9 +3,14 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentResponse } from '@waggle/agent';
+import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/agent';
 import { fleetRoutes } from '../../src/local/routes/fleet.js';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
+import {
+  DEFAULT_TURN_SCHEMA_CHAR_LIMIT,
+  DEFAULT_TURN_TOOL_LIMIT,
+  measureOpenAiToolSchemaChars,
+} from '../../src/local/persona-tool-filter.js';
 
 const tempDirs: string[] = [];
 
@@ -96,6 +101,107 @@ describe('isolated Fleet execution', () => {
     await waitFor(() => runnerModels.length === 1, 'explicit model run did not start');
     expect(runnerModels).toEqual([explicitModel]);
     expect(registry.get(body.runId)?.executor.model).toBe(explicitModel);
+    await server.close();
+  });
+
+  it('filters availability and selects at most 14 tools from 29 relevant candidates in a 78-tool pool', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-tool-context-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const availabilityCheck = vi.fn(() => false);
+    const makeTool = (
+      name: string,
+      description: string,
+      checkAvailability?: () => boolean,
+    ): ToolDefinition => ({
+      name,
+      description,
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: `Input for ${name}` } },
+      },
+      execute: async () => 'ok',
+      ...(checkAvailability ? { checkAvailability } : {}),
+    });
+    const relevantTools = Array.from({ length: 29 }, (_, index) =>
+      makeTool(`code_tool_${index}`, 'Run code tests and inspect implementation.'));
+    const irrelevantTools = Array.from({ length: 48 }, (_, index) =>
+      makeTool(`calendar_tool_${index}`, 'Schedule calendar meetings and manage appointments.'));
+    const unavailableTool = makeTool(
+      'offline_calendar_tool',
+      'Schedule calendar meetings while offline.',
+      availabilityCheck,
+    );
+    const fullPool = [...relevantTools, ...irrelevantTools, unavailableTool];
+    let capturedConfig: AgentLoopConfig | null = null;
+
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test' });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? { id, name: 'Project', group: 'test', created: new Date().toISOString(), directory: workspaceDir, model: 'test-model' }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', { getMaxSessions: () => 10, size: 0, getActive: () => [] } as never);
+    server.decorate('mindCache', { acquire: () => ({}), release: () => {} } as never);
+    server.decorate('agentState', {
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+      }),
+      buildToolsForSession: () => fullPool,
+    } as never);
+    server.decorate('agentRunner', async (config: AgentLoopConfig) => {
+      capturedConfig = config;
+      return { content: 'Done', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    });
+    server.decorate('fleetResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [1], workspaceFrameIds: { [run.workspaceId]: [2] },
+    }));
+    await server.register(fleetRoutes);
+
+    expect(fullPool).toHaveLength(78);
+    expect(relevantTools).toHaveLength(29);
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: {
+        task: 'Run code tests and inspect this implementation',
+        persona: 'fleet-tool-context-regression',
+        parentWorkspaceId: 'workspace-1',
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    const { runId } = response.json() as { runId: string };
+    await waitFor(() => capturedConfig !== null, 'Fleet runner did not receive its selected tool context');
+
+    const selected = capturedConfig?.tools ?? [];
+    expect(availabilityCheck).toHaveBeenCalledOnce();
+    expect(selected).toHaveLength(DEFAULT_TURN_TOOL_LIMIT);
+    expect(selected.map((tool) => tool.name)).toEqual(
+      relevantTools.slice(0, DEFAULT_TURN_TOOL_LIMIT).map((tool) => tool.name),
+    );
+    expect(measureOpenAiToolSchemaChars(selected)).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
+    expect(capturedConfig).toMatchObject({
+      maxTurns: 9,
+      maxToolRounds: 8,
+      maxTokenBudget: 80_000,
+      synthesisReserveTokens: 14_000,
+      toolContextBudget: {
+        maxSingleResultChars: 8_000,
+        recentResultCount: 2,
+        historicalResultChars: 750,
+      },
+    });
+    await waitFor(() => registry.get(runId)?.status === 'completed', 'bounded Fleet run did not complete');
     await server.close();
   });
 

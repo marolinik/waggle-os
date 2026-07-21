@@ -9,7 +9,7 @@ import {
 import { createWorkflowTools } from '../src/workflow-tools.js';
 import type { ToolDefinition } from '../src/tools.js';
 import type { AgentLoopConfig, AgentResponse } from '../src/agent-loop.js';
-import type { OrchestratorConfig } from '../src/subagent-orchestrator.js';
+import { SubagentOrchestrator, type OrchestratorConfig } from '../src/subagent-orchestrator.js';
 
 function makeMockTools(): ToolDefinition[] {
   return [
@@ -132,6 +132,19 @@ describe('Workflow Templates', () => {
       expect(WORKFLOW_TEMPLATES).toHaveProperty('ticket-resolve');
       expect(WORKFLOW_TEMPLATES).toHaveProperty('content-pipeline');
       expect(Object.keys(WORKFLOW_TEMPLATES)).toHaveLength(5);
+    });
+
+    it('keeps every built-in template executable inside workflow limits', async () => {
+      for (const [name, factory] of Object.entries(WORKFLOW_TEMPLATES)) {
+        const runner = makeMockRunner();
+        const orchestrator = new SubagentOrchestrator(makeConfig(runner));
+        const template = factory(`Exercise ${name}`);
+
+        const result = await orchestrator.runWorkflow(template);
+
+        expect(result.results.size).toBe(template.steps.length);
+        expect(runner).toHaveBeenCalledTimes(template.steps.length);
+      }
     });
   });
 

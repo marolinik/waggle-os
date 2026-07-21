@@ -13,6 +13,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { isAmbiguousMessage } from '../../src/local/routes/chat.js';
+import {
+  AMBIGUITY_PROMPT,
+  USER_RESPONSE_FORMAT_PRECEDENCE,
+  buildTemplateWelcomePrompt,
+} from '../../src/local/routes/chat-helpers.js';
 
 describe('isAmbiguousMessage', () => {
   // ── Should be AMBIGUOUS (true) ──────────────────────────────────────
@@ -147,5 +152,30 @@ describe('isAmbiguousMessage', () => {
 
   it('handles "write tests" correctly (starts with action verb)', () => {
     expect(isAmbiguousMessage('write tests')).toBe(false);
+  });
+});
+
+describe('first-turn response-format precedence', () => {
+  it('keeps ambiguous format requests classified while making their format authoritative', () => {
+    expect(isAmbiguousMessage('Return JSON only.')).toBe(true);
+    expect(AMBIGUITY_PROMPT).toContain(USER_RESPONSE_FORMAT_PRECEDENCE);
+    expect(AMBIGUITY_PROMPT).toContain('express any essential clarification only within');
+    expect(AMBIGUITY_PROMPT).toContain('format-valid, truthful failure or refusal');
+    expect(AMBIGUITY_PROMPT).toContain('Otherwise, ask ONE specific clarifying question');
+    expect(AMBIGUITY_PROMPT).toContain('verdicts, fixed values, or claims are not presentation constraints');
+    expect(AMBIGUITY_PROMPT).toContain('never override safety, evidence, attribution');
+  });
+
+  it('makes template greetings default-only while preserving starter context', () => {
+    const prompt = buildTemplateWelcomePrompt({
+      name: 'Sales Pipeline',
+      description: 'Track leads and draft outreach.',
+      starterMemory: ['Qualify new leads before outreach.'],
+    });
+
+    expect(prompt).toContain(USER_RESPONSE_FORMAT_PRECEDENCE);
+    expect(prompt).toContain('When no response format is specified, greet the user');
+    expect(prompt).toContain('When one is specified, omit the greeting');
+    expect(prompt).toContain('Starter context:\n- Qualify new leads before outreach.');
   });
 });
