@@ -6,7 +6,18 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import fs from 'node:fs';
-import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive, SuppressionStore, readArchiveUids, withArchiveUid } from '@waggle/hive-mind-core';
+import {
+  evaluateExternalMemoryIngress,
+  projectExternalMemoryContent,
+  resolveRelativeDate,
+  HARVEST_FRAME_CONTENT_CAP,
+  MAX_TURNS_PER_ITEM,
+  writeRawTurnFrames,
+  RawArchive,
+  SuppressionStore,
+  readArchiveUids,
+  withArchiveUid,
+} from '@waggle/hive-mind-core';
 import {
   getFrameStore,
   getSessions,
@@ -79,6 +90,99 @@ export function registerHarvestTools(server: McpServer): void {
         };
       }
 
+      const preparedItems = items.map((item) => {
+        const storedContent = item.content.slice(0, HARVEST_FRAME_CONTENT_CAP);
+        const content = item.title
+          ? `[${item.source}] ${item.title}: ${storedContent}`
+          : `[${item.source}] ${storedContent}`;
+        const ingressContent = projectExternalMemoryContent({
+          content: item.content,
+          messages: item.messages,
+          parseMethod: item.metadata?.parseMethod,
+          maxChars: HARVEST_FRAME_CONTENT_CAP,
+        });
+        const ingressFrameContent = item.title
+          ? `[${item.source}] ${item.title}: ${ingressContent}`
+          : `[${item.source}] ${ingressContent}`;
+        const archiveIngressContent = projectExternalMemoryContent({
+          content: item.content,
+          messages: item.messages,
+          parseMethod: item.metadata?.parseMethod,
+        });
+        const entityProjections: Array<{ type: string; name: string; recalled: string }> = [];
+        if (Array.isArray(item.metadata?.entities)) {
+          for (const entity of item.metadata.entities) {
+            if (!entity || typeof entity !== 'object') continue;
+            const { name, type } = entity as Record<string, unknown>;
+            if (typeof name !== 'string') continue;
+            const storedType = typeof type === 'string' && type ? type : 'concept';
+            entityProjections.push({
+              type: storedType,
+              name,
+              recalled: `${storedType}: ${name}`,
+            });
+          }
+        }
+        const rawTurnProjections: Array<{ content: string; timestamp?: string }> = [];
+        if (process.env.WAGGLE_RAWDETAIL !== '0' && Array.isArray(item.messages)) {
+          for (const message of item.messages) {
+            if (message.role !== 'user' && message.role !== 'assistant') continue;
+            const rawTurnContent = (message.text ?? '').trim();
+            if (!rawTurnContent) continue;
+            if (rawTurnProjections.length >= MAX_TURNS_PER_ITEM) break;
+            rawTurnProjections.push({
+              content: rawTurnContent.slice(0, HARVEST_FRAME_CONTENT_CAP),
+              timestamp: message.timestamp,
+            });
+          }
+        }
+        return {
+          item,
+          content,
+          ingressFrameContent,
+          archiveIngressContent,
+          entityProjections,
+          rawTurnProjections,
+        };
+      });
+      const hasUnsafeContent = (file_path !== undefined
+        && evaluateExternalMemoryIngress({ content: file_path }).action !== 'allow')
+        || preparedItems.some(({
+          item,
+          ingressFrameContent,
+          archiveIngressContent,
+          entityProjections,
+          rawTurnProjections,
+        }) => {
+          if (evaluateExternalMemoryIngress({ content: ingressFrameContent }).action !== 'allow'
+            || evaluateExternalMemoryIngress({
+              title: item.title,
+              content: archiveIngressContent,
+            }).action !== 'allow'
+            || [item.source, item.id, item.timestamp].some((value) =>
+              evaluateExternalMemoryIngress({ content: value }).action !== 'allow')) {
+            return true;
+          }
+          if (entityProjections.some(({ type, name, recalled }) =>
+            evaluateExternalMemoryIngress({ content: recalled }).action !== 'allow'
+            || evaluateExternalMemoryIngress({ title: type, content: name }).action !== 'allow')) {
+            return true;
+          }
+          return rawTurnProjections.some(({ content: rawTurnContent, timestamp }) =>
+            evaluateExternalMemoryIngress({ content: rawTurnContent }).action !== 'allow'
+            || (timestamp !== undefined
+              && evaluateExternalMemoryIngress({ content: timestamp }).action !== 'allow'));
+        });
+      if (hasUnsafeContent) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Error: imported content was blocked by the memory safety policy.',
+          }],
+          isError: true,
+        };
+      }
+
       // Save each item as an I-Frame in the personal mind
       const frameStore = getFrameStore();
       const sessions = getSessions();
@@ -114,12 +218,8 @@ export function registerHarvestTools(server: McpServer): void {
       const suppression = new SuppressionStore(getPersonalDb());
       let suppressedSkipped = 0;
 
-      for (const item of items) {
+      for (const { item, content } of preparedItems) {
         if (suppression.isSuppressed(item.source, item.id)) { suppressedSkipped++; continue; }
-        // Build a summary from the conversation
-        const content = item.title
-          ? `[${item.source}] ${item.title}: ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`
-          : `[${item.source}] ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`;
 
         // Write-time temporal anchoring. The frame's created_at should reflect WHEN the
         // event happened, not the ingest wall-clock. Start from the source timestamp; if
