@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { MindDB, FrameStore, type Importance, SessionStore } from '@waggle/core';
+import { MindDB, FrameStore, KnowledgeGraph, type Importance, SessionStore } from '@waggle/core';
 import { MemoryWeaver } from '../src/consolidation.js';
 
 describe('Memory Weaver (Consolidation)', () => {
@@ -108,6 +108,32 @@ describe('Memory Weaver (Consolidation)', () => {
 
       const removed = weaver.decayFrames();
       expect(removed).toBe(0);
+    });
+
+    it('uses canonical deletion to clear all indexes and preserve dependent frames', () => {
+      const session = sessions.create();
+      const deprecated = frames.createIFrame(session.gop_id, 'Expired indexed frame', 'deprecated');
+      const preserved = frames.createIFrame(session.gop_id, 'Current frame', 'normal');
+      const dependent = frames.createPFrame(session.gop_id, 'Dependent frame', deprecated.id);
+      const raw = db.getDatabase();
+      const vector = new Uint8Array(new Float32Array(1024).fill(0.1).buffer);
+      raw.prepare(`INSERT INTO memory_frames_vec (rowid, embedding) VALUES (${deprecated.id}, ?)`).run(vector);
+      const chunkId = Number(raw.prepare(
+        'INSERT INTO memory_frame_chunks (frame_id, chunk_idx, content, char_start, char_end) VALUES (?, ?, ?, ?, ?)',
+      ).run(deprecated.id, 0, 'Expired indexed chunk', 0, 21).lastInsertRowid);
+      raw.prepare(`INSERT INTO memory_frame_chunks_vec (rowid, embedding) VALUES (${chunkId}, ?)`).run(vector);
+      const kg = new KnowledgeGraph(db);
+      const entity = kg.createEntity('concept', 'Expired index', {});
+      kg.linkEntityToFrame(entity.id, deprecated.id);
+
+      expect(weaver.decayFrames()).toBe(1);
+      expect(frames.getById(deprecated.id)).toBeUndefined();
+      expect(frames.getById(preserved.id)).toBeDefined();
+      expect(frames.getById(dependent.id)?.base_frame_id).toBeNull();
+      expect(raw.prepare('SELECT COUNT(*) AS count FROM memory_frames_vec WHERE rowid = ?').get(deprecated.id)).toEqual({ count: 0 });
+      expect(raw.prepare('SELECT COUNT(*) AS count FROM memory_frame_chunks WHERE frame_id = ?').get(deprecated.id)).toEqual({ count: 0 });
+      expect(raw.prepare('SELECT COUNT(*) AS count FROM memory_frame_chunks_vec WHERE rowid = ?').get(chunkId)).toEqual({ count: 0 });
+      expect(raw.prepare('SELECT COUNT(*) AS count FROM kg_entity_frames WHERE frame_id = ?').get(deprecated.id)).toEqual({ count: 0 });
     });
   });
 

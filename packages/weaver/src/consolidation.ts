@@ -53,28 +53,18 @@ export class MemoryWeaver {
   decayFrames(): number {
     const raw = this.db.getDatabase();
 
-    // Delete deprecated frames with zero access count
-    // First get the IDs for FTS cleanup
+    // Select deprecated frames with zero access count for canonical cleanup.
     const toDelete = raw.prepare(
       "SELECT id FROM memory_frames WHERE importance = 'deprecated' AND access_count = 0"
     ).all() as { id: number }[];
 
     if (toDelete.length === 0) return 0;
 
-    const ids = toDelete.map(r => r.id);
-    const placeholders = ids.map(() => '?').join(',');
-
-    // Delete from FTS index
-    raw.prepare(
-      `DELETE FROM memory_frames_fts WHERE rowid IN (${placeholders})`
-    ).run(...ids);
-
-    // Delete the frames
-    const result = raw.prepare(
-      `DELETE FROM memory_frames WHERE id IN (${placeholders})`
-    ).run(...ids);
-
-    return result.changes;
+    let deleted = 0;
+    for (const { id } of toDelete) {
+      if (this.frames.delete(id)) deleted++;
+    }
+    return deleted;
   }
 
   strengthenFrames(tempThreshold = 10, normalThreshold = 25): number {
