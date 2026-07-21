@@ -73,6 +73,16 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(screen.queryByText('· Coder')).not.toBeInTheDocument();
   });
 
+  it('keeps historical model attribution when the active model changes', () => {
+    render({
+      messages: [{ ...assistantMsg, model: 'openai/historical-model' }],
+      currentModel: 'anthropic/current-model',
+    });
+
+    expect(screen.getByText('· Historical Model')).toBeInTheDocument();
+    expect(screen.queryByText('· Current Model')).not.toBeInTheDocument();
+  });
+
   it('keeps the empty-state mascot intrinsically sized before image decode', () => {
     render({ messages: [] });
     const emptyState = screen.getByText("Pick a workspace and Waggle's ready").closest('div');

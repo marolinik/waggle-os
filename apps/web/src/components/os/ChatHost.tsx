@@ -128,6 +128,7 @@ const ChatHostInstance = ({ workspaceId }: { workspaceId: string }) => {
           templateId={ws?.templateId}
           storageType={ws?.storageType}
           initialPersona={personaId}
+          initialModel={ws?.model}
           initialMessage={seed?.initialMessage}
           autoSendInitial={seed?.autoSend ?? false}
           onPersonaChange={setPersona}

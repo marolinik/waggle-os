@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +13,8 @@ interface ChatWindowInstanceProps {
   workspaceId: string;
   workspaceName?: string;
   initialPersona?: string;
+  /** Workspace-scoped model already loaded by the shell. */
+  initialModel?: string;
   /** QW-1: starter prompt prefilled into the chat input once on first mount. */
   initialMessage?: string;
   /** F2: auto-send the initialMessage once the chat is ready (wizard "Let's go"). */
@@ -39,6 +41,7 @@ const ChatWindowInstance = ({
   workspaceId,
   workspaceName,
   initialPersona,
+  initialModel,
   initialMessage,
   autoSendInitial = false,
   templateId,
@@ -61,6 +64,26 @@ const ChatWindowInstance = ({
 
   const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
 
+  const [currentModel, setCurrentModel] = useState<string>(initialModel ?? '');
+  const currentModelRef = useRef(initialModel ?? '');
+  const confirmedModelRef = useRef(initialModel ?? '');
+  const initialModelRef = useRef(initialModel);
+  const modelRevisionRef = useRef(0);
+  const userSelectedModelRef = useRef(false);
+  const modelPersistenceRef = useRef<Promise<void>>(Promise.resolve());
+
+  // The shell may finish loading the workspace after this kept-alive chat
+  // mounts. Accept that workspace-scoped model until the user makes an
+  // explicit per-window choice; a late shell refresh must not overwrite it.
+  useEffect(() => {
+    initialModelRef.current = initialModel;
+    if (!initialModel || userSelectedModelRef.current) return;
+    modelRevisionRef.current += 1;
+    currentModelRef.current = initialModel;
+    confirmedModelRef.current = initialModel;
+    setCurrentModel(initialModel);
+  }, [initialModel]);
+
   // chat-session-uuid-title (P2): the server returns a real title derived from the
   // first user message, or null for a brand-new untitled session. Render a friendly
   // placeholder instead of the raw `session-<uuid>` id — covering both null/empty
@@ -76,10 +99,10 @@ const ChatWindowInstance = ({
     workspaceId,
     sessionId: activeSessionId,
     persona: currentPersona,
+    model: currentModel,
     autonomy: { level: autonomyLevel, expiresAt: autonomyExpiresAt },
   });
 
-  const [currentModel, setCurrentModel] = useState<string>('');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
 
@@ -127,19 +150,34 @@ const ChatWindowInstance = ({
     // Try fetching the current active model from the sidecar. Also retries on
     // transient failure — the initial render may race the sidecar spawning.
     const fetchCurrentModel = async () => {
+      if (initialModelRef.current || userSelectedModelRef.current) {
+        currentLanded = true;
+        return;
+      }
+      const loadRevision = modelRevisionRef.current;
       try {
         const model = await adapter.getModel();
-        if (cancelled) return;
+        if (cancelled || userSelectedModelRef.current || loadRevision !== modelRevisionRef.current) {
+          currentLanded = true;
+          return;
+        }
         if (typeof model === 'string' && model) {
+          currentModelRef.current = model;
+          confirmedModelRef.current = model;
           setCurrentModel(model);
           currentLanded = true;
           return;
         }
         const settings = await adapter.getSettings();
-        if (cancelled) return;
+        if (cancelled || userSelectedModelRef.current || loadRevision !== modelRevisionRef.current) {
+          currentLanded = true;
+          return;
+        }
         const fromSettings = (settings as { defaultModel?: string; model?: string }).defaultModel
           ?? (settings as { model?: string }).model;
         if (fromSettings) {
+          currentModelRef.current = fromSettings;
+          confirmedModelRef.current = fromSettings;
           setCurrentModel(fromSettings);
           currentLanded = true;
         }
@@ -188,11 +226,38 @@ const ChatWindowInstance = ({
   }, []);
 
   const handleModelChange = (model: string) => {
+    if (!model || model === currentModelRef.current) return;
+    userSelectedModelRef.current = true;
+    const revision = ++modelRevisionRef.current;
+    currentModelRef.current = model;
     setCurrentModel(model);
-    adapter.setModel(model).catch((err) => console.error('[ChatWindowInstance] set model failed:', err));
-    adapter.patchWorkspace(workspaceId, { model })
-      .then(() => toast({ title: 'Model updated', description: `Now using ${formatModelLabel(model)}` }))
-      .catch(() => toast({ title: 'Model updated locally', description: 'Backend offline — will sync when connected', variant: 'destructive' }));
+    // Serialize workspace writes so two rapid clicks cannot resolve out of
+    // order. The request itself already carries `model`, so the optimistic
+    // selection is safe for an immediate Send while persistence completes.
+    modelPersistenceRef.current = modelPersistenceRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          await adapter.patchWorkspace(workspaceId, { model });
+          confirmedModelRef.current = model;
+          if (revision === modelRevisionRef.current) {
+            toast({ title: 'Model updated', description: `Now using ${formatModelLabel(model)}` });
+          }
+        } catch (err) {
+          console.error('[ChatWindowInstance] persist model failed:', err);
+          if (revision !== modelRevisionRef.current) return;
+          const confirmedModel = confirmedModelRef.current;
+          currentModelRef.current = confirmedModel;
+          setCurrentModel(confirmedModel);
+          toast({
+            title: 'Model change failed',
+            description: confirmedModel
+              ? `Still using ${formatModelLabel(confirmedModel)}`
+              : 'The previous model remains active.',
+            variant: 'destructive',
+          });
+        }
+      });
   };
 
   return (

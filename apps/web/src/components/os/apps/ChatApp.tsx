@@ -1187,7 +1187,7 @@ const ChatApp = ({
                   <div className="mb-1 flex items-center gap-1.5 font-mono text-[11.5px] text-[var(--text-muted)]">
                     <span className="font-semibold text-[var(--text-2)]">Waggle</span>
                     {messagePersona?.name && <span>· {messagePersona.name}</span>}
-                    {currentModel && <span>· {formatModelLabel(currentModel)}</span>}
+                    {msg.model && <span>· {formatModelLabel(msg.model)}</span>}
                   </div>
                 )}
                 <div className={`relative select-text cursor-text group/msg text-sm ${
