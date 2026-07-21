@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { resolveUsableModel } from '../model-availability.js';
+import { chatSessionStateKey } from './chat-persistence.js';
 import { assertSafeSegment } from './validate.js';
 
 /**
@@ -83,9 +84,10 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
     const workspaceId = request.query.workspace ?? 'default';
     assertSafeSegment(sessionId, 'session');
     assertSafeSegment(workspaceId, 'workspace');
+    const sessionStateKey = chatSessionStateKey(workspaceId, sessionId);
 
     // Try in-memory first
-    let history = server.agentState.sessionHistories.get(sessionId);
+    let history = server.agentState.sessionHistories.get(sessionStateKey);
 
     // If not in RAM, load from disk
     if (!history || history.length === 0) {
@@ -114,7 +116,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
           } catch { /* skip */ }
         }
         // Cache in RAM for subsequent requests
-        server.agentState.sessionHistories.set(sessionId, messages.map(m => ({
+        server.agentState.sessionHistories.set(sessionStateKey, messages.map(m => ({
           role: m.role,
           content: m.content,
           ...(m.model ? { model: m.model } : {}),

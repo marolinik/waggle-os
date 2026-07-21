@@ -37,7 +37,7 @@ import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } f
 
 // ── Extracted modules ──────────────────────────────────────────────────
 import { allowsAutomaticRecall, allowsConversationHistory, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, resolveTurnPersistencePermissions, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
-import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
+import { chatSessionStateKey, isChatSessionStateKeyForSession, isChatSessionStateKeyForWorkspace, persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
   behavioralRulesForPromptPackage,
@@ -629,7 +629,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona.
     // Skip cache entirely when assembled is provided — it reflects per-turn
     // memory recall + task-shape detection that should not be cached across turns.
-    const cacheKey = sessionId ?? 'default';
+    const cacheKey = chatSessionStateKey(workspaceId ?? 'default', sessionId ?? 'default');
     if (!assembled) {
       const cached = systemPromptCache.get(cacheKey);
       if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode) {
@@ -1093,6 +1093,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let pinnedSharedMindId: string | null = null;
     const activeSessionId = requestedSessionId ?? workspace ?? 'default';
     const activeWorkspaceId = workspace ?? 'default';
+    const activeSessionStateKey = chatSessionStateKey(activeWorkspaceId, activeSessionId);
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     let activeAttemptModel: string | null = null;
     let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
@@ -1161,17 +1162,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       const sessionId = activeSessionId;
       const effectiveWorkspace = activeWorkspaceId;
+      const sessionStateKey = activeSessionStateKey;
 
       // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
 
       // Get or create session history — load from disk if not in RAM
-      if (!sessionHistories.has(sessionId)) {
+      if (!sessionHistories.has(sessionStateKey)) {
         const saved = loadSessionMessages(
           server.localConfig.dataDir, effectiveWorkspace, sessionId
         );
-        sessionHistories.set(sessionId, saved);
+        sessionHistories.set(sessionStateKey, saved);
       }
-      const history = sessionHistories.get(sessionId)!;
+      const history = sessionHistories.get(sessionStateKey)!;
       activeHistory = history;
 
       // F4 retry-dedup: a retried turn re-issues the failed user message. Drop
@@ -1863,7 +1865,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();
             const retrieval = await server.agentState.mcpToolRetriever.selectToolsWithDetails(
-              runningMcpTools, history, sessionId, retrievalCfg,
+              runningMcpTools, history, sessionStateKey, retrievalCfg,
             );
             let selectedMcp = retrieval.tools;
             if (activePersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, activePersona);
@@ -1963,7 +1965,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             litellmApiKey: server.agentState.litellmApiKey,
             maxContextTokens,
           });
-          const previousSummary = compressionSummaries.get(sessionId) ?? null;
+          const previousSummary = compressionSummaries.get(sessionStateKey) ?? null;
           const compressionResult = await compressConversation(history, compressionConfig, previousSummary);
           windowedMessages = compressionResult.messages;
 
@@ -1971,7 +1973,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             log.info(`[context-compression] Compressed ${compressionResult.originalTokens}→${compressionResult.compressedTokens} tokens (session=${sessionId})`);
             sendEvent('step', { content: `Context compressed: ${compressionResult.originalTokens}→${compressionResult.compressedTokens} tokens` });
             if (compressionResult.summary) {
-              compressionSummaries.set(sessionId, compressionResult.summary);
+              compressionSummaries.set(sessionStateKey, compressionResult.summary);
 
               // #12: dual-use — persist the summary the compressor already
               // paid for as a durable memory frame (skipped for automated
@@ -1987,10 +1989,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 } else {
                   try {
                     const frameId = await sessionOrch.persistCompactionSummary(
-                      compressionResult.summary, sessionId, compactionFrameIds.get(sessionId) ?? null,
+                      compressionResult.summary, sessionId, compactionFrameIds.get(sessionStateKey) ?? null,
                     );
                     if (frameId != null) {
-                      compactionFrameIds.set(sessionId, frameId);
+                      compactionFrameIds.set(sessionStateKey, frameId);
                       sendEvent('step', { content: 'Session summary saved to memory' });
                     }
                   } catch (e) {
@@ -2087,7 +2089,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!hasCustomRunner) {
           toolCatalogCount = catalogToolNames.size;
           toolEligibleCount = effectiveTools.length;
-          const sequenceHistory = sessionToolSequences.get(sessionId);
+          const sequenceHistory = sessionToolSequences.get(sessionStateKey);
           const previousToolSequence = allowsConversationHistory(turnMutationPolicy)
             ? sequenceHistory?.[sequenceHistory.length - 1] ?? []
             : [];
@@ -2714,14 +2716,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && result.toolsUsed.length > 0) {
           try {
             // Track this session's tool sequence
-            if (!sessionToolSequences.has(sessionId)) {
-              sessionToolSequences.set(sessionId, []);
+            if (!sessionToolSequences.has(sessionStateKey)) {
+              sessionToolSequences.set(sessionStateKey, []);
             }
-            sessionToolSequences.get(sessionId)!.push(result.toolsUsed);
+            sessionToolSequences.get(sessionStateKey)!.push(result.toolsUsed);
 
-            // Build session history from other sessions' tool sequences
+            // Build history from other sessions in this workspace only.
             const otherSessions = [...sessionToolSequences.entries()]
-              .filter(([id]) => id !== sessionId)
+              .filter(([id]) => id !== sessionStateKey
+                && isChatSessionStateKeyForWorkspace(id, effectiveWorkspace))
               .map(([, seqs]) => ({ toolSequence: seqs.flat() }));
 
             if (otherSessions.length >= 2) {
@@ -3039,14 +3042,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
   // (systemPromptCache, compressionSummaries, sessionToolSequences) grew unbounded
   // across the sidecar's lifetime, compounding in heavy-use instances.
   server.delete<{
-    Querystring: { session?: string };
+    Querystring: { session?: string; workspace?: string };
   }>('/api/chat/history', async (request, reply) => {
     const sessionId = request.query.session ?? 'default';
-    sessionHistories.delete(sessionId);
-    systemPromptCache.delete(sessionId);
-    compressionSummaries.delete(sessionId);
-    compactionFrameIds.delete(sessionId); // #12: next compaction starts a fresh frame
-    sessionToolSequences.delete(sessionId);
+    const workspaceId = request.query.workspace;
+    assertSafeSegment(sessionId, 'session');
+    if (workspaceId) assertSafeSegment(workspaceId, 'workspace');
+
+    const evictSessionState = <T>(state: Map<string, T>): void => {
+      if (workspaceId) {
+        state.delete(chatSessionStateKey(workspaceId, sessionId));
+        return;
+      }
+      for (const stateKey of state.keys()) {
+        if (isChatSessionStateKeyForSession(stateKey, sessionId)) state.delete(stateKey);
+      }
+    };
+
+    evictSessionState(sessionHistories);
+    evictSessionState(systemPromptCache);
+    evictSessionState(compressionSummaries);
+    evictSessionState(compactionFrameIds); // #12: next compaction starts a fresh frame
+    evictSessionState(sessionToolSequences);
     return reply.send({ ok: true, cleared: sessionId });
   });
 };

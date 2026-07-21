@@ -35,7 +35,7 @@ import {
 import { buildLocalServer } from '../../packages/server/src/local/index.js';
 import type { AgentRunner } from '../../packages/server/src/local/routes/chat.js';
 import type { AgentResponse } from '../../packages/agent/src/agent-loop.js';
-import { loadSessionMessages } from '../../packages/server/src/local/routes/chat-persistence.js';
+import { chatSessionStateKey, loadSessionMessages } from '../../packages/server/src/local/routes/chat-persistence.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -491,7 +491,9 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
 
       // Let the route's abort catch/finally finish before inspecting both stores.
       await new Promise((resolve) => setTimeout(resolve, 30));
-      expect(serverInst.agentState.sessionHistories.get(session)).toEqual([
+      expect(serverInst.agentState.sessionHistories.get(
+        chatSessionStateKey('default', session),
+      )).toEqual([
         { role: 'user', content: message },
       ]);
       expect(loadSessionMessages(serverInst.localConfig.dataDir, 'default', session)).toEqual([
@@ -531,7 +533,9 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
     }).then(r => r.text());
 
     // Verify server has accumulated 4 messages (user1, assistant1, user2, assistant2)
-    const history = serverInst.agentState.sessionHistories.get(session);
+    const history = serverInst.agentState.sessionHistories.get(
+      chatSessionStateKey('default', session),
+    );
     expect(history).toBeDefined();
     expect(history!.length).toBe(4);
     expect(history![0]).toMatchObject({ role: 'user', content: 'first message' });
@@ -551,7 +555,8 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       body: JSON.stringify({ message: 'to be cleared', workspace: 'default', session }),
     }).then(r => r.text());
 
-    expect(serverInst.agentState.sessionHistories.has(session)).toBe(true);
+    const stateKey = chatSessionStateKey('default', session);
+    expect(serverInst.agentState.sessionHistories.has(stateKey)).toBe(true);
 
     // Clear it
     const clearRes = await fetch(`${baseUrl}/api/chat/history?session=${session}`, {
@@ -559,6 +564,6 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       headers: { 'Authorization': `Bearer ${authToken}` },
     });
     expect(clearRes.status).toBe(200);
-    expect(serverInst.agentState.sessionHistories.has(session)).toBe(false);
+    expect(serverInst.agentState.sessionHistories.has(stateKey)).toBe(false);
   });
 });

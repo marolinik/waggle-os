@@ -9,6 +9,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 
+const CHAT_SESSION_STATE_SEPARATOR = '\u0000';
+
+/**
+ * Collision-free process-local key for state that belongs to one chat session.
+ * Persisted paths and public session ids remain separate workspace/session fields.
+ */
+export function chatSessionStateKey(workspaceId: string, sessionId: string): string {
+  return `${workspaceId}${CHAT_SESSION_STATE_SEPARATOR}${sessionId}`;
+}
+
+/** Match both scoped keys and pre-upgrade raw keys for legacy clear requests. */
+export function isChatSessionStateKeyForSession(stateKey: string, sessionId: string): boolean {
+  return stateKey === sessionId
+    || stateKey.endsWith(`${CHAT_SESSION_STATE_SEPARATOR}${sessionId}`);
+}
+
+/** Keep cross-session workflow signals inside their originating workspace. */
+export function isChatSessionStateKeyForWorkspace(stateKey: string, workspaceId: string): boolean {
+  return stateKey.startsWith(`${workspaceId}${CHAT_SESSION_STATE_SEPARATOR}`);
+}
+
 /**
  * Persist a chat message to the session's .jsonl file on disk.
  * This ensures messages survive server restarts.
