@@ -1,4 +1,12 @@
-import type { MindDB, FrameStore, MemoryFrame, Importance, SessionStore, KnowledgeGraph } from '@waggle/core';
+import {
+  evaluateExternalMemoryIngress,
+  type MindDB,
+  type FrameStore,
+  type MemoryFrame,
+  type Importance,
+  type SessionStore,
+  type KnowledgeGraph,
+} from '@waggle/core';
 
 const IMPORTANCE_UPGRADE: Record<string, Importance> = {
   temporary: 'normal',
@@ -24,6 +32,9 @@ export class MemoryWeaver {
     // Merge I-frame + P-frames into consolidated content
     const parts = [state.iframe.content, ...state.pframes.map(p => p.content)];
     const mergedContent = parts.join('\n---\n');
+    if ([mergedContent, parts.join('\n'), parts.join('')].some(
+      content => evaluateExternalMemoryIngress({ content }).action !== 'allow',
+    )) return null;
 
     // Create new consolidated I-frame
     const consolidated = this.frames.createIFrame(gopId, mergedContent, 'normal');
@@ -69,20 +80,24 @@ export class MemoryWeaver {
   strengthenFrames(tempThreshold = 10, normalThreshold = 25): number {
     const raw = this.db.getDatabase();
     let upgraded = 0;
+    const candidates = raw.prepare(
+      'SELECT id, content FROM memory_frames WHERE importance = ? AND access_count >= ?',
+    );
+    const promote = raw.prepare(
+      'UPDATE memory_frames SET importance = ? WHERE id = ? AND content = ? AND importance = ? AND access_count >= ?',
+    );
 
     // Upgrade temporary → normal
-    const tempResult = raw.prepare(`
-      UPDATE memory_frames SET importance = 'normal'
-      WHERE importance = 'temporary' AND access_count >= ?
-    `).run(tempThreshold);
-    upgraded += tempResult.changes;
+    for (const frame of candidates.all('temporary', tempThreshold) as Array<{ id: number; content: string }>) {
+      if (evaluateExternalMemoryIngress({ content: frame.content }).action !== 'allow') continue;
+      upgraded += promote.run('normal', frame.id, frame.content, 'temporary', tempThreshold).changes;
+    }
 
     // Upgrade normal → important
-    const normalResult = raw.prepare(`
-      UPDATE memory_frames SET importance = 'important'
-      WHERE importance = 'normal' AND access_count >= ?
-    `).run(normalThreshold);
-    upgraded += normalResult.changes;
+    for (const frame of candidates.all('normal', normalThreshold) as Array<{ id: number; content: string }>) {
+      if (evaluateExternalMemoryIngress({ content: frame.content }).action !== 'allow') continue;
+      upgraded += promote.run('important', frame.id, frame.content, 'normal', normalThreshold).changes;
+    }
 
     return upgraded;
   }
@@ -102,9 +117,13 @@ export class MemoryWeaver {
 
     if (allContent.length === 0) return null;
 
+    const summaryContent = allContent.join('\n---\n');
+    if ([summaryContent, allContent.join('\n'), allContent.join('')].some(
+      content => evaluateExternalMemoryIngress({ content }).action !== 'allow',
+    )) return null;
+
     // Create a summary session
     const summarySession = this.sessions.create('daily-summary');
-    const summaryContent = allContent.join('\n---\n');
     return this.frames.createIFrame(summarySession.gop_id, summaryContent, 'important');
   }
 
@@ -179,15 +198,20 @@ export class MemoryWeaver {
         for (let j = i + 1; j < ids.length; j++) {
           const pairKey = `${Math.min(ids[i], ids[j])}:${Math.max(ids[i], ids[j])}`;
           if (linkedPairs.has(pairKey)) continue;
-          linkedPairs.add(pairKey);
-
-          // Find the gop_id of the base frame
           const baseFrame = allFrames.find(f => f.id === ids[i]);
-          if (!baseFrame) continue;
+          const referencedFrame = allFrames.find(f => f.id === ids[j]);
+          if (!baseFrame || !referencedFrame) continue;
+          const description = `Shared entity: ${entityName}`;
+          const bContent = JSON.stringify({ description, references: [ids[j]] });
+          const sourceContent = [baseFrame.content, referencedFrame.content];
+          if ([entityName, bContent, ...sourceContent, sourceContent.join('\n'), sourceContent.join('')].some(
+            content => evaluateExternalMemoryIngress({ content }).action !== 'allow',
+          )) continue;
+          linkedPairs.add(pairKey);
 
           this.frames.createBFrame(
             baseFrame.gop_id,
-            `Shared entity: ${entityName}`,
+            description,
             ids[i],
             [ids[j]]
           );
@@ -204,12 +228,16 @@ export class MemoryWeaver {
    * Takes pre-extracted session summary and key points, creates an important frame
    * that persists across consolidation cycles.
    */
-  distillSessionContent(sessionDate: string, summary: string, keyPoints: string[]): MemoryFrame {
+  distillSessionContent(sessionDate: string, summary: string, keyPoints: string[]): MemoryFrame | null {
     const parts = [`Session (${sessionDate}): ${summary}`];
     if (keyPoints.length > 0) {
       parts.push('Key points: ' + keyPoints.join('; '));
     }
     const content = parts.join('. ');
+    const components = [sessionDate, summary, ...keyPoints];
+    if ([content, components.join('\n'), components.join('')].some(
+      projection => evaluateExternalMemoryIngress({ content: projection }).action !== 'allow',
+    )) return null;
 
     // Replace-on-update: re-distilling the same session (same date+summary,
     // evolving key points) must update the one distilled frame. createIFrame's
@@ -230,25 +258,33 @@ export class MemoryWeaver {
   }
 
   consolidateProject(projectId: string): MemoryFrame | null {
+    if (evaluateExternalMemoryIngress({ content: projectId }).action !== 'allow') return null;
     const projectSessions = this.sessions.getByProject(projectId);
     const closedSessions = projectSessions.filter(s => s.status === 'closed' || s.status === 'archived');
 
     if (closedSessions.length === 0) return null;
 
     const allContent: string[] = [];
+    const sourceContent: string[] = [];
     for (const session of closedSessions) {
       const latestI = this.frames.getLatestIFrame(session.gop_id);
       if (latestI) {
         allContent.push(`[${session.gop_id}] ${latestI.content}`);
+        sourceContent.push(latestI.content);
       }
     }
 
     if (allContent.length === 0) return null;
 
+    const consolidatedContent = allContent.join('\n---\n');
+    if ([consolidatedContent, sourceContent.join('\n'), sourceContent.join('')].some(
+      content => evaluateExternalMemoryIngress({ content }).action !== 'allow',
+    )) return null;
+
     const consolidationSession = this.sessions.create(projectId);
     return this.frames.createIFrame(
       consolidationSession.gop_id,
-      allContent.join('\n---\n'),
+      consolidatedContent,
       'important'
     );
   }

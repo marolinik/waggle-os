@@ -1437,8 +1437,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           const sessionsDir = path.join(fullConfig.dataDir, 'workspaces', workspaceId, 'sessions');
           const undistilled = findUndistilledSessions(sessionsDir);
           for (const session of undistilled) {
-            wsWeaver.distillSessionContent(session.date, session.summary, session.keyPoints);
-            markSessionDistilled(session.filePath);
+            const distilled = wsWeaver.distillSessionContent(session.date, session.summary, session.keyPoints);
+            if (distilled) markSessionDistilled(session.filePath);
           }
         } catch (err) { log.debug('Workspace distillation skipped', err); }
       }
