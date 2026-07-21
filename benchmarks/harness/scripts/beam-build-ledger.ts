@@ -204,10 +204,24 @@ async function main(): Promise<void> {
   // gpt-5-mini emits many output tokens per extraction chunk → the 60s default
   // timeout aborts mid-generation. Use a long timeout and reasoning_effort:low
   // (extraction is mechanical; hidden reasoning is wasted latency + $ here).
-  const client = createBeamOpenAiClient({
-    model: args.model, pricing: OPENAI_PRICING[args.model],
-    timeoutMs: 300_000, maxRetries: 2, reasoningEffort: 'minimal',
-  });
+  // Any provider-prefixed model ("openai/*", "anthropic/*") is routed through
+  // OpenRouter (the OpenAI-direct account's quota can be exhausted — 429
+  // insufficient_quota). Bare model names keep the OpenAI-direct path unchanged.
+  const client: BeamOpenAiClient = args.model.includes('/')
+    ? (() => {
+        const key = process.env.OPENROUTER_API_KEY;
+        if (!key) throw new Error('OPENROUTER_API_KEY required for provider-routed models');
+        const bare = args.model.replace(/^[^/]+\//, '');
+        return new BeamOpenAiClient({
+          model: args.model, apiKey: key, baseUrl: 'https://openrouter.ai/api/v1',
+          pricing: OPENAI_PRICING[args.model] ?? OPENAI_PRICING[bare] ?? { inputPerMillion: 0.25, outputPerMillion: 2.0 },
+          timeoutMs: 300_000, maxRetries: 2, reasoningEffort: 'minimal',
+        });
+      })()
+    : createBeamOpenAiClient({
+        model: args.model, pricing: OPENAI_PRICING[args.model],
+        timeoutMs: 300_000, maxRetries: 2, reasoningEffort: 'minimal',
+      });
 
   console.log(`[ledger] model=${args.model} chunkMsgs=${args.chunkMsgs} concurrency=${args.concurrency} budget=$${args.budget} convs=${args.convs.length}`);
   let totalCost = 0;
