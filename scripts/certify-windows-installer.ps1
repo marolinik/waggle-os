@@ -16,7 +16,21 @@ param(
 
   [string]$ExpectedSourceRevision,
 
-  [switch]$VerifyManagedModel
+  [switch]$VerifyManagedModel,
+
+  [switch]$RequireVersionToVersionUpgrade,
+
+  [string]$PreviousInstallerPath,
+
+  [string]$ExpectedPreviousInstallerSha256,
+
+  [string]$ExpectedPreviousVersion,
+
+  [string]$ExpectedPreviousSourceRevision,
+
+  [string]$ExpectedCandidateInstallerSha256,
+
+  [string]$ExpectedCandidateVersion
 )
 
 Set-StrictMode -Version Latest
@@ -55,6 +69,86 @@ function Assert-ExpectedAuthenticodeSignature {
   ) "$ArtifactLabel signer does not match the imported production certificate."
   Assert-True ($null -ne $Signature.TimeStamperCertificate) `
     "$ArtifactLabel has no validated Authenticode timestamp certificate."
+}
+
+function ConvertTo-StrictSemanticVersion {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Value,
+    [Parameter(Mandatory = $true)] [string]$Label
+  )
+
+  Assert-True ($Value -match '^\d+\.\d+\.\d+$') `
+    "$Label must use strict numeric x.y.z format."
+  return [version]$Value
+}
+
+function Get-InstalledProductVersion {
+  param(
+    [Parameter(Mandatory = $true)] [string]$ExecutablePath,
+    [Parameter(Mandatory = $true)] [string]$ArtifactLabel
+  )
+
+  $rawVersion = [string](Get-Item -LiteralPath $ExecutablePath).VersionInfo.ProductVersion
+  Assert-True (-not [string]::IsNullOrWhiteSpace($rawVersion)) `
+    "$ArtifactLabel has no embedded product version."
+  Assert-True ($rawVersion -match '^(?<version>\d+\.\d+\.\d+)(?:\.0)?(?:[+-].*)?$') `
+    "$ArtifactLabel product version is not a supported x.y.z value: $rawVersion"
+  return [ordered]@{
+    raw = $rawVersion
+    normalized = $Matches['version']
+  }
+}
+
+function New-AuthenticodeArtifactReceipt {
+  param(
+    [Parameter(Mandatory = $true)] [System.IO.FileInfo]$File,
+    [Parameter(Mandatory = $true)] [object]$Signature
+  )
+
+  $artifact = [ordered]@{
+    name = $File.Name
+    sha256 = (Get-FileHash -LiteralPath $File.FullName -Algorithm SHA256).Hash
+    sizeBytes = $File.Length
+    authenticodeStatus = [string]$Signature.Status
+    signatureType = [string]$Signature.SignatureType
+    signerSubject = $null
+    signerThumbprint = $null
+    timestampAuthoritySubject = $null
+    timestampAuthorityThumbprint = $null
+    timestampAuthorityNotBefore = $null
+    timestampAuthorityNotAfter = $null
+  }
+  if ($Signature.SignerCertificate) {
+    $artifact.signerSubject = $Signature.SignerCertificate.Subject
+    $artifact.signerThumbprint = $Signature.SignerCertificate.Thumbprint
+  }
+  if ($Signature.TimeStamperCertificate) {
+    $artifact.timestampAuthoritySubject = $Signature.TimeStamperCertificate.Subject
+    $artifact.timestampAuthorityThumbprint = $Signature.TimeStamperCertificate.Thumbprint
+    $artifact.timestampAuthorityNotBefore = $Signature.TimeStamperCertificate.NotBefore.ToUniversalTime().ToString('o')
+    $artifact.timestampAuthorityNotAfter = $Signature.TimeStamperCertificate.NotAfter.ToUniversalTime().ToString('o')
+  }
+  return $artifact
+}
+
+function Assert-ArtifactIdentity {
+  param(
+    [Parameter(Mandatory = $true)] [string]$FilePath,
+    [Parameter(Mandatory = $true)] [string]$ExpectedSha256,
+    [Parameter(Mandatory = $true)] [string]$ExpectedSignerThumbprint,
+    [Parameter(Mandatory = $true)] [string]$ArtifactLabel
+  )
+
+  Assert-True (Test-Path -LiteralPath $FilePath -PathType Leaf) `
+    "$ArtifactLabel is missing."
+  $actualSha256 = (Get-FileHash -LiteralPath $FilePath -Algorithm SHA256).Hash
+  Assert-True ([string]::Equals(
+    $actualSha256,
+    $ExpectedSha256,
+    [System.StringComparison]::OrdinalIgnoreCase
+  )) "$ArtifactLabel SHA-256 changed during certification."
+  $signature = Get-AuthenticodeSignature -LiteralPath $FilePath
+  Assert-ExpectedAuthenticodeSignature $signature $ExpectedSignerThumbprint $ArtifactLabel
 }
 
 function Get-FreeTcpPort {
@@ -184,6 +278,23 @@ function Stop-StartedProcessTree {
   }
 }
 
+function Remove-CertificationControlEnvironment {
+  param([Parameter(Mandatory = $true)] [System.Diagnostics.ProcessStartInfo]$Info)
+
+  $explicitNames = @(
+    'CI', 'GH_TOKEN', 'GITHUB_TOKEN',
+    'WINDOWS_CODESIGN_PFX_BASE64', 'WINDOWS_CODESIGN_PFX_PASSWORD',
+    'WINDOWS_UPGRADE_BASE_SHA256', 'WAGGLE_APPROVED_CODESIGN_THUMBPRINT',
+    'WAGGLE_CODESIGN_THUMBPRINT', 'WAGGLE_RELEASE_VERSION'
+  )
+  foreach ($name in @($Info.Environment.Keys)) {
+    if ($name -match '^(?:ACTIONS_|GITHUB_|RUNNER_|WAGGLE_UPGRADE_BASE_)' -or
+        $explicitNames -contains $name) {
+      $null = $Info.Environment.Remove($name)
+    }
+  }
+}
+
 function Invoke-RawProcess {
   param(
     [Parameter(Mandatory = $true)] [string]$FilePath,
@@ -197,6 +308,7 @@ function Invoke-RawProcess {
   $info.UseShellExecute = $false
   $info.CreateNoWindow = $true
   $info.WorkingDirectory = Split-Path -Parent $FilePath
+  Remove-CertificationControlEnvironment $info
 
   $process = [System.Diagnostics.Process]::new()
   $process.StartInfo = $info
@@ -222,6 +334,7 @@ function Start-InstalledApp {
   $info.FileName = $ExecutablePath
   $info.UseShellExecute = $false
   $info.WorkingDirectory = Split-Path -Parent $ExecutablePath
+  Remove-CertificationControlEnvironment $info
   $process = [System.Diagnostics.Process]::new()
   $process.StartInfo = $info
   Assert-True ($process.Start()) "Could not start installed Waggle: $ExecutablePath"
@@ -566,6 +679,75 @@ $installer = Get-Item -LiteralPath $InstallerPath
 Assert-True (-not $installer.PSIsContainer) 'InstallerPath must be a file'
 Assert-True ($installer.Extension -eq '.exe') 'InstallerPath must be an NSIS .exe'
 $InstallerPath = $installer.FullName
+$candidateInstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
+
+$previousInstaller = $null
+$previousInstallerSignature = $null
+$previousInstallerEvidence = $null
+$previousVersionObject = $null
+$candidateVersionObject = $null
+$upgradeInputs = @(
+  $PreviousInstallerPath,
+  $ExpectedPreviousInstallerSha256,
+  $ExpectedPreviousVersion,
+  $ExpectedPreviousSourceRevision,
+  $ExpectedCandidateInstallerSha256,
+  $ExpectedCandidateVersion
+)
+$hasUpgradeInputs = @(
+  $upgradeInputs | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+).Count -gt 0
+Assert-True ($RequireVersionToVersionUpgrade -or -not $hasUpgradeInputs) `
+  'Version-to-version inputs require RequireVersionToVersionUpgrade.'
+if ($RequireVersionToVersionUpgrade) {
+  Assert-True $RequireAuthenticodeSignature `
+    'Version-to-version certification requires Authenticode signature enforcement.'
+  Assert-True ($hasUpgradeInputs -and @(
+    $upgradeInputs | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }
+  ).Count -eq 0) 'Version-to-version certification requires every previous and candidate input.'
+  Assert-True ($ExpectedPreviousInstallerSha256 -match '^[0-9A-Fa-f]{64}$') `
+    'Previous installer SHA-256 must be exactly 64 hexadecimal characters.'
+  Assert-True ($ExpectedCandidateInstallerSha256 -match '^[0-9A-Fa-f]{64}$') `
+    'Candidate installer SHA-256 must be exactly 64 hexadecimal characters.'
+  Assert-True ($ExpectedPreviousSourceRevision -match '^[0-9A-Fa-f]{40}$') `
+    'Previous source revision must be exactly 40 hexadecimal characters.'
+  Assert-True ([string]::Equals(
+    $candidateInstallerHash,
+    $ExpectedCandidateInstallerSha256,
+    [System.StringComparison]::OrdinalIgnoreCase
+  )) 'Candidate installer does not match the pre-certification SHA-256.'
+  $previousVersionObject = ConvertTo-StrictSemanticVersion `
+    $ExpectedPreviousVersion 'Previous version'
+  $candidateVersionObject = ConvertTo-StrictSemanticVersion `
+    $ExpectedCandidateVersion 'Candidate version'
+  Assert-True ($candidateVersionObject -gt $previousVersionObject) `
+    'Candidate version must be newer than the previous version.'
+
+  $previousInstaller = Get-Item -LiteralPath $PreviousInstallerPath
+  Assert-True (-not $previousInstaller.PSIsContainer) 'PreviousInstallerPath must be a file.'
+  Assert-True ($previousInstaller.Extension -eq '.exe') `
+    'PreviousInstallerPath must be an NSIS .exe.'
+  $PreviousInstallerPath = $previousInstaller.FullName
+  Assert-True (-not [string]::Equals(
+    $PreviousInstallerPath,
+    $InstallerPath,
+    [System.StringComparison]::OrdinalIgnoreCase
+  )) 'Previous installer and candidate installer must be distinct files.'
+  $previousInstallerHash = (
+    Get-FileHash -LiteralPath $PreviousInstallerPath -Algorithm SHA256
+  ).Hash
+  Assert-True ([string]::Equals(
+    $previousInstallerHash,
+    $ExpectedPreviousInstallerSha256,
+    [System.StringComparison]::OrdinalIgnoreCase
+  )) 'Previous installer does not match the protected SHA-256.'
+  $previousInstallerSignature = Get-AuthenticodeSignature -LiteralPath $PreviousInstallerPath
+  Assert-ExpectedAuthenticodeSignature `
+    $previousInstallerSignature $ExpectedSignerThumbprint 'Previous release installer'
+  $previousInstallerEvidence = New-AuthenticodeArtifactReceipt `
+    $previousInstaller $previousInstallerSignature
+  $previousInstallerEvidence['expectedVersion'] = $ExpectedPreviousVersion
+}
 
 if (-not $ReceiptPath) {
   $ReceiptPath = Join-Path $installer.DirectoryName 'windows-installer-certificate.json'
@@ -635,13 +817,18 @@ foreach ($name in $isolatedEnvironmentNames) {
 }
 
 $receipt = [ordered]@{
-  schemaVersion = 2
+  schemaVersion = 3
+  certificationMode = if ($RequireVersionToVersionUpgrade) {
+    'version-to-version-upgrade'
+  } else {
+    'same-version-repair'
+  }
   status = 'running'
   startedAt = $startedAt.ToString('o')
   finishedAt = $null
   installer = [ordered]@{
     name = $installer.Name
-    sha256 = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
+    sha256 = $candidateInstallerHash
     sizeBytes = $installer.Length
     authenticodeStatus = $null
     signatureType = $null
@@ -652,6 +839,8 @@ $receipt = [ordered]@{
     timestampAuthorityNotBefore = $null
     timestampAuthorityNotAfter = $null
   }
+  previousInstaller = $previousInstallerEvidence
+  previousInstalledApp = $null
   installedApp = $null
   platform = [ordered]@{
     os = [Environment]::OSVersion.VersionString
@@ -675,8 +864,32 @@ $receipt = [ordered]@{
   managedModelVerified = $false
   managedModelDigest = $null
   bundledNpm = $null
+  upgrade = if ($RequireVersionToVersionUpgrade) {
+    [ordered]@{
+      previousVersion = $ExpectedPreviousVersion
+      candidateVersion = $ExpectedCandidateVersion
+      previousSourceRevision = $ExpectedPreviousSourceRevision.ToLowerInvariant()
+      installDirectory = $installDir
+      observedPreviousVersion = $null
+      observedCandidateVersion = $null
+      configuredDataMarkerSha256 = $null
+      profileMarkerSha256 = $null
+      vaultKeySha256 = $null
+    }
+  } else {
+    $null
+  }
   checks = [ordered]@{}
   error = $null
+}
+
+if ($RequireVersionToVersionUpgrade) {
+  $receipt.checks['previousInstallerHash'] = $true
+  $receipt.checks['previousInstallerAuthenticodeSignature'] = $true
+  $receipt.checks['previousInstallerAuthenticodeSigner'] = $true
+  $receipt.checks['previousInstallerAuthenticodeTimestamp'] = $true
+  $receipt.checks['candidateInstallerHash'] = $true
+  $receipt.checks['versionOrder'] = $true
 }
 
 New-Item -ItemType Directory -Path $scratchRoot, $dataDir -Force | Out-Null
@@ -887,7 +1100,142 @@ try {
   # owns the exact installed process itself.
   Assert-NoForeignWaggleProcesses $appExecutable
   $installerStarted = $true
-  Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
+  $upgradeVaultKeySha256 = $null
+  $upgradeDataMarkerSha256 = $null
+  $upgradeProfileMarkerSha256 = $null
+  if ($RequireVersionToVersionUpgrade) {
+    Assert-ArtifactIdentity `
+      $PreviousInstallerPath `
+      $ExpectedPreviousInstallerSha256 `
+      $ExpectedSignerThumbprint `
+      'Previous installer before install'
+    Invoke-RawProcess $PreviousInstallerPath "/S /D=$installDir" 420
+    Wait-ForPathState $appExecutable $true
+    Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) `
+      'Previous installer did not create uninstall.exe.'
+    $previousRegistration = Get-ItemProperty -LiteralPath $uninstallRegistry
+    Assert-True ([string]$previousRegistration.DisplayVersion -eq $ExpectedPreviousVersion) `
+      'Previous installer registry version does not match the protected previous version.'
+    Assert-True ([string]::Equals(
+      ([string]$previousRegistration.InstallLocation).Trim('"'),
+      $installDir,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'Previous installer did not use the isolated install directory.'
+    $previousRegisteredUninstaller = ([string]$previousRegistration.UninstallString).Trim().Trim('"')
+    Assert-True ([string]::Equals(
+      [System.IO.Path]::GetFullPath($previousRegisteredUninstaller),
+      [System.IO.Path]::GetFullPath($uninstaller),
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'Previous installer registered an unexpected uninstaller.'
+    $previousProductRegistration = Get-Item -LiteralPath $productRegistry
+    Assert-True ([string]::Equals(
+      [System.IO.Path]::GetFullPath(([string]$previousProductRegistration.GetValue('')).Trim('"')),
+      [System.IO.Path]::GetFullPath($installDir),
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'Previous installer product metadata does not match the isolated target.'
+
+    $previousInstalledAppFile = Get-Item -LiteralPath $appExecutable
+    $previousInstalledAppSignature = Get-AuthenticodeSignature -LiteralPath $appExecutable
+    Assert-ExpectedAuthenticodeSignature `
+      $previousInstalledAppSignature $ExpectedSignerThumbprint 'Previous installed Waggle executable'
+    $previousInstalledProductVersion = Get-InstalledProductVersion `
+      $appExecutable 'Previous installed Waggle executable'
+    Assert-True ($previousInstalledProductVersion.normalized -eq $ExpectedPreviousVersion) `
+      'Previous installed executable version does not match the protected previous version.'
+    $receipt.previousInstalledApp = New-AuthenticodeArtifactReceipt `
+      $previousInstalledAppFile $previousInstalledAppSignature
+    $receipt.previousInstalledApp['productVersion'] = $previousInstalledProductVersion.raw
+    $receipt.upgrade.observedPreviousVersion = $previousInstalledProductVersion.normalized
+    $receipt.checks['previousInstall'] = $true
+    $receipt.checks['previousVersion'] = $true
+    $receipt.checks['previousInstalledAppAuthenticodeSignature'] = $true
+    $receipt.checks['previousInstalledAppAuthenticodeSigner'] = $true
+    $receipt.checks['previousInstalledAppAuthenticodeTimestamp'] = $true
+
+    $previousBaseUrl = "http://127.0.0.1:$($env:WAGGLE_PORT)"
+    Assert-TcpPortAvailable 3333
+    $previousProcess = Start-InstalledApp $appExecutable
+    try {
+      $null = Wait-ForHealth $previousBaseUrl $StartupTimeoutSeconds
+      $previousProcess.Refresh()
+      Assert-True (-not $previousProcess.HasExited) `
+        'The previous desktop process exited before upgrade state was prepared.'
+      $previousVaultKeyPath = Join-Path $dataDir '.vault-key'
+      Assert-VaultKeyAclRestricted $previousVaultKeyPath
+      New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+      Set-Content -LiteralPath $dataMarker -Value $runId -Encoding UTF8
+      Assert-True (Test-Path -LiteralPath $profileDataMarker -PathType Leaf) `
+        'Previous launch removed the profile preservation marker.'
+      $upgradeVaultKeySha256 = (
+        Get-FileHash -LiteralPath $previousVaultKeyPath -Algorithm SHA256
+      ).Hash
+      $upgradeDataMarkerSha256 = (
+        Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256
+      ).Hash
+      $upgradeProfileMarkerSha256 = (
+        Get-FileHash -LiteralPath $profileDataMarker -Algorithm SHA256
+      ).Hash
+      $receipt.upgrade.vaultKeySha256 = $upgradeVaultKeySha256
+      $receipt.upgrade.configuredDataMarkerSha256 = $upgradeDataMarkerSha256
+      $receipt.upgrade.profileMarkerSha256 = $upgradeProfileMarkerSha256
+      $receipt.checks['previousLaunch'] = $true
+    } finally {
+      Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
+      Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+        -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+      $previousProcess.Dispose()
+    }
+
+    Assert-NoForeignWaggleProcesses $appExecutable
+    Assert-ArtifactIdentity `
+      $InstallerPath `
+      $ExpectedCandidateInstallerSha256 `
+      $ExpectedSignerThumbprint `
+      'Candidate installer before upgrade'
+    Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
+    Assert-ArtifactIdentity `
+      $InstallerPath `
+      $ExpectedCandidateInstallerSha256 `
+      $ExpectedSignerThumbprint `
+      'Candidate installer after upgrade'
+    Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+    Wait-ForPathState $appExecutable $true
+    $upgradeRegistration = Get-ItemProperty -LiteralPath $uninstallRegistry
+    Assert-True ([string]$upgradeRegistration.DisplayVersion -eq $ExpectedCandidateVersion) `
+      'Candidate installer registry version does not match the protected candidate version.'
+    Assert-True ([string]::Equals(
+      ([string]$upgradeRegistration.InstallLocation).Trim('"'),
+      $installDir,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'Upgrade changed the registered install directory.'
+    Assert-True ([string]::Equals(
+      [System.IO.Path]::GetFullPath(([string]$upgradeRegistration.UninstallString).Trim().Trim('"')),
+      [System.IO.Path]::GetFullPath($previousRegisteredUninstaller),
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'Upgrade changed the registered uninstaller location.'
+    $upgradeProductRegistration = Get-Item -LiteralPath $productRegistry
+    Assert-True ([string]::Equals(
+      [System.IO.Path]::GetFullPath(([string]$upgradeProductRegistration.GetValue('')).Trim('"')),
+      [System.IO.Path]::GetFullPath($installDir),
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'Upgrade changed the product install location.'
+    Assert-True (
+      (Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash -eq $upgradeDataMarkerSha256
+    ) 'Upgrade changed or removed configured user data.'
+    Assert-True (
+      (Get-FileHash -LiteralPath $profileDataMarker -Algorithm SHA256).Hash -eq
+        $upgradeProfileMarkerSha256
+    ) 'Upgrade changed or removed the profile data marker.'
+    $receipt.checks['candidateVersion'] = $true
+    $receipt.checks['versionToVersionUpgrade'] = $true
+    $receipt.checks['upgradeSameInstallDirectory'] = $true
+    $receipt.checks['upgradeConfiguredDataPreserved'] = $true
+    $receipt.checks['upgradeProfileDataPreserved'] = $true
+    $receipt.checks['upgradeRegistrations'] = $true
+  } else {
+    Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
+  }
   Wait-ForPathState $appExecutable $true
   Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'Installer did not create uninstall.exe'
   Assert-True (Test-Path -LiteralPath $serviceScript -PathType Leaf) 'Installer omitted resources/service.js'
@@ -1024,6 +1372,24 @@ try {
     $receipt.checks['installedAppAuthenticodeSigner'] = $true
     $receipt.checks['installedAppAuthenticodeTimestamp'] = $true
   }
+  if ($RequireVersionToVersionUpgrade) {
+    $installedProductVersion = Get-InstalledProductVersion `
+      $appExecutable 'Installed Waggle executable'
+    Assert-True ($installedProductVersion.normalized -eq $ExpectedCandidateVersion) `
+      'Installed candidate executable version does not match the protected candidate version.'
+    $receipt.installedApp['productVersion'] = $installedProductVersion.raw
+    $receipt.upgrade.observedCandidateVersion = $installedProductVersion.normalized
+    Assert-True ([string]::Equals(
+      [string]$receipt.previousInstaller.signerThumbprint,
+      [string]$receipt.installer.signerThumbprint,
+      [System.StringComparison]::OrdinalIgnoreCase
+    ) -and [string]::Equals(
+      [string]$receipt.previousInstalledApp.signerThumbprint,
+      [string]$receipt.installedApp.signerThumbprint,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'Previous and candidate artifacts are not signed by the same approved signer.'
+    $receipt.checks['sameApprovedSigner'] = $true
+  }
 
   $registered = Get-ItemProperty -LiteralPath $uninstallRegistry
   Assert-True (
@@ -1085,6 +1451,21 @@ try {
     $vaultKeyPath = Join-Path $dataDir '.vault-key'
     Assert-VaultKeyAclRestricted $vaultKeyPath
     $receipt.checks['vaultKeyAclRestricted'] = $true
+    if ($RequireVersionToVersionUpgrade) {
+      Assert-True (
+        (Get-FileHash -LiteralPath $vaultKeyPath -Algorithm SHA256).Hash -eq $upgradeVaultKeySha256
+      ) 'Upgrade changed the existing Windows vault key.'
+      Assert-True (
+        (Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash -eq $upgradeDataMarkerSha256
+      ) 'Candidate launch changed or removed configured user data.'
+      Assert-True (
+        (Get-FileHash -LiteralPath $profileDataMarker -Algorithm SHA256).Hash -eq
+          $upgradeProfileMarkerSha256
+      ) 'Candidate launch changed or removed the profile data marker.'
+      $receipt.checks['upgradeVaultKeyPreserved'] = $true
+      $receipt.checks['candidateLaunch'] = $true
+      $receipt.checks['relaunchAfterUpgrade'] = $true
+    }
     $proxy = Invoke-JsonRequest "$baseUrl/v1/health/liveliness"
     Assert-True ($proxy.status -eq 'healthy') 'Built-in provider proxy is not healthy'
     Assert-True ((Get-HttpStatusCode "$baseUrl/api/tier") -eq 401) `
@@ -1231,8 +1612,23 @@ try {
     }
     $receipt.checks['embeddingPayloadReady'] = $true
     $receipt.checks['dockerIndependentRuntimePrerequisites'] = $true
-    New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
-    Set-Content -LiteralPath $dataMarker -Value $runId -Encoding UTF8
+    if ($RequireVersionToVersionUpgrade) {
+      Assert-True (
+        (Get-FileHash -LiteralPath (Join-Path $dataDir '.vault-key') -Algorithm SHA256).Hash -eq
+          $upgradeVaultKeySha256
+      ) 'Candidate activity changed the upgraded Windows vault key.'
+      Assert-True (
+        (Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash -eq
+          $upgradeDataMarkerSha256
+      ) 'Candidate activity changed or removed upgraded user data.'
+      Assert-True (
+        (Get-FileHash -LiteralPath $profileDataMarker -Algorithm SHA256).Hash -eq
+          $upgradeProfileMarkerSha256
+      ) 'Candidate activity changed or removed upgraded profile data.'
+    } else {
+      New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+      Set-Content -LiteralPath $dataMarker -Value $runId -Encoding UTF8
+    }
   } finally {
     Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
     Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
@@ -1253,7 +1649,21 @@ try {
       $marketplaceResourceSha256
   ) 'Could not prepare the marketplace repair probe'
   Assert-NoForeignWaggleProcesses $appExecutable
+  if ($RequireVersionToVersionUpgrade) {
+    Assert-ArtifactIdentity `
+      $InstallerPath `
+      $ExpectedCandidateInstallerSha256 `
+      $ExpectedSignerThumbprint `
+      'Candidate installer before repair'
+  }
   Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
+  if ($RequireVersionToVersionUpgrade) {
+    Assert-ArtifactIdentity `
+      $InstallerPath `
+      $ExpectedCandidateInstallerSha256 `
+      $ExpectedSignerThumbprint `
+      'Candidate installer after repair'
+  }
   Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
     -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
   Assert-True ((Get-FileHash -LiteralPath $serviceScript -Algorithm SHA256).Hash -eq $serviceHash) `
@@ -1263,6 +1673,19 @@ try {
       $marketplaceResourceSha256
   ) 'Same-version repair did not restore resources/marketplace.db'
   Assert-True (Test-Path -LiteralPath $dataMarker -PathType Leaf) 'Repair removed user data'
+  if ($RequireVersionToVersionUpgrade) {
+    Assert-True (
+      (Get-FileHash -LiteralPath (Join-Path $dataDir '.vault-key') -Algorithm SHA256).Hash -eq
+        $upgradeVaultKeySha256
+    ) 'Same-version repair changed the upgraded Windows vault key.'
+    Assert-True (
+      (Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash -eq $upgradeDataMarkerSha256
+    ) 'Same-version repair changed upgraded user data.'
+    Assert-True (
+      (Get-FileHash -LiteralPath $profileDataMarker -Algorithm SHA256).Hash -eq
+        $upgradeProfileMarkerSha256
+    ) 'Same-version repair changed upgraded profile data.'
+  }
   $repairRegistration = Get-ItemProperty -LiteralPath $uninstallRegistry
   Assert-True (
     [string]::Equals(
@@ -1335,6 +1758,19 @@ try {
     'Silent uninstall removed the Windows profile data path'
   Assert-True ((Get-Content -Raw -LiteralPath $profileDataMarker).Trim() -eq $runId) `
     'Silent uninstall changed the Windows profile data marker'
+  if ($RequireVersionToVersionUpgrade) {
+    Assert-True (
+      (Get-FileHash -LiteralPath (Join-Path $dataDir '.vault-key') -Algorithm SHA256).Hash -eq
+        $upgradeVaultKeySha256
+    ) 'Silent uninstall changed the upgraded Windows vault key.'
+    Assert-True (
+      (Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash -eq $upgradeDataMarkerSha256
+    ) 'Silent uninstall changed upgraded user data.'
+    Assert-True (
+      (Get-FileHash -LiteralPath $profileDataMarker -Algorithm SHA256).Hash -eq
+        $upgradeProfileMarkerSha256
+    ) 'Silent uninstall changed upgraded profile data.'
+  }
   $receipt.checks['silentUninstall'] = $true
   $receipt.checks['certificateRegistryCleanup'] = $true
   $receipt.checks['configuredDataDirPreserved'] = $true

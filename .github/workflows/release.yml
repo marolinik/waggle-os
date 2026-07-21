@@ -209,13 +209,139 @@ jobs:
             throw "Managed-model certification requires at least 8 GiB free after pruning; available=$($drive.Free)"
           }
 
-      - name: Certify Windows Solo installer lifecycle
+      - name: Download signed Windows upgrade baseline
+        id: upgrade-baseline
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WINDOWS_UPGRADE_BASE_TAG: ${{ vars.WINDOWS_UPGRADE_BASE_TAG }}
+          WINDOWS_UPGRADE_BASE_ASSET_NAME: ${{ vars.WINDOWS_UPGRADE_BASE_ASSET_NAME }}
+          WINDOWS_UPGRADE_BASE_SHA256: ${{ vars.WINDOWS_UPGRADE_BASE_SHA256 }}
+          WINDOWS_UPGRADE_BASE_COMMIT: ${{ vars.WINDOWS_UPGRADE_BASE_COMMIT }}
+        run: |
+          $baseTag = [string]$env:WINDOWS_UPGRADE_BASE_TAG
+          $assetName = [string]$env:WINDOWS_UPGRADE_BASE_ASSET_NAME
+          $expectedSha256 = ([string]$env:WINDOWS_UPGRADE_BASE_SHA256).Trim().ToUpperInvariant()
+          $expectedBaseCommit = ([string]$env:WINDOWS_UPGRADE_BASE_COMMIT).Trim().ToLowerInvariant()
+          if ($baseTag -notmatch '^v(?<version>\d+\.\d+\.\d+)$') {
+            throw 'WINDOWS_UPGRADE_BASE_TAG must use exact vX.Y.Z format'
+          }
+          $baseVersion = $Matches['version']
+          if ($assetName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*-setup\.exe$') {
+            throw 'WINDOWS_UPGRADE_BASE_ASSET_NAME must be one exact NSIS setup filename'
+          }
+          if ($expectedSha256 -notmatch '^[0-9A-F]{64}$') {
+            throw 'WINDOWS_UPGRADE_BASE_SHA256 must be exactly 64 hexadecimal characters'
+          }
+          if ($expectedBaseCommit -notmatch '^[0-9a-f]{40}$') {
+            throw 'WINDOWS_UPGRADE_BASE_COMMIT must be exactly 40 hexadecimal characters'
+          }
+          $candidateVersion = [string](Get-Content -Raw -LiteralPath 'app/src-tauri/tauri.conf.json' | ConvertFrom-Json).version
+          if ($candidateVersion -notmatch '^\d+\.\d+\.\d+$' -or $env:GITHUB_REF_NAME -ne "v$candidateVersion") {
+            throw 'Candidate installer version no longer matches the release tag'
+          }
+          if ([version]$baseVersion -ge [version]$candidateVersion) {
+            throw 'The protected Windows upgrade baseline must be older than the candidate'
+          }
+
+          $remoteTagLines = @(git ls-remote --tags origin "refs/tags/$baseTag" "refs/tags/$baseTag^{}")
+          if ($LASTEXITCODE -ne 0 -or $remoteTagLines.Count -eq 0) {
+            throw "Could not resolve protected upgrade baseline tag $baseTag"
+          }
+          $resolvedTagLine = @($remoteTagLines | Where-Object { $_ -match '\^\{\}$' } | Select-Object -First 1)
+          if ($resolvedTagLine.Count -eq 0) { $resolvedTagLine = @($remoteTagLines | Select-Object -First 1) }
+          $baseCommit = ([regex]::Split(([string]$resolvedTagLine[0]).Trim(), '\s+'))[0].ToLowerInvariant()
+          if ($baseCommit -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve the protected upgrade baseline commit'
+          }
+          if (-not [string]::Equals($baseCommit, $expectedBaseCommit, [System.StringComparison]::Ordinal)) {
+            throw 'Protected Windows upgrade baseline tag does not resolve to WINDOWS_UPGRADE_BASE_COMMIT'
+          }
+          git fetch --no-tags origin "refs/tags/$baseTag"
+          if ($LASTEXITCODE -ne 0) { throw "Could not fetch protected upgrade baseline tag $baseTag" }
+          git merge-base --is-ancestor $baseCommit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The protected Windows upgrade baseline is not an ancestor of the candidate release'
+          }
+          $releaseJson = gh release view $baseTag --json isDraft,isPrerelease,tagName,assets
+          if ($LASTEXITCODE -ne 0) { throw "Could not inspect protected upgrade baseline $baseTag" }
+          $releaseData = $releaseJson | ConvertFrom-Json
+          if ($releaseData.tagName -ne $baseTag -or $releaseData.isDraft -or $releaseData.isPrerelease) {
+            throw 'Windows upgrade baseline must be an exact published, non-prerelease release'
+          }
+          $matchingAssets = @($releaseData.assets | Where-Object { $_.name -eq $assetName })
+          if ($matchingAssets.Count -ne 1) {
+            throw "Expected exactly one protected upgrade baseline asset named $assetName"
+          }
+
+          $downloadRoot = Join-Path $env:RUNNER_TEMP 'waggle-windows-upgrade-baseline'
+          if (Test-Path -LiteralPath $downloadRoot) {
+            throw "Upgrade baseline directory already exists: $downloadRoot"
+          }
+          New-Item -ItemType Directory -Path $downloadRoot | Out-Null
+          gh release download $baseTag --pattern $assetName --dir $downloadRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the protected Windows upgrade baseline' }
+          $downloadedFiles = @(Get-ChildItem -LiteralPath $downloadRoot -File)
+          if ($downloadedFiles.Count -ne 1 -or $downloadedFiles[0].Name -ne $assetName) {
+            throw 'Downloaded Windows upgrade baseline identity is ambiguous'
+          }
+          $baseInstaller = $downloadedFiles[0]
+          $actualSha256 = (Get-FileHash -LiteralPath $baseInstaller.FullName -Algorithm SHA256).Hash
+          if (-not [string]::Equals($actualSha256, $expectedSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Downloaded Windows upgrade baseline does not match the protected SHA-256'
+          }
+          "installer_path=$($baseInstaller.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "base_version=$baseVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "base_commit=$baseCommit" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Certify Windows Solo installer lifecycle
+        id: certify-windows
+        shell: pwsh
+        env:
+          WINDOWS_UPGRADE_BASE_SHA256: ${{ vars.WINDOWS_UPGRADE_BASE_SHA256 }}
+          WAGGLE_UPGRADE_BASE_INSTALLER_PATH: ${{ steps.upgrade-baseline.outputs.installer_path }}
+          WAGGLE_UPGRADE_BASE_VERSION: ${{ steps.upgrade-baseline.outputs.base_version }}
+          WAGGLE_UPGRADE_BASE_COMMIT: ${{ steps.upgrade-baseline.outputs.base_commit }}
         run: |
           $installers = @(Get-ChildItem -LiteralPath 'app/src-tauri/target' -Recurse -Filter '*-setup.exe' -File | Where-Object { $_.DirectoryName -match '[\\/]bundle[\\/]nsis$' })
           if ($installers.Count -ne 1) { throw "Expected exactly one NSIS setup executable, found $($installers.Count)" }
           $installer = $installers[0]
-          & ./scripts/certify-windows-installer.ps1 -InstallerPath $installer.FullName -RequireAuthenticodeSignature -ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT -ExpectedSourceRevision $env:GITHUB_SHA -VerifyManagedModel
+          $candidateVersion = [string](Get-Content -Raw -LiteralPath 'app/src-tauri/tauri.conf.json' | ConvertFrom-Json).version
+          if ($candidateVersion -notmatch '^\d+\.\d+\.\d+$' -or $env:GITHUB_REF_NAME -ne "v$candidateVersion") {
+            throw 'Candidate installer version no longer matches the release tag'
+          }
+          $candidateSha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+          $cleanReceiptPath = Join-Path $installer.DirectoryName 'windows-installer-certificate.json'
+          $upgradeReceiptPath = Join-Path $installer.DirectoryName 'windows-installer-upgrade-certificate.json'
+
+          & ./scripts/certify-windows-installer.ps1 `
+            -InstallerPath $installer.FullName `
+            -ReceiptPath $cleanReceiptPath `
+            -RequireAuthenticodeSignature `
+            -ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT `
+            -ExpectedSourceRevision $env:GITHUB_SHA `
+            -VerifyManagedModel
+
+          & ./scripts/certify-windows-installer.ps1 `
+            -InstallerPath $installer.FullName `
+            -ReceiptPath $upgradeReceiptPath `
+            -RequireAuthenticodeSignature `
+            -ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT `
+            -ExpectedSourceRevision $env:GITHUB_SHA `
+            -RequireVersionToVersionUpgrade `
+            -PreviousInstallerPath $env:WAGGLE_UPGRADE_BASE_INSTALLER_PATH `
+            -ExpectedPreviousInstallerSha256 $env:WINDOWS_UPGRADE_BASE_SHA256 `
+            -ExpectedPreviousVersion $env:WAGGLE_UPGRADE_BASE_VERSION `
+            -ExpectedPreviousSourceRevision $env:WAGGLE_UPGRADE_BASE_COMMIT `
+            -ExpectedCandidateInstallerSha256 $candidateSha256 `
+            -ExpectedCandidateVersion $candidateVersion
+
+          $postCertificationSha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+          if (-not [string]::Equals($postCertificationSha256, $candidateSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Candidate installer changed during Windows lifecycle certification'
+          }
+          "candidate_sha256=$candidateSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "candidate_version=$candidateVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Attest certified Windows artifacts
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
@@ -223,13 +349,16 @@ jobs:
           subject-path: |
             app/src-tauri/target/**/bundle/nsis/*-setup.exe
             app/src-tauri/target/**/bundle/nsis/windows-installer-certificate.json
+            app/src-tauri/target/**/bundle/nsis/windows-installer-upgrade-certificate.json
 
       - name: Upload Windows lifecycle certificate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: waggle-windows-installer-certificate-${{ github.sha }}
-          path: app/src-tauri/target/**/bundle/nsis/windows-installer-certificate.json
+          path: |
+            app/src-tauri/target/**/bundle/nsis/windows-installer-certificate.json
+            app/src-tauri/target/**/bundle/nsis/windows-installer-upgrade-certificate.json
           if-no-files-found: error
           retention-days: 30
 
@@ -238,6 +367,16 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WINDOWS_UPGRADE_BASE_TAG: ${{ vars.WINDOWS_UPGRADE_BASE_TAG }}
+          WINDOWS_UPGRADE_BASE_ASSET_NAME: ${{ vars.WINDOWS_UPGRADE_BASE_ASSET_NAME }}
+          WINDOWS_UPGRADE_BASE_SHA256: ${{ vars.WINDOWS_UPGRADE_BASE_SHA256 }}
+          WINDOWS_UPGRADE_BASE_COMMIT: ${{ vars.WINDOWS_UPGRADE_BASE_COMMIT }}
+          WINDOWS_CODESIGN_APPROVED_THUMBPRINT: ${{ vars.WINDOWS_CODESIGN_APPROVED_THUMBPRINT }}
+          WAGGLE_UPGRADE_BASE_INSTALLER_PATH: ${{ steps.upgrade-baseline.outputs.installer_path }}
+          WAGGLE_UPGRADE_BASE_VERSION: ${{ steps.upgrade-baseline.outputs.base_version }}
+          WAGGLE_UPGRADE_BASE_COMMIT: ${{ steps.upgrade-baseline.outputs.base_commit }}
+          WAGGLE_CERTIFIED_CANDIDATE_SHA256: ${{ steps.certify-windows.outputs.candidate_sha256 }}
+          WAGGLE_CERTIFIED_CANDIDATE_VERSION: ${{ steps.certify-windows.outputs.candidate_version }}
         run: |
           function Assert-RemoteTagCommit {
             param([string]$Tag, [string]$ExpectedCommit)
@@ -251,46 +390,129 @@ jobs:
             }
           }
 
+          function Assert-ExpectedAuthenticodeSignature {
+            param([System.IO.FileInfo]$Artifact, [string]$ExpectedThumbprint)
+            $signature = Get-AuthenticodeSignature -FilePath $Artifact.FullName
+            $signerThumbprint = if ($null -eq $signature.SignerCertificate) { '' } else { $signature.SignerCertificate.Thumbprint }
+            if ($signature.Status -ne 'Valid' -or
+                -not [string]::Equals($signerThumbprint, $ExpectedThumbprint, [System.StringComparison]::OrdinalIgnoreCase) -or
+                $null -eq $signature.TimeStamperCertificate) {
+              throw "Artifact signature is no longer valid for the approved signer: $($Artifact.FullName)"
+            }
+          }
+
           $installers = @(Get-ChildItem -LiteralPath 'app/src-tauri/target' -Recurse -Filter '*-setup.exe' -File | Where-Object { $_.DirectoryName -match '[\\/]bundle[\\/]nsis$' })
           if ($installers.Count -ne 1) { throw "Expected exactly one certified NSIS installer, found $($installers.Count)" }
           $installer = $installers[0]
           $receipt = Get-Item -LiteralPath (Join-Path $installer.DirectoryName 'windows-installer-certificate.json')
-          $receiptData = Get-Content -Raw -LiteralPath $receipt.FullName | ConvertFrom-Json
-          if ($receiptData.schemaVersion -ne 2 -or $receiptData.status -ne 'passed') {
-            throw 'Windows lifecycle receipt is not a passing schema-v2 certificate'
+          $upgradeReceipt = Get-Item -LiteralPath (Join-Path $installer.DirectoryName 'windows-installer-upgrade-certificate.json')
+          $cleanReceiptData = Get-Content -Raw -LiteralPath $receipt.FullName | ConvertFrom-Json
+          $receiptData = Get-Content -Raw -LiteralPath $upgradeReceipt.FullName | ConvertFrom-Json
+          if ($cleanReceiptData.schemaVersion -ne 3 -or
+              $cleanReceiptData.certificationMode -ne 'same-version-repair' -or
+              $cleanReceiptData.status -ne 'passed') {
+            throw 'Windows clean-install receipt is not a passing schema-v3 certificate'
           }
-          if ($receiptData.evidence.sourceRevision -ne $env:GITHUB_SHA) {
-            throw 'Lifecycle receipt source revision does not match the release commit'
+          if ($receiptData.schemaVersion -ne 3 -or
+              $receiptData.certificationMode -ne 'version-to-version-upgrade' -or
+              $receiptData.status -ne 'passed') {
+            throw 'Windows lifecycle receipt is not a passing schema-v3 version-to-version certificate'
           }
-          if ($receiptData.installer.name -ne $installer.Name -or [int64]$receiptData.installer.sizeBytes -ne $installer.Length) {
-            throw 'Lifecycle receipt installer identity does not match the release artifact'
+          if ($receiptData.evidence.sourceRevision -ne $env:GITHUB_SHA -or
+              $cleanReceiptData.evidence.sourceRevision -ne $env:GITHUB_SHA) {
+            throw 'Lifecycle receipts do not match the release commit'
+          }
+          if ($receiptData.installer.name -ne $installer.Name -or
+              $cleanReceiptData.installer.name -ne $installer.Name -or
+              [int64]$receiptData.installer.sizeBytes -ne $installer.Length -or
+              [int64]$cleanReceiptData.installer.sizeBytes -ne $installer.Length) {
+            throw 'Lifecycle receipt installer identities do not match the release artifact'
+          }
+          $candidateVersion = [string](Get-Content -Raw -LiteralPath 'app/src-tauri/tauri.conf.json' | ConvertFrom-Json).version
+          if ($candidateVersion -notmatch '^\d+\.\d+\.\d+$' -or
+              $env:GITHUB_REF_NAME -ne "v$candidateVersion" -or
+              $env:WAGGLE_CERTIFIED_CANDIDATE_VERSION -ne $candidateVersion) {
+            throw 'Published candidate version is not independently bound to the release tag'
           }
           $installerSha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
-          if (-not [string]::Equals($installerSha256, [string]$receiptData.installer.sha256, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Certified installer hash no longer matches the lifecycle receipt'
+          if (-not [string]::Equals($installerSha256, $env:WAGGLE_CERTIFIED_CANDIDATE_SHA256, [System.StringComparison]::OrdinalIgnoreCase) -or
+              -not [string]::Equals($installerSha256, [string]$receiptData.installer.sha256, [System.StringComparison]::OrdinalIgnoreCase) -or
+              -not [string]::Equals($installerSha256, [string]$cleanReceiptData.installer.sha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Certified installer hash no longer matches both lifecycle receipts and the pre-publication output'
+          }
+          $baseInstaller = Get-Item -LiteralPath $env:WAGGLE_UPGRADE_BASE_INSTALLER_PATH
+          $baseSha256 = (Get-FileHash -LiteralPath $baseInstaller.FullName -Algorithm SHA256).Hash
+          if (-not [string]::Equals($env:WAGGLE_UPGRADE_BASE_COMMIT, $env:WINDOWS_UPGRADE_BASE_COMMIT, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Certified Windows upgrade baseline commit no longer matches the protected commit'
+          }
+          Assert-RemoteTagCommit $env:WINDOWS_UPGRADE_BASE_TAG $env:WAGGLE_UPGRADE_BASE_COMMIT
+          if ($env:WINDOWS_UPGRADE_BASE_TAG -notmatch '^v(?<version>\d+\.\d+\.\d+)$' -or
+              $Matches['version'] -ne [string]$receiptData.upgrade.previousVersion -or
+              $Matches['version'] -ne $env:WAGGLE_UPGRADE_BASE_VERSION -or
+              [string]$receiptData.upgrade.previousSourceRevision -ne $env:WAGGLE_UPGRADE_BASE_COMMIT -or
+              [string]$receiptData.upgrade.candidateVersion -ne $candidateVersion -or
+              [string]$receiptData.upgrade.observedPreviousVersion -ne [string]$receiptData.upgrade.previousVersion -or
+              [string]$receiptData.upgrade.observedCandidateVersion -ne [string]$receiptData.upgrade.candidateVersion) {
+            throw 'Lifecycle receipt does not bind the observed upgrade versions to the protected release versions'
+          }
+          if ($baseInstaller.Name -ne $env:WINDOWS_UPGRADE_BASE_ASSET_NAME -or
+              $receiptData.previousInstaller.name -ne $baseInstaller.Name -or
+              [int64]$receiptData.previousInstaller.sizeBytes -ne $baseInstaller.Length -or
+              -not [string]::Equals($baseSha256, $env:WINDOWS_UPGRADE_BASE_SHA256, [System.StringComparison]::OrdinalIgnoreCase) -or
+              -not [string]::Equals($baseSha256, [string]$receiptData.previousInstaller.sha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Lifecycle receipt previous installer does not match the protected upgrade baseline'
           }
           if ($receiptData.installer.authenticodeStatus -ne 'Valid' -or
               $receiptData.installedApp.authenticodeStatus -ne 'Valid' -or
+              $cleanReceiptData.installer.authenticodeStatus -ne 'Valid' -or
+              $cleanReceiptData.installedApp.authenticodeStatus -ne 'Valid' -or
+              $receiptData.previousInstaller.authenticodeStatus -ne 'Valid' -or
+              $receiptData.previousInstalledApp.authenticodeStatus -ne 'Valid' -or
               $receiptData.installer.signatureType -ne 'Authenticode' -or
-              $receiptData.installedApp.signatureType -ne 'Authenticode') {
-            throw 'Lifecycle receipt does not contain valid outer and installed-app signatures'
+              $receiptData.installedApp.signatureType -ne 'Authenticode' -or
+              $cleanReceiptData.installer.signatureType -ne 'Authenticode' -or
+              $cleanReceiptData.installedApp.signatureType -ne 'Authenticode' -or
+              $receiptData.previousInstaller.signatureType -ne 'Authenticode' -or
+              $receiptData.previousInstalledApp.signatureType -ne 'Authenticode') {
+            throw 'Lifecycle receipt does not contain valid previous and candidate signatures'
           }
-          foreach ($signerThumbprint in @($receiptData.installer.signerThumbprint, $receiptData.installedApp.signerThumbprint)) {
-            if (-not [string]::Equals([string]$signerThumbprint, $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT, [System.StringComparison]::OrdinalIgnoreCase)) {
+          $approvedThumbprint = ([string]$env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT -replace '\s', '').ToUpperInvariant()
+          if ($approvedThumbprint -notmatch '^[0-9A-F]{40}$') {
+            throw 'Protected publication signer thumbprint is invalid'
+          }
+          Assert-ExpectedAuthenticodeSignature $installer $approvedThumbprint
+          Assert-ExpectedAuthenticodeSignature $baseInstaller $approvedThumbprint
+          foreach ($signerThumbprint in @(
+            $receiptData.previousInstaller.signerThumbprint,
+            $receiptData.previousInstalledApp.signerThumbprint,
+            $receiptData.installer.signerThumbprint,
+            $receiptData.installedApp.signerThumbprint,
+            $cleanReceiptData.installer.signerThumbprint,
+            $cleanReceiptData.installedApp.signerThumbprint
+          )) {
+            if (-not [string]::Equals([string]$signerThumbprint, $approvedThumbprint, [System.StringComparison]::OrdinalIgnoreCase)) {
               throw 'Lifecycle receipt signer does not match the imported production certificate'
             }
           }
-          if ([string]::IsNullOrWhiteSpace([string]$receiptData.installer.timestampAuthorityThumbprint) -or
-              [string]::IsNullOrWhiteSpace([string]$receiptData.installedApp.timestampAuthorityThumbprint)) {
-            throw 'Lifecycle receipt is missing a validated Authenticode timestamp'
+          foreach ($timestampThumbprint in @(
+            $receiptData.previousInstaller.timestampAuthorityThumbprint,
+            $receiptData.previousInstalledApp.timestampAuthorityThumbprint,
+            $receiptData.installer.timestampAuthorityThumbprint,
+            $receiptData.installedApp.timestampAuthorityThumbprint,
+            $cleanReceiptData.installer.timestampAuthorityThumbprint,
+            $cleanReceiptData.installedApp.timestampAuthorityThumbprint
+          )) {
+            if ([string]::IsNullOrWhiteSpace([string]$timestampThumbprint)) {
+              throw 'Lifecycle receipt is missing a validated Authenticode timestamp'
+            }
           }
-          if ($receiptData.managedModelVerified -ne $true) {
-            throw 'Lifecycle receipt does not prove a managed local-model chat completion'
+          if ($cleanReceiptData.managedModelVerified -ne $true) {
+            throw 'Clean-install receipt does not prove a managed local-model chat completion'
           }
-          if ([string]$receiptData.managedModelDigest -notmatch '^sha256:[0-9a-f]{64}$') {
-            throw 'Lifecycle receipt does not bind the managed model to an immutable manifest digest'
+          if ([string]$cleanReceiptData.managedModelDigest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw 'Clean-install receipt does not bind the managed model to an immutable manifest digest'
           }
-          $requiredChecks = @(
+          $cleanRequiredChecks = @(
             'sourceRevision', 'sourceFilesClean', 'generatedInstallerInclude', 'profileDataDeletionAbsent',
             'baseAppDataDeletionNeutralized', 'authenticodeSignature', 'authenticodeSigner',
             'authenticodeTimestamp', 'installedAppAuthenticodeSignature',
@@ -300,13 +522,37 @@ jobs:
             'managedRuntimeCleanup', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
             'configuredDataDirPreserved', 'profileDataPathPreserved', 'environmentRestored'
           )
-          foreach ($checkName in $requiredChecks) {
-            $check = $receiptData.checks.PSObject.Properties[$checkName]
-            if ($null -eq $check -or $check.Value -ne $true) { throw "Lifecycle receipt check did not pass: $checkName" }
+          $upgradeRequiredChecks = @(
+            'sourceRevision', 'sourceFilesClean', 'generatedInstallerInclude', 'profileDataDeletionAbsent',
+            'baseAppDataDeletionNeutralized', 'authenticodeSignature', 'authenticodeSigner',
+            'authenticodeTimestamp', 'installedAppAuthenticodeSignature',
+            'installedAppAuthenticodeSigner', 'installedAppAuthenticodeTimestamp',
+            'previousInstallerHash', 'previousInstallerAuthenticodeSignature',
+            'previousInstallerAuthenticodeSigner', 'previousInstallerAuthenticodeTimestamp',
+            'previousInstalledAppAuthenticodeSignature', 'previousInstalledAppAuthenticodeSigner',
+            'previousInstalledAppAuthenticodeTimestamp', 'candidateInstallerHash', 'versionOrder', 'previousVersion',
+            'candidateVersion', 'previousInstall', 'previousLaunch', 'sameApprovedSigner',
+            'versionToVersionUpgrade', 'upgradeSameInstallDirectory', 'upgradeConfiguredDataPreserved',
+            'upgradeProfileDataPreserved', 'upgradeVaultKeyPreserved', 'upgradeRegistrations',
+            'candidateLaunch', 'relaunchAfterUpgrade',
+            'silentInstall', 'vaultKeyAclRestricted', 'windowsInboxTools', 'noModelChatSetupRequired',
+            'dockerIndependentRuntimePrerequisites', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
+            'configuredDataDirPreserved', 'profileDataPathPreserved', 'environmentRestored'
+          )
+          foreach ($checkName in $cleanRequiredChecks) {
+            $check = $cleanReceiptData.checks.PSObject.Properties[$checkName]
+            if ($null -eq $check -or $check.Value -ne $true) { throw "Clean-install receipt check did not pass: $checkName" }
           }
-          $nonPassingChecks = @($receiptData.checks.PSObject.Properties | Where-Object { $_.Value -ne $true })
+          foreach ($checkName in $upgradeRequiredChecks) {
+            $check = $receiptData.checks.PSObject.Properties[$checkName]
+            if ($null -eq $check -or $check.Value -ne $true) { throw "Upgrade receipt check did not pass: $checkName" }
+          }
+          $nonPassingChecks = @(
+            @($cleanReceiptData.checks.PSObject.Properties | Where-Object { $_.Value -ne $true }) +
+            @($receiptData.checks.PSObject.Properties | Where-Object { $_.Value -ne $true })
+          )
           if ($nonPassingChecks.Count -gt 0) {
-            throw "Lifecycle receipt contains non-passing checks: $($nonPassingChecks.Name -join ', ')"
+            throw "Lifecycle receipts contain non-passing checks: $($nonPassingChecks.Name -join ', ')"
           }
           $currentCertifierHash = (Get-FileHash -LiteralPath 'scripts/certify-windows-installer.ps1' -Algorithm SHA256).Hash
           $currentHookHash = (Get-FileHash -LiteralPath 'app/src-tauri/nsis/installer.nsi' -Algorithm SHA256).Hash
@@ -314,12 +560,14 @@ jobs:
           $generatedInstallerScripts = @(Get-ChildItem -LiteralPath (Join-Path $releaseDirectory 'nsis') -Recurse -Filter 'installer.nsi' -File)
           if ($generatedInstallerScripts.Count -ne 1) { throw 'Could not uniquely resolve generated NSIS source during publication' }
           $currentGeneratedInstallerHash = (Get-FileHash -LiteralPath $generatedInstallerScripts[0].FullName -Algorithm SHA256).Hash
-          if (-not [string]::Equals($currentCertifierHash, [string]$receiptData.evidence.certifierSha256, [System.StringComparison]::OrdinalIgnoreCase) -or
-              -not [string]::Equals($currentHookHash, [string]$receiptData.evidence.installerHookSha256, [System.StringComparison]::OrdinalIgnoreCase) -or
-              -not [string]::Equals($currentGeneratedInstallerHash, [string]$receiptData.evidence.generatedInstallerScriptSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Lifecycle receipt source hashes do not match the release checkout'
+          foreach ($certificateData in @($cleanReceiptData, $receiptData)) {
+            if (-not [string]::Equals($currentCertifierHash, [string]$certificateData.evidence.certifierSha256, [System.StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals($currentHookHash, [string]$certificateData.evidence.installerHookSha256, [System.StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals($currentGeneratedInstallerHash, [string]$certificateData.evidence.generatedInstallerScriptSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw 'Lifecycle receipt source hashes do not match the release checkout'
+            }
           }
-          $tag = '${{ github.ref_name }}'
+          $tag = $env:GITHUB_REF_NAME
           Assert-RemoteTagCommit $tag $env:GITHUB_SHA
           $releaseJson = gh release view $tag --json isDraft,tagName,assets 2>$null
           if ($LASTEXITCODE -ne 0) {
@@ -335,13 +583,14 @@ jobs:
           if ($releaseData.tagName -ne $tag) { throw "Release identity does not match tag $tag" }
           if (-not $releaseData.isDraft) { throw "Refusing to modify a published release: $tag" }
           $existingAssetNames = @($releaseData.assets | ForEach-Object { $_.name })
-          foreach ($assetName in @($installer.Name, $receipt.Name)) {
+          foreach ($assetName in @($installer.Name, $receipt.Name, $upgradeReceipt.Name)) {
             if ($existingAssetNames -contains $assetName) {
               throw "Refusing to replace existing release asset: $assetName"
             }
           }
+          Assert-RemoteTagCommit $env:WINDOWS_UPGRADE_BASE_TAG $env:WAGGLE_UPGRADE_BASE_COMMIT
           Assert-RemoteTagCommit $tag $env:GITHUB_SHA
-          gh release upload $tag $installer.FullName $receipt.FullName
+          gh release upload $tag $installer.FullName $receipt.FullName $upgradeReceipt.FullName
           if ($LASTEXITCODE -ne 0) { throw "Could not upload certified Windows assets to $tag" }
 
   build-macos:

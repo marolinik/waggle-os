@@ -1034,7 +1034,10 @@ describe('CI/CD Configuration', () => {
       const pruneIndex = windowsSteps.indexOf('Reclaim Windows build intermediates');
       const certificateIndex = windowsSteps.indexOf('certify-windows-installer.ps1');
       const signerCleanupIndex = windowsSteps.indexOf('Remove imported Windows code-signing certificates');
-      const receiptIndex = windowsSteps.indexOf('windows-installer-certificate.json');
+      const receiptIndex = windowsSteps.indexOf(
+        'windows-installer-certificate.json',
+        certificateIndex,
+      );
       const handoffIndex = windowsSteps.indexOf(handoff);
       const nextStepIndex = windowsSteps.indexOf('\n      - name:', handoffIndex + handoff.length);
       const handoffStep = windowsSteps.slice(
@@ -1089,12 +1092,56 @@ describe('CI/CD Configuration', () => {
         expect(windowsSteps).toContain('tauri.build-override.conf.json');
         expect(windowsSteps).toContain('-RequireAuthenticodeSignature');
         expect(windowsSteps).toContain('-ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT');
+        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_TAG');
+        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_ASSET_NAME');
+        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_SHA256');
+        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_COMMIT');
+        expect(windowsSteps).toContain('Download signed Windows upgrade baseline');
+        expect(windowsSteps).toContain('gh release view $baseTag');
+        expect(windowsSteps).toContain('isPrerelease');
+        expect(windowsSteps).toContain('gh release download $baseTag');
+        expect(windowsSteps).toContain('WAGGLE_UPGRADE_BASE_INSTALLER_PATH');
+        expect(windowsSteps).toContain('WAGGLE_UPGRADE_BASE_VERSION');
+        expect(windowsSteps).toContain('WAGGLE_UPGRADE_BASE_COMMIT');
+        expect(windowsSteps).toContain('git merge-base --is-ancestor $baseCommit $env:GITHUB_SHA');
+        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_COMMIT must be exactly 40 hexadecimal characters');
+        expect(windowsSteps).toContain('Protected Windows upgrade baseline tag does not resolve to WINDOWS_UPGRADE_BASE_COMMIT');
+        expect(windowsSteps).toContain('-RequireVersionToVersionUpgrade');
+        expect(windowsSteps).toContain('-PreviousInstallerPath $env:WAGGLE_UPGRADE_BASE_INSTALLER_PATH');
+        expect(windowsSteps).toContain('-ExpectedPreviousInstallerSha256 $env:WINDOWS_UPGRADE_BASE_SHA256');
+        expect(windowsSteps).toContain('-ExpectedPreviousVersion $env:WAGGLE_UPGRADE_BASE_VERSION');
+        expect(windowsSteps).toContain('-ExpectedPreviousSourceRevision $env:WAGGLE_UPGRADE_BASE_COMMIT');
+        expect(windowsSteps).toContain('-ExpectedCandidateInstallerSha256 $candidateSha256');
+        expect(windowsSteps).toContain('-ExpectedCandidateVersion $candidateVersion');
         expect(windowsSteps).toContain('-VerifyManagedModel');
+        expect(windowsSteps).toContain('windows-installer-upgrade-certificate.json');
+        expect([...windowsSteps.matchAll(/& \.\/scripts\/certify-windows-installer\.ps1/g)])
+          .toHaveLength(2);
         expect(windowsSteps).toContain('Refusing to prune outside the Tauri target');
         expect(windowsSteps).toContain('$minimumFreeBytes = 8GB');
         expect(handoffStep).toContain('isDraft');
         expect(handoffStep).toContain('Refusing to modify a published release');
-        expect(handoffStep).toContain('schemaVersion -ne 2');
+        expect(handoffStep).toContain('schemaVersion -ne 3');
+        expect(handoffStep).toContain("certificationMode -ne 'version-to-version-upgrade'");
+        expect(handoffStep).toContain("certificationMode -ne 'same-version-repair'");
+        expect(handoffStep).toContain('cleanReceiptData.managedModelVerified');
+        expect(handoffStep).toContain('windows-installer-upgrade-certificate.json');
+        expect(handoffStep).toContain('previousInstaller.sha256');
+        expect(handoffStep).toContain('previousInstalledApp.authenticodeStatus');
+        expect(handoffStep).toContain('upgrade.previousVersion');
+        expect(handoffStep).toContain('upgrade.candidateVersion');
+        expect(handoffStep).toContain('upgrade.previousSourceRevision');
+        expect(handoffStep).toContain('Assert-RemoteTagCommit $env:WINDOWS_UPGRADE_BASE_TAG');
+        expect(handoffStep).toContain('$env:WAGGLE_UPGRADE_BASE_COMMIT, $env:WINDOWS_UPGRADE_BASE_COMMIT');
+        expect(handoffStep).toContain('Assert-ExpectedAuthenticodeSignature $installer');
+        expect(handoffStep).toContain('Assert-ExpectedAuthenticodeSignature $baseInstaller');
+        expect(handoffStep).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
+        expect(handoffStep).toContain('$env:GITHUB_REF_NAME');
+        expect(handoffStep).not.toContain("$tag = '${{ github.ref_name }}'");
+        expect(handoffStep).toContain('versionToVersionUpgrade');
+        expect(handoffStep).toContain('upgradeConfiguredDataPreserved');
+        expect(handoffStep).toContain('upgradeProfileDataPreserved');
+        expect(handoffStep).toContain('upgradeVaultKeyPreserved');
         expect(handoffStep).toContain('installedApp.authenticodeStatus');
         expect(handoffStep).toContain("signatureType -ne 'Authenticode'");
         expect(handoffStep).toContain('nonPassingChecks');
@@ -1112,6 +1159,8 @@ describe('CI/CD Configuration', () => {
       } else {
         expect(windowsSteps).not.toContain('-RequireAuthenticodeSignature');
         expect(windowsSteps).not.toContain('-VerifyManagedModel');
+        expect(windowsSteps).not.toContain('-RequireVersionToVersionUpgrade');
+        expect(windowsSteps).not.toContain('-PreviousInstallerPath');
       }
     }
   });
@@ -1221,6 +1270,50 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain('RequireAuthenticodeSignature');
     expect(script).toContain('ExpectedSignerThumbprint');
     expect(script).toContain('ExpectedSourceRevision');
+    expect(script).toContain('RequireVersionToVersionUpgrade');
+    expect(script).toContain('PreviousInstallerPath');
+    expect(script).toContain('ExpectedPreviousInstallerSha256');
+    expect(script).toContain('ExpectedPreviousVersion');
+    expect(script).toContain('ExpectedPreviousSourceRevision');
+    expect(script).toContain('ExpectedCandidateInstallerSha256');
+    expect(script).toContain('ExpectedCandidateVersion');
+    expect(script).toContain('version-to-version-upgrade');
+    expect(script).toContain('Previous installer SHA-256 must be exactly 64 hexadecimal characters.');
+    expect(script).toContain('Candidate installer SHA-256 must be exactly 64 hexadecimal characters.');
+    expect(script).toContain('Previous source revision must be exactly 40 hexadecimal characters.');
+    expect(script).toContain('Previous installer and candidate installer must be distinct files.');
+    expect(script).toContain('Candidate version must be newer than the previous version.');
+    expect(script).toContain("$receipt.checks['previousInstallerHash']");
+    expect(script).toContain("$receipt.checks['previousInstallerAuthenticodeSignature']");
+    expect(script).toContain("$receipt.checks['previousInstalledAppAuthenticodeSignature']");
+    expect(script).toContain("$receipt.checks['versionOrder']");
+    expect(script).toContain("$receipt.checks['versionToVersionUpgrade']");
+    expect(script).toContain("$receipt.checks['upgradeSameInstallDirectory']");
+    expect(script).toContain("$receipt.checks['upgradeConfiguredDataPreserved']");
+    expect(script).toContain("$receipt.checks['upgradeProfileDataPreserved']");
+    expect(script).toContain("$receipt.checks['upgradeVaultKeyPreserved']");
+    expect(script).toContain("$receipt.checks['relaunchAfterUpgrade']");
+    expect(script).toContain('Candidate installer before upgrade');
+    expect(script).toContain('Candidate installer after upgrade');
+    expect(script).toContain('Candidate installer before repair');
+    expect(script).toContain('Candidate installer after repair');
+    expect(script).toContain('previousSourceRevision = $ExpectedPreviousSourceRevision');
+    expect(script).toContain('Remove-CertificationControlEnvironment');
+    expect(script).toContain("'^(?:ACTIONS_|GITHUB_|RUNNER_|WAGGLE_UPGRADE_BASE_)'");
+    expect(script).toContain("'GH_TOKEN', 'GITHUB_TOKEN'");
+    expect(script).toContain("$receipt.checks['candidateInstallerHash']");
+    const previousInstallIndex = script.indexOf('Invoke-RawProcess $PreviousInstallerPath');
+    const previousLaunchIndex = script.indexOf('$previousProcess = Start-InstalledApp');
+    const candidateInstallIndex = script.indexOf('Invoke-RawProcess $InstallerPath', previousInstallIndex);
+    const candidateLaunchIndex = script.indexOf('$firstProcess = Start-InstalledApp');
+    const candidateRepairIndex = script.lastIndexOf('Invoke-RawProcess $InstallerPath');
+    const uninstallIndex = script.indexOf("Invoke-RawProcess $registeredUninstaller '/S'");
+    expect(previousInstallIndex).toBeGreaterThanOrEqual(0);
+    expect(previousLaunchIndex).toBeGreaterThan(previousInstallIndex);
+    expect(candidateInstallIndex).toBeGreaterThan(previousLaunchIndex);
+    expect(candidateLaunchIndex).toBeGreaterThan(candidateInstallIndex);
+    expect(candidateRepairIndex).toBeGreaterThan(candidateLaunchIndex);
+    expect(uninstallIndex).toBeGreaterThan(candidateRepairIndex);
     expect(script).toContain('sourceFilesClean');
     expect(script).toContain("'scripts/build-sidecar.mjs'");
     expect(script).toContain("'packages/server/src/local/index.ts'");
@@ -1228,7 +1321,7 @@ describe('CI/CD Configuration', () => {
     expect(script).toMatch(
       /\$gitCommand\s*=\s*Get-Command git -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1/,
     );
-    expect(script).toContain('schemaVersion = 2');
+    expect(script).toContain('schemaVersion = 3');
     expect(script).toContain('-UseBasicParsing');
     expect(script).toContain('authenticodeStatus');
     expect(script).toContain('signerThumbprint');
@@ -1334,7 +1427,8 @@ describe('CI/CD Configuration', () => {
       'utf-8',
     );
 
-    expect(workflow).toMatch(/\$requiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
+    expect(workflow).toMatch(/\$cleanRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
+    expect(workflow).toMatch(/\$upgradeRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
   });
 });
 
