@@ -10,6 +10,7 @@ import {
   KnowledgeGraph,
   ImprovementSignalStore,
   createCoreLogger,
+  evaluateExternalMemoryIngress,
   type Embedder,
   TEMPORAL_GUIDANCE,
   renderReferenceDateLine,
@@ -926,6 +927,7 @@ export class Orchestrator {
     const importance = 'normal';
     const marker = `[Session summary — ${sessionKey}]`;
     const content = `${marker}\n\n${summary}`;
+    if (evaluateExternalMemoryIngress({ content }).action !== 'allow') return null;
 
     const frames = this.workspaceLayers?.frames ?? this.frames;
     const cognify = this.workspaceLayers?.cognify ?? this.cognify;
