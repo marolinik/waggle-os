@@ -15,7 +15,7 @@
  */
 
 import { COMPACTION_PROMPT } from './behavioral-spec.js';
-import { createCoreLogger } from '@waggle/core';
+import { createCoreLogger, evaluateExternalMemoryIngress } from '@waggle/core';
 const log = createCoreLogger('context-compressor');
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -57,6 +57,17 @@ export interface CompressionResult {
 export interface CompressibleMessage {
   role: string;
   content: string;
+}
+
+function previousSummarySystemMessage(previousSummary: string): string {
+  return `You are summarizing a conversation that has been compressed before. Here is the previous summary:\n\n${previousSummary}\n\nNow incorporate the new messages below into an updated summary.`;
+}
+
+function safePreviousSummary(previousSummary?: string | null): string | null {
+  if (previousSummary === undefined || previousSummary === null) return null;
+  return evaluateExternalMemoryIngress({ content: previousSummarySystemMessage(previousSummary) }).action === 'allow'
+    ? previousSummary
+    : null;
 }
 
 // ── Step 1: Token Estimation ─────────────────────────────────────────────
@@ -238,6 +249,7 @@ export async function summarizeMiddle(
   config: Pick<CompressionConfig, 'budgetModel' | 'litellmUrl' | 'litellmApiKey' | 'fetch'>,
   previousSummary?: string | null,
 ): Promise<string> {
+  previousSummary = safePreviousSummary(previousSummary);
   if (middle.length === 0) return previousSummary ?? '';
 
   const fetchFn = config.fetch ?? globalThis.fetch;
@@ -249,7 +261,7 @@ export async function summarizeMiddle(
   if (previousSummary) {
     summarizerMessages.push({
       role: 'system',
-      content: `You are summarizing a conversation that has been compressed before. Here is the previous summary:\n\n${previousSummary}\n\nNow incorporate the new messages below into an updated summary.`,
+      content: previousSummarySystemMessage(previousSummary),
     });
   }
 
@@ -372,6 +384,7 @@ export async function compressConversation(
   previousSummary?: string | null,
 ): Promise<CompressionResult> {
   const originalTokens = estimateTokens(messages);
+  const safeSummary = safePreviousSummary(previousSummary);
 
   // Step 1: Detect — do we need compression?
   if (!needsCompression(messages, config)) {
@@ -381,7 +394,7 @@ export async function compressConversation(
       originalTokens,
       compressedTokens: originalTokens,
       summaryGenerated: false,
-      summary: previousSummary ?? null,
+      summary: safeSummary,
     };
   }
 
@@ -403,18 +416,30 @@ export async function compressConversation(
       originalTokens,
       compressedTokens: estimateTokens(result),
       summaryGenerated: false,
-      summary: previousSummary ?? null,
+      summary: safeSummary,
     };
   }
 
   // Step 4: Summarize the middle
-  const summary = await summarizeMiddle(regions.middle, config, previousSummary);
+  const summary = await summarizeMiddle(regions.middle, config, safeSummary);
 
   // Step 5: Inject — replace middle with a single summary message
   const summaryMessage: CompressibleMessage = {
     role: 'system',
     content: `[Conversation compressed — ${regions.middle.length} messages summarized]\n\n${summary}`,
   };
+
+  if (evaluateExternalMemoryIngress({ content: summaryMessage.content }).action !== 'allow') {
+    const messagesWithoutSummary = [...regions.head, ...regions.tail];
+    return {
+      messages: messagesWithoutSummary,
+      compressed: true,
+      originalTokens,
+      compressedTokens: estimateTokens(messagesWithoutSummary),
+      summaryGenerated: false,
+      summary: null,
+    };
+  }
 
   const compressed = [...regions.head, summaryMessage, ...regions.tail];
   const compressedTokens = estimateTokens(compressed);
