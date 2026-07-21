@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { FrameStore, SessionStore } from '@waggle/core';
+import { evaluateExternalMemoryIngress, FrameStore, SessionStore } from '@waggle/core';
 import type { CollaborationRunMemoryRefs, CollaborationWorkerRun, WaggleMessage } from '@waggle/shared';
 import {
   SubagentOrchestrator,
@@ -49,6 +49,8 @@ interface GroupRunContext {
 
 const STRATEGIES = ['parallel', 'sequential', 'coordinator'] as const;
 type GroupStrategy = typeof STRATEGIES[number];
+const QUARANTINED_AGENT_RESULT = '[Quarantined agent result: unsafe external content]';
+const QUARANTINED_AGENT_ERROR = '[Quarantined agent error: unsafe external content]';
 
 function isStrategy(value: string): value is GroupStrategy {
   return STRATEGIES.includes(value as GroupStrategy);
@@ -87,6 +89,26 @@ function snapshotWorkers(orchestrator: SubagentOrchestrator): Record<string, unk
     usage: worker.usage,
     model: worker.model,
   }));
+}
+
+function guardAgentOutput(text: string, kind: 'result' | 'error'): string {
+  if (evaluateExternalMemoryIngress({ content: text }).action === 'allow') return text;
+  return kind === 'result' ? QUARANTINED_AGENT_RESULT : QUARANTINED_AGENT_ERROR;
+}
+
+function guardAgentRunner(runLoop: AgentRunner): AgentRunner {
+  return async (config) => {
+    try {
+      const response = await runLoop(config);
+      const content = guardAgentOutput(response.content, 'result');
+      return content === response.content ? response : { ...response, content };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const durableMessage = guardAgentOutput(message, 'error');
+      if (durableMessage === message) throw error;
+      throw new Error(durableMessage);
+    }
+  };
 }
 
 function getGroupsPath(dataDir: string): string {
@@ -300,7 +322,7 @@ async function executeGroup(
       }, { once: true });
     }
 
-    const runLoop: AgentRunner = server.agentRunner ?? runAgentLoop;
+    const runLoop = guardAgentRunner(server.agentRunner ?? runAgentLoop);
     let availableTools = server.agentState.allTools;
     let sessionOrchestrator: ReturnType<FastifyInstance['agentState']['createSessionOrchestrator']> | undefined;
     let workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0] | undefined;
@@ -371,7 +393,8 @@ async function executeGroup(
       );
     });
 
-    const { results, aggregated } = await orchestrator.runWorkflow(workflow);
+    const { results, aggregated: rawAggregated } = await orchestrator.runWorkflow(workflow);
+    const aggregated = guardAgentOutput(rawAggregated, 'result');
     const workers = snapshotWorkers(orchestrator);
     const failed = Array.from(results.values()).some((worker) => worker.status === 'failed');
     if (runContext && workspaceMind) {
@@ -396,13 +419,14 @@ async function executeGroup(
       });
     }
   } catch (error) {
+    const durableError = guardAgentOutput(error instanceof Error ? error.message : String(error), 'error');
     if (runContext) {
       for (const run of runContext.runs.values()) {
         const current = server.agentRunRegistry.get(run.id);
         if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
           server.agentRunRegistry.update(run.id, {
             status: signal.aborted ? 'cancelled' : 'failed',
-            result: { error: error instanceof Error ? error.message : String(error) },
+            result: { error: durableError },
           });
         }
       }
@@ -411,7 +435,7 @@ async function executeGroup(
       server.localJobStore.update(jobId, {
         status: 'failed',
         completedAt: new Date().toISOString(),
-        output: { error: error instanceof Error ? error.message : String(error) },
+        output: { error: durableError },
       });
     }
   } finally {
