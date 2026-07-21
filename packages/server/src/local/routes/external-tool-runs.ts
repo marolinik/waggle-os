@@ -1,14 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { FrameStore, SessionStore } from '@waggle/core';
+import { evaluateExternalMemoryIngress, FrameStore, SessionStore } from '@waggle/core';
 import {
   classifyRateLimitError,
   detectInstalledTools,
   getToolRegistry,
   resolveWaggleRuntime,
   runExternalTool,
-  scanForInjection,
   type ExternalRunEvent,
   type ExternalToolRunRequest,
   type ExternalToolRunResult,
@@ -593,6 +592,8 @@ async function executeExternalRun(
     });
 
     const status = resultStatus(result);
+    const originalSummaryIngress = evaluateExternalMemoryIngress({ content: result.summary });
+    const durableResult = sanitizeExternalResult(result);
     if (status === 'completed') {
       server.executorRegistry?.noteHealthy(manifest.id);
     } else if (status === 'failed') {
@@ -604,46 +605,55 @@ async function executeExternalRun(
     server.agentRunRegistry.update(run.id, {
       status,
       result: {
-        summary: result.summary,
-        sessionId: result.sessionId,
-        exitCode: result.exitCode,
-        ...(status === 'failed' ? { error: result.error || result.stderrTail || result.summary || `${manifest.displayName} failed` } : {}),
+        summary: durableResult.summary,
+        sessionId: durableResult.sessionId,
+        exitCode: durableResult.exitCode,
+        ...(status === 'failed' ? {
+          error: durableResult.error || durableResult.stderrTail || durableResult.summary || `${manifest.displayName} failed`,
+        } : {}),
       },
       progress: null,
     });
     if (traceId !== undefined) {
       server.traceStore?.finalize(traceId, {
         outcome: status === 'completed' ? 'success' : 'abandoned',
-        output: result.summary,
+        output: durableResult.summary,
         tags: [`external-tool:${manifest.id}`, `room:${run.roomId}`, `status:${status}`],
       });
     }
 
     const current = server.agentRunRegistry.get(run.id) as CollaborationWorkerRun;
-    const recorder = server.externalResultRecorder ?? ((input) => recordResultToMinds(server, input));
+    const recorder = server.externalResultRecorder
+      ?? ((input) => recordResultToMinds(server, input, originalSummaryIngress.scan));
     try {
-      const memoryRefs = await recorder({ run: current, prompt: options.prompt, result });
+      const memoryRefs = await recorder({ run: current, prompt: options.prompt, result: durableResult });
       server.agentRunRegistry.update(run.id, { memoryRefs });
     } catch (err) {
+      const recorderError = sanitizeExternalText(err instanceof Error ? err.message : String(err));
       server.agentRunRegistry.update(run.id, {
         memoryRefs: { status: 'failed' },
-        result: { error: err instanceof Error ? err.message : String(err) },
+        result: { error: recorderError },
       });
     }
     publishDance(server, {
       senderId: `run::${run.id}`, type: 'broadcast', subtype: 'routed_share',
       roomId: run.roomId, runId: run.id, workspaceId: run.workspaceId, toolId: manifest.id,
       referenceId: options.assignmentId,
-      content: { phase: status, result: sanitizeExternalText(result.summary), sessionId: result.sessionId ?? null },
+      content: {
+        phase: status,
+        result: durableResult.summary,
+        sessionId: durableResult.sessionId ?? null,
+      },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const rawMessage = err instanceof Error ? err.message : String(err);
     if (!controller.signal.aborted) {
-      const assessment = classifyRateLimitError(message, Date.now());
+      const assessment = classifyRateLimitError(rawMessage, Date.now());
       if (assessment.isRateLimit) {
         server.executorRegistry?.noteRateLimit(manifest.id, assessment.resetAtMs);
       }
     }
+    const message = sanitizeExternalText(rawMessage);
     const current = server.agentRunRegistry.get(run.id);
     if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
       server.agentRunRegistry.update(run.id, {
@@ -674,10 +684,11 @@ function handleExternalEvent(
   assignmentId?: string,
 ): void {
   if (event.type === 'started') {
+    const message = sanitizeExternalText(event.text ?? 'Started');
     server.agentRunRegistry.update(runId, {
       status: 'running',
       executor: event.pid ? { pid: event.pid } : undefined,
-      progress: { message: event.text ?? 'Started', phase: 'running' },
+      progress: { message, phase: 'running' },
     });
     publishDance(server, {
       senderId: `run::${runId}`, type: 'response', subtype: 'task_claim',
@@ -688,18 +699,19 @@ function handleExternalEvent(
   }
   if (event.type === 'progress' || event.type === 'message' || event.type === 'tool') {
     const current = server.agentRunRegistry.get(runId);
+    const message = sanitizeExternalText(event.text ?? event.type);
     const toolsUsed = event.type === 'tool'
-      ? [...new Set([...(current?.metrics?.toolsUsed ?? []), event.text ?? 'tool'])]
+      ? [...new Set([...(current?.metrics?.toolsUsed ?? []), message])]
       : current?.metrics?.toolsUsed;
     const phase = event.stalled === undefined ? event.type : event.stalled ? 'stalled' : 'running';
     server.agentRunRegistry.update(runId, {
-      progress: { message: event.text ?? event.type, phase },
+      progress: { message, phase },
       ...(toolsUsed ? { metrics: { toolsUsed } } : {}),
     });
     publishDance(server, {
       senderId: `run::${runId}`, type: 'broadcast', subtype: 'discovery',
       roomId: event.roomId, runId, workspaceId: event.workspaceId, toolId: event.toolId,
-      referenceId: assignmentId, content: { phase: event.type, message: sanitizeExternalText(event.text ?? '') },
+      referenceId: assignmentId, content: { phase: event.type, message },
     });
   }
 }
@@ -707,19 +719,20 @@ function handleExternalEvent(
 async function recordResultToMinds(
   server: FastifyInstance,
   input: { run: CollaborationWorkerRun; prompt: string; result: ExternalToolRunResult },
+  originalSummaryScan: ReturnType<typeof evaluateExternalMemoryIngress>['scan'],
 ): Promise<CollaborationRunMemoryRefs> {
-  const scan = scanForInjection(input.result.summary, 'tool_output');
-  const safeSummary = scan.safe
+  const durableIngress = evaluateExternalMemoryIngress({ content: input.result.summary });
+  const safeSummary = durableIngress.action === 'allow'
     ? input.result.summary
-    : `[Quarantined external result: ${scan.flags.join(', ') || 'injection risk'}]`;
+    : `[Quarantined external result: ${durableIngress.scan.flags.join(', ') || 'injection risk'}]`;
   const metadata = JSON.stringify({
     runId: input.run.id,
     roomId: input.run.roomId,
     workspaceId: input.run.workspaceId,
     toolId: input.run.executor.toolId,
-    externalSessionId: input.result.sessionId ?? null,
+    externalSessionId: safeExternalSessionId(input.result.sessionId) ?? null,
     ...(input.run.attribution ?? {}),
-    injection: scan,
+    injection: originalSummaryScan,
   });
   const personalFrameIds: number[] = [];
   const workspaceFrameIds: Record<string, number[]> = {};
@@ -837,9 +850,32 @@ function resultStatus(result: ExternalToolRunResult): CollaborationRunStatus {
   return 'failed';
 }
 
+function safeExternalSessionId(value: string | undefined): string | undefined {
+  if (!value || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(value)) return undefined;
+  if (evaluateExternalMemoryIngress({ content: value }).action !== 'allow') return undefined;
+  const semanticProjection = value.replace(/[._-]+/g, ' ');
+  if (evaluateExternalMemoryIngress({ content: semanticProjection }).action !== 'allow') return undefined;
+  return value;
+}
+
+function sanitizeExternalResult(result: ExternalToolRunResult): ExternalToolRunResult {
+  const { summary, error, sessionId, stdoutTail, stderrTail, ...stable } = result;
+  const safeSessionId = safeExternalSessionId(sessionId);
+  return {
+    ...stable,
+    summary: sanitizeExternalText(summary),
+    stdoutTail: sanitizeExternalText(stdoutTail),
+    stderrTail: sanitizeExternalText(stderrTail),
+    ...(error ? { error: sanitizeExternalText(error) } : {}),
+    ...(safeSessionId ? { sessionId: safeSessionId } : {}),
+  };
+}
+
 function sanitizeExternalText(text: string): string {
-  const scan = scanForInjection(text, 'tool_output');
-  return scan.safe ? text : `[Quarantined external output: ${scan.flags.join(', ') || 'injection risk'}]`;
+  const ingress = evaluateExternalMemoryIngress({ content: text });
+  return ingress.action === 'allow'
+    ? text
+    : `[Quarantined external output: ${ingress.scan.flags.join(', ') || 'injection risk'}]`;
 }
 
 function localApiBase(server: FastifyInstance): string {
