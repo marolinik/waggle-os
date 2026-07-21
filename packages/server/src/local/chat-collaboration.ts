@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { FrameStore, SessionStore } from '@waggle/core';
+import { evaluateExternalMemoryIngress, FrameStore, SessionStore } from '@waggle/core';
 import {
   createSubAgentTools,
   createWorkflowTools,
@@ -23,6 +23,26 @@ const COLLABORATION_TOOL_NAMES = new Set([
   'compose_workflow', 'orchestrate_workflow', 'list_harnesses', 'run_harness',
 ]);
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
+const QUARANTINED_AGENT_INPUT = '[Quarantined agent input: unsafe external content]';
+const QUARANTINED_AGENT_RESULT = '[Quarantined agent result: unsafe external content]';
+const QUARANTINED_AGENT_ERROR = '[Quarantined agent error: unsafe external content]';
+
+type CollaborationTextKind = 'input' | 'result' | 'error';
+
+function guardCollaborationText(text: string, kind: CollaborationTextKind): string {
+  if (evaluateExternalMemoryIngress({ content: text }).action === 'allow') return text;
+  if (kind === 'result') return QUARANTINED_AGENT_RESULT;
+  if (kind === 'error') return QUARANTINED_AGENT_ERROR;
+  return QUARANTINED_AGENT_INPUT;
+}
+
+function guardOptionalText(text: string | undefined, kind: CollaborationTextKind): string | undefined {
+  return text === undefined ? undefined : guardCollaborationText(text, kind);
+}
+
+function guardTextList(values: string[]): string[] {
+  return values.map((value) => guardCollaborationText(value, 'input'));
+}
 
 export interface ChatCollaborationSecurityContext {
   hooks?: HookRegistry;
@@ -76,6 +96,10 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       task: string;
       model: string;
     }) {
+      const durableName = guardCollaborationText(input.name, 'input');
+      const durableRole = guardCollaborationText(input.role, 'input');
+      const durableTask = guardCollaborationText(input.task, 'input');
+      const durableModel = guardCollaborationText(input.model, 'input');
       const priorRoom = subagentRoom ? server.agentRunRegistry.get(subagentRoom.id) : undefined;
       if (!subagentRoom || !priorRoom || TERMINAL.has(priorRoom.status)) {
         subagentRoom = server.agentRunRegistry.createRoom({
@@ -95,18 +119,18 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         executor: {
           kind: 'waggle_agent',
           agentId: input.provisionalAgentId,
-          personaId: input.role,
-          model: input.model,
+          personaId: durableRole,
+          model: durableModel,
         },
-        title: input.name,
-        task: input.task,
+        title: durableName,
+        task: durableTask,
         capabilities: { cancel: true },
       });
       const unregister = server.agentRunRegistry.registerControls(run.id, {
         cancel: () => controller.abort(),
       });
       const assignment = publishDance(server, run, 'request', 'task_delegation', {
-        task: input.task, phase: 'queued', role: input.role, model: input.model,
+        task: durableTask, phase: 'queued', role: durableRole, model: durableModel,
         parentSessionId,
       });
       subagentAssignments.set(run.id, assignment?.id);
@@ -116,11 +140,11 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         progress: { message: 'Sub-agent started', phase: 'running' },
       });
       publishDance(server, run, 'response', 'task_claim', {
-        phase: 'running', role: input.role, parentSessionId,
+        phase: 'running', role: durableRole, parentSessionId,
       }, assignment?.id);
       emitSubagentStatus(server, workspaceId, [{
-        id: run.id, name: input.name, role: input.role, status: 'running',
-        task: input.task, toolsUsed: [], startedAt: Date.now(),
+        id: run.id, name: durableName, role: durableRole, status: 'running',
+        task: durableTask, toolsUsed: [], startedAt: Date.now(),
       }]);
       return { runId: run.id, signal: controller.signal, dispose: unregister };
     },
@@ -134,12 +158,14 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     }) {
       const current = workerRun(server.agentRunRegistry.get(handle.runId));
       if (!current || TERMINAL.has(current.status)) return;
-      const memoryRefs = recordResult(server, current, workspaceId, current.task, result.response, 'Chat sub-agent');
+      const durableResult = guardCollaborationText(result.response, 'result');
+      const durableTools = guardTextList(result.toolsUsed);
+      const memoryRefs = recordResult(server, current, workspaceId, current.task, durableResult, 'Chat sub-agent');
       server.agentRunRegistry.update(current.id, {
         status: 'completed',
-        result: { summary: result.response, sessionId: parentSessionId },
+        result: { summary: durableResult, sessionId: parentSessionId },
         metrics: {
-          toolsUsed: result.toolsUsed,
+          toolsUsed: durableTools,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
         },
@@ -147,13 +173,14 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         progress: null,
       });
       emitSubagentStatus(server, workspaceId, [{
-        id: current.id, name: result.agentName, role: result.role, status: 'done',
-        task: current.task, toolsUsed: result.toolsUsed,
+        id: current.id, name: current.title,
+        role: current.executor.personaId ?? 'agent', status: 'done',
+        task: current.task, toolsUsed: durableTools,
         startedAt: current.startedAt ? Date.parse(current.startedAt) : undefined,
         completedAt: result.completedAt,
       }]);
       publishDance(server, current, 'broadcast', 'routed_share', {
-        phase: 'completed', result: result.response, parentSessionId,
+        phase: 'completed', result: durableResult, parentSessionId,
       }, subagentAssignments.get(current.id));
     },
     fail(handle: { runId: string; signal?: AbortSignal }, input: {
@@ -167,19 +194,21 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       const current = workerRun(server.agentRunRegistry.get(handle.runId));
       if (!current || TERMINAL.has(current.status)) return;
       const status = input.cancelled || handle.signal?.aborted ? 'cancelled' : 'failed';
+      const durableError = guardCollaborationText(input.error, 'error');
       server.agentRunRegistry.update(current.id, {
         status,
-        result: { error: input.error, summary: input.error, sessionId: parentSessionId },
+        result: { error: durableError, summary: durableError, sessionId: parentSessionId },
         progress: null,
       });
       emitSubagentStatus(server, workspaceId, [{
-        id: current.id, name: input.name, role: input.role, status: 'failed',
-        task: input.task, toolsUsed: [],
+        id: current.id, name: current.title,
+        role: current.executor.personaId ?? 'agent', status: 'failed',
+        task: current.task, toolsUsed: [],
         startedAt: current.startedAt ? Date.parse(current.startedAt) : undefined,
         completedAt: input.completedAt,
       }]);
       publishDance(server, current, 'broadcast', 'routed_share', {
-        phase: status, error: input.error, parentSessionId,
+        phase: status, error: durableError, parentSessionId,
       }, subagentAssignments.get(current.id));
     },
     list() {
@@ -196,11 +225,13 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     start(input: { workflowName: string; task: string; template: {
       steps: Array<{ name: string; role: string; task: string; model?: string }>;
     } }) {
+      const durableWorkflowName = guardCollaborationText(input.workflowName, 'input');
+      const durableWorkflowTask = guardCollaborationText(input.task, 'input');
       const room = server.agentRunRegistry.createRoom({
         workspaceIds: [workspaceId],
         source: 'workflow',
-        title: input.workflowName,
-        task: input.task,
+        title: durableWorkflowName,
+        task: durableWorkflowTask,
         executor: { kind: 'coordinator' },
         capabilities: { cancel: true },
       });
@@ -208,16 +239,20 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       const workers = new Map<string, CollaborationWorkerRun>();
       const assignments = new Map<string, string | undefined>();
       for (const step of input.template.steps) {
+        const durableName = guardCollaborationText(step.name, 'input');
+        const durableRole = guardCollaborationText(step.role, 'input');
+        const durableTask = guardCollaborationText(step.task, 'input');
+        const durableModel = guardCollaborationText(step.model ?? model, 'input');
         const run = server.agentRunRegistry.createWorker({
           parentRunId: room.id,
           workspaceId,
           source: 'workflow',
           executor: {
-            kind: 'waggle_agent', personaId: step.role,
-            agentId: `workflow:${step.name}`, model: step.model ?? model,
+            kind: 'waggle_agent', personaId: durableRole,
+            agentId: `workflow:${durableName}`, model: durableModel,
           },
-          title: step.name,
-          task: step.task,
+          title: durableName,
+          task: durableTask,
           // The current orchestrator has one shared AbortSignal. Individual
           // cancellation would falsely imply isolation, so only the Room can cancel.
           capabilities: { cancel: false },
@@ -225,8 +260,8 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         server.agentRunRegistry.update(run.id, { result: { sessionId: parentSessionId } });
         workers.set(step.name, run);
         const assignment = publishDance(server, run, 'request', 'task_delegation', {
-          task: step.task, phase: 'queued', role: step.role,
-          model: step.model ?? model, parentSessionId,
+          task: durableTask, phase: 'queued', role: durableRole,
+          model: durableModel, parentSessionId,
         });
         assignments.set(step.name, assignment?.id);
       }
@@ -291,16 +326,20 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
           : event.workerState.status === 'failed'
             ? 'failed'
             : event.workerState.status === 'running' ? 'running' : 'queued';
-      const memoryRefs = status === 'completed' && event.workerState.result
-        ? recordResult(server, current, workspaceId, current.task, event.workerState.result, 'Workflow worker')
+      const durableResult = guardOptionalText(event.workerState.result, 'result');
+      const durableError = guardOptionalText(event.workerState.error, 'error');
+      const durableModel = guardOptionalText(event.workerState.model, 'input');
+      const durableTools = guardTextList(event.workerState.toolsUsed);
+      const memoryRefs = status === 'completed' && durableResult
+        ? recordResult(server, current, workspaceId, current.task, durableResult, 'Workflow worker')
         : undefined;
       server.agentRunRegistry.update(current.id, {
         status,
-        executor: { model: event.workerState.model },
-        ...(event.workerState.result ? { result: { summary: event.workerState.result, sessionId: parentSessionId } } : {}),
-        ...(event.workerState.error ? { result: { error: event.workerState.error, sessionId: parentSessionId } } : {}),
+        executor: { model: durableModel },
+        ...(durableResult ? { result: { summary: durableResult, sessionId: parentSessionId } } : {}),
+        ...(durableError ? { result: { error: durableError, sessionId: parentSessionId } } : {}),
         metrics: {
-          toolsUsed: event.workerState.toolsUsed,
+          toolsUsed: durableTools,
           inputTokens: event.workerState.usage.inputTokens,
           outputTokens: event.workerState.usage.outputTokens,
         },
@@ -308,23 +347,23 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         progress: status === 'running' ? { message: 'Workflow worker running', phase: 'running' } : null,
       });
       emitSubagentStatus(server, workspaceId, [{
-        id: current.id, name: event.workerState.name, role: event.workerState.role,
+        id: current.id, name: current.title, role: current.executor.personaId ?? 'agent',
         status: status === 'completed'
           ? 'done'
           : status === 'failed' || status === 'cancelled'
             ? 'failed'
             : status === 'running' ? 'running' : 'pending',
-        task: event.workerState.task, toolsUsed: event.workerState.toolsUsed,
+        task: current.task, toolsUsed: durableTools,
         startedAt: event.workerState.startedAt, completedAt: event.workerState.completedAt,
       }]);
       if (status === 'running') {
         publishDance(server, current, 'response', 'task_claim', {
-          phase: status, role: event.workerState.role, parentSessionId,
+          phase: status, role: current.executor.personaId ?? 'agent', parentSessionId,
         }, context.assignments.get(event.workerState.name));
       } else if (TERMINAL.has(status)) {
         publishDance(server, current, 'broadcast', 'routed_share', {
-          phase: status, result: event.workerState.result ?? null,
-          error: event.workerState.error ?? null, parentSessionId,
+          phase: status, result: durableResult ?? null,
+          error: durableError ?? null, parentSessionId,
         }, context.assignments.get(event.workerState.name));
       }
     },
@@ -332,11 +371,12 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       const context = workflowContexts.get(handle.runId);
       const current = context ? server.agentRunRegistry.get(context.room.id) : undefined;
       if (!context || !current || current.status === 'cancelled') return;
-      const memoryRefs = output.aggregated
-        ? recordResult(server, context.room, workspaceId, context.room.task, output.aggregated, 'Workflow aggregate')
+      const durableAggregate = guardCollaborationText(output.aggregated, 'result');
+      const memoryRefs = durableAggregate
+        ? recordResult(server, context.room, workspaceId, context.room.task, durableAggregate, 'Workflow aggregate')
         : { status: 'failed' as const, personalFrameIds: [], workspaceFrameIds: {} };
       server.agentRunRegistry.update(context.room.id, {
-        result: { summary: output.aggregated, sessionId: parentSessionId },
+        result: { summary: durableAggregate, sessionId: parentSessionId },
         memoryRefs,
         progress: null,
       });
@@ -344,16 +384,17 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     fail(handle: { runId: string }, error: Error) {
       const context = workflowContexts.get(handle.runId);
       if (!context) return;
+      const durableError = guardCollaborationText(error.message, 'error');
       for (const worker of context.workers.values()) {
         const current = server.agentRunRegistry.get(worker.id);
         if (current && !TERMINAL.has(current.status)) {
           server.agentRunRegistry.update(worker.id, {
             status: context.controller.signal.aborted ? 'cancelled' : 'failed',
-            result: { error: error.message, sessionId: parentSessionId },
+            result: { error: durableError, sessionId: parentSessionId },
           });
         }
       }
-      server.agentRunRegistry.update(context.room.id, { result: { error: error.message, sessionId: parentSessionId } });
+      server.agentRunRegistry.update(context.room.id, { result: { error: durableError, sessionId: parentSessionId } });
     },
   };
 
@@ -370,12 +411,13 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       onSubAgentTool: (runId, name) => {
         const current = workerRun(server.agentRunRegistry.get(runId));
         if (!current || TERMINAL.has(current.status)) return;
-        const toolsUsed = [...new Set([...(current.metrics?.toolsUsed ?? []), name])];
+        const durableName = guardCollaborationText(name, 'input');
+        const toolsUsed = [...new Set([...(current.metrics?.toolsUsed ?? []), durableName])];
         server.agentRunRegistry.update(runId, {
-          progress: { message: name, phase: 'tool' }, metrics: { toolsUsed },
+          progress: { message: durableName, phase: 'tool' }, metrics: { toolsUsed },
         });
         publishDance(server, current, 'broadcast', 'discovery', {
-          phase: 'tool', tool: name, parentSessionId,
+          phase: 'tool', tool: durableName, parentSessionId,
         }, subagentAssignments.get(runId));
       },
     }),
@@ -450,9 +492,10 @@ function recordResult(
     const personal = server.multiMind.personal;
     new SessionStore(personal).ensure('agent-runs', 'agent-runs', 'Agent collaboration index');
     const frames = new FrameStore(personal);
+    const personalContent = `[${label}]\nRun: ${run.id}\nWorkspace: ${workspaceId}\nSummary: ${result.slice(0, 1_000)}`;
     const frame = frames.createIFrame(
       'agent-runs',
-      `[${label}]\nRun: ${run.id}\nWorkspace: ${workspaceId}\nSummary: ${result.slice(0, 1_000)}`,
+      guardCollaborationText(personalContent, 'result'),
       'normal', 'agent_inferred',
     );
     frames.setMetadata(frame.id, metadata);
@@ -465,9 +508,10 @@ function recordResult(
     acquired = true;
     new SessionStore(workspaceMind).ensure('agent-runs', 'agent-runs', 'Agent collaboration results');
     const frames = new FrameStore(workspaceMind);
+    const workspaceContent = `[${label} result]\nRun: ${run.id}\nTask:\n${task}\n\nResult:\n${result.slice(0, 100_000)}`;
     const frame = frames.createIFrame(
       'agent-runs',
-      `[${label} result]\nRun: ${run.id}\nTask:\n${task}\n\nResult:\n${result.slice(0, 100_000)}`,
+      guardCollaborationText(workspaceContent, 'result'),
       'normal', 'agent_inferred',
     );
     frames.setMetadata(frame.id, metadata);
@@ -495,19 +539,39 @@ function publishDance(
   referenceId?: string,
 ): WaggleMessage | undefined {
   if (!server.signalBus) return undefined;
+  const guardedFields = Object.fromEntries(Object.entries(content).map(([key, value]) => {
+    if (typeof value !== 'string') return [key, value];
+    const kind = key === 'error' ? 'error' : key === 'result' ? 'result' : 'input';
+    return [key, guardCollaborationText(value, kind)];
+  }));
+  const candidateContent: Record<string, unknown> = {
+    kind: run.source === 'workflow' ? 'workflow_worker' : 'chat_subagent',
+    roomId: run.roomId,
+    runId: run.id,
+    workspaceId: run.workspaceId,
+    ...guardedFields,
+  };
+  const durableContent = evaluateExternalMemoryIngress({
+    content: JSON.stringify(candidateContent),
+  }).action === 'allow'
+    ? candidateContent
+    : {
+        kind: candidateContent.kind,
+        roomId: run.roomId,
+        runId: run.id,
+        workspaceId: run.workspaceId,
+        ...(typeof guardedFields.phase === 'string' ? { phase: guardedFields.phase } : {}),
+        ...('result' in guardedFields ? { result: QUARANTINED_AGENT_RESULT } : {}),
+        ...('error' in guardedFields ? { error: QUARANTINED_AGENT_ERROR } : {}),
+        detail: QUARANTINED_AGENT_INPUT,
+      };
   return server.signalBus.record({
     id: randomUUID(),
     teamId: `room::${run.roomId}`,
     senderId: type === 'request' ? 'user' : `run::${run.id}`,
     type,
     subtype,
-    content: {
-      kind: run.source === 'workflow' ? 'workflow_worker' : 'chat_subagent',
-      roomId: run.roomId,
-      runId: run.id,
-      workspaceId: run.workspaceId,
-      ...content,
-    },
+    content: durableContent,
     referenceId: referenceId ?? null,
     routing: null,
     createdAt: new Date(),
