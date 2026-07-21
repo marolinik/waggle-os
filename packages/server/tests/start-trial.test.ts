@@ -192,6 +192,7 @@ describe('PATCH /api/tier override gate (AV-3)', () => {
 describe('D1 loopback auth + session-token bootstrap', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  const originalHost = process.env.WAGGLE_HOST;
 
   beforeEach(async () => {
     // Exercise the SECURE D1 default (the suite setup defaults trust ON).
@@ -202,6 +203,8 @@ describe('D1 loopback auth + session-token bootstrap', () => {
   afterEach(async () => {
     await server.close();
     process.env.WAGGLE_TRUST_LOCALHOST = '1';
+    if (originalHost === undefined) delete process.env.WAGGLE_HOST;
+    else process.env.WAGGLE_HOST = originalHost;
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on win32 */ }
   });
@@ -212,6 +215,17 @@ describe('D1 loopback auth + session-token bootstrap', () => {
     const token = res.json().token as string;
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
+  });
+
+  it('does not expose the process bearer when the sidecar is non-loopback-bound', async () => {
+    await server.close();
+    process.env.WAGGLE_HOST = '0.0.0.0';
+    server = await buildLocalServer({ dataDir: tmpDir });
+
+    const res = await server.inject({ method: 'GET', url: '/api/auth/session-token' });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('SESSION_BOOTSTRAP_LOOPBACK_ONLY');
   });
 
   it('requires a bearer token on a normal route (loopback no longer trusted)', async () => {

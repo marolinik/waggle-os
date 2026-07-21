@@ -13,6 +13,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { browserExtensionIdAllowed, browserExtensionOriginAllowed } from '../cors-config.js';
+import { isLoopbackBind } from '../net-config.js';
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -20,6 +21,12 @@ function headerValue(value: string | string[] | undefined): string | undefined {
 
 export async function browserExtRoutes(server: FastifyInstance) {
   server.get('/api/browser-ext/session-token', async (request, reply) => {
+    if (!isLoopbackBind()) {
+      return reply.code(403).send({
+        error: 'Session bootstrap is available only on a loopback-bound sidecar.',
+        code: 'SESSION_BOOTSTRAP_LOOPBACK_ONLY',
+      });
+    }
     const origin = headerValue(request.headers.origin);
     const extensionId = headerValue(request.headers['x-waggle-extension-id']);
     const secFetchSite = headerValue(request.headers['sec-fetch-site']);

@@ -1,5 +1,5 @@
 /**
- * Regression test for R1-005 — path traversal in the /api/restore loop.
+ * Regression tests for restore path containment, including R01-C006 and R01-C007.
  *
  * The restore loop in packages/server/src/local/routes/backup.ts validates each
  * manifest entry's target path before writing it to dataDir. The original guard
@@ -9,10 +9,12 @@
  * escaped the root. It also wrote to a raw `targetPath` rather than the confirmed
  * `resolved` path.
  *
- * This test drives the real route via Fastify inject and proves:
+ * These tests drive the real route via Fastify inject and prove:
  *   (a) a classic '../' traversal and a sibling-prefix escape are both rejected,
  *       and NO out-of-root file is written;
- *   (b) a normal in-root file IS restored.
+ *   (b) preview never probes an out-of-root path;
+ *   (c) restore does not follow a pre-existing symlink or Windows junction;
+ *   (d) normal in-root preview and restore behavior remains available.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -52,7 +54,7 @@ function entry(relativePath: string, text: string): FileEntry {
   return { relativePath, content: buf.toString('base64'), sizeBytes: buf.length };
 }
 
-describe('R1-005 — /api/restore path traversal guard', () => {
+describe('/api/restore path containment', () => {
   let server: FastifyInstance;
   let rootBase: string;
   let dataDir: string;
@@ -112,6 +114,99 @@ describe('R1-005 — /api/restore path traversal guard', () => {
     // Nothing must be written to the sibling-prefixed directory.
     expect(fs.existsSync(path.join(rootBase, 'data-evil'))).toBe(false);
     expect(fs.existsSync(path.join(rootBase, 'data-evil', 'x.txt'))).toBe(false);
+  });
+
+  it('rejects preview traversal before probing whether the out-of-root path exists', async () => {
+    const outsidePath = path.join(rootBase, 'preview-probe.txt');
+    fs.writeFileSync(outsidePath, 'outside', 'utf-8');
+    const backup = buildBackupBase64([entry('../preview-probe.txt', 'ignored')]);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup, preview: true },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const json = res.json();
+    expect(json.error).toContain('Invalid backup path');
+    expect(json.existingFiles).toBeUndefined();
+    expect(json.newFiles).toBeUndefined();
+  });
+
+  it('rejects Windows-style traversal separators in preview manifests', async () => {
+    const outsidePath = path.join(rootBase, 'windows-preview-probe.txt');
+    fs.writeFileSync(outsidePath, 'outside', 'utf-8');
+    const backup = buildBackupBase64([entry('..\\windows-preview-probe.txt', 'ignored')]);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup, preview: true },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('Invalid backup path');
+  });
+
+  it('rejects preview probes through a pre-existing symlink or Windows junction', async () => {
+    const outsideDir = path.join(rootBase, 'outside-preview');
+    fs.mkdirSync(outsideDir);
+    fs.writeFileSync(path.join(outsideDir, 'secret.txt'), 'outside', 'utf-8');
+    fs.symlinkSync(outsideDir, path.join(dataDir, 'linked-preview'), process.platform === 'win32' ? 'junction' : 'dir');
+    const backup = buildBackupBase64([entry('linked-preview/secret.txt', 'ignored')]);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup, preview: true },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('Invalid backup path');
+  });
+
+  it('does not write through a pre-existing symlink or Windows junction', async () => {
+    const outsideDir = path.join(rootBase, 'outside-restore');
+    fs.mkdirSync(outsideDir);
+    const outsidePath = path.join(outsideDir, 'target.txt');
+    fs.writeFileSync(outsidePath, 'original', 'utf-8');
+    fs.symlinkSync(outsideDir, path.join(dataDir, 'linked-restore'), process.platform === 'win32' ? 'junction' : 'dir');
+    const backup = buildBackupBase64([entry('linked-restore/target.txt', 'overwritten')]);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const json = res.json();
+    expect(json.filesRestored).toBe(0);
+    expect(json.errors.some((error: string) => error.includes('path traversal'))).toBe(true);
+    expect(fs.readFileSync(outsidePath, 'utf-8')).toBe('original');
+  });
+
+  it('previews normal nested in-root files without modifying them', async () => {
+    const existingPath = path.join(dataDir, 'mind', 'existing.mind');
+    fs.mkdirSync(path.dirname(existingPath), { recursive: true });
+    fs.writeFileSync(existingPath, 'existing', 'utf-8');
+    const backup = buildBackupBase64([
+      entry('mind/existing.mind', 'replacement'),
+      entry('mind/new.mind', 'new'),
+    ]);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup, preview: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const json = res.json();
+    expect(json.existingFiles).toEqual(['mind/existing.mind']);
+    expect(json.newFiles).toEqual(['mind/new.mind']);
+    expect(fs.readFileSync(existingPath, 'utf-8')).toBe('existing');
   });
 
   it('restores a normal in-root file (valid path is NOT rejected)', async () => {

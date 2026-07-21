@@ -13,6 +13,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { anthropicProxyRoutes } from '../../src/local/routes/anthropic-proxy.js';
+import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
 function createTestServer(options: {
   vaultApiKey?: string;
@@ -57,6 +58,7 @@ describe('Anthropic Proxy Routes', () => {
   afterEach(async () => {
     if (server) await server.close();
     globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
     // Restore env var
     if (originalApiKey !== undefined) {
       process.env.ANTHROPIC_API_KEY = originalApiKey;
@@ -78,6 +80,33 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.status).toBe('healthy');
+    });
+  });
+
+  describe('GET /v1/health/readiness', () => {
+    it('reports unavailable when the proxy has no provider credential', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      server = createTestServer();
+      const res = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toMatchObject({ status: 'unavailable' });
+    });
+
+    it('reports ready when at least one provider credential is configured', async () => {
+      server = createTestServer({ vaultApiKey: 'test-key' });
+      const res = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ status: 'ready' });
     });
   });
 
@@ -161,6 +190,43 @@ describe('Anthropic Proxy Routes', () => {
         : String(requestBody.system ?? '');
       expect(systemText).toContain('You are a helpful assistant');
       expect(requestBody.stream).toBe(false);
+    });
+
+    it('counts and preserves Anthropic cache tokens in response usage', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-cache-usage';
+      server = createTestServer();
+
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'Cached response' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 100,
+          cache_creation_input_tokens: 2_000,
+          cache_read_input_tokens: 5_000,
+          output_tokens: 20,
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Use the cached context' }],
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().usage).toEqual({
+        prompt_tokens: 7_100,
+        completion_tokens: 20,
+        total_tokens: 7_120,
+        prompt_tokens_details: { cached_tokens: 5_000 },
+        cache_creation_input_tokens: 2_000,
+        cache_read_input_tokens: 5_000,
+      });
     });
 
     it('uses API key from vault when available', async () => {
@@ -276,6 +342,48 @@ describe('Anthropic Proxy Routes', () => {
       expect(body.choices[0].message.tool_calls[0].type).toBe('function');
       expect(body.choices[0].message.tool_calls[0].function.name).toBe('web_search');
       expect(JSON.parse(body.choices[0].message.tool_calls[0].function.arguments)).toEqual({ query: 'Waggle AI agent' });
+    });
+  });
+
+  describe('POST /v1/chat/completions (streaming)', () => {
+    it('counts and preserves Anthropic cache tokens in the final usage chunk', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-stream-cache-usage';
+      server = createTestServer();
+      const anthropicStream = [
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":100,"cache_creation_input_tokens":2000,"cache_read_input_tokens":5000}}}',
+        'data: {"type":"message_delta","usage":{"output_tokens":20}}',
+        'data: {"type":"message_stop"}',
+      ].join('\n\n') + '\n\n';
+      globalThis.fetch = vi.fn(async () => new Response(anthropicStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Stream cached context' }],
+          stream: true,
+          stream_options: { include_usage: true },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const usageChunk = res.body
+        .split('\n')
+        .filter(line => line.startsWith('data: {'))
+        .map(line => JSON.parse(line.slice(6)))
+        .find(chunk => chunk.usage);
+      expect(usageChunk?.usage).toEqual({
+        prompt_tokens: 7_100,
+        completion_tokens: 20,
+        total_tokens: 7_120,
+        prompt_tokens_details: { cached_tokens: 5_000 },
+        cache_creation_input_tokens: 2_000,
+        cache_read_input_tokens: 5_000,
+      });
     });
   });
 
@@ -425,7 +533,12 @@ describe('Anthropic Proxy Routes', () => {
 
       globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
         choices: [{ message: { role: 'assistant', content: 'Direct route works.' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 },
+        usage: {
+          prompt_tokens: 7_100,
+          completion_tokens: 20,
+          total_tokens: 7_120,
+          prompt_tokens_details: { cached_tokens: 5_000 },
+        },
         model: 'gpt-5.4',
       }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
 
@@ -445,6 +558,12 @@ describe('Anthropic Proxy Routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().choices[0].message.content).toBe('Direct route works.');
+      expect(res.json().usage).toEqual({
+        prompt_tokens: 7_100,
+        completion_tokens: 20,
+        total_tokens: 7_120,
+        prompt_tokens_details: { cached_tokens: 5_000 },
+      });
       const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
       expect(String(url)).toBe('https://api.openai.com/v1/chat/completions');
       expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer openai-vault-key');

@@ -39,6 +39,7 @@ const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 // Must match the metafile path written by build-sidecar.mjs (temp, not repo).
 const metaFile = path.join(os.tmpdir(), 'waggle-sidecar-meta.json');
 const stageDir = path.join(resourcesDir, 'node_modules');
+const bundledNpmRuntimeDir = path.join(stageDir, 'waggle-node-runtime');
 const hookRuntimeBuild = path.join(root, 'scripts', 'build-hook-runtime.mjs');
 const HOOK_RUNTIME_ROOTS = new Set([
   '@waggle/hive-mind-cli',
@@ -592,6 +593,32 @@ function dirSizeMB(dir) {
   return (bytes / 1024 / 1024).toFixed(1);
 }
 
+function preserveBundledNpmRuntime() {
+  const required = [
+    path.join(bundledNpmRuntimeDir, 'package.json'),
+    path.join(bundledNpmRuntimeDir, 'NODE-LICENSE'),
+    path.join(bundledNpmRuntimeDir, 'node_modules', 'npm', 'LICENSE'),
+    path.join(bundledNpmRuntimeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(bundledNpmRuntimeDir, 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+    path.join(bundledNpmRuntimeDir, 'bin', platform === 'win32' ? 'npm.cmd' : 'npm'),
+    path.join(bundledNpmRuntimeDir, 'bin', platform === 'win32' ? 'npx.cmd' : 'npx'),
+  ];
+  const missing = required.filter((file) => !fs.existsSync(file));
+  if (missing.length > 0) {
+    console.error(
+      '[stage-sidecar-deps] FATAL - bundled npm runtime is incomplete:\n'
+      + missing.map((file) => `  - ${path.relative(resourcesDir, file)}`).join('\n')
+      + '\n  Run `node scripts/bundle-node.mjs` before staging sidecar dependencies.',
+    );
+    process.exit(1);
+  }
+
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-node-runtime-'));
+  const snapshot = path.join(temporaryRoot, 'waggle-node-runtime');
+  fs.cpSync(bundledNpmRuntimeDir, snapshot, { recursive: true, dereference: true });
+  return { snapshot, temporaryRoot };
+}
+
 // ── main ───────────────────────────────────────────────────────────
 console.log(`[stage-sidecar-deps] Platform: ${platform}-${arch}`);
 
@@ -601,8 +628,17 @@ console.log(`[stage-sidecar-deps] Platform: ${platform}-${arch}`);
 execFileSync(process.execPath, [hookRuntimeBuild], { cwd: root, stdio: 'inherit' });
 
 // Fresh stage dir each run so a removed dep never lingers in a stale bundle.
-fs.rmSync(stageDir, { recursive: true, force: true });
-fs.mkdirSync(stageDir, { recursive: true });
+const preservedNpmRuntime = preserveBundledNpmRuntime();
+try {
+  fs.rmSync(stageDir, { recursive: true, force: true });
+  fs.mkdirSync(stageDir, { recursive: true });
+  fs.cpSync(preservedNpmRuntime.snapshot, bundledNpmRuntimeDir, {
+    recursive: true,
+    dereference: true,
+  });
+} finally {
+  fs.rmSync(preservedNpmRuntime.temporaryRoot, { recursive: true, force: true });
+}
 
 const externals = readExternalPackages();
 const runtimeRoots = new Set([

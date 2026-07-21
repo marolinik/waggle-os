@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
-import { users, agents, agentGroups, agentGroupMembers, agentJobs, teams } from '../../src/db/schema.js';
+import { users, agents, agentGroups, agentGroupMembers, agentJobs, teams, teamMembers } from '../../src/db/schema.js';
 import { sql, eq } from 'drizzle-orm';
 
 describe('Agent API', () => {
@@ -8,8 +8,10 @@ describe('Agent API', () => {
   let user1Id: string;
   let user2Id: string;
   let teamId: string;
+  let team2Id: string;
   let agent1Id: string;
   let agent2Id: string;
+  let group1Id: string;
 
   beforeAll(async () => {
     server = await buildServer();
@@ -48,6 +50,17 @@ describe('Agent API', () => {
       ownerId: user1Id,
     }).returning();
     teamId = team.id;
+
+    await server.db.insert(teamMembers).values({ teamId, userId: user1Id, role: 'owner' });
+
+    const [team2] = await server.db.insert(teams).values({
+      name: 'Agent Test Team 2',
+      slug: 'agtest-team-2',
+      ownerId: user2Id,
+    }).returning();
+    team2Id = team2.id;
+
+    await server.db.insert(teamMembers).values({ teamId: team2Id, userId: user2Id, role: 'owner' });
 
     // Override auth handler for tests
     server._authHandler.fn = async function (request, reply) {
@@ -198,6 +211,7 @@ describe('Agent API', () => {
     expect(body.name).toBe('Research Squad');
     expect(body.strategy).toBe('parallel');
     expect(body.members).toHaveLength(2);
+    group1Id = body.id;
   });
 
   it('creates a group with coordinator strategy and a lead agent', async () => {
@@ -283,6 +297,106 @@ describe('Agent API', () => {
     expect(job.status).toBe('queued');
     expect(job.jobType).toBe('group');
     expect(job.userId).toBe(user1Id);
+  });
+
+  it('rejects an owned group run attributed to a foreign team', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${group1Id}/run`,
+      headers: { 'x-test-user-id': user1Id },
+      payload: { task: 'Cross-tenant run', teamId: team2Id },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body)).toEqual({ error: 'Team not found' });
+  });
+
+  it('rejects generic job submission for a foreign team', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user1Id },
+      payload: { jobType: 'chat', teamId: team2Id, input: { message: 'Cross-tenant job' } },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body)).toEqual({ error: 'Team not found' });
+  });
+
+  it('rejects a generic group job that references another user\'s group', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user2Id },
+      payload: {
+        jobType: 'group',
+        teamId: team2Id,
+        input: { groupId: group1Id, taskInput: { task: 'Run foreign group' } },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body)).toEqual({ error: 'Agent group not found' });
+  });
+
+  it('hides job status from users outside the job team while preserving member access', async () => {
+    const createResponse = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user1Id },
+      payload: { jobType: 'chat', teamId, input: { message: 'Private job' } },
+    });
+    expect(createResponse.statusCode).toBe(202);
+    const { jobId } = JSON.parse(createResponse.body);
+
+    const foreignResponse = await server.inject({
+      method: 'GET',
+      url: `/api/jobs/${jobId}`,
+      headers: { 'x-test-user-id': user2Id },
+    });
+    expect(foreignResponse.statusCode).toBe(404);
+    expect(JSON.parse(foreignResponse.body)).toEqual({ error: 'Job not found' });
+
+    const memberResponse = await server.inject({
+      method: 'GET',
+      url: `/api/jobs/${jobId}`,
+      headers: { 'x-test-user-id': user1Id },
+    });
+    expect(memberResponse.statusCode).toBe(200);
+    expect(JSON.parse(memberResponse.body).id).toBe(jobId);
+  });
+
+  it('prevents users outside the job team from cancelling it', async () => {
+    const createResponse = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user1Id },
+      payload: { jobType: 'chat', teamId, input: { message: 'Do not cancel' } },
+    });
+    expect(createResponse.statusCode).toBe(202);
+    const { jobId } = JSON.parse(createResponse.body);
+
+    const foreignResponse = await server.inject({
+      method: 'POST',
+      url: `/api/jobs/${jobId}/cancel`,
+      headers: { 'x-test-user-id': user2Id },
+    });
+    expect(foreignResponse.statusCode).toBe(404);
+    expect(JSON.parse(foreignResponse.body)).toEqual({ error: 'Job not found' });
+
+    const [unchanged] = await server.db
+      .select()
+      .from(agentJobs)
+      .where(eq(agentJobs.id, jobId))
+      .limit(1);
+    expect(unchanged.status).toBe('queued');
+
+    const memberResponse = await server.inject({
+      method: 'POST',
+      url: `/api/jobs/${jobId}/cancel`,
+      headers: { 'x-test-user-id': user1Id },
+    });
+    expect(memberResponse.statusCode).toBe(200);
   });
 
   it('deletes an agent', async () => {

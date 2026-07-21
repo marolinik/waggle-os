@@ -3,6 +3,7 @@ import {
   needsConfirmation,
   needsConfirmationWithAutonomy,
   isCriticalNeverAutopass,
+  getApprovalClass,
   classifyGatedToolRisk,
   ConfirmationGate,
 } from '../src/confirmation.js';
@@ -43,6 +44,42 @@ describe('needsConfirmation', () => {
 
   it('returns false for read_skill (ungated)', () => {
     expect(needsConfirmation('read_skill')).toBe(false);
+  });
+});
+
+describe('connector mutation confirmation policy', () => {
+  it.each([
+    'connector_dropbox_upload_file',
+    'connector_gdrive_upload_file',
+    'connector_gsheets_append_values',
+    'connector_onedrive_upload_file',
+  ])('gates state-changing connector action %s as elevated', (toolName) => {
+    expect(needsConfirmation(toolName)).toBe(true);
+    expect(getApprovalClass(toolName)).toBe('elevated');
+  });
+
+  it.each([
+    'connector_postgres_execute',
+    'connector_composio_execute_action',
+  ])('gates high-risk connector action %s as critical', (toolName) => {
+    expect(needsConfirmation(toolName)).toBe(true);
+    expect(getApprovalClass(toolName)).toBe('critical');
+    expect(classifyGatedToolRisk(toolName)).toEqual({
+      riskLevel: 'high',
+      approvalClass: 'critical',
+    });
+  });
+
+  it.each([
+    'connector_dropbox_download_file',
+    'connector_gdrive_get_file',
+    'connector_gsheets_get_values',
+    'connector_onedrive_search_files',
+    'connector_postgres_query',
+    'connector_composio_list_actions',
+  ])('keeps read-only connector action %s ungated', (toolName) => {
+    expect(needsConfirmation(toolName)).toBe(false);
+    expect(getApprovalClass(toolName)).toBe('standard');
   });
 });
 

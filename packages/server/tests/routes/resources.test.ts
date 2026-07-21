@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import { users, teams, teamMembers, teamResources } from '../../src/db/schema.js';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 describe('Team Resources API', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
@@ -198,6 +198,43 @@ describe('Team Resources API', () => {
     });
     const rated2 = JSON.parse(rateRes2.body);
     expect(rated2.useCount).toBe(2);
+  });
+
+  it('does not rate a resource owned by another team through this team route', async () => {
+    const [foreignTeam] = await server.db.insert(teams).values({
+      name: 'Foreign Resource Team',
+      slug: 'restest-foreign-resources',
+      ownerId: outsiderId,
+    }).returning();
+    await server.db.insert(teamMembers).values({
+      teamId: foreignTeam.id,
+      userId: outsiderId,
+      role: 'owner',
+    });
+    const [foreignResource] = await server.db.insert(teamResources).values({
+      teamId: foreignTeam.id,
+      resourceType: 'model_recipe',
+      name: 'Foreign Recipe',
+      config: { model: 'private-model' },
+      sharedBy: outsiderId,
+      rating: 1,
+      useCount: 1,
+    }).returning();
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/teams/${teamSlug}/resources/${foreignResource.id}`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: { rating: 5 },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: 'Resource not found' });
+
+    const [unchanged] = await server.db.select().from(teamResources)
+      .where(eq(teamResources.id, foreignResource.id));
+    expect(unchanged.rating).toBe(1);
+    expect(unchanged.useCount).toBe(1);
   });
 
   it('filters resources by resource_type', async () => {

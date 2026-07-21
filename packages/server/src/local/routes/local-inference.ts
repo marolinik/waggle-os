@@ -46,11 +46,13 @@ interface InferenceServerStatus {
   available: boolean;
   url: string;
   models: string[];
+  modelDigests?: Record<string, string>;
   cloudModels: string[];
   version?: string;
 }
 
 const OLLAMA_MODEL_REF = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/;
+const OLLAMA_MANIFEST_DIGEST = /^sha256:[0-9a-f]{64}$/i;
 
 function isValidOllamaModelRef(model: string): boolean {
   if (model.length > 200 || !OLLAMA_MODEL_REF.test(model)) return false;
@@ -77,11 +79,22 @@ async function checkOllama(baseUrl: string): Promise<InferenceServerStatus> {
   try {
     const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return { type: 'ollama', available: false, url: baseUrl, models: [], cloudModels: [] };
-    const data = await res.json() as { models?: Array<{ name: string; remote_host?: string }> };
+    const data = await res.json() as {
+      models?: Array<{ name: string; digest?: string; remote_host?: string }>;
+    };
     const entries = (data.models ?? []).filter((model) => typeof model.name === 'string' && model.name.length > 0);
     const models = entries
       .filter((model) => !isRemoteOllamaAlias(model.name, model.remote_host))
       .map((model) => model.name);
+    const modelDigests = Object.fromEntries(
+      entries
+        .filter((model) => (
+          !isRemoteOllamaAlias(model.name, model.remote_host)
+          && typeof model.digest === 'string'
+          && OLLAMA_MANIFEST_DIGEST.test(model.digest)
+        ))
+        .map((model) => [model.name, model.digest!]),
+    );
     const cloudModels = entries
       .filter((model) => isRemoteOllamaAlias(model.name, model.remote_host))
       .map((model) => model.name);
@@ -90,7 +103,15 @@ async function checkOllama(baseUrl: string): Promise<InferenceServerStatus> {
       const vRes = await fetch(`${baseUrl}/api/version`, { signal: AbortSignal.timeout(2000) });
       if (vRes.ok) version = ((await vRes.json()) as { version?: string }).version;
     } catch { /* ignore */ }
-    return { type: 'ollama', available: true, url: baseUrl, models, cloudModels, version };
+    return {
+      type: 'ollama',
+      available: true,
+      url: baseUrl,
+      models,
+      modelDigests,
+      cloudModels,
+      version,
+    };
   } catch {
     return { type: 'ollama', available: false, url: baseUrl, models: [], cloudModels: [] };
   }
@@ -285,6 +306,14 @@ export async function localInferenceRoutes(
           code: 'MODEL_NOT_ADVERTISED_LOCAL',
         });
       }
+      const digest = installed.modelDigests?.[installedModel];
+      if (!digest || !OLLAMA_MANIFEST_DIGEST.test(digest)) {
+        return reply.code(502).send({
+          error: `Ollama did not advertise an immutable manifest digest for "${installedModel}"`,
+          code: 'MODEL_DIGEST_UNAVAILABLE',
+          model: installedModel,
+        });
+      }
 
       const probe = await fetch(`${OLLAMA_URL}/api/generate`, {
         method: 'POST',
@@ -312,6 +341,7 @@ export async function localInferenceRoutes(
       return {
         ok: true,
         model: installedModel,
+        digest,
         status: pullStatus,
         verifiedGeneration: true,
         sample: generation.response.trim().slice(0, 40),

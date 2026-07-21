@@ -14,7 +14,9 @@ param(
 
   [string]$ExpectedSignerThumbprint,
 
-  [string]$ExpectedSourceRevision
+  [string]$ExpectedSourceRevision,
+
+  [switch]$VerifyManagedModel
 )
 
 Set-StrictMode -Version Latest
@@ -235,6 +237,25 @@ function Invoke-JsonRequest {
   return Invoke-RestMethod -Uri $Uri -Method Get -Headers $Headers -TimeoutSec 5
 }
 
+function Invoke-JsonPostRequest {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Uri,
+    [Parameter(Mandatory = $true)] [hashtable]$Body,
+    [hashtable]$Headers = @{},
+    [ValidateRange(1, 3600)] [int]$TimeoutSeconds = 30
+  )
+
+  $json = $Body | ConvertTo-Json -Compress -Depth 8
+  return Invoke-WebRequest `
+    -Uri $Uri `
+    -Method Post `
+    -Headers $Headers `
+    -ContentType 'application/json; charset=utf-8' `
+    -Body ([System.Text.Encoding]::UTF8.GetBytes($json)) `
+    -TimeoutSec $TimeoutSeconds `
+    -UseBasicParsing
+}
+
 function Get-HttpStatusCode {
   param([Parameter(Mandatory = $true)] [string]$Uri)
 
@@ -274,10 +295,16 @@ function Wait-ForHealth {
 function Get-InstalledProcessIds {
   param(
     [Parameter(Mandatory = $true)] [string]$AppExecutable,
-    [Parameter(Mandatory = $true)] [string]$ServiceScript
+    [Parameter(Mandatory = $true)] [string]$ServiceScript,
+    [string]$ManagedRuntimeRoot = ''
   )
 
   $ids = [System.Collections.Generic.HashSet[int]]::new()
+  $managedRoot = if ([string]::IsNullOrWhiteSpace($ManagedRuntimeRoot)) {
+    $null
+  } else {
+    [System.IO.Path]::GetFullPath($ManagedRuntimeRoot).TrimEnd('\', '/')
+  }
   $processes = Get-CimInstance Win32_Process -ErrorAction Stop
   foreach ($process in $processes) {
     $exactApp = $process.ExecutablePath -and
@@ -291,7 +318,19 @@ function Get-InstalledProcessIds {
         $ServiceScript,
         [System.StringComparison]::OrdinalIgnoreCase
       ) -ge 0
-    if ($exactApp -or $exactSidecar) {
+    $managedRuntime = $managedRoot -and (
+      ($process.ExecutablePath -and
+        [System.IO.Path]::GetFullPath($process.ExecutablePath).StartsWith(
+          "$managedRoot\",
+          [System.StringComparison]::OrdinalIgnoreCase
+        )) -or
+      ($process.CommandLine -and
+        $process.CommandLine.IndexOf(
+          $managedRoot,
+          [System.StringComparison]::OrdinalIgnoreCase
+        ) -ge 0)
+    )
+    if ($exactApp -or $exactSidecar -or $managedRuntime) {
       $null = $ids.Add([int]$process.ProcessId)
     }
   }
@@ -303,14 +342,20 @@ function Wait-ForInstalledRuntimeStop {
     [Parameter(Mandatory = $true)] [string]$AppExecutable,
     [Parameter(Mandatory = $true)] [string]$ServiceScript,
     [Parameter(Mandatory = $true)] [int]$Port,
+    [string]$ManagedRuntimeRoot = '',
+    [int[]]$AdditionalPorts = @(),
     [ValidateRange(5, 120)] [int]$TimeoutSeconds = 30
   )
 
+  $ports = @($Port) + @($AdditionalPorts | Where-Object { $_ -ge 1 -and $_ -le 65535 })
   $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
   $consecutiveAvailableProbes = 0
   do {
-    $ownedProcessIds = @(Get-InstalledProcessIds $AppExecutable $ServiceScript)
-    if ($ownedProcessIds.Count -eq 0 -and (Test-TcpPortAvailable $Port)) {
+    $ownedProcessIds = @(
+      Get-InstalledProcessIds $AppExecutable $ServiceScript $ManagedRuntimeRoot
+    )
+    $busyPorts = @($ports | Where-Object { -not (Test-TcpPortAvailable $_) })
+    if ($ownedProcessIds.Count -eq 0 -and $busyPorts.Count -eq 0) {
       $consecutiveAvailableProbes++
       if ($consecutiveAvailableProbes -ge 2) { return }
     } else {
@@ -319,8 +364,11 @@ function Wait-ForInstalledRuntimeStop {
     Start-Sleep -Milliseconds 300
   } while ([DateTime]::UtcNow -lt $deadline)
 
-  $remainingProcessIds = @(Get-InstalledProcessIds $AppExecutable $ServiceScript)
-  throw "Installed runtime did not stop cleanly; owned PIDs=$($remainingProcessIds -join ',') port=$Port"
+  $remainingProcessIds = @(
+    Get-InstalledProcessIds $AppExecutable $ServiceScript $ManagedRuntimeRoot
+  )
+  $remainingBusyPorts = @($ports | Where-Object { -not (Test-TcpPortAvailable $_) })
+  throw "Installed runtime did not stop cleanly; owned PIDs=$($remainingProcessIds -join ',') ports=$($remainingBusyPorts -join ',')"
 }
 
 function Assert-NoForeignWaggleProcesses {
@@ -356,17 +404,18 @@ function Test-RegistryValue {
 function Stop-InstalledProcesses {
   param(
     [Parameter(Mandatory = $true)] [string]$AppExecutable,
-    [Parameter(Mandatory = $true)] [string]$ServiceScript
+    [Parameter(Mandatory = $true)] [string]$ServiceScript,
+    [string]$ManagedRuntimeRoot = ''
   )
 
   $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
-  foreach ($processId in (Get-InstalledProcessIds $AppExecutable $ServiceScript)) {
+  foreach ($processId in (Get-InstalledProcessIds $AppExecutable $ServiceScript $ManagedRuntimeRoot)) {
     try {
       Invoke-RawProcess $taskkill "/PID $processId /T /F" 20
     } catch {
       # Killing the main process tree can make a separately captured child PID
       # disappear. Re-check exact ownership before treating that as a failure.
-      $stillOwned = Get-InstalledProcessIds $AppExecutable $ServiceScript
+      $stillOwned = Get-InstalledProcessIds $AppExecutable $ServiceScript $ManagedRuntimeRoot
       if ($stillOwned -contains $processId) { throw }
     }
   }
@@ -533,6 +582,12 @@ $installDir = Join-Path $scratchRoot 'install'
 $dataDir = Join-Path $scratchRoot 'data'
 $appExecutable = Join-Path $installDir 'waggle.exe'
 $serviceScript = Join-Path $installDir 'resources\service.js'
+$bundledNode = Join-Path $installDir 'resources\node.exe'
+$bundledNpmRuntime = Join-Path $installDir 'resources\node_modules\waggle-node-runtime'
+$bundledNpmCli = Join-Path $bundledNpmRuntime 'node_modules\npm\bin\npm-cli.js'
+$bundledNpxCli = Join-Path $bundledNpmRuntime 'node_modules\npm\bin\npx-cli.js'
+$bundledNpmWrapper = Join-Path $bundledNpmRuntime 'bin\npm.cmd'
+$bundledNpxWrapper = Join-Path $bundledNpmRuntime 'bin\npx.cmd'
 $uninstaller = Join-Path $installDir 'uninstall.exe'
 $dataMarker = Join-Path $dataDir 'installer-certificate-marker.txt'
 $profileDataDir = Join-Path $env:USERPROFILE '.waggle'
@@ -559,6 +614,12 @@ $environmentNamesToClear = @(
   'ZHIPU_API_KEY', 'MOONSHOT_API_KEY', 'PERPLEXITY_API_KEY',
   'OPENROUTER_API_KEY'
 )
+$environmentNamesToClear += @(
+  Get-ChildItem Env: |
+    Where-Object { $_.Name -match '(?i)^npm_' } |
+    ForEach-Object { $_.Name }
+)
+$environmentNamesToClear = @($environmentNamesToClear | Sort-Object -Unique)
 $isolatedEnvironmentNames = @(
   'PATH', 'WAGGLE_PORT', 'WAGGLE_DATA_DIR', 'WAGGLE_HOST',
   'OLLAMA_HOST', 'VLLM_HOST', 'WAGGLE_SKIP_MARKETPLACE_SYNC'
@@ -601,16 +662,21 @@ $receipt = [ordered]@{
     installerHookSha256 = $null
     generatedInstallerScriptSha256 = $null
     generatedInstallerHookPath = $null
+    windowsInboxTools = [ordered]@{}
   }
   scratchRoot = $scratchRoot
   embeddingPayloadReady = $false
   embeddingPayload = $null
   managedModelVerified = $false
+  managedModelDigest = $null
+  bundledNpm = $null
   checks = [ordered]@{}
   error = $null
 }
 
 New-Item -ItemType Directory -Path $scratchRoot, $dataDir -Force | Out-Null
+$ollamaPort = 0
+$managedRuntimeRoot = Join-Path $dataDir 'runtimes\ollama'
 
 try {
   Assert-True (Test-Path -LiteralPath $installerHookPath -PathType Leaf) `
@@ -645,7 +711,11 @@ try {
     Assert-True ($repositoryRevision -eq $normalizedExpectedSourceRevision) `
       "Repository revision $repositoryRevision does not match expected source $normalizedExpectedSourceRevision."
     $trackedSourcePaths = @(
+      'scripts/bundle-node.mjs',
       'scripts/certify-windows-installer.ps1',
+      'scripts/check-sidecar-resources.mjs',
+      'scripts/stage-sidecar-deps.mjs',
+      'app/src-tauri/src/service.rs',
       'app/src-tauri/nsis/installer.nsi'
     )
     foreach ($trackedSourcePath in $trackedSourcePaths) {
@@ -758,18 +828,46 @@ try {
   $env:WAGGLE_PORT = '3333'
   $env:WAGGLE_DATA_DIR = $dataDir
   $env:WAGGLE_HOST = '127.0.0.1'
-  $env:OLLAMA_HOST = "http://127.0.0.1:$(Get-FreeTcpPort)"
+  $ollamaPort = Get-FreeTcpPort
+  $env:OLLAMA_HOST = "http://127.0.0.1:$ollamaPort"
   $env:VLLM_HOST = "http://127.0.0.1:$(Get-FreeTcpPort)"
   $env:WAGGLE_SKIP_MARKETPLACE_SYNC = '1'
   $isolationPath = Join-Path $scratchRoot 'isolated-path'
   New-Item -ItemType Directory -Path $isolationPath -Force | Out-Null
+  $systemDirectory = [Environment]::GetFolderPath('System')
+  foreach ($toolName in @('tar.exe', 'taskkill.exe')) {
+    $sourceTool = Join-Path $systemDirectory $toolName
+    Assert-True (Test-Path -LiteralPath $sourceTool -PathType Leaf) `
+      "Required Windows inbox tool is missing: $sourceTool"
+    $toolSignature = Get-AuthenticodeSignature -LiteralPath $sourceTool
+    Assert-True ($toolSignature.Status -eq [System.Management.Automation.SignatureStatus]::Valid) `
+      "Required Windows inbox tool has no valid signature: $sourceTool"
+    $stagedTool = Join-Path $isolationPath $toolName
+    Copy-Item -LiteralPath $sourceTool -Destination $stagedTool
+    $sourceToolHash = (Get-FileHash -LiteralPath $sourceTool -Algorithm SHA256).Hash
+    Assert-True ((Get-FileHash -LiteralPath $stagedTool -Algorithm SHA256).Hash -eq $sourceToolHash) `
+      "Staged Windows inbox tool differs from its signed source: $toolName"
+    $receipt.evidence.windowsInboxTools[$toolName] = $sourceToolHash
+  }
   $env:PATH = $isolationPath
+  foreach ($toolName in @('tar.exe', 'taskkill.exe')) {
+    $resolvedTool = Get-Command $toolName -CommandType Application -ErrorAction Stop |
+      Select-Object -First 1
+    Assert-True (
+      [string]::Equals(
+        [System.IO.Path]::GetFullPath($resolvedTool.Source),
+        [System.IO.Path]::GetFullPath((Join-Path $isolationPath $toolName)),
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+    ) "Isolation PATH did not resolve the staged Windows inbox tool: $toolName"
+  }
+  $receipt.checks['windowsInboxTools'] = $true
   foreach ($name in $environmentNamesToClear) {
     [Environment]::SetEnvironmentVariable($name, $null, 'Process')
   }
 
   $unexpectedApplications = @(
-    @('node.exe', 'docker.exe', 'ollama.exe', 'python.exe') |
+    @('node.exe', 'npm.cmd', 'npx.cmd', 'docker.exe', 'ollama.exe', 'python.exe') |
       Where-Object { Get-Command $_ -CommandType Application -ErrorAction SilentlyContinue }
   )
   Assert-True ($unexpectedApplications.Count -eq 0) `
@@ -785,12 +883,90 @@ try {
   Wait-ForPathState $appExecutable $true
   Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'Installer did not create uninstall.exe'
   Assert-True (Test-Path -LiteralPath $serviceScript -PathType Leaf) 'Installer omitted resources/service.js'
-  Assert-True (Test-Path -LiteralPath (Join-Path $installDir 'resources\node.exe') -PathType Leaf) `
+  Assert-True (Test-Path -LiteralPath $bundledNode -PathType Leaf) `
     'Installer omitted the bundled Node.js runtime'
   Assert-True (Test-Path -LiteralPath (Join-Path $installDir 'resources\node_modules') -PathType Container) `
     'Installer omitted staged runtime dependencies'
+  $bundledRuntimeFiles = @(
+    (Join-Path $bundledNpmRuntime 'package.json'),
+    (Join-Path $bundledNpmRuntime 'NODE-LICENSE'),
+    (Join-Path $bundledNpmRuntime 'node_modules\npm\LICENSE'),
+    $bundledNpmCli,
+    $bundledNpxCli,
+    $bundledNpmWrapper,
+    $bundledNpxWrapper
+  )
+  foreach ($runtimeFile in $bundledRuntimeFiles) {
+    Assert-True (Test-Path -LiteralPath $runtimeFile -PathType Leaf) `
+      "Installer omitted bundled npm runtime file: $runtimeFile"
+  }
+
+  $npmVersionOutput = @(& $bundledNode $bundledNpmCli --version 2>$null)
+  Assert-True ($LASTEXITCODE -eq 0 -and $npmVersionOutput.Count -eq 1) `
+    'Bundled npm CLI did not execute through the installed Node runtime.'
+  $npxVersionOutput = @(& $bundledNode $bundledNpxCli --version 2>$null)
+  Assert-True ($LASTEXITCODE -eq 0 -and $npxVersionOutput.Count -eq 1) `
+    'Bundled npx CLI did not execute through the installed Node runtime.'
+  $npmVersion = ([string]$npmVersionOutput[0]).Trim()
+  $npxVersion = ([string]$npxVersionOutput[0]).Trim()
+  Assert-True ($npmVersion -match '^\d+\.\d+\.\d+$' -and $npmVersion -eq $npxVersion) `
+    "Bundled npm/npx versions do not match: npm=$npmVersion npx=$npxVersion"
+  $cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
+  Invoke-RawProcess $cmdExe ('/d /s /c ""{0}" --version"' -f $bundledNpmWrapper) 60
+  Invoke-RawProcess $cmdExe ('/d /s /c ""{0}" --version"' -f $bundledNpxWrapper) 60
+
+  $offlinePackageSource = Join-Path $scratchRoot 'offline-npm-package'
+  $offlineInstallRoot = Join-Path $scratchRoot 'offline-npm-install'
+  $offlineCache = Join-Path $scratchRoot 'offline-npm-cache'
+  $isolatedUserConfig = Join-Path $scratchRoot 'empty-user.npmrc'
+  $isolatedGlobalConfig = Join-Path $scratchRoot 'empty-global.npmrc'
+  New-Item -ItemType Directory -Path @(
+    $offlinePackageSource,
+    $offlineInstallRoot,
+    $offlineCache
+  ) -Force | Out-Null
+  Set-Content -LiteralPath $isolatedUserConfig -Value '' -NoNewline
+  Set-Content -LiteralPath $isolatedGlobalConfig -Value '' -NoNewline
+  $offlinePackageManifest = [ordered]@{
+    name = 'waggle-offline-install-probe'
+    version = '1.0.0'
+    scripts = [ordered]@{
+      install = "node -e `"require('node:fs').writeFileSync('lifecycle-ran.txt','unexpected')`""
+    }
+  }
+  $offlinePackageManifest | ConvertTo-Json -Depth 4 |
+    Set-Content -LiteralPath (Join-Path $offlinePackageSource 'package.json') -Encoding UTF8
+  Assert-True (@(Get-ChildItem -LiteralPath $offlineCache -Force).Count -eq 0) `
+    'Offline npm certificate cache was not clean before the probe.'
+  $npmInstallOutput = @(
+    & $bundledNode $bundledNpmCli install --offline --ignore-scripts --no-audit --no-fund `
+      --package-lock=false --save=false --userconfig $isolatedUserConfig `
+      --globalconfig $isolatedGlobalConfig --cache $offlineCache --prefix $offlineInstallRoot `
+      -- $offlinePackageSource 2>&1
+  )
+  Assert-True ($LASTEXITCODE -eq 0) `
+    "Bundled npm offline local install failed: $($npmInstallOutput -join [Environment]::NewLine)"
+  $installedOfflinePackage = Join-Path $offlineInstallRoot 'node_modules\waggle-offline-install-probe'
+  Assert-True (Test-Path -LiteralPath (Join-Path $installedOfflinePackage 'package.json') -PathType Leaf) `
+    'Bundled npm did not install the local offline package.'
+  Assert-True (-not (Test-Path -LiteralPath (Join-Path $installedOfflinePackage 'lifecycle-ran.txt'))) `
+    'Bundled npm executed a lifecycle script despite --ignore-scripts.'
+  Assert-True (-not (Test-Path -LiteralPath (Join-Path $offlinePackageSource 'lifecycle-ran.txt'))) `
+    'Bundled npm executed a lifecycle script in the local package source.'
   $receipt.checks['silentInstall'] = $true
   $receipt.checks['bundledRuntimePayload'] = $true
+  $receipt.checks['bundledNpmCli'] = $true
+  $receipt.checks['bundledNpmWrappers'] = $true
+  $receipt.checks['bundledNpmOfflineInstall'] = $true
+  $receipt.checks['bundledNpmIgnoreScriptsFlagHonored'] = $true
+  $receipt.bundledNpm = [ordered]@{
+    version = $npmVersion
+    npmCli = $bundledNpmCli
+    npxCli = $bundledNpxCli
+    cacheWasClean = $true
+    offlinePackage = 'waggle-offline-install-probe@1.0.0'
+    ignoreScriptsFlagHonored = $true
+  }
   $installedAppFile = Get-Item -LiteralPath $appExecutable
   $installedAppSignature = Get-AuthenticodeSignature -LiteralPath $appExecutable
   $receipt.installedApp = [ordered]@{
@@ -874,6 +1050,13 @@ try {
     $health = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $firstProcess.Refresh()
     Assert-True (-not $firstProcess.HasExited) 'The installed desktop process exited during first boot'
+    $sidecarNpmPrefix = Join-Path $dataDir 'npm\prefix'
+    $sidecarNpmCache = Join-Path $dataDir 'npm\cache'
+    Assert-True (Test-Path -LiteralPath $sidecarNpmPrefix -PathType Container) `
+      'First boot did not create the sidecar npm prefix directory.'
+    Assert-True (Test-Path -LiteralPath $sidecarNpmCache -PathType Container) `
+      'First boot did not create the sidecar npm cache directory.'
+    $receipt.checks['sidecarNpmDataDirectories'] = $true
     $vaultKeyPath = Join-Path $dataDir '.vault-key'
     Assert-VaultKeyAclRestricted $vaultKeyPath
     $receipt.checks['vaultKeyAclRestricted'] = $true
@@ -887,6 +1070,28 @@ try {
       'Session-token bootstrap returned no token'
     $headers = @{ Authorization = "Bearer $($tokenResponse.token)" }
     $null = Invoke-JsonRequest "$baseUrl/api/tier" $headers
+    $chatProbeMessage = "installer-certificate-no-model-$runId"
+    $chatResponse = Invoke-JsonPostRequest "$baseUrl/api/chat" @{
+      message = $chatProbeMessage
+      sessionId = "installer-certificate-no-model-$runId"
+    } $headers
+    $chatContent = [string]$chatResponse.Content
+    Assert-True ([int]$chatResponse.StatusCode -eq 200) `
+      'Clean no-model chat did not return HTTP 200.'
+    Assert-True (
+      ([string]$chatResponse.Headers['Content-Type']).StartsWith('text/event-stream')
+    ) 'Clean no-model chat did not return an SSE stream.'
+    Assert-True ([regex]::Matches(
+      $chatContent,
+      '(?m)^event:[ \t]*done[ \t]*\r?$'
+    ).Count -eq 1) 'Clean no-model chat did not complete with exactly one done event.'
+    Assert-True (-not ($chatContent -match '(?m)^event:[ \t]*error[ \t]*\r?$')) `
+      'Clean no-model chat emitted an error event.'
+    Assert-True ($chatContent.Contains('No AI model is ready')) `
+      'Clean no-model chat did not report that model setup is required.'
+    Assert-True (-not $chatContent.Contains($chatProbeMessage)) `
+      'Clean no-model chat echoed the prompt instead of reporting setup-required state.'
+    $receipt.checks['noModelChatSetupRequired'] = $true
     $embedding = Invoke-JsonRequest "$baseUrl/api/embedding/status" $headers
     Assert-True ($embedding.activeProvider -eq 'inprocess') `
       "Clean install did not load the in-process embedding model: $($embedding.activeProvider)"
@@ -901,6 +1106,79 @@ try {
     Assert-True ($localInference.dockerRequired -eq $false) 'Local inference incorrectly requires Docker'
     Assert-True ($localInference.managedRuntime.supported -eq $true) `
       'Managed local inference runtime is not supported by the packaged Windows app'
+    if ($VerifyManagedModel) {
+      $managedCertificateModel = 'qwen2.5:0.5b'
+      $managedOperationTimeoutSeconds = 3600
+      $bootstrapResponse = Invoke-JsonPostRequest `
+        "$baseUrl/api/local-inference/bootstrap" `
+        @{} `
+        $headers `
+        $managedOperationTimeoutSeconds
+      $bootstrap = $bootstrapResponse.Content | ConvertFrom-Json
+      Assert-True ([int]$bootstrapResponse.StatusCode -eq 200 -and $bootstrap.ok -eq $true) `
+        'The packaged managed local runtime did not bootstrap successfully.'
+      Assert-True ($bootstrap.dockerRequired -eq $false) `
+        'The packaged managed local runtime unexpectedly requires Docker.'
+      $receipt.checks['managedRuntimeBootstrap'] = $true
+
+      $pullResponse = Invoke-JsonPostRequest `
+        "$baseUrl/api/local-inference/pull" `
+        @{ model = $managedCertificateModel } `
+        $headers `
+        $managedOperationTimeoutSeconds
+      $pull = $pullResponse.Content | ConvertFrom-Json
+      Assert-True (
+        [int]$pullResponse.StatusCode -eq 200 -and
+        $pull.ok -eq $true -and
+        $pull.verifiedGeneration -eq $true
+      ) 'The managed local model did not complete its generation probe.'
+      Assert-True (-not [string]::IsNullOrWhiteSpace([string]$pull.model)) `
+        'The managed local model pull returned no installed model identity.'
+      Assert-True ([string]$pull.digest -match '^sha256:[0-9a-f]{64}$') `
+        'The managed local model pull returned no immutable manifest digest.'
+      $receipt.checks['managedModelPull'] = $true
+
+      $managedStatus = Invoke-JsonRequest "$baseUrl/api/local-inference/status" $headers
+      Assert-True ($managedStatus.offlineReady -eq $true) `
+        'The managed local model was pulled but offline readiness is false.'
+      Assert-True ([int]$managedStatus.totalLocalModels -ge 1) `
+        'The managed runtime did not advertise an installed local model.'
+      $localChatResponse = Invoke-JsonPostRequest "$baseUrl/api/chat" @{
+        message = 'Reply with one short sentence confirming that local inference works.'
+        model = "ollama/$($pull.model)"
+        sessionId = "installer-certificate-managed-model-$runId"
+      } $headers 300
+      $localChatContent = [string]$localChatResponse.Content
+      Assert-True ([int]$localChatResponse.StatusCode -eq 200) `
+        'Managed local-model chat did not return HTTP 200.'
+      Assert-True (
+        ([string]$localChatResponse.Headers['Content-Type']).StartsWith('text/event-stream')
+      ) 'Managed local-model chat did not return an SSE stream.'
+      Assert-True (-not ($localChatContent -match '(?m)^event:[ \t]*error[ \t]*\r?$')) `
+        'Managed local-model chat emitted an error event.'
+      Assert-True (-not $localChatContent.Contains('No AI model is ready')) `
+        'Managed local-model chat fell back to setup-required mode.'
+      $localDoneMatches = [regex]::Matches(
+        $localChatContent,
+        '(?m)^event:[ \t]*done[ \t]*\r?\ndata:[ \t]*(?<data>[^\r\n]+)\r?$'
+      )
+      Assert-True ($localDoneMatches.Count -eq 1) `
+        'Managed local-model chat did not complete with exactly one done event.'
+      $localDone = $localDoneMatches[0].Groups['data'].Value | ConvertFrom-Json
+      Assert-True (-not [string]::IsNullOrWhiteSpace([string]$localDone.content)) `
+        'Managed local-model chat completed without response content.'
+      Assert-True ([string]$localDone.model -eq "ollama/$($pull.model)") `
+        'Managed local-model chat reported a model other than the requested local model.'
+      $receipt.managedModelVerified = $true
+      $receipt.managedModelDigest = [string]$pull.digest
+      $receipt.managedModel = [ordered]@{
+        name = [string]$pull.model
+        manifestDigest = [string]$pull.digest
+        pullGenerationVerified = $true
+        chatResponseChars = ([string]$localDone.content).Length
+      }
+      $receipt.checks['managedModelChat'] = $true
+    }
     $receipt.checks['firstBoot'] = $true
     $receipt.checks['database'] = $health.database.healthy
     $receipt.checks['builtInProxyLiveness'] = $true
@@ -915,8 +1193,9 @@ try {
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
     Set-Content -LiteralPath $dataMarker -Value $runId -Encoding UTF8
   } finally {
-    Stop-InstalledProcesses $appExecutable $serviceScript
-    Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333
+    Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
+    Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
     $firstProcess.Dispose()
   }
 
@@ -928,7 +1207,8 @@ try {
     'Could not prepare the repair probe'
   Assert-NoForeignWaggleProcesses $appExecutable
   Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
-  Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333
+  Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+    -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
   Assert-True ((Get-FileHash -LiteralPath $serviceScript -Algorithm SHA256).Hash -eq $serviceHash) `
     'Same-version repair did not restore resources/service.js'
   Assert-True (Test-Path -LiteralPath $dataMarker -PathType Leaf) 'Repair removed user data'
@@ -971,8 +1251,9 @@ try {
     Assert-True (-not $secondProcess.HasExited) 'The installed desktop process exited after repair'
     $receipt.checks['relaunchAfterRepair'] = $true
   } finally {
-    Stop-InstalledProcesses $appExecutable $serviceScript
-    Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333
+    Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
+    Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
     $secondProcess.Dispose()
   }
 
@@ -991,7 +1272,11 @@ try {
   $receipt.checks['uninstallerCleanup'] = $true
   Remove-CertificateProductRegistry $productRegistry $installDir
   Wait-ForPathState $productRegistry $false 30
-  Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333
+  Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+    -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+  if ($VerifyManagedModel) {
+    $receipt.checks['managedRuntimeCleanup'] = $true
+  }
   $installerStarted = $false
   Assert-True (Test-Path -LiteralPath $dataMarker -PathType Leaf) `
     'Silent uninstall did not preserve user data by default'
@@ -1016,9 +1301,10 @@ try {
   throw
 } finally {
   try {
-    Stop-InstalledProcesses $appExecutable $serviceScript
+    Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
     if ($receipt.status -eq 'passed') {
-      Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333
+      Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+        -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
     }
   } catch {
     $receipt.status = 'failed'
@@ -1029,7 +1315,8 @@ try {
       Assert-NoForeignWaggleProcesses $appExecutable
       Invoke-RawProcess $uninstaller '/S' 300
       Wait-ForPathState $installDir $false 90
-      Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333
+      Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+        -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
     } catch {
       $receipt.status = 'failed'
       $receipt['uninstallerCleanupError'] = $_.Exception.Message

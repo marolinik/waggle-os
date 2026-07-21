@@ -23,6 +23,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 const stagedDepsDir = path.join(resourcesDir, 'node_modules');
+const bundledNpmRuntimeDir = path.join(stagedDepsDir, 'waggle-node-runtime');
+const bundledNpmBinDir = path.join(bundledNpmRuntimeDir, 'bin');
+const bundledNpmPackageDir = path.join(bundledNpmRuntimeDir, 'node_modules', 'npm');
 const targetArch = process.env.TARGET_ARCH || process.arch;
 const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
 const FIRST_PARTY_RUNTIME_ENTRY_PATTERN = /^(?:dist|package\.json|licen[cs]e(?:\.(?:md|txt))?|notice(?:\.(?:md|txt))?)$/i;
@@ -248,18 +251,51 @@ for (const [packageDir, expectedName] of firstPartyPackageDirs) {
 
 const nodeBinary = process.platform === 'win32' ? 'node.exe' : 'node';
 const nodePath = path.join(resourcesDir, nodeBinary);
+const npmCliPath = path.join(bundledNpmPackageDir, 'bin', 'npm-cli.js');
+const npxCliPath = path.join(bundledNpmPackageDir, 'bin', 'npx-cli.js');
+const npmWrapperPath = path.join(
+  bundledNpmBinDir,
+  process.platform === 'win32' ? 'npm.cmd' : 'npm',
+);
+const npxWrapperPath = path.join(
+  bundledNpmBinDir,
+  process.platform === 'win32' ? 'npx.cmd' : 'npx',
+);
+const bundledNpmFiles = [
+  path.join(bundledNpmRuntimeDir, 'package.json'),
+  path.join(bundledNpmRuntimeDir, 'NODE-LICENSE'),
+  path.join(bundledNpmPackageDir, 'LICENSE'),
+  npmCliPath,
+  npxCliPath,
+  npmWrapperPath,
+  npxWrapperPath,
+];
+for (const file of bundledNpmFiles) {
+  if (!fs.existsSync(file) || !fs.lstatSync(file).isFile()) {
+    missing.push(`resources/${resourceRelative(file)} (run: node scripts/bundle-node.mjs)`);
+  }
+}
+if (process.platform !== 'win32') {
+  for (const wrapper of [npmWrapperPath, npxWrapperPath]) {
+    if (fs.existsSync(wrapper) && (fs.statSync(wrapper).mode & 0o111) === 0) {
+      unsafe.push(`resources/${resourceRelative(wrapper)} is not executable`);
+    }
+  }
+}
+let bundledNodeVersion = null;
 if (!fs.existsSync(nodePath)) {
   missing.push(`resources/${nodeBinary} (run: node scripts/bundle-node.mjs)`);
 } else {
   try {
     const bundledRuntime = JSON.parse(execFileSync(nodePath, [
       '-p',
-      'JSON.stringify({ arch: process.arch, modules: process.versions.modules })',
+      'JSON.stringify({ arch: process.arch, modules: process.versions.modules, version: process.versions.node })',
     ], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim());
     const currentAbi = process.versions.modules;
+    bundledNodeVersion = bundledRuntime.version;
     if (bundledRuntime.modules !== currentAbi) {
       missing.push(
         `resources/${nodeBinary} ABI ${bundledRuntime.modules} does not match current Node ABI ${currentAbi} ` +
@@ -273,6 +309,62 @@ if (!fs.existsSync(nodePath)) {
     }
   } catch (err) {
     missing.push(`resources/${nodeBinary} is not executable (${err.message})`);
+  }
+}
+
+if (
+  fs.existsSync(nodePath)
+  && bundledNpmFiles.every((file) => fs.existsSync(file))
+) {
+  try {
+    const runtimeManifest = readManifest(bundledNpmRuntimeDir);
+    const npmManifest = readManifest(bundledNpmPackageDir);
+    if (runtimeManifest.name !== 'waggle-node-runtime') {
+      throw new Error('runtime manifest has an unexpected name');
+    }
+    if (runtimeManifest.version !== bundledNodeVersion) {
+      throw new Error(
+        `runtime manifest Node ${runtimeManifest.version} does not match bundled Node ${bundledNodeVersion}`,
+      );
+    }
+    if (typeof npmManifest.version !== 'string' || npmManifest.version.length === 0) {
+      throw new Error('npm manifest has no version');
+    }
+    const runBundledCli = (cliPath) => execFileSync(nodePath, [cliPath, '--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    const runWrapper = (wrapperPath) => {
+      if (process.platform === 'win32') {
+        return execFileSync(process.env.ComSpec || 'cmd.exe', [
+          '/d',
+          '/s',
+          '/c',
+          `""${wrapperPath}" --version"`,
+        ], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsVerbatimArguments: true,
+        }).trim();
+      }
+      return execFileSync(wrapperPath, ['--version'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+    };
+    const versions = [
+      runBundledCli(npmCliPath),
+      runBundledCli(npxCliPath),
+      runWrapper(npmWrapperPath),
+      runWrapper(npxWrapperPath),
+    ];
+    if (versions.some((version) => version !== npmManifest.version)) {
+      throw new Error(`npm/npx version mismatch: ${versions.join(', ')}`);
+    }
+  } catch (err) {
+    missing.push(
+      `resources bundled npm/npx runtime probe failed (${err instanceof Error ? err.message : String(err)})`,
+    );
   }
 }
 

@@ -18,12 +18,19 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { MarketplaceDB } from './db.js';
 import { SecurityGate, type ScanResult, type SecurityGateConfig } from './security.js';
 import { type FetchFn, defaultFetch } from './fetcher.js';
+import {
+  assertNoNpmArgs,
+  assertSafeGitUrl,
+  assertSafeNpmPackageSpec,
+  resolveManagedInstallPath,
+  runMarketplaceInstallCommand,
+} from './install-security.js';
 import type {
   MarketplacePackage,
   InstallManifest,
@@ -40,6 +47,11 @@ const WAGGLE_DIR = join(homedir(), '.waggle');
 const SKILLS_DIR = join(WAGGLE_DIR, 'skills');
 const PLUGINS_DIR = join(WAGGLE_DIR, 'plugins');
 const REGISTRY_PATH = join(PLUGINS_DIR, 'registry.json');
+
+function isPluginRegistryPath(candidate: string): boolean {
+  // Reserve the same namespace on every platform; Windows aliases path casing.
+  return resolve(candidate).toLowerCase() === resolve(REGISTRY_PATH).toLowerCase();
+}
 // UX-Refactor Phase 4 (C4): the sidecar boot loader reads <dataDir>/.mcp.json
 // (dataDir = WAGGLE_DATA_DIR or ~/.waggle — see server local/mcp-config.ts).
 // This previously wrote to process.cwd(), a file nothing ever read.
@@ -97,6 +109,19 @@ export class MarketplaceInstaller {
       };
     }
 
+    const installType = pkg.waggle_install_type as InstallationType;
+    if (request.installPath !== undefined) {
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: request.installPath,
+        message: 'Custom install paths are not supported. Marketplace packages install only to Waggle-managed destinations.',
+        errors: ['Custom install paths are not supported'],
+      };
+    }
+
     // Check if already installed
     if (!request.force && this.db.isInstalled(pkg.id)) {
       return {
@@ -136,7 +161,6 @@ export class MarketplaceInstaller {
     // ─── END SECURITY GATE ─────────────────────────────────────
 
     // Dispatch to type-specific installer
-    const installType = pkg.waggle_install_type as InstallationType;
     let result: InstallResult;
 
     switch (installType) {
@@ -313,10 +337,14 @@ export class MarketplaceInstaller {
 
   private async installSkill(pkg: MarketplacePackage, request: InstallRequest): Promise<InstallResult> {
     const skillName = pkg.name;
-    const installPath = request.installPath || join(SKILLS_DIR, `${skillName}.md`);
+    let installPath = request.installPath || '';
     const manifest = pkg.install_manifest as InstallManifest | null;
 
     try {
+      installPath = resolveManagedInstallPath(SKILLS_DIR, request.installPath || `${skillName}.md`);
+      if (existsSync(installPath) && !request.force) {
+        throw new Error(`Skill destination already exists: ${installPath}`);
+      }
       let content: string;
 
       if (manifest?.skill_content) {
@@ -371,25 +399,38 @@ export class MarketplaceInstaller {
 
   private async installPlugin(pkg: MarketplacePackage, request: InstallRequest): Promise<InstallResult> {
     const pluginName = pkg.name;
-    const pluginDir = request.installPath || join(PLUGINS_DIR, pluginName);
+    let pluginDir = '';
+    let createdPluginDir = false;
     const manifest = pkg.install_manifest as InstallManifest | null;
 
     try {
-      mkdirSync(pluginDir, { recursive: true });
+      pluginDir = resolveManagedInstallPath(PLUGINS_DIR, request.installPath || pluginName);
+      if (isPluginRegistryPath(pluginDir)) {
+        throw new Error('Plugin destination conflicts with the marketplace registry');
+      }
+      if (existsSync(pluginDir)) {
+        if (!request.force) {
+          throw new Error(`Plugin destination already exists: ${pluginDir}`);
+        }
+      } else {
+        mkdirSync(pluginDir, { recursive: true });
+        createdPluginDir = true;
+      }
 
       // Step 1: Clone repo, install npm package, or create from metadata
       if (manifest?.git_url) {
-        execSync(`git clone --depth 1 ${manifest.git_url} ${pluginDir}`, {
-          stdio: 'pipe',
+        const gitUrl = assertSafeGitUrl(manifest.git_url);
+        runMarketplaceInstallCommand('git', ['clone', '--depth', '1', '--', gitUrl, pluginDir], {
           timeout: 60_000,
         });
       } else if (manifest?.npm_package) {
+        const npmPackage = assertSafeNpmPackageSpec(manifest.npm_package);
+        assertNoNpmArgs(manifest.npm_args);
         // Install npm package into plugin directory
         try {
           writeFileSync(join(pluginDir, 'package.json'), JSON.stringify({ name: pluginName, private: true }), 'utf-8');
-          execSync(`npm install ${manifest.npm_package} --save`, {
+          runMarketplaceInstallCommand('npm', ['install', '--save', '--', npmPackage], {
             cwd: pluginDir,
-            stdio: 'pipe',
             timeout: 120_000,
           });
         } catch {
@@ -430,11 +471,11 @@ export class MarketplaceInstaller {
 
       // Step 3: Install bundled skills
       if (pluginManifest.skills && pluginManifest.skills.length > 0) {
-        const skillsDir = join(pluginDir, 'skills');
+        const skillsDir = resolveManagedInstallPath(pluginDir, 'skills');
         mkdirSync(skillsDir, { recursive: true });
 
         for (const skillName of pluginManifest.skills) {
-          const skillPath = join(skillsDir, `${skillName}.md`);
+          const skillPath = resolveManagedInstallPath(skillsDir, `${skillName}.md`);
           if (!existsSync(skillPath)) {
             // Try to find the skill in marketplace and install it into the plugin
             const skillPkg = this.db.getPackageByName(skillName);
@@ -474,7 +515,7 @@ export class MarketplaceInstaller {
       };
     } catch (err) {
       // Clean up on failure
-      if (existsSync(pluginDir)) {
+      if (createdPluginDir && pluginDir && existsSync(pluginDir)) {
         rmSync(pluginDir, { recursive: true, force: true });
       }
       return {
@@ -510,9 +551,9 @@ export class MarketplaceInstaller {
     try {
       // Step 1: Install npm package if needed
       if (manifest?.npm_package) {
-        const args = manifest.npm_args?.join(' ') || '';
-        execSync(`npm install -g ${manifest.npm_package} ${args}`, {
-          stdio: 'pipe',
+        const npmPackage = assertSafeNpmPackageSpec(manifest.npm_package);
+        assertNoNpmArgs(manifest.npm_args);
+        runMarketplaceInstallCommand('npm', ['install', '--global', '--', npmPackage], {
           timeout: 120_000,
         });
       }
@@ -556,7 +597,7 @@ export class MarketplaceInstaller {
   // ─── Uninstallation ───────────────────────────────────────────────
 
   private async uninstallSkill(pkg: MarketplacePackage): Promise<void> {
-    const skillPath = join(SKILLS_DIR, `${pkg.name}.md`);
+    const skillPath = resolveManagedInstallPath(SKILLS_DIR, `${pkg.name}.md`);
     if (existsSync(skillPath)) {
       rmSync(skillPath);
     }
@@ -564,7 +605,7 @@ export class MarketplaceInstaller {
   }
 
   private async uninstallPlugin(pkg: MarketplacePackage): Promise<void> {
-    const pluginDir = join(PLUGINS_DIR, pkg.name);
+    const pluginDir = resolveManagedInstallPath(PLUGINS_DIR, pkg.name);
     if (existsSync(pluginDir)) {
       rmSync(pluginDir, { recursive: true, force: true });
     }
@@ -757,7 +798,7 @@ This skill was installed from the marketplace. Configure or extend it as needed 
         break;
       case 'create_file':
         if (hook.path && hook.content) {
-          const fullPath = join(cwd, hook.path);
+          const fullPath = resolveManagedInstallPath(cwd, hook.path);
           mkdirSync(dirname(fullPath), { recursive: true });
           writeFileSync(fullPath, hook.content, 'utf-8');
         }

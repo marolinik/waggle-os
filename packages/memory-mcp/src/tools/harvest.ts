@@ -15,6 +15,7 @@ import {
   getPersonalDb,
   getAdapter,
 } from '../core/setup.js';
+import { resolveImportFilePath } from './ingest.js';
 import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive, SuppressionStore, readArchiveUids, withArchiveUid } from '@waggle/core';
 
 export function registerHarvestTools(server: McpServer): void {
@@ -30,15 +31,16 @@ export function registerHarvestTools(server: McpServer): void {
       data: z.string().optional()
         .describe('JSON string of the export data. Provide this OR file_path, not both'),
       file_path: z.string().optional()
-        .describe('Path to the export file on disk. Provide this OR data, not both'),
+        .describe('Relative path beneath WAGGLE_MCP_IMPORT_ROOT. Provide this OR data, not both'),
     },
     async ({ source, data, file_path }) => {
-      // Validate: one of data or file_path must be provided
-      if (!data && !file_path) {
+      // Keep raw JSON and local path inputs separate. Local files are resolved
+      // only beneath the explicit MCP import root.
+      if ((data === undefined) === (file_path === undefined)) {
         return {
           content: [{
             type: 'text' as const,
-            text: 'Error: provide either "data" (JSON string) or "file_path" (path to export file)',
+            text: 'Error: provide either "data" (JSON string) or "file_path" (relative import path), not both',
           }],
           isError: true,
         };
@@ -47,8 +49,9 @@ export function registerHarvestTools(server: McpServer): void {
       // Parse input
       let parsed: unknown;
       try {
-        if (file_path) {
-          const raw = fs.readFileSync(file_path, 'utf-8');
+        if (file_path !== undefined) {
+          const safePath = resolveImportFilePath(file_path);
+          const raw = fs.readFileSync(safePath, 'utf-8');
           parsed = JSON.parse(raw);
         } else {
           parsed = JSON.parse(data!);

@@ -682,11 +682,11 @@ For evidence-only reviews, an attributed teammate or user claim proves only that
 5. Check permitted context for contradictions with established prior decisions
 
 ### Output Contract Precedence
-An explicit whole-response contract (JSON/XML only; one tagged envelope with nothing outside; one literal token; or no surrounding prose) replaces only the default format below. A schema, field set, or tagged envelope alone is not exclusive unless the whole reply must match it or surrounding content is forbidden.
+An explicit whole-response contract (JSON/XML only, one tagged envelope, one literal token, or no surrounding prose) replaces only the default format. A schema, field set, or tagged envelope alone is not exclusive.
 Emit one requested payload and nothing else. Put verdict, checks, evidence, blockers, and limitations only in allowed fields; add no headings, commentary, offers, extra fields, or second VERDICT line.
-For an exclusive JSON, XML, or tagged-envelope contract, return the raw payload only; never wrap it in a Markdown code fence.
-Preserve all requested JSON value types exactly. Numeric literals remain unquoted numbers (for example, schemaVersion: 1, not "1").
-This syntax/shape override never relaxes read-only, evidence, attribution, anti-fabrication, or honest blocker-reporting rules. Never emit a fixed result contrary to evidence. If the payload cannot represent mandatory blockers/limitations, use a valid failure/refusal when possible; otherwise explain the incompatibility rather than fabricate.
+For exclusive JSON/XML/tagged envelopes, return raw payload; never wrap it in a Markdown code fence.
+Preserve JSON value types exactly: numeric literals stay unquoted.
+This syntax/shape override never relaxes read-only, evidence, attribution, anti-fabrication, or honest blocker reporting. Never emit a fixed result contrary to evidence. If required blockers or limitations do not fit, use a valid failure/refusal or explain the incompatibility rather than fabricate.
 
 ### Default Human-Readable Output Format
 When no exclusive response contract is requested, every verification ends with exactly one of:

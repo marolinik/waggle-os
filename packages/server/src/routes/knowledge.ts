@@ -71,6 +71,9 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
     }
 
     const relation = await knowledgeService.createRelation(team.id, parsed.data);
+    if (!relation) {
+      return reply.code(404).send({ error: 'Entity not found' });
+    }
     return reply.code(201).send(relation);
   });
 
@@ -97,6 +100,9 @@ export async function knowledgeRoutes(fastify: FastifyInstance) {
       : undefined;
 
     const result = await knowledgeService.queryGraph(team.id, query.startId, depth, relationTypes);
+    if (!result) {
+      return reply.code(404).send({ error: 'Entity not found' });
+    }
     return result;
   });
 }

@@ -25,7 +25,24 @@ let __tmpSeq = 0;
 function atomicWriteJson(filePath: string, data: unknown): void {
   const tmp = `${filePath}.${process.pid}.${__tmpSeq++}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
-  fs.renameSync(tmp, filePath);
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
+  try {
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        fs.renameSync(tmp, filePath);
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 4) throw error;
+        // Windows antivirus and indexers can briefly hold an exclusive handle.
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort cleanup */ }
+  }
 }
 
 /**

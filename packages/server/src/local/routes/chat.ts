@@ -53,7 +53,7 @@ import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-avail
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import type { GoalAncestry } from '@waggle/shared';
-import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
+import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
@@ -998,7 +998,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const budgetModel = pilotConfig.getBudgetModel();
       const budgetThreshold = pilotConfig.getBudgetThreshold();
 
-      // Budget check: if daily spend exceeds threshold, use budget model
+      // Resolve model selection before availability and fallback checks.
       let resolvedModel = primaryModel;
       let modelSwitchReason: string | null = null;
       let budgetModelSelected = false;
@@ -1006,23 +1006,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
         : false;
 
-      const dailyBudget = pilotConfig.getDailyBudget();
-      if (dailyBudget && dailyBudget > 0 && budgetModel && budgetRoutingAllowed) {
-        const spent = costTracker.getDailyTotal();
-        if (spent / dailyBudget >= budgetThreshold) {
-          resolvedModel = budgetModel;
-          budgetModelSelected = resolvedModel !== primaryModel;
-          modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
-        }
-      }
-
-      // Smart routing: simple messages → budget model (cost optimization)
-      if (!modelSwitchReason && budgetModel && budgetRoutingAllowed) {
-        const routing = routeMessage(message, resolvedModel, budgetModel);
+      // Classify first: spend pressure must never downgrade consequential work.
+      if (budgetModel && budgetRoutingAllowed) {
+        const routing = routeMessage(message, primaryModel, budgetModel);
         if (routing.reason === 'simple_turn') {
           resolvedModel = routing.model;
           budgetModelSelected = resolvedModel !== primaryModel;
-          // Smart routing is silent — no toast, no inline message
+          const dailyBudget = pilotConfig.getDailyBudget();
+          if (dailyBudget && dailyBudget > 0) {
+            const spent = costTracker.getDailyTotal();
+            if (spent / dailyBudget >= budgetThreshold) {
+              modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
+            }
+          }
+          // Under-threshold smart routing is silent; threshold routing keeps telemetry.
         }
       }
 
@@ -1138,13 +1135,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // catch so a failed generation still persists the raw user turn.
       activeSessionOrch = sessionOrch;
 
-      // Check if LiteLLM is available — if not, use echo mode
-      // F2 fix: When using the built-in Anthropic proxy, the /health/liveliness
-      // endpoint doesn't exist — so the HTTP probe always fails, dropping into
-      // echo mode even when an API key is configured. Instead, trust the
-      // provider status that was determined at startup (or updated at runtime).
-      let litellmAvailable = hasCustomRunner; // trust injected runners
-      if (!hasCustomRunner) {
+      // Check whether the configured LLM path can serve a completion. Process
+      // liveness is insufficient for the built-in proxy because it also runs
+      // normally before a cloud credential or local model has been configured.
+      // resolveUsableModel() only returns an ollama/* selection after the tag
+      // is observed locally, so it remains authoritative even if startup's
+      // cloud-provider status has not yet caught up with onboarding.
+      const resolvedLocalOllama = resolvedModel.toLowerCase().startsWith('ollama/');
+      let litellmAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
+      if (!hasCustomRunner && !resolvedLocalOllama) {
         const llmStatus = server.agentState.llmProvider;
         if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
           // Healthy tracked provider — skip HTTP probe. For litellm the
@@ -1159,7 +1158,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             if (token) {
               healthHeaders['Authorization'] = `Bearer ${token}`;
             }
-            const healthRes = await fetch(`${getLitellmUrl()}/health/liveliness`, {
+            const healthPath = llmStatus.provider === 'anthropic-proxy'
+              ? '/health/readiness'
+              : '/health/liveliness';
+            const healthRes = await fetch(`${getLitellmUrl()}${healthPath}`, {
               signal: AbortSignal.any([abortController.signal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
@@ -1257,8 +1259,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const shouldEchoMode = !reroutedMessage && !commandRegistry.isCommand(message) && !litellmAvailable;
 
       if (shouldEchoMode) {
-        // Echo mode — respond without LLM so the UI is functional
-        const echoResponse = `**Waggle is running in local mode** (no LLM proxy connected).\n\nYour message: "${message}"\n\nTo enable AI responses, configure an API key in Settings > API Keys.`;
+        // Setup-required mode — respond without pretending the user's input
+        // was answered. The raw turn is still persisted for continuity.
+        const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
         const words = echoResponse.split(' ');
         for (const word of words) {
           if (abortController.signal.aborted) return;
@@ -1456,14 +1459,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         unregisterHook = requestHookRegistry?.on('pre:tool', async (ctx) => {
           if (!ctx.toolName) return;
           const args = (ctx.args ?? {}) as Record<string, unknown>;
+          const trustedRiskLevel = typeof ctx.riskLevel === 'string'
+            && (RISK_LEVELS as readonly string[]).includes(ctx.riskLevel)
+            ? ctx.riskLevel as RiskLevel
+            : undefined;
 
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
           // blocks even at YOLO (see isCriticalNeverAutopass).
-          if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel)) {
+          if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel, trustedRiskLevel)) {
             // Surface an audit-visible step when elevated autonomy pre-approved
             // so users can see WHY the tool ran without a prompt.
-            if (autonomyLevel !== 'normal' && needsConfirmation(ctx.toolName, args)) {
+            if (autonomyLevel !== 'normal' && needsConfirmation(ctx.toolName, args, trustedRiskLevel)) {
               sendEvent('step', { content: `\u26a1 ${ctx.toolName} auto-approved (${autonomyLevel})` });
               // Tag the audit input with the autonomy level so forensics can
               // see WHY the tool was auto-approved.
@@ -1566,7 +1573,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // 'local_user' was a false claim on the trust surface (review #3).
           if (!trustMeta) {
             try {
-              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input);
+              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input, trustedRiskLevel);
               trustMeta = {
                 riskLevel,
                 approvalClass,
@@ -1716,7 +1723,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // sub-agent inherits the selected MCP tools. Below the threshold the
           // retriever injects them all; above it, the conversation's union-only
           // accumulated top-k. Persona denylist / read-only rails still apply.
-          const runningMcpTools = server.agentState.mcpRuntime.getAllTools();
+          const runningMcpTools = server.agentState.mcpRuntime
+            .getToolsForWorkspace(effectiveWorkspace);
           for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();

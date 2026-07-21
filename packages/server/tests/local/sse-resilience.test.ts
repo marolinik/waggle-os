@@ -12,12 +12,13 @@
  * works because echo mode (no LLM) completes and closes the stream.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
+import type { ToolDefinition } from '@waggle/agent';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import type { LlmProviderStatus } from '../../src/local/index.js';
@@ -26,6 +27,7 @@ import type {
   SubagentStatusEvent,
 } from '../../src/local/routes/notifications.js';
 import { injectWithAuth } from '../test-utils.js';
+import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
 /**
  * Echo mode forces the chat endpoint to bypass the LLM. The test sets an
@@ -88,8 +90,9 @@ describe('SSE Stream Resilience', () => {
       // In echo mode (no LLM), we should see token events and a done event
       expect(body).toContain('event: token');
       expect(body).toContain('event: done');
-      // The done event should contain the echo response mentioning the message
-      expect(body).toContain('test abort handling');
+      // The done event must be truthful and must not masquerade as an answer.
+      expect(body).toContain('No AI model is ready');
+      expect(body).not.toContain('test abort handling');
 
       // Restore provider
       server.agentState.llmProvider = prevProvider;
@@ -108,7 +111,7 @@ describe('SSE Stream Resilience', () => {
       expect(body.error).toBe('message is required');
     });
 
-    it('echo mode includes "local mode" indicator in response', async () => {
+    it('setup-required mode explains how to configure a working model', async () => {
       // Force echo mode: set provider unavailable AND break health probe URL
       const prevProvider = server.agentState.llmProvider;
       const prevLitellmUrl = server.localConfig.litellmUrl;
@@ -122,12 +125,233 @@ describe('SSE Stream Resilience', () => {
       });
 
       expect(res.statusCode).toBe(200);
-      // Echo mode should mention "local mode" or "no LLM proxy"
-      expect(res.body).toContain('local mode');
+      expect(res.body).toContain('No AI model is ready');
+      expect(res.body).toContain('Settings');
+      expect(res.body).not.toContain('echo test');
 
       // Restore provider
       server.agentState.llmProvider = prevProvider;
       server.localConfig.litellmUrl = prevLitellmUrl;
+    });
+
+    it('returns a truthful setup-required completion when the built-in proxy is live but no model is configured', async () => {
+      const prevProvider = server.agentState.llmProvider;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      const providerEnv = [...new Set(Object.values(PROVIDER_ENV_NAMES).flat())];
+      const previousEnv = new Map(providerEnv.map((name) => [name, process.env[name]]));
+      for (const name of providerEnv) delete process.env[name];
+
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'degraded',
+        detail: 'Built-in provider proxy (no API key)',
+        checkedAt: new Date().toISOString(),
+      };
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/health/liveliness')) {
+          return new Response(JSON.stringify({ status: 'healthy' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/health/readiness')) {
+          return new Response(JSON.stringify({ status: 'unavailable' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ error: { message: 'No API key configured' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      });
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: { message: 'Draft a launch plan' },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('event: done');
+        expect(res.body).toContain('No AI model is ready');
+        expect(res.body).toContain('Settings');
+        expect(res.body).not.toContain('Draft a launch plan');
+        expect(res.body).not.toContain('event: error');
+        expect(fetchSpy.mock.calls.some(([input]) => String(input).endsWith('/chat/completions'))).toBe(false);
+      } finally {
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = prevProvider;
+        server.localConfig.litellmUrl = prevLitellmUrl;
+        for (const [name, value] of previousEnv) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+    });
+
+    it('uses a newly verified local Ollama model even while startup provider status is stale', async () => {
+      const prevProvider = server.agentState.llmProvider;
+      const prevCurrentModel = server.agentState.currentModel;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      const prevOllamaHost = process.env.OLLAMA_HOST;
+      const providerEnv = [...new Set(Object.values(PROVIDER_ENV_NAMES).flat())];
+      const previousEnv = new Map(providerEnv.map((name) => [name, process.env[name]]));
+      for (const name of providerEnv) delete process.env[name];
+
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'degraded',
+        detail: 'Built-in provider proxy (no API key)',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-test';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+
+      const completionUrls: string[] = [];
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-test' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/health/readiness')) {
+          return new Response(JSON.stringify({ status: 'unavailable' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/chat/completions')) {
+          completionUrls.push(url);
+          const stream = 'data: {"choices":[{"delta":{"content":"Local model ready"}}]}\n\ndata: [DONE]\n\n';
+          return new Response(stream, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+        }
+        return new Response('', { status: 503 });
+      });
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: { message: 'Use the newly installed model', model: 'ollama/local-test' },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toContain('event: done');
+        expect(res.body).toContain('Local model ready');
+        expect(res.body).not.toContain('No AI model is ready');
+        expect(completionUrls).toEqual(['http://ollama.test/v1/chat/completions']);
+      } finally {
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = prevProvider;
+        server.agentState.currentModel = prevCurrentModel;
+        server.localConfig.litellmUrl = prevLitellmUrl;
+        if (prevOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = prevOllamaHost;
+        for (const [name, value] of previousEnv) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+    });
+
+    it('sends only global and active-workspace MCP tools to the model', async () => {
+      const prevProvider = server.agentState.llmProvider;
+      const prevCurrentModel = server.agentState.currentModel;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      const prevMcpRuntime = server.agentState.mcpRuntime;
+      const prevOllamaHost = process.env.OLLAMA_HOST;
+      const makeTool = (name: string): ToolDefinition => ({
+        name,
+        description: name,
+        parameters: { type: 'object', properties: {} },
+        execute: async () => 'ok',
+      });
+      const globalTool = makeTool('mcp_global_search');
+      const activeTool = makeTool('mcp_default_write');
+      const foreignTool = makeTool('mcp_other_workspace_admin');
+      const getAllTools = vi.fn(() => [globalTool, activeTool, foreignTool]);
+      const getToolsForWorkspace = vi.fn((workspaceId: string) =>
+        workspaceId === 'default' ? [globalTool, activeTool] : [globalTool, foreignTool]);
+      server.agentState.mcpRuntime = {
+        getAllTools,
+        getToolsForWorkspace,
+        getServerStates: () => ({}),
+      } as unknown as typeof server.agentState.mcpRuntime;
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'degraded',
+        detail: 'Built-in provider proxy (no API key)',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-test';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+
+      let transmittedToolNames: string[] = [];
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-test' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/chat/completions')) {
+          const body = JSON.parse(String(init?.body ?? '{}')) as {
+            tools?: Array<{ function?: { name?: string } }>;
+          };
+          transmittedToolNames = body.tools?.flatMap(tool => tool.function?.name ?? []) ?? [];
+          const stream = 'data: {"choices":[{"delta":{"content":"Workspace tools ready"}}]}\n\ndata: [DONE]\n\n';
+          return new Response(stream, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+        }
+        return new Response('', { status: 503 });
+      });
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            message: 'Execute the mcp_global_search tool and the mcp_default_write tool',
+            model: 'ollama/local-test',
+          },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(transmittedToolNames).toContain(globalTool.name);
+        expect(transmittedToolNames).toContain(activeTool.name);
+        expect(transmittedToolNames).not.toContain(foreignTool.name);
+        expect(getToolsForWorkspace).toHaveBeenCalledWith('default');
+        expect(getAllTools).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = prevProvider;
+        server.agentState.currentModel = prevCurrentModel;
+        server.agentState.mcpRuntime = prevMcpRuntime;
+        server.localConfig.litellmUrl = prevLitellmUrl;
+        if (prevOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = prevOllamaHost;
+      }
     });
   });
 
@@ -237,9 +461,11 @@ describe('SSE Stream Resilience', () => {
       expect(res1.statusCode).toBe(200);
       expect(res2.statusCode).toBe(200);
 
-      // Each should contain its own message in the echo
-      expect(res1.body).toContain('stream one');
-      expect(res2.body).toContain('stream two');
+      // Neither response pretends to have answered its user prompt.
+      expect(res1.body).toContain('No AI model is ready');
+      expect(res2.body).toContain('No AI model is ready');
+      expect(res1.body).not.toContain('stream one');
+      expect(res2.body).not.toContain('stream two');
 
       // Both should have the SSE structure
       expect(res1.body).toContain('event: done');

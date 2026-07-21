@@ -57,6 +57,32 @@ describe('Stripe Webhook — tier update logic', () => {
       expect(raw.theme).toBe('dark');
     });
 
+    it('retries a transient Windows lock while replacing config.json', () => {
+      const configPath = path.join(tmpDir, 'config.json');
+      fs.writeFileSync(configPath, JSON.stringify({ theme: 'dark', tier: 'FREE' }));
+      const renameSync = fs.renameSync.bind(fs);
+      const rename = vi.spyOn(fs, 'renameSync')
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('temporarily locked'), { code: 'EPERM' });
+        })
+        .mockImplementation(renameSync);
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      try {
+        updateUserTier(tmpDir, 'TEAMS');
+
+        expect(rename).toHaveBeenCalledTimes(2);
+        expect(wait).toHaveBeenCalledOnce();
+        expect(JSON.parse(fs.readFileSync(configPath, 'utf-8'))).toMatchObject({
+          theme: 'dark',
+          tier: 'TEAMS',
+        });
+      } finally {
+        rename.mockRestore();
+        wait.mockRestore();
+      }
+    });
+
     it('downgrades tier to FREE on subscription deleted', () => {
       const configPath = path.join(tmpDir, 'config.json');
       fs.writeFileSync(configPath, JSON.stringify({ tier: 'TEAMS' }));

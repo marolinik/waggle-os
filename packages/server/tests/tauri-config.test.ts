@@ -350,6 +350,58 @@ describe('Tauri Production Configuration', () => {
         );
         fs.copyFileSync(process.execPath, path.join(fixtureResources, 'node.exe'));
         writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
+        const fixtureNpmVersion = '0.0.0-fixture';
+        const fixtureNpmRuntimeRoot = 'node_modules/waggle-node-runtime';
+        const fixtureNpmCli = `process.stdout.write(${JSON.stringify(fixtureNpmVersion)} + '\\n');\n`;
+        const fixtureNpmWrapper = (cli: 'npm' | 'npx') => [
+          '@ECHO OFF',
+          'SETLOCAL',
+          'SET "NODE_EXE=%~dp0\\..\\..\\..\\node.exe"',
+          `SET "NPM_CLI_JS=%~dp0\\..\\node_modules\\npm\\bin\\${cli}-cli.js"`,
+          '"%NODE_EXE%" "%NPM_CLI_JS%" %*',
+          'EXIT /B %ERRORLEVEL%',
+          '',
+        ].join('\r\n');
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/package.json`,
+          JSON.stringify({
+            name: 'waggle-node-runtime',
+            private: true,
+            version: process.versions.node,
+          }),
+        );
+        writeFixtureFile(fixtureResources, `${fixtureNpmRuntimeRoot}/NODE-LICENSE`, 'Node license');
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/package.json`,
+          JSON.stringify({ name: 'npm', version: fixtureNpmVersion }),
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/LICENSE`,
+          'npm license',
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/bin/npm-cli.js`,
+          fixtureNpmCli,
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/bin/npx-cli.js`,
+          fixtureNpmCli,
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/bin/npm.cmd`,
+          fixtureNpmWrapper('npm'),
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/bin/npx.cmd`,
+          fixtureNpmWrapper('npx'),
+        );
 
         const installedBetterSqlite = path.join(ROOT, 'node_modules', 'better-sqlite3');
         const fixtureBetterSqlite = path.join(fixtureResources, 'node_modules', 'better-sqlite3');
@@ -446,6 +498,19 @@ describe('Tauri Production Configuration', () => {
         });
 
         expect(runChecker().status).toBe(0);
+
+        const fixtureNpmRuntimeManifest = path.join(
+          fixtureResources,
+          ...`${fixtureNpmRuntimeRoot}/package.json`.split('/'),
+        );
+        const fixtureNpmRuntimeManifestContent = fs.readFileSync(fixtureNpmRuntimeManifest);
+        fs.rmSync(fixtureNpmRuntimeManifest);
+        const missingNpmRuntimeResult = runChecker();
+        expect(missingNpmRuntimeResult.status).toBe(1);
+        expect(missingNpmRuntimeResult.stderr).toContain(
+          'resources/node_modules/waggle-node-runtime/package.json',
+        );
+        fs.writeFileSync(fixtureNpmRuntimeManifest, fixtureNpmRuntimeManifestContent);
 
         const stagedBinding = path.join(
           fixtureBetterSqlite,
@@ -901,6 +966,7 @@ describe('CI/CD Configuration', () => {
         workflow.indexOf(macJob),
       );
       const buildIndex = windowsSteps.indexOf('Build Tauri (Windows)');
+      const pruneIndex = windowsSteps.indexOf('Reclaim Windows build intermediates');
       const certificateIndex = windowsSteps.indexOf('certify-windows-installer.ps1');
       const signerCleanupIndex = windowsSteps.indexOf('Remove imported Windows code-signing certificates');
       const receiptIndex = windowsSteps.indexOf('windows-installer-certificate.json');
@@ -913,6 +979,8 @@ describe('CI/CD Configuration', () => {
 
       expect(buildIndex).toBeGreaterThanOrEqual(0);
       if (name === 'release.yml') {
+        expect(pruneIndex).toBeGreaterThan(buildIndex);
+        expect(pruneIndex).toBeLessThan(certificateIndex);
         expect(signerCleanupIndex).toBeGreaterThan(buildIndex);
         expect(signerCleanupIndex).toBeLessThan(certificateIndex);
       }
@@ -956,6 +1024,9 @@ describe('CI/CD Configuration', () => {
         expect(windowsSteps).toContain('tauri.build-override.conf.json');
         expect(windowsSteps).toContain('-RequireAuthenticodeSignature');
         expect(windowsSteps).toContain('-ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT');
+        expect(windowsSteps).toContain('-VerifyManagedModel');
+        expect(windowsSteps).toContain('Refusing to prune outside the Tauri target');
+        expect(windowsSteps).toContain('$minimumFreeBytes = 8GB');
         expect(handoffStep).toContain('isDraft');
         expect(handoffStep).toContain('Refusing to modify a published release');
         expect(handoffStep).toContain('schemaVersion -ne 2');
@@ -963,11 +1034,19 @@ describe('CI/CD Configuration', () => {
         expect(handoffStep).toContain("signatureType -ne 'Authenticode'");
         expect(handoffStep).toContain('nonPassingChecks');
         expect(handoffStep).toContain('generatedInstallerScriptSha256');
+        expect(handoffStep).toContain('managedModelVerified');
+        expect(handoffStep).toContain('managedModelDigest');
+        expect(handoffStep).toContain('noModelChatSetupRequired');
+        expect(handoffStep).toContain('windowsInboxTools');
+        expect(handoffStep).toContain('dockerIndependentRuntimePrerequisites');
+        expect(handoffStep).toContain('managedModelChat');
+        expect(handoffStep).toContain('managedRuntimeCleanup');
         expect(handoffStep).toContain('git ls-remote --tags origin');
         expect(handoffStep).toContain('--verify-tag');
         expect(handoffStep).not.toContain('--clobber');
       } else {
         expect(windowsSteps).not.toContain('-RequireAuthenticodeSignature');
+        expect(windowsSteps).not.toContain('-VerifyManagedModel');
       }
     }
   });
@@ -1011,6 +1090,9 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain("resources\\service.js");
     expect(script).toContain('/v1/health/liveliness');
     expect(script).toContain('/api/auth/session-token');
+    expect(script).toContain("$baseUrl/api/chat");
+    expect(script).toContain('No AI model is ready');
+    expect(script).toContain("$receipt.checks['noModelChatSetupRequired']");
     expect(script).toContain("$baseUrl/api/tier");
     expect(script).toContain('unauthenticatedProtectedRoute');
     expect(script).toContain("'WAGGLE_TRUST_LOCALHOST'");
@@ -1025,6 +1107,18 @@ describe('CI/CD Configuration', () => {
     expect(script).not.toContain('$env:PATH = "$env:SystemRoot\\System32;$env:SystemRoot"');
     expect(script).toContain('/api/embedding/status');
     expect(script).toContain('/api/local-inference/status');
+    expect(script).toContain('/api/local-inference/bootstrap');
+    expect(script).toContain('/api/local-inference/pull');
+    expect(script).toContain('[switch]$VerifyManagedModel');
+    expect(script).toContain("[Environment]::GetFolderPath('System')");
+    expect(script).toContain("@('tar.exe', 'taskkill.exe')");
+    expect(script).toContain("$receipt.checks['windowsInboxTools']");
+    expect(script).toContain('$managedOperationTimeoutSeconds = 3600');
+    expect(script).toContain('$receipt.managedModelVerified = $true');
+    expect(script).toContain("$receipt.checks['managedModelChat']");
+    expect(script).toContain('managedModelDigest');
+    expect(script).toContain('managedRuntimeCleanup');
+    expect(script).toContain('Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot');
     expect(script).toContain('dockerRequired');
     expect(script).toContain('sameVersionRepair');
     expect(script).toContain('$firstProcess.HasExited');
