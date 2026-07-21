@@ -95,13 +95,40 @@ describe('CostTracker', () => {
   });
 
   describe('getDailyTotal', () => {
-    it('returns total cost across all models for current session', () => {
+    it('adds persisted carryover to in-process usage without double-seeding', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-21T12:00:00.000Z'));
       const tracker = new CostTracker();
-      tracker.addUsage('claude-sonnet-4-6', 1000, 500);
-      tracker.addUsage('claude-sonnet-4-6', 2000, 1000);
-      const total = tracker.getDailyTotal();
-      expect(total).toBeGreaterThan(0);
-      expect(total).toBe(tracker.getStats().estimatedCost);
+      try {
+        tracker.initializeDailyCarryover('2026-07-21', 6);
+        tracker.initializeDailyCarryover('2026-07-21', 8);
+        tracker.addUsage('claude-sonnet-4-6', 1000, 1000);
+
+        expect(tracker.hasDailyCarryover('2026-07-21')).toBe(true);
+        expect(tracker.getDailyTotal()).toBeCloseTo(6.018, 6);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('resets carryover and in-process usage at the next UTC day', () => {
+      vi.useFakeTimers();
+      const tracker = new CostTracker();
+      try {
+        vi.setSystemTime(new Date('2026-07-20T23:59:00.000Z'));
+        tracker.initializeDailyCarryover('2026-07-20', 6);
+        tracker.addUsage('claude-sonnet-4-6', 1000, 1000);
+
+        vi.setSystemTime(new Date('2026-07-21T00:01:00.000Z'));
+        expect(tracker.getDailyTotal()).toBe(0);
+        expect(tracker.hasDailyCarryover('2026-07-21')).toBe(false);
+
+        tracker.initializeDailyCarryover('2026-07-21', 2);
+        tracker.addUsage('claude-sonnet-4-6', 2000, 1000);
+        expect(tracker.getDailyTotal()).toBeCloseTo(2.021, 6);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

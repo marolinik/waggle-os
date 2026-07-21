@@ -320,6 +320,25 @@ export class ExecutionTraceStore {
     return row ? toParsed(row) : undefined;
   }
 
+  /** Highest trace id present when a consumer starts its process-local ledger. */
+  getLatestId(): number {
+    const row = this.db.getDatabase().prepare(
+      'SELECT COALESCE(MAX(id), 0) AS id FROM execution_traces',
+    ).get() as { id: number | null };
+    return Number(row.id ?? 0);
+  }
+
+  /** Sum persisted model cost from a timestamp through an inclusive trace-id boundary. */
+  getTotalCostSince(since: string, throughId: number = Number.MAX_SAFE_INTEGER): number {
+    const row = this.db.getDatabase().prepare(`
+      SELECT COALESCE(SUM(cost_usd), 0) AS total
+      FROM execution_traces
+      WHERE created_at >= datetime(?)
+        AND id <= ?
+    `).get(since, throughId) as { total: number | null };
+    return Number(row.total ?? 0);
+  }
+
   /** Query traces with optional filters. */
   query(filter: TraceQueryFilter = {}): ExecutionTrace[] {
     const clauses: string[] = [];

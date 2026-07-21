@@ -90,27 +90,34 @@ function isIncompleteCompletionError(error: unknown): boolean {
     && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
 }
 
+function getBillableUsage(
+  usage: unknown,
+): { inputTokens: number; outputTokens: number } | null {
+  const candidate = usage as {
+    inputTokens?: unknown;
+    outputTokens?: unknown;
+  } | null | undefined;
+  if (!candidate
+    || typeof candidate.inputTokens !== 'number'
+    || !Number.isFinite(candidate.inputTokens)
+    || candidate.inputTokens < 0
+    || typeof candidate.outputTokens !== 'number'
+    || !Number.isFinite(candidate.outputTokens)
+    || candidate.outputTokens < 0
+    || candidate.inputTokens + candidate.outputTokens <= 0) {
+    return null;
+  }
+  return {
+    inputTokens: candidate.inputTokens,
+    outputTokens: candidate.outputTokens,
+  };
+}
+
 function getIncompleteCompletionUsage(
   error: unknown,
 ): { inputTokens: number; outputTokens: number } | null {
   if (!isIncompleteCompletionError(error)) return null;
-  const usage = (error as {
-    usage?: { inputTokens?: unknown; outputTokens?: unknown };
-  }).usage;
-  if (!usage
-    || typeof usage.inputTokens !== 'number'
-    || !Number.isFinite(usage.inputTokens)
-    || usage.inputTokens < 0
-    || typeof usage.outputTokens !== 'number'
-    || !Number.isFinite(usage.outputTokens)
-    || usage.outputTokens < 0
-    || usage.inputTokens + usage.outputTokens <= 0) {
-    return null;
-  }
-  return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-  };
+  return getBillableUsage((error as { usage?: unknown }).usage);
 }
 
 const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
@@ -441,6 +448,38 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     sessionHistories,
   } = server.agentState;
   const approvalTimeoutPolicy = resolveApprovalTimeoutPolicy();
+  let persistedTraceBoundaryId = 0;
+  try {
+    persistedTraceBoundaryId = server.traceStore?.getLatestId() ?? 0;
+  } catch (costBoundaryError) {
+    log.warn(
+      '[chat] persisted cost boundary unavailable; starting daily carryover at zero:',
+      costBoundaryError instanceof Error ? costBoundaryError.message : String(costBoundaryError),
+    );
+  }
+
+  const getTrackedDailySpend = (enabled: boolean): number => {
+    const day = new Date().toISOString().slice(0, 10);
+    const dayStart = `${day}T00:00:00.000Z`;
+
+    if (!costTracker.hasDailyCarryover(day)) {
+      try {
+        const persisted = server.traceStore?.getTotalCostSince(
+          dayStart,
+          persistedTraceBoundaryId,
+        ) ?? 0;
+        costTracker.initializeDailyCarryover(day, persisted);
+      } catch (costReadError) {
+        log.warn(
+          '[chat] persisted daily cost read failed; using in-process total:',
+          costReadError instanceof Error ? costReadError.message : String(costReadError),
+        );
+      }
+    }
+
+    if (!enabled) return 0;
+    return costTracker.getDailyTotal();
+  };
   // Read dynamically — may be updated to built-in proxy at runtime
   const getLitellmUrl = () => server.localConfig.litellmUrl;
 
@@ -1056,6 +1095,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const activeWorkspaceId = workspace ?? 'default';
     let activeHistory: Array<{ role: string; content: string }> | undefined;
     let activeAttemptModel: string | null = null;
+    let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
 
     try {
       const hasCustomRunner = !!server.agentRunner;
@@ -1079,21 +1119,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const budgetRoutingAllowed = budgetModel
         ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
         : false;
+      const dailyBudget = pilotConfig.getDailyBudget() ?? 0;
+      const spent = getTrackedDailySpend(dailyBudget > 0);
+      const budgetThresholdReached = dailyBudget > 0
+        && spent / dailyBudget >= budgetThreshold;
 
       // Classify first: spend pressure must never downgrade consequential work.
-      if (budgetModel && budgetRoutingAllowed) {
+      if (budgetModel && budgetRoutingAllowed && budgetThresholdReached) {
         const routing = routeMessage(message, primaryModel, budgetModel);
         if (routing.reason === 'simple_turn') {
           resolvedModel = routing.model;
           budgetModelSelected = resolvedModel !== primaryModel;
-          const dailyBudget = pilotConfig.getDailyBudget();
-          if (dailyBudget && dailyBudget > 0) {
-            const spent = costTracker.getDailyTotal();
-            if (spent / dailyBudget >= budgetThreshold) {
-              modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
-            }
+          if (budgetModelSelected) {
+            modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
           }
-          // Under-threshold smart routing is silent; threshold routing keeps telemetry.
         }
       }
 
@@ -2364,8 +2403,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const runAgentAttempt = async (config: typeof runConfig) => {
           bufferedAgentTokens = [];
           activeAttemptModel = resolvedModel;
+          abortedAttemptUsage = null;
           const attemptedResult = await agentRunner(config);
           if (abortController.signal.aborted) {
+            abortedAttemptUsage = getBillableUsage(attemptedResult.usage);
             throw abortController.signal.reason ?? new Error('Chat request aborted');
           }
           return attemptedResult;
@@ -2526,6 +2567,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Track cost with the ACTUALLY used model
+        const resultCost = costTracker.calculateCost(
+          result.usage.inputTokens,
+          result.usage.outputTokens,
+          resolvedModel,
+        );
         costTracker.addUsage(resolvedModel, result.usage.inputTokens, result.usage.outputTokens, effectiveWorkspace);
 
         // L-17 C3: per-session token accumulation for /api/fleet visibility.
@@ -2548,6 +2594,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 input: result.usage.inputTokens,
                 output: result.usage.outputTokens,
               },
+              costUsd: resultCost,
             });
             traceFinalized = true;
           } catch { /* tracing is best-effort — don't fail the response */ }
@@ -2853,17 +2900,25 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     } catch (err) {
       const incompleteUsage = getIncompleteCompletionUsage(err);
-      if (incompleteUsage && activeAttemptModel) {
+      const billableFailureUsage = incompleteUsage
+        ?? (abortController.signal.aborted ? abortedAttemptUsage : null);
+      let failureCostUsd: number | undefined;
+      if (billableFailureUsage && activeAttemptModel) {
         try {
+          failureCostUsd = costTracker.calculateCost(
+            billableFailureUsage.inputTokens,
+            billableFailureUsage.outputTokens,
+            activeAttemptModel,
+          );
           costTracker.addUsage(
             activeAttemptModel,
-            incompleteUsage.inputTokens,
-            incompleteUsage.outputTokens,
+            billableFailureUsage.inputTokens,
+            billableFailureUsage.outputTokens,
             activeWorkspaceId,
           );
           server.sessionManager?.addTokens(
             activeWorkspaceId,
-            incompleteUsage.inputTokens + incompleteUsage.outputTokens,
+            billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,
           );
         } catch (accountingError) {
           log.warn(
@@ -2871,13 +2926,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             accountingError instanceof Error ? accountingError.message : String(accountingError),
           );
         }
-      }
-      // A user Stop/client disconnect is not an assistant answer or generation
-      // failure. Keep the already-persisted user turn, but never fabricate an
-      // authoritative assistant/error turn from partial work.
-      if (abortController.signal.aborted) {
-        log.info(`[chat] turn ${turnId} cancelled by client`);
-        return;
       }
       // H-07 G4: finalize aborted trace so the evolution dataset builder can
       // mine it as a negative example. Without this the row stays 'pending'
@@ -2888,10 +2936,25 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           traceRecorder.finalize(traceHandle, {
             outcome: 'abandoned',
             output: '',
-            correctionFeedback: errMsg.slice(0, 500),
+            tokens: billableFailureUsage ? {
+              input: billableFailureUsage.inputTokens,
+              output: billableFailureUsage.outputTokens,
+            } : undefined,
+            costUsd: failureCostUsd,
+            ...(!abortController.signal.aborted && {
+              correctionFeedback: errMsg.slice(0, 500),
+            }),
           });
           traceFinalized = true;
         } catch { /* best-effort */ }
+      }
+      // A user Stop/client disconnect is not an assistant answer or generation
+      // failure. Keep the already-persisted user turn, but never fabricate an
+      // authoritative assistant/error turn from partial work.
+      if (abortController.signal.aborted) {
+        log.info(`[chat] turn ${turnId} cancelled by client`);
+        if (!raw.destroyed && !raw.writableEnded) raw.end();
+        return;
       }
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;

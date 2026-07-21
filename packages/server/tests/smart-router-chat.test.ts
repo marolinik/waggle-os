@@ -87,7 +87,7 @@ describe('chat smart-router integration', () => {
     }
   });
 
-  it('uses the configured budget model for a bounded trivial turn', async () => {
+  it('keeps a bounded trivial turn on primary when no daily budget is configured', async () => {
     const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
@@ -95,7 +95,27 @@ describe('chat smart-router integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(capturedModel).toBe('budget-test-model');
+    expect(capturedModel).toBe('primary-test-model');
+    expect(response.body).not.toContain('event: model_switch');
+  });
+
+  it('keeps an under-threshold trivial turn on the configured primary model', async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.setDailyBudget(10);
+    config.setBudgetThreshold(0.8);
+    config.save();
+    const getDailyTotal = vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(7.99);
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'What is 19 * 23?', session: 'under-budget-trivial-route' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedModel).toBe('primary-test-model');
+    expect(response.body).not.toContain('event: model_switch');
+    expect(getDailyTotal).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -141,7 +161,8 @@ describe('chat smart-router integration', () => {
     config.setDailyBudget(1);
     config.setBudgetThreshold(0.8);
     config.save();
-    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
+    const getDailyTotal = vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(0.8);
+    vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(4);
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -151,8 +172,124 @@ describe('chat smart-router integration', () => {
 
     expect(response.statusCode).toBe(200);
     expect(capturedModel).toBe('budget-test-model');
+    expect(getDailyTotal).toHaveBeenCalledOnce();
     expect(response.body).toContain('event: model_switch');
-    expect(response.body).toContain('Budget 80% reached ($1.00/$1.00)');
+    expect(response.body).toContain('Budget 80% reached ($0.80/$1.00)');
+    const [persistedTrace] = server.traceStore.query({
+      sessionId: 'over-budget-trivial-route',
+      limit: 1,
+    });
+    expect(persistedTrace.cost_usd).toBe(4);
+    expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 1, output: 1 });
+  });
+
+  it('adds restart carryover without double-counting after a transient read failure', async () => {
+    const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-smart-router-restart-'));
+    let initialServer: FastifyInstance | undefined;
+    let restartedServer: FastifyInstance | undefined;
+    try {
+      const config = new WaggleConfig(restartDir);
+      config.setDefaultModel(primary);
+      config.setBudgetModel(budget);
+      config.setDailyBudget(13.75);
+      config.setBudgetThreshold(0.8);
+      config.save();
+
+      initialServer = await buildLocalServer({ dataDir: restartDir });
+      const traceId = initialServer.traceStore.start({
+        sessionId: 'persisted-daily-spend-source',
+        workspaceId: 'default',
+        model: 'claude-opus-4-8',
+        input: 'prior completed turn',
+      });
+      initialServer.traceStore.finalize(traceId, {
+        outcome: 'success',
+        output: 'ok',
+        costUsd: 8,
+      });
+      const oldTraceId = initialServer.traceStore.start({
+        sessionId: 'previous-day-spend-source',
+        workspaceId: 'default',
+        model: 'claude-opus-4-8',
+        input: 'previous day turn',
+      });
+      initialServer.traceStore.finalize(oldTraceId, {
+        outcome: 'success',
+        output: 'ok',
+        costUsd: 100,
+      });
+      const previousDay = new Date(Date.now() - 86_400_000)
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, 19);
+      initialServer.multiMind.personal.getDatabase()
+        .prepare('UPDATE execution_traces SET created_at = ? WHERE id = ?')
+        .run(previousDay, oldTraceId);
+      await initialServer.close();
+      initialServer = undefined;
+
+      restartedServer = await buildLocalServer({ dataDir: restartDir });
+      let restartedModel: string | undefined;
+      restartedServer.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+        restartedModel = agentConfig.model;
+        return {
+          content: 'ok',
+          toolsUsed: [],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      };
+      vi.spyOn(restartedServer.traceStore, 'getTotalCostSince')
+        .mockImplementationOnce(() => { throw new Error('transient daily cost read failure'); });
+
+      const failedReadResponse = await injectWithAuth(restartedServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'failed-carryover-read' },
+      });
+      expect(failedReadResponse.statusCode).toBe(200);
+      expect(restartedModel).toBe('primary-test-model');
+
+      // $8 persisted before restart + ~$2 incurred in this process reaches the
+      // $10 total. The new trace is above the process-start id boundary, so a
+      // recovered carryover read must not seed it and then add it again.
+      restartedServer.agentState.costTracker.addUsage('claude-opus-4-8', 133_334, 0);
+      const currentTraceId = restartedServer.traceStore.start({
+        sessionId: 'current-process-paid-turn',
+        workspaceId: 'default',
+        model: 'claude-opus-4-8',
+        input: 'current process turn',
+      });
+      restartedServer.traceStore.finalize(currentTraceId, {
+        outcome: 'success',
+        output: 'ok',
+        costUsd: 2,
+      });
+
+      const recoveredReadResponse = await injectWithAuth(restartedServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'recovered-carryover-read' },
+      });
+      expect(recoveredReadResponse.statusCode).toBe(200);
+      expect(restartedModel).toBe('primary-test-model');
+      expect(recoveredReadResponse.body).not.toContain('event: model_switch');
+
+      config.setDailyBudget(12.5);
+      config.save();
+      const response = await injectWithAuth(restartedServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'What is 19 * 23?', session: 'persisted-spend-trivial-route' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(restartedModel).toBe('budget-test-model');
+      expect(response.body).toContain('Budget 80% reached ($10.00/$12.50)');
+    } finally {
+      if (initialServer) await initialServer.close();
+      if (restartedServer) await restartedServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      fs.rmSync(restartDir, { recursive: true, force: true });
+    }
   });
 
   it('never sends local conversation history to a cloud budget model implicitly', async () => {
@@ -250,7 +387,9 @@ describe('chat smart-router integration', () => {
   it('returns to the primary before fallback when an optional budget run fails', async () => {
     const config = new WaggleConfig(tmpDir);
     config.setFallbackModel('ollama/fallback-test-model');
+    config.setDailyBudget(1);
     config.save();
+    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
     const attempts: string[] = [];
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(agentConfig.model);
@@ -277,10 +416,13 @@ describe('chat smart-router integration', () => {
   it('never replays an incomplete budget-model run on the primary or fallback', async () => {
     const config = new WaggleConfig(tmpDir);
     config.setFallbackModel('ollama/fallback-test-model');
+    config.setDailyBudget(1);
     config.save();
+    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
     const attempts: string[] = [];
     let simulatedMutations = 0;
     const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
+    const calculateCost = vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(2);
     const addTokens = vi.spyOn(server.sessionManager, 'addTokens');
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(agentConfig.model);
@@ -315,12 +457,61 @@ describe('chat smart-router integration', () => {
     );
     expect(addTokens).toHaveBeenCalledOnce();
     expect(addTokens).toHaveBeenCalledWith('default', 14_000);
+    expect(calculateCost).toHaveBeenCalledWith(13_500, 500, 'ollama/budget-test-model');
+    const [persistedTrace] = server.traceStore.query({
+      sessionId: 'incomplete-budget-no-replay',
+      limit: 1,
+    });
+    expect(persistedTrace.cost_usd).toBe(2);
+    expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 13_500, output: 500 });
+  });
+
+  it('persists returned usage before completing a client-cancelled run', async () => {
+    const calculateCost = vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(3);
+    const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      Object.defineProperty(agentConfig.signal!, 'aborted', {
+        value: true,
+        configurable: true,
+      });
+      return {
+        content: 'partial output that must not be committed',
+        toolsUsed: [],
+        usage: { inputTokens: 20_000, outputTokens: 1_000 },
+      };
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Analyze this report', session: 'cancelled-run-usage' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain('event: error');
+    expect(response.body).not.toContain('event: done');
+    expect(calculateCost).toHaveBeenCalledWith(20_000, 1_000, 'ollama/primary-test-model');
+    expect(addUsage).toHaveBeenCalledWith(
+      'ollama/primary-test-model',
+      20_000,
+      1_000,
+      'default',
+    );
+    const [persistedTrace] = server.traceStore.query({
+      sessionId: 'cancelled-run-usage',
+      limit: 1,
+    });
+    expect(persistedTrace.cost_usd).toBe(3);
+    expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 20_000, output: 1_000 });
+    expect(persistedTrace.outcome).toBe('abandoned');
   });
 
   it('uses the configured fallback only after both budget and primary runs fail', async () => {
     const config = new WaggleConfig(tmpDir);
     config.setFallbackModel('ollama/fallback-test-model');
+    config.setDailyBudget(1);
     config.save();
+    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
     const attempts: string[] = [];
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(agentConfig.model);

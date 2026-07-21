@@ -80,6 +80,7 @@ export class BudgetExceededError extends Error {
 export class CostTracker {
   private pricing: Record<string, ModelPricing>;
   private usage: UsageEntry[] = [];
+  private dailyCarryover: { day: string; costUsd: number } | null = null;
   private dailyBudgetUsd: number | null = null;
   private budgetMode: BudgetMode = 'soft';
 
@@ -180,9 +181,31 @@ export class CostTracker {
     return total;
   }
 
-  /** Get total estimated cost for the current session (proxy for daily total). */
+  hasDailyCarryover(day: string): boolean {
+    return this.dailyCarryover?.day === day;
+  }
+
+  /** Seed cost persisted before this process started, once per UTC day. */
+  initializeDailyCarryover(day: string, costUsd: number): void {
+    if (this.hasDailyCarryover(day)) return;
+    this.dailyCarryover = {
+      day,
+      costUsd: Number.isFinite(costUsd) ? Math.max(0, costUsd) : 0,
+    };
+  }
+
+  /** Get today's persisted carryover plus in-process usage (UTC calendar day). */
   getDailyTotal(): number {
-    return this.getStats().estimatedCost;
+    const today = new Date().toISOString().slice(0, 10);
+    let total = this.dailyCarryover?.day === today
+      ? this.dailyCarryover.costUsd
+      : 0;
+    for (const entry of this.usage) {
+      if (entry.timestamp.startsWith(today)) {
+        total += this.calculateCost(entry.input, entry.output, entry.model);
+      }
+    }
+    return total;
   }
 
   formatSummary(): string {
