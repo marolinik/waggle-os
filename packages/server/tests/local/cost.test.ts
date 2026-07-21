@@ -141,4 +141,51 @@ describe('Cost Dashboard API', () => {
       expect(typeof ws.percentOfTotal).toBe('number');
     }
   });
+
+  it('keeps the budget progress total across a sidecar restart', async () => {
+    const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cost-restart-'));
+    let initialServer: FastifyInstance | undefined;
+    let restartedServer: FastifyInstance | undefined;
+    try {
+      fs.writeFileSync(
+        path.join(restartDir, 'config.json'),
+        JSON.stringify({ tier: 'TEAMS', dailyBudget: 10 }),
+      );
+      const mind = new MindDB(path.join(restartDir, 'personal.mind'));
+      mind.close();
+
+      initialServer = await buildLocalServer({ dataDir: restartDir });
+      const traceId = initialServer.traceStore.start({
+        sessionId: 'persisted-cost-dashboard-source',
+        workspaceId: 'default',
+        model: 'claude-sonnet-4-6',
+        input: 'prior paid turn',
+      });
+      initialServer.traceStore.finalize(traceId, {
+        outcome: 'success',
+        output: 'ok',
+        costUsd: 5,
+      });
+      await initialServer.close();
+      initialServer = undefined;
+
+      restartedServer = await buildLocalServer({ dataDir: restartDir });
+      restartedServer.agentState.costTracker.addUsage('claude-sonnet-4-6', 1000, 1000);
+      const res = await injectWithAuth(restartedServer, {
+        method: 'GET',
+        url: '/api/cost/summary',
+      });
+      const body = JSON.parse(res.body);
+
+      expect(res.statusCode).toBe(200);
+      expect(body.budget.todayCost).toBeCloseTo(5.018, 4);
+      expect(body.budget.budgetPercent).toBe(50);
+      expect(body.budget.budgetStatus).toBe('ok');
+    } finally {
+      if (initialServer) await initialServer.close();
+      if (restartedServer) await restartedServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      fs.rmSync(restartDir, { recursive: true, force: true });
+    }
+  });
 });

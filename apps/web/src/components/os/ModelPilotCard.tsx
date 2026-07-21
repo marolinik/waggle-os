@@ -459,17 +459,17 @@ const ModelPilotCard = ({
             aria-label="Budget saver activation threshold"
             name="budgetThreshold"
             type="range"
-            min={0.1}
-            max={1.0}
+            min={0.5}
+            max={0.95}
             step={0.05}
             value={budgetThreshold}
             onChange={(e) => onUpdate({ budgetThreshold: parseFloat(e.target.value) })}
             className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-[var(--honey)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
           <div className="flex justify-between text-[11px] text-muted-foreground mt-0.5">
-            <span>10%</span>
             <span>50%</span>
-            <span>100%</span>
+            <span>75%</span>
+            <span>95%</span>
           </div>
         </div>
       )}

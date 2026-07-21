@@ -64,6 +64,12 @@ function estimateCost(input: number, output: number): number {
 
 export const costRoutes: FastifyPluginAsync = async (server) => {
   const { costTracker } = server.agentState;
+  let persistedTraceBoundaryId = 0;
+  try {
+    persistedTraceBoundaryId = server.traceStore?.getLatestId() ?? 0;
+  } catch (error) {
+    server.log.warn({ err: error }, 'Persisted cost boundary unavailable');
+  }
 
   /**
    * Get usage entries from the cost tracker.
@@ -108,6 +114,18 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
       todayOutput += e.output;
       todayCost += calcCost(e.input, e.output, e.model);
     }
+    if (!costTracker.hasDailyCarryover(todayStr)) {
+      try {
+        const persisted = server.traceStore?.getTotalCostSince(
+          `${todayStr}T00:00:00.000Z`,
+          persistedTraceBoundaryId,
+        ) ?? 0;
+        costTracker.initializeDailyCarryover(todayStr, persisted);
+      } catch (error) {
+        server.log.warn({ err: error }, 'Persisted daily cost unavailable');
+      }
+    }
+    const trackedTodayCost = costTracker.getDailyTotal();
 
     // Daily breakdown for the last N days
     const dayKeys = lastNDays(daysParam);
@@ -163,10 +181,10 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
     }
 
     if (dailyBudget !== null && dailyBudget > 0) {
-      budgetPercent = Math.round((todayCost / dailyBudget) * 100);
-      if (todayCost >= dailyBudget) {
+      budgetPercent = Math.round((trackedTodayCost / dailyBudget) * 100);
+      if (trackedTodayCost >= dailyBudget) {
         budgetStatus = 'exceeded';
-      } else if (todayCost >= dailyBudget * 0.8) {
+      } else if (trackedTodayCost >= dailyBudget * 0.8) {
         budgetStatus = 'warning';
       }
     }
@@ -194,7 +212,7 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
       daily,
       budget: {
         dailyBudget,
-        todayCost: Math.round(todayCost * 10000) / 10000,
+        todayCost: Math.round(trackedTodayCost * 10000) / 10000,
         budgetStatus,
         budgetPercent,
       },
