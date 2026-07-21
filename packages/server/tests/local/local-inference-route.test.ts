@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import { localInferenceRoutes } from '../../src/local/routes/local-inference.js';
+import { ManagedRuntimeRollbackError } from '../../src/local/managed-ollama-runtime.js';
 
 describe('local-inference route — TS engine wiring', () => {
   let server: ReturnType<typeof Fastify>;
@@ -59,6 +60,15 @@ function managedStatus(supported = true) {
     running: false,
     targetVersion: 'test-1.0.0',
     version: 'test-1.0.0',
+    targetInstalled: false,
+    activeVersion: null,
+    previousVersion: null,
+    fallbackActive: false,
+    rollback: {
+      available: false,
+      active: false,
+      lastAttempt: null,
+    },
     artifactSizeBytes: 123,
     downloadRequired: true,
     dockerRequired: false as const,
@@ -66,7 +76,54 @@ function managedStatus(supported = true) {
   };
 }
 
+const rollbackAttempt = {
+  failedVersion: 'test-2.0.0',
+  restoredVersion: 'test-1.0.0',
+  occurredAt: '2026-07-21T09:00:00.000Z',
+  reason: 'target failed its readiness probe',
+};
+
+function managedRollbackStatus(running = true) {
+  return {
+    ...managedStatus(),
+    installed: true,
+    running,
+    targetVersion: rollbackAttempt.failedVersion,
+    version: rollbackAttempt.restoredVersion,
+    targetInstalled: true,
+    activeVersion: rollbackAttempt.restoredVersion,
+    previousVersion: null,
+    fallbackActive: true,
+    rollback: {
+      available: true,
+      active: true,
+      lastAttempt: rollbackAttempt,
+    },
+    downloadRequired: false,
+  };
+}
+
 describe('local-inference route — Waggle-managed runtime', () => {
+  it('forwards target, active, previous, and rollback state without flattening it', async () => {
+    const server = Fastify({ logger: false });
+    const rollbackStatus = managedRollbackStatus();
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => rollbackStatus,
+        ensureReady: vi.fn(),
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe: async () => unavailableOllama,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'GET', url: '/api/local-inference/status' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().managedRuntime).toEqual(rollbackStatus);
+    await server.close();
+  });
+
   it('advertises a Docker-free managed bootstrap instead of requiring a system Ollama install', async () => {
     const server = Fastify({ logger: false });
     const stop = vi.fn(async () => undefined);
@@ -99,15 +156,11 @@ describe('local-inference route — Waggle-managed runtime', () => {
     expect(stop).toHaveBeenCalledOnce();
   });
 
-  it('restarts an already-installed managed runtime when the sidecar starts', async () => {
+  it('restarts an active fallback runtime on sidecar start without retrying the upgrade', async () => {
     const server = Fastify({ logger: false });
-    const installedStatus = {
-      ...managedStatus(),
-      installed: true,
-      running: false,
-      downloadRequired: false,
-    };
+    const installedStatus = managedRollbackStatus(false);
     const runningStatus = { ...installedStatus, running: true };
+    const ensureReady = vi.fn();
     const startInstalled = vi.fn(async () => ({
       installedNow: false,
       startedNow: true,
@@ -117,7 +170,7 @@ describe('local-inference route — Waggle-managed runtime', () => {
     await server.register(localInferenceRoutes, {
       runtimeFactory: () => ({
         getStatus: () => installedStatus,
-        ensureReady: vi.fn(),
+        ensureReady,
         startInstalled,
         stop: async () => undefined,
       }),
@@ -131,6 +184,45 @@ describe('local-inference route — Waggle-managed runtime', () => {
       installedNow: false,
       startedNow: true,
     });
+    expect(ensureReady).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it('does not auto-start an older active runtime before an explicit target upgrade', async () => {
+    const server = Fastify({ logger: false });
+    const pendingUpgradeStatus = {
+      ...managedStatus(),
+      installed: true,
+      running: false,
+      targetVersion: 'test-2.0.0',
+      version: 'test-1.0.0',
+      targetInstalled: true,
+      activeVersion: 'test-1.0.0',
+      previousVersion: null,
+      fallbackActive: false,
+      rollback: {
+        available: true,
+        active: false,
+        lastAttempt: null,
+      },
+      downloadRequired: false,
+    };
+    const ensureReady = vi.fn();
+    const startInstalled = vi.fn();
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => pendingUpgradeStatus,
+        ensureReady,
+        startInstalled,
+        stop: async () => undefined,
+      }),
+      ollamaProbe: async () => unavailableOllama,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    await server.ready();
+    expect(startInstalled).not.toHaveBeenCalled();
+    expect(ensureReady).not.toHaveBeenCalled();
     await server.close();
   });
 
@@ -140,6 +232,7 @@ describe('local-inference route — Waggle-managed runtime', () => {
       ...managedStatus(),
       installed: true,
       running: false,
+      targetInstalled: true,
       downloadRequired: false,
     };
     const ensureReady = vi.fn();
@@ -175,6 +268,7 @@ describe('local-inference route — Waggle-managed runtime', () => {
       ...managedStatus(),
       installed: true,
       running: false,
+      targetInstalled: true,
       downloadRequired: false,
     };
     let finishRestart!: () => void;
@@ -215,7 +309,14 @@ describe('local-inference route — Waggle-managed runtime', () => {
 
   it('installs, starts, and health-checks the managed runtime through one bootstrap route', async () => {
     const server = Fastify({ logger: false });
-    const readyStatus = { ...managedStatus(), installed: true, running: true, downloadRequired: false };
+    const readyStatus = {
+      ...managedStatus(),
+      installed: true,
+      running: true,
+      targetInstalled: true,
+      activeVersion: 'test-1.0.0',
+      downloadRequired: false,
+    };
     const ensureReady = vi.fn(async () => ({
       installedNow: true,
       startedNow: true,
@@ -249,9 +350,255 @@ describe('local-inference route — Waggle-managed runtime', () => {
       startedNow: true,
       dockerRequired: false,
       server: { available: true, version: 'test-1.0.0' },
+      status: {
+        activeVersion: 'test-1.0.0',
+        fallbackActive: false,
+        rollback: {
+          available: false,
+          active: false,
+          lastAttempt: null,
+        },
+      },
     });
     expect(ensureReady).toHaveBeenCalledOnce();
     expect(ollamaProbe).toHaveBeenCalledTimes(2);
+    await server.close();
+  });
+
+  it('reports a failed target upgrade after the verified prior runtime is restored', async () => {
+    const server = Fastify({ logger: false });
+    const rollbackStatus = managedRollbackStatus();
+    const ensureReady = vi.fn(async () => {
+      throw new ManagedRuntimeRollbackError(rollbackAttempt, new Error(rollbackAttempt.reason));
+    });
+    const ollamaProbe = vi.fn()
+      .mockResolvedValueOnce(unavailableOllama)
+      .mockResolvedValueOnce({
+        ...unavailableOllama,
+        available: true,
+        version: 'test-1.0.0',
+      });
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => rollbackStatus,
+        ensureReady,
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'POST', url: '/api/local-inference/bootstrap' });
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(body).toMatchObject({
+      ok: false,
+      code: 'MANAGED_RUNTIME_ROLLED_BACK',
+      server: { available: true, version: 'test-1.0.0' },
+    });
+    expect(body.managedRuntime).toEqual(rollbackStatus);
+    expect(body).not.toHaveProperty('installedNow');
+    expect(body).not.toHaveProperty('startedNow');
+    expect(ensureReady).toHaveBeenCalledOnce();
+    expect(ollamaProbe).toHaveBeenCalledTimes(2);
+    await server.close();
+  });
+
+  it('does not claim bootstrap success when the already-running endpoint is a restored fallback', async () => {
+    const server = Fastify({ logger: false });
+    const rollbackStatus = managedRollbackStatus();
+    const ensureReady = vi.fn(async () => ({
+      installedNow: false,
+      startedNow: false,
+      endpoint: 'http://127.0.0.1:11434',
+      status: rollbackStatus,
+    }));
+    const restoredServer = {
+      ...unavailableOllama,
+      available: true,
+      version: 'test-1.0.0',
+    };
+    const ollamaProbe = vi.fn(async () => restoredServer);
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => rollbackStatus,
+        ensureReady,
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'POST', url: '/api/local-inference/bootstrap' });
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual(expect.objectContaining({
+      ok: false,
+      code: 'MANAGED_RUNTIME_ROLLED_BACK',
+      server: restoredServer,
+      managedRuntime: rollbackStatus,
+    }));
+    expect(ensureReady).toHaveBeenCalledOnce();
+    expect(ollamaProbe).toHaveBeenCalledTimes(2);
+    await server.close();
+  });
+
+  it('waits for managed activation to commit when the runtime already answers loopback', async () => {
+    const server = Fastify({ logger: false });
+    const activatingStatus = {
+      ...managedStatus(),
+      installed: true,
+      running: true,
+      targetInstalled: true,
+      downloadRequired: false,
+    };
+    const readyStatus = {
+      ...activatingStatus,
+      activeVersion: 'test-1.0.0',
+    };
+    const ensureReady = vi.fn(async () => ({
+      installedNow: false,
+      startedNow: false,
+      endpoint: 'http://127.0.0.1:11434',
+      status: readyStatus,
+    }));
+    const existingServer = {
+      ...unavailableOllama,
+      available: true,
+      version: 'test-1.0.0',
+    };
+    const ollamaProbe = vi.fn(async () => existingServer);
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => activatingStatus,
+        ensureReady,
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'POST', url: '/api/local-inference/bootstrap' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      installedNow: false,
+      startedNow: false,
+      server: existingServer,
+      status: { activeVersion: 'test-1.0.0', fallbackActive: false },
+    });
+    expect(ensureReady).toHaveBeenCalledOnce();
+    expect(ollamaProbe).toHaveBeenCalledTimes(2);
+    await server.close();
+  });
+
+  it('preserves bootstrap success for an already-running endpoint that is not a fallback', async () => {
+    const server = Fastify({ logger: false });
+    const status = managedStatus();
+    const ensureReady = vi.fn(async () => ({
+      installedNow: false,
+      startedNow: false,
+      endpoint: 'http://127.0.0.1:11434',
+      status,
+    }));
+    const existingServer = {
+      ...unavailableOllama,
+      available: true,
+      version: 'system-1.0.0',
+    };
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => status,
+        ensureReady,
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe: async () => existingServer,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'POST', url: '/api/local-inference/bootstrap' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      installedNow: false,
+      startedNow: false,
+      server: existingServer,
+      status,
+    });
+    expect(ensureReady).toHaveBeenCalledOnce();
+    await server.close();
+  });
+
+  it('does not turn a fallback result into bootstrap success after a probe race', async () => {
+    const server = Fastify({ logger: false });
+    const rollbackStatus = managedRollbackStatus();
+    const ensureReady = vi.fn(async () => ({
+      installedNow: false,
+      startedNow: false,
+      endpoint: 'http://127.0.0.1:11434',
+      status: rollbackStatus,
+    }));
+    const restoredServer = {
+      ...unavailableOllama,
+      available: true,
+      version: 'test-1.0.0',
+    };
+    const ollamaProbe = vi.fn()
+      .mockResolvedValueOnce(unavailableOllama)
+      .mockResolvedValueOnce(restoredServer);
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => rollbackStatus,
+        ensureReady,
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'POST', url: '/api/local-inference/bootstrap' });
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual(expect.objectContaining({
+      ok: false,
+      code: 'MANAGED_RUNTIME_ROLLED_BACK',
+      server: restoredServer,
+      managedRuntime: rollbackStatus,
+    }));
+    expect(response.json()).not.toHaveProperty('installedNow');
+    expect(response.json()).not.toHaveProperty('startedNow');
+    expect(ensureReady).toHaveBeenCalledOnce();
+    expect(ollamaProbe).toHaveBeenCalledTimes(2);
+    await server.close();
+  });
+
+  it('keeps the generic bootstrap failure contract for failures without a restored runtime', async () => {
+    const server = Fastify({ logger: false });
+    const ensureReady = vi.fn(async () => {
+      throw new Error('runtime download blocked');
+    });
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => managedStatus(),
+        ensureReady,
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe: async () => unavailableOllama,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'POST', url: '/api/local-inference/bootstrap' });
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({
+      error: 'runtime download blocked',
+      code: 'MANAGED_RUNTIME_BOOTSTRAP_FAILED',
+      managedRuntime: managedStatus(),
+    });
+    expect(ensureReady).toHaveBeenCalledOnce();
     await server.close();
   });
 

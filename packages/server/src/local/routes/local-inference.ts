@@ -19,6 +19,7 @@ import { rankModels, OLLAMA_CATALOG } from '@waggle/agent';
 import { detectHardware } from '../hardware-detect.js';
 import {
   ManagedOllamaRuntime,
+  ManagedRuntimeRollbackError,
   type ManagedOllamaReadyResult,
   type ManagedOllamaStatus,
 } from '../managed-ollama-runtime.js';
@@ -80,6 +81,24 @@ export interface LocalInferenceRouteOptions {
   runtimeFactory?: (dataDir: string, baseUrl: string) => LocalInferenceRuntimeController;
   ollamaProbe?: (baseUrl: string) => Promise<InferenceServerStatus>;
   vllmProbe?: (baseUrl: string) => Promise<InferenceServerStatus>;
+}
+
+function managedRuntimeRollbackPayload(
+  status: ManagedOllamaStatus,
+  server: InferenceServerStatus,
+  error?: string,
+) {
+  const lastRollback = status.rollback.lastAttempt;
+  return {
+    ok: false,
+    error: error ?? (lastRollback
+      ? `Managed runtime ${lastRollback.failedVersion} failed; restored verified runtime ${lastRollback.restoredVersion}`
+      : 'The managed runtime target is unavailable; a verified prior runtime remains active'),
+    code: 'MANAGED_RUNTIME_ROLLED_BACK',
+    server,
+    managedRuntime: status,
+    dockerRequired: false,
+  };
 }
 
 // ── Ollama / vLLM checks ────────────────────────────────────────────
@@ -170,6 +189,12 @@ export async function localInferenceRoutes(
   fastify.addHook('onReady', () => {
     const status = runtime.getStatus();
     if (!status.supported || !status.installed || status.running) return;
+    const rollbackForCurrentTarget = status.rollback.lastAttempt?.failedVersion === status.targetVersion
+      && status.rollback.lastAttempt.restoredVersion === status.activeVersion;
+    const shouldRestart = status.activeVersion === status.targetVersion
+      || rollbackForCurrentTarget
+      || (status.activeVersion === null && (status.targetInstalled || status.previousVersion !== null));
+    if (!shouldRestart) return;
 
     // The desktop watchdog deliberately stops the managed daemon with the
     // sidecar. Recover a previously verified installation in the background,
@@ -239,20 +264,8 @@ export async function localInferenceRoutes(
   // its upstream license.
   fastify.post('/api/local-inference/bootstrap', async (_request, reply) => {
     const existing = await probeOllama(OLLAMA_URL);
-    if (existing.available) {
-      return {
-        ok: true,
-        installedNow: false,
-        startedNow: false,
-        endpoint: OLLAMA_URL,
-        server: existing,
-        managedRuntime: runtime.getStatus(),
-        dockerRequired: false,
-      };
-    }
-
     const before = runtime.getStatus();
-    if (!before.supported) {
+    if (!existing.available && !before.supported) {
       return reply.code(409).send({
         error: before.reason ?? 'Managed local runtime is unsupported on this platform',
         code: 'MANAGED_RUNTIME_UNSUPPORTED',
@@ -263,6 +276,9 @@ export async function localInferenceRoutes(
     try {
       const ready = await runtime.ensureReady();
       const server = await probeOllama(OLLAMA_URL);
+      if (ready.status.fallbackActive) {
+        return reply.code(502).send(managedRuntimeRollbackPayload(runtime.getStatus(), server));
+      }
       if (!server.available) {
         return reply.code(502).send({
           error: 'Managed local runtime started but failed its loopback health check',
@@ -270,8 +286,22 @@ export async function localInferenceRoutes(
           managedRuntime: runtime.getStatus(),
         });
       }
-      return { ok: true, ...ready, server, dockerRequired: false };
+      return {
+        ok: true,
+        ...ready,
+        server,
+        managedRuntime: runtime.getStatus(),
+        dockerRequired: false,
+      };
     } catch (error) {
+      if (error instanceof ManagedRuntimeRollbackError) {
+        const server = await probeOllama(OLLAMA_URL);
+        return reply.code(502).send(managedRuntimeRollbackPayload(
+          runtime.getStatus(),
+          server,
+          error.message,
+        ));
+      }
       return reply.code(502).send({
         error: error instanceof Error ? error.message : 'Managed local runtime bootstrap failed',
         code: 'MANAGED_RUNTIME_BOOTSTRAP_FAILED',

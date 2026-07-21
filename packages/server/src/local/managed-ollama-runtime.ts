@@ -4,8 +4,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import {
   chmodSync,
+  closeSync,
   createWriteStream,
   existsSync,
+  fsyncSync,
+  openSync,
   readFileSync,
   realpathSync,
   statSync,
@@ -56,7 +59,7 @@ const finish = (code) => {
 const stopTree = () => {
   if (stopping) return;
   stopping = true;
-  if (child.exitCode !== null || !child.pid) return finish(0);
+  if (!child.pid) return finish(1);
   forceTimer = setTimeout(() => finish(1), 4000);
   if (process.platform === 'win32') {
     const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
@@ -64,8 +67,8 @@ const stopTree = () => {
       shell: false,
       stdio: 'ignore',
     });
-    killer.once('error', () => { try { child.kill(); } catch {} });
-    killer.once('exit', () => finish(0));
+    killer.once('error', () => finish(1));
+    killer.once('exit', (code) => finish(code === 0 ? 0 : 1));
   } else {
     try { process.kill(-child.pid, 'SIGTERM'); } catch { try { child.kill(); } catch {} }
     setTimeout(() => {
@@ -78,7 +81,7 @@ child.once('spawn', () => {
   if (process.send) process.send({ type: 'spawned', pid: child.pid });
 });
 child.once('error', () => finish(1));
-child.once('exit', (code) => finish(stopping ? 0 : (code ?? 1)));
+child.once('exit', () => { if (!stopping) finish(1); });
 process.once('disconnect', stopTree);
 process.on('message', (message) => { if (message === 'shutdown') stopTree(); });
 process.once('SIGTERM', stopTree);
@@ -151,6 +154,36 @@ interface InstallMetadata {
   installedAt: string;
 }
 
+interface RuntimeReceipt {
+  version: string;
+  sha256: string;
+  executable: string;
+  installedAt: string;
+}
+
+interface RuntimeActivationState {
+  schemaVersion: 1;
+  active: RuntimeReceipt;
+  previous: RuntimeReceipt | null;
+  lastRollback: ManagedRuntimeRollback | null;
+}
+
+type RuntimeStateLoad =
+  | { kind: 'missing' }
+  | {
+    kind: 'invalid';
+    reason: string;
+    recoveryArtifact?: OllamaRuntimeArtifact;
+    recoveryReceipt?: RuntimeReceipt;
+    lastRollback?: ManagedRuntimeRollback | null;
+  }
+  | {
+    kind: 'valid';
+    state: RuntimeActivationState;
+    activeArtifact: OllamaRuntimeArtifact;
+    previousArtifact: OllamaRuntimeArtifact | null;
+  };
+
 interface InstallLockClaim {
   database: DatabaseType;
 }
@@ -162,10 +195,50 @@ export interface ManagedOllamaStatus {
   running: boolean;
   targetVersion: string | null;
   version: string | null;
+  targetInstalled: boolean;
+  activeVersion: string | null;
+  previousVersion: string | null;
+  fallbackActive: boolean;
+  rollback: {
+    available: boolean;
+    active: boolean;
+    lastAttempt: ManagedRuntimeRollback | null;
+  };
   artifactSizeBytes: number | null;
   downloadRequired: boolean;
   dockerRequired: false;
   reason?: string;
+}
+
+export interface ManagedRuntimeRollback {
+  failedVersion: string;
+  restoredVersion: string;
+  occurredAt: string;
+  reason: string;
+}
+
+export class ManagedRuntimeRollbackError extends Error {
+  readonly rollback: ManagedRuntimeRollback;
+  readonly failedVersion: string;
+  readonly restoredVersion: string;
+
+  constructor(rollback: ManagedRuntimeRollback, cause: unknown) {
+    super(
+      `Managed Ollama ${rollback.failedVersion} failed; restored verified runtime ${rollback.restoredVersion}: ${rollback.reason}`,
+      { cause },
+    );
+    this.name = 'ManagedRuntimeRollbackError';
+    this.rollback = rollback;
+    this.failedVersion = rollback.failedVersion;
+    this.restoredVersion = rollback.restoredVersion;
+  }
+}
+
+class ManagedRuntimeTerminationError extends Error {
+  constructor(reason = 'watchdog did not confirm process-tree termination') {
+    super(`Managed Ollama ${reason}; refusing to start a replacement runtime`);
+    this.name = 'ManagedRuntimeTerminationError';
+  }
 }
 
 export interface ManagedOllamaReadyResult {
@@ -185,9 +258,11 @@ interface RuntimeDependencies {
   spawnImpl?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   probe?: (baseUrl: string) => Promise<boolean>;
   renameImpl?: typeof rename;
+  stateRenameImpl?: typeof rename;
   rmImpl?: typeof rm;
   warn?: (message: string, error: unknown) => void;
   artifact?: OllamaRuntimeArtifact | null;
+  artifactCatalog?: ReadonlyArray<OllamaRuntimeArtifact>;
   platform?: NodeJS.Platform;
   arch?: string;
 }
@@ -229,10 +304,12 @@ export function buildManagedOllamaEnv(
 
 async function defaultProbe(baseUrl: string): Promise<boolean> {
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/version`, {
-      signal: AbortSignal.timeout(1_500),
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/tags`, {
+      signal: AbortSignal.timeout(3_000),
     });
-    return response.ok;
+    if (!response.ok) return false;
+    const payload = await response.json() as { models?: unknown };
+    return Array.isArray(payload.models);
   } catch {
     return false;
   }
@@ -313,34 +390,48 @@ export class ManagedOllamaRuntime {
   private readonly root: string;
   private readonly modelsDir: string;
   private readonly artifact: OllamaRuntimeArtifact | null;
+  private readonly artifactCatalog: ReadonlyArray<OllamaRuntimeArtifact>;
+  private readonly platform: NodeJS.Platform;
+  private readonly arch: string;
   private readonly fetchImpl: typeof fetch;
   private readonly extractArchive: NonNullable<RuntimeDependencies['extractArchive']>;
   private readonly spawnImpl: NonNullable<RuntimeDependencies['spawnImpl']>;
   private readonly probe: NonNullable<RuntimeDependencies['probe']>;
   private readonly renameImpl: NonNullable<RuntimeDependencies['renameImpl']>;
+  private readonly stateRenameImpl: NonNullable<RuntimeDependencies['stateRenameImpl']>;
   private readonly rmImpl: NonNullable<RuntimeDependencies['rmImpl']>;
   private readonly warn: NonNullable<RuntimeDependencies['warn']>;
   private installPromise: Promise<{ executable: string; installedNow: boolean }> | null = null;
   private startPromise: Promise<boolean> | null = null;
+  private activationPromise: Promise<unknown> | null = null;
   private child: ChildProcess | null = null;
+  private runningArtifact: OllamaRuntimeArtifact | null = null;
+  private terminationFailure: ManagedRuntimeTerminationError | null = null;
 
   constructor(
     dataDir: string,
     private readonly baseUrl = 'http://127.0.0.1:11434',
     dependencies: RuntimeDependencies = {},
   ) {
-    const platform = dependencies.platform ?? process.platform;
-    const arch = dependencies.arch ?? process.arch;
+    const platform = dependencies.platform ?? dependencies.artifact?.platform ?? process.platform;
+    const arch = dependencies.arch ?? dependencies.artifact?.arch ?? process.arch;
+    this.platform = platform;
+    this.arch = arch;
     this.root = path.resolve(dataDir, 'runtimes', 'ollama');
     this.modelsDir = path.resolve(dataDir, 'models', 'ollama');
     this.artifact = dependencies.artifact === undefined
       ? resolveOllamaRuntimeArtifact(platform, arch)
       : dependencies.artifact;
+    this.artifactCatalog = dependencies.artifactCatalog
+      ?? (dependencies.artifact === undefined
+        ? OLLAMA_RUNTIME_ARTIFACTS
+        : (dependencies.artifact ? [dependencies.artifact] : []));
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.extractArchive = dependencies.extractArchive ?? defaultExtract;
     this.spawnImpl = dependencies.spawnImpl ?? ((file, args, options) => spawn(file, args, options));
     this.probe = dependencies.probe ?? defaultProbe;
     this.renameImpl = dependencies.renameImpl ?? rename;
+    this.stateRenameImpl = dependencies.stateRenameImpl ?? rename;
     this.rmImpl = dependencies.rmImpl ?? rm;
     this.warn = dependencies.warn ?? ((message, error) => log.warn(message, {
       error: error instanceof Error ? error.message : String(error),
@@ -350,27 +441,69 @@ export class ManagedOllamaRuntime {
 
   getStatus(): ManagedOllamaStatus {
     const executable = this.getInstalledExecutable();
+    const targetInstalled = executable !== null;
+    const loadedState = this.loadRuntimeState();
+    const running = this.child !== null && this.child.exitCode === null;
+    const managedRunningVersion = running ? this.runningArtifact?.version ?? null : null;
+    const activeVersion = managedRunningVersion
+      ?? (loadedState.kind === 'valid' ? loadedState.state.active.version : null);
+    const previousVersion = loadedState.kind === 'valid'
+      ? loadedState.state.previous?.version ?? null
+      : loadedState.kind === 'invalid'
+        ? loadedState.recoveryArtifact?.version ?? null
+        : null;
+    const persistedRollbackActive = loadedState.kind === 'valid'
+      && this.artifact !== null
+      && !this.sameArtifact(loadedState.activeArtifact, this.artifact)
+      && loadedState.state.lastRollback?.failedVersion === this.artifact.version
+      && loadedState.state.lastRollback.restoredVersion === loadedState.activeArtifact.version;
+    const fallbackActive = persistedRollbackActive || (running
+      && this.runningArtifact !== null
+      && this.artifact !== null
+      && !this.sameArtifact(this.runningArtifact, this.artifact));
+    const rollbackAvailable = loadedState.kind === 'valid'
+      && this.selectFallbackArtifact(loadedState, this.artifact) !== null;
     const supported = this.artifact !== null && isLoopbackEndpoint(this.baseUrl);
     return {
       source: 'waggle-managed',
       supported,
-      installed: executable !== null,
-      running: this.child !== null && this.child.exitCode === null,
+      installed: targetInstalled
+        || loadedState.kind === 'valid'
+        || (loadedState.kind === 'invalid' && loadedState.recoveryArtifact !== undefined)
+        || this.runningArtifact !== null,
+      running,
       targetVersion: this.artifact?.version ?? null,
-      version: executable ? this.artifact?.version ?? null : null,
+      version: activeVersion ?? (targetInstalled ? this.artifact?.version ?? null : null),
+      targetInstalled,
+      activeVersion,
+      previousVersion,
+      fallbackActive,
+      rollback: {
+        available: rollbackAvailable || fallbackActive,
+        active: fallbackActive,
+        lastAttempt: loadedState.kind === 'valid'
+          ? loadedState.state.lastRollback
+          : loadedState.kind === 'invalid'
+            ? loadedState.lastRollback ?? null
+            : null,
+      },
       artifactSizeBytes: this.artifact?.sizeBytes ?? null,
-      downloadRequired: executable === null,
+      downloadRequired: !targetInstalled,
       dockerRequired: false,
       ...(!supported
         ? { reason: this.artifact === null
           ? `No managed Ollama artifact for ${process.platform}/${process.arch}`
           : 'Managed Ollama requires a loopback OLLAMA_HOST' }
+        : loadedState.kind === 'invalid'
+          ? { reason: loadedState.reason }
         : {}),
     };
   }
 
-  private versionDir(): string | null {
-    return this.artifact ? path.join(this.root, this.artifact.version) : null;
+  private versionDir(artifact = this.artifact): string | null {
+    if (!artifact) return null;
+    const candidate = path.join(this.root, artifact.version);
+    return inside(this.root, candidate) && path.resolve(candidate) !== this.root ? candidate : null;
   }
 
   private installVersionKey(): string {
@@ -381,19 +514,317 @@ export class ManagedOllamaRuntime {
     return path.join(this.root, `.install-lock-${this.installVersionKey()}.sqlite`);
   }
 
-  private getInstalledExecutable(): string | null {
-    const versionDir = this.versionDir();
+  private getVerifiedInstall(artifact = this.artifact): { executable: string; receipt: RuntimeReceipt } | null {
+    const versionDir = this.versionDir(artifact);
     if (!versionDir) return null;
     const metadataPath = path.join(versionDir, 'install.json');
     try {
       const metadata = JSON.parse(readFileSync(metadataPath, 'utf8')) as InstallMetadata;
-      if (metadata.version !== this.artifact?.version || metadata.sha256 !== this.artifact.sha256) return null;
+      if (metadata.version !== artifact?.version || metadata.sha256 !== artifact.sha256) return null;
       if (path.isAbsolute(metadata.executable) || metadata.executable.split(/[\\/]/).includes('..')) return null;
+      if (path.basename(metadata.executable).toLowerCase() !== artifact.executableName.toLowerCase()) return null;
+      if (typeof metadata.installedAt !== 'string' || !Number.isFinite(Date.parse(metadata.installedAt))) return null;
       const executable = realpathSync(path.join(versionDir, metadata.executable));
-      return inside(versionDir, executable) && statSync(executable).isFile() ? executable : null;
+      if (!inside(versionDir, executable) || !statSync(executable).isFile()) return null;
+      return {
+        executable,
+        receipt: {
+          version: metadata.version,
+          sha256: metadata.sha256,
+          executable: metadata.executable,
+          installedAt: metadata.installedAt,
+        },
+      };
     } catch {
       return null;
     }
+  }
+
+  private getInstalledExecutable(artifact = this.artifact): string | null {
+    return this.getVerifiedInstall(artifact)?.executable ?? null;
+  }
+
+  private statePath(): string {
+    return path.join(this.root, 'runtime-state.json');
+  }
+
+  private receiptFor(artifact: OllamaRuntimeArtifact): RuntimeReceipt {
+    const installation = this.getVerifiedInstall(artifact);
+    if (!installation) throw new Error(`Managed Ollama ${artifact.version} install receipt failed validation`);
+    return installation.receipt;
+  }
+
+  private sameReceipt(left: RuntimeReceipt, right: RuntimeReceipt): boolean {
+    return left.version === right.version
+      && left.sha256 === right.sha256
+      && left.executable === right.executable
+      && left.installedAt === right.installedAt;
+  }
+
+  private sameArtifact(left: OllamaRuntimeArtifact, right: OllamaRuntimeArtifact): boolean {
+    return left.version === right.version && left.sha256 === right.sha256;
+  }
+
+  private sameCatalogArtifact(left: OllamaRuntimeArtifact, right: OllamaRuntimeArtifact): boolean {
+    return this.sameArtifact(left, right)
+      && left.platform === right.platform
+      && left.arch === right.arch
+      && left.filename === right.filename
+      && left.url === right.url
+      && left.sizeBytes === right.sizeBytes
+      && left.executableName === right.executableName;
+  }
+
+  private assertTrustedTarget(): OllamaRuntimeArtifact {
+    if (!this.artifact) throw new Error(`Managed Ollama is unsupported on ${process.platform}/${process.arch}`);
+    const trusted = this.artifactCatalog.find((candidate) => this.sameCatalogArtifact(candidate, this.artifact!));
+    if (!trusted) throw new Error(`Managed Ollama ${this.artifact.version} is not present in the trusted artifact catalog`);
+    return trusted;
+  }
+
+  private catalogArtifact(receipt: RuntimeReceipt): OllamaRuntimeArtifact | null {
+    return this.artifactCatalog.find((candidate) => (
+      candidate.platform === this.platform
+      && candidate.arch === this.arch
+      && candidate.version === receipt.version
+      && candidate.sha256 === receipt.sha256
+    )) ?? null;
+  }
+
+  private validReceipt(value: unknown): RuntimeReceipt | null {
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as Partial<RuntimeReceipt>;
+    if (typeof candidate.version !== 'string' || candidate.version.length === 0 || candidate.version.length > 128) return null;
+    if (typeof candidate.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(candidate.sha256)) return null;
+    if (typeof candidate.executable !== 'string' || candidate.executable.length === 0 || candidate.executable.length > 1_024) return null;
+    if (path.isAbsolute(candidate.executable) || candidate.executable.split(/[\\/]/).includes('..')) return null;
+    if (typeof candidate.installedAt !== 'string' || !Number.isFinite(Date.parse(candidate.installedAt))) return null;
+    return {
+      version: candidate.version,
+      sha256: candidate.sha256,
+      executable: candidate.executable,
+      installedAt: candidate.installedAt,
+    };
+  }
+
+  private validRollback(value: unknown): ManagedRuntimeRollback | null | undefined {
+    if (value === null) return null;
+    if (!value || typeof value !== 'object') return undefined;
+    const candidate = value as Partial<ManagedRuntimeRollback>;
+    if (typeof candidate.failedVersion !== 'string' || candidate.failedVersion.length === 0 || candidate.failedVersion.length > 128) return undefined;
+    if (typeof candidate.restoredVersion !== 'string' || candidate.restoredVersion.length === 0 || candidate.restoredVersion.length > 128) return undefined;
+    if (typeof candidate.occurredAt !== 'string' || !Number.isFinite(Date.parse(candidate.occurredAt))) return undefined;
+    if (typeof candidate.reason !== 'string' || candidate.reason.length === 0 || candidate.reason.length > 2_048) return undefined;
+    return {
+      failedVersion: candidate.failedVersion,
+      restoredVersion: candidate.restoredVersion,
+      occurredAt: candidate.occurredAt,
+      reason: candidate.reason,
+    };
+  }
+
+  private loadRuntimeState(): RuntimeStateLoad {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(this.statePath(), 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return { kind: 'missing' };
+      return { kind: 'invalid', reason: 'Managed Ollama activation state failed validation' };
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      return { kind: 'invalid', reason: 'Managed Ollama activation state failed validation' };
+    }
+    const candidate = parsed as Partial<RuntimeActivationState>;
+    if (candidate.schemaVersion !== 1) {
+      return { kind: 'invalid', reason: 'Managed Ollama activation state failed validation' };
+    }
+    const parsedRollback = this.validRollback(candidate.lastRollback);
+    const lastRollback = parsedRollback === undefined ? null : parsedRollback;
+    const previous = candidate.previous === null ? null : this.validReceipt(candidate.previous);
+    const previousArtifact = previous ? this.catalogArtifact(previous) : null;
+    const previousInstall = previousArtifact ? this.getVerifiedInstall(previousArtifact) : null;
+    const trustedPrevious = previous && previousArtifact && previousInstall
+      && this.sameReceipt(previous, previousInstall.receipt)
+      ? { receipt: previous, artifact: previousArtifact }
+      : null;
+    const recovery = trustedPrevious
+      ? {
+        recoveryArtifact: trustedPrevious.artifact,
+        recoveryReceipt: trustedPrevious.receipt,
+        lastRollback,
+      }
+      : { lastRollback };
+    const active = this.validReceipt(candidate.active);
+    if (!active) {
+      return {
+        kind: 'invalid',
+        reason: 'Managed Ollama activation state failed validation',
+        ...recovery,
+      };
+    }
+    const activeArtifact = this.catalogArtifact(active);
+    const activeInstall = activeArtifact ? this.getVerifiedInstall(activeArtifact) : null;
+    if (!activeArtifact || !activeInstall || !this.sameReceipt(active, activeInstall.receipt)) {
+      return {
+        kind: 'invalid',
+        reason: 'Managed Ollama activation state references an untrusted or invalid runtime',
+        ...recovery,
+      };
+    }
+    const usablePrevious = trustedPrevious
+      && !this.sameArtifact(activeArtifact, trustedPrevious.artifact)
+      ? trustedPrevious
+      : null;
+    return {
+      kind: 'valid',
+      state: {
+        schemaVersion: 1,
+        active,
+        previous: usablePrevious?.receipt ?? null,
+        lastRollback,
+      },
+      activeArtifact,
+      previousArtifact: usablePrevious?.artifact ?? null,
+    };
+  }
+
+  private async writeRuntimeState(state: RuntimeActivationState): Promise<void> {
+    await mkdir(this.root, { recursive: true });
+    const temporary = path.join(this.root, `.runtime-state.${process.pid}-${randomUUID()}.tmp`);
+    let descriptor: number | null = null;
+    try {
+      descriptor = openSync(temporary, 'wx');
+      writeFileSync(descriptor, `${JSON.stringify(state, null, 2)}\n`);
+      fsyncSync(descriptor);
+      closeSync(descriptor);
+      descriptor = null;
+      for (let attempt = 1; attempt <= FILESYSTEM_ATTEMPTS; attempt += 1) {
+        try {
+          await this.stateRenameImpl(temporary, this.statePath());
+          break;
+        } catch (error) {
+          if (!isTransientFilesystemError(error) || attempt === FILESYSTEM_ATTEMPTS) throw error;
+          await waitForFilesystemRetry(attempt);
+        }
+      }
+    } finally {
+      if (descriptor !== null) closeSync(descriptor);
+      if (existsSync(temporary)) await removeWithin(this.root, temporary, this.rmImpl);
+    }
+  }
+
+  private async promoteActive(artifact: OllamaRuntimeArtifact): Promise<void> {
+    const loaded = this.loadRuntimeState();
+    const receipt = this.receiptFor(artifact);
+    const current = loaded.kind === 'valid' ? loaded.state : null;
+    await this.writeRuntimeState({
+      schemaVersion: 1,
+      active: receipt,
+      previous: current && !this.sameReceipt(current.active, receipt) ? current.active : current?.previous ?? null,
+      lastRollback: current?.lastRollback ?? null,
+    });
+  }
+
+  private selectFallbackArtifact(
+    loaded: Extract<RuntimeStateLoad, { kind: 'valid' }>,
+    failedArtifact: OllamaRuntimeArtifact | null,
+  ): OllamaRuntimeArtifact | null {
+    if (!failedArtifact || !this.sameArtifact(loaded.activeArtifact, failedArtifact)) return loaded.activeArtifact;
+    return loaded.previousArtifact && !this.sameArtifact(loaded.previousArtifact, failedArtifact)
+      ? loaded.previousArtifact
+      : null;
+  }
+
+  private verifiedCatalogInstalls(): Array<{ artifact: OllamaRuntimeArtifact; executable: string }> {
+    const seen = new Set<string>();
+    const installations: Array<{ artifact: OllamaRuntimeArtifact; executable: string }> = [];
+    for (const artifact of this.artifactCatalog) {
+      if (artifact.platform !== this.platform || artifact.arch !== this.arch) continue;
+      const key = `${artifact.version}:${artifact.sha256}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const executable = this.getInstalledExecutable(artifact);
+      if (executable) installations.push({ artifact, executable });
+    }
+    return installations;
+  }
+
+  private legacyStartCandidate(): { artifact: OllamaRuntimeArtifact; executable: string } | null {
+    const installations = this.verifiedCatalogInstalls();
+    return installations.length === 1 ? installations[0]! : null;
+  }
+
+  private rollbackReason(error: unknown): string {
+    const reason = error instanceof Error ? error.message : String(error);
+    return (reason || 'target runtime failed').slice(0, 2_048);
+  }
+
+  private async persistRollback(
+    failedArtifact: OllamaRuntimeArtifact,
+    restoredArtifact: OllamaRuntimeArtifact,
+    rollback: ManagedRuntimeRollback,
+  ): Promise<void> {
+    const loaded = this.loadRuntimeState();
+    const restored = this.receiptFor(restoredArtifact);
+    const current = loaded.kind === 'valid' ? loaded.state : null;
+    const failedWasActive = current !== null
+      && current.active.version === failedArtifact.version
+      && current.active.sha256 === failedArtifact.sha256;
+    await this.writeRuntimeState({
+      schemaVersion: 1,
+      active: restored,
+      previous: failedWasActive ? current.active : current?.previous ?? null,
+      lastRollback: rollback,
+    });
+  }
+
+  private activationLockDatabasePath(): string {
+    return path.join(this.root, '.activation-lock.sqlite');
+  }
+
+  private async acquireActivationLock(): Promise<InstallLockClaim> {
+    await mkdir(this.root, { recursive: true });
+    const database = new Database(this.activationLockDatabasePath(), { timeout: INSTALL_LOCK_BUSY_TIMEOUT_MS });
+    const deadline = Date.now() + INSTALL_LOCK_WAIT_MS;
+    let retryDelay = INSTALL_LOCK_RETRY_MIN_MS;
+    while (Date.now() < deadline) {
+      try {
+        database.exec('BEGIN EXCLUSIVE');
+        return { database };
+      } catch (error) {
+        if (!isSqliteBusyError(error)) {
+          try { database.close(); } catch { /* primary error wins */ }
+          throw error;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      retryDelay = Math.min(retryDelay * 2, INSTALL_LOCK_RETRY_MAX_MS);
+    }
+    try { database.close(); } catch { /* timeout error wins */ }
+    throw new Error('Timed out waiting for the managed Ollama activation coordinator');
+  }
+
+  private withActivationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const prior = this.activationPromise;
+    const activation = (async () => {
+      if (prior) {
+        try {
+          await prior;
+        } catch {
+          // The next caller must observe the resulting state, including a healthy rollback.
+        }
+      }
+      const lock = await this.acquireActivationLock();
+      try {
+        return await operation();
+      } finally {
+        await this.releaseInstallLock(lock);
+      }
+    })();
+    this.activationPromise = activation;
+    return activation.finally(() => {
+      if (this.activationPromise === activation) this.activationPromise = null;
+    });
   }
 
   async install(): Promise<{ executable: string; installedNow: boolean }> {
@@ -491,6 +922,7 @@ export class ManagedOllamaRuntime {
   }
 
   private async installInternal(): Promise<{ executable: string; installedNow: boolean }> {
+    this.assertTrustedTarget();
     if (!this.artifact) throw new Error(`Managed Ollama is unsupported on ${process.platform}/${process.arch}`);
     if (!isLoopbackEndpoint(this.baseUrl)) throw new Error('Managed Ollama requires a loopback OLLAMA_HOST');
 
@@ -595,51 +1027,145 @@ export class ManagedOllamaRuntime {
     throw new Error('Managed Ollama runtime publication exhausted all retry attempts');
   }
 
-  async startInstalled(): Promise<ManagedOllamaReadyResult> {
-    if (await this.probe(this.baseUrl)) {
-      return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };
+  private fallbackCandidate(
+    loaded: RuntimeStateLoad,
+    failedArtifact: OllamaRuntimeArtifact,
+  ): { artifact: OllamaRuntimeArtifact; executable: string } | null {
+    const artifact = loaded.kind === 'valid'
+      ? this.selectFallbackArtifact(loaded, failedArtifact)
+      : loaded.kind === 'invalid' && loaded.recoveryArtifact
+        ? loaded.recoveryArtifact
+        : this.legacyStartCandidate()?.artifact ?? null;
+    if (!artifact || this.sameArtifact(artifact, failedArtifact)) return null;
+    const executable = this.getInstalledExecutable(artifact);
+    return executable ? { artifact, executable } : null;
+  }
+
+  private async rollbackAfterFailure(
+    failedArtifact: OllamaRuntimeArtifact,
+    fallback: { artifact: OllamaRuntimeArtifact; executable: string } | null,
+    cause: unknown,
+  ): Promise<never> {
+    if (cause instanceof ManagedRuntimeTerminationError) throw cause;
+    await this.stop();
+    if (!fallback) throw cause;
+
+    try {
+      const started = await this.start(fallback.executable, fallback.artifact);
+      if (!started || !this.runningArtifact || !this.sameArtifact(this.runningArtifact, fallback.artifact)) {
+        throw new Error(`Verified fallback runtime ${fallback.artifact.version} was not started by Waggle`);
+      }
+    } catch (rollbackError) {
+      throw new Error(
+        `Managed Ollama ${failedArtifact.version} failed and verified fallback ${fallback.artifact.version} could not start: ${this.rollbackReason(rollbackError)}`,
+        { cause },
+      );
     }
-    const executable = this.getInstalledExecutable();
-    if (!executable) {
-      throw new Error('Verified Waggle-managed Ollama runtime is not installed');
-    }
-    const startedNow = await this.start(executable);
-    return {
-      installedNow: false,
-      startedNow,
-      endpoint: this.baseUrl,
-      status: this.getStatus(),
+
+    const rollback: ManagedRuntimeRollback = {
+      failedVersion: failedArtifact.version,
+      restoredVersion: fallback.artifact.version,
+      occurredAt: new Date().toISOString(),
+      reason: this.rollbackReason(cause),
     };
+    try {
+      await this.persistRollback(failedArtifact, fallback.artifact, rollback);
+    } catch (stateError) {
+      this.reportWarning('Could not persist the managed Ollama rollback receipt', stateError);
+    }
+    throw new ManagedRuntimeRollbackError(rollback, cause);
+  }
+
+  async startInstalled(): Promise<ManagedOllamaReadyResult> {
+    return this.withActivationLock(async () => {
+      this.assertTerminationConfirmed();
+      if (await this.probe(this.baseUrl)) {
+        return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };
+      }
+      const loaded = this.loadRuntimeState();
+      const candidate = loaded.kind === 'valid'
+        ? {
+          artifact: loaded.activeArtifact,
+          executable: this.getInstalledExecutable(loaded.activeArtifact),
+        }
+        : loaded.kind === 'invalid' && loaded.recoveryArtifact
+          ? {
+            artifact: loaded.recoveryArtifact,
+            executable: this.getInstalledExecutable(loaded.recoveryArtifact),
+          }
+          : this.legacyStartCandidate();
+      if (!candidate?.executable) {
+        throw new Error('Verified Waggle-managed Ollama runtime is not installed');
+      }
+      const fallback = this.fallbackCandidate(loaded, candidate.artifact);
+      let startedNow: boolean;
+      try {
+        startedNow = await this.start(candidate.executable, candidate.artifact);
+        if (startedNow && loaded.kind !== 'valid') await this.promoteActive(candidate.artifact);
+      } catch (error) {
+        return this.rollbackAfterFailure(candidate.artifact, fallback, error);
+      }
+      return {
+        installedNow: false,
+        startedNow,
+        endpoint: this.baseUrl,
+        status: this.getStatus(),
+      };
+    });
   }
 
   async ensureReady(): Promise<ManagedOllamaReadyResult> {
-    if (await this.probe(this.baseUrl)) {
-      return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };
-    }
-    const installation = await this.install();
-    const startedNow = await this.start(installation.executable);
-    return {
-      installedNow: installation.installedNow,
-      startedNow,
-      endpoint: this.baseUrl,
-      status: this.getStatus(),
-    };
+    return this.withActivationLock(async () => {
+      this.assertTerminationConfirmed();
+      if (await this.probe(this.baseUrl)) {
+        return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };
+      }
+      const target = this.assertTrustedTarget();
+      const loadedBefore = this.loadRuntimeState();
+      const fallback = this.fallbackCandidate(loadedBefore, target);
+      let installation: { executable: string; installedNow: boolean };
+      try {
+        installation = await this.install();
+      } catch (error) {
+        return this.rollbackAfterFailure(target, fallback, error);
+      }
+
+      let startedNow: boolean;
+      try {
+        startedNow = await this.start(installation.executable, target);
+        if (startedNow) await this.promoteActive(target);
+      } catch (error) {
+        return this.rollbackAfterFailure(target, fallback, error);
+      }
+      return {
+        installedNow: installation.installedNow,
+        startedNow,
+        endpoint: this.baseUrl,
+        status: this.getStatus(),
+      };
+    });
   }
 
-  private async start(executable?: string): Promise<boolean> {
-    if (await this.probe(this.baseUrl)) return false;
+  private async start(executable: string, artifact: OllamaRuntimeArtifact): Promise<boolean> {
     if (this.startPromise) return this.startPromise;
-    this.startPromise = this.startInternal(executable).finally(() => { this.startPromise = null; });
+    this.assertTerminationConfirmed();
+    if (await this.probe(this.baseUrl)) return false;
+    if (this.child) {
+      if (this.child.exitCode === null) await this.stop();
+      else if (this.child.exitCode !== 0) {
+        throw this.markTerminationUnconfirmed(`watchdog exited with code ${this.child.exitCode}`);
+      }
+    }
+    this.startPromise = this.startInternal(executable, artifact).finally(() => { this.startPromise = null; });
     return this.startPromise;
   }
 
-  private async startInternal(executable?: string): Promise<boolean> {
-    const runtimeExecutable = executable ?? (await this.install()).executable;
+  private async startInternal(executable: string, artifact: OllamaRuntimeArtifact): Promise<boolean> {
     await mkdir(this.modelsDir, { recursive: true });
     const child = this.spawnImpl(process.execPath, [
       '-e',
       MANAGED_OLLAMA_WATCHDOG_SOURCE,
-      runtimeExecutable,
+      executable,
       JSON.stringify(['serve']),
     ], {
       env: buildManagedOllamaEnv(this.baseUrl, this.modelsDir),
@@ -651,42 +1177,112 @@ export class ManagedOllamaRuntime {
     let startupError: Error | null = null;
     child.once('error', (error) => {
       startupError = error;
-      if (this.child === child) this.child = null;
+      if (this.child === child) {
+        this.child = null;
+        this.runningArtifact = null;
+      }
     });
-    child.once('exit', () => {
-      if (this.child === child) this.child = null;
+    child.once('exit', (code) => {
+      if (this.child === child) {
+        if (code === 0) {
+          this.child = null;
+          this.terminationFailure = null;
+        } else {
+          this.markTerminationUnconfirmed(
+            code === null ? 'watchdog exited without a success code' : `watchdog exited with code ${code}`,
+          );
+        }
+        this.runningArtifact = null;
+      }
     });
 
-    const deadline = Date.now() + START_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      if (startupError) throw startupError;
-      if (child.exitCode !== null) break;
-      if (await this.probe(this.baseUrl)) return true;
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      const deadline = Date.now() + START_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        if (startupError) throw startupError;
+        if (child.exitCode !== null) break;
+        if (await this.probe(this.baseUrl)) {
+          this.runningArtifact = artifact;
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch (error) {
+      if (startupError && child.pid === undefined) {
+        if (this.child === child) this.child = null;
+        this.runningArtifact = null;
+        throw error;
+      }
+      await this.stopChild(child);
+      if (this.child === child) this.child = null;
+      if (this.runningArtifact === artifact) this.runningArtifact = null;
+      throw error;
     }
-    this.requestStop(child);
+    await this.stopChild(child);
     if (this.child === child) this.child = null;
+    if (this.runningArtifact === artifact) this.runningArtifact = null;
     throw new Error('Waggle-managed Ollama did not become ready on loopback');
   }
 
   private requestStop(child: ChildProcess): void {
     try {
       if (child.connected) child.send('shutdown');
-      else child.kill();
-    } catch {
-      try { child.kill(); } catch { /* process already gone */ }
+    } catch { /* a disconnected watchdog must confirm shutdown by exiting cleanly */ }
+  }
+
+  private markTerminationUnconfirmed(reason: string): ManagedRuntimeTerminationError {
+    this.terminationFailure ??= new ManagedRuntimeTerminationError(reason);
+    return this.terminationFailure;
+  }
+
+  private assertTerminationConfirmed(): void {
+    if (this.terminationFailure) throw this.terminationFailure;
+  }
+
+  private async stopChild(child: ChildProcess): Promise<void> {
+    if (child.exitCode !== null) {
+      if (child.exitCode === 0) return;
+      throw this.markTerminationUnconfirmed(`watchdog exited with code ${child.exitCode}`);
     }
+    const exitPromise = new Promise<number | null | undefined>((resolve) => {
+      const onExit = (code: number | null) => {
+        clearTimeout(timeout);
+        resolve(code);
+      };
+      const timeout = setTimeout(() => {
+        child.off('exit', onExit);
+        resolve(undefined);
+      }, STOP_TIMEOUT_MS);
+      child.once('exit', onExit);
+    });
+    this.requestStop(child);
+    const exitCode = await exitPromise;
+    if (exitCode === 0) {
+      this.terminationFailure = null;
+      return;
+    }
+    if (exitCode === undefined) {
+      throw this.markTerminationUnconfirmed('watchdog did not confirm process-tree termination');
+    }
+    throw this.markTerminationUnconfirmed(
+      exitCode === null ? 'watchdog exited without a success code' : `watchdog exited with code ${exitCode}`,
+    );
   }
 
   async stop(): Promise<void> {
     const child = this.child;
-    this.child = null;
-    if (!child || child.exitCode !== null) return;
-    this.requestStop(child);
-    await Promise.race([
-      new Promise<void>((resolve) => child.once('exit', () => resolve())),
-      new Promise<void>((resolve) => setTimeout(resolve, STOP_TIMEOUT_MS)),
-    ]);
-    if (child.exitCode === null) child.kill();
+    if (!child) return;
+    if (child.exitCode !== null) {
+      if (child.exitCode !== 0) {
+        throw this.markTerminationUnconfirmed(`watchdog exited with code ${child.exitCode}`);
+      }
+      if (this.child === child) this.child = null;
+      this.terminationFailure = null;
+      this.runningArtifact = null;
+      return;
+    }
+    await this.stopChild(child);
+    if (this.child === child) this.child = null;
+    this.runningArtifact = null;
   }
 }

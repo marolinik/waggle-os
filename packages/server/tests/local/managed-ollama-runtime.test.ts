@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ManagedRuntimeRollbackError,
   ManagedOllamaRuntime,
   MANAGED_OLLAMA_WATCHDOG_SOURCE,
   OLLAMA_RUNTIME_ARTIFACTS,
@@ -34,6 +35,84 @@ function fixtureArtifact(bytes: Buffer, sha256 = createHash('sha256').update(byt
     sizeBytes: bytes.length,
     executableName: 'ollama.exe',
   };
+}
+
+function versionedFixtureArtifact(version: string, bytes: Buffer): OllamaRuntimeArtifact {
+  return {
+    ...fixtureArtifact(bytes),
+    version,
+    url: `https://github.com/ollama/ollama/releases/download/v${version}/ollama-test.zip`,
+  };
+}
+
+function runtimeProcessHarness(failingVersions: ReadonlySet<string> = new Set()) {
+  let healthyVersion: string | null = null;
+  let liveChildren = 0;
+  let maximumLiveChildren = 0;
+  const startedVersions: string[] = [];
+  const spawnImpl = vi.fn((_file: string, args: readonly string[]) => {
+    const executable = args[2] ?? '';
+    const version = executable.split(/[\\/]/).at(-2) ?? 'unknown';
+    startedVersions.push(version);
+    const fails = failingVersions.has(version);
+    liveChildren += 1;
+    maximumLiveChildren = Math.max(maximumLiveChildren, liveChildren);
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: fails ? 1 : null as number | null,
+      connected: true,
+      send: vi.fn(() => {
+        if (child.exitCode === null) child.exitCode = 0;
+        if (healthyVersion === version) healthyVersion = null;
+        liveChildren = Math.max(0, liveChildren - 1);
+        queueMicrotask(() => child.emit('exit', child.exitCode, null));
+        return true;
+      }),
+      kill: vi.fn(() => {
+        if (child.exitCode === null) child.exitCode = 1;
+        if (healthyVersion === version) healthyVersion = null;
+        liveChildren = Math.max(0, liveChildren - 1);
+        queueMicrotask(() => child.emit('exit', child.exitCode, null));
+        return true;
+      }),
+    });
+    if (fails) {
+      liveChildren = Math.max(0, liveChildren - 1);
+    } else {
+      healthyVersion = version;
+    }
+    return child as never;
+  });
+  return {
+    spawnImpl,
+    probe: async () => healthyVersion !== null,
+    get healthyVersion() { return healthyVersion; },
+    get maximumLiveChildren() { return maximumLiveChildren; },
+    startedVersions,
+  };
+}
+
+async function seedActiveRuntime(
+  dataDir: string,
+  artifact: OllamaRuntimeArtifact,
+  bytes: Buffer,
+  artifactCatalog: ReadonlyArray<OllamaRuntimeArtifact>,
+): Promise<void> {
+  const processes = runtimeProcessHarness();
+  const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+    artifact,
+    artifactCatalog,
+    fetchImpl: (async () => new Response(bytes, {
+      status: 200,
+      headers: { 'content-length': String(bytes.length) },
+    })) as typeof fetch,
+    extractArchive: async (_archive, destination) => {
+      await writeFile(path.join(destination, 'ollama.exe'), `${artifact.version} executable`);
+    },
+    spawnImpl: processes.spawnImpl,
+    probe: processes.probe,
+  });
+  await runtime.ensureReady();
+  await runtime.stop();
 }
 
 function installVersionKey(version = 'test-1.0.0'): string {
@@ -149,6 +228,822 @@ describe('ManagedOllamaRuntime', () => {
       downloadRequired: false,
       dockerRequired: false,
     });
+  });
+
+  it('promotes a healthy upgrade atomically and restarts only the persisted active version', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted runtime N');
+    const nextBytes = Buffer.from('trusted runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    const processes = runtimeProcessHarness();
+    const dependencies = (artifact: OllamaRuntimeArtifact, bytes: Buffer) => ({
+      artifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive: string, destination: string) => {
+        await writeFile(path.join(destination, 'ollama.exe'), `${artifact.version} executable`);
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+    });
+
+    const firstRuntime = new ManagedOllamaRuntime(
+      dataDir,
+      'http://127.0.0.1:11434',
+      dependencies(firstArtifact, firstBytes),
+    );
+    expect((await firstRuntime.ensureReady()).status).toMatchObject({
+      activeVersion: 'test-1.0.0',
+      previousVersion: null,
+      fallbackActive: false,
+    });
+    await firstRuntime.stop();
+
+    const upgradedRuntime = new ManagedOllamaRuntime(
+      dataDir,
+      'http://127.0.0.1:11434',
+      dependencies(nextArtifact, nextBytes),
+    );
+    expect((await upgradedRuntime.ensureReady()).status).toMatchObject({
+      targetInstalled: true,
+      activeVersion: 'test-2.0.0',
+      previousVersion: 'test-1.0.0',
+      fallbackActive: false,
+      rollback: { available: true, active: false, lastAttempt: null },
+    });
+    await upgradedRuntime.stop();
+
+    const restartedRuntime = new ManagedOllamaRuntime(
+      dataDir,
+      'http://127.0.0.1:11434',
+      dependencies(nextArtifact, nextBytes),
+    );
+    expect((await restartedRuntime.startInstalled()).status).toMatchObject({
+      activeVersion: 'test-2.0.0',
+      previousVersion: 'test-1.0.0',
+      fallbackActive: false,
+    });
+    expect(processes.startedVersions).toEqual(['test-1.0.0', 'test-2.0.0', 'test-2.0.0']);
+    await restartedRuntime.stop();
+  });
+
+  it('promotes only after the default generation-capable tags probe succeeds', async () => {
+    const dataDir = await temporaryDataDir();
+    const bytes = Buffer.from('default readiness probe runtime');
+    const artifact = versionedFixtureArtifact('test-1.0.0', bytes);
+    let spawned = false;
+    const probeUrls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      probeUrls.push(String(input));
+      return spawned
+        ? new Response(JSON.stringify({ models: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+        : new Response('not ready', { status: 503 });
+    });
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      connected: true,
+      pid: 42_001,
+      send: vi.fn(() => {
+        child.exitCode = 0;
+        queueMicrotask(() => child.emit('exit', 0, null));
+        return true;
+      }),
+      kill: vi.fn(() => true),
+    });
+    const spawnImpl = vi.fn(() => {
+      spawned = true;
+      return child as never;
+    });
+    const download = vi.fn(async () => new Response(bytes, {
+      status: 200,
+      headers: { 'content-length': String(bytes.length) },
+    }));
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact,
+      artifactCatalog: [artifact],
+      fetchImpl: download as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'probe-ready executable');
+      },
+      spawnImpl,
+    });
+
+    const ready = await runtime.ensureReady();
+
+    expect(download).toHaveBeenCalledOnce();
+    expect(spawnImpl).toHaveBeenCalledOnce();
+    expect(probeUrls.length).toBeGreaterThanOrEqual(3);
+    expect(probeUrls.every((url) => url === 'http://127.0.0.1:11434/api/tags')).toBe(true);
+    expect(probeUrls.some((url) => url.endsWith('/api/version'))).toBe(false);
+    expect(ready.status).toMatchObject({
+      activeVersion: 'test-1.0.0',
+      running: true,
+      fallbackActive: false,
+    });
+    await runtime.stop();
+  });
+
+  it('serializes a concurrent readiness call until a failed activation rename has restored the prior runtime', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted concurrent runtime N');
+    const nextBytes = Buffer.from('trusted concurrent runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    const firstProcesses = runtimeProcessHarness();
+    const firstRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: firstArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(firstBytes, {
+        status: 200,
+        headers: { 'content-length': String(firstBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'runtime N executable');
+      },
+      spawnImpl: firstProcesses.spawnImpl,
+      probe: firstProcesses.probe,
+    });
+    await firstRuntime.ensureReady();
+    await firstRuntime.stop();
+
+    let renameEntered!: () => void;
+    const enteredRename = new Promise<void>((resolve) => { renameEntered = resolve; });
+    let releaseRename!: () => void;
+    const renameReleased = new Promise<void>((resolve) => { releaseRename = resolve; });
+    let stateRenameCalls = 0;
+    const stateRenameImpl = vi.fn(async (source: string, destination: string) => {
+      stateRenameCalls += 1;
+      if (stateRenameCalls === 1) {
+        renameEntered();
+        await renameReleased;
+        throw new Error('simulated activation-state rename failure');
+      }
+      await rename(source, destination);
+    });
+    const processes = runtimeProcessHarness();
+    const upgradedRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: nextArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(nextBytes, {
+        status: 200,
+        headers: { 'content-length': String(nextBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'runtime N plus 1 executable');
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+      stateRenameImpl: stateRenameImpl as typeof rename,
+    });
+
+    const firstActivation = upgradedRuntime.ensureReady().then(
+      (value) => ({ fulfilled: true as const, value }),
+      (error: unknown) => ({ fulfilled: false as const, error }),
+    );
+    await enteredRename;
+    let secondSettled = false;
+    const secondActivation = upgradedRuntime.ensureReady().finally(() => { secondSettled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const settledBeforeRenameRelease = secondSettled;
+    releaseRename();
+
+    const firstResult = await firstActivation;
+    const secondResult = await secondActivation;
+
+    expect(settledBeforeRenameRelease).toBe(false);
+    expect(firstResult.fulfilled).toBe(false);
+    expect(firstResult.fulfilled ? null : firstResult.error).toBeInstanceOf(ManagedRuntimeRollbackError);
+    expect(processes.startedVersions).toEqual(['test-2.0.0', 'test-1.0.0']);
+    expect(stateRenameImpl).toHaveBeenCalledTimes(2);
+    expect(secondResult).toMatchObject({
+      installedNow: false,
+      startedNow: false,
+      status: {
+        targetInstalled: true,
+        activeVersion: 'test-1.0.0',
+        fallbackActive: true,
+        rollback: {
+          active: true,
+          lastAttempt: {
+            failedVersion: 'test-2.0.0',
+            restoredVersion: 'test-1.0.0',
+            reason: 'simulated activation-state rename failure',
+          },
+        },
+      },
+    });
+    const persistedState = JSON.parse(await readFile(
+      path.join(dataDir, 'runtimes', 'ollama', 'runtime-state.json'),
+      'utf8',
+    ));
+    expect(persistedState).toMatchObject({
+      active: { version: 'test-1.0.0' },
+      lastRollback: {
+        failedVersion: 'test-2.0.0',
+        restoredVersion: 'test-1.0.0',
+      },
+    });
+    await upgradedRuntime.stop();
+  });
+
+  it('serializes distinct runtime instances across a delayed failed activation rename', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted cross-instance runtime N');
+    const nextBytes = Buffer.from('trusted cross-instance runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    await seedActiveRuntime(dataDir, firstArtifact, firstBytes, artifactCatalog);
+
+    let renameEntered!: () => void;
+    const enteredRename = new Promise<void>((resolve) => { renameEntered = resolve; });
+    let releaseRename!: () => void;
+    const renameReleased = new Promise<void>((resolve) => { releaseRename = resolve; });
+    let stateRenameCalls = 0;
+    const delayedStateRename = vi.fn(async (source: string, destination: string) => {
+      stateRenameCalls += 1;
+      if (stateRenameCalls === 1) {
+        renameEntered();
+        await renameReleased;
+        throw new Error('simulated cross-instance activation rename failure');
+      }
+      await rename(source, destination);
+    });
+    const processes = runtimeProcessHarness();
+    const dependencies = {
+      artifact: nextArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(nextBytes, {
+        status: 200,
+        headers: { 'content-length': String(nextBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive: string, destination: string) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'runtime N plus 1 executable');
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+    };
+    const firstInstance = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      ...dependencies,
+      stateRenameImpl: delayedStateRename as typeof rename,
+    });
+    const secondInstance = new ManagedOllamaRuntime(
+      dataDir,
+      'http://127.0.0.1:11434',
+      dependencies,
+    );
+
+    const firstActivation = firstInstance.ensureReady().then(
+      (value) => ({ fulfilled: true as const, value }),
+      (error: unknown) => ({ fulfilled: false as const, error }),
+    );
+    await enteredRename;
+    let secondSettled = false;
+    const secondActivation = secondInstance.ensureReady().finally(() => { secondSettled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const settledBeforeRenameRelease = secondSettled;
+    releaseRename();
+
+    const firstResult = await firstActivation;
+    const secondResult = await secondActivation;
+
+    expect(settledBeforeRenameRelease).toBe(false);
+    expect(firstResult.fulfilled).toBe(false);
+    expect(firstResult.fulfilled ? null : firstResult.error).toBeInstanceOf(ManagedRuntimeRollbackError);
+    expect(processes.startedVersions).toEqual(['test-2.0.0', 'test-1.0.0']);
+    expect(secondResult).toMatchObject({
+      installedNow: false,
+      startedNow: false,
+      status: {
+        activeVersion: 'test-1.0.0',
+        fallbackActive: true,
+        rollback: {
+          active: true,
+          lastAttempt: {
+            failedVersion: 'test-2.0.0',
+            restoredVersion: 'test-1.0.0',
+            reason: 'simulated cross-instance activation rename failure',
+          },
+        },
+      },
+    });
+    await firstInstance.stop();
+    await secondInstance.stop();
+  });
+
+  it('restores the persisted previous runtime when the active runtime fails its startInstalled health probe', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted persisted runtime N');
+    const nextBytes = Buffer.from('trusted persisted runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    await seedActiveRuntime(dataDir, firstArtifact, firstBytes, artifactCatalog);
+    await seedActiveRuntime(dataDir, nextArtifact, nextBytes, artifactCatalog);
+    const processes = runtimeProcessHarness();
+    let targetProbeFailed = false;
+    const restartedRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: nextArtifact,
+      artifactCatalog,
+      spawnImpl: processes.spawnImpl,
+      probe: async () => {
+        if (processes.healthyVersion === nextArtifact.version && !targetProbeFailed) {
+          targetProbeFailed = true;
+          throw new Error('persisted target health probe failed');
+        }
+        return processes.probe();
+      },
+    });
+
+    let failure: unknown;
+    try {
+      await restartedRuntime.startInstalled();
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(ManagedRuntimeRollbackError);
+    expect((failure as ManagedRuntimeRollbackError).rollback).toMatchObject({
+      failedVersion: 'test-2.0.0',
+      restoredVersion: 'test-1.0.0',
+    });
+    expect(processes.startedVersions).toEqual(['test-2.0.0', 'test-1.0.0']);
+    expect(restartedRuntime.getStatus()).toMatchObject({
+      running: true,
+      activeVersion: 'test-1.0.0',
+      previousVersion: 'test-2.0.0',
+      fallbackActive: true,
+      rollback: {
+        active: true,
+        lastAttempt: {
+          failedVersion: 'test-2.0.0',
+          restoredVersion: 'test-1.0.0',
+        },
+      },
+    });
+    await restartedRuntime.stop();
+  });
+
+  it('fails closed without spawning a replacement when an owned watchdog cannot be terminated', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted unkillable rollback runtime N');
+    const nextBytes = Buffer.from('unkillable rollback runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    await seedActiveRuntime(dataDir, firstArtifact, firstBytes, artifactCatalog);
+
+    vi.useFakeTimers();
+    try {
+      let runningVersion: string | null = null;
+      let targetProbeFailed = false;
+      let stopRequested!: () => void;
+      const requestedStop = new Promise<void>((resolve) => { stopRequested = resolve; });
+      const spawnImpl = vi.fn((_file: string, args: readonly string[]) => {
+        const executable = args[2] ?? '';
+        const version = executable.split(/[\\/]/).at(-2) ?? 'unknown';
+        runningVersion = version;
+        if (spawnImpl.mock.calls.length === 1) {
+          return Object.assign(new EventEmitter(), {
+            exitCode: null as number | null,
+            connected: true,
+            pid: 41_001,
+            send: vi.fn(() => {
+              stopRequested();
+              return true;
+            }),
+            kill: vi.fn(() => true),
+          }) as never;
+        }
+        const child = Object.assign(new EventEmitter(), {
+          exitCode: null as number | null,
+          connected: true,
+          pid: 41_002,
+          send: vi.fn(() => {
+            child.exitCode = 0;
+            runningVersion = null;
+            queueMicrotask(() => child.emit('exit', 0, null));
+            return true;
+          }),
+          kill: vi.fn(() => true),
+        });
+        return child as never;
+      });
+      const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+        artifact: nextArtifact,
+        artifactCatalog,
+        fetchImpl: (async () => new Response(nextBytes, {
+          status: 200,
+          headers: { 'content-length': String(nextBytes.length) },
+        })) as typeof fetch,
+        extractArchive: async (_archive, destination) => {
+          await writeFile(path.join(destination, 'ollama.exe'), 'runtime N plus 1 executable');
+        },
+        spawnImpl,
+        probe: async () => {
+          if (runningVersion === nextArtifact.version && !targetProbeFailed) {
+            targetProbeFailed = true;
+            throw new Error('target startup health failed');
+          }
+          return runningVersion === firstArtifact.version;
+        },
+      });
+      const attempt = runtime.ensureReady().then(
+        (value) => ({ fulfilled: true as const, value }),
+        (error: unknown) => ({ fulfilled: false as const, error }),
+      );
+      await requestedStop;
+      // The sidecar makes one bounded request and refuses overlap when the
+      // watchdog cannot confirm that its owned process tree is gone.
+      for (let timer = 0; timer < 4; timer += 1) {
+        await vi.runOnlyPendingTimersAsync();
+      }
+      const result = await attempt;
+
+      expect(result.fulfilled).toBe(false);
+      expect(result.fulfilled ? null : result.error).not.toBeInstanceOf(ManagedRuntimeRollbackError);
+      expect(spawnImpl).toHaveBeenCalledTimes(1);
+      expect(runtime.getStatus()).toMatchObject({
+        fallbackActive: false,
+        activeVersion: 'test-1.0.0',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refuses rollback when the watchdog reports failed tree termination and the target remains live', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted rollback runtime N');
+    const nextBytes = Buffer.from('surviving rollback runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    await seedActiveRuntime(dataDir, firstArtifact, firstBytes, artifactCatalog);
+
+    let runningVersion: string | null = null;
+    let targetProbeFailed = false;
+    const targetWatchdog = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      connected: true,
+      pid: 42_001,
+      send: vi.fn(() => {
+        targetWatchdog.exitCode = 1;
+        queueMicrotask(() => targetWatchdog.emit('exit', 1, null));
+        return true;
+      }),
+      kill: vi.fn(() => true),
+    });
+    const spawnImpl = vi.fn((_file: string, args: readonly string[]) => {
+      const executable = args[2] ?? '';
+      runningVersion = executable.split(/[\\/]/).at(-2) ?? 'unknown';
+      return targetWatchdog as never;
+    });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: nextArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(nextBytes, {
+        status: 200,
+        headers: { 'content-length': String(nextBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'runtime N plus 1 executable');
+      },
+      spawnImpl,
+      probe: async () => {
+        if (runningVersion === nextArtifact.version && !targetProbeFailed) {
+          targetProbeFailed = true;
+          throw new Error('target startup health failed');
+        }
+        return runningVersion === firstArtifact.version
+          || (targetProbeFailed && runningVersion === nextArtifact.version);
+      },
+    });
+
+    const failure = await runtime.ensureReady().catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(ManagedRuntimeRollbackError);
+    expect((failure as Error).message).toMatch(/watchdog exited with code 1/i);
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+    expect(targetWatchdog.kill).not.toHaveBeenCalled();
+    expect(runningVersion).toBe(nextArtifact.version);
+    // Model a late-starting target that now answers loopback. The retained
+    // termination tombstone must win before that health probe can report ready.
+    const retryFailure = await runtime.ensureReady().catch((error: unknown) => error);
+    expect(retryFailure).toBeInstanceOf(Error);
+    expect((retryFailure as Error).message).toMatch(/watchdog exited with code 1/i);
+    expect(spawnImpl).toHaveBeenCalledTimes(1);
+    expect(runtime.getStatus()).toMatchObject({
+      running: false,
+      fallbackActive: false,
+      activeVersion: firstArtifact.version,
+    });
+  });
+
+  it('waits for a failed target watchdog to exit before restoring the trusted prior runtime', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted rollback runtime N');
+    const nextBytes = Buffer.from('failing rollback runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    const firstProcesses = runtimeProcessHarness();
+    const firstRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: firstArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(firstBytes, {
+        status: 200,
+        headers: { 'content-length': String(firstBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'runtime N executable');
+      },
+      spawnImpl: firstProcesses.spawnImpl,
+      probe: firstProcesses.probe,
+    });
+    await firstRuntime.ensureReady();
+    await firstRuntime.stop();
+
+    let runningVersion: string | null = null;
+    let liveChildren = 0;
+    let maximumLiveChildren = 0;
+    let targetExitedBeforeFallback = false;
+    const startedVersions: string[] = [];
+    const spawnImpl = vi.fn((_file: string, args: readonly string[]) => {
+      const executable = args[2] ?? '';
+      const version = executable.split(/[\\/]/).at(-2) ?? 'unknown';
+      if (version === firstArtifact.version) targetExitedBeforeFallback = liveChildren === 0;
+      startedVersions.push(version);
+      liveChildren += 1;
+      maximumLiveChildren = Math.max(maximumLiveChildren, liveChildren);
+      runningVersion = version;
+      const child = Object.assign(new EventEmitter(), {
+        exitCode: null as number | null,
+        connected: true,
+        pid: 10_000 + startedVersions.length,
+        send: vi.fn(() => {
+          setTimeout(() => {
+            if (child.exitCode !== null) return;
+            child.exitCode = 0;
+            if (runningVersion === version) runningVersion = null;
+            liveChildren -= 1;
+            child.emit('exit', 0, null);
+          }, 25);
+          return true;
+        }),
+        kill: vi.fn(() => {
+          if (child.exitCode === null) {
+            child.exitCode = 1;
+            if (runningVersion === version) runningVersion = null;
+            liveChildren -= 1;
+            queueMicrotask(() => child.emit('exit', 1, null));
+          }
+          return true;
+        }),
+      });
+      return child as never;
+    });
+    const upgradedRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: nextArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(nextBytes, {
+        status: 200,
+        headers: { 'content-length': String(nextBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'runtime N plus 1 executable');
+      },
+      spawnImpl,
+      probe: async () => {
+        if (runningVersion === nextArtifact.version) throw new Error('target readiness probe failed');
+        return runningVersion === firstArtifact.version;
+      },
+    });
+
+    let failure: unknown;
+    try {
+      await upgradedRuntime.ensureReady();
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(ManagedRuntimeRollbackError);
+    expect((failure as ManagedRuntimeRollbackError).rollback).toMatchObject({
+      failedVersion: 'test-2.0.0',
+      restoredVersion: 'test-1.0.0',
+      reason: 'target readiness probe failed',
+    });
+    expect(startedVersions).toEqual(['test-2.0.0', 'test-1.0.0']);
+    expect(targetExitedBeforeFallback).toBe(true);
+    expect(maximumLiveChildren).toBe(1);
+    expect(upgradedRuntime.getStatus()).toMatchObject({
+      running: true,
+      targetInstalled: true,
+      activeVersion: 'test-1.0.0',
+      fallbackActive: true,
+      rollback: {
+        available: true,
+        active: true,
+        lastAttempt: {
+          failedVersion: 'test-2.0.0',
+          restoredVersion: 'test-1.0.0',
+        },
+      },
+    });
+    await upgradedRuntime.stop();
+  });
+
+  it('restores the trusted prior runtime when the target download fails checksum verification', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted checksum rollback runtime N');
+    const nextBytes = Buffer.from('tampered checksum upgrade payload');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = {
+      ...versionedFixtureArtifact('test-2.0.0', nextBytes),
+      sha256: '0'.repeat(64),
+    };
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    const firstProcesses = runtimeProcessHarness();
+    const firstRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: firstArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(firstBytes, {
+        status: 200,
+        headers: { 'content-length': String(firstBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'runtime N executable');
+      },
+      spawnImpl: firstProcesses.spawnImpl,
+      probe: firstProcesses.probe,
+    });
+    await firstRuntime.ensureReady();
+    await firstRuntime.stop();
+    const priorExecutable = path.join(dataDir, 'runtimes', 'ollama', firstArtifact.version, 'ollama.exe');
+
+    const rollbackProcesses = runtimeProcessHarness();
+    const upgradedRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: nextArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(nextBytes, {
+        status: 200,
+        headers: { 'content-length': String(nextBytes.length) },
+      })) as typeof fetch,
+      extractArchive: vi.fn(),
+      spawnImpl: rollbackProcesses.spawnImpl,
+      probe: rollbackProcesses.probe,
+    });
+
+    let failure: unknown;
+    try {
+      await upgradedRuntime.ensureReady();
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(ManagedRuntimeRollbackError);
+    expect((failure as ManagedRuntimeRollbackError).rollback).toMatchObject({
+      failedVersion: 'test-2.0.0',
+      restoredVersion: 'test-1.0.0',
+      reason: 'Official Ollama runtime checksum verification failed',
+    });
+    expect(rollbackProcesses.startedVersions).toEqual(['test-1.0.0']);
+    expect(existsSync(priorExecutable)).toBe(true);
+    expect(existsSync(path.join(dataDir, 'runtimes', 'ollama', nextArtifact.version))).toBe(false);
+    expect(upgradedRuntime.getStatus()).toMatchObject({
+      running: true,
+      targetInstalled: false,
+      activeVersion: 'test-1.0.0',
+      fallbackActive: true,
+      downloadRequired: true,
+    });
+    await upgradedRuntime.stop();
+  });
+
+  it('never selects an unknown activation receipt and recovers through the sole verified legacy target', async () => {
+    const dataDir = await temporaryDataDir();
+    const bytes = Buffer.from('trusted legacy runtime');
+    const artifact = versionedFixtureArtifact('test-1.0.0', bytes);
+    const installRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact,
+      artifactCatalog: [artifact],
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'trusted legacy executable');
+      },
+      probe: async () => false,
+    });
+    await installRuntime.install();
+    const statePath = path.join(dataDir, 'runtimes', 'ollama', 'runtime-state.json');
+    await writeFile(statePath, JSON.stringify({
+      schemaVersion: 1,
+      active: {
+        version: 'unknown-9.9.9',
+        sha256: artifact.sha256,
+        executable: path.join('bin', 'untrusted.exe'),
+        installedAt: new Date().toISOString(),
+      },
+      previous: null,
+      lastRollback: null,
+    }));
+    const processes = runtimeProcessHarness();
+    const recoveredRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact,
+      artifactCatalog: [artifact],
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+    });
+
+    const ready = await recoveredRuntime.startInstalled();
+
+    expect(processes.startedVersions).toEqual(['test-1.0.0']);
+    expect(ready).toMatchObject({
+      installedNow: false,
+      startedNow: true,
+      status: {
+        activeVersion: 'test-1.0.0',
+        fallbackActive: false,
+      },
+    });
+    const recoveredState = JSON.parse(await readFile(statePath, 'utf8'));
+    expect(recoveredState.active).toMatchObject({
+      version: 'test-1.0.0',
+      sha256: artifact.sha256,
+      executable: 'ollama.exe',
+    });
+    expect(JSON.stringify(recoveredState)).not.toContain('unknown-9.9.9');
+    await recoveredRuntime.stop();
+  });
+
+  it('recovers only the exact trusted previous receipt when a multi-install active receipt is corrupt', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted recovery receipt runtime N');
+    const nextBytes = Buffer.from('corrupt active receipt runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-2.0.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    await seedActiveRuntime(dataDir, firstArtifact, firstBytes, artifactCatalog);
+    await seedActiveRuntime(dataDir, nextArtifact, nextBytes, artifactCatalog);
+    const statePath = path.join(dataDir, 'runtimes', 'ollama', 'runtime-state.json');
+    const installedState = JSON.parse(await readFile(statePath, 'utf8'));
+    const trustedPrevious = installedState.previous;
+    expect(trustedPrevious).toMatchObject({
+      version: 'test-1.0.0',
+      sha256: firstArtifact.sha256,
+    });
+    await writeFile(statePath, JSON.stringify({
+      ...installedState,
+      active: {
+        ...installedState.active,
+        executable: path.join('..', 'untrusted-target.exe'),
+      },
+      previous: trustedPrevious,
+    }));
+    const processes = runtimeProcessHarness();
+    const fetchImpl = vi.fn();
+    const recoveredRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: nextArtifact,
+      artifactCatalog,
+      fetchImpl: fetchImpl as typeof fetch,
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+    });
+
+    const ready = await recoveredRuntime.startInstalled();
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(processes.startedVersions).toEqual(['test-1.0.0']);
+    expect(ready).toMatchObject({
+      installedNow: false,
+      startedNow: true,
+      status: {
+        targetInstalled: true,
+        activeVersion: 'test-1.0.0',
+        previousVersion: null,
+        fallbackActive: true,
+      },
+    });
+    const recoveredState = JSON.parse(await readFile(statePath, 'utf8'));
+    expect(recoveredState).toMatchObject({
+      active: trustedPrevious,
+      previous: null,
+    });
+    expect(JSON.stringify(recoveredState)).not.toContain('untrusted-target.exe');
+    await recoveredRuntime.stop();
   });
 
   it('rejects a byte-perfect-size archive when its checksum is wrong and leaves no install', async () => {
@@ -622,7 +1517,6 @@ setInterval(() => {}, 1000);
       kill: vi.fn(() => true),
     });
     const spawnImpl = vi.fn(() => child as never);
-    let probes = 0;
     const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
       artifact: fixtureArtifact(bytes),
       fetchImpl: (async () => new Response(bytes, {
@@ -633,7 +1527,7 @@ setInterval(() => {}, 1000);
         await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
       },
       spawnImpl,
-      probe: async () => ++probes >= 3,
+      probe: async () => spawnImpl.mock.calls.length > 0,
     });
 
     const ready = await runtime.ensureReady();
