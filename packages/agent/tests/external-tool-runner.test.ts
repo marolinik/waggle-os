@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BUILTIN_TOOL_MANIFESTS, type ToolManifest } from '@waggle/shared';
 import {
   buildExternalToolEnv,
+  resolveWindowsTaskkillPath,
   runExternalTool,
   type ExternalRunEvent,
   type ExternalProcessHandle,
@@ -24,9 +25,16 @@ class FakeStdin {
 
 class FakeChild extends EventEmitter implements ExternalProcessHandle {
   pid = 4321;
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
+  killSignals: Array<NodeJS.Signals | number | undefined> = [];
   stdout = new FakeStream();
   stderr = new FakeStream();
   stdin = new FakeStdin();
+  kill(signal?: NodeJS.Signals | number) {
+    this.killSignals.push(signal);
+    return true;
+  }
   override once(event: 'error' | 'exit', cb: (...args: never[]) => void): this {
     return super.once(event, cb);
   }
@@ -385,6 +393,130 @@ describe('runExternalTool', () => {
     expect(result.status).toBe('cancelled');
   });
 
+  it('does not kill a process that exited before a queued abort is handled', async () => {
+    const child = new FakeChild();
+    const controller = new AbortController();
+    let treeKills = 0;
+    const promise = runExternalTool({
+      ...baseRequest('hermes'),
+      access: 'native',
+      signal: controller.signal,
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => {
+        queueMicrotask(() => {
+          child.exitCode = 0;
+          controller.abort();
+        });
+        return child;
+      },
+      killTree: async () => { treeKills += 1; },
+    });
+
+    await expect(promise).resolves.toMatchObject({ status: 'completed', exitCode: 0 });
+    expect(treeKills).toBe(0);
+    expect(child.killSignals).toEqual([]);
+  });
+
+  it('recovers a spawn/listener abort race when tree cleanup rejects', async () => {
+    vi.useFakeTimers();
+    const child = new FakeChild();
+    const controller = new AbortController();
+    const cleanup = vi.fn();
+    const events: ExternalRunEvent[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('openclaw'),
+      access: 'native',
+      managedAgentId: 'waggle-workspace-1',
+      signal: controller.signal,
+      onEvent: (event) => events.push(event),
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      createPromptFile: () => ({ path: '/tmp/prompt.txt', cleanup }),
+      spawnProcess: () => {
+        controller.abort();
+        return child;
+      },
+      killTree: async () => { throw new Error('tree cleanup failed'); },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(child.killSignals).toEqual(['SIGKILL']);
+    let settled = false;
+    void promise.then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(promise).resolves.toMatchObject({
+      status: 'cancelled',
+      stderrTail: expect.stringContaining('tree cleanup failed'),
+    });
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(events.filter((event) => event.type === 'cancelled')).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('bounds a hung tree cleanup and a child that never exits', async () => {
+    vi.useFakeTimers();
+    const child = new FakeChild();
+    const controller = new AbortController();
+    let treeKills = 0;
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      timeoutMs: 120_000,
+      signal: controller.signal,
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => child,
+      killTree: () => {
+        treeKills += 1;
+        return new Promise<void>(() => {});
+      },
+    });
+    controller.abort();
+
+    let settled = false;
+    void promise.then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(settled).toBe(false);
+    expect(child.killSignals).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(treeKills).toBe(1);
+    expect(child.killSignals).toEqual(['SIGKILL']);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(promise).resolves.toMatchObject({ status: 'cancelled' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('preserves a timeout that wins before a later abort', async () => {
+    vi.useFakeTimers();
+    const child = new FakeChild();
+    const controller = new AbortController();
+    let treeKills = 0;
+    const promise = runExternalTool({
+      ...baseRequest('codex'),
+      timeoutMs: 1_000,
+      signal: controller.signal,
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => child,
+      killTree: async () => { treeKills += 1; },
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await expect(promise).resolves.toMatchObject({ status: 'timed_out' });
+    expect(treeKills).toBe(1);
+    expect(child.killSignals).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('emits one stall per quiet episode, recovers on output, and clears its watchdog on exit', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
@@ -508,6 +640,15 @@ describe('runExternalTool', () => {
 });
 
 describe('external adapter safety', () => {
+  it('resolves taskkill from an absolute Windows system directory', () => {
+    expect(resolveWindowsTaskkillPath({ SystemRoot: 'C:\\Windows' }))
+      .toBe('C:\\Windows\\System32\\taskkill.exe');
+    expect(resolveWindowsTaskkillPath({ WINDIR: 'D:\\WinNT' }))
+      .toBe('D:\\WinNT\\System32\\taskkill.exe');
+    expect(resolveWindowsTaskkillPath({ SystemRoot: 'relative\\windows' }))
+      .toBe('C:\\Windows\\System32\\taskkill.exe');
+  });
+
   it('passes OS context and explicit run identity but no ambient secrets', () => {
     const env = buildExternalToolEnv(
       {

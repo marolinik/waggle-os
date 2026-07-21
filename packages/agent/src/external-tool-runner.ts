@@ -19,6 +19,8 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1_000;
 const DEFAULT_STALL_AFTER_MS = 120_000;
 const MIN_STALL_AFTER_MS = 30_000;
+const TREE_KILL_TIMEOUT_MS = 5_000;
+const TERMINATION_SETTLE_MS = 2_000;
 
 export type ExternalRunEventType =
   | 'started' | 'progress' | 'message' | 'tool'
@@ -74,9 +76,12 @@ export interface ExternalToolRunResult {
 
 export interface ExternalProcessHandle {
   pid: number;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
   stdout: { on(event: 'data', cb: (chunk: Buffer | string) => void): void };
   stderr: { on(event: 'data', cb: (chunk: Buffer | string) => void): void };
   stdin: { write(value: string): void; end(): void };
+  kill(signal?: NodeJS.Signals | number): boolean;
   once(event: 'error', cb: (error: Error) => void): void;
   once(event: 'exit', cb: (code: number | null) => void): void;
 }
@@ -122,6 +127,12 @@ export async function runExternalTool(
   const promptFile = task.promptTransport === 'temp-file'
     ? (deps.createPromptFile ?? defaultCreatePromptFile)(request.prompt)
     : undefined;
+  let promptCleaned = false;
+  const cleanupPromptFile = () => {
+    if (promptCleaned) return;
+    promptCleaned = true;
+    try { promptFile?.cleanup(); } catch { /* best-effort secure temp cleanup */ }
+  };
   const args = renderArgs(
     request.sessionId && task.resumeArgvTemplate ? task.resumeArgvTemplate : task.argvTemplate,
     task,
@@ -140,7 +151,6 @@ export async function runExternalTool(
   let seq = 0;
   let abortRequested = request.signal?.aborted ?? false;
   let timedOut = false;
-  let killRequested = false;
   let lastEventAtMs = startedAt;
   let stalledEpisode = false;
 
@@ -163,7 +173,7 @@ export async function runExternalTool(
   };
 
   if (abortRequested) {
-    promptFile?.cleanup();
+    cleanupPromptFile();
     emit('cancelled', 'Cancelled before launch');
     return terminalResult('cancelled', null, '', '', '', now() - startedAt);
   }
@@ -172,29 +182,13 @@ export async function runExternalTool(
   try {
     child = spawnProcess(request.binary, args, { cwd: workspacePath, env });
   } catch (err) {
-    promptFile?.cleanup();
+    cleanupPromptFile();
     const message = err instanceof Error ? err.message : String(err);
     emit('failed', message);
     return terminalResult('failed', null, message, '', message, now() - startedAt);
   }
   emit('started', `Started ${request.manifest.displayName}`, child.pid);
 
-  const requestKill = async () => {
-    if (killRequested) return;
-    killRequested = true;
-    try { await killTree(child.pid, platform); }
-    catch (err) { stderr = appendTail(stderr, err instanceof Error ? err.message : String(err), MAX_STDERR); }
-  };
-
-  const abortHandler = () => {
-    abortRequested = true;
-    void requestKill();
-  };
-  request.signal?.addEventListener('abort', abortHandler, { once: true });
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    void requestKill();
-  }, timeoutMs);
   const stallTimer = stallAfterMs === undefined ? undefined : setInterval(() => {
     if (abortRequested || timedOut) return;
     const idleMs = now() - lastEventAtMs;
@@ -230,15 +224,18 @@ export async function runExternalTool(
     const progress = stripAnsi(text).trim();
     if (progress) emit('progress', progress);
   });
-  if (task.promptTransport === 'stdin') child.stdin.write(request.prompt);
-  child.stdin.end();
-
   return await new Promise<ExternalToolRunResult>((resolve) => {
     let settled = false;
+    let terminationIntent: 'cancelled' | 'timed_out' | null = null;
+    let treeKillDeadline: NodeJS.Timeout | undefined;
+    let settlementTimer: NodeJS.Timeout | undefined;
+    let timeout: NodeJS.Timeout | undefined;
     const finish = (exitCode: number | null, spawnError?: Error) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
+      if (treeKillDeadline) clearTimeout(treeKillDeadline);
+      if (settlementTimer) clearTimeout(settlementTimer);
       if (stallTimer) clearInterval(stallTimer);
       request.signal?.removeEventListener('abort', abortHandler);
       if (stdoutRemainder.trim()) parseLine(task.outputDialect, stdoutRemainder, parseState, emit);
@@ -248,7 +245,7 @@ export async function runExternalTool(
       if (task.outputDialect === 'hermes-text') {
         parseState.sessionId = extractSessionId(stripAnsi(stderr)) ?? parseState.sessionId;
       }
-      promptFile?.cleanup();
+      cleanupPromptFile();
 
       if (
         task.outputDialect === 'claude-stream-json' &&
@@ -297,8 +294,74 @@ export async function runExternalTool(
         ...(parseState.sessionId ? { sessionId: parseState.sessionId } : {}),
       });
     };
+
+    const appendCleanupError = (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      stderr = appendTail(stderr, message, MAX_STDERR);
+    };
+    const childHasExited = () => child.exitCode !== null || child.signalCode !== null;
+    const forceRootKill = () => {
+      if (settled || childHasExited()) return;
+      try {
+        if (!child.kill('SIGKILL')) appendCleanupError('Root process refused SIGKILL');
+      } catch (error) {
+        appendCleanupError(error);
+      }
+    };
+    const scheduleForcedSettlement = () => {
+      if (settled || settlementTimer) return;
+      settlementTimer = setTimeout(() => finish(child.exitCode), TERMINATION_SETTLE_MS);
+    };
+    const requestTermination = (intent: 'cancelled' | 'timed_out') => {
+      if (settled || terminationIntent) return;
+      if (childHasExited()) {
+        finish(child.exitCode);
+        return;
+      }
+      terminationIntent = intent;
+      abortRequested = intent === 'cancelled';
+      timedOut = intent === 'timed_out';
+      if (intent === 'cancelled' && timeout) {
+        clearTimeout(timeout);
+        timeout = undefined;
+      }
+
+      let treeAttemptFinished = false;
+      const finishTreeAttempt = (fallbackToRoot: boolean, error?: unknown) => {
+        if (settled || treeAttemptFinished) return;
+        treeAttemptFinished = true;
+        if (treeKillDeadline) {
+          clearTimeout(treeKillDeadline);
+          treeKillDeadline = undefined;
+        }
+        if (error !== undefined) appendCleanupError(error);
+        if (fallbackToRoot) forceRootKill();
+        scheduleForcedSettlement();
+      };
+
+      treeKillDeadline = setTimeout(() => {
+        finishTreeAttempt(true, new Error(`Process-tree cleanup exceeded ${TREE_KILL_TIMEOUT_MS}ms`));
+      }, TREE_KILL_TIMEOUT_MS);
+      try {
+        void killTree(child.pid, platform).then(
+          () => finishTreeAttempt(false),
+          (error) => finishTreeAttempt(true, error),
+        );
+      } catch (error) {
+        finishTreeAttempt(true, error);
+      }
+    };
+    const abortHandler = () => requestTermination('cancelled');
+
     child.once('error', (error) => finish(null, error));
     child.once('exit', (code) => finish(code));
+    timeout = setTimeout(() => requestTermination('timed_out'), timeoutMs);
+    request.signal?.addEventListener('abort', abortHandler, { once: true });
+    // Close the spawn/listener race: an abort can land after the pre-launch
+    // check but before the listener above is attached.
+    if (request.signal?.aborted) abortHandler();
+    if (!abortRequested && task.promptTransport === 'stdin') child.stdin.write(request.prompt);
+    child.stdin.end();
   });
 }
 
@@ -565,16 +628,30 @@ function defaultSpawnProcess(
     env: options.env,
     shell: false,
     detached: process.platform !== 'win32',
+    windowsHide: true,
     windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   return child as unknown as ExternalProcessHandle;
 }
 
+export function resolveWindowsTaskkillPath(env: NodeJS.ProcessEnv = process.env): string {
+  const candidate = env.SystemRoot ?? env.WINDIR;
+  const windowsRoot = candidate && path.win32.isAbsolute(candidate)
+    ? path.win32.normalize(candidate)
+    : 'C:\\Windows';
+  return path.win32.join(windowsRoot, 'System32', 'taskkill.exe');
+}
+
 async function defaultKillTree(pid: number, platform: NodeJS.Platform): Promise<void> {
   if (platform === 'win32') {
     await new Promise<void>((resolve, reject) => {
-      execFile('taskkill.exe', ['/PID', String(pid), '/T', '/F'], (error) => error ? reject(error) : resolve());
+      execFile(
+        resolveWindowsTaskkillPath(),
+        ['/PID', String(pid), '/T', '/F'],
+        { timeout: TREE_KILL_TIMEOUT_MS, windowsHide: true },
+        (error) => error ? reject(error) : resolve(),
+      );
     });
     return;
   }
