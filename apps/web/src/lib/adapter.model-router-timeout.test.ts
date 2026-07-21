@@ -43,12 +43,28 @@ describe('model router request deadlines', () => {
     }));
 
     const events = [];
-    for await (const event of client.sendMessage('workspace-1', 'hello', 'session-1', 'writer')) {
+    for await (const event of client.sendMessage(
+      'workspace-1',
+      'hello',
+      'session-1',
+      'writer',
+      undefined,
+      undefined,
+      'openai/requested-model',
+    )) {
       events.push(event);
     }
 
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(fetchSpy.mock.calls[0]?.[2]).toBe(45_000);
+    const request = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      workspaceId: 'workspace-1',
+      message: 'hello',
+      sessionId: 'session-1',
+      persona: 'writer',
+      model: 'openai/requested-model',
+    });
     expect(events).toEqual([{ type: 'done', data: { content: 'ok' } }]);
   });
 });

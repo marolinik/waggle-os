@@ -222,6 +222,60 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
   });
 });
 
+describe('useChat — immutable per-turn model selection', () => {
+  it('snapshots queued models and records the model resolved by the server', async () => {
+    const firstGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'first' } };
+        await firstGate.promise;
+        yield { type: 'done', data: { model: 'openai/resolved-a' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'second', model: 'anthropic/resolved-b' } };
+      });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ model }: { model: string }) => useChat({
+        workspaceId: 'ws-1',
+        sessionId: 'sess-1',
+        model,
+      }),
+      { initialProps: { model: 'openai/request-a' } },
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    let firstPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      firstPromise = hook.result.current.sendMessage('first question');
+      await flush();
+    });
+    await act(async () => { hook.rerender({ model: 'anthropic/request-b' }); });
+    await act(async () => {
+      await hook.result.current.sendMessage('second question');
+      await flush();
+    });
+
+    expect(mocks.adapter.sendMessage.mock.calls[0]?.[6]).toBe('openai/request-a');
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.messages.find(message => message.role === 'assistant')?.model).toBeUndefined();
+
+    firstGate.resolve();
+    await act(async () => { await firstPromise; await flush(); });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[6]).toBe('anthropic/request-b');
+
+    await vi.waitFor(() => {
+      const assistants = hook.result.current.messages.filter(message => message.role === 'assistant');
+      expect(assistants.map(message => message.model)).toEqual([
+        'openai/resolved-a',
+        'anthropic/resolved-b',
+      ]);
+    });
+  });
+});
+
 // ── ChatApp streaming interaction surface (contracts 1 + 2, the UI side) ────
 
 describe('ChatApp — streaming interaction contract', () => {

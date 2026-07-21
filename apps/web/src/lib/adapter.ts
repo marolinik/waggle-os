@@ -826,6 +826,7 @@ class LocalAdapter {
     persona?: string,
     autonomy?: { level: 'normal' | 'trusted' | 'yolo'; expiresAt?: number },
     retry?: boolean,
+    model?: string,
   ): AsyncGenerator<StreamEvent> {
     // CC Sesija A §2.2 — thread the user-selected Faza 1 GEPA shape into the
     // chat body. Sidecar /api/chat ignores `shape` until A3.1 wires it into
@@ -845,7 +846,7 @@ class LocalAdapter {
     try {
       const res = await this.fetch('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry }),
+        body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry, model }),
         signal: controller.signal,
       }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
 

@@ -79,6 +79,8 @@ interface UseChatOptions {
   workspaceId: string | null;
   sessionId: string | null;
   persona?: string;
+  /** Model selected when the user sends this turn. */
+  model?: string;
   /**
    * Phase B.5: per-window autonomy. When set to 'trusted' or 'yolo' (and not
    * expired), the server's pre-tool gate skips confirmation for the matching
@@ -87,7 +89,7 @@ interface UseChatOptions {
   autonomy?: AutonomyState;
 }
 
-export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOptions) => {
+export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: UseChatOptions) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
@@ -106,10 +108,10 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
   // QUEUE behind the in-flight one — the optimistic user turn renders at once
   // with a truthful `queued` marker and dispatches when the current reply ends.
   const inFlightRef = useRef(false);
-  const queueRef = useRef<Array<{ id: string; content: string; retry?: boolean }>>([]);
+  const queueRef = useRef<Array<{ id: string; content: string; retry?: boolean; model?: string }>>([]);
   // Late-bound so the dispatch loop can flush its own queue without a self-dep.
   const runDispatchRef = useRef<
-    (content: string, opts: { retry?: boolean } | undefined, optimisticId?: string) => Promise<boolean>
+    (content: string, opts: { retry?: boolean } | undefined, optimisticId?: string, turnModel?: string) => Promise<boolean>
   >(async () => false);
 
   // Cancel any in-flight stream on unmount
@@ -163,6 +165,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     content: string,
     opts?: { retry?: boolean },
     optimisticId?: string,
+    turnModel?: string,
   ): Promise<boolean> => {
     if (!workspaceId || !content.trim()) return false;
     inFlightRef.current = true;
@@ -233,14 +236,25 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
       const autonomyPayload = autonomy && autonomy.level !== 'normal'
         ? { level: autonomy.level, expiresAt: autonomy.expiresAt ?? undefined }
         : undefined;
-      for await (const event of adapter.sendMessage(
-        workspaceId,
-        content,
-        sessionId || undefined,
-        persona,
-        autonomyPayload,
-        opts?.retry,
-      )) {
+      const eventStream = turnModel
+        ? adapter.sendMessage(
+          workspaceId,
+          content,
+          sessionId || undefined,
+          persona,
+          autonomyPayload,
+          opts?.retry,
+          turnModel,
+        )
+        : adapter.sendMessage(
+          workspaceId,
+          content,
+          sessionId || undefined,
+          persona,
+          autonomyPayload,
+          opts?.retry,
+        );
+      for await (const event of eventStream) {
         if (controller.signal.aborted) break;
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
@@ -255,6 +269,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
           if (!last || last.role !== 'assistant') return msgs;
           const blocks = [...(last.blocks || [])];
           let toolsUpdate: ToolExecution[] | null = null;
+          let modelUpdate: string | null = null;
 
           switch (evt.type) {
             case 'token': {
@@ -341,13 +356,15 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
             }
 
             case 'model_switch': {
+              const switchedModel = (data as Record<string, string>).model;
               blocks.push({
                 type: 'model_switch',
                 blockId: nextBlockId('model'),
                 from: (data as Record<string, string>).primary ?? 'primary',
-                to: (data as Record<string, string>).model ?? 'fallback',
+                to: switchedModel ?? 'fallback',
                 reason: (data as Record<string, string>).reason ?? 'primary unavailable',
               });
+              if (switchedModel) modelUpdate = switchedModel;
               break;
             }
 
@@ -371,6 +388,8 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
               if (doneContent && !blocks.some(b => b.type === 'text' && b.content)) {
                 blocks.push({ type: 'text', blockId: nextBlockId('text'), content: doneContent });
               }
+              const resolvedModel = data?.model;
+              if (typeof resolvedModel === 'string' && resolvedModel) modelUpdate = resolvedModel;
               break;
             }
 
@@ -385,7 +404,13 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
           const content = flattenBlocks(blocks);
           return msgs.map((m, i) =>
             i === targetIdx
-              ? { ...m, blocks, content, ...(toolsUpdate && { tools: toolsUpdate }) }
+              ? {
+                ...m,
+                blocks,
+                content,
+                ...(toolsUpdate && { tools: toolsUpdate }),
+                ...(modelUpdate && { model: modelUpdate }),
+              }
               : m
           );
         });
@@ -435,7 +460,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         inFlightRef.current = false;
         // Flush the next queued send (FIFO) now that the stream has ended.
         const next = queueRef.current.shift();
-        if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id);
+        if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id, next.model);
       }
     }
     return !failed;
@@ -450,7 +475,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     // truthful `queued` marker; it dispatches when the current reply finishes.
     if (inFlightRef.current) {
       const id = crypto.randomUUID();
-      queueRef.current.push({ id, content: trimmed, retry: opts?.retry });
+      queueRef.current.push({ id, content: trimmed, retry: opts?.retry, model: model || undefined });
       setMessages(prev => [...prev, {
         id,
         role: 'user',
@@ -461,8 +486,8 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
       }]);
       return true;
     }
-    return runDispatch(content, opts);
-  }, [workspaceId, runDispatch]);
+    return runDispatch(content, opts, undefined, model || undefined);
+  }, [workspaceId, model, runDispatch]);
 
   // F4: re-issue the last user turn after a failure. Drops the failed
   // user+assistant pair from local state first, then sendMessage re-appends a
@@ -499,7 +524,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     // Preserve user-entered order: if a turn was already queued, promote it
     // before a newly typed send can bypass the queue after Stop releases input.
     const next = queueRef.current.shift();
-    if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id);
+    if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id, next.model);
   }, []);
 
   const clearHistory = useCallback(async () => {

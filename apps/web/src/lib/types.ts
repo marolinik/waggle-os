@@ -435,6 +435,8 @@ export interface ChatMessage {
   feedback?: 'up' | 'down' | null;
   pinned?: boolean;
   persona?: string;
+  /** The model that actually produced this turn, as reported by the server. */
+  model?: string;
   /**
    * Lane C (Pillar 2.2/2.5): an optimistic user turn that was typed+sent while a
    * previous reply was still streaming. It renders immediately with a truthful
