@@ -650,6 +650,235 @@ describe('SSE Stream Resilience', () => {
       }
     }, 30_000);
 
+    it('queues checkout mutations across sessions while knowledge-only chat stays concurrent', async () => {
+      const workspaceRoot = path.join(tmpDir, 'shared-coder-workspace');
+      fs.mkdirSync(workspaceRoot, { recursive: true });
+      const sharedFile = path.join(workspaceRoot, 'shared.txt');
+      fs.writeFileSync(sharedFile, 'v0', 'utf-8');
+
+      const workspaceResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/workspaces',
+        payload: {
+          name: 'Shared Coder Queue Test',
+          group: 'Test',
+          directory: workspaceRoot,
+          storageType: 'local',
+          storagePath: workspaceRoot,
+        },
+      });
+      expect(workspaceResponse.statusCode).toBe(201);
+      const workspaceId = (workspaceResponse.json() as { id: string }).id;
+
+      const previousProvider = server.agentState.llmProvider;
+      const previousCurrentModel = server.agentState.currentModel;
+      const previousLitellmUrl = server.localConfig.litellmUrl;
+      const previousOllamaHost = process.env.OLLAMA_HOST;
+      const previousReranker = process.env.WAGGLE_RERANKER;
+
+      server.agentState.llmProvider = {
+        provider: 'ollama',
+        health: 'healthy',
+        detail: 'Test Ollama provider',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-queue';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+      process.env.WAGGLE_RERANKER = '0';
+
+      const deferred = () => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((done) => { resolve = done; });
+        return { promise, resolve };
+      };
+      const aHeldAfterEdit = deferred();
+      const releaseA = deferred();
+      const bProviderEntered = deferred();
+      const calls = new Map<'A' | 'B' | 'C', number>([['A', 0], ['B', 0], ['C', 0]]);
+      let bReadResult = '';
+      let cMemoryResult = '';
+
+      const streamResponse = (chunks: unknown[]) => new Response(
+        `${chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+      const toolResponse = (id: string, name: string, args: Record<string, unknown>) => streamResponse([
+        {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id,
+                type: 'function',
+                function: { name, arguments: JSON.stringify(args) },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        },
+      ]);
+      const finalResponse = (content: string) => streamResponse([
+        { choices: [{ delta: { content } }] },
+        {
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        },
+      ]);
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-queue' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (!url.endsWith('/chat/completions')) return new Response('', { status: 503 });
+
+        const body = JSON.parse(String(init?.body ?? '{}')) as {
+          messages?: Array<{ role?: string; content?: string }>;
+        };
+        const contents = (body.messages ?? []).map(entry => entry.content ?? '').join('\n');
+        const session = contents.includes('QUEUE_SESSION_A')
+          ? 'A'
+          : contents.includes('QUEUE_SESSION_B')
+            ? 'B'
+            : contents.includes('QUEUE_SESSION_C') ? 'C' : null;
+        if (!session) throw new Error('Provider request did not contain a queue-test marker');
+        const call = (calls.get(session) ?? 0) + 1;
+        calls.set(session, call);
+
+        if (session === 'A' && call === 1) {
+          return toolResponse('queue-a-read', 'read_file', { path: 'shared.txt' });
+        }
+        if (session === 'A' && call === 2) {
+          return toolResponse('queue-a-edit', 'edit_file', {
+            path: 'shared.txt', old_string: 'v0', new_string: 'v1',
+          });
+        }
+        if (session === 'A' && call === 3) {
+          aHeldAfterEdit.resolve();
+          await releaseA.promise;
+          return finalResponse('QUEUE_SESSION_A complete');
+        }
+        if (session === 'B' && call === 1) {
+          bProviderEntered.resolve();
+          return toolResponse('queue-b-read', 'read_file', { path: 'shared.txt' });
+        }
+        if (session === 'B' && call === 2) {
+          bReadResult = body.messages
+            ?.filter(entry => entry.role === 'tool')
+            .at(-1)?.content ?? '';
+          return toolResponse('queue-b-edit', 'edit_file', {
+            path: 'shared.txt', old_string: 'v1', new_string: 'v2',
+          });
+        }
+        if (session === 'B' && call === 3) {
+          return finalResponse('QUEUE_SESSION_B complete');
+        }
+        if (session === 'C' && call === 1) {
+          await Promise.race([
+            bProviderEntered.promise,
+            new Promise<void>(resolve => setTimeout(resolve, 250)),
+          ]);
+          return toolResponse('queue-c-memory', 'search_memory', {
+            query: 'SSE resilience frame',
+          });
+        }
+        if (session === 'C' && call === 2) {
+          cMemoryResult = body.messages
+            ?.filter(entry => entry.role === 'tool')
+            .at(-1)?.content ?? '';
+          return finalResponse('QUEUE_SESSION_C complete');
+        }
+        throw new Error(`Unexpected queue-test provider call ${session}#${call}`);
+      });
+
+      const requestA = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: workspaceId,
+          session: 'queue-session-a',
+          persona: 'coder',
+          model: 'ollama/local-queue',
+          autonomy: { level: 'yolo' },
+          message: 'QUEUE_SESSION_A: read shared.txt, then edit_file from v0 to v1.',
+        },
+      });
+      let requestB: ReturnType<typeof injectWithAuth> | undefined;
+      let requestC: ReturnType<typeof injectWithAuth> | undefined;
+
+      try {
+        await Promise.race([
+          aHeldAfterEdit.promise,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('First coder session did not reach its held completion')),
+            5_000,
+          )),
+        ]);
+        expect(fs.readFileSync(sharedFile, 'utf-8')).toBe('v1');
+
+        requestB = injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            workspace: workspaceId,
+            session: 'queue-session-b',
+            persona: 'coder',
+            model: 'ollama/local-queue',
+            autonomy: { level: 'yolo' },
+            message: 'QUEUE_SESSION_B: read shared.txt, then edit_file from v1 to v2.',
+          },
+        });
+        requestC = injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            workspace: workspaceId,
+            session: 'queue-session-c',
+            model: 'ollama/local-queue',
+            message: 'QUEUE_SESSION_C: search my memory for SSE resilience frame, then summarize it.',
+          },
+        });
+
+        const responseC = await Promise.race([
+          requestC,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('Knowledge-only session was blocked by the coder lease')),
+            5_000,
+          )),
+        ]);
+        expect(responseC.body).toContain('QUEUE_SESSION_C complete');
+        expect(cMemoryResult).toContain('SSE resilience test frame');
+        expect(calls.get('B')).toBe(0);
+
+        releaseA.resolve();
+        const [responseA, responseB] = await Promise.all([requestA, requestB]);
+        expect(responseA.body).toContain('QUEUE_SESSION_A complete');
+        expect(responseB.body).toContain('QUEUE_SESSION_B complete');
+        expect(responseB.body).toContain('Waiting for another agent to finish editing this workspace');
+        expect(bReadResult).toContain('v1');
+        expect(fs.readFileSync(sharedFile, 'utf-8')).toBe('v2');
+      } finally {
+        releaseA.resolve();
+        await Promise.allSettled([requestA, requestB, requestC].filter(Boolean) as Promise<unknown>[]);
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = previousProvider;
+        server.agentState.currentModel = previousCurrentModel;
+        server.localConfig.litellmUrl = previousLitellmUrl;
+        if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = previousOllamaHost;
+        if (previousReranker === undefined) delete process.env.WAGGLE_RERANKER;
+        else process.env.WAGGLE_RERANKER = previousReranker;
+        await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${workspaceId}` });
+      }
+    }, 30_000);
+
     it('rejects an overlapping turn for the same workspace session before it mutates history', async () => {
       const workspaceResponse = await injectWithAuth(server, {
         method: 'POST',

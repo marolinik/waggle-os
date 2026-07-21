@@ -144,6 +144,7 @@ import { ChannelManager } from './channels/manager.js';
 import { runChannelChatTurn } from './channels/chat-client.js';
 import { channelRoutes } from './channels/routes.js';
 import { isChannelPlatform } from './channels/types.js';
+import { WorkspaceTurnCoordinator } from './workspace-turn-coordinator.js';
 import { IdleSessionWatcher, readRecentTranscript, buildReviewInstruction, NOTHING_TO_DO } from './idle-watcher.js';
 import { DreamJournal } from './dream-journal.js';
 import { dreamRoutes } from './routes/dreams.js';
@@ -245,6 +246,8 @@ export interface AgentState {
   currentModel: string;
   litellmApiKey: string;
   pendingApprovals: Map<string, PendingApproval>;
+  /** Serializes checkout-reading/writing agent turns by canonical physical root. */
+  workspaceTurnCoordinator: WorkspaceTurnCoordinator;
   /** Phase B.3: persistent "always allow" grant store for gated tools. */
   approvalGrantStore: import('./approval-grants.js').ApprovalGrantStore;
   /**
@@ -973,6 +976,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Pending approvals map for confirmation gates
   const pendingApprovals = new Map<string, PendingApproval>();
+  const workspaceTurnCoordinator = new WorkspaceTurnCoordinator();
 
   // Phase B.3: persistent "always allow" grant store — survives sessions
   // so approved (tool, target) combinations don't re-prompt every time.
@@ -1497,6 +1501,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     currentModel,
     litellmApiKey,
     pendingApprovals,
+    workspaceTurnCoordinator,
     approvalGrantStore,
     buildToolsForWorkspace,
     createSessionOrchestrator,

@@ -53,6 +53,7 @@ import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
+import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import { getBoundTeamServer } from '../team-server-binding.js';
 import { fetchTeamServer } from '../team-server-egress.js';
@@ -1164,6 +1165,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
     let activeChatRuntime: { workspaceSession: WorkspaceSession; sessionId: string; runtime: ChatRuntime } | undefined;
+    let workspaceTurnScope: WorkspaceTurnScope | undefined;
     // Turn-scoped pin for the shared orchestrator's workspace mind (default/
     // no-workspace chats). Hoisted so the outer finally can release it.
     let pinnedSharedMindId: string | null = null;
@@ -1254,6 +1256,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
       activeSessionOrch = sessionOrch;
+      if (!hasCustomRunner && workspace && workspace !== 'default' && workspacePath) {
+        workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
+          workspacePath,
+          turnSignal,
+        );
+      }
 
       // ── Model Pilot: resolve model with fallback chain ──
       const pilotConfig = new WaggleConfig(server.localConfig.dataDir);
@@ -2192,6 +2200,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
+        if (workspaceTurnScope) {
+          effectiveTools = workspaceTurnScope.wrapTools(effectiveTools, externalToolNames);
+          spawnAvailableTools = workspaceTurnScope.wrapTools(spawnAvailableTools, externalToolNames);
+        }
+
         // Bind collaboration producers to THIS request's workspace, session,
         // security policy, and runner. Static startup tools are replaced only
         // when their names survived persona/availability/intent filtering.
@@ -2255,6 +2268,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           toolOmittedCount = selection.omittedCount;
           transmittedToolSchemaChars = toolSelectedCount > 0 ? selection.schemaChars : 0;
           log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
+        }
+
+        if (workspaceTurnScope) {
+          const workspaceAccess = workspaceTurnScope.classify(effectiveTools, externalToolNames);
+          if (workspaceAccess !== 'none') {
+            let queued = false;
+            await workspaceTurnScope.acquire(workspaceAccess, (queuePosition) => {
+              queued = true;
+              sendEvent('step', {
+                content: 'Waiting for another agent to finish editing this workspace\u2026',
+                phase: 'workspace_queue',
+                queuePosition,
+              });
+            });
+            throwIfTurnAborted();
+            if (queued) {
+              sendEvent('step', {
+                content: 'Workspace is ready; continuing this session.',
+                phase: 'workspace_acquired',
+              });
+            }
+          }
         }
 
         // Package the prompt only after the executable tool set is final. A
@@ -3181,6 +3216,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
+      if (workspaceTurnScope) {
+        try { await workspaceTurnScope.release(); } catch { /* lease already released */ }
+      }
       if (activeChatRuntime) {
         releaseChatRuntime(
           activeChatRuntime.workspaceSession,
