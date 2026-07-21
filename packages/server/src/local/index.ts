@@ -241,7 +241,7 @@ export interface AgentState {
   costTracker: CostTracker;
   skills: LoadedSkill[];
   userSystemPrompt: string | null;
-  sessionHistories: Map<string, Array<{ role: string; content: string }>>;
+  sessionHistories: Map<string, Array<{ role: string; content: string; model?: string }>>;
   currentModel: string;
   litellmApiKey: string;
   pendingApprovals: Map<string, PendingApproval>;
@@ -963,7 +963,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const mcpToolRetriever = new McpToolRetriever({ embedder });
 
   // Session histories (server-side, like CLI)
-  const sessionHistories = new Map<string, Array<{ role: string; content: string }>>();
+  const sessionHistories = new Map<string, Array<{ role: string; content: string; model?: string }>>();
 
   // Default model — W2C: initialize from config.json's defaultModel so the
   // top-bar chip and Settings → Models agree from the first launch (this was

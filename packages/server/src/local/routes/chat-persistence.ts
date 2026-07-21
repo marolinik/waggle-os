@@ -17,7 +17,7 @@ export function persistMessage(
   dataDir: string,
   workspaceId: string,
   sessionId: string,
-  msg: { role: string; content: string },
+  msg: { role: string; content: string; model?: string },
 ): void {
   const sessionsDir = path.join(dataDir, 'workspaces', workspaceId, 'sessions');
   if (!fs.existsSync(sessionsDir)) {
@@ -31,7 +31,12 @@ export function persistMessage(
     fs.writeFileSync(filePath, meta + '\n', 'utf-8');
   }
 
-  const line = JSON.stringify({ role: msg.role, content: msg.content, timestamp: new Date().toISOString() });
+  const line = JSON.stringify({
+    role: msg.role,
+    content: msg.content,
+    timestamp: new Date().toISOString(),
+    ...(typeof msg.model === 'string' && msg.model.trim() ? { model: msg.model } : {}),
+  });
   fs.appendFileSync(filePath, line + '\n', 'utf-8');
 }
 
@@ -84,21 +89,28 @@ export function loadSessionMessages(
   dataDir: string,
   workspaceId: string,
   sessionId: string,
-): Array<{ role: string; content: string }> {
+): Array<{ role: string; content: string; model?: string }> {
   const filePath = path.join(dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`);
   if (!fs.existsSync(filePath)) return [];
 
   const content = fs.readFileSync(filePath, 'utf-8').trim();
   if (!content) return [];
 
-  const messages: Array<{ role: string; content: string }> = [];
+  const messages: Array<{ role: string; content: string; model?: string }> = [];
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
       const parsed = JSON.parse(line);
       if (parsed.type === 'meta') continue; // skip metadata line
       if (parsed.role && parsed.content !== undefined) {
-        messages.push({ role: parsed.role, content: parsed.content });
+        const model = typeof parsed.model === 'string' && parsed.model.trim()
+          ? parsed.model
+          : undefined;
+        messages.push({
+          role: parsed.role,
+          content: parsed.content,
+          ...(model ? { model } : {}),
+        });
       }
     } catch {
       // skip malformed lines

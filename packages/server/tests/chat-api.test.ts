@@ -547,15 +547,51 @@ describe('Chat Streaming API', () => {
     expect(doneEvents.length).toBe(1);
   });
 
-  it('accepts optional model parameter', async () => {
+  it('persists the authoritative resolved model through live and cold history reads', async () => {
+    resetRateLimiter(server);
+    const sessionId = `model-provenance-${Date.now()}`;
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
-      payload: { message: 'Hello', model: 'gpt-4o' },
+      payload: { message: 'Hello', model: 'gpt-4o', workspace: 'default', session: sessionId },
     });
     const events = parseSSE(res.body);
-    const doneEvents = events.filter(e => e.event === 'done');
-    expect(doneEvents.length).toBe(1);
+    const done = events.find(e => e.event === 'done');
+    expect(done).toBeDefined();
+    const resolvedModel = JSON.parse(done!.data).model as string;
+    expect(resolvedModel).toBeTruthy();
+
+    const inMemory = server.agentState.sessionHistories.get(sessionId);
+    expect(inMemory).toEqual([
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: 'Hello world', model: resolvedModel },
+    ]);
+
+    const liveHistory = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=default&session=${sessionId}`,
+    });
+    expect(liveHistory.statusCode).toBe(200);
+    expect(liveHistory.json().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Hello' }),
+      expect.objectContaining({ role: 'assistant', content: 'Hello world', model: resolvedModel }),
+    ]);
+
+    // Evict RAM to exercise the same disk path used after a sidecar restart.
+    server.agentState.sessionHistories.delete(sessionId);
+    const coldHistory = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=default&session=${sessionId}`,
+    });
+    expect(coldHistory.statusCode).toBe(200);
+    expect(coldHistory.json().messages).toEqual([
+      expect.objectContaining({ role: 'user', content: 'Hello' }),
+      expect.objectContaining({ role: 'assistant', content: 'Hello world', model: resolvedModel }),
+    ]);
+    expect(loadSessionMessages(tmpDir, 'default', sessionId)).toEqual([
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: 'Hello world', model: resolvedModel },
+    ]);
   });
 
   it('passes windowed messages to agent runner when history exceeds MAX_CONTEXT_MESSAGES', async () => {

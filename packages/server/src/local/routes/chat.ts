@@ -1093,7 +1093,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let pinnedSharedMindId: string | null = null;
     const activeSessionId = requestedSessionId ?? workspace ?? 'default';
     const activeWorkspaceId = workspace ?? 'default';
-    let activeHistory: Array<{ role: string; content: string }> | undefined;
+    let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     let activeAttemptModel: string | null = null;
     let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
 
@@ -2196,6 +2196,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           + `toolRounds=${agentRunBudget.maxToolRounds} tokens=${agentRunBudget.maxTokenBudget}`,
         );
 
+        // Persistence carries display-only model provenance. Strip it before
+        // provider serialization so the LLM message schema remains role/content.
+        windowedMessages = windowedMessages.map(({ role, content }) => ({ role, content }));
+
         // Build agent loop config — with windowed conversation history + hooks
         let bufferedAgentTokens: string[] = [];
 
@@ -2818,8 +2822,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         bufferedAgentTokens = [];
 
         // Add assistant response to history (maintains context for next turn) and persist
-        history.push({ role: 'assistant', content: finalContent });
-        persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: finalContent });
+        const assistantMessage = { role: 'assistant', content: finalContent, model: resolvedModel };
+        history.push(assistantMessage);
+        persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, assistantMessage);
 
         // Send the done event with full response + model info + per-message cost
         const messageCost = result.usage

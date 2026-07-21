@@ -94,19 +94,31 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       );
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8').trim();
-        const messages: Array<{ role: string; content: string; timestamp?: string }> = [];
+        const messages: Array<{ role: string; content: string; timestamp?: string; model?: string }> = [];
         for (const line of content.split('\n')) {
           if (!line.trim()) continue;
           try {
             const parsed = JSON.parse(line);
             if (parsed.type === 'meta') continue;
             if (parsed.role && parsed.content !== undefined) {
-              messages.push({ role: parsed.role, content: parsed.content, timestamp: parsed.timestamp });
+              const model = typeof parsed.model === 'string' && parsed.model.trim()
+                ? parsed.model
+                : undefined;
+              messages.push({
+                role: parsed.role,
+                content: parsed.content,
+                timestamp: parsed.timestamp,
+                ...(model ? { model } : {}),
+              });
             }
           } catch { /* skip */ }
         }
         // Cache in RAM for subsequent requests
-        server.agentState.sessionHistories.set(sessionId, messages.map(m => ({ role: m.role, content: m.content })));
+        server.agentState.sessionHistories.set(sessionId, messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          ...(m.model ? { model: m.model } : {}),
+        })));
         return {
           sessionId,
           messages: messages.map((m, i) => ({
@@ -114,6 +126,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
             role: m.role,
             content: m.content,
             timestamp: m.timestamp ?? new Date().toISOString(),
+            ...(m.model ? { model: m.model } : {}),
           })),
           count: messages.length,
         };
@@ -128,6 +141,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
         role: m.role,
         content: m.content,
         timestamp: new Date().toISOString(),
+        ...(m.model ? { model: m.model } : {}),
       })),
       count: history.length,
     };
