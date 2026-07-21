@@ -280,3 +280,20 @@ bun.lock
 
 # Local plaintext API keys — never commit
 AI API KEYS.txt
+
+# Sesija C external dependencies — vendored per-clone, not committed
+# (ARE platform installed under external/meta-agents-research-environments;
+# pinned SHA tracked in benchmarks/gaia2/README.md)
+external/
+
+# Sesija C per-run output dirs — large JSONL traces, not committed
+# (Phase 2 smoke evidence summarized in benchmarks/gaia2/smoke-evidence.md;
+# Phase 4 dry run JSONLs stay local + summarized in dry-run-results-memo.md)
+benchmarks/gaia2/runs/*
+!benchmarks/gaia2/runs/.gitkeep
+
+# Sesija C per-clone Gaia2 task dumps — produced by dump-tasks.py from HF,
+# large JSONL (2.44–2.67M chars/scenario), not committed. Phase 3b-B
+# regenerates locally; Phase 4 Docker run uses ARE-native HF loader directly.
+benchmarks/gaia2/data/*
+!benchmarks/gaia2/data/.gitkeep

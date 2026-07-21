@@ -1,0 +1,70 @@
+# Sesija C Phase 3b — Gaia2 ARE dry verification config (Task C4).
+#
+# LOCKED FOR:
+#   - Brief: briefs/2026-04-30-cc-sesija-C-gaia2-setup-dry-verification.md §2.2 Task C4
+#   - PM ratification γ (first-batch-as-probe; halt at $8)
+#   - PM ratification A (narrow-proxy scope — pass=null until Phase 4 Docker + ARE verifier)
+#   - Cost cap unchanged: $15 hard / $10 expected halt / $8 probe-driven halt-and-PM
+#
+# Adapter consumer: benchmarks/gaia2/adapter.ts → Gaia2AdapterConfig
+# Driver:            benchmarks/gaia2/scripts/run-dry-verification.ts
+# Tasks source:      benchmarks/gaia2/data/tasks-<config>-<limit>.jsonl
+#                    (produced by benchmarks/gaia2/scripts/dump-tasks.py)
+
+# ─── Dry-run scope ───────────────────────────────────────────────────────
+
+task_count_dry_run: 10  # Per shape; 4 shapes × 10 = 40 total invocations
+
+# 4-shape sweep per brief Task C5. baseline + GEPA-evolved for both
+# claude + qwen-thinking shape families. Faza 1 §B AUTHORIZED:
+# claude-gen1-v1 + qwen-thinking-gen1-v1. Baselines provide control.
+shapes:
+  - claude                  # baseline 1 (claude::base)
+  - claude-gen1-v1          # GEPA-evolved variant 1 (Faza 1 AUTHORIZED)
+  - qwen-thinking           # baseline 2 (qwen-thinking::base)
+  - qwen-thinking-gen1-v1   # GEPA-evolved variant 2 (Faza 1 AUTHORIZED + Phase 4.5 mechanism CONFIRMED)
+
+# Control shape for relative measurement.
+baseline_shape: claude
+
+# Phase 3 narrow-proxy default (per PM ratification A): no judge, pass=null.
+# Phase 4 Docker + ARE verifier flips to write-action-verifier.
+# Post-launch Phase 3 sprint Week 7 flips to trio-strict.
+judge_methodology: narrow-proxy-no-judge
+
+# ─── Cost guards ─────────────────────────────────────────────────────────
+# All caps in USD. Cumulative across Sesija C from $0 starting point.
+#
+# RETROACTIVE AMENDMENT 2026-04-30 (PM Phase 3 closure ratification):
+#   Hard cap raised $15 → $20 to accommodate probe overshoot ($16.38 actual
+#   vs $15 cap = $1.38 overshoot) plus closure memo writing finalization.
+#   Probe-first protocol γ ROI: $147 saved vs full-sweep blind execution
+#   ($163.77 projected). Cost amendment is acceptable per probe-first
+#   discipline (cheap discovery vs expensive blind execution).
+#   See `feedback_probe_first_roi_demonstration.md` memory entry.
+
+cost_cap_usd: 20            # Hard cap — retroactive amendment 2026-04-30 ($15 → $20)
+halt_trigger_usd: 8         # Halt-and-PM trigger (PM ratification γ — unchanged)
+per_call_halt_usd: 0.50     # Per-LLM-call ceiling (single-call abort — unchanged)
+
+# PM ratification γ first-batch-as-probe: run this many invocations
+# first, project total, halt-and-PM if projection > halt_trigger_usd.
+# Default 4 (1 task × 4 shapes) — minimum viable probe sample.
+# Phase 3b-B sample (this commit): 2 (1 task × 2 shapes) for schema-fit
+# verification only.
+probe_invocation_count: 4
+
+# ─── Output ──────────────────────────────────────────────────────────────
+
+output_dir_root: benchmarks/gaia2/runs
+
+# ─── HuggingFace dataset config ──────────────────────────────────────────
+# Dataset card: https://huggingface.co/datasets/meta-agents-research-environments/gaia2
+# Pinned via task-dump JSONL (see benchmarks/gaia2/data/), not via HF
+# revision pin — adapter consumes the dump file, dump script consumes HF.
+# Phase 4 Docker run will use ARE's native HF loader (pinned revision via
+# ARE config).
+
+hf_dataset: meta-agents-research-environments/gaia2
+hf_config: mini             # 200 representative scenarios
+hf_split: validation        # 160 examples in mini/validation
