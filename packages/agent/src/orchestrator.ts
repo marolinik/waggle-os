@@ -319,7 +319,7 @@ export class Orchestrator {
     return compute();
   }
 
-  buildSystemPrompt(): string {
+  buildSystemPrompt(modelOverride = this.model): string {
     // ── IDENTITY (always personal, stable within a session) ──
     // Cache key must hash the full identity content — updated_at alone
     // has only second precision in SQLite, so rapid successive edits
@@ -347,7 +347,7 @@ export class Orchestrator {
       const caps: AgentCapabilities = {
         tools: this.tools.map(t => ({ name: t.name, description: t.description })),
         skills: this.skills,
-        model: this.model,
+        model: modelOverride,
         memoryStats: this.getMemoryStats(),
         mode: this.mode,
         version: this.version,
@@ -379,11 +379,12 @@ export class Orchestrator {
   async buildAssembledPrompt(
     query: string,
     persona: AgentPersona | null = null,
-    opts: AssembleOptions = {},
+    opts: AssembleOptions & { model?: string } = {},
   ): Promise<AssembledPrompt> {
-    const tier = tierForModel(this.model);
+    const effectiveModel = opts.model ?? this.model;
+    const tier = tierForModel(effectiveModel);
     const closedWorldRewrite = isClosedWorldRewriteRequest(query);
-    const corePrompt = closedWorldRewrite ? '' : this.buildSystemPrompt();
+    const corePrompt = closedWorldRewrite ? '' : this.buildSystemPrompt(effectiveModel);
     const context: ContextFramesImpl = closedWorldRewrite
       ? {
           stateFrames: [],

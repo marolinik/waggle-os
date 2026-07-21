@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { WaggleConfig } from '@waggle/core';
+import { FEATURE_FLAGS } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -538,6 +539,110 @@ describe('chat smart-router integration', () => {
       'fallback-test-model',
     ]);
   });
+
+  it('rebuilds the production system prompt for the configured fallback model', async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.setDefaultModel('test-mid-model');
+    config.clearBudgetModel();
+    config.setFallbackModel('gemma-4-31b');
+    config.save();
+
+    const previousRunner = server.agentRunner;
+    const previousProvider = server.agentState.llmProvider;
+    const previousCurrentModel = server.agentState.currentModel;
+    const previousPromptAssembler = FEATURE_FLAGS.PROMPT_ASSEMBLER;
+    const previousReranker = process.env.WAGGLE_RERANKER;
+    server.agentRunner = undefined;
+    server.agentState.llmProvider = {
+      provider: 'litellm',
+      health: 'healthy',
+      detail: 'Test LiteLLM provider',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = '';
+    Object.defineProperty(FEATURE_FLAGS, 'PROMPT_ASSEMBLER', {
+      value: true,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+    process.env.WAGGLE_RERANKER = '0';
+
+    const requests: Array<{
+      model?: string;
+      messages?: Array<{ role?: string; content?: string }>;
+    }> = [];
+    vi.restoreAllMocks();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (!url.includes('/chat/completions')) return new Response('', { status: 503 });
+
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        model?: string;
+        messages?: Array<{ role?: string; content?: string }>;
+      };
+      requests.push(body);
+      if (body.model === 'test-mid-model') {
+        throw new Error('fetch failed');
+      }
+
+      return new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'fallback ok' } }] })}\n\n`
+        + `data: ${JSON.stringify({
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Review this pull request for security issues',
+          session: 'production-fallback-prompt',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('fallback ok');
+      expect(requests.map(request => request.model)).toEqual([
+        'test-mid-model',
+        'test-mid-model',
+        'test-mid-model',
+        'gemma-4-31b',
+      ]);
+      const primaryPrompt = requests[0]?.messages?.[0]?.content ?? '';
+      const fallbackPrompt = requests.at(-1)?.messages?.[0]?.content ?? '';
+      expect(primaryPrompt).toContain('Model: test-mid-model');
+      expect(primaryPrompt).toContain('Briefly state assumption, then recommendation.');
+      expect(fallbackPrompt).toContain('Model: gemma-4-31b');
+      expect(fallbackPrompt).toContain('State the assumption. List the trade-offs. Give the recommendation.');
+      expect(fallbackPrompt).not.toContain('Model: test-mid-model');
+      expect(fallbackPrompt).not.toContain('Briefly state assumption, then recommendation.');
+    } finally {
+      fetchSpy.mockRestore();
+      server.agentRunner = previousRunner;
+      server.agentState.llmProvider = previousProvider;
+      server.agentState.currentModel = previousCurrentModel;
+      Object.defineProperty(FEATURE_FLAGS, 'PROMPT_ASSEMBLER', {
+        value: previousPromptAssembler,
+        configurable: true,
+        enumerable: true,
+        writable: true,
+      });
+      if (previousReranker === undefined) delete process.env.WAGGLE_RERANKER;
+      else process.env.WAGGLE_RERANKER = previousReranker;
+    }
+  }, 20_000);
 
   it('tries every provider credential before entering the fallback chain', async () => {
     const firstKey = 'sk-anthropic-first-test';

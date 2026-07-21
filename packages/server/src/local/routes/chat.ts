@@ -529,7 +529,75 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // C3: Cache the base system prompt per session to avoid rebuilding on every message
-  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode }>();
+  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
+
+  // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
+  // chat-local mutable tools (plans, save counters) and orchestrator receipts
+  // must not be shared by distinct conversations in that workspace.
+  interface ChatRuntime {
+    orchestrator: Orchestrator;
+    tools: ToolDefinition[];
+    toolContextKey: string;
+    activeTurns: number;
+  }
+  const MAX_CHAT_RUNTIMES_PER_WORKSPACE = 32;
+  const chatRuntimes = new WeakMap<WorkspaceSession, Map<string, ChatRuntime>>();
+  const activeChatTurns = new Set<string>();
+
+  function pruneChatRuntimes(cache: Map<string, ChatRuntime>): void {
+    if (cache.size <= MAX_CHAT_RUNTIMES_PER_WORKSPACE) return;
+    for (const [sessionId, runtime] of cache) {
+      if (runtime.activeTurns !== 0) continue;
+      cache.delete(sessionId);
+      if (cache.size <= MAX_CHAT_RUNTIMES_PER_WORKSPACE) break;
+    }
+  }
+
+  function acquireChatRuntime(
+    workspaceSession: WorkspaceSession,
+    sessionId: string,
+    workspacePath: string,
+    workspaceId: string,
+  ): ChatRuntime {
+    let cache = chatRuntimes.get(workspaceSession);
+    if (!cache) {
+      cache = new Map();
+      chatRuntimes.set(workspaceSession, cache);
+    }
+
+    const toolContextKey = `${workspaceId}\u0000${workspacePath}`;
+    let runtime = cache.get(sessionId);
+    if (!runtime || runtime.toolContextKey !== toolContextKey) {
+      const runtimeOrchestrator = server.agentState.createSessionOrchestrator(workspaceSession.mind);
+      runtime = {
+        orchestrator: runtimeOrchestrator,
+        tools: server.agentState.buildToolsForSession(runtimeOrchestrator, workspacePath, workspaceId),
+        toolContextKey,
+        activeTurns: 0,
+      };
+    } else {
+      // Map insertion order is the LRU order. Touch a reused runtime.
+      cache.delete(sessionId);
+    }
+
+    runtime.activeTurns += 1;
+    cache.set(sessionId, runtime);
+    pruneChatRuntimes(cache);
+    return runtime;
+  }
+
+  function releaseChatRuntime(
+    workspaceSession: WorkspaceSession,
+    sessionId: string,
+    runtime: ChatRuntime,
+  ): void {
+    runtime.activeTurns = Math.max(0, runtime.activeTurns - 1);
+    const cache = chatRuntimes.get(workspaceSession);
+    if (!cache || cache.get(sessionId) !== runtime) return;
+    cache.delete(sessionId);
+    cache.set(sessionId, runtime);
+    pruneChatRuntimes(cache);
+  }
 
   // Profile cache (review Major #4): was fs.readFileSync on every buildSystemPrompt call —
   // blocks the Node event loop on every concurrent SSE request. Load once per mtime change,
@@ -601,6 +669,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     closedWorldRewrite = false,
     contextScope: TurnContextScope = 'default',
     selectedToolCount = 0,
+    selectedModel?: string,
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
@@ -632,7 +701,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     const cacheKey = chatSessionStateKey(workspaceId ?? 'default', sessionId ?? 'default');
     if (!assembled) {
       const cached = systemPromptCache.get(cacheKey);
-      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode) {
+      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode && cached.model === selectedModel) {
         return cached.prompt;
       }
     }
@@ -655,7 +724,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // AI-OS #6 — supply the durable "why" (project ← workspace name) before the
     // orchestrator renders its system prompt. Empty ancestry self-suppresses.
     orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
-    prompt += assembled?.system ?? orch.buildSystemPrompt();
+    prompt += assembled?.system ?? orch.buildSystemPrompt(selectedModel);
 
     // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
     try {
@@ -805,7 +874,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // C3: Cache the built prompt — only when there's no per-turn assembler
     // input. Caching an assembled prompt would replay stale memory recall.
     if (!assembled) {
-      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength, packageMode });
+      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength, packageMode, model: selectedModel });
     }
 
     return prompt;
@@ -1046,6 +1115,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // closes reply.raw (request.raw already finished after the POST body), which
     // must abort the provider/tool run immediately.
     const abortController = new AbortController();
+    let turnSignal: AbortSignal = abortController.signal;
     raw.once('close', () => {
       if (!raw.writableEnded) abortController.abort();
     });
@@ -1053,11 +1123,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // Helper to write SSE events
     const sendEvent = (event: string, data: unknown) => {
-      if (abortController.signal.aborted || raw.destroyed || raw.writableEnded) return;
+      if (turnSignal.aborted || raw.destroyed || raw.writableEnded) return;
       if (event === 'token' && firstTokenAt === null) {
         firstTokenAt = performance.now();
       }
       raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    const throwIfTurnAborted = (): void => {
+      if (turnSignal.aborted) {
+        throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
+      }
     };
 
     // Declare at handler scope so error handler can surface recalled memories (P1-4)
@@ -1088,9 +1163,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // can persist the raw user turn even when generation fails. Memory capture
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
+    let activeChatRuntime: { workspaceSession: WorkspaceSession; sessionId: string; runtime: ChatRuntime } | undefined;
     // Turn-scoped pin for the shared orchestrator's workspace mind (default/
     // no-workspace chats). Hoisted so the outer finally can release it.
     let pinnedSharedMindId: string | null = null;
+    // A named workspace session owns a long-lived pin. Each active chat turn
+    // takes another pin so Fleet kill cannot release/evict its mind before the
+    // turn observes the workspace abort signal and unwinds.
+    let pinnedWorkspaceMindId: string | null = null;
     const activeSessionId = requestedSessionId ?? workspace ?? 'default';
     const activeWorkspaceId = workspace ?? 'default';
     const activeSessionStateKey = chatSessionStateKey(activeWorkspaceId, activeSessionId);
@@ -1098,12 +1178,82 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let activeAttemptModel: string | null = null;
     let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
 
+    // Mutable conversation-local state cannot accept two overlapping turns.
+    // Reject the second request before model resolution or history mutation.
+    if (activeChatTurns.has(activeSessionStateKey)) {
+      sendEvent('error', {
+        message: 'Another turn is already running for this session.',
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+      if (!raw.destroyed && !raw.writableEnded) raw.end();
+      return;
+    }
+    activeChatTurns.add(activeSessionStateKey);
+
     try {
       const hasCustomRunner = !!server.agentRunner;
       requestHookRegistry = hasCustomRunner ? undefined : hookRegistry.fork();
 
       // Resolve the agent runner (injectable for tests)
       const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
+      const sessionId = activeSessionId;
+      const effectiveWorkspace = activeWorkspaceId;
+      const sessionStateKey = activeSessionStateKey;
+
+      // Named workspaces must acquire one coherent chat runtime before any
+      // asynchronous model work or conversation mutation. Construction errors
+      // fail closed; mixing a workspace tool pool with the shared orchestrator
+      // would cross memory and mutable agent state.
+      let sessionOrch: Orchestrator = orchestrator;
+      let sessionTools: ToolDefinition[] | undefined;
+      let wsSession: WorkspaceSession | undefined;
+      if (!hasCustomRunner && workspace && workspace !== 'default') {
+        try {
+          if (!server.agentState.getWorkspaceMindDb(effectiveWorkspace)) {
+            throw new Error('Workspace mind is unavailable');
+          }
+          const candidateSession = server.sessionManager.getOrCreate(
+            effectiveWorkspace,
+            () => server.mindCache.acquire(effectiveWorkspace),
+            (m) => server.agentState.createSessionOrchestrator(m),
+            (m, o) => server.agentState.buildToolsForSession(
+              o,
+              workspacePath ?? effectiveWorkspace,
+              effectiveWorkspace,
+            ),
+            server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
+            () => server.mindCache.release(effectiveWorkspace),
+          );
+          if (candidateSession.status !== 'active') {
+            throw new Error(`Workspace session is ${candidateSession.status}`);
+          }
+          turnSignal = AbortSignal.any([
+            abortController.signal,
+            candidateSession.abortController.signal,
+          ]);
+          if (turnSignal.aborted) {
+            throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
+          }
+
+          server.mindCache.acquire(effectiveWorkspace);
+          pinnedWorkspaceMindId = effectiveWorkspace;
+          const runtime = acquireChatRuntime(
+            candidateSession,
+            sessionId,
+            workspacePath ?? effectiveWorkspace,
+            effectiveWorkspace,
+          );
+
+          wsSession = candidateSession;
+          activeChatRuntime = { workspaceSession: candidateSession, sessionId, runtime };
+          sessionOrch = runtime.orchestrator;
+          sessionTools = runtime.tools;
+        } catch (err) {
+          log.warn(`[session] Failed to create workspace chat runtime for "${effectiveWorkspace}": ${(err as Error).message}`);
+          throw new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`);
+        }
+      }
+      activeSessionOrch = sessionOrch;
 
       // ── Model Pilot: resolve model with fallback chain ──
       const pilotConfig = new WaggleConfig(server.localConfig.dataDir);
@@ -1159,10 +1309,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           modelSwitchReason = `${unavailableModel} unavailable; configured fallback selected`;
         }
       }
-
-      const sessionId = activeSessionId;
-      const effectiveWorkspace = activeWorkspaceId;
-      const sessionStateKey = activeSessionStateKey;
+      throwIfTurnAborted();
 
       // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
 
@@ -1195,37 +1342,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       history.push({ role: 'user', content: message });
       persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'user', content: message });
 
-      // ── Workspace session (Phase A.1 — Option Y per-session orchestrator) ──
-      // Create or reuse a WorkspaceSession so this chat call's orchestrator
-      // operates on its own workspace-mind instance, never the shared singleton.
-      // Non-workspace chats (no workspace set, or 'default') fall back to the
-      // shared orchestrator (personal mind only). Failures are non-fatal and
-      // also fall back to the shared orchestrator.
-      let sessionOrch: Orchestrator = orchestrator;
-      let wsSession: WorkspaceSession | undefined;
-      if (!hasCustomRunner && workspace && workspace !== 'default') {
-        try {
-          const mind = server.agentState.getWorkspaceMindDb(effectiveWorkspace);
-          if (mind) {
-            wsSession = server.sessionManager.getOrCreate(
-              effectiveWorkspace,
-              // Pin the shared cache handle for this session's lifetime so a
-              // fan-out over many workspaces cannot evict (and close) this mind
-              // mid-turn while we hold it across the LLM await.
-              () => server.mindCache.acquire(effectiveWorkspace),
-              (m) => server.agentState.createSessionOrchestrator(m),
-              // Phase B.2: pass effectiveWorkspace as the source workspace ID
-              // so cross-workspace read tools scope their grants correctly.
-              (m, o) => server.agentState.buildToolsForSession(o, workspacePath ?? effectiveWorkspace, effectiveWorkspace),
-              server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
-              () => server.mindCache.release(effectiveWorkspace),
-            );
-            sessionOrch = wsSession.orchestrator;
-          }
-        } catch (err) {
-          log.warn(`[session] Failed to create workspace session for "${effectiveWorkspace}": ${(err as Error).message}`);
-        }
-      }
       // Pin the shared orchestrator's workspace mind for this turn. The named-
       // workspace path above pins via WorkspaceSession (1f7186a0), but the
       // default path kept the boot-time handle unpinned — a >20-workspace
@@ -1245,10 +1361,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
       }
-
-      // #3 (launch-blocker): expose the resolved orchestrator to the outer
-      // catch so a failed generation still persists the raw user turn.
-      activeSessionOrch = sessionOrch;
 
       // Check whether the configured LLM path can serve a completion. Process
       // liveness is insufficient for the built-in proxy because it also runs
@@ -1277,7 +1389,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               ? '/health/readiness'
               : '/health/liveliness';
             const healthRes = await fetch(`${getLitellmUrl()}${healthPath}`, {
-              signal: AbortSignal.any([abortController.signal, AbortSignal.timeout(3000)]),
+              signal: AbortSignal.any([turnSignal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
             litellmAvailable = healthRes.ok;
@@ -1288,7 +1400,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // ── Slash command routing (works even in echo mode) ──
-      if (abortController.signal.aborted) return;
+      if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
       if (commandRegistry.isCommand(message)) {
         // Build a lightweight command context (same as commands.ts route)
@@ -1337,11 +1449,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           const words = friendlyError.split(' ');
           for (const word of words) {
-            if (abortController.signal.aborted) return;
+            if (turnSignal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
-          if (abortController.signal.aborted) return;
+          if (turnSignal.aborted) return;
           history.push({ role: 'assistant', content: friendlyError });
           persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: friendlyError });
           sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
@@ -1351,11 +1463,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Stream the command result as SSE tokens
           const cmdWords = cmdResult.split(' ');
           for (const word of cmdWords) {
-            if (abortController.signal.aborted) return;
+            if (turnSignal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
-          if (abortController.signal.aborted) return;
+          if (turnSignal.aborted) return;
           // Persist command result
           history.push({ role: 'assistant', content: cmdResult });
           persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: cmdResult });
@@ -1379,11 +1491,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
         const words = echoResponse.split(' ');
         for (const word of words) {
-          if (abortController.signal.aborted) return;
+          if (turnSignal.aborted) return;
           sendEvent('token', { content: word + ' ' });
           await new Promise((r) => setTimeout(r, 15));
         }
-        if (abortController.signal.aborted) return;
+        if (turnSignal.aborted) return;
         // Persist echo response so session continuity is maintained
         history.push({ role: 'assistant', content: echoResponse });
         persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: echoResponse });
@@ -1436,6 +1548,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             sendEvent('tool', { name: 'auto_recall', input: { query: agentMessage } });
             const recallStart = Date.now();
             const recall = await sessionOrch.recallMemory(agentMessage);
+            throwIfTurnAborted();
             const recallDuration = Date.now() - recallStart;
             if (recall.count > 0) {
               // Minor #3: scan recalled memory for injection payloads before injecting into prompt
@@ -1473,6 +1586,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               sendEvent('tool_result', { name: 'auto_recall', result: 'No relevant memories found', duration: recallDuration, isError: false });
             }
           } catch {
+            throwIfTurnAborted();
             // Non-blocking — if recall fails, continue without it
           }
         }
@@ -1499,6 +1613,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const optimizer = await getOptimizerService(server);
             if (optimizer) {
               const result = await optimizer.expandWithChoices(agentMessage);
+              throwIfTurnAborted();
               if (result.isVague && result.expanded) {
                 gepaExpanded = result.expanded;
                 sendEvent('step', { content: `GEPA: Expanded prompt for better results` });
@@ -1514,6 +1629,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             }
           } catch {
+            throwIfTurnAborted();
             // Non-blocking — optimizer failure doesn't affect chat
           }
         }
@@ -1560,7 +1676,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && turnMutationPolicy.contextScope === 'default'
           && isEnabled('PROMPT_ASSEMBLER')) {
           try {
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler });
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler, model: resolvedModel });
+            throwIfTurnAborted();
             log.info(
               `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
               + `shape=${turnTaskShape.type ?? 'none'} conf=${turnTaskShape.confidence.toFixed(2)} `
@@ -1568,6 +1685,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`
             );
           } catch (err) {
+            throwIfTurnAborted();
             log.warn(`[prompt-assembler] failed, falling back to static prompt: ${(err as Error).message}`);
             assembled = null;
           }
@@ -1577,6 +1695,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // recall block is already INSIDE the assembled prompt — appending
         // recalledContext again injected every recalled memory twice.
         let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
+        const initialPromptModel = resolvedModel;
+        let rebuildSystemPromptForModel: ((logicalModel: string) => Promise<string>) | null = null;
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -1584,6 +1704,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Assignment (not declaration) — unregisterHook is declared at outer try scope
         // so the outer finally can always clean up regardless of which path we exit on.
         unregisterHook = requestHookRegistry?.on('pre:tool', async (ctx) => {
+          if (turnSignal.aborted) {
+            return { cancel: true, reason: 'Chat or workspace cancelled' };
+          }
           if (!ctx.toolName) return;
           const args = (ctx.args ?? {}) as Record<string, unknown>;
           const trustedRiskLevel = typeof ctx.riskLevel === 'string'
@@ -1759,7 +1882,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             },
             policy: approvalTimeoutPolicy,
             sendEvent,
-            signal: abortController.signal,
+            signal: turnSignal,
             onHeld: (expiresAt) => {
               log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — moved to Approvals inbox`);
               emitAuditEvent(server, {
@@ -1773,8 +1896,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             },
           });
 
-          if (abortController.signal.aborted) {
-            return { cancel: true, reason: 'Chat request cancelled' };
+          if (turnSignal.aborted) {
+            return { cancel: true, reason: 'Chat or workspace cancelled' };
           }
           if (!approved) {
             if (held) {
@@ -1792,10 +1915,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
 
         // Use workspace-scoped tools if a workspacePath was specified
+        if (!hasCustomRunner && workspace && workspace !== 'default' && !sessionTools) {
+          throw new Error('Workspace chat runtime is unavailable.');
+        }
         let effectiveTools = hasCustomRunner
           ? []
           : workspacePath
-            ? wsSession?.tools
+            ? sessionTools
               ?? server.agentState.buildToolsForWorkspace(workspacePath, sessionOrch, effectiveWorkspace)
             : allTools;
         const catalogToolNames = new Set(effectiveTools.map(tool => tool.name));
@@ -1867,6 +1993,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const retrieval = await server.agentState.mcpToolRetriever.selectToolsWithDetails(
               runningMcpTools, history, sessionStateKey, retrievalCfg,
             );
+            throwIfTurnAborted();
             let selectedMcp = retrieval.tools;
             if (activePersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, activePersona);
             selectedMcp = filterAvailableTools(selectedMcp);
@@ -1940,6 +2067,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && isLocalModel
           && needsCompression(history, { maxContextTokens, compressionThreshold: 0.5 })) {
           const verifiedCompressionModel = await resolveExplicitRoutableModel(server, compressionModel);
+          throwIfTurnAborted();
           compressionModel = verifiedCompressionModel
             && isOfflineOllamaModelReference(verifiedCompressionModel)
             ? verifiedCompressionModel
@@ -1967,6 +2095,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           });
           const previousSummary = compressionSummaries.get(sessionStateKey) ?? null;
           const compressionResult = await compressConversation(history, compressionConfig, previousSummary);
+          throwIfTurnAborted();
           windowedMessages = compressionResult.messages;
 
           if (compressionResult.compressed) {
@@ -1991,11 +2120,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                     const frameId = await sessionOrch.persistCompactionSummary(
                       compressionResult.summary, sessionId, compactionFrameIds.get(sessionStateKey) ?? null,
                     );
+                    throwIfTurnAborted();
                     if (frameId != null) {
                       compactionFrameIds.set(sessionStateKey, frameId);
                       sendEvent('step', { content: 'Session summary saved to memory' });
                     }
                   } catch (e) {
+                    throwIfTurnAborted();
                     if (isClosedDbError(e)) {
                       log.warn(`[context-compression] summary persist skipped — mind handle closed mid-turn (session=${sessionId})`);
                     } else {
@@ -2031,7 +2162,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               effectiveWorkspace,
               wsConfig.teamRole,
             );
-          } catch { /* governance not available — allow all */ }
+            throwIfTurnAborted();
+          } catch {
+            throwIfTurnAborted();
+            // Governance not available — allow all.
+          }
         }
 
         if (!hasCustomRunner) {
@@ -2134,7 +2269,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             || isExplicitMemoryRecallRequest(agentMessage)
             || isExplicitMemorySaveRequest(agentMessage)
             || isExplicitExternalResearchRequest(agentMessage);
-          packageMode = selectChatPromptPackageMode({
+          const selectedPackageMode = selectChatPromptPackageMode({
             message: agentMessage,
             selectedToolCount: effectiveTools.length,
             autonomyLevel,
@@ -2144,26 +2279,53 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
               || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
           });
-          const packagedSystemPrompt = buildSystemPrompt(
-            sessionOrch,
-            workspacePath,
-            sessionId,
-            history.length,
-            effectiveWorkspace,
-            personaOverride,
-            assembled,
-            packageMode,
-            closedWorldRewrite,
-            turnMutationPolicy.contextScope,
-            effectiveTools.length,
-          );
-          systemPrompt = turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite
-            ? packagedSystemPrompt
-            : ambiguityPrefix
-              + packagedSystemPrompt
-              + templateContext
-              + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
-              + (assembled ? '' : recalledContext);
+          packageMode = selectedPackageMode;
+          rebuildSystemPromptForModel = async (logicalModel: string): Promise<string> => {
+            let assembledForModel = assembled;
+            if (assembled && logicalModel !== initialPromptModel) {
+              try {
+                assembledForModel = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
+                  taskShape: turnTaskShape,
+                  turnId,
+                  recalledText: recallTextForAssembler,
+                  model: logicalModel,
+                });
+                throwIfTurnAborted();
+                log.info(
+                  `[prompt-assembler] rebuilt turn=${turnId.slice(0, 8)} model=${logicalModel} `
+                  + `tier=${assembledForModel.debug.tier} chars=${assembledForModel.debug.totalChars}`,
+                );
+              } catch (err) {
+                throwIfTurnAborted();
+                log.warn(`[prompt-assembler] fallback rebuild failed, using static prompt: ${(err as Error).message}`);
+                assembledForModel = null;
+              }
+            }
+
+            const packagedSystemPrompt = buildSystemPrompt(
+              sessionOrch,
+              workspacePath,
+              sessionId,
+              history.length,
+              effectiveWorkspace,
+              personaOverride,
+              assembledForModel,
+              selectedPackageMode,
+              closedWorldRewrite,
+              turnMutationPolicy.contextScope,
+              effectiveTools.length,
+              logicalModel,
+            );
+            return turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite
+              ? packagedSystemPrompt
+              : ambiguityPrefix
+                + packagedSystemPrompt
+                + templateContext
+                + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
+                + (assembledForModel ? '' : recalledContext);
+          };
+          systemPrompt = await rebuildSystemPromptForModel(resolvedModel);
+          throwIfTurnAborted();
           log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
         }
 
@@ -2217,7 +2379,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
-          signal: abortController.signal,
+          signal: turnSignal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
           onToken: (token: string) => {
@@ -2400,13 +2562,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : undefined,
         };
 
-        const configForModelAttempt = (
+        const configForModelAttempt = async (
           logicalModel: string,
           apiKey = effectiveApiKey,
-        ): typeof runConfig => {
+        ): Promise<typeof runConfig> => {
           const useOllama = logicalModel.trim().toLowerCase().startsWith('ollama/');
+          const systemPromptForAttempt = rebuildSystemPromptForModel
+            ? await rebuildSystemPromptForModel(logicalModel)
+            : runConfig.systemPrompt;
+          throwIfTurnAborted();
+          systemPrompt = systemPromptForAttempt;
           return {
             ...runConfig,
+            systemPrompt: systemPromptForAttempt,
             model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
             litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
             litellmApiKey: apiKey,
@@ -2418,9 +2586,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           activeAttemptModel = resolvedModel;
           abortedAttemptUsage = null;
           const attemptedResult = await agentRunner(config);
-          if (abortController.signal.aborted) {
+          if (turnSignal.aborted) {
             abortedAttemptUsage = getBillableUsage(attemptedResult.usage);
-            throw abortController.signal.reason ?? new Error('Chat request aborted');
+            throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
           }
           return attemptedResult;
         };
@@ -2448,11 +2616,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               if (!fallbackModel || fallbackModel === failedBudgetModel) throw failure;
               resolvedModel = await resolveUsableModel(server, fallbackModel);
               modelSwitchReason = `${failedBudgetModel} failed and ${primaryModel} unavailable; configured fallback selected`;
-              return await runAgentAttempt(configForModelAttempt(resolvedModel));
+              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
             }
 
             try {
-              return await runAgentAttempt(configForModelAttempt(resolvedModel));
+              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
             } catch (primaryRunError) {
               if (isIncompleteCompletionError(primaryRunError)) throw primaryRunError;
               failure = primaryRunError;
@@ -2466,7 +2634,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const failedModel = resolvedModel;
             resolvedModel = await resolveUsableModel(server, fallbackModel);
             modelSwitchReason = `${failedModel} failed (${(failure as { status?: number }).status ?? 'timeout'}); configured fallback selected`;
-            return await runAgentAttempt(configForModelAttempt(resolvedModel));
+            return await runAgentAttempt(await configForModelAttempt(resolvedModel));
           }
 
           throw failure;
@@ -2481,7 +2649,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Report success to credential pool
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
-          if (abortController.signal.aborted) throw primaryErr;
+          if (turnSignal.aborted) throw primaryErr;
           if (isIncompleteCompletionError(primaryErr)) throw primaryErr;
           // Report error to credential pool and try next key
           if (credPool && poolKey) {
@@ -2518,7 +2686,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 credPool.reportSuccess(nextKey);
                 break;
               } catch (nextCredentialError) {
-                if (abortController.signal.aborted) throw nextCredentialError;
+                if (turnSignal.aborted) throw nextCredentialError;
                 if (isIncompleteCompletionError(nextCredentialError)) throw nextCredentialError;
                 failedKey = nextKey;
                 credentialError = nextCredentialError;
@@ -2606,10 +2774,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 // memory here?". Undefined when no trace recorder (legacy/tests).
                 traceId: traceHandle ? String(traceHandle.id) : undefined,
               });
+              throwIfTurnAborted();
               if (saved.length > 0) {
                 sendEvent('step', { content: `Auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} from this exchange.` });
               }
             } catch (e) {
+              throwIfTurnAborted();
               // Non-blocking. W4A: a closed-handle failure here is the signature
               // of the MultiMindCache evicting this turn's mind mid-flight — log
               // it with context so the flake is observable, but still fail soft.
@@ -2815,7 +2985,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // the HTTP boundary so token events contain only the exact content in
         // the authoritative done event. Preserve the original chunking when it
         // already matches the fully post-processed response.
-        if (abortController.signal.aborted) return;
+        if (turnSignal.aborted) return;
         const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
           ? bufferedAgentTokens
           : finalContent ? [finalContent] : [];
@@ -2891,7 +3061,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     } catch (err) {
       const incompleteUsage = getIncompleteCompletionUsage(err);
       const billableFailureUsage = incompleteUsage
-        ?? (abortController.signal.aborted ? abortedAttemptUsage : null);
+        ?? (turnSignal.aborted ? abortedAttemptUsage : null);
       let failureCostUsd: number | undefined;
       if (billableFailureUsage && activeAttemptModel) {
         try {
@@ -2931,7 +3101,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               output: billableFailureUsage.outputTokens,
             } : undefined,
             costUsd: failureCostUsd,
-            ...(!abortController.signal.aborted && {
+            ...(!turnSignal.aborted && {
               correctionFeedback: errMsg.slice(0, 500),
             }),
           });
@@ -2941,8 +3111,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // A user Stop/client disconnect is not an assistant answer or generation
       // failure. Keep the already-persisted user turn, but never fabricate an
       // authoritative assistant/error turn from partial work.
-      if (abortController.signal.aborted) {
-        log.info(`[chat] turn ${turnId} cancelled by client`);
+      if (turnSignal.aborted) {
+        log.info(`[chat] turn ${turnId} cancelled by client or workspace lifecycle`);
         if (!raw.destroyed && !raw.writableEnded) raw.end();
         return;
       }
@@ -3011,6 +3181,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
+      if (activeChatRuntime) {
+        releaseChatRuntime(
+          activeChatRuntime.workspaceSession,
+          activeChatRuntime.sessionId,
+          activeChatRuntime.runtime,
+        );
+      }
+      if (pinnedWorkspaceMindId) {
+        try { server.mindCache.release(pinnedWorkspaceMindId); } catch { /* cache already torn down */ }
+      }
       // Un-pin the shared orchestrator's workspace mind (see acquire above).
       if (pinnedSharedMindId) {
         try { server.mindCache.release(pinnedSharedMindId); } catch { /* cache already torn down */ }
@@ -3031,6 +3211,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           traceFinalized = true;
         } catch { /* best-effort */ }
       }
+      activeChatTurns.delete(activeSessionStateKey);
     }
 
     // End the SSE stream
@@ -3064,6 +3245,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     evictSessionState(compressionSummaries);
     evictSessionState(compactionFrameIds); // #12: next compaction starts a fresh frame
     evictSessionState(sessionToolSequences);
+    if (workspaceId) {
+      const workspaceSession = server.sessionManager.get(workspaceId);
+      if (workspaceSession) chatRuntimes.get(workspaceSession)?.delete(sessionId);
+    } else {
+      for (const workspaceSession of server.sessionManager.getActive()) {
+        chatRuntimes.get(workspaceSession)?.delete(sessionId);
+      }
+    }
     return reply.send({ ok: true, cleared: sessionId });
   });
 };

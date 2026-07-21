@@ -28,6 +28,7 @@ import type {
 } from '../../src/local/routes/notifications.js';
 import { injectWithAuth } from '../test-utils.js';
 import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
+import { chatSessionStateKey } from '../../src/local/routes/chat-persistence.js';
 
 /**
  * Echo mode forces the chat endpoint to bypass the LLM. The test sets an
@@ -436,6 +437,519 @@ describe('SSE Stream Resilience', () => {
   // ── Multiple concurrent chat streams ────────────────────────────
 
   describe('Multiple concurrent SSE connections', () => {
+    it('isolates production agent runtimes for two sessions in the same workspace', async () => {
+      const workspaceResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/workspaces',
+        payload: { name: 'Concurrent Runtime Test', group: 'Test' },
+      });
+      expect(workspaceResponse.statusCode).toBe(201);
+      const workspaceId = (workspaceResponse.json() as { id: string }).id;
+
+      const previousProvider = server.agentState.llmProvider;
+      const previousCurrentModel = server.agentState.currentModel;
+      const previousLitellmUrl = server.localConfig.litellmUrl;
+      const previousOllamaHost = process.env.OLLAMA_HOST;
+      const previousReranker = process.env.WAGGLE_RERANKER;
+
+      server.agentState.llmProvider = {
+        provider: 'ollama',
+        health: 'healthy',
+        detail: 'Test Ollama provider',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-a';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+      process.env.WAGGLE_RERANKER = '0';
+
+      const deferred = () => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((done) => { resolve = done; });
+        return { promise, resolve };
+      };
+      const aSecondArrived = deferred();
+      const bSecondArrived = deferred();
+      const aThirdArrived = deferred();
+      const bRequestCompleted = deferred();
+      const providerBodies = new Map<'A' | 'B', Array<{
+        model?: string;
+        messages?: Array<{ role?: string; content?: string }>;
+        tools?: Array<{ function?: { name?: string } }>;
+      }>>([['A', []], ['B', []]]);
+
+      const streamResponse = (chunks: unknown[]) => new Response(
+        `${chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+      const toolResponse = (id: string, name: string, args: Record<string, unknown>) => streamResponse([
+        {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id,
+                type: 'function',
+                function: { name, arguments: JSON.stringify(args) },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        },
+      ]);
+      const finalResponse = (content: string) => streamResponse([
+        { choices: [{ delta: { content } }] },
+        {
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        },
+      ]);
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-a' }, { name: 'local-b' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (!url.endsWith('/chat/completions')) return new Response('', { status: 503 });
+
+        const body = JSON.parse(String(init?.body ?? '{}')) as {
+          model?: string;
+          messages?: Array<{ role?: string; content?: string }>;
+          tools?: Array<{ function?: { name?: string } }>;
+        };
+        const contents = (body.messages ?? []).map(message => message.content ?? '').join('\n');
+        const session = contents.includes('SESSION_A') ? 'A' : contents.includes('SESSION_B') ? 'B' : null;
+        if (!session) throw new Error('Provider request did not contain a session marker');
+        const bodies = providerBodies.get(session)!;
+        bodies.push(body);
+        const call = bodies.length;
+
+        if (session === 'A' && call === 1) {
+          return toolResponse('call-a-create', 'create_plan', { title: 'Plan A' });
+        }
+        if (session === 'A' && call === 2) {
+          aSecondArrived.resolve();
+          await bSecondArrived.promise;
+          return toolResponse('call-a-add', 'add_plan_step', { title: 'A_ONLY' });
+        }
+        if (session === 'A' && call === 3) {
+          aThirdArrived.resolve();
+          await bRequestCompleted.promise;
+          return finalResponse('SESSION_A complete');
+        }
+        if (session === 'B' && call === 1) {
+          await aSecondArrived.promise;
+          return toolResponse('call-b-create', 'create_plan', { title: 'Plan B' });
+        }
+        if (session === 'B' && call === 2) {
+          bSecondArrived.resolve();
+          await aThirdArrived.promise;
+          return toolResponse('call-b-show', 'show_plan', {});
+        }
+        if (session === 'B' && call === 3) {
+          return finalResponse('SESSION_B complete');
+        }
+        throw new Error(`Unexpected provider call ${session}#${call}`);
+      });
+
+      const completionOrder: string[] = [];
+      const requestA = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: workspaceId,
+          session: 'concurrent-a',
+          persona: 'project-manager',
+          model: 'ollama/local-a',
+          autonomy: { level: 'yolo' },
+          message: 'SESSION_A: use create_plan, then add_plan_step with A_ONLY.',
+        },
+      }).then(response => {
+        completionOrder.push('A');
+        return response;
+      });
+      const requestB = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: workspaceId,
+          session: 'concurrent-b',
+          persona: 'project-manager',
+          model: 'ollama/local-b',
+          autonomy: { level: 'yolo' },
+          message: 'SESSION_B: execute create_plan for Plan B, then execute show_plan immediately.',
+        },
+      }).then(response => {
+        completionOrder.push('B');
+        bRequestCompleted.resolve();
+        return response;
+      });
+      let overlapTimeout: ReturnType<typeof setTimeout> | undefined;
+
+      try {
+        const [responseA, responseB] = await Promise.race([
+          Promise.all([requestA, requestB]),
+          new Promise<never>((_, reject) => {
+            overlapTimeout = setTimeout(
+              () => reject(new Error('Concurrent production-runtime barriers did not complete')),
+              10_000,
+            );
+          }),
+        ]);
+
+        expect(responseA.statusCode).toBe(200);
+        expect(responseB.statusCode).toBe(200);
+        expect(completionOrder).toEqual(['B', 'A']);
+        expect(responseA.body).toContain('SESSION_A complete');
+        expect(responseB.body).toContain('SESSION_B complete');
+
+        const bCreateResult = providerBodies.get('B')![1]?.messages
+          ?.filter(message => message.role === 'tool')
+          .at(-1)?.content;
+        const bShowResult = providerBodies.get('B')![2]?.messages
+          ?.filter(message => message.role === 'tool')
+          .at(-1)?.content;
+        expect(bCreateResult).toContain('Plan created: Plan B');
+        expect(bShowResult).toContain('Plan has no steps.');
+        expect(bShowResult).not.toContain('A_ONLY');
+
+        const firstSystemPromptA = providerBodies.get('A')![0]?.messages?.[0]?.content;
+        const firstSystemPromptB = providerBodies.get('B')![0]?.messages?.[0]?.content;
+        const firstToolNamesA = providerBodies.get('A')![0]?.tools?.map(tool => tool.function?.name);
+        const firstToolNamesB = providerBodies.get('B')![0]?.tools?.map(tool => tool.function?.name);
+        expect(firstToolNamesA).toEqual(expect.arrayContaining(['create_plan', 'add_plan_step']));
+        expect(firstToolNamesB).toEqual(expect.arrayContaining(['create_plan', 'show_plan']));
+        expect(firstSystemPromptA).toContain('Model: ollama/local-a');
+        expect(firstSystemPromptB).toContain('Model: ollama/local-b');
+        expect(firstSystemPromptA).not.toContain('Model: ollama/local-b');
+        expect(firstSystemPromptB).not.toContain('Model: ollama/local-a');
+        expect(firstSystemPromptA).not.toContain('Model: unknown');
+        expect(firstSystemPromptB).not.toContain('Model: unknown');
+      } finally {
+        if (overlapTimeout) clearTimeout(overlapTimeout);
+        aSecondArrived.resolve();
+        bSecondArrived.resolve();
+        aThirdArrived.resolve();
+        bRequestCompleted.resolve();
+        await Promise.allSettled([requestA, requestB]);
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = previousProvider;
+        server.agentState.currentModel = previousCurrentModel;
+        server.localConfig.litellmUrl = previousLitellmUrl;
+        if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = previousOllamaHost;
+        if (previousReranker === undefined) delete process.env.WAGGLE_RERANKER;
+        else process.env.WAGGLE_RERANKER = previousReranker;
+        await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${workspaceId}` });
+      }
+    }, 30_000);
+
+    it('rejects an overlapping turn for the same workspace session before it mutates history', async () => {
+      const workspaceResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/workspaces',
+        payload: { name: 'Same Session Lease Test', group: 'Test' },
+      });
+      expect(workspaceResponse.statusCode).toBe(201);
+      const workspaceId = (workspaceResponse.json() as { id: string }).id;
+      const sessionId = 'same-session-overlap';
+
+      const previousProvider = server.agentState.llmProvider;
+      const previousCurrentModel = server.agentState.currentModel;
+      const previousLitellmUrl = server.localConfig.litellmUrl;
+      const previousOllamaHost = process.env.OLLAMA_HOST;
+      const previousReranker = process.env.WAGGLE_RERANKER;
+
+      server.agentState.llmProvider = {
+        provider: 'ollama',
+        health: 'healthy',
+        detail: 'Test Ollama provider',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-same';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+      process.env.WAGGLE_RERANKER = '0';
+
+      const deferred = () => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((done) => { resolve = done; });
+        return { promise, resolve };
+      };
+      const providerEntered = deferred();
+      const releaseFirst = deferred();
+      let completionCalls = 0;
+      const finalResponse = (content: string) => new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`
+        + `data: ${JSON.stringify({
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-same' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (!url.endsWith('/chat/completions')) return new Response('', { status: 503 });
+        completionCalls += 1;
+        if (completionCalls === 1) {
+          providerEntered.resolve();
+          await releaseFirst.promise;
+          return finalResponse('FIRST_COMPLETE');
+        }
+        return finalResponse('AFTER_COMPLETE');
+      });
+
+      const firstRequest = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: workspaceId,
+          session: sessionId,
+          model: 'ollama/local-same',
+          message: 'LEASE_FIRST',
+        },
+      });
+      let secondRequest: ReturnType<typeof injectWithAuth> | undefined;
+
+      try {
+        await Promise.race([
+          providerEntered.promise,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('First same-session turn did not reach the provider')),
+            5_000,
+          )),
+        ]);
+        secondRequest = injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            workspace: workspaceId,
+            session: sessionId,
+            model: 'ollama/local-same',
+            message: 'LEASE_SECOND',
+          },
+        });
+        const secondResponse = await Promise.race([
+          secondRequest,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('Overlapping same-session turn was not rejected promptly')),
+            5_000,
+          )),
+        ]);
+
+        expect(secondResponse.statusCode).toBe(200);
+        expect(secondResponse.body).toContain('event: error');
+        expect(secondResponse.body).toContain('"code":"SESSION_TURN_IN_PROGRESS"');
+        expect(secondResponse.body).not.toContain('event: done');
+        expect(secondResponse.body).not.toContain('AFTER_COMPLETE');
+
+        releaseFirst.resolve();
+        const firstResponse = await firstRequest;
+        expect(firstResponse.statusCode).toBe(200);
+        expect(firstResponse.body).toContain('event: done');
+        expect(firstResponse.body).toContain('FIRST_COMPLETE');
+        expect(completionCalls).toBe(1);
+
+        const historyResponse = await injectWithAuth(server, {
+          method: 'GET',
+          url: `/api/history?workspace=${workspaceId}&session=${sessionId}`,
+        });
+        expect(historyResponse.statusCode).toBe(200);
+        expect(historyResponse.json().messages).toEqual([
+          expect.objectContaining({ role: 'user', content: 'LEASE_FIRST' }),
+          expect.objectContaining({ role: 'assistant', content: 'FIRST_COMPLETE' }),
+        ]);
+
+        const followUpResponse = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            workspace: workspaceId,
+            session: sessionId,
+            model: 'ollama/local-same',
+            message: 'LEASE_AFTER_COMPLETE',
+          },
+        });
+        expect(followUpResponse.statusCode).toBe(200);
+        expect(followUpResponse.body).toContain('event: done');
+        expect(followUpResponse.body).toContain('AFTER_COMPLETE');
+        expect(completionCalls).toBe(2);
+      } finally {
+        releaseFirst.resolve();
+        await Promise.allSettled([firstRequest, ...(secondRequest ? [secondRequest] : [])]);
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = previousProvider;
+        server.agentState.currentModel = previousCurrentModel;
+        server.localConfig.litellmUrl = previousLitellmUrl;
+        if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = previousOllamaHost;
+        if (previousReranker === undefined) delete process.env.WAGGLE_RERANKER;
+        else process.env.WAGGLE_RERANKER = previousReranker;
+        await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${workspaceId}` });
+      }
+    }, 30_000);
+
+    it('aborts an in-flight chat when its workspace session is paused', async () => {
+      const workspaceResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/workspaces',
+        payload: { name: 'Pause In Flight Test', group: 'Test' },
+      });
+      expect(workspaceResponse.statusCode).toBe(201);
+      const workspaceId = (workspaceResponse.json() as { id: string }).id;
+      const sessionId = 'pause-in-flight';
+
+      const previousProvider = server.agentState.llmProvider;
+      const previousCurrentModel = server.agentState.currentModel;
+      const previousLitellmUrl = server.localConfig.litellmUrl;
+      const previousOllamaHost = process.env.OLLAMA_HOST;
+      const previousReranker = process.env.WAGGLE_RERANKER;
+
+      server.agentState.llmProvider = {
+        provider: 'ollama',
+        health: 'healthy',
+        detail: 'Test Ollama provider',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-pause';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+      process.env.WAGGLE_RERANKER = '0';
+
+      const deferred = () => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((done) => { resolve = done; });
+        return { promise, resolve };
+      };
+      const providerEntered = deferred();
+      const providerAborted = deferred();
+      const releaseProvider = deferred();
+      let completionCalls = 0;
+      let abortObserved = false;
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-pause' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (!url.endsWith('/chat/completions')) return new Response('', { status: 503 });
+        completionCalls += 1;
+        providerEntered.resolve();
+        const signal = init?.signal;
+        return await new Promise<Response>((resolve, reject) => {
+          const onAbort = () => {
+            abortObserved = true;
+            providerAborted.resolve();
+            reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+          };
+          if (signal?.aborted) {
+            onAbort();
+            return;
+          }
+          signal?.addEventListener('abort', onAbort, { once: true });
+          void releaseProvider.promise.then(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve(new Response(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: 'SHOULD_NOT_COMPLETE' } }] })}\n\n`
+              + 'data: [DONE]\n\n',
+              { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+            ));
+          });
+        });
+      });
+
+      const chatRequest = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: workspaceId,
+          session: sessionId,
+          model: 'ollama/local-pause',
+          message: 'PAUSE_ACTIVE_TURN',
+        },
+      });
+
+      try {
+        await Promise.race([
+          providerEntered.promise,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('Pause test turn did not reach the provider')),
+            5_000,
+          )),
+        ]);
+        const pauseResponse = await injectWithAuth(server, {
+          method: 'POST',
+          url: `/api/fleet/${workspaceId}/pause`,
+        });
+        expect(pauseResponse.statusCode).toBe(200);
+        expect(pauseResponse.json()).toEqual({ paused: true, workspaceId });
+
+        const abortWon = await Promise.race([
+          providerAborted.promise.then(() => true),
+          new Promise<false>((resolve) => setTimeout(() => resolve(false), 3_000)),
+        ]);
+        if (!abortWon) releaseProvider.resolve();
+        const chatResponse = await Promise.race([
+          chatRequest,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('Paused chat did not finish promptly')),
+            5_000,
+          )),
+        ]);
+
+        expect(abortWon).toBe(true);
+        expect(abortObserved).toBe(true);
+        expect(completionCalls).toBe(1);
+        expect(chatResponse.statusCode).toBe(200);
+        expect(chatResponse.body).not.toContain('event: error');
+        expect(chatResponse.body).not.toContain('event: done');
+        expect(chatResponse.body).not.toContain('Generation failed:');
+        expect(chatResponse.body).not.toContain('SHOULD_NOT_COMPLETE');
+
+        const stateKey = chatSessionStateKey(workspaceId, sessionId);
+        expect(server.agentState.sessionHistories.get(stateKey)).toEqual([
+          { role: 'user', content: 'PAUSE_ACTIVE_TURN' },
+        ]);
+        server.agentState.sessionHistories.delete(stateKey);
+        const coldHistory = await injectWithAuth(server, {
+          method: 'GET',
+          url: `/api/history?workspace=${workspaceId}&session=${sessionId}`,
+        });
+        expect(coldHistory.statusCode).toBe(200);
+        expect(coldHistory.json().messages).toEqual([
+          expect.objectContaining({ role: 'user', content: 'PAUSE_ACTIVE_TURN' }),
+        ]);
+      } finally {
+        releaseProvider.resolve();
+        await Promise.allSettled([chatRequest]);
+        fetchSpy.mockRestore();
+        server.agentState.llmProvider = previousProvider;
+        server.agentState.currentModel = previousCurrentModel;
+        server.localConfig.litellmUrl = previousLitellmUrl;
+        if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = previousOllamaHost;
+        if (previousReranker === undefined) delete process.env.WAGGLE_RERANKER;
+        else process.env.WAGGLE_RERANKER = previousReranker;
+        await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${workspaceId}` });
+      }
+    }, 30_000);
+
     it('two chat streams complete independently in echo mode', async () => {
       // Force echo mode: set provider unavailable AND break health probe URL
       const prevProvider = server.agentState.llmProvider;
@@ -448,12 +962,12 @@ describe('SSE Stream Resilience', () => {
         injectWithAuth(server, {
           method: 'POST',
           url: '/api/chat',
-          payload: { message: 'stream one' },
+          payload: { message: 'stream one', session: 'echo-concurrent-one' },
         }),
         injectWithAuth(server, {
           method: 'POST',
           url: '/api/chat',
-          payload: { message: 'stream two' },
+          payload: { message: 'stream two', session: 'echo-concurrent-two' },
         }),
       ]);
 
