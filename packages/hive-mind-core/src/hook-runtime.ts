@@ -16,6 +16,7 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
+import { evaluateExternalMemoryIngress } from './memory-ingress-guard.js';
 import { MindDB } from './mind/db.js';
 import {
   FrameStore,
@@ -177,6 +178,9 @@ function resolveMind(options: { dataDir?: string; workspace?: string }): {
 
 function assertSaveInput(options: SaveHookFrameOptions): void {
   if (typeof options.content !== 'string') throw new Error('Hook frame content must be a string');
+  if (evaluateExternalMemoryIngress({ content: options.content }).action !== 'allow') {
+    throw new Error('Hook frame content was rejected because it is unsafe.');
+  }
   if (!ALLOWED_IMPORTANCE.has(options.importance)) {
     throw new Error(`Invalid hook frame importance: ${String(options.importance)}`);
   }
