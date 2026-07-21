@@ -11,7 +11,11 @@ import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
 import { selectAgentRunBudget, type AgentRunBudgetPolicy } from './agent-run-budget.js';
 import { HookRegistry, type HookEvent } from './hooks.js';
-import { filterSpawnToolNames, type SpawnSecurityContext } from './subagent-tools.js';
+import {
+  filterSpawnToolNames,
+  guardSubAgentOutput,
+  type SpawnSecurityContext,
+} from './subagent-tools.js';
 import { detectTaskShape } from './task-shape.js';
 import { filterAvailableTools, selectToolsForTurn } from './tool-filter.js';
 
@@ -453,9 +457,10 @@ export class SubagentOrchestrator extends EventEmitter {
           : undefined,
       });
 
+      const response = guardSubAgentOutput(result.content, 'result');
       workerState.status = 'done';
       workerState.completedAt = Date.now();
-      workerState.result = result.content;
+      workerState.result = response;
       workerState.toolsUsed = result.toolsUsed;
       workerState.usage = { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens };
 
@@ -463,7 +468,10 @@ export class SubagentOrchestrator extends EventEmitter {
     } catch (err) {
       workerState.status = 'failed';
       workerState.completedAt = Date.now();
-      workerState.error = err instanceof Error ? err.message : String(err);
+      workerState.error = guardSubAgentOutput(
+        err instanceof Error ? err.message : String(err),
+        'error',
+      );
 
       this.emit('worker:status', { workerId: id, status: 'failed', workerState });
     }
@@ -489,7 +497,8 @@ export class SubagentOrchestrator extends EventEmitter {
         }
       }
       if (contextParts.length > 0) {
-        prompt += `\n## Previous Results\n${contextParts.join('\n\n')}\n`;
+        const context = guardSubAgentOutput(contextParts.join('\n\n'), 'result');
+        prompt += `\n## Previous Results\n${context}\n`;
       }
     }
 
@@ -511,20 +520,22 @@ export class SubagentOrchestrator extends EventEmitter {
 
     switch (mode) {
       case 'concatenate': {
-        return doneWorkers
+        const combined = doneWorkers
           .map(w => `## ${w.name}\n${w.result}`)
           .join('\n\n');
+        return guardSubAgentOutput(combined, 'result');
       }
 
       case 'last': {
-        return doneWorkers[doneWorkers.length - 1].result!;
+        return guardSubAgentOutput(doneWorkers[doneWorkers.length - 1].result!, 'result');
       }
 
       case 'synthesize': {
         // Spawn a synthesizer worker to combine all results
-        const allResults = doneWorkers
+        const combined = doneWorkers
           .map(w => `### ${w.name}\n${w.result}`)
           .join('\n\n');
+        const allResults = guardSubAgentOutput(combined, 'result');
 
         const synthesizeStep: WorkflowStep = {
           name: 'Synthesizer',
@@ -538,7 +549,7 @@ export class SubagentOrchestrator extends EventEmitter {
       }
 
       default:
-        return doneWorkers.map(w => w.result).join('\n\n');
+        return guardSubAgentOutput(doneWorkers.map(w => w.result).join('\n\n'), 'result');
     }
   }
 }

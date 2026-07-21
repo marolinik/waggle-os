@@ -8,6 +8,7 @@
 
 import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
+import { evaluateExternalMemoryIngress } from '@waggle/core';
 import { selectAgentRunBudget } from './agent-run-budget.js';
 import type { HookRegistry } from './hooks.js';
 import { detectTaskShape } from './task-shape.js';
@@ -194,6 +195,14 @@ export interface SubAgentToolsDeps {
   runAdapter?: SubAgentRunAdapter;
 }
 
+const QUARANTINED_AGENT_RESULT = '[Quarantined agent result: unsafe external content]';
+const QUARANTINED_AGENT_ERROR = '[Quarantined agent error: unsafe external content]';
+
+export function guardSubAgentOutput(text: string, kind: 'result' | 'error'): string {
+  if (evaluateExternalMemoryIngress({ content: text }).action === 'allow') return text;
+  return kind === 'result' ? QUARANTINED_AGENT_RESULT : QUARANTINED_AGENT_ERROR;
+}
+
 // In-memory registry of spawned sub-agents and their results
 const activeAgents = new Map<string, SubAgentDef>();
 const agentResults = new Map<string, SubAgentResult>();
@@ -355,7 +364,10 @@ ${task}
           });
           if (runHandle?.runId) id = runHandle.runId;
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err);
+          const errMsg = guardSubAgentOutput(
+            err instanceof Error ? err.message : String(err),
+            'error',
+          );
           return `## Sub-Agent Error: ${name}\n**Error:** Could not start the run: ${errMsg}`;
         }
 
@@ -384,6 +396,7 @@ ${task}
           startedAt: startTime,
         });
         try {
+          const bufferedTokens: string[] = [];
           const result = await runLoop({
             litellmUrl,
             litellmApiKey,
@@ -406,7 +419,7 @@ ${task}
               ? { blockedTools: [...secCtx.blockedTools] }
               : undefined,
             onToken: deps.onSubAgentToken
-              ? (token: string) => deps.onSubAgentToken!(id, token)
+              ? (token: string) => bufferedTokens.push(token)
               : undefined,
             onToolUse: deps.onSubAgentTool
               ? (name: string, input: Record<string, unknown>) => deps.onSubAgentTool!(id, name, input)
@@ -417,12 +430,20 @@ ${task}
             throw new Error('Sub-agent run was cancelled');
           }
 
+          const response = guardSubAgentOutput(result.content, 'result');
+          const emittedContent = bufferedTokens.join('');
+          if (deps.onSubAgentToken
+            && response === result.content
+            && guardSubAgentOutput(emittedContent, 'result') === emittedContent) {
+            for (const token of bufferedTokens) deps.onSubAgentToken(id, token);
+          }
+
           const duration = Date.now() - startTime;
           const subResult: SubAgentResult = {
             agentId: id,
             agentName: name,
             role,
-            response: result.content,
+            response,
             usage: { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens },
             toolsUsed: result.toolsUsed,
             duration,
@@ -465,11 +486,14 @@ ${task}
             completedAt: Date.now(),
           });
 
-          return `## Sub-Agent Result: ${name}\n**Run ID:** ${id}\n**Role:** ${role}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ') || 'none'}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens} total\n\n---\n\n${result.content}`;
+          return `## Sub-Agent Result: ${name}\n**Run ID:** ${id}\n**Role:** ${role}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ') || 'none'}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens} total\n\n---\n\n${response}`;
         } catch (err) {
           const duration = Date.now() - startTime;
           activeAgents.delete(id);
-          const errMsg = err instanceof Error ? err.message : String(err);
+          const errMsg = guardSubAgentOutput(
+            err instanceof Error ? err.message : String(err),
+            'error',
+          );
           const completedAt = Date.now();
           const cancelled = runHandle?.signal?.aborted ?? false;
           const failedResult: SubAgentResult = {
