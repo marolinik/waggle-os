@@ -357,7 +357,6 @@ async function executeGroup(
       defaultModel: server.agentState.currentModel,
       hooks: server.agentState.hookRegistry,
       signal,
-      getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     });
     orchestrator.on('worker:status', (event: { workerState: import('@waggle/agent').WorkerState }) => {
       server.localJobStore.update(jobId, { output: { workers: snapshotWorkers(orchestrator) } });

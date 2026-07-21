@@ -3,11 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import { evaluateExternalMemoryIngress, FrameStore, SessionStore } from '@waggle/core';
 import {
   createSubAgentTools,
+  createCronTools,
   createWorkflowTools,
   type AgentLoopConfig,
   type AgentResponse,
   type HookRegistry,
   type ToolDefinition,
+  type TurnOrigin,
 } from '@waggle/agent';
 import type {
   CollaborationRoomRun,
@@ -62,6 +64,7 @@ export interface BindChatCollaborationOptions {
   model: string;
   runLoop: (config: AgentLoopConfig) => Promise<AgentResponse>;
   securityContext: ChatCollaborationSecurityContext;
+  turnOrigin: TurnOrigin;
 }
 
 interface WorkflowContext {
@@ -80,10 +83,19 @@ interface WorkflowContext {
 export function bindChatCollaborationTools(options: BindChatCollaborationOptions): ToolDefinition[] {
   const {
     server, visibleTools, workspaceId, parentSessionId, parentTask,
-    model, runLoop, securityContext,
+    model, runLoop, securityContext, turnOrigin,
   } = options;
   const enabledNames = new Set(visibleTools.map((tool) => tool.name));
-  const workerTools = options.workerTools.filter((tool) => !COLLABORATION_TOOL_NAMES.has(tool.name));
+  const cronReplacements = new Map(
+    createCronTools({ getTurnOrigin: () => turnOrigin })
+      .map((tool) => [tool.name, tool] as const),
+  );
+  const bindCronTools = (tools: ToolDefinition[]) => tools.map(
+    (tool) => cronReplacements.get(tool.name) ?? tool,
+  );
+  const workerTools = bindCronTools(
+    options.workerTools.filter((tool) => !COLLABORATION_TOOL_NAMES.has(tool.name)),
+  );
   const subagentAssignments = new Map<string, string | undefined>();
   const workflowContexts = new Map<string, WorkflowContext>();
   let subagentRoom: CollaborationRoomRun | undefined;
@@ -436,7 +448,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
   ].filter((tool) => enabledNames.has(tool.name));
 
   return [
-    ...visibleTools.filter((tool) => !COLLABORATION_TOOL_NAMES.has(tool.name)),
+    ...bindCronTools(visibleTools.filter((tool) => !COLLABORATION_TOOL_NAMES.has(tool.name))),
     ...replacements,
   ];
 }

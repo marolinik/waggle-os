@@ -1,11 +1,18 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { MindDB } from '@waggle/core';
-import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/agent';
+import {
+  createCronTools,
+  HookRegistry,
+  type AgentLoopConfig,
+  type AgentResponse,
+  type ToolDefinition,
+  type TurnOrigin,
+} from '@waggle/agent';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { bindChatCollaborationTools } from '../../src/local/chat-collaboration.js';
 import { SignalBus } from '../../src/local/signal-bus.js';
@@ -95,6 +102,7 @@ function bind(
       blockedTools: ['bash'],
       allowedToolNames: new Set(visibleTools.map((item) => item.name)),
     },
+    turnOrigin: { session: sessionId, workspace: 'workspace-a' },
   });
 }
 
@@ -184,6 +192,129 @@ describe('request-bound chat collaboration', () => {
     const restored = new AgentRunRegistry(path.join(dir, 'agent-runs.json'));
     expect(restored.get(worker.id)?.status).toBe('completed');
     restored.close();
+  });
+
+  it('keeps cron origins and spawn policy isolated across overlapping request bindings', async () => {
+    const { server } = setup();
+    const originA: TurnOrigin = {
+      session: 'session-a',
+      workspace: 'workspace-a',
+      channel: { platform: 'telegram', chatId: 'chat-a' },
+    };
+    const originB: TurnOrigin = {
+      session: 'session-b',
+      workspace: 'workspace-b',
+      channel: { platform: 'slack', chatId: 'chat-b' },
+    };
+    let ambientOrigin: TurnOrigin | null = originA;
+    const visibleTools = [
+      ...collaborationNames.map(tool),
+      tool('read_file'),
+      tool('bash'),
+      ...createCronTools({ getTurnOrigin: () => ambientOrigin }),
+    ];
+    const hookA = new HookRegistry();
+    const hookB = new HookRegistry();
+    const runnerCalls: Array<{ lane: 'a' | 'b'; config: AgentLoopConfig }> = [];
+    const bindLane = (
+      lane: 'a' | 'b',
+      origin: TurnOrigin,
+      hooks: HookRegistry,
+      blockedTools: string[],
+    ) => bindChatCollaborationTools({
+      server,
+      visibleTools,
+      workerTools: visibleTools,
+      workspaceId: 'workspace-a',
+      parentSessionId: origin.session,
+      parentTask: `Coordinate lane ${lane}`,
+      model: `model-${lane}`,
+      runLoop: async (config) => {
+        runnerCalls.push({ lane, config });
+        return {
+          content: `lane ${lane} complete`,
+          toolsUsed: config.tools.map((item) => item.name),
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+      securityContext: {
+        hooks,
+        blockedTools,
+        allowedToolNames: new Set(visibleTools.map((item) => item.name)),
+      },
+      turnOrigin: origin,
+    });
+
+    const toolsA = bindLane('a', originA, hookA, ['bash']);
+    ambientOrigin = originB;
+    const toolsB = bindLane('b', originB, hookB, ['read_file']);
+    // Simulate the old ambient lifecycle: B overwrites A, then A's cleanup
+    // clears the shared value before B executes its schedule tool.
+    ambientOrigin = null;
+
+    const scheduled: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      scheduled.push(body);
+      return new Response(JSON.stringify({
+        id: scheduled.length,
+        name: body.name,
+        cronExpr: body.cronExpr,
+        jobType: body.jobType,
+        nextRunAt: '2030-01-01T00:00:00.000Z',
+        enabled: true,
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+    });
+    try {
+      const gate = deferred<void>();
+      let arrivals = 0;
+      const create = async (tools: ToolDefinition[], name: string) => {
+        arrivals += 1;
+        if (arrivals === 2) gate.resolve(undefined);
+        await gate.promise;
+        return tools.find((item) => item.name === 'create_schedule')!.execute({
+          name,
+          cron_expression: '0 9 * * *',
+          prompt: `Run ${name}`,
+        });
+      };
+      await Promise.all([
+        create(toolsA, 'schedule-a'),
+        create(toolsB, 'schedule-b'),
+      ]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const scheduleA = scheduled.find((item) => item.name === 'schedule-a')!;
+    const scheduleB = scheduled.find((item) => item.name === 'schedule-b')!;
+    expect(scheduleA).toMatchObject({
+      workspaceId: 'workspace-a',
+      jobConfig: { deliverTo: originA.channel },
+    });
+    expect(scheduleB).toMatchObject({
+      workspaceId: 'workspace-b',
+      jobConfig: { deliverTo: originB.channel },
+    });
+
+    await Promise.all([
+      toolsA.find((item) => item.name === 'spawn_agent')!.execute({
+        name: 'Lane A', role: 'custom', task: 'Use the approved lane A tools',
+        tools: ['read_file', 'bash'],
+      }),
+      toolsB.find((item) => item.name === 'spawn_agent')!.execute({
+        name: 'Lane B', role: 'custom', task: 'Use the approved lane B tools',
+        tools: ['read_file', 'bash'],
+      }),
+    ]);
+    const callA = runnerCalls.find((call) => call.lane === 'a')!.config;
+    const callB = runnerCalls.find((call) => call.lane === 'b')!.config;
+    expect(callA.hooks).toBe(hookA);
+    expect(callB.hooks).toBe(hookB);
+    expect(callA.governancePolicies).toEqual({ blockedTools: ['bash'] });
+    expect(callB.governancePolicies).toEqual({ blockedTools: ['read_file'] });
+    expect(callA.tools.map((item) => item.name)).toEqual(['read_file']);
+    expect(callB.tools.map((item) => item.name)).toEqual(['bash']);
   });
 
   it('quarantines unsafe model-authored fields before collaboration durable and status sinks', async () => {

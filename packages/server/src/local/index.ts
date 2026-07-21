@@ -281,27 +281,6 @@ export interface AgentState {
   activeWorkspaceId: string | null;
   /** Current sub-agent orchestrator instance (set during workflow execution) */
   subagentOrchestrator: import('@waggle/agent').SubagentOrchestrator | null;
-  /**
-   * SEC: request-scoped security context for spawned agents. Set by the chat
-   * route for the lifetime of a single agent run (cleared in its finally) so
-   * that sub-agents / workflow workers spawned during the run inherit the same
-   * approval gate, governance blockedTools, and persona tool-allowlist as the
-   * main loop. `null` outside an active run. Structural shape matches
-   * @waggle/agent SpawnSecurityContext (kept inline to avoid a type re-export).
-   */
-  spawnSecurityContext: {
-    hooks?: import('@waggle/agent').HookRegistry;
-    blockedTools?: readonly string[];
-    allowedToolNames?: ReadonlySet<string> | null;
-  } | null;
-  /**
-   * #17: origin of the currently-executing chat turn. Same request-scoped
-   * lifecycle as spawnSecurityContext (set by the chat route, cleared in its
-   * finally). cron-tools' create_schedule snapshots it synchronously at
-   * tool-execute time so ai_task delivery targets come from a trusted source,
-   * never from free-form tool arguments. `null` outside an active run.
-   */
-  turnOrigin: import('@waggle/agent').TurnOrigin | null;
   /** Plugin runtime manager — lifecycle, tools, skills from plugins */
   pluginRuntimeManager: import('@waggle/sdk').PluginRuntimeManager;
   /** MCP server runtime — stdio servers, health, tools */
@@ -681,12 +660,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   });
 
   // Cron tools — let the agent manage cron schedules (via REST API).
-  // #17: getTurnOrigin lets create_schedule stamp ai_task delivery targets
-  // from the request-scoped origin snapshot (read synchronously at
-  // tool-execute time — see AgentState.turnOrigin).
-  const cronTools = createCronTools({
-    getTurnOrigin: () => server.agentState.turnOrigin,
-  });
+  // The chat route replaces surviving cron tools with request-bound copies so
+  // overlapping turns cannot exchange delivery origins.
+  const cronTools = createCronTools();
 
   // Search tools — Tavily + Brave with vault-backed API keys
   const searchTools = createSearchTools(async (key: string) => {
@@ -810,10 +786,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     litellmUrl: fullConfig.litellmUrl,
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
-    // SEC: sub-agents spawned during a chat request inherit that request's
-    // approval gate + governance denylist + persona allowlist. The chat route
-    // publishes this per request; called at spawn time (post-decoration).
-    getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     onSubAgentStatus: (event) => {
       emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
         id: event.agentId,
@@ -869,9 +841,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     litellmUrl: fullConfig.litellmUrl,
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
-    // SEC: workflow workers inherit the spawning request's approval gate +
-    // governance denylist + persona allowlist (same contract as sub-agents).
-    getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     onWorkerStatus: (event) => {
       // Relay sub-agent status to eventBus for SSE notification stream
       const orch = server.agentState.subagentOrchestrator;
@@ -1540,8 +1509,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     weaverState,
     workspaceWeaverStatus,
     subagentOrchestrator: null,
-    spawnSecurityContext: null,
-    turnOrigin: null,
     pluginRuntimeManager,
     mcpRuntime,
     mcpToolRetriever,

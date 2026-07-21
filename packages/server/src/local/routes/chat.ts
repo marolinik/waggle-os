@@ -2073,6 +2073,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               blockedTools: governancePolicies?.blockedTools,
               allowedToolNames: spawnAllowedToolNames,
             },
+            turnOrigin: {
+              session: sessionId,
+              workspace: effectiveWorkspace ?? null,
+              ...(channelMeta?.platform && channelMeta?.chatId
+                ? { channel: { platform: channelMeta.platform, chatId: channelMeta.chatId } }
+                : {}),
+            },
           });
         }
 
@@ -2457,31 +2464,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
 
           throw failure;
-        };
-
-        // SEC: publish the request-scoped security context so sub-agents /
-        // workflow workers spawned during this run inherit the SAME approval
-        // gate, governance denylist, and persona allowlist as the main loop.
-        // Without this, spawned agents ran the full tool pool with no
-        // confirmation gate (the sub-agent confirmation-bypass). Cleared in the
-        // outer finally so it never leaks into a later run.
-        server.agentState.spawnSecurityContext = hasCustomRunner ? null : {
-          hooks: hookRegistry,
-          blockedTools: governancePolicies?.blockedTools,
-          allowedToolNames: spawnAllowedToolNames,
-        };
-
-        // #17: publish the request-scoped turn origin — create_schedule reads
-        // it synchronously at tool-execute time to stamp ai_task delivery
-        // targets (channel meta only ever arrives from the loopback client's
-        // ChannelManager path). Same lifecycle as spawnSecurityContext above;
-        // cleared in the outer finally.
-        server.agentState.turnOrigin = {
-          session: sessionId,
-          workspace: effectiveWorkspace ?? null,
-          ...(channelMeta?.platform && channelMeta?.chatId
-            ? { channel: { platform: channelMeta.platform, chatId: channelMeta.chatId } }
-            : {}),
         };
 
         // ── Run agent with credential pool + fallback chain ──
@@ -3025,13 +3007,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (pinnedSharedMindId) {
         try { server.mindCache.release(pinnedSharedMindId); } catch { /* cache already torn down */ }
       }
-      // SEC: drop the request-scoped spawn security context. It must not leak
-      // into a later run, which could otherwise apply a stale workspace's
-      // governance / persona restrictions to a freshly spawned sub-agent.
-      server.agentState.spawnSecurityContext = null;
-      // #17: same for the turn origin — a stale origin would stamp a later
-      // turn's schedules with the wrong delivery channel.
-      server.agentState.turnOrigin = null;
       // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
       // already unregisters and sets to undefined; this guarantees we never leak the
       // hook into the shared hookRegistry on any exception path.
