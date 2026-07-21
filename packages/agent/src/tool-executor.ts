@@ -15,28 +15,40 @@
  *   5. pre:memory-write hook (save_memory only) — early return on cancel
  *   6. LoopGuard.check — produces error result if duplicate
  *   7. Execute (or capability-router fallback or unknown-tool error)
- *   8. scanForInjection — REVIEW C2: BEFORE onToolResult / post-hooks
+ *   8. evaluateExternalMemoryIngress — REVIEW C2: BEFORE onToolResult / post-hooks
  *   9. onToolResult callback (sanitized content)
  *  10. post:memory-write hook (save_memory only, sanitized)
  *  11. post:tool hook (sanitized)
  *  12. compress model-facing result (subtractive; observers keep full fidelity)
  *
  * Critical invariant (Review C2): steps 8 → 9 → 10 → 11 must stay in this
- * order. Sanitization output is what flows into both model context AND
+ * order. Canonically guarded output is what flows into both model context AND
  * every downstream observer (audit / telemetry / team-sync / UI). Step 12 is
  * subtractive-only and applies ONLY to the returned (model-facing) content —
- * observers at 9–11 still receive the full sanitized result.
+ * observers at 9–11 still receive the full guarded result.
  */
 
 import type { ToolDefinition } from './tools.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { LoopGuard } from './loop-guard.js';
-import { scanForInjection } from './injection-scanner.js';
+import { evaluateExternalMemoryIngress } from '@waggle/core';
 import { isCriticalNeverAutopass } from './confirmation.js';
 import { compressToolOutput } from './tool-output-compressor.js';
 import { logTurnEvent } from './turn-context.js';
 import { untrustedContextWrapper } from './untrusted-context.js';
+
+const QUARANTINED_TOOL_OUTPUT = '[SECURITY] Tool output quarantined.';
+
+/**
+ * Never reflect rejected external content (or guard details) beyond this boundary.
+ * The canonical ingress guard includes legacy scanning plus normalization-aware checks.
+ */
+function guardExternalToolOutput(result: string): string {
+  return evaluateExternalMemoryIngress({ content: result }).action === 'allow'
+    ? result
+    : QUARANTINED_TOOL_OUTPUT;
+}
 
 export interface ToolExecutorDeps {
   toolMap: ReadonlyMap<string, ToolDefinition>;
@@ -135,10 +147,7 @@ export async function executeToolCall(
       result = `Error: Unknown tool "${fnName}". Available tools: ${Array.from(toolMap.keys()).join(', ')}`;
     }
 
-    const scanResult = scanForInjection(result, 'tool_output');
-    if (!scanResult.safe) {
-      result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
-    }
+    result = guardExternalToolOutput(result);
     if (onToolResult) onToolResult(fnName, fnArgs, result);
     return { content: result, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
   }
@@ -238,16 +247,17 @@ export async function executeToolCall(
   } else if (tool) {
     logTurnEvent(turnId, { stage: 'agent-loop.tool.enter', toolName: fnName, argsKeys: Object.keys(fnArgs) });
     try {
-      result = await tool.execute(fnArgs);
+      const rawResult = await tool.execute(fnArgs);
       // Tools in this codebase report many failures by RETURNING an
       // "Error: ..." string rather than throwing — count those as failures
       // too, or the failure tiers never see them.
-      guard.record(fnName, fnArgs, !/^Error\b/.test(result));
+      guard.record(fnName, fnArgs, !/^Error\b/.test(rawResult));
+      result = guardExternalToolOutput(rawResult);
       logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, resultChars: result.length, error: false });
     } catch (err) {
-      result = `Error executing ${fnName}: ${(err as Error).message}`;
+      result = guardExternalToolOutput(`Error executing ${fnName}: ${(err as Error).message}`);
       guard.record(fnName, fnArgs, false);
-      logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: (err as Error).message });
+      logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: result });
     }
     countedAsUsed = true;
   } else if (capabilityRouter) {
@@ -265,16 +275,14 @@ export async function executeToolCall(
     result = `Error: Unknown tool "${fnName}". Available tools: ${Array.from(toolMap.keys()).join(', ')}`;
   }
 
-  // ── Step 8: sanitize BEFORE post-hooks + onToolResult (Review C2) ──
-  // The scanner output is what flows into both model context on the next
-  // turn AND into every downstream observer (audit sinks, telemetry,
-  // team-sync, UI). Order is load-bearing — do not reorder.
-  const scanResult = scanForInjection(result, 'tool_output');
-  if (!scanResult.safe) {
-    result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
-  }
+  // ── Step 8: canonical guard BEFORE post-hooks + onToolResult (Review C2) ──
+  // The guarded output is what flows into both model context on the next turn
+  // AND every downstream observer (audit sinks, telemetry, team-sync, UI).
+  // Non-allows become an opaque marker; guard details and normalized attacker
+  // content must never cross this boundary. Order is load-bearing.
+  result = guardExternalToolOutput(result);
 
-  // ── Step 9: onToolResult callback (sanitized content) ──
+  // ── Step 9: onToolResult callback (guarded content) ──
   if (onToolResult) onToolResult(fnName, fnArgs, result);
 
   // ── Step 10: post:memory-write hook (save_memory only, sanitized) ──
