@@ -1,5 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { processImport, FrameStore, type ImportSource } from '@waggle/core';
+import {
+  evaluateExternalMemoryIngress,
+  FrameStore,
+  processImport,
+  projectExternalMemoryContent,
+  type ImportSource,
+} from '@waggle/core';
 
 export async function importRoutes(fastify: FastifyInstance) {
   // POST /api/import/preview — parse export and show what would be imported
@@ -40,6 +46,21 @@ export async function importRoutes(fastify: FastifyInstance) {
       };
     }
 
+    const sourceLabel = source === 'chatgpt' ? 'ChatGPT' : 'Claude';
+    const preparedItems = result.knowledgeExtracted.map((item) => {
+      const content = `[Import:${sourceLabel}] ${item.content}`;
+      return {
+        content,
+        importance: item.importance,
+        ingressContent: projectExternalMemoryContent({ content }),
+      };
+    });
+    if (preparedItems.some(({ ingressContent }) => (
+      evaluateExternalMemoryIngress({ content: ingressContent }).action !== 'allow'
+    ))) {
+      return reply.status(422).send({ error: 'Imported content could not be saved.' });
+    }
+
     // Save to personal memory
     try {
       const personalDb = fastify.multiMind?.personal;
@@ -49,11 +70,9 @@ export async function importRoutes(fastify: FastifyInstance) {
 
       const frameStore = new FrameStore(personalDb);
       let saved = 0;
-      const sourceLabel = source === 'chatgpt' ? 'ChatGPT' : 'Claude';
 
-      for (const item of result.knowledgeExtracted) {
-        const content = `[Import:${sourceLabel}] ${item.content}`;
-        frameStore.createIFrame('import', content, item.importance);
+      for (const item of preparedItems) {
+        frameStore.createIFrame('import', item.content, item.importance);
         saved++;
       }
 

@@ -21,6 +21,7 @@ import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
 import zlib from 'node:zlib';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { evaluateExternalMemoryIngress, projectExternalMemoryContent } from '@waggle/core';
 import { assertSafeSegment } from './validate.js';
 import {
   capExtractedOfficeText,
@@ -493,20 +494,77 @@ export const ingestRoutes: FastifyPluginAsync = async (server) => {
       throw error;
     }
 
+    const durableItems = workspaceId && workspaceId !== 'default'
+      ? results.map((result, index) => {
+          const registryEntry: FileRegistryEntry | null = result.type === 'unsupported'
+            ? null
+            : {
+                name: result.name,
+                type: result.type,
+                summary: result.summary,
+                sizeBytes: Math.ceil(files[index].content.length * 0.75),
+                ingestedAt: new Date().toISOString(),
+              };
+          const registryIngressContent = registryEntry
+            ? projectExternalMemoryContent({ content: JSON.stringify(registryEntry) })
+            : null;
+          if (result.type === 'unsupported' || !result.content) {
+            return { registryEntry, registryIngressContent, memoryExchange: null };
+          }
+
+          const contentPreview = result.content.slice(0, 500);
+          const userMessage = `User uploaded file: ${result.name}`;
+          const memoryContent = `File ingested: ${result.name} (${result.summary})\n\nContent preview:\n${contentPreview}`;
+          const exchangeMessages = [
+            { role: 'user' as const, text: userMessage },
+            { role: 'assistant' as const, text: memoryContent },
+          ];
+          const exchangeContent = exchangeMessages
+            .map((message) => `${message.role}: ${message.text}`)
+            .join('\n\n');
+          return {
+            registryEntry,
+            registryIngressContent,
+            memoryExchange: {
+              userMessage,
+              memoryContent,
+              ingressContent: projectExternalMemoryContent({
+                content: exchangeContent,
+                messages: exchangeMessages,
+              }),
+            },
+          };
+        })
+      : [];
+
+    if (workspaceId && workspaceId !== 'default') {
+      const unsafeWorkspacePath = evaluateExternalMemoryIngress({
+        content: projectExternalMemoryContent({ content: workspaceId }),
+      }).action !== 'allow';
+      const unsafeItem = durableItems.some((item) => {
+        if (item.registryEntry && item.registryIngressContent
+          && evaluateExternalMemoryIngress({
+            title: item.registryEntry.name,
+            content: item.registryIngressContent,
+          }).action !== 'allow') {
+          return true;
+        }
+        return item.memoryExchange !== null
+          && evaluateExternalMemoryIngress({
+            content: item.memoryExchange.ingressContent,
+          }).action !== 'allow';
+      });
+      if (unsafeWorkspacePath || unsafeItem) {
+        return reply.status(422).send({ error: 'Ingested content could not be saved.' });
+      }
+    }
+
     // F2: Write to workspace file registry
     if (workspaceId && workspaceId !== 'default') {
       try {
-        for (let i = 0; i < results.length; i++) {
-          const result = results[i];
-          if (result.type === 'unsupported') continue;
-          const approxSize = Math.ceil(files[i].content.length * 0.75);
-          addToFileRegistry(server.localConfig.dataDir, workspaceId, {
-            name: result.name,
-            type: result.type,
-            summary: result.summary,
-            sizeBytes: approxSize,
-            ingestedAt: new Date().toISOString(),
-          });
+        for (const item of durableItems) {
+          if (!item.registryEntry) continue;
+          addToFileRegistry(server.localConfig.dataDir, workspaceId, item.registryEntry);
         }
       } catch { /* non-blocking */ }
     }
@@ -516,14 +574,11 @@ export const ingestRoutes: FastifyPluginAsync = async (server) => {
       try {
         server.agentState.activateWorkspaceMind(workspaceId);
         const { orchestrator } = server.agentState;
-        for (const result of results) {
-          if (result.type === 'unsupported' || !result.content) continue;
-          // Save a memory frame with file name, type, and content summary
-          const contentPreview = result.content.slice(0, 500);
-          const memoryContent = `File ingested: ${result.name} (${result.summary})\n\nContent preview:\n${contentPreview}`;
+        for (const item of durableItems) {
+          if (!item.memoryExchange) continue;
           await orchestrator.autoSaveFromExchange(
-            `User uploaded file: ${result.name}`,
-            memoryContent,
+            item.memoryExchange.userMessage,
+            item.memoryExchange.memoryContent,
           );
         }
       } catch {
