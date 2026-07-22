@@ -374,12 +374,14 @@ describe('Tauri Production Configuration', () => {
         );
         fs.mkdirSync(path.dirname(fixtureMarketplaceSource), { recursive: true });
         const fixtureMarketplace = new Database(fixtureMarketplaceSource);
+        fixtureMarketplace.pragma('journal_mode = WAL');
         fixtureMarketplace.exec(`
           CREATE TABLE sources (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
           CREATE TABLE packages (id INTEGER PRIMARY KEY, source_id INTEGER, name TEXT NOT NULL);
           INSERT INTO sources (id, name) VALUES (1, 'mcp_registry');
           INSERT INTO packages (id, source_id, name) VALUES (1, 1, 'memory');
         `);
+        fixtureMarketplace.pragma('wal_checkpoint(TRUNCATE)');
         fixtureMarketplace.close();
         const fixtureMarketplaceResource = path.join(fixtureResources, 'marketplace.db');
         fs.copyFileSync(fixtureMarketplaceSource, fixtureMarketplaceResource);
@@ -536,7 +538,32 @@ describe('Tauri Production Configuration', () => {
           return result;
         };
 
+        const fixtureMarketplaceBeforeProbe = fs.readFileSync(fixtureMarketplaceResource);
         expect(runChecker().status).toBe(0);
+        expect(fs.readFileSync(fixtureMarketplaceResource)).toEqual(fixtureMarketplaceBeforeProbe);
+        for (const target of [
+          {
+            path: fixtureMarketplaceResource,
+            label: 'resources/marketplace.db',
+            diagnostic: 'must not be packaged',
+          },
+          {
+            path: fixtureMarketplaceSource,
+            label: 'packages/marketplace/marketplace.db',
+            diagnostic: 'must not be present while staging',
+          },
+        ]) {
+          for (const suffix of ['-wal', '-shm', '-journal']) {
+            expect(fs.existsSync(`${target.path}${suffix}`)).toBe(false);
+            fs.writeFileSync(`${target.path}${suffix}`, 'stale SQLite sidecar');
+            const staleSidecarResult = runChecker();
+            expect(staleSidecarResult.status).toBe(1);
+            expect(staleSidecarResult.stderr).toContain(
+              `${target.label}${suffix} ${target.diagnostic}`,
+            );
+            fs.rmSync(`${target.path}${suffix}`);
+          }
+        }
 
         const fixtureMarketplaceContent = fs.readFileSync(fixtureMarketplaceResource);
         fs.rmSync(fixtureMarketplaceResource);

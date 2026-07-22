@@ -15,6 +15,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -175,6 +176,14 @@ if (!fs.existsSync(servicePath)) {
 
 const canonicalMarketplaceDb = path.join(root, 'packages', 'marketplace', 'marketplace.db');
 const marketplaceResource = path.join(resourcesDir, 'marketplace.db');
+for (const suffix of ['-wal', '-shm', '-journal']) {
+  if (fs.existsSync(`${canonicalMarketplaceDb}${suffix}`)) {
+    unsafe.push(`packages/marketplace/marketplace.db${suffix} must not be present while staging`);
+  }
+  if (fs.existsSync(`${marketplaceResource}${suffix}`)) {
+    unsafe.push(`resources/marketplace.db${suffix} must not be packaged`);
+  }
+}
 const canonicalMarketplaceIsRegular = fs.existsSync(canonicalMarketplaceDb)
   && fs.lstatSync(canonicalMarketplaceDb).isFile()
   && !fs.lstatSync(canonicalMarketplaceDb).isSymbolicLink();
@@ -457,7 +466,11 @@ if (
   && fs.existsSync(path.join(stagedBetterSqlite, 'package.json'))
   && marketplaceResourceIsRegular
 ) {
+  let marketplaceProbeRoot;
   try {
+    marketplaceProbeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-marketplace-probe-'));
+    const marketplaceProbeDb = path.join(marketplaceProbeRoot, 'marketplace.db');
+    fs.copyFileSync(marketplaceResource, marketplaceProbeDb);
     const marketplaceProbe = [
       'const Database = require(process.argv[1]);',
       'const database = new Database(process.argv[2], { readonly: true, fileMustExist: true });',
@@ -473,14 +486,18 @@ if (
       '-e',
       marketplaceProbe,
       stagedBetterSqlite,
-      marketplaceResource,
+      marketplaceProbeDb,
     ], {
-      cwd: resourcesDir,
+      cwd: marketplaceProbeRoot,
       env: { ...process.env, NODE_PATH: stagedDepsDir },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch {
     unsafe.push('resources/marketplace.db failed its SQLite integrity/schema probe');
+  } finally {
+    if (marketplaceProbeRoot) {
+      fs.rmSync(marketplaceProbeRoot, { recursive: true, force: true });
+    }
   }
 }
 if (

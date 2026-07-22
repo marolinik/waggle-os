@@ -209,6 +209,9 @@ function expectNoSourceRuntimePaths(contents: string, label: string): void {
       expect(contents, `${label} leaked JSON-escaped source runtime path ${sourcePath}`).not.toContain(
         sourcePath.replace(/\\/g, '\\\\'),
       );
+      expect(contents, `${label} leaked slash-normalized source runtime path ${sourcePath}`).not.toContain(
+        sourcePath.replace(/\\/g, '/'),
+      );
     }
   }
 }
@@ -395,15 +398,29 @@ describe('hook package installed lifecycle UX', () => {
               'hive-mind',
               'handler.js',
             );
+            const installedBundle = path.join(
+              home,
+              '.openclaw',
+              'hooks',
+              'hive-mind',
+              'handler.cjs',
+            );
             expect(fs.existsSync(installedHandler)).toBe(true);
-            expect(fs.readFileSync(installedHandler)).toEqual(
+            expect(fs.readFileSync(installedHandler, 'utf8')).toBe(
+              "'use strict';\nmodule.exports = require('./handler.cjs');\n",
+            );
+            expect(fs.readFileSync(installedBundle)).toEqual(
               fs.readFileSync(path.join(packageDir, 'dist', 'handler.bundle.cjs')),
             );
             expect(installedConfig).toContain(stagedCli.replace(/\\/g, '\\\\'));
             expect(JSON.parse(installedPointer)).toMatchObject({ cli_path: stagedCli });
             expectNoSourceRuntimePaths(
               fs.readFileSync(installedHandler, 'utf8'),
-              'openclaw installed handler',
+              'openclaw installed handler loader',
+            );
+            expectNoSourceRuntimePaths(
+              fs.readFileSync(installedBundle, 'utf8'),
+              'openclaw installed handler bundle',
             );
           } else if (hookPackage.id === 'claude-desktop') {
             const config = JSON.parse(installedConfig) as {
@@ -414,12 +431,26 @@ describe('hook package installed lifecycle UX', () => {
               args: [stagedMemoryMcp],
             });
           } else {
-            expect(
-              installedConfig.includes(bundledNode)
-                || installedConfig.includes(bundledNode.replace(/\\/g, '\\\\')),
-              `${hookPackage.id} did not pin the copied bundled Node path`,
-            ).toBe(true);
-            expect(installedConfig).not.toContain(SOURCE_BUNDLED_NODE);
+            const nodePathHaystacks = process.platform === 'win32'
+              && (hookPackage.id === 'codex' || hookPackage.id === 'codex-desktop')
+              ? [...installedConfig.matchAll(/-EncodedCommand ([A-Za-z0-9+/=]+)/g)]
+                  .map(match => Buffer.from(match[1], 'base64').toString('utf16le'))
+              : [installedConfig];
+            if (process.platform === 'win32'
+              && (hookPackage.id === 'codex' || hookPackage.id === 'codex-desktop')) {
+              expect(nodePathHaystacks).toHaveLength(4);
+            }
+            for (const nodePathHaystack of nodePathHaystacks) {
+              expect(
+                nodePathHaystack.includes(bundledNode)
+                  || nodePathHaystack.includes(bundledNode.replace(/\\/g, '\\\\')),
+                `${hookPackage.id} did not pin every command to the copied bundled Node path`,
+              ).toBe(true);
+              expectNoSourceRuntimePaths(
+                nodePathHaystack,
+                `${hookPackage.id} decoded runtime command`,
+              );
+            }
           }
 
           const verifyResult = await runHook('verify');
