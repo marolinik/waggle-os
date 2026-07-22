@@ -2788,6 +2788,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             traceRecorder.finalize(traceHandle, {
               outcome: 'success',
               output: result.content ?? '',
+              model: activeAttemptModel ?? resolvedModel,
               tokens: {
                 input: result.usage.inputTokens,
                 output: result.usage.outputTokens,
@@ -3138,6 +3139,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           traceRecorder.finalize(traceHandle, {
             outcome: 'abandoned',
             output: '',
+            model: activeAttemptModel ?? undefined,
             tokens: billableFailureUsage ? {
               input: billableFailureUsage.inputTokens,
               output: billableFailureUsage.outputTokens,
@@ -3252,7 +3254,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // output — the correction-detector can upgrade it later if appropriate.
       if (traceRecorder && traceHandle && !traceFinalized) {
         try {
-          traceRecorder.finalize(traceHandle, { outcome: 'abandoned', output: '' });
+          traceRecorder.finalize(traceHandle, {
+            outcome: 'abandoned',
+            output: '',
+            model: activeAttemptModel ?? undefined,
+          });
           traceFinalized = true;
         } catch { /* best-effort */ }
       }

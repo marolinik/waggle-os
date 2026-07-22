@@ -7,6 +7,7 @@ import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
+import { loadSessionMessages } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
 describe('chat smart-router integration', () => {
@@ -538,6 +539,66 @@ describe('chat smart-router integration', () => {
       'primary-test-model',
       'fallback-test-model',
     ]);
+  });
+
+  it('records the actual fallback model across SSE, history, and execution trace', async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.clearBudgetModel();
+    config.setFallbackModel('ollama/fallback-test-model');
+    config.save();
+    const attempts: string[] = [];
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(agentConfig.model);
+      if (attempts.length === 1) {
+        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
+      }
+      return {
+        content: 'fallback ok',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+    const session = 'actual-fallback-model-provenance';
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'Review this TypeScript function', session },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+    const switchEvents = [...response.body.matchAll(/event: model_switch\r?\ndata: (.+?)(?:\r?\n|$)/g)]
+      .map(match => JSON.parse(match[1]!) as Record<string, unknown>);
+    expect(switchEvents).toEqual([{
+      model: 'ollama/fallback-test-model',
+      reason: 'ollama/primary-test-model failed (timeout); configured fallback selected',
+      primary: 'ollama/primary-test-model',
+    }]);
+    const doneEvents = [...response.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g)]
+      .map(match => JSON.parse(match[1]!) as { model?: string });
+    expect(doneEvents).toHaveLength(1);
+    expect(doneEvents[0]?.model).toBe('ollama/fallback-test-model');
+
+    const historyResponse = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=default&session=${session}`,
+    });
+    expect(historyResponse.statusCode).toBe(200);
+    expect(historyResponse.json().messages).toContainEqual(
+      expect.objectContaining({
+        role: 'assistant',
+        content: 'fallback ok',
+        model: 'ollama/fallback-test-model',
+      }),
+    );
+    expect(loadSessionMessages(tmpDir, 'default', session)).toContainEqual({
+      role: 'assistant',
+      content: 'fallback ok',
+      model: 'ollama/fallback-test-model',
+    });
+    const [persistedTrace] = server.traceStore.query({ sessionId: session, limit: 1 });
+    expect(persistedTrace.model).toBe('ollama/fallback-test-model');
   });
 
   it('rebuilds the production system prompt for the configured fallback model', async () => {

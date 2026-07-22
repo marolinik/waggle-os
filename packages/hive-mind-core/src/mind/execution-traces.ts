@@ -109,6 +109,7 @@ export interface StartTraceInput {
 export interface FinalizeTraceInput {
   outcome: TraceOutcome;
   output: string;
+  model?: string | null;
   reasoning?: TraceReasoningStep[];
   toolCalls?: TraceToolCall[];
   artifacts?: string[];
@@ -270,10 +271,12 @@ export class ExecutionTraceStore {
     const createdMs = Date.parse(current.created_at + 'Z');
     const now = Date.now();
     const durationMs = Number.isFinite(createdMs) ? Math.max(0, now - createdMs) : 0;
+    const finalModel = input.model === undefined ? current.model : input.model;
 
     this.db.getDatabase().prepare(`
       UPDATE execution_traces
       SET outcome = ?,
+          model = ?,
           trace_json = ?,
           cost_usd = ?,
           duration_ms = ?,
@@ -281,6 +284,7 @@ export class ExecutionTraceStore {
       WHERE id = ?
     `).run(
       input.outcome,
+      finalModel,
       JSON.stringify(merged),
       input.costUsd ?? current.cost_usd,
       durationMs,

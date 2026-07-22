@@ -132,6 +132,22 @@ describe('ExecutionTraceStore', () => {
       expect(parsed?.finalized_at).not.toBeNull();
     });
 
+    it('preserves the starting model unless finalization supplies the actual model', () => {
+      const unchangedId = store.start({ input: 'x', model: 'primary-model' });
+      const unchanged = store.finalize(unchangedId, { outcome: 'success', output: 'primary result' });
+      expect(unchanged?.model).toBe('primary-model');
+      expect(store.get(unchangedId)?.model).toBe('primary-model');
+
+      const fallbackId = store.start({ input: 'x', model: 'primary-model' });
+      const fallback = store.finalize(fallbackId, {
+        outcome: 'success',
+        output: 'fallback result',
+        model: 'fallback-model',
+      });
+      expect(fallback?.model).toBe('fallback-model');
+      expect(store.get(fallbackId)?.model).toBe('fallback-model');
+    });
+
     it('preserves appended events when not passed explicitly', () => {
       const id = store.start({ input: 'x' });
       const call: TraceToolCall = {

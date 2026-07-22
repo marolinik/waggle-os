@@ -36,6 +36,7 @@ export interface TraceHandle {
 export interface FinalizeOptions {
   outcome: TraceOutcome;
   output: string;
+  model?: string | null;
   tokens?: { input: number; output: number };
   costUsd?: number;
   harness?: TracePayload['harness'];
@@ -214,6 +215,7 @@ export class TraceRecorder {
     const result = this.store.finalize(handle.id, {
       outcome: options.outcome,
       output: options.output,
+      model: options.model,
       tokens: options.tokens,
       costUsd: options.costUsd,
       harness: options.harness,
