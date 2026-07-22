@@ -401,6 +401,30 @@ jobs:
             }
           }
 
+          function Assert-PassingWindowsCertificateReceipt {
+            param([object]$Receipt, [string]$ExpectedMode, [string]$Label)
+            $schemaVersionIsIntegral = (
+              $Receipt.schemaVersion -is [int] -or
+              $Receipt.schemaVersion -is [long]
+            )
+            if (-not $schemaVersionIsIntegral -or
+                [long]$Receipt.schemaVersion -ne 4 -or
+                -not ($Receipt.certificationMode -is [string]) -or
+                -not [string]::Equals($Receipt.certificationMode, $ExpectedMode, [System.StringComparison]::Ordinal) -or
+                -not ($Receipt.status -is [string]) -or
+                -not [string]::Equals($Receipt.status, 'passed', [System.StringComparison]::Ordinal)) {
+              throw "$Label is not a passing schema-v4 certificate"
+            }
+          }
+
+          function Assert-PassingWindowsCertificateCheck {
+            param([object]$Receipt, [string]$CheckName, [string]$Label)
+            $check = $Receipt.checks.PSObject.Properties[$CheckName]
+            if ($null -eq $check -or -not [bool]::True.Equals($check.Value)) {
+              throw "$Label check did not pass: $CheckName"
+            }
+          }
+
           $installers = @(Get-ChildItem -LiteralPath 'app/src-tauri/target' -Recurse -Filter '*-setup.exe' -File | Where-Object { $_.DirectoryName -match '[\\/]bundle[\\/]nsis$' })
           if ($installers.Count -ne 1) { throw "Expected exactly one certified NSIS installer, found $($installers.Count)" }
           $installer = $installers[0]
@@ -408,16 +432,10 @@ jobs:
           $upgradeReceipt = Get-Item -LiteralPath (Join-Path $installer.DirectoryName 'windows-installer-upgrade-certificate.json')
           $cleanReceiptData = Get-Content -Raw -LiteralPath $receipt.FullName | ConvertFrom-Json
           $receiptData = Get-Content -Raw -LiteralPath $upgradeReceipt.FullName | ConvertFrom-Json
-          if ($cleanReceiptData.schemaVersion -ne 3 -or
-              $cleanReceiptData.certificationMode -ne 'same-version-repair' -or
-              $cleanReceiptData.status -ne 'passed') {
-            throw 'Windows clean-install receipt is not a passing schema-v3 certificate'
-          }
-          if ($receiptData.schemaVersion -ne 3 -or
-              $receiptData.certificationMode -ne 'version-to-version-upgrade' -or
-              $receiptData.status -ne 'passed') {
-            throw 'Windows lifecycle receipt is not a passing schema-v3 version-to-version certificate'
-          }
+          Assert-PassingWindowsCertificateReceipt `
+            $cleanReceiptData 'same-version-repair' 'Windows clean-install receipt'
+          Assert-PassingWindowsCertificateReceipt `
+            $receiptData 'version-to-version-upgrade' 'Windows lifecycle receipt'
           if ($receiptData.evidence.sourceRevision -ne $env:GITHUB_SHA -or
               $cleanReceiptData.evidence.sourceRevision -ne $env:GITHUB_SHA) {
             throw 'Lifecycle receipts do not match the release commit'
@@ -506,11 +524,26 @@ jobs:
               throw 'Lifecycle receipt is missing a validated Authenticode timestamp'
             }
           }
-          if ($cleanReceiptData.managedModelVerified -ne $true) {
+          if (-not [bool]::True.Equals($cleanReceiptData.managedModelVerified)) {
             throw 'Clean-install receipt does not prove a managed local-model chat completion'
           }
           if ([string]$cleanReceiptData.managedModelDigest -notmatch '^sha256:[0-9a-f]{64}$') {
             throw 'Clean-install receipt does not bind the managed model to an immutable manifest digest'
+          }
+          foreach ($certificateData in @($cleanReceiptData, $receiptData)) {
+            if ([string]::IsNullOrWhiteSpace([string]$certificateData.lifecycleData.workspaceId) -or
+                [long]$certificateData.lifecycleData.personalFrameId -lt 1 -or
+                [long]$certificateData.lifecycleData.workspaceFrameId -lt 1 -or
+                [int]$certificateData.lifecycleData.preUninstallManifestEntryCount -lt 1 -or
+                [string]$certificateData.lifecycleData.preUninstallManifestSha256 -notmatch '^[0-9A-F]{64}$' -or
+                [string]$certificateData.lifecycleData.postUninstallManifestSha256 -notmatch '^[0-9A-F]{64}$' -or
+                -not [string]::Equals(
+                  [string]$certificateData.lifecycleData.preUninstallManifestSha256,
+                  [string]$certificateData.lifecycleData.postUninstallManifestSha256,
+                  [System.StringComparison]::Ordinal
+                )) {
+              throw 'Lifecycle receipt does not bind real workspace and memory data to an unchanged uninstall manifest'
+            }
           }
           $cleanRequiredChecks = @(
             'sourceRevision', 'sourceFilesClean', 'generatedInstallerInclude', 'profileDataDeletionAbsent',
@@ -520,7 +553,10 @@ jobs:
             'silentInstall', 'vaultKeyAclRestricted', 'windowsInboxTools', 'noModelChatSetupRequired',
             'dockerIndependentRuntimePrerequisites', 'managedRuntimeBootstrap', 'managedModelPull', 'managedModelChat',
             'managedRuntimeCleanup', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
-            'configuredDataDirPreserved', 'profileDataPathPreserved', 'environmentRestored'
+            'defaultProfileDataDir', 'realWorkspaceAndMemorySeeded',
+            'repairRealWorkspaceAndMemoryPreserved', 'uninstallRealWorkspaceAndMemoryPreserved',
+            'configuredDataDirPreserved', 'profileDataPathPreserved', 'certificateProfileCleanup',
+            'environmentRestored'
           )
           $upgradeRequiredChecks = @(
             'sourceRevision', 'sourceFilesClean', 'generatedInstallerInclude', 'profileDataDeletionAbsent',
@@ -537,19 +573,20 @@ jobs:
             'candidateLaunch', 'relaunchAfterUpgrade',
             'silentInstall', 'vaultKeyAclRestricted', 'windowsInboxTools', 'noModelChatSetupRequired',
             'dockerIndependentRuntimePrerequisites', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
-            'configuredDataDirPreserved', 'profileDataPathPreserved', 'environmentRestored'
+            'defaultProfileDataDir', 'realWorkspaceAndMemorySeeded',
+            'upgradeRealWorkspaceAndMemoryPreserved', 'repairRealWorkspaceAndMemoryPreserved',
+            'uninstallRealWorkspaceAndMemoryPreserved', 'configuredDataDirPreserved',
+            'profileDataPathPreserved', 'certificateProfileCleanup', 'environmentRestored'
           )
           foreach ($checkName in $cleanRequiredChecks) {
-            $check = $cleanReceiptData.checks.PSObject.Properties[$checkName]
-            if ($null -eq $check -or $check.Value -ne $true) { throw "Clean-install receipt check did not pass: $checkName" }
+            Assert-PassingWindowsCertificateCheck $cleanReceiptData $checkName 'Clean-install receipt'
           }
           foreach ($checkName in $upgradeRequiredChecks) {
-            $check = $receiptData.checks.PSObject.Properties[$checkName]
-            if ($null -eq $check -or $check.Value -ne $true) { throw "Upgrade receipt check did not pass: $checkName" }
+            Assert-PassingWindowsCertificateCheck $receiptData $checkName 'Upgrade receipt'
           }
           $nonPassingChecks = @(
-            @($cleanReceiptData.checks.PSObject.Properties | Where-Object { $_.Value -ne $true }) +
-            @($receiptData.checks.PSObject.Properties | Where-Object { $_.Value -ne $true })
+            @($cleanReceiptData.checks.PSObject.Properties | Where-Object { -not [bool]::True.Equals($_.Value) }) +
+            @($receiptData.checks.PSObject.Properties | Where-Object { -not [bool]::True.Equals($_.Value) })
           )
           if ($nonPassingChecks.Count -gt 0) {
             throw "Lifecycle receipts contain non-passing checks: $($nonPassingChecks.Name -join ', ')"

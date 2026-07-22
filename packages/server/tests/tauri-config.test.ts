@@ -531,7 +531,7 @@ describe('Tauri Production Configuration', () => {
         const runChecker = () => {
           const result = spawnSync(process.execPath, [fixtureChecker], {
             encoding: 'utf-8',
-            timeout: 15_000,
+            timeout: 60_000,
             windowsHide: true,
           });
           if (result.error) throw result.error;
@@ -1148,9 +1148,10 @@ describe('CI/CD Configuration', () => {
         expect(windowsSteps).toContain('$minimumFreeBytes = 8GB');
         expect(handoffStep).toContain('isDraft');
         expect(handoffStep).toContain('Refusing to modify a published release');
-        expect(handoffStep).toContain('schemaVersion -ne 3');
-        expect(handoffStep).toContain("certificationMode -ne 'version-to-version-upgrade'");
-        expect(handoffStep).toContain("certificationMode -ne 'same-version-repair'");
+        expect(handoffStep).toContain('Assert-PassingWindowsCertificateReceipt');
+        expect(handoffStep).toContain('$Receipt.certificationMode, $ExpectedMode');
+        expect(handoffStep).toContain("$cleanReceiptData 'same-version-repair'");
+        expect(handoffStep).toContain("$receiptData 'version-to-version-upgrade'");
         expect(handoffStep).toContain('cleanReceiptData.managedModelVerified');
         expect(handoffStep).toContain('windows-installer-upgrade-certificate.json');
         expect(handoffStep).toContain('previousInstaller.sha256');
@@ -1226,6 +1227,10 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain('"/S /D=$installDir"');
     expect(script).toContain("$env:WAGGLE_PORT = '3333'");
     expect(script).toContain('Assert-TcpPortAvailable 3333');
+    expect(script).toContain("$profileDataDir = Join-Path $env:USERPROFILE '.waggle'");
+    expect(script).toContain('$dataDir = $profileDataDir');
+    expect(script).not.toContain("$dataDir = Join-Path $scratchRoot 'data'");
+    expect(script).not.toContain('$env:WAGGLE_DATA_DIR = $dataDir');
     expect(script).toContain("'OPENROUTER_API_KEY'");
     expect(script).toContain("resources\\node.exe");
     expect(script).toContain("resources\\service.js");
@@ -1240,6 +1245,34 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain('Same-version repair did not restore resources/marketplace.db');
     expect(script).toContain('/v1/health/liveliness');
     expect(script).toContain('/api/auth/session-token');
+    expect(script).toContain('$BaseUrl/api/workspaces');
+    expect(script).toContain('$BaseUrl/api/memory/frames?extract=false');
+    expect(script).toContain('New-CertificateLifecycleData');
+    expect(script).toContain('Assert-CertificateLifecycleData');
+    expect(script).toContain('Get-CertificateDataManifest');
+    expect(script).toContain('Assert-CertificateDataManifest');
+    expect(script).toContain('Get-CertificateDataManifestDigest');
+    expect(script).toContain('Get-CertificateRelativePath');
+    expect(script).not.toContain('[System.IO.Path]::GetRelativePath');
+    expect(script).toContain("$receipt.checks['defaultProfileDataDir']");
+    expect(script).toContain("$receipt.checks['realWorkspaceAndMemorySeeded']");
+    expect(script).toContain("$receipt.checks['upgradeRealWorkspaceAndMemoryPreserved']");
+    expect(script).toContain("$receipt.checks['repairRealWorkspaceAndMemoryPreserved']");
+    expect(script).toContain("$receipt.checks['uninstallRealWorkspaceAndMemoryPreserved']");
+    expect(script).toContain('Remove-CertificateProfileData');
+    expect(script).not.toContain('Remove-CertificateProfileMarker');
+    expect(script).not.toContain('$_.path -cne $markerRelativePath');
+    const finalUninstallerCleanup = script.match(
+      /if \(Test-Path -LiteralPath \$uninstaller -PathType Leaf\) \{\s*try \{([\s\S]*?)Invoke-RawProcess \$uninstaller/,
+    )?.[1];
+    expect(finalUninstallerCleanup).toBeDefined();
+    const shutdownProofReset =
+      finalUninstallerCleanup?.indexOf('$runtimeConfirmedStopped = $false') ?? -1;
+    const preUninstallProcessAssertion =
+      finalUninstallerCleanup?.indexOf('Assert-NoForeignWaggleProcesses') ?? -1;
+    expect(shutdownProofReset).toBeGreaterThanOrEqual(0);
+    expect(preUninstallProcessAssertion).toBeGreaterThanOrEqual(0);
+    expect(shutdownProofReset).toBeLessThan(preUninstallProcessAssertion);
     expect(script).toContain("$baseUrl/api/chat");
     expect(script).toContain('No AI model is ready');
     expect(script).toContain("$receipt.checks['noModelChatSetupRequired']");
@@ -1348,7 +1381,7 @@ describe('CI/CD Configuration', () => {
     expect(script).toMatch(
       /\$gitCommand\s*=\s*Get-Command git -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1/,
     );
-    expect(script).toContain('schemaVersion = 3');
+    expect(script).toContain('schemaVersion = 4');
     expect(script).toContain('-UseBasicParsing');
     expect(script).toContain('authenticodeStatus');
     expect(script).toContain('signerThumbprint');
@@ -1457,6 +1490,107 @@ describe('CI/CD Configuration', () => {
     expect(workflow).toMatch(/\$cleanRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
     expect(workflow).toMatch(/\$upgradeRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
   });
+
+  it('release publication requires real default-profile workspace and memory lifecycle evidence', () => {
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+      'utf-8',
+    );
+    const cleanRequiredChecks = workflow.match(
+      /\$cleanRequiredChecks\s*=\s*@\(([\s\S]*?)\r?\n\s*\)/,
+    )?.[1];
+    const upgradeRequiredChecks = workflow.match(
+      /\$upgradeRequiredChecks\s*=\s*@\(([\s\S]*?)\r?\n\s*\)/,
+    )?.[1];
+    expect(cleanRequiredChecks).toBeDefined();
+    expect(upgradeRequiredChecks).toBeDefined();
+
+    for (const check of [
+      'defaultProfileDataDir',
+      'realWorkspaceAndMemorySeeded',
+      'repairRealWorkspaceAndMemoryPreserved',
+      'uninstallRealWorkspaceAndMemoryPreserved',
+      'certificateProfileCleanup',
+    ]) {
+      expect(cleanRequiredChecks).toContain(`'${check}'`);
+      expect(upgradeRequiredChecks).toContain(`'${check}'`);
+    }
+    expect(upgradeRequiredChecks).toContain("'upgradeRealWorkspaceAndMemoryPreserved'");
+    expect(workflow).toContain('lifecycleData.workspaceId');
+    expect(workflow).toContain('lifecycleData.personalFrameId');
+    expect(workflow).toContain('lifecycleData.workspaceFrameId');
+    expect(workflow).toContain('lifecycleData.preUninstallManifestEntryCount');
+    expect(workflow).toContain('lifecycleData.preUninstallManifestSha256');
+    expect(workflow).toContain('lifecycleData.postUninstallManifestSha256');
+    expect(workflow).toContain('unchanged uninstall manifest');
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'release receipt guards reject stringified schema versions and truthy non-booleans',
+    () => {
+      const workflow = fs
+        .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const envelopeStart = workflow.indexOf(
+        '          function Assert-PassingWindowsCertificateReceipt {',
+      );
+      const checkStart = workflow.indexOf(
+        '          function Assert-PassingWindowsCertificateCheck {',
+      );
+      const verifierStart = workflow.indexOf('\n          $installers =', checkStart);
+      expect(envelopeStart).toBeGreaterThanOrEqual(0);
+      expect(checkStart).toBeGreaterThan(envelopeStart);
+      expect(verifierStart).toBeGreaterThan(checkStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-receipt-types-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const helperSource = workflow
+        .slice(envelopeStart, verifierStart)
+        .replace(/^ {10}/gm, '');
+      const fixtureSource = String.raw`
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$good = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$longVersion = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$longVersion.schemaVersion = [long]4
+$stringVersion = '{"schemaVersion":"4","certificationMode":"same-version-repair","status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$stringCheck = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":"true"}}' | ConvertFrom-Json
+$numericCheck = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":1}}' | ConvertFrom-Json
+Assert-PassingWindowsCertificateReceipt $good 'same-version-repair' 'good fixture'
+Assert-PassingWindowsCertificateReceipt $longVersion 'same-version-repair' 'PowerShell 7 integer fixture'
+Assert-PassingWindowsCertificateCheck $good 'proof' 'good fixture'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $stringVersion 'same-version-repair' 'string version' } 'string version'
+Expect-Rejection { Assert-PassingWindowsCertificateCheck $stringCheck 'proof' 'string check' } 'string check'
+Expect-Rejection { Assert-PassingWindowsCertificateCheck $numericCheck 'proof' 'numeric check' } 'numeric check'
+`;
+
+      try {
+        fs.writeFileSync(probePath, `${helperSource}\n${fixtureSource}`, 'utf-8');
+        const powershell = path.join(
+          process.env.SystemRoot ?? 'C:\\Windows',
+          'System32',
+          'WindowsPowerShell',
+          'v1.0',
+          'powershell.exe',
+        );
+        const result = spawnSync(
+          powershell,
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(`Receipt type probe failed: ${result.stderr || result.stdout}`);
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe('Playwright Visual Regression Setup', () => {

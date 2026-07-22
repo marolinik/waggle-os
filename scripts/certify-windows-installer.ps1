@@ -369,6 +369,270 @@ function Invoke-JsonPostRequest {
     -UseBasicParsing
 }
 
+function Get-CertificateSessionHeaders {
+  param([Parameter(Mandatory = $true)] [string]$BaseUrl)
+
+  $tokenResponse = Invoke-JsonRequest "$BaseUrl/api/auth/session-token"
+  Assert-True (-not [string]::IsNullOrWhiteSpace([string]$tokenResponse.token)) `
+    'Session-token bootstrap returned no token.'
+  return @{ Authorization = "Bearer $($tokenResponse.token)" }
+}
+
+function Assert-CertificateLifecycleData {
+  param(
+    [Parameter(Mandatory = $true)] [string]$BaseUrl,
+    [Parameter(Mandatory = $true)] [hashtable]$Headers,
+    [Parameter(Mandatory = $true)] [object]$State,
+    [Parameter(Mandatory = $true)] [string]$DataDir
+  )
+
+  $escapedWorkspaceId = [uri]::EscapeDataString([string]$State.workspaceId)
+  $workspace = Invoke-JsonRequest "$BaseUrl/api/workspaces/$escapedWorkspaceId" $Headers
+  Assert-True ([string]$workspace.id -ceq [string]$State.workspaceId) `
+    'Persisted workspace id changed or disappeared.'
+  Assert-True ([string]$workspace.name -ceq [string]$State.workspaceName) `
+    'Persisted workspace name changed or disappeared.'
+  Assert-True ([string]$workspace.group -ceq [string]$State.workspaceGroup) `
+    'Persisted workspace group changed or disappeared.'
+
+  $personalList = Invoke-JsonRequest "$BaseUrl/api/memory/frames?limit=200" $Headers
+  $personalResults = @($personalList.results)
+  Assert-True ([long]$personalList.count -eq $personalResults.Count) `
+    'Personal memory response count does not match its result set.'
+  $personalMatches = @($personalResults | Where-Object {
+    [long]$_.id -eq [long]$State.personalFrameId -and
+      [string]$_.mind -ceq 'personal' -and
+      [string]$_.source_mind -ceq 'personal' -and
+      [string]$_.content -ceq [string]$State.personalContent
+  })
+  Assert-True ($personalMatches.Count -eq 1) `
+    'Persisted personal memory marker is missing or ambiguous.'
+
+  $workspaceList = Invoke-JsonRequest `
+    "$BaseUrl/api/memory/frames?workspaceId=$escapedWorkspaceId&limit=200" `
+    $Headers
+  $workspaceResults = @($workspaceList.results)
+  Assert-True ([long]$workspaceList.count -eq $workspaceResults.Count) `
+    'Workspace memory response count does not match its result set.'
+  $workspaceMatches = @($workspaceResults | Where-Object {
+    [long]$_.id -eq [long]$State.workspaceFrameId -and
+      [string]$_.mind -ceq 'workspace' -and
+      [string]$_.source_mind -ceq 'workspace' -and
+      [string]$_.content -ceq [string]$State.workspaceContent
+  })
+  Assert-True ($workspaceMatches.Count -eq 1) `
+    'Persisted workspace memory marker is missing or ambiguous.'
+
+  foreach ($frame in @($personalMatches[0], $workspaceMatches[0])) {
+    Assert-True ([string]$frame.source -ceq 'tool_verified') `
+      'Persisted lifecycle memory lost its provenance.'
+    Assert-True ([string]$frame.importance -ceq 'important') `
+      'Persisted lifecycle memory lost its importance.'
+    Assert-True (@('I', 'P', 'B') -contains [string]$frame.frameType) `
+      'Persisted lifecycle memory returned an invalid frame type.'
+    $parsedTimestamp = [DateTimeOffset]::MinValue
+    Assert-True ([DateTimeOffset]::TryParse([string]$frame.timestamp, [ref]$parsedTimestamp)) `
+      'Persisted lifecycle memory returned an invalid timestamp.'
+    $parsedAccessCount = 0L
+    Assert-True ([long]::TryParse([string]$frame.accessCount, [ref]$parsedAccessCount)) `
+      'Persisted lifecycle memory returned an invalid access count.'
+  }
+
+  $workspaceDir = Join-Path $DataDir "workspaces\$($State.workspaceId)"
+  foreach ($path in @(
+    (Join-Path $DataDir 'personal.mind'),
+    (Join-Path $workspaceDir 'workspace.json'),
+    (Join-Path $workspaceDir 'workspace.mind')
+  )) {
+    Assert-True (Test-Path -LiteralPath $path -PathType Leaf) `
+      "Lifecycle data file is missing: $path"
+  }
+  foreach ($path in @(
+    (Join-Path $workspaceDir 'sessions'),
+    (Join-Path $workspaceDir 'files\attachments'),
+    (Join-Path $workspaceDir 'files\exports'),
+    (Join-Path $workspaceDir 'files\notes')
+  )) {
+    Assert-True (Test-Path -LiteralPath $path -PathType Container) `
+      "Lifecycle workspace directory is missing: $path"
+  }
+}
+
+function New-CertificateLifecycleData {
+  param(
+    [Parameter(Mandatory = $true)] [string]$BaseUrl,
+    [Parameter(Mandatory = $true)] [hashtable]$Headers,
+    [Parameter(Mandatory = $true)] [string]$RunId,
+    [Parameter(Mandatory = $true)] [string]$DataDir
+  )
+
+  $workspaceName = "Installer certificate $RunId"
+  $workspaceGroup = 'Installer certificate'
+  $workspaceResponse = Invoke-JsonPostRequest "$BaseUrl/api/workspaces" @{
+    name = $workspaceName
+    group = $workspaceGroup
+  } $Headers
+  $workspace = $workspaceResponse.Content | ConvertFrom-Json
+  Assert-True ([int]$workspaceResponse.StatusCode -eq 201) `
+    'Could not create the lifecycle certificate workspace.'
+  Assert-True ([string]$workspace.id -match '^[a-z0-9]+(?:-[a-z0-9]+)*$') `
+    'Lifecycle certificate workspace returned an invalid id.'
+  Assert-True ([string]$workspace.name -ceq $workspaceName) `
+    'Lifecycle certificate workspace returned an unexpected name.'
+  Assert-True ([string]$workspace.group -ceq $workspaceGroup) `
+    'Lifecycle certificate workspace returned an unexpected group.'
+  $workspaceCreated = [DateTimeOffset]::MinValue
+  Assert-True ([DateTimeOffset]::TryParse([string]$workspace.created, [ref]$workspaceCreated)) `
+    'Lifecycle certificate workspace returned an invalid creation timestamp.'
+
+  $personalContent = "installer-certificate-personal-memory-$RunId"
+  $personalResponse = Invoke-JsonPostRequest "$BaseUrl/api/memory/frames?extract=false" @{
+    content = $personalContent
+    importance = 'important'
+    source = 'tool_verified'
+  } $Headers
+  $personal = $personalResponse.Content | ConvertFrom-Json
+  Assert-True (
+    [int]$personalResponse.StatusCode -eq 200 -and
+      $personal.saved -eq $true -and
+      [string]$personal.mind -ceq 'personal' -and
+      [string]$personal.importance -ceq 'important' -and
+      [string]$personal.source -ceq 'tool_verified'
+  ) 'Could not seed the lifecycle certificate personal memory.'
+  Assert-True ($personal.frameId -is [int] -or $personal.frameId -is [long]) `
+    'Lifecycle certificate personal memory returned no numeric frame id.'
+
+  $workspaceContent = "installer-certificate-workspace-memory-$RunId"
+  $workspaceMemoryResponse = Invoke-JsonPostRequest "$BaseUrl/api/memory/frames?extract=false" @{
+    content = $workspaceContent
+    workspaceId = [string]$workspace.id
+    importance = 'important'
+    source = 'tool_verified'
+  } $Headers
+  $workspaceMemory = $workspaceMemoryResponse.Content | ConvertFrom-Json
+  Assert-True (
+    [int]$workspaceMemoryResponse.StatusCode -eq 200 -and
+      $workspaceMemory.saved -eq $true -and
+      [string]$workspaceMemory.mind -ceq 'workspace' -and
+      [string]$workspaceMemory.importance -ceq 'important' -and
+      [string]$workspaceMemory.source -ceq 'tool_verified'
+  ) 'Could not seed the lifecycle certificate workspace memory.'
+  Assert-True ($workspaceMemory.frameId -is [int] -or $workspaceMemory.frameId -is [long]) `
+    'Lifecycle certificate workspace memory returned no numeric frame id.'
+
+  $state = [ordered]@{
+    workspaceId = [string]$workspace.id
+    workspaceName = $workspaceName
+    workspaceGroup = $workspaceGroup
+    personalContent = $personalContent
+    personalFrameId = [long]$personal.frameId
+    workspaceContent = $workspaceContent
+    workspaceFrameId = [long]$workspaceMemory.frameId
+  }
+  Assert-CertificateLifecycleData $BaseUrl $Headers $state $DataDir
+  return $state
+}
+
+function Get-CertificateRelativePath {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Root,
+    [Parameter(Mandatory = $true)] [string]$Child
+  )
+
+  $resolvedRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
+  $resolvedChild = [System.IO.Path]::GetFullPath($Child)
+  Assert-True (
+    $resolvedChild.StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)
+  ) "Certificate profile entry escapes the owned root: $resolvedChild"
+  return $resolvedChild.Substring($resolvedRoot.Length).Replace('\', '/')
+}
+
+function Get-CertificateDataManifest {
+  param(
+    [Parameter(Mandatory = $true)] [string]$ProfileDataDir,
+    [switch]$SkipHashes
+  )
+
+  $resolvedRoot = [System.IO.Path]::GetFullPath($ProfileDataDir).TrimEnd('\')
+  Assert-True (Test-Path -LiteralPath $resolvedRoot -PathType Container) `
+    "Certificate profile directory is missing: $resolvedRoot"
+  $root = Get-Item -LiteralPath $resolvedRoot -Force
+  Assert-True (($root.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+    "Certificate profile root must not be a reparse point: $resolvedRoot"
+
+  $queue = [System.Collections.Generic.Queue[System.IO.DirectoryInfo]]::new()
+  $queue.Enqueue([System.IO.DirectoryInfo]$root)
+  $paths = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase
+  )
+  $entries = @()
+  while ($queue.Count -gt 0) {
+    $directory = $queue.Dequeue()
+    foreach ($item in @(Get-ChildItem -LiteralPath $directory.FullName -Force)) {
+      Assert-True (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+        "Certificate profile contains a reparse point: $($item.FullName)"
+      $relativePath = Get-CertificateRelativePath $resolvedRoot $item.FullName
+      Assert-True ($paths.Add($relativePath)) `
+        "Certificate profile contains an ambiguous path: $relativePath"
+      if ($item.PSIsContainer) {
+        $entries += [ordered]@{
+          path = $relativePath
+          type = 'directory'
+          sizeBytes = 0L
+          sha256 = $null
+        }
+        $queue.Enqueue([System.IO.DirectoryInfo]$item)
+      } else {
+        $entries += [ordered]@{
+          path = $relativePath
+          type = 'file'
+          sizeBytes = [long]$item.Length
+          sha256 = if ($SkipHashes) {
+            $null
+          } else {
+            (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+          }
+        }
+      }
+    }
+  }
+  return @($entries | Sort-Object { [string]$_.path })
+}
+
+function Assert-CertificateDataManifest {
+  param(
+    [Parameter(Mandatory = $true)] [object[]]$Expected,
+    [Parameter(Mandatory = $true)] [object[]]$Actual
+  )
+
+  Assert-True ($Actual.Count -eq $Expected.Count) `
+    'Silent uninstall changed the default-profile manifest entry count.'
+  for ($index = 0; $index -lt $Expected.Count; $index++) {
+    foreach ($property in @('path', 'type', 'sizeBytes', 'sha256')) {
+      Assert-True (
+        [string]::Equals(
+          [string]$Actual[$index][$property],
+          [string]$Expected[$index][$property],
+          [System.StringComparison]::Ordinal
+        )
+      ) "Silent uninstall changed default-profile manifest entry '$($Expected[$index].path)' ($property)."
+    }
+  }
+}
+
+function Get-CertificateDataManifestDigest {
+  param([Parameter(Mandatory = $true)] [object[]]$Manifest)
+
+  $payload = $Manifest | ConvertTo-Json -Compress -Depth 4
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $digest = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))
+    return ([System.BitConverter]::ToString($digest)).Replace('-', '')
+  } finally {
+    $sha256.Dispose()
+  }
+}
+
 function Get-HttpStatusCode {
   param([Parameter(Mandatory = $true)] [string]$Uri)
 
@@ -641,13 +905,19 @@ function Clear-AbandonedCertificateProductRegistry {
   Remove-CertificateProductRegistry $ProductRegistry $resolvedInstallDir
 }
 
-function Remove-CertificateProfileMarker {
+function Remove-CertificateProfileData {
   param(
     [Parameter(Mandatory = $true)] [string]$ProfileDataDir,
     [Parameter(Mandatory = $true)] [string]$ProfileDataMarker,
-    [Parameter(Mandatory = $true)] [string]$RunId
+    [Parameter(Mandatory = $true)] [string]$RunId,
+    [Parameter(Mandatory = $true)] [bool]$ProfileAbsenceProven,
+    [Parameter(Mandatory = $true)] [bool]$RuntimeConfirmedStopped
   )
 
+  Assert-True $ProfileAbsenceProven `
+    'Refusing to clean a profile whose pre-certificate absence was not proven.'
+  Assert-True $RuntimeConfirmedStopped `
+    'Refusing to clean the certificate profile before runtime shutdown is proven.'
   $expectedDataDir = [System.IO.Path]::GetFullPath((Join-Path $env:USERPROFILE '.waggle')).TrimEnd('\')
   $resolvedDataDir = [System.IO.Path]::GetFullPath($ProfileDataDir).TrimEnd('\')
   Assert-True (
@@ -662,17 +932,51 @@ function Remove-CertificateProfileMarker {
   ) "Refusing to clean a profile marker outside the certificate directory: $ProfileDataMarker"
   Assert-True ((Split-Path -Leaf $ProfileDataMarker) -eq "installer-certificate-profile-marker-$RunId.txt") `
     "Refusing to clean an unexpected profile marker: $ProfileDataMarker"
+  Assert-True (Test-Path -LiteralPath $ProfileDataMarker -PathType Leaf) `
+    "Certificate ownership marker is missing: $ProfileDataMarker"
+  Assert-True ((Get-Content -Raw -LiteralPath $ProfileDataMarker).Trim() -eq $RunId) `
+    "Refusing to remove a profile marker not owned by this certificate: $ProfileDataMarker"
 
-  if (Test-Path -LiteralPath $ProfileDataMarker -PathType Leaf) {
-    Assert-True ((Get-Content -Raw -LiteralPath $ProfileDataMarker).Trim() -eq $RunId) `
-      "Refusing to remove a profile marker not owned by this certificate: $ProfileDataMarker"
-    Remove-Item -LiteralPath $ProfileDataMarker -Force
+  $entries = @(Get-CertificateDataManifest $resolvedDataDir -SkipHashes)
+  $markerRelativePath = Get-CertificateRelativePath $resolvedDataDir $ProfileDataMarker
+  foreach ($entry in @($entries | Where-Object {
+    $_.type -eq 'file' -and -not [string]::Equals(
+      [string]$_.path,
+      $markerRelativePath,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  })) {
+    $entryPath = Join-Path $resolvedDataDir ([string]$entry.path).Replace('/', '\')
+    $item = Get-Item -LiteralPath $entryPath -Force
+    Assert-True (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+      "Refusing to remove a replaced profile entry: $entryPath"
+    Remove-Item -LiteralPath $entryPath -Force
   }
-  if (Test-Path -LiteralPath $ProfileDataDir -PathType Container) {
-    Assert-True (@(Get-ChildItem -LiteralPath $ProfileDataDir -Force).Count -eq 0) `
-      "Certificate profile directory contains unexpected data: $ProfileDataDir"
-    Remove-Item -LiteralPath $ProfileDataDir -Force
+  $directories = @($entries | Where-Object { $_.type -eq 'directory' } | Sort-Object {
+    ([string]$_.path).Length
+  } -Descending)
+  foreach ($entry in $directories) {
+    $entryPath = Join-Path $resolvedDataDir ([string]$entry.path).Replace('/', '\')
+    $item = Get-Item -LiteralPath $entryPath -Force
+    Assert-True (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+      "Refusing to remove a replaced profile directory: $entryPath"
+    Assert-True (@(Get-ChildItem -LiteralPath $entryPath -Force).Count -eq 0) `
+      "Certificate profile directory changed during cleanup: $entryPath"
+    Remove-Item -LiteralPath $entryPath -Force
   }
+  $remaining = @(Get-ChildItem -LiteralPath $resolvedDataDir -Force)
+  Assert-True (
+    $remaining.Count -eq 1 -and
+      [string]::Equals(
+        $remaining[0].FullName,
+        [System.IO.Path]::GetFullPath($ProfileDataMarker),
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+  ) 'Certificate profile changed before ownership-marker cleanup.'
+  Remove-Item -LiteralPath $ProfileDataMarker -Force
+  Remove-Item -LiteralPath $resolvedDataDir -Force
+  Assert-True (-not (Test-Path -LiteralPath $resolvedDataDir)) `
+    'Certificate profile cleanup did not remove the owned profile root.'
 }
 
 $installer = Get-Item -LiteralPath $InstallerPath
@@ -761,7 +1065,8 @@ $runId = [Guid]::NewGuid().ToString('N')
 $scratchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "waggle-installer-cert-$runId"
 Assert-SafeScratchRoot $scratchRoot
 $installDir = Join-Path $scratchRoot 'install'
-$dataDir = Join-Path $scratchRoot 'data'
+$profileDataDir = Join-Path $env:USERPROFILE '.waggle'
+$dataDir = $profileDataDir
 $appExecutable = Join-Path $installDir 'waggle.exe'
 $serviceScript = Join-Path $installDir 'resources\service.js'
 $canonicalMarketplaceDb = [System.IO.Path]::GetFullPath(
@@ -777,7 +1082,6 @@ $bundledNpmWrapper = Join-Path $bundledNpmRuntime 'bin\npm.cmd'
 $bundledNpxWrapper = Join-Path $bundledNpmRuntime 'bin\npx.cmd'
 $uninstaller = Join-Path $installDir 'uninstall.exe'
 $dataMarker = Join-Path $dataDir 'installer-certificate-marker.txt'
-$profileDataDir = Join-Path $env:USERPROFILE '.waggle'
 $profileDataMarker = Join-Path $profileDataDir "installer-certificate-profile-marker-$runId.txt"
 $uninstallRegistry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Waggle'
 $productRegistry = 'HKCU:\Software\egzakta\Waggle'
@@ -786,9 +1090,13 @@ $runRegistryValue = 'Waggle'
 $shortcutCandidates = Get-WaggleShortcutPaths
 $startedAt = [DateTime]::UtcNow
 $installerStarted = $false
-$profileMarkerOwned = $false
+$profileAbsenceProven = $false
+$profileRootOwned = $false
+$runtimeConfirmedStopped = $false
+$certificateLifecycleData = $null
+$preUninstallDataManifest = @()
 $environmentNamesToClear = @(
-  'WAGGLE_NODE_PATH', 'NODE_PATH', 'NODE_OPTIONS', 'DOCKER_HOST',
+  'WAGGLE_NODE_PATH', 'WAGGLE_DATA_DIR', 'NODE_PATH', 'NODE_OPTIONS', 'DOCKER_HOST',
   'WAGGLE_TRUST_LOCALHOST', 'WAGGLE_SQLITE_VEC_PATH', 'ONNXRUNTIME_NODE_BINDING_PATH',
   'EMBEDDING_PROVIDER', 'EMBEDDING_MODEL', 'OLLAMA_EMBED_MODEL',
   'WAGGLE_EMBEDDING_PROVIDER', 'HIVE_MIND_EMBEDDING_PROVIDER',
@@ -817,7 +1125,7 @@ foreach ($name in $isolatedEnvironmentNames) {
 }
 
 $receipt = [ordered]@{
-  schemaVersion = 3
+  schemaVersion = 4
   certificationMode = if ($RequireVersionToVersionUpgrade) {
     'version-to-version-upgrade'
   } else {
@@ -863,6 +1171,7 @@ $receipt = [ordered]@{
   embeddingPayload = $null
   managedModelVerified = $false
   managedModelDigest = $null
+  lifecycleData = $null
   bundledNpm = $null
   upgrade = if ($RequireVersionToVersionUpgrade) {
     [ordered]@{
@@ -892,7 +1201,7 @@ if ($RequireVersionToVersionUpgrade) {
   $receipt.checks['versionOrder'] = $true
 }
 
-New-Item -ItemType Directory -Path $scratchRoot, $dataDir -Force | Out-Null
+New-Item -ItemType Directory -Path $scratchRoot -Force | Out-Null
 $ollamaPort = 0
 $managedRuntimeRoot = Join-Path $dataDir 'runtimes\ollama'
 
@@ -1039,15 +1348,18 @@ try {
   }
   Assert-True (-not (Test-Path -LiteralPath $profileDataDir)) `
     "Profile data already exists at $profileDataDir; run this certificate under a disposable Windows user."
+  $profileAbsenceProven = $true
   New-Item -ItemType Directory -Path $profileDataDir | Out-Null
+  $profileRoot = Get-Item -LiteralPath $profileDataDir -Force
+  Assert-True (($profileRoot.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+    'Certificate profile root must not be a reparse point.'
   Set-Content -LiteralPath $profileDataMarker -Value $runId -Encoding UTF8
-  $profileMarkerOwned = $true
+  $profileRootOwned = $true
 
   # The desktop webview and Rust shell currently share the fixed loopback port
   # 3333 contract. Refuse to run rather than collide with another installation.
   Assert-TcpPortAvailable 3333
   $env:WAGGLE_PORT = '3333'
-  $env:WAGGLE_DATA_DIR = $dataDir
   $env:WAGGLE_HOST = '127.0.0.1'
   $ollamaPort = Get-FreeTcpPort
   $env:OLLAMA_HOST = "http://127.0.0.1:$ollamaPort"
@@ -1086,6 +1398,19 @@ try {
   foreach ($name in $environmentNamesToClear) {
     [Environment]::SetEnvironmentVariable($name, $null, 'Process')
   }
+  Assert-True (
+    [string]::IsNullOrEmpty(
+      [Environment]::GetEnvironmentVariable('WAGGLE_DATA_DIR', 'Process')
+    )
+  ) 'WAGGLE_DATA_DIR must be absent so the packaged default-profile fallback is exercised.'
+  Assert-True (
+    [string]::Equals(
+      [System.IO.Path]::GetFullPath($dataDir).TrimEnd('\'),
+      [System.IO.Path]::GetFullPath((Join-Path $env:USERPROFILE '.waggle')).TrimEnd('\'),
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  ) 'Certificate data directory is not the real Windows default profile.'
+  $receipt.checks['defaultProfileDataDir'] = $true
 
   $unexpectedApplications = @(
     @('node.exe', 'npm.cmd', 'npx.cmd', 'docker.exe', 'ollama.exe', 'python.exe') |
@@ -1166,6 +1491,11 @@ try {
       Set-Content -LiteralPath $dataMarker -Value $runId -Encoding UTF8
       Assert-True (Test-Path -LiteralPath $profileDataMarker -PathType Leaf) `
         'Previous launch removed the profile preservation marker.'
+      $previousHeaders = Get-CertificateSessionHeaders $previousBaseUrl
+      $certificateLifecycleData = New-CertificateLifecycleData `
+        $previousBaseUrl $previousHeaders $runId $dataDir
+      $receipt.lifecycleData = $certificateLifecycleData
+      $receipt.checks['realWorkspaceAndMemorySeeded'] = $true
       $upgradeVaultKeySha256 = (
         Get-FileHash -LiteralPath $previousVaultKeyPath -Algorithm SHA256
       ).Hash
@@ -1471,11 +1801,19 @@ try {
     Assert-True ((Get-HttpStatusCode "$baseUrl/api/tier") -eq 401) `
       'A protected API route did not reject an unauthenticated loopback request'
     $receipt.checks['unauthenticatedProtectedRoute'] = $true
-    $tokenResponse = Invoke-JsonRequest "$baseUrl/api/auth/session-token"
-    Assert-True (-not [string]::IsNullOrWhiteSpace([string]$tokenResponse.token)) `
-      'Session-token bootstrap returned no token'
-    $headers = @{ Authorization = "Bearer $($tokenResponse.token)" }
+    $headers = Get-CertificateSessionHeaders $baseUrl
     $null = Invoke-JsonRequest "$baseUrl/api/tier" $headers
+    if ($RequireVersionToVersionUpgrade) {
+      Assert-True ($null -ne $certificateLifecycleData) `
+        'Upgrade lifecycle data was not created by the previous release.'
+      Assert-CertificateLifecycleData $baseUrl $headers $certificateLifecycleData $dataDir
+      $receipt.checks['upgradeRealWorkspaceAndMemoryPreserved'] = $true
+    } else {
+      $certificateLifecycleData = New-CertificateLifecycleData `
+        $baseUrl $headers $runId $dataDir
+      $receipt.lifecycleData = $certificateLifecycleData
+      $receipt.checks['realWorkspaceAndMemorySeeded'] = $true
+    }
     $marketplace = Invoke-JsonRequest `
       "$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100" `
       $headers
@@ -1715,23 +2053,35 @@ try {
   }
   Assert-ShortcutTargets $installedShortcuts $appExecutable
   $receipt.checks['sameVersionRepair'] = $true
-  $receipt.checks['repairPreservedData'] = $true
   $receipt.checks['repairRegistrations'] = $true
 
+  $runtimeConfirmedStopped = $false
   $secondProcess = Start-InstalledApp $appExecutable
   try {
     $null = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $secondProcess.Refresh()
     Assert-True (-not $secondProcess.HasExited) 'The installed desktop process exited after repair'
+    $repairHeaders = Get-CertificateSessionHeaders $baseUrl
+    Assert-CertificateLifecycleData $baseUrl $repairHeaders $certificateLifecycleData $dataDir
+    $receipt.checks['repairPreservedData'] = $true
+    $receipt.checks['repairRealWorkspaceAndMemoryPreserved'] = $true
     $receipt.checks['relaunchAfterRepair'] = $true
   } finally {
     Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
     Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
       -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+    $runtimeConfirmedStopped = $true
     $secondProcess.Dispose()
   }
 
   Assert-NoForeignWaggleProcesses $appExecutable
+  $preUninstallDataManifest = @(Get-CertificateDataManifest $profileDataDir)
+  Assert-True ($preUninstallDataManifest.Count -gt 0) `
+    'Default-profile manifest is empty before uninstall.'
+  $receipt.lifecycleData['preUninstallManifestEntryCount'] = $preUninstallDataManifest.Count
+  $receipt.lifecycleData['preUninstallManifestSha256'] = Get-CertificateDataManifestDigest `
+    $preUninstallDataManifest
+  $runtimeConfirmedStopped = $false
   Invoke-RawProcess $registeredUninstaller '/S' 300
   Wait-ForPathState $installDir $false 90
   # NSIS copies the uninstaller to a temporary process. The launcher can exit
@@ -1748,6 +2098,16 @@ try {
   Wait-ForPathState $productRegistry $false 30
   Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
     -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+  $runtimeConfirmedStopped = $true
+  $postUninstallDataManifest = @(Get-CertificateDataManifest $profileDataDir)
+  Assert-CertificateDataManifest $preUninstallDataManifest $postUninstallDataManifest
+  $postUninstallManifestSha256 = Get-CertificateDataManifestDigest $postUninstallDataManifest
+  Assert-True (
+    [string]$postUninstallManifestSha256 -ceq
+      [string]$receipt.lifecycleData.preUninstallManifestSha256
+  ) 'Silent uninstall changed the default-profile manifest digest.'
+  $receipt.lifecycleData['postUninstallManifestSha256'] = $postUninstallManifestSha256
+  $receipt.checks['uninstallRealWorkspaceAndMemoryPreserved'] = $true
   if ($VerifyManagedModel) {
     $receipt.checks['managedRuntimeCleanup'] = $true
   }
@@ -1775,8 +2135,12 @@ try {
   $receipt.checks['certificateRegistryCleanup'] = $true
   $receipt.checks['configuredDataDirPreserved'] = $true
   $receipt.checks['profileDataPathPreserved'] = $true
-  Remove-CertificateProfileMarker $profileDataDir $profileDataMarker $runId
-  $profileMarkerOwned = $false
+  Assert-NoForeignWaggleProcesses $appExecutable
+  Assert-TcpPortAvailable 3333
+  Remove-CertificateProfileData `
+    $profileDataDir $profileDataMarker $runId $profileAbsenceProven $runtimeConfirmedStopped
+  $profileRootOwned = $false
+  $receipt.checks['certificateProfileCleanup'] = $true
   $receipt.status = 'passed'
 } catch {
   $receipt.status = 'failed'
@@ -1788,22 +2152,28 @@ try {
   throw
 } finally {
   try {
+    $runtimeConfirmedStopped = $false
     Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
-    if ($receipt.status -eq 'passed') {
-      Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-        -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
-    }
+    Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+    Assert-NoForeignWaggleProcesses $appExecutable
+    Assert-TcpPortAvailable 3333
+    $runtimeConfirmedStopped = $true
   } catch {
     $receipt.status = 'failed'
     $receipt['runtimeCleanupError'] = $_.Exception.Message
   }
   if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
     try {
+      $runtimeConfirmedStopped = $false
       Assert-NoForeignWaggleProcesses $appExecutable
       Invoke-RawProcess $uninstaller '/S' 300
       Wait-ForPathState $installDir $false 90
       Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
         -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+      Assert-NoForeignWaggleProcesses $appExecutable
+      Assert-TcpPortAvailable 3333
+      $runtimeConfirmedStopped = $true
     } catch {
       $receipt.status = 'failed'
       $receipt['uninstallerCleanupError'] = $_.Exception.Message
@@ -1817,10 +2187,11 @@ try {
       $receipt['cleanupError'] = $_.Exception.Message
     }
   }
-  if ($profileMarkerOwned) {
+  if ($profileRootOwned) {
     try {
-      Remove-CertificateProfileMarker $profileDataDir $profileDataMarker $runId
-      $profileMarkerOwned = $false
+      Remove-CertificateProfileData `
+        $profileDataDir $profileDataMarker $runId $profileAbsenceProven $runtimeConfirmedStopped
+      $profileRootOwned = $false
     } catch {
       $receipt.status = 'failed'
       $receipt['profileCleanupError'] = $_.Exception.Message
