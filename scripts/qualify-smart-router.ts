@@ -40,6 +40,9 @@ export interface WindowsProcessCandidate extends OwnedProcess {
 
 export const PRIMARY_PROMPT = 'Why does this TypeScript Promise resolve twice? Reply in one concise sentence and do not use tools.';
 export const BUDGET_PROMPT = 'What is 19 * 23?';
+const QUALIFICATION_DAILY_BUDGET_USD = 1;
+const QUALIFICATION_DAILY_SPEND_USD = 0.8;
+const QUALIFICATION_BUDGET_THRESHOLD = 0.8;
 
 interface QualifierOptions {
   runtimeDataDir: string;
@@ -281,9 +284,9 @@ export function buildRouterSettings(aliases: ModelAliases): Record<string, unkno
     defaultModel: `ollama/${aliases.primary}`,
     budgetModel: `ollama/${aliases.budget}`,
     fallbackModel: `ollama/${aliases.fallback}`,
-    dailyBudget: null,
+    dailyBudget: QUALIFICATION_DAILY_BUDGET_USD,
     budgetHardCap: false,
-    budgetThreshold: 0.8,
+    budgetThreshold: QUALIFICATION_BUDGET_THRESHOLD,
     providers: {},
   };
 }
@@ -796,14 +799,30 @@ async function qualify(options: QualifierOptions): Promise<void> {
     const settings = buildRouterSettings(aliases);
     await putJson(`${serviceBaseUrl}/api/settings`, settings, headers);
     const persisted = await requestJson(`${serviceBaseUrl}/api/settings`, { headers });
-    for (const field of ['defaultModel', 'budgetModel', 'fallbackModel', 'budgetThreshold'] as const) {
+    for (const field of ['defaultModel', 'budgetModel', 'fallbackModel', 'dailyBudget', 'budgetHardCap', 'budgetThreshold'] as const) {
       if (persisted[field] !== settings[field]) throw new Error(`Persisted router setting ${field} did not match the qualification payload`);
     }
     receipt.persistedSettings = {
       defaultModel: persisted.defaultModel,
       budgetModel: persisted.budgetModel,
       fallbackModel: persisted.fallbackModel,
+      dailyBudget: persisted.dailyBudget,
+      budgetHardCap: persisted.budgetHardCap,
       budgetThreshold: persisted.budgetThreshold,
+    };
+    const qualificationDay = new Date().toISOString().slice(0, 10);
+    service.server.agentState.costTracker.initializeDailyCarryover(
+      qualificationDay,
+      QUALIFICATION_DAILY_SPEND_USD,
+    );
+    const seededDailySpend = service.server.agentState.costTracker.getDailyTotal();
+    if (seededDailySpend !== QUALIFICATION_DAILY_SPEND_USD) {
+      throw new Error(`Qualification daily spend seed must be $${QUALIFICATION_DAILY_SPEND_USD.toFixed(2)}, received $${seededDailySpend.toFixed(2)}`);
+    }
+    receipt.qualificationDailySpend = {
+      day: qualificationDay,
+      amountUsd: seededDailySpend,
+      source: 'cost-tracker daily carryover seed',
     };
 
     const routerCases: ChatReceipt[] = [];
@@ -816,6 +835,11 @@ async function qualify(options: QualifierOptions): Promise<void> {
       expectedDispatchModel: aliases.primary,
       dispatches,
     }));
+    const expectedBudgetSwitch = {
+      model: `ollama/${aliases.budget}`,
+      primary: `ollama/${aliases.primary}`,
+      reason: 'Budget 80% reached ($0.80/$1.00)',
+    };
     routerCases.push(await runChatCase({
       name: 'budget',
       baseUrl: serviceBaseUrl,
@@ -824,6 +848,7 @@ async function qualify(options: QualifierOptions): Promise<void> {
       expectedModel: `ollama/${aliases.budget}`,
       expectedDispatchModel: aliases.budget,
       dispatches,
+      expectedSwitch: expectedBudgetSwitch,
     }));
     receipt.modelIdentityAfterPrimaryAndBudget = assertCopiedModelIdentity({
       baseModel: options.baseModel,

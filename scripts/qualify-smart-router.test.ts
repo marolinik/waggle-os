@@ -307,7 +307,7 @@ describe('qualify-smart-router helpers', () => {
       defaultModel: 'ollama/router-primary:latest',
       budgetModel: 'ollama/router-budget:latest',
       fallbackModel: 'ollama/router-fallback:latest',
-      dailyBudget: null,
+      dailyBudget: 1,
       budgetHardCap: false,
       budgetThreshold: 0.8,
       providers: {},
