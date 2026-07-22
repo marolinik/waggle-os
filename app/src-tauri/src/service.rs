@@ -269,6 +269,25 @@ fn build_service_command(port: u16) -> Result<Command, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Stdio;
+    use std::thread;
+
+    fn long_lived_command() -> Command {
+        let mut command = if cfg!(windows) {
+            let mut command = Command::new("cmd");
+            command.args(["/C", "ping -n 30 127.0.0.1 >NUL"]);
+            command
+        } else {
+            let mut command = Command::new("sh");
+            command.args(["-c", "sleep 30"]);
+            command
+        };
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command
+    }
 
     #[test]
     fn service_script_prefers_bundled_resource_when_present() {
@@ -405,26 +424,100 @@ mod tests {
             Err("Unable to resolve writable npm data directory".to_string())
         );
     }
+
+    #[test]
+    fn exited_service_child_does_not_block_restart() {
+        let mut command = if cfg!(windows) {
+            let mut command = Command::new("cmd");
+            command.args(["/C", "exit", "0"]);
+            command
+        } else {
+            let mut command = Command::new("sh");
+            command.args(["-c", "exit 0"]);
+            command
+        };
+        let child = command.spawn().expect("starts short-lived child");
+        let mut process = Some(child);
+
+        for _ in 0..100 {
+            if !service_child_is_running(&mut process).expect("inspects service child") {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(process.is_none());
+    }
+
+    #[test]
+    fn running_service_child_remains_registered() {
+        let child = long_lived_command()
+            .spawn()
+            .expect("starts long-lived child");
+        let mut process = Some(child);
+
+        assert!(service_child_is_running(&mut process).expect("inspects service child"));
+        let mut child = process.take().expect("preserves running service child");
+        child.kill().expect("kills long-lived child");
+        child.wait().expect("reaps long-lived child");
+    }
+
+    #[test]
+    fn service_spawn_holds_process_lock_until_child_registered() {
+        let process = Mutex::new(None);
+        spawn_service_with(&process, || {
+            assert!(matches!(
+                process.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ));
+            Ok(long_lived_command())
+        })
+        .expect("spawns service while holding process lock");
+
+        let mut child = process
+            .lock()
+            .expect("locks service child")
+            .take()
+            .expect("one service child remains registered");
+        child.kill().expect("kills service child");
+        child.wait().expect("reaps service child");
+    }
+}
+
+fn service_child_is_running(process: &mut Option<Child>) -> Result<bool, String> {
+    let Some(child) = process.as_mut() else {
+        return Ok(false);
+    };
+    match child.try_wait() {
+        Ok(None) => Ok(true),
+        Ok(Some(_)) => {
+            *process = None;
+            Ok(false)
+        }
+        Err(error) => Err(format!("Failed to inspect service process: {error}")),
+    }
+}
+
+fn spawn_service_with(
+    process: &Mutex<Option<Child>>,
+    build_command: impl FnOnce() -> Result<Command, String>,
+) -> Result<(), String> {
+    let mut proc = process.lock().map_err(|e| e.to_string())?;
+    if service_child_is_running(&mut proc)? {
+        return Ok(());
+    }
+
+    let mut cmd = build_command()?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start service: {e}"))?;
+    *proc = Some(child);
+    Ok(())
 }
 
 /// Synchronously spawn the sidecar process if not already running. Does not wait
 /// for the health check. Safe to call from Tauri's synchronous `.setup()` callback.
 pub fn spawn_service_sync(port: u16, process: &Mutex<Option<Child>>) -> Result<(), String> {
-    {
-        let proc = process.lock().map_err(|e| e.to_string())?;
-        if proc.is_some() {
-            return Ok(());
-        }
-    }
-
-    let mut cmd = build_service_command(port)?;
-    let child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to start service: {}", e))?;
-
-    let mut proc = process.lock().map_err(|e| e.to_string())?;
-    *proc = Some(child);
-    Ok(())
+    spawn_service_with(process, || build_service_command(port))
 }
 
 #[tauri::command]
