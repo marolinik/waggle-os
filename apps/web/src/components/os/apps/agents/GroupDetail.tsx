@@ -78,7 +78,7 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
               };
             });
           }
-          if (res.status === 'running') {
+          if (res.status === 'running' && !Array.isArray(workerSnapshots)) {
             const now = Date.now();
             updated.members = updated.members.map((m, i) => {
               if (m.status === 'done' || m.status === 'failed') return m;

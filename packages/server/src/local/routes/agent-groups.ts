@@ -322,7 +322,7 @@ async function executeGroup(
       }, { once: true });
     }
 
-    const runLoop = guardAgentRunner(server.agentRunner ?? runAgentLoop);
+    const baseRunLoop = guardAgentRunner(server.agentRunner ?? runAgentLoop);
     let availableTools = server.agentState.allTools;
     let sessionOrchestrator: ReturnType<FastifyInstance['agentState']['createSessionOrchestrator']> | undefined;
     let workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0] | undefined;
@@ -348,6 +348,69 @@ async function executeGroup(
           .map((tool) => tool.name),
       };
     });
+    const workspaceTurnCoordinator = runContext
+      ? server.agentState.workspaceTurnCoordinator
+      : undefined;
+    const updateJobWorkerSnapshot = (activeOrchestrator: SubagentOrchestrator) => {
+      let workers = snapshotWorkers(activeOrchestrator);
+      if (workspaceTurnCoordinator && runContext) {
+        workers = workers.map((worker) => {
+          const workerName = typeof worker.name === 'string' ? worker.name : undefined;
+          const run = workerName ? runContext.runs.get(workerName) : undefined;
+          const status = run ? server.agentRunRegistry.get(run.id)?.status : undefined;
+          if (status === 'queued') return { ...worker, status: 'pending' };
+          if (status === 'running') return { ...worker, status: 'running' };
+          return worker;
+        });
+      }
+      server.localJobStore.update(jobId, { output: { workers } });
+    };
+    const runLoop = workspaceTurnCoordinator && runContext
+      ? async (config: Parameters<AgentRunner>[0]) => {
+          const workerName = /^# Sub-Agent: ([^\r\n]+)$/m.exec(config.systemPrompt)?.[1]?.trim();
+          const run = workerName ? runContext.runs.get(workerName) : undefined;
+          const markWaiting = () => {
+            if (!run) return;
+            const current = server.agentRunRegistry.get(run.id);
+            if (!current || ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) return;
+            server.agentRunRegistry.update(run.id, {
+              status: 'queued',
+              executor: { model: config.model },
+              progress: { message: 'Waiting for workspace', phase: 'workspace_queue' },
+            });
+            updateJobWorkerSnapshot(orchestrator);
+          };
+          const markRunning = () => {
+            if (!run) return;
+            const current = server.agentRunRegistry.get(run.id);
+            if (!current || ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) return;
+            server.agentRunRegistry.update(run.id, {
+              status: 'running',
+              executor: { model: config.model },
+              progress: { message: 'Working', phase: 'running' },
+            });
+            publishGroupDance(
+              server,
+              run,
+              'response',
+              'task_claim',
+              { phase: 'running', result: null, error: null },
+              runContext.assignmentIds.get(workerName!),
+            );
+            updateJobWorkerSnapshot(orchestrator);
+          };
+          const workerScope = workspaceTurnCoordinator.createScope(runContext.cwd, signal);
+          const tools = workerScope.wrapTools(config.tools);
+          const workspaceAccess = workerScope.classify(tools);
+          try {
+            if (workspaceAccess !== 'none') await workerScope.acquire(workspaceAccess, markWaiting);
+            markRunning();
+            return await baseRunLoop({ ...config, tools });
+          } finally {
+            await workerScope.release();
+          }
+        }
+      : baseRunLoop;
     const workflow: WorkflowTemplate = buildWorkflowFromGroup({ ...group, members }, task);
     const orchestrator = new SubagentOrchestrator({
       availableTools,
@@ -359,12 +422,13 @@ async function executeGroup(
       signal,
     });
     orchestrator.on('worker:status', (event: { workerState: import('@waggle/agent').WorkerState }) => {
-      server.localJobStore.update(jobId, { output: { workers: snapshotWorkers(orchestrator) } });
+      updateJobWorkerSnapshot(orchestrator);
       if (!runContext) return;
       const run = runContext.runs.get(event.workerState.name);
       if (!run) return;
       const current = server.agentRunRegistry.get(run.id);
       if (!current || ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) return;
+      if (workspaceTurnCoordinator && event.workerState.status === 'running') return;
       const status = event.workerState.status === 'done'
         ? 'completed'
         : event.workerState.status === 'failed'
@@ -380,6 +444,7 @@ async function executeGroup(
         metrics: { toolsUsed: event.workerState.toolsUsed },
         progress: status === 'running' ? { message: 'Working', phase: 'running' } : null,
       });
+      updateJobWorkerSnapshot(orchestrator);
       const messageType: WaggleMessage['type'] = status === 'running' ? 'response' : 'broadcast';
       const subtype: WaggleMessage['subtype'] = status === 'running' ? 'task_claim' : status === 'queued' ? 'discovery' : 'routed_share';
       publishGroupDance(

@@ -11,6 +11,7 @@ import {
   DEFAULT_TURN_TOOL_LIMIT,
   measureOpenAiToolSchemaChars,
 } from '../../src/local/persona-tool-filter.js';
+import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
 
 const tempDirs: string[] = [];
 
@@ -244,10 +245,11 @@ describe('isolated Fleet execution', () => {
         return orchestrator;
       },
       buildToolsForSession: (_orchestrator: unknown, cwd: string, workspaceId?: string) => {
-        const tools = [{ name: `tool-${toolBuilds.length}`, description: '', parameters: {}, execute: async () => '' }];
+        const tools = [{ name: 'edit_file', description: '', parameters: {}, execute: async () => '' }];
         toolBuilds.push({ cwd, workspaceId, tools });
         return tools;
       },
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
     } as never);
     server.decorate('agentRunner', (config: { signal?: AbortSignal; tools: unknown[] }) => {
       const finish = deferred<AgentResponse>();
@@ -265,11 +267,11 @@ describe('isolated Fleet execution', () => {
 
     const firstResponse = await server.inject({
       method: 'POST', url: '/api/fleet/spawn',
-      payload: { task: 'First task', persona: 'researcher', parentWorkspaceId: 'workspace-1' },
+      payload: { task: 'Edit the first file', persona: 'coder', parentWorkspaceId: 'workspace-1' },
     });
     const secondResponse = await server.inject({
       method: 'POST', url: '/api/fleet/spawn',
-      payload: { task: 'Second task', persona: 'writer', parentWorkspaceId: 'workspace-1' },
+      payload: { task: 'Edit the second file', persona: 'writer', parentWorkspaceId: 'workspace-1' },
     });
     expect(firstResponse.statusCode).toBe(202);
     expect(secondResponse.statusCode).toBe(202);
@@ -279,21 +281,25 @@ describe('isolated Fleet execution', () => {
     expect(first.roomId).not.toBe(second.roomId);
     expect(first.resumable).toBe(false);
     expect(first.statusUrl).toBe(`/api/agent-runs/${first.runId}`);
-    await waitFor(() => calls.length === 2, 'both agents did not enter the runner');
+    await waitFor(() => calls.length >= 1, 'first mutating agent did not enter the runner');
+    expect(calls.map((call) => call.tools.map((item) => (item as ToolDefinition).name)))
+      .toEqual([['edit_file']]);
 
     expect(orchestrators).toHaveLength(2);
     expect(orchestrators[0]).not.toBe(orchestrators[1]);
     expect(toolBuilds).toHaveLength(2);
     expect(toolBuilds.every((build) => build.cwd === fs.realpathSync(workspaceDir))).toBe(true);
     expect(toolBuilds.every((build) => build.workspaceId === 'workspace-1')).toBe(true);
-    expect(calls[0].tools).not.toBe(calls[1].tools);
-    expect(calls[0].signal).not.toBe(calls[1].signal);
+    expect(registry.get(second.runId)?.status).toBe('queued');
 
     await registry.control(first.runId, 'cancel');
+    await waitFor(() => calls.length === 2, 'second mutating agent did not start after the first released the workspace');
     expect(registry.get(first.runId)?.status).toBe('cancelled');
     expect(registry.get(second.runId)?.status).toBe('running');
+    expect(calls[0].tools).not.toBe(calls[1].tools);
+    expect(calls[0].signal).not.toBe(calls[1].signal);
     calls[1].finish.resolve({
-      content: 'Second completed', toolsUsed: ['tool-1'], usage: { inputTokens: 3, outputTokens: 4 },
+      content: 'Second completed', toolsUsed: ['edit_file'], usage: { inputTokens: 3, outputTokens: 4 },
     });
     await waitFor(() => registry.get(second.runId)?.status === 'completed', 'second run did not complete');
     expect(registry.get(second.runId)).toMatchObject({

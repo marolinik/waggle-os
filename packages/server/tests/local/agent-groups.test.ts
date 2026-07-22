@@ -10,6 +10,7 @@ import { localJobRoutes } from '../../src/local/routes/jobs.js';
 import { agentGroupRoutes } from '../../src/local/routes/agent-groups.js';
 import { LocalJobStore } from '../../src/local/job-store.js';
 import { SignalBus } from '../../src/local/signal-bus.js';
+import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -255,6 +256,7 @@ describe('local agent group execution', () => {
         toolBuilds.push({ cwd, workspaceId });
         return [sessionOnlyTool];
       },
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
     } as never);
     server.decorate('agentRunner', (config: AgentLoopConfig) => {
       const finish = deferred<AgentResponse>();
@@ -351,6 +353,130 @@ describe('local agent group execution', () => {
     expect(roomWorkspaceFrame?.content).toContain('Research result');
     expect(roomWorkspaceFrame?.content).toContain('Draft result');
     expect(signalBus.query({ teamId: `room::${startBody.roomId}` }).filter((signal) => signal.subtype === 'routed_share')).toHaveLength(2);
+  });
+
+  it('serializes complete mutating member transactions over one checkout', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-transaction-'));
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const signalBus = new SignalBus();
+    const firstStarted = deferred<void>();
+    const firstMayFinish = deferred<void>();
+    const starts: string[] = [];
+    let shared = 'v0';
+    const workspaceTurnCoordinator = new WorkspaceTurnCoordinator();
+    const externalScope = workspaceTurnCoordinator.createScope(workspaceDir);
+    await externalScope.acquire('write');
+    const checkoutTools: ToolDefinition[] = [
+      { name: 'read_file', description: 'Read a file', parameters: {}, execute: async () => shared },
+      { name: 'edit_file', description: 'Edit a file', parameters: {}, execute: async () => 'edited' },
+    ];
+
+    server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('localJobStore', new LocalJobStore());
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('signalBus', signalBus);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: () => ({
+        id: 'workspace-1', name: 'Project', group: 'test', created: new Date().toISOString(),
+        directory: workspaceDir, model: 'test-model',
+      }),
+    } as never);
+    server.decorate('mindCache', { acquire: () => ({}), release: () => {} } as never);
+    server.decorate('multiMind', { personal: {} } as never);
+    server.decorate('agentState', {
+      allTools: checkoutTools,
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      hookRegistry: undefined,
+      spawnSecurityContext: null,
+      workspaceTurnCoordinator,
+      createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
+      buildToolsForSession: () => checkoutTools,
+    } as never);
+    server.decorate('agentRunner', async (config: AgentLoopConfig) => {
+      starts.push(starts.length === 0 ? 'first' : 'second');
+      const seen = shared;
+      if (starts.length === 1) {
+        firstStarted.resolve(undefined);
+        await firstMayFinish.promise;
+        shared = seen === 'v0' ? 'v1' : 'corrupt-first';
+      } else {
+        shared = seen === 'v1' ? 'v2' : 'corrupt-second';
+      }
+      return {
+        content: `${starts.at(-1)} complete`,
+        toolsUsed: config.tools.map((tool) => tool.name),
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    });
+    server.addHook('onClose', async () => { registry.close(); });
+    server.register(agentGroupRoutes);
+    server.register(localJobRoutes);
+
+    const created = await server.inject({
+      method: 'POST', url: '/api/agent-groups',
+      payload: {
+        name: 'Mutating pair', strategy: 'parallel',
+        members: [
+          { agentId: 'writer', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'coder', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const started = await server.inject({
+      method: 'POST', url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+      payload: { task: 'Read shared state and edit it safely', workspaceId: 'workspace-1' },
+    });
+    const { jobId, roomId, runIds } = started.json() as {
+      jobId: string;
+      roomId: string;
+      runIds: string[];
+    };
+
+    try {
+      await waitFor(
+        () => runIds.every((id) => registry.get(id)?.progress?.phase === 'workspace_queue'),
+        'group executor did not reach the held workspace lease',
+      );
+      expect(starts).toEqual([]);
+      expect(runIds.map((id) => registry.get(id)?.status)).toEqual(['queued', 'queued']);
+      expect(runIds.map((id) => registry.get(id)?.progress?.phase))
+        .toEqual(['workspace_queue', 'workspace_queue']);
+      const blockedWorkers = (server.localJobStore.get(jobId)?.output as {
+        workers?: Array<{ status?: string }>;
+      } | undefined)?.workers;
+      expect(blockedWorkers?.map((worker) => worker.status)).toEqual(['pending', 'pending']);
+      expect(signalBus.query({ teamId: `room::${roomId}`, subtype: 'task_claim' }))
+        .toHaveLength(0);
+      await externalScope.release();
+      await firstStarted.promise;
+      expect(starts).toEqual(['first']);
+      expect(shared).toBe('v0');
+      expect(runIds.map((id) => registry.get(id)?.status)).toEqual(['running', 'queued']);
+      const activeWorkers = (server.localJobStore.get(jobId)?.output as {
+        workers?: Array<{ status?: string }>;
+      } | undefined)?.workers;
+      expect(activeWorkers?.map((worker) => worker.status)).toEqual(['running', 'pending']);
+      expect(signalBus.query({ teamId: `room::${roomId}`, subtype: 'task_claim' }))
+        .toHaveLength(1);
+      firstMayFinish.resolve(undefined);
+      const job = await waitForJob(server, jobId);
+      expect(job.status).toBe('completed');
+      expect(starts).toEqual(['first', 'second']);
+      expect(shared).toBe('v2');
+      expect(signalBus.query({ teamId: `room::${roomId}`, subtype: 'task_claim' }))
+        .toHaveLength(2);
+    } finally {
+      await externalScope.release();
+      firstMayFinish.resolve(undefined);
+    }
   });
 
   it('quarantines encoded and confusable late worker output before every durable group sink', async () => {

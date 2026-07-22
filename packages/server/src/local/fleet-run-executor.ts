@@ -23,6 +23,7 @@ import { persistMessage } from './routes/chat-persistence.js';
 import { emitWaggleSignal } from './routes/waggle-signals.js';
 import type { AgentRunner } from './routes/chat.js';
 import { listOllamaChatModelIds, resolveUsableModel } from './model-availability.js';
+import type { WorkspaceTurnScope } from './workspace-turn-coordinator.js';
 
 const ACTIVE = new Set(['queued', 'starting', 'running', 'waiting_for_approval', 'paused', 'cancelling']);
 
@@ -205,6 +206,7 @@ async function executeFleetRun(
   const controller = new AbortController();
   const unregister = server.agentRunRegistry.registerControls(run.id, { cancel: () => controller.abort() });
   let acquired = false;
+  let workspaceTurnScope: WorkspaceTurnScope | undefined;
   let traceId: number | undefined;
   try {
     const mind = server.mindCache.acquire(run.workspaceId);
@@ -218,6 +220,13 @@ async function executeFleetRun(
       message: task,
       preferredToolNames: persona?.tools ?? [],
     }).tools;
+    const workspaceTurnCoordinator = server.agentState.workspaceTurnCoordinator;
+    if (workspaceTurnCoordinator) {
+      workspaceTurnScope = workspaceTurnCoordinator.createScope(cwd, controller.signal);
+      tools = workspaceTurnScope.wrapTools(tools);
+      const workspaceAccess = workspaceTurnScope.classify(tools);
+      if (workspaceAccess !== 'none') await workspaceTurnScope.acquire(workspaceAccess);
+    }
     const taskShape = detectTaskShape(task);
     const runBudget = selectAgentRunBudget({
       taskShape: taskShape.type,
@@ -344,6 +353,7 @@ async function executeFleetRun(
     }, assignmentId);
   } finally {
     unregister();
+    if (workspaceTurnScope) await workspaceTurnScope.release();
     if (acquired) server.mindCache.release(run.workspaceId);
   }
 }
