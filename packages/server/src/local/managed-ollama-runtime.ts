@@ -15,6 +15,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -28,6 +29,9 @@ const RELEASE_ROOT = `https://github.com/ollama/ollama/releases/download/v${OLLA
 const DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
 const START_TIMEOUT_MS = 45_000;
 const STOP_TIMEOUT_MS = 5_000;
+const WATCHDOG_EXIT_TERMINATION_CONFIRMED = 0;
+const WATCHDOG_EXIT_CLEANUP_UNCONFIRMED = 1;
+const WATCHDOG_EXIT_OWNED_DAEMON_EXITED = 2;
 const INSTALL_LOCK_WAIT_MS = DOWNLOAD_TIMEOUT_MS + 15 * 60_000;
 const INSTALL_LOCK_BUSY_TIMEOUT_MS = 0;
 const INSTALL_LOCK_RETRY_MIN_MS = 200;
@@ -59,29 +63,42 @@ const finish = (code) => {
 const stopTree = () => {
   if (stopping) return;
   stopping = true;
-  if (!child.pid) return finish(1);
-  forceTimer = setTimeout(() => finish(1), 4000);
+  if (!child.pid) return finish(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED});
+  forceTimer = setTimeout(() => finish(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}), 4000);
   if (process.platform === 'win32') {
     const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
       windowsHide: true,
       shell: false,
       stdio: 'ignore',
     });
-    killer.once('error', () => finish(1));
-    killer.once('exit', (code) => finish(code === 0 ? 0 : 1));
+    killer.once('error', () => finish(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
+    killer.once('exit', (code) => finish(code === 0
+      ? ${WATCHDOG_EXIT_TERMINATION_CONFIRMED}
+      : ${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
   } else {
     try { process.kill(-child.pid, 'SIGTERM'); } catch { try { child.kill(); } catch {} }
     setTimeout(() => {
       try { process.kill(-child.pid, 'SIGKILL'); } catch {}
-      finish(0);
+      setTimeout(() => {
+        try {
+          process.kill(-child.pid, 0);
+          finish(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED});
+        } catch (error) {
+          finish(error && error.code === 'ESRCH'
+            ? ${WATCHDOG_EXIT_TERMINATION_CONFIRMED}
+            : ${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED});
+        }
+      }, 100).unref();
     }, 1500).unref();
   }
 };
 child.once('spawn', () => {
   if (process.send) process.send({ type: 'spawned', pid: child.pid });
 });
-child.once('error', () => finish(1));
-child.once('exit', () => { if (!stopping) finish(1); });
+child.once('error', () => finish(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
+child.once('exit', () => {
+  if (!stopping) finish(${WATCHDOG_EXIT_OWNED_DAEMON_EXITED});
+});
 process.once('disconnect', stopTree);
 process.on('message', (message) => { if (message === 'shutdown') stopTree(); });
 process.once('SIGTERM', stopTree);
@@ -257,6 +274,7 @@ interface RuntimeDependencies {
   ) => Promise<void>;
   spawnImpl?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   probe?: (baseUrl: string) => Promise<boolean>;
+  endpointQuiescent?: (baseUrl: string) => Promise<boolean>;
   renameImpl?: typeof rename;
   stateRenameImpl?: typeof rename;
   rmImpl?: typeof rm;
@@ -397,6 +415,7 @@ export class ManagedOllamaRuntime {
   private readonly extractArchive: NonNullable<RuntimeDependencies['extractArchive']>;
   private readonly spawnImpl: NonNullable<RuntimeDependencies['spawnImpl']>;
   private readonly probe: NonNullable<RuntimeDependencies['probe']>;
+  private readonly endpointQuiescent: NonNullable<RuntimeDependencies['endpointQuiescent']>;
   private readonly renameImpl: NonNullable<RuntimeDependencies['renameImpl']>;
   private readonly stateRenameImpl: NonNullable<RuntimeDependencies['stateRenameImpl']>;
   private readonly rmImpl: NonNullable<RuntimeDependencies['rmImpl']>;
@@ -407,6 +426,10 @@ export class ManagedOllamaRuntime {
   private child: ChildProcess | null = null;
   private runningArtifact: OllamaRuntimeArtifact | null = null;
   private terminationFailure: ManagedRuntimeTerminationError | null = null;
+  private pendingCrashRecovery: OllamaRuntimeArtifact | null = null;
+  private crashRecoveryConsumed = false;
+  private stopInProgress = false;
+  private readonly stopRequestedChildren = new WeakSet<ChildProcess>();
 
   constructor(
     dataDir: string,
@@ -430,6 +453,7 @@ export class ManagedOllamaRuntime {
     this.extractArchive = dependencies.extractArchive ?? defaultExtract;
     this.spawnImpl = dependencies.spawnImpl ?? ((file, args, options) => spawn(file, args, options));
     this.probe = dependencies.probe ?? defaultProbe;
+    this.endpointQuiescent = dependencies.endpointQuiescent ?? defaultEndpointQuiescent;
     this.renameImpl = dependencies.renameImpl ?? rename;
     this.stateRenameImpl = dependencies.stateRenameImpl ?? rename;
     this.rmImpl = dependencies.rmImpl ?? rm;
@@ -1047,7 +1071,7 @@ export class ManagedOllamaRuntime {
     cause: unknown,
   ): Promise<never> {
     if (cause instanceof ManagedRuntimeTerminationError) throw cause;
-    await this.stop();
+    await this.stopInternal();
     if (!fallback) throw cause;
 
     try {
@@ -1076,10 +1100,68 @@ export class ManagedOllamaRuntime {
     throw new ManagedRuntimeRollbackError(rollback, cause);
   }
 
+  private async recoverCrashedRuntime(): Promise<ManagedOllamaReadyResult | null> {
+    const artifact = this.pendingCrashRecovery;
+    if (!artifact) return null;
+    if (this.crashRecoveryConsumed) {
+      throw this.markTerminationUnconfirmed('managed Ollama crash-recovery budget is exhausted');
+    }
+    const executable = this.getInstalledExecutable(artifact);
+    if (!executable) {
+      throw this.markTerminationUnconfirmed('verified managed Ollama runtime disappeared before crash recovery');
+    }
+    if (!await this.endpointQuiescent(this.baseUrl)) {
+      throw this.markTerminationUnconfirmed(
+        'owned Ollama daemon exited but its loopback endpoint remains occupied',
+      );
+    }
+    this.assertTerminationConfirmed();
+
+    this.crashRecoveryConsumed = true;
+    this.pendingCrashRecovery = null;
+    try {
+      const started = await this.start(executable, artifact, true);
+      if (!started || !this.runningArtifact || !this.sameArtifact(this.runningArtifact, artifact)) {
+        throw new Error(`verified runtime ${artifact.version} was not restarted by Waggle`);
+      }
+    } catch (error) {
+      throw this.markTerminationUnconfirmed(
+        `managed Ollama crash recovery failed: ${this.rollbackReason(error)}`,
+      );
+    }
+    return {
+      installedNow: false,
+      startedNow: true,
+      endpoint: this.baseUrl,
+      status: this.getStatus(),
+    };
+  }
+
+  private queueCrashRecovery(artifact: OllamaRuntimeArtifact): void {
+    this.pendingCrashRecovery = artifact;
+    const recovery = this.withActivationLock(async () => {
+      this.assertTerminationConfirmed();
+      await this.recoverCrashedRuntime();
+    });
+    void recovery.catch((error: unknown) => {
+      if (!this.terminationFailure) {
+        this.markTerminationUnconfirmed(
+          `managed Ollama crash recovery failed: ${this.rollbackReason(error)}`,
+        );
+      }
+    });
+  }
+
   async startInstalled(): Promise<ManagedOllamaReadyResult> {
     return this.withActivationLock(async () => {
       this.assertTerminationConfirmed();
-      if (await this.probe(this.baseUrl)) {
+      let recovered = await this.recoverCrashedRuntime();
+      if (recovered) return recovered;
+      const endpointReady = await this.probe(this.baseUrl);
+      this.assertTerminationConfirmed();
+      recovered = await this.recoverCrashedRuntime();
+      if (recovered) return recovered;
+      if (endpointReady) {
         return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };
       }
       const loaded = this.loadRuntimeState();
@@ -1117,7 +1199,13 @@ export class ManagedOllamaRuntime {
   async ensureReady(): Promise<ManagedOllamaReadyResult> {
     return this.withActivationLock(async () => {
       this.assertTerminationConfirmed();
-      if (await this.probe(this.baseUrl)) {
+      let recovered = await this.recoverCrashedRuntime();
+      if (recovered) return recovered;
+      const endpointReady = await this.probe(this.baseUrl);
+      this.assertTerminationConfirmed();
+      recovered = await this.recoverCrashedRuntime();
+      if (recovered) return recovered;
+      if (endpointReady) {
         return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };
       }
       const target = this.assertTrustedTarget();
@@ -1146,16 +1234,42 @@ export class ManagedOllamaRuntime {
     });
   }
 
-  private async start(executable: string, artifact: OllamaRuntimeArtifact): Promise<boolean> {
+  private async start(
+    executable: string,
+    artifact: OllamaRuntimeArtifact,
+    requireQuiescentEndpoint = false,
+  ): Promise<boolean> {
     if (this.startPromise) return this.startPromise;
     this.assertTerminationConfirmed();
-    if (await this.probe(this.baseUrl)) return false;
+    const endpointReady = await this.probe(this.baseUrl);
+    this.assertTerminationConfirmed();
+    const recovered = await this.recoverCrashedRuntime();
+    if (recovered) return false;
+    if (endpointReady) {
+      if (requireQuiescentEndpoint) {
+        throw new ManagedRuntimeTerminationError('managed Ollama loopback endpoint remains occupied');
+      }
+      return false;
+    }
+    if (requireQuiescentEndpoint && !await this.endpointQuiescent(this.baseUrl)) {
+      throw new ManagedRuntimeTerminationError('managed Ollama loopback endpoint remains occupied');
+    }
     if (this.child) {
-      if (this.child.exitCode === null) await this.stop();
-      else if (this.child.exitCode !== 0) {
+      if (this.child.exitCode === null) await this.stopInternal();
+      else if (this.child.exitCode === WATCHDOG_EXIT_OWNED_DAEMON_EXITED) {
+        if (!await this.endpointQuiescent(this.baseUrl)) {
+          throw this.markTerminationUnconfirmed('owned Ollama daemon exited but its loopback endpoint remains occupied');
+        }
+        this.child = null;
+        this.runningArtifact = null;
+      } else if (this.child.exitCode !== WATCHDOG_EXIT_TERMINATION_CONFIRMED) {
         throw this.markTerminationUnconfirmed(`watchdog exited with code ${this.child.exitCode}`);
+      } else {
+        this.child = null;
+        this.runningArtifact = null;
       }
     }
+    this.assertTerminationConfirmed();
     this.startPromise = this.startInternal(executable, artifact).finally(() => { this.startPromise = null; });
     return this.startPromise;
   }
@@ -1184,9 +1298,23 @@ export class ManagedOllamaRuntime {
     });
     child.once('exit', (code) => {
       if (this.child === child) {
-        if (code === 0) {
+        const readyArtifact = this.runningArtifact && this.sameArtifact(this.runningArtifact, artifact)
+          ? this.runningArtifact
+          : null;
+        const stopWasRequested = this.stopRequestedChildren.has(child);
+        if (code === WATCHDOG_EXIT_TERMINATION_CONFIRMED) {
           this.child = null;
           this.terminationFailure = null;
+          this.pendingCrashRecovery = null;
+        } else if (code === WATCHDOG_EXIT_OWNED_DAEMON_EXITED) {
+          this.child = null;
+          if (readyArtifact && !stopWasRequested && !this.stopInProgress && !this.terminationFailure) {
+            if (this.crashRecoveryConsumed) {
+              this.markTerminationUnconfirmed('managed Ollama replacement exited after its one recovery attempt');
+            } else {
+              this.queueCrashRecovery(readyArtifact);
+            }
+          }
         } else {
           this.markTerminationUnconfirmed(
             code === null ? 'watchdog exited without a success code' : `watchdog exited with code ${code}`,
@@ -1201,7 +1329,10 @@ export class ManagedOllamaRuntime {
       while (Date.now() < deadline) {
         if (startupError) throw startupError;
         if (child.exitCode !== null) break;
-        if (await this.probe(this.baseUrl)) {
+        const ready = await this.probe(this.baseUrl);
+        if (startupError) throw startupError;
+        if (child.exitCode !== null || this.child !== child) break;
+        if (ready) {
           this.runningArtifact = artifact;
           return true;
         }
@@ -1231,6 +1362,7 @@ export class ManagedOllamaRuntime {
   }
 
   private markTerminationUnconfirmed(reason: string): ManagedRuntimeTerminationError {
+    this.pendingCrashRecovery = null;
     this.terminationFailure ??= new ManagedRuntimeTerminationError(reason);
     return this.terminationFailure;
   }
@@ -1240,9 +1372,9 @@ export class ManagedOllamaRuntime {
   }
 
   private async stopChild(child: ChildProcess): Promise<void> {
+    this.stopRequestedChildren.add(child);
     if (child.exitCode !== null) {
-      if (child.exitCode === 0) return;
-      throw this.markTerminationUnconfirmed(`watchdog exited with code ${child.exitCode}`);
+      return this.confirmWatchdogExit(child.exitCode);
     }
     const exitPromise = new Promise<number | null | undefined>((resolve) => {
       const onExit = (code: number | null) => {
@@ -1257,32 +1389,63 @@ export class ManagedOllamaRuntime {
     });
     this.requestStop(child);
     const exitCode = await exitPromise;
-    if (exitCode === 0) {
+    if (exitCode === undefined) {
+      throw this.markTerminationUnconfirmed('watchdog did not confirm process-tree termination');
+    }
+    return this.confirmWatchdogExit(exitCode);
+  }
+
+  private async confirmWatchdogExit(exitCode: number | null): Promise<void> {
+    if (exitCode === WATCHDOG_EXIT_TERMINATION_CONFIRMED) {
       this.terminationFailure = null;
       return;
     }
-    if (exitCode === undefined) {
-      throw this.markTerminationUnconfirmed('watchdog did not confirm process-tree termination');
+    if (exitCode === WATCHDOG_EXIT_OWNED_DAEMON_EXITED) {
+      if (await this.endpointQuiescent(this.baseUrl)) return;
+      throw this.markTerminationUnconfirmed('owned Ollama daemon exited but its loopback endpoint remains occupied');
     }
     throw this.markTerminationUnconfirmed(
       exitCode === null ? 'watchdog exited without a success code' : `watchdog exited with code ${exitCode}`,
     );
   }
 
-  async stop(): Promise<void> {
-    const child = this.child;
-    if (!child) return;
-    if (child.exitCode !== null) {
-      if (child.exitCode !== 0) {
-        throw this.markTerminationUnconfirmed(`watchdog exited with code ${child.exitCode}`);
+  private async stopInternal(): Promise<void> {
+    this.stopInProgress = true;
+    this.pendingCrashRecovery = null;
+    try {
+      const child = this.child;
+      if (!child) return;
+      this.stopRequestedChildren.add(child);
+      if (child.exitCode !== null) {
+        await this.confirmWatchdogExit(child.exitCode);
+        if (this.child === child) this.child = null;
+        this.runningArtifact = null;
+        return;
       }
+      await this.stopChild(child);
       if (this.child === child) this.child = null;
-      this.terminationFailure = null;
       this.runningArtifact = null;
-      return;
+    } finally {
+      this.pendingCrashRecovery = null;
+      this.stopInProgress = false;
     }
-    await this.stopChild(child);
-    if (this.child === child) this.child = null;
-    this.runningArtifact = null;
   }
+
+  async stop(): Promise<void> {
+    return this.withActivationLock(() => this.stopInternal());
+  }
+}
+
+async function defaultEndpointQuiescent(baseUrl: string): Promise<boolean> {
+  const endpoint = new URL(baseUrl);
+  const host = endpoint.hostname.replace(/^\[|\]$/g, '');
+  const port = Number.parseInt(endpoint.port || '80', 10);
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.unref();
+    server.once('error', () => resolve(false));
+    server.listen({ host, port, exclusive: true }, () => {
+      server.close((error) => resolve(error === undefined));
+    });
+  });
 }

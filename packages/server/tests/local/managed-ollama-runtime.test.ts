@@ -91,6 +91,60 @@ function runtimeProcessHarness(failingVersions: ReadonlySet<string> = new Set())
   };
 }
 
+function crashRecoveryProcessHarness() {
+  let endpointHealthy = false;
+  let liveChildren = 0;
+  let maximumLiveChildren = 0;
+  let nextStopExitCode = 0;
+  const children: Array<EventEmitter & {
+    exitCode: number | null;
+    connected: boolean;
+    pid: number;
+    send: ReturnType<typeof vi.fn>;
+    kill: ReturnType<typeof vi.fn>;
+  }> = [];
+  const spawnImpl = vi.fn(() => {
+    liveChildren += 1;
+    maximumLiveChildren = Math.max(maximumLiveChildren, liveChildren);
+    endpointHealthy = true;
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      connected: true,
+      pid: 51_000 + children.length,
+      send: vi.fn(() => {
+        if (child.exitCode !== null) return false;
+        const exitCode = nextStopExitCode;
+        nextStopExitCode = 0;
+        child.exitCode = exitCode;
+        endpointHealthy = false;
+        liveChildren -= 1;
+        queueMicrotask(() => child.emit('exit', exitCode, null));
+        return true;
+      }),
+      kill: vi.fn(() => true),
+    });
+    children.push(child);
+    return child as never;
+  });
+  return {
+    spawnImpl,
+    probe: async () => endpointHealthy,
+    endpointQuiescent: async () => !endpointHealthy,
+    crashOwnedDaemon(endpointRemainsOccupied = false) {
+      const child = children.at(-1);
+      if (!child || child.exitCode !== null) throw new Error('No live owned daemon to crash');
+      child.exitCode = 2;
+      endpointHealthy = endpointRemainsOccupied;
+      liveChildren -= 1;
+      child.emit('exit', 2, null);
+    },
+    exitUnexpectedlyOnNextStop() { nextStopExitCode = 2; },
+    releaseOccupiedEndpoint() { endpointHealthy = false; },
+    get liveChildren() { return liveChildren; },
+    get maximumLiveChildren() { return maximumLiveChildren; },
+  };
+}
+
 async function seedActiveRuntime(
   dataDir: string,
   artifact: OllamaRuntimeArtifact,
@@ -591,6 +645,343 @@ describe('ManagedOllamaRuntime', () => {
       },
     });
     await restartedRuntime.stop();
+  });
+
+  it('restarts exactly once after the watchdog confirms its owned daemon exited', async () => {
+    const dataDir = await temporaryDataDir();
+    const bytes = Buffer.from('trusted crash recovery runtime');
+    const processes = crashRecoveryProcessHarness();
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+      endpointQuiescent: processes.endpointQuiescent,
+    });
+    await runtime.ensureReady();
+
+    processes.crashOwnedDaemon();
+    await vi.waitFor(() => expect(processes.spawnImpl).toHaveBeenCalledTimes(2));
+    const stable = await Promise.all([
+      runtime.startInstalled(),
+      runtime.startInstalled(),
+    ]);
+
+    expect(stable.map((result) => result.installedNow)).toEqual([false, false]);
+    expect(stable.map((result) => result.startedNow)).toEqual([false, false]);
+    expect(processes.spawnImpl).toHaveBeenCalledTimes(2);
+    expect(processes.maximumLiveChildren).toBe(1);
+    expect(processes.liveChildren).toBe(1);
+    expect(runtime.getStatus()).toMatchObject({ running: true, activeVersion: 'test-1.0.0' });
+
+    processes.crashOwnedDaemon();
+    await new Promise((resolve) => queueMicrotask(resolve));
+    await expect(runtime.startInstalled()).rejects.toThrow(/one recovery attempt/i);
+    expect(processes.spawnImpl).toHaveBeenCalledTimes(2);
+    expect(processes.liveChildren).toBe(0);
+  });
+
+  it('does not spawn a third daemon when the recovered daemon crashes during a readiness probe', async () => {
+    const dataDir = await temporaryDataDir();
+    const bytes = Buffer.from('trusted second crash probe runtime');
+    const processes = crashRecoveryProcessHarness();
+    let induceSecondCrash = false;
+    let raceProbeCalls = 0;
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: async () => {
+        if (induceSecondCrash) {
+          raceProbeCalls += 1;
+          if (raceProbeCalls === 1) return false;
+          if (raceProbeCalls === 2) {
+            processes.crashOwnedDaemon();
+            return false;
+          }
+        }
+        return processes.probe();
+      },
+      endpointQuiescent: processes.endpointQuiescent,
+    });
+    await runtime.ensureReady();
+    processes.crashOwnedDaemon();
+    await vi.waitFor(() => expect(processes.spawnImpl).toHaveBeenCalledTimes(2));
+
+    induceSecondCrash = true;
+    await expect(runtime.startInstalled()).rejects.toThrow(/one recovery attempt/i);
+
+    expect(processes.spawnImpl).toHaveBeenCalledTimes(2);
+    expect(processes.maximumLiveChildren).toBe(1);
+    expect(processes.liveChildren).toBe(0);
+  });
+
+  it('serializes queued recovery before a concurrent readiness check and stop', async () => {
+    const dataDir = await temporaryDataDir();
+    const bytes = Buffer.from('trusted recovery stop queue runtime');
+    const processes = crashRecoveryProcessHarness();
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+      endpointQuiescent: processes.endpointQuiescent,
+    });
+    await runtime.ensureReady();
+
+    processes.crashOwnedDaemon();
+    const readiness = runtime.startInstalled();
+    const stopping = runtime.stop();
+    const [readyResult] = await Promise.all([readiness, stopping]);
+
+    expect(readyResult.startedNow).toBe(false);
+    expect(processes.spawnImpl).toHaveBeenCalledTimes(2);
+    expect(processes.maximumLiveChildren).toBe(1);
+    expect(processes.liveChildren).toBe(0);
+    expect(runtime.getStatus().running).toBe(false);
+  });
+
+  it('tombstones an occupied endpoint after its owned daemon exited', async () => {
+    const dataDir = await temporaryDataDir();
+    const bytes = Buffer.from('trusted occupied endpoint recovery runtime');
+    const processes = crashRecoveryProcessHarness();
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+      endpointQuiescent: processes.endpointQuiescent,
+    });
+    await runtime.ensureReady();
+
+    processes.crashOwnedDaemon(true);
+    await expect(runtime.startInstalled()).rejects.toThrow(/endpoint remains occupied/i);
+    expect(processes.spawnImpl).toHaveBeenCalledTimes(1);
+
+    processes.releaseOccupiedEndpoint();
+    await expect(runtime.startInstalled()).rejects.toThrow(/endpoint remains occupied/i);
+    expect(processes.spawnImpl).toHaveBeenCalledTimes(1);
+    expect(processes.maximumLiveChildren).toBe(1);
+  });
+
+  it('rolls back a startup code 2 stale health response without consuming crash recovery', async () => {
+    const dataDir = await temporaryDataDir();
+    const firstBytes = Buffer.from('trusted startup race runtime N');
+    const nextBytes = Buffer.from('startup race runtime N plus 1');
+    const firstArtifact = versionedFixtureArtifact('test-1.0.0', firstBytes);
+    const nextArtifact = versionedFixtureArtifact('test-1.1.0', nextBytes);
+    const artifactCatalog = [firstArtifact, nextArtifact];
+    await seedActiveRuntime(dataDir, firstArtifact, firstBytes, artifactCatalog);
+
+    let runningVersion: string | null = null;
+    let liveChildren = 0;
+    let maximumLiveChildren = 0;
+    let staleTargetProbeReturned = false;
+    const startedVersions: string[] = [];
+    const children: Array<EventEmitter & {
+      exitCode: number | null;
+      connected: boolean;
+      pid: number;
+      send: ReturnType<typeof vi.fn>;
+      kill: ReturnType<typeof vi.fn>;
+    }> = [];
+    const spawnImpl = vi.fn((_file: string, args: readonly string[]) => {
+      const executable = args[2] ?? '';
+      const version = executable.split(/[\\/]/).at(-2) ?? 'unknown';
+      startedVersions.push(version);
+      runningVersion = version;
+      liveChildren += 1;
+      maximumLiveChildren = Math.max(maximumLiveChildren, liveChildren);
+      const child = Object.assign(new EventEmitter(), {
+        exitCode: null as number | null,
+        connected: true,
+        pid: 52_000 + children.length,
+        send: vi.fn(() => {
+          if (child.exitCode !== null) return false;
+          child.exitCode = 0;
+          if (runningVersion === version) runningVersion = null;
+          liveChildren -= 1;
+          queueMicrotask(() => child.emit('exit', 0, null));
+          return true;
+        }),
+        kill: vi.fn(() => true),
+      });
+      children.push(child);
+      return child as never;
+    });
+    const crashCurrentChild = () => {
+      const child = children.at(-1);
+      if (!child || child.exitCode !== null) throw new Error('No live child to crash');
+      child.exitCode = 2;
+      runningVersion = null;
+      liveChildren -= 1;
+      child.emit('exit', 2, null);
+    };
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: nextArtifact,
+      artifactCatalog,
+      fetchImpl: (async () => new Response(nextBytes, {
+        status: 200,
+        headers: { 'content-length': String(nextBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'startup race target executable');
+      },
+      spawnImpl,
+      probe: async () => {
+        if (runningVersion === nextArtifact.version && !staleTargetProbeReturned) {
+          staleTargetProbeReturned = true;
+          crashCurrentChild();
+          return true;
+        }
+        return runningVersion !== null;
+      },
+      endpointQuiescent: async () => runningVersion === null,
+    });
+
+    const failure = await runtime.ensureReady().catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ManagedRuntimeRollbackError);
+    expect((failure as ManagedRuntimeRollbackError).rollback).toMatchObject({
+      failedVersion: nextArtifact.version,
+      restoredVersion: firstArtifact.version,
+    });
+    expect(startedVersions).toEqual([nextArtifact.version, firstArtifact.version]);
+    expect(maximumLiveChildren).toBe(1);
+    expect(liveChildren).toBe(1);
+
+    crashCurrentChild();
+    await vi.waitFor(() => expect(startedVersions).toEqual([
+      nextArtifact.version,
+      firstArtifact.version,
+      firstArtifact.version,
+    ]));
+    expect(maximumLiveChildren).toBe(1);
+    expect(liveChildren).toBe(1);
+    await runtime.stop();
+  });
+
+  it('does not arm or consume crash recovery when code 2 arrives during explicit stop', async () => {
+    const dataDir = await temporaryDataDir();
+    const bytes = Buffer.from('trusted explicit stop race runtime');
+    const processes = crashRecoveryProcessHarness();
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      spawnImpl: processes.spawnImpl,
+      probe: processes.probe,
+      endpointQuiescent: processes.endpointQuiescent,
+    });
+    await runtime.ensureReady();
+
+    processes.exitUnexpectedlyOnNextStop();
+    await runtime.stop();
+    expect(processes.spawnImpl).toHaveBeenCalledTimes(1);
+    expect(processes.liveChildren).toBe(0);
+
+    await runtime.startInstalled();
+    processes.crashOwnedDaemon();
+    await vi.waitFor(() => expect(processes.spawnImpl).toHaveBeenCalledTimes(3));
+    expect(processes.maximumLiveChildren).toBe(1);
+    expect(processes.liveChildren).toBe(1);
+    await runtime.stop();
+  });
+
+  it('keeps a stop-timeout tombstone authoritative when the watchdog later exits with code 2', async () => {
+    vi.useFakeTimers();
+    try {
+      const dataDir = await temporaryDataDir();
+      const bytes = Buffer.from('trusted late stop exit runtime');
+      let endpointHealthy = false;
+      let stopRequested!: () => void;
+      const requestedStop = new Promise<void>((resolve) => { stopRequested = resolve; });
+      let child!: EventEmitter & {
+        exitCode: number | null;
+        connected: boolean;
+        pid: number;
+        send: ReturnType<typeof vi.fn>;
+        kill: ReturnType<typeof vi.fn>;
+      };
+      const spawnImpl = vi.fn(() => {
+        endpointHealthy = true;
+        child = Object.assign(new EventEmitter(), {
+          exitCode: null as number | null,
+          connected: true,
+          pid: 53_000,
+          send: vi.fn(() => {
+            stopRequested();
+            return true;
+          }),
+          kill: vi.fn(() => true),
+        });
+        return child as never;
+      });
+      const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+        artifact: fixtureArtifact(bytes),
+        fetchImpl: (async () => new Response(bytes, {
+          status: 200,
+          headers: { 'content-length': String(bytes.length) },
+        })) as typeof fetch,
+        extractArchive: async (_archive, destination) => {
+          await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+        },
+        spawnImpl,
+        probe: async () => endpointHealthy,
+        endpointQuiescent: async () => !endpointHealthy,
+      });
+      await runtime.ensureReady();
+
+      const stopped = runtime.stop().then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await requestedStop;
+      await vi.advanceTimersByTimeAsync(5_000);
+      const stopFailure = await stopped;
+      expect(stopFailure).toBeInstanceOf(Error);
+      expect((stopFailure as Error).message).toMatch(/did not confirm process-tree termination/i);
+
+      child.exitCode = 2;
+      endpointHealthy = false;
+      child.emit('exit', 2, null);
+      const retryFailure = await runtime.startInstalled().catch((error: unknown) => error);
+
+      expect(retryFailure).toBeInstanceOf(Error);
+      expect((retryFailure as Error).message).toMatch(/did not confirm process-tree termination/i);
+      expect(spawnImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails closed without spawning a replacement when an owned watchdog cannot be terminated', async () => {
@@ -1579,6 +1970,22 @@ setInterval(() => {}, 1000);
     await expect(runtime.ensureReady()).rejects.toThrow(/blocked by quarantine/i);
     expect(runtime.getStatus().running).toBe(false);
   });
+
+  it('reports a distinct exit code when its owned daemon exits unexpectedly', async () => {
+    const watchdog = spawn(process.execPath, [
+      '-e',
+      MANAGED_OLLAMA_WATCHDOG_SOURCE,
+      process.execPath,
+      JSON.stringify(['-e', 'process.exit(23)']),
+    ], { windowsHide: true, stdio: 'ignore' });
+
+    const exitCode = await new Promise<number | null>((resolve, reject) => {
+      watchdog.once('error', reject);
+      watchdog.once('exit', resolve);
+    });
+
+    expect(exitCode).toBe(2);
+  }, 10_000);
 
   it('kills the runtime process when an abruptly terminated sidecar loses its IPC handle', async () => {
     const dataDir = await temporaryDataDir();
