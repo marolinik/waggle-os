@@ -116,6 +116,37 @@ describe('WorkspaceTurnCoordinator', () => {
     await scope.release();
   });
 
+  it('serializes complete child checkout transactions while memory-only children stay concurrent', async () => {
+    const coordinator = new WorkspaceTurnCoordinator();
+    const scope = coordinator.createScope(process.cwd());
+    await scope.acquire('write');
+
+    const firstStarted = deferred();
+    const firstMayFinish = deferred();
+    const starts: string[] = [];
+    const checkoutTools = [{ name: 'read_file' }, { name: 'edit_file' }];
+
+    const first = scope.runChildTransaction(checkoutTools, async () => {
+      starts.push('first');
+      firstStarted.resolve();
+      await firstMayFinish.promise;
+      return 'first';
+    });
+    await firstStarted.promise;
+    const second = scope.runChildTransaction(checkoutTools, async () => {
+      starts.push('second');
+      return 'second';
+    });
+    const memory = scope.runChildTransaction([{ name: 'search_memory' }], async () => 'memory');
+
+    await expect(memory).resolves.toBe('memory');
+    expect(starts).toEqual(['first']);
+    firstMayFinish.resolve();
+    await expect(Promise.all([first, second])).resolves.toEqual(['first', 'second']);
+    expect(starts).toEqual(['first', 'second']);
+    await scope.release();
+  });
+
   it('classifies checkout reads, writes, knowledge-only tools, and unknown tools conservatively', () => {
     expect(classifyWorkspaceTurnAccess([
       { name: 'search_memory' }, { name: 'web_fetch' }, { name: 'create_skill' },

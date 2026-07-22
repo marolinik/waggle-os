@@ -16,6 +16,7 @@ import {
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { bindChatCollaborationTools } from '../../src/local/chat-collaboration.js';
 import { SignalBus } from '../../src/local/signal-bus.js';
+import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
 
 const resources: Array<{
   dir: string;
@@ -87,8 +88,18 @@ function bind(
   server: FastifyInstance,
   runLoop: (config: AgentLoopConfig) => Promise<AgentResponse>,
   sessionId = 'chat-session-a',
+  runWorkerTransaction?: (
+    tools: readonly ToolDefinition[],
+    operation: () => Promise<AgentResponse>,
+  ) => Promise<AgentResponse>,
 ) {
-  const visibleTools = [...collaborationNames.map(tool), tool('read_file'), tool('bash')];
+  const visibleTools = [
+    ...collaborationNames.map(tool),
+    tool('read_file'),
+    tool('edit_file'),
+    tool('search_memory'),
+    tool('bash'),
+  ];
   return bindChatCollaborationTools({
     server,
     visibleTools,
@@ -98,6 +109,7 @@ function bind(
     parentTask: 'Coordinate specialists on the release',
     model: 'model-default',
     runLoop,
+    runWorkerTransaction,
     securityContext: {
       blockedTools: ['bash'],
       allowedToolNames: new Set(visibleTools.map((item) => item.name)),
@@ -532,6 +544,96 @@ describe('request-bound chat collaboration', () => {
       expect(chain.map((item) => item.subtype)).toEqual(expect.arrayContaining([
         'task_delegation', 'task_claim', 'routed_share',
       ]));
+    }
+  });
+
+  it('routes standalone sub-agents through the same exact-tool transaction boundary', async () => {
+    const { server } = setup();
+    const transactionTools: string[][] = [];
+    const tools = bind(server, async () => ({
+      content: 'Standalone writer complete',
+      toolsUsed: ['edit_file'],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }), 'standalone-transaction-session', async (selectedTools, operation) => {
+      transactionTools.push(selectedTools.map((item) => item.name));
+      return operation();
+    });
+
+    const output = await tools.find((item) => item.name === 'spawn_agent')!.execute({
+      name: 'Standalone writer',
+      role: 'writer',
+      task: 'Edit the release file with edit_file.',
+    });
+
+    expect(output).toContain('Standalone writer complete');
+    expect(transactionTools).toHaveLength(1);
+    expect(transactionTools[0]).toContain('edit_file');
+  });
+
+  it('serializes parallel mutating workers as complete transactions while memory-only work overlaps', async () => {
+    const { dir, server } = setup();
+    const coordinator = new WorkspaceTurnCoordinator();
+    const scope = coordinator.createScope(dir);
+    await scope.acquire('write');
+
+    const firstStarted = deferred<void>();
+    const firstMayFinish = deferred<void>();
+    const memoryFinished = deferred<void>();
+    const starts: string[] = [];
+    let shared = 'v0';
+
+    const tools = bind(server, async (config) => {
+      const task = String(config.messages[0]?.content ?? '');
+      if (task.includes('WORKER_A')) {
+        starts.push('A');
+        const seen = shared;
+        firstStarted.resolve(undefined);
+        await firstMayFinish.promise;
+        shared = seen === 'v0' ? 'v1' : 'corrupt-a';
+        return { content: 'A complete', toolsUsed: ['read_file', 'edit_file'], usage: { inputTokens: 1, outputTokens: 1 } };
+      }
+      if (task.includes('WORKER_B')) {
+        starts.push('B');
+        const seen = shared;
+        shared = seen === 'v1' ? 'v2' : 'corrupt-b';
+        return { content: 'B complete', toolsUsed: ['read_file', 'edit_file'], usage: { inputTokens: 1, outputTokens: 1 } };
+      }
+      if (task.includes('MEMORY_C')) {
+        memoryFinished.resolve(undefined);
+        return { content: 'Memory complete', toolsUsed: ['search_memory'], usage: { inputTokens: 1, outputTokens: 1 } };
+      }
+      throw new Error(`Unexpected worker task: ${task}`);
+    }, 'transaction-session', (selectedTools, operation) => (
+      scope.runChildTransaction(selectedTools, operation)
+    ));
+
+    const pending = tools.find((item) => item.name === 'orchestrate_workflow')!.execute({
+      task: 'Exercise child transaction isolation',
+      inline_template: {
+        name: 'Transaction isolation',
+        description: 'Two checkout workers and one memory-only worker',
+        aggregation: 'concatenate',
+        steps: [
+          { name: 'Writer A', role: 'writer', task: 'WORKER_A mutate shared state', tools: ['read_file', 'edit_file'] },
+          { name: 'Writer B', role: 'writer', task: 'WORKER_B mutate shared state', tools: ['read_file', 'edit_file'] },
+          { name: 'Memory C', role: 'researcher', task: 'MEMORY_C search memory', tools: ['search_memory'] },
+        ],
+      },
+    });
+
+    try {
+      await firstStarted.promise;
+      await memoryFinished.promise;
+      expect(starts).toEqual(['A']);
+      expect(shared).toBe('v0');
+      firstMayFinish.resolve(undefined);
+      await expect(pending).resolves.toContain('A complete');
+      expect(starts).toEqual(['A', 'B']);
+      expect(shared).toBe('v2');
+    } finally {
+      firstMayFinish.resolve(undefined);
+      await Promise.allSettled([pending]);
+      await scope.release();
     }
   });
 });

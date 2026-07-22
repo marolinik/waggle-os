@@ -63,6 +63,10 @@ export interface BindChatCollaborationOptions {
   parentTask: string;
   model: string;
   runLoop: (config: AgentLoopConfig) => Promise<AgentResponse>;
+  runWorkerTransaction?: (
+    tools: readonly ToolDefinition[],
+    operation: () => Promise<AgentResponse>,
+  ) => Promise<AgentResponse>;
   securityContext: ChatCollaborationSecurityContext;
   turnOrigin: TurnOrigin;
 }
@@ -96,6 +100,13 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
   const workerTools = bindCronTools(
     options.workerTools.filter((tool) => !COLLABORATION_TOOL_NAMES.has(tool.name)),
   );
+  const runWorkerTransaction = options.runWorkerTransaction;
+  const runWorkerLoop = runWorkerTransaction
+    ? (config: AgentLoopConfig) => runWorkerTransaction(
+        config.tools,
+        () => runLoop(config),
+      )
+    : runLoop;
   const subagentAssignments = new Map<string, string | undefined>();
   const workflowContexts = new Map<string, WorkflowContext>();
   let subagentRoom: CollaborationRoomRun | undefined;
@@ -413,7 +424,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
   const replacements = [
     ...createSubAgentTools({
       availableTools: workerTools,
-      runLoop,
+      runLoop: runWorkerLoop,
       litellmUrl: server.localConfig.litellmUrl,
       litellmApiKey: server.agentState.litellmApiKey,
       defaultModel: model,
@@ -435,7 +446,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     }),
     ...createWorkflowTools({
       availableTools: workerTools,
-      runLoop,
+      runLoop: runWorkerLoop,
       litellmUrl: server.localConfig.litellmUrl,
       litellmApiKey: server.agentState.litellmApiKey,
       defaultModel: model,

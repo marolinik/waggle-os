@@ -2218,6 +2218,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             parentTask: agentMessage,
             model: resolvedModel,
             runLoop: agentRunner,
+            runWorkerTransaction: workspaceTurnScope
+              ? (tools, operation) => workspaceTurnScope!.runChildTransaction(
+                  tools,
+                  operation,
+                  externalToolNames,
+                )
+              : undefined,
             securityContext: {
               hooks: requestHookRegistry,
               blockedTools: governancePolicies?.blockedTools,

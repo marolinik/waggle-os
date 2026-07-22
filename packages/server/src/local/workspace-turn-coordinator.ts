@@ -247,6 +247,7 @@ export class WorkspaceTurnScope {
   private releaseTurn?: () => void;
   private access: WorkspaceTurnAccess = 'none';
   private mutationTail: Promise<void> = Promise.resolve();
+  private readonly childTransactions = new WorkspaceTurnCoordinator();
   private released = false;
 
   constructor(
@@ -278,6 +279,32 @@ export class WorkspaceTurnScope {
         },
       };
     });
+  }
+
+  async runChildTransaction<T>(
+    tools: readonly Pick<ToolDefinition, 'name'>[],
+    operation: () => Promise<T>,
+    externalToolNames: ReadonlySet<string> = new Set<string>(),
+  ): Promise<T> {
+    if (this.released || this.access !== 'write' || !this.releaseTurn) {
+      throw new Error('Child agent attempted to run without an active writer lease');
+    }
+    if (this.signal?.aborted) throw abortError(this.signal);
+
+    const access = classifyWorkspaceTurnAccess(tools, externalToolNames);
+    if (access === 'none') return operation();
+
+    const releaseChild = await this.childTransactions.acquire(
+      this.resource,
+      access,
+      this.signal,
+    );
+    try {
+      if (this.signal?.aborted) throw abortError(this.signal);
+      return await operation();
+    } finally {
+      releaseChild();
+    }
   }
 
   async acquire(
