@@ -20,6 +20,21 @@ export interface QualifiedChatCase {
   toolsUsed: string[];
 }
 
+export interface QualifiedToolContext {
+  toolCatalogCount: number;
+  toolEligibleCount: number;
+  toolSelectedCount: number;
+  toolOmittedCount: number;
+  transmittedToolSchemaChars: number;
+  estimatedToolSchemaTokens: number;
+  selectorLatencyMs: number;
+  selectedToolNames: string[];
+}
+
+export interface QualifiedToolContextCase extends QualifiedChatCase {
+  toolContext: QualifiedToolContext;
+}
+
 export interface OwnedProcess {
   processId: number;
   name: string;
@@ -32,6 +47,7 @@ export interface DispatchEvidence {
   path: string;
   model: string;
   bodySha256: string;
+  toolNames: string[];
 }
 
 export interface WindowsProcessCandidate extends OwnedProcess {
@@ -40,6 +56,7 @@ export interface WindowsProcessCandidate extends OwnedProcess {
 
 export const PRIMARY_PROMPT = 'Why does this TypeScript Promise resolve twice? Reply in one concise sentence and do not use tools.';
 export const BUDGET_PROMPT = 'What is 19 * 23?';
+export const TOOL_CONTEXT_PROMPT = 'Inspect, test, validate, and verify this TypeScript workspace. Reply with a one-sentence plan and do not call any tools.';
 const QUALIFICATION_DAILY_BUDGET_USD = 1;
 const QUALIFICATION_DAILY_SPEND_USD = 0.8;
 const QUALIFICATION_BUDGET_THRESHOLD = 0.8;
@@ -57,13 +74,14 @@ interface ModelAliases {
 }
 
 interface ChatReceipt extends QualifiedChatCase {
-  name: 'primary' | 'budget' | 'fallback';
+  name: 'primary' | 'budget' | 'fallback' | 'tool-context';
   promptSha256: string;
   expectedModel: string;
   dispatches: DispatchEvidence[];
   startedAt: string;
   completedAt: string;
   durationMs: number;
+  toolContext?: QualifiedToolContext;
 }
 
 interface RuntimeStartEvidence {
@@ -188,6 +206,75 @@ export function assertQualifiedChatCase(input: {
     }
   }
   return { content: done.content.trim(), events, toolsUsed: [...done.toolsUsed] as string[] };
+}
+
+export function assertQualifiedToolContextCase(input: {
+  httpStatus: number;
+  contentType: string;
+  rawSse: string;
+  expectedModel: string;
+  selectedToolNames: string[];
+  expectedSwitch?: { model: string; primary: string; reason: string };
+}): QualifiedToolContextCase {
+  const qualified = assertQualifiedChatCase(input);
+  const done = qualified.events.find(({ event }) => event === 'done')!.data;
+  const metrics = done.contextMetrics;
+  if (typeof metrics !== 'object' || metrics === null || Array.isArray(metrics)) {
+    throw new Error('Qualified tool context requires done.contextMetrics');
+  }
+  const raw = metrics as Record<string, unknown>;
+  const readInteger = (name: string): number => {
+    const value = raw[name];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+      throw new Error(`Qualified tool context requires non-negative integer ${name}`);
+    }
+    return value;
+  };
+  const toolContext: QualifiedToolContext = {
+    toolCatalogCount: readInteger('toolCatalogCount'),
+    toolEligibleCount: readInteger('toolEligibleCount'),
+    toolSelectedCount: readInteger('toolSelectedCount'),
+    toolOmittedCount: readInteger('toolOmittedCount'),
+    transmittedToolSchemaChars: readInteger('transmittedToolSchemaChars'),
+    estimatedToolSchemaTokens: readInteger('estimatedToolSchemaTokens'),
+    selectorLatencyMs: readInteger('selectorLatencyMs'),
+    selectedToolNames: [...input.selectedToolNames],
+  };
+  if (toolContext.toolCatalogCount < toolContext.toolEligibleCount) {
+    throw new Error('Qualified tool context requires catalog count to cover every eligible tool');
+  }
+  if (toolContext.toolEligibleCount < 29) {
+    throw new Error(`Qualified tool context requires at least 29 eligible tools, received ${toolContext.toolEligibleCount}`);
+  }
+  if (toolContext.toolSelectedCount < 1 || toolContext.toolSelectedCount > 14) {
+    throw new Error(`Qualified tool context requires at most 14 tools and at least one, received ${toolContext.toolSelectedCount}`);
+  }
+  if (toolContext.toolOmittedCount !== toolContext.toolEligibleCount - toolContext.toolSelectedCount) {
+    throw new Error('Qualified tool context omitted count must equal eligible minus selected');
+  }
+  if (toolContext.transmittedToolSchemaChars < 1 || toolContext.transmittedToolSchemaChars > 8_000) {
+    throw new Error(`Qualified tool context must transmit no more than 8,000 schema characters, received ${toolContext.transmittedToolSchemaChars}`);
+  }
+  if (toolContext.estimatedToolSchemaTokens !== Math.ceil(toolContext.transmittedToolSchemaChars / 4)) {
+    throw new Error('Qualified tool context schema token estimate must match the transmitted schema size');
+  }
+  if (toolContext.selectorLatencyMs > 250) {
+    throw new Error(`Qualified tool context selector latency must not exceed 250ms, received ${toolContext.selectorLatencyMs}ms`);
+  }
+  if (toolContext.selectedToolNames.length !== toolContext.toolSelectedCount) {
+    throw new Error('Qualified tool context selected names must match the selected tool count');
+  }
+  if (new Set(toolContext.selectedToolNames).size !== toolContext.selectedToolNames.length) {
+    throw new Error('Qualified tool context requires unique selected names');
+  }
+  const codeInspectionTools = new Set([
+    'bash', 'read_file', 'search_files', 'search_content', 'git_status',
+    'git_diff', 'git_log', 'execute_code', 'run_code',
+  ]);
+  if (toolContext.selectedToolNames.filter(name => codeInspectionTools.has(name)).length < 2) {
+    throw new Error('Qualified tool context must demonstrate code-inspection relevance');
+  }
+  return { ...qualified, toolContext };
 }
 
 export function canonicalizeManifestDigest(digest: unknown): string {
@@ -559,6 +646,29 @@ export function buildOwnedProxyTarget(requestTarget: string, targetEndpoint: str
   return target;
 }
 
+export function extractDispatchedToolNames(payload: unknown): string[] {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new Error('Ollama audit request payload must be a JSON object');
+  }
+  const tools = (payload as Record<string, unknown>).tools;
+  if (tools === undefined) return [];
+  if (!Array.isArray(tools)) throw new Error('Ollama audit request tools must be an array');
+  return tools.map((tool, index) => {
+    if (typeof tool !== 'object' || tool === null || Array.isArray(tool)) {
+      throw new Error(`Ollama audit request tool ${index + 1} must be an object`);
+    }
+    const fn = (tool as Record<string, unknown>).function;
+    if (typeof fn !== 'object' || fn === null || Array.isArray(fn)) {
+      throw new Error(`Ollama audit request tool ${index + 1} is missing function metadata`);
+    }
+    const name = (fn as Record<string, unknown>).name;
+    if (typeof name !== 'string' || !name) {
+      throw new Error(`Ollama audit request tool ${index + 1} is missing a function name`);
+    }
+    return name;
+  });
+}
+
 async function startAuditProxy(input: {
   port: number;
   targetEndpoint: string;
@@ -577,6 +687,7 @@ async function startAuditProxy(input: {
           path: target.pathname,
           model: payload.model,
           bodySha256: sha256Text(body),
+          toolNames: extractDispatchedToolNames(payload),
         });
       }
       const method = request.method ?? 'GET';
@@ -626,6 +737,8 @@ async function runChatCase(input: {
   expectedModel: string;
   expectedDispatchModel: string;
   dispatches: DispatchEvidence[];
+  workspace?: string;
+  requireToolContext?: boolean;
   expectedSwitch?: { model: string; primary: string; reason: string };
 }): Promise<ChatReceipt> {
   const started = Date.now();
@@ -634,18 +747,28 @@ async function runChatCase(input: {
   const response = await fetch(`${input.baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...input.headers },
-    body: JSON.stringify({ message: input.prompt, sessionId: randomUUID() }),
+    body: JSON.stringify({
+      message: input.prompt,
+      sessionId: randomUUID(),
+      ...(input.workspace ? { workspace: input.workspace } : {}),
+    }),
     signal: AbortSignal.timeout(10 * 60_000),
   });
   const rawSse = await response.text();
-  const qualified = assertQualifiedChatCase({
+  const observedDispatches = assertObservedDispatch(input.dispatches, dispatchStartIndex, input.expectedDispatchModel);
+  const qualificationInput = {
     httpStatus: response.status,
     contentType: response.headers.get('content-type') ?? '',
     rawSse,
     expectedModel: input.expectedModel,
     expectedSwitch: input.expectedSwitch,
-  });
-  const observedDispatches = assertObservedDispatch(input.dispatches, dispatchStartIndex, input.expectedDispatchModel);
+  };
+  const qualified = input.requireToolContext
+    ? assertQualifiedToolContextCase({
+        ...qualificationInput,
+        selectedToolNames: observedDispatches.at(-1)?.toolNames ?? [],
+      })
+    : assertQualifiedChatCase(qualificationInput);
   const completed = Date.now();
   return {
     name: input.name,
@@ -831,6 +954,21 @@ async function qualify(options: QualifierOptions): Promise<void> {
       baseUrl: serviceBaseUrl,
       headers,
       prompt: PRIMARY_PROMPT,
+      expectedModel: `ollama/${aliases.primary}`,
+      expectedDispatchModel: aliases.primary,
+      dispatches,
+    }));
+    const toolContextWorkspace = service.server.workspaceManager.create({
+      name: 'Smart router tool context',
+      group: 'Qualification',
+    });
+    routerCases.push(await runChatCase({
+      name: 'tool-context',
+      baseUrl: serviceBaseUrl,
+      headers,
+      prompt: TOOL_CONTEXT_PROMPT,
+      workspace: toolContextWorkspace.id,
+      requireToolContext: true,
       expectedModel: `ollama/${aliases.primary}`,
       expectedDispatchModel: aliases.primary,
       dispatches,

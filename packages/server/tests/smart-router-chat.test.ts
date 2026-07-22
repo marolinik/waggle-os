@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { WaggleConfig } from '@waggle/core';
 import { FEATURE_FLAGS } from '@waggle/agent';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/agent';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
@@ -600,6 +600,94 @@ describe('chat smart-router integration', () => {
     const [persistedTrace] = server.traceStore.query({ sessionId: session, limit: 1 });
     expect(persistedTrace.model).toBe('ollama/fallback-test-model');
   });
+
+  it('sends a bounded relevant subset of 29 eligible tools through the real chat provider path', async () => {
+    const previousRunner = server.agentRunner;
+    const originalTools = [...server.agentState.allTools];
+    const execute = vi.fn(async () => 'unused');
+    const candidates: ToolDefinition[] = Array.from({ length: 29 }, (_, index) => ({
+      name: `code_tool_${String(index).padStart(2, '0')}`,
+      description: 'Inspect, test, validate, and verify TypeScript code in this workspace.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Code inspection query.' },
+        },
+      },
+      execute,
+    }));
+    const providerRequests: Array<{
+      model?: string;
+      tools?: Array<{ function?: { name?: string } }>;
+    }> = [];
+    server.agentRunner = undefined;
+    server.agentState.allTools.splice(0, server.agentState.allTools.length, ...candidates);
+    vi.restoreAllMocks();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'primary-test-model' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (!url.includes('/chat/completions')) return new Response('', { status: 503 });
+      providerRequests.push(JSON.parse(String(init?.body ?? '{}')));
+      return new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'qualified' } }] })}\n\n`
+        + `data: ${JSON.stringify({
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 1 },
+        })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Inspect, test, validate, and verify this TypeScript workspace. Reply with one sentence and do not call any tools.',
+          session: 'production-tool-context-29',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(providerRequests).toHaveLength(1);
+      const transmittedTools = providerRequests[0]?.tools ?? [];
+      const transmittedNames = transmittedTools.map(tool => tool.function?.name);
+      expect(transmittedNames).toHaveLength(14);
+      expect(new Set(transmittedNames).size).toBe(14);
+      expect(transmittedNames.every(name => candidates.some(tool => tool.name === name))).toBe(true);
+      const serializedSchemaChars = JSON.stringify(transmittedTools).length;
+      expect(serializedSchemaChars).toBeLessThanOrEqual(8_000);
+
+      const doneMatches = [...response.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g)];
+      expect(doneMatches).toHaveLength(1);
+      const done = JSON.parse(doneMatches[0]![1]!) as {
+        toolsUsed?: string[];
+        contextMetrics?: Record<string, number>;
+      };
+      expect(done.toolsUsed).toEqual([]);
+      expect(done.contextMetrics).toMatchObject({
+        toolCatalogCount: 29,
+        toolEligibleCount: 29,
+        toolSelectedCount: 14,
+        toolOmittedCount: 15,
+        transmittedToolSchemaChars: serializedSchemaChars,
+        estimatedToolSchemaTokens: Math.ceil(serializedSchemaChars / 4),
+      });
+      expect(done.contextMetrics?.selectorLatencyMs).toBeLessThanOrEqual(250);
+      expect(response.body).not.toMatch(/event: tool\r?\ndata: \{"name":"code_tool_/);
+      expect(response.body).not.toMatch(/event: tool_result\r?\ndata: \{"name":"code_tool_/);
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      server.agentState.allTools.splice(0, server.agentState.allTools.length, ...originalTools);
+      server.agentRunner = previousRunner;
+    }
+  }, 20_000);
 
   it('rebuilds the production system prompt for the configured fallback model', async () => {
     const config = new WaggleConfig(tmpDir);

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   assertQualifiedChatCase,
+  assertQualifiedToolContextCase,
   assertCopiedModelIdentity,
   assertObservedDispatch,
   assertRuntimeStartOwned,
@@ -12,6 +13,7 @@ import {
   buildRouterSettings,
   buildSanitizedEnvironment,
   canonicalizeManifestDigest,
+  extractDispatchedToolNames,
   parseSse,
   partitionWindowsProcesses,
   postJsonForStatus,
@@ -88,6 +90,59 @@ describe('qualify-smart-router helpers', () => {
     assert.equal(result.content, 'fallback answer');
     assert.equal(result.events.filter(({ event }) => event === 'done').length, 1);
     assert.equal(result.events.filter(({ event }) => event === 'model_switch').length, 1);
+  });
+
+  it('qualifies a bounded, relevant production chat tool context from at least 29 eligible tools', () => {
+    const selectedToolNames = [
+      'read_file', 'search_files', 'search_content', 'git_status',
+      ...Array.from({ length: 10 }, (_, index) => `code_tool_${index}`),
+    ];
+    const rawSse = (contextMetrics: Record<string, unknown>) => [
+      'event: token',
+      'data: {"content":"tool context qualified"}',
+      '',
+      'event: done',
+      `data: ${JSON.stringify({
+        content: 'tool context qualified',
+        model: 'ollama/primary',
+        toolsUsed: [],
+        contextMetrics,
+      })}`,
+      '',
+    ].join('\n');
+    const validMetrics = {
+      toolCatalogCount: 78,
+      toolEligibleCount: 52,
+      toolSelectedCount: 14,
+      toolOmittedCount: 38,
+      transmittedToolSchemaChars: 6_120,
+      estimatedToolSchemaTokens: 1_530,
+      selectorLatencyMs: 6,
+    };
+    const qualify = (
+      overrides: Record<string, unknown> = {},
+      dispatchedToolNames: string[] = selectedToolNames,
+    ) => assertQualifiedToolContextCase({
+      httpStatus: 200,
+      contentType: 'text/event-stream; charset=utf-8',
+      rawSse: rawSse({ ...validMetrics, ...overrides }),
+      expectedModel: 'ollama/primary',
+      selectedToolNames: dispatchedToolNames,
+    });
+
+    const qualified = qualify();
+    assert.deepEqual(qualified.toolContext.selectedToolNames, selectedToolNames);
+    assert.equal(qualified.toolContext.toolEligibleCount, 52);
+    assert.equal(qualified.toolContext.toolSelectedCount, 14);
+
+    assert.throws(() => qualify({ toolEligibleCount: 28, toolOmittedCount: 14 }), /at least 29 eligible/i);
+    assert.throws(() => qualify({ toolSelectedCount: 15, toolOmittedCount: 37 }), /at most 14 tools/i);
+    assert.throws(() => qualify({ transmittedToolSchemaChars: 8_001, estimatedToolSchemaTokens: 2_001 }), /8,000 schema characters/i);
+    assert.throws(() => qualify({ toolOmittedCount: 37 }), /eligible minus selected/i);
+    assert.throws(() => qualify({}, selectedToolNames.slice(0, -1)), /selected names/i);
+    assert.throws(() => qualify({}, Array(14).fill('calendar_tool')), /unique selected names/i);
+    assert.throws(() => qualify({}, Array.from({ length: 14 }, (_, index) => `calendar_tool_${index}`)), /code-inspection relevance/i);
+    assert.throws(() => qualify({ selectorLatencyMs: 251 }), /250ms/i);
   });
 
   it('fails closed on errors, duplicate done events, wrong models, or unexpected switches', () => {
@@ -292,10 +347,21 @@ describe('qualify-smart-router helpers', () => {
 
   it('requires independently observed Ollama dispatch to the expected alias', () => {
     const dispatches = [
-      { at: 'now', path: '/v1/chat/completions', model: 'router-primary:latest', bodySha256: 'a'.repeat(64) },
+      { at: 'now', path: '/v1/chat/completions', model: 'router-primary:latest', bodySha256: 'a'.repeat(64), toolNames: [] },
     ];
     assert.deepEqual(assertObservedDispatch(dispatches, 0, 'router-primary:latest'), dispatches);
     assert.throws(() => assertObservedDispatch(dispatches, 0, 'router-budget:latest'), /observed Ollama dispatch/i);
+  });
+
+  it('extracts transmitted OpenAI tool names from the audited provider payload', () => {
+    assert.deepEqual(extractDispatchedToolNames({
+      tools: [
+        { type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } },
+        { type: 'function', function: { name: 'search_files', parameters: { type: 'object' } } },
+      ],
+    }), ['read_file', 'search_files']);
+    assert.deepEqual(extractDispatchedToolNames({ model: 'router-primary:latest' }), []);
+    assert.throws(() => extractDispatchedToolNames({ tools: [{}] }), /function metadata/i);
   });
 
   it('builds the real model-pilot settings payload', () => {
