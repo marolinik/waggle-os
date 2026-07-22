@@ -90,6 +90,7 @@ describe('E2E Connector Scenarios', () => {
       registry.register(new MockConnector('github', 'GitHub', 'github.com', [
         { name: 'create_issue', description: 'Create issue', inputSchema: { properties: { owner: { type: 'string' }, repo: { type: 'string' }, title: { type: 'string' } } }, riskLevel: 'medium' },
       ]));
+      expect(await registry.hydrate('github')).toBe(true);
 
       const tools = registry.generateTools();
       expect(tools).toHaveLength(1);
@@ -109,6 +110,7 @@ describe('E2E Connector Scenarios', () => {
       registry.register(new MockConnector('email', 'Email', 'sendgrid.com', [
         { name: 'send_email', description: 'Send email', inputSchema: { properties: { to: { type: 'string' }, subject: { type: 'string' } } }, riskLevel: 'high' },
       ]));
+      expect(await registry.hydrate('email')).toBe(true);
 
       const tools = registry.generateTools();
       const sendTool = tools.find(t => t.name === 'connector_email_send_email')!;
@@ -138,6 +140,10 @@ describe('E2E Connector Scenarios', () => {
       registry.register(new MockConnector('slack', 'Slack', 'slack.com', [
         { name: 'send_message', description: 'Send', inputSchema: { properties: {} }, riskLevel: 'medium' },
       ]));
+      const hydrationResults = await Promise.all(
+        ['github', 'email', 'jira', 'slack'].map(id => registry.hydrate(id)),
+      );
+      expect(hydrationResults).toEqual([true, true, true, true]);
 
       const tools = registry.generateTools();
       expect(tools).toHaveLength(4);

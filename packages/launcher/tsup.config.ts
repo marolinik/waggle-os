@@ -12,8 +12,9 @@ export default defineConfig({
   // Inline all @waggle/* workspace packages into the bundle.
   // Third-party npm packages stay external (installed as dependencies).
   noExternal: [/^@waggle\//],
-  // Native/optional packages that cannot be bundled.
+  // Runtime packages that cannot be bundled safely.
   external: [
+    'adm-zip',
     'playwright-core',
     'chromium-bidi',
   ],
