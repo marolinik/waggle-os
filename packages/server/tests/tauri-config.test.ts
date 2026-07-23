@@ -2200,6 +2200,46 @@ Expect-Rejection {
     expect(script).toContain(
       "Set-ProcessEnvironment -Name 'WAGGLE_E2E_REUSE_EXISTING_SERVER' -Value '0'",
     );
+    expect(script).toContain(
+      "$profileVariables = @('USERPROFILE', 'HOME', 'APPDATA', " +
+      "'LOCALAPPDATA', 'HERMES_HOME')",
+    );
+    expect(script).toContain(
+      '$environmentToRestore = @($profileVariables + $secretVariables + ' +
+      '$runnerVariables | Select-Object -Unique)',
+    );
+    const isolatedHermesHome = (
+      "Set-ProcessEnvironment -Name 'HERMES_HOME' " +
+      "-Value (Join-Path $hookProfile '.hermes')"
+    );
+    expect(script).toContain(isolatedHermesHome);
+    expect(script.indexOf(isolatedHermesHome)).toBeLessThan(
+      script.indexOf(
+        "Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'",
+      ),
+    );
+    const hookLaneIndex = script.indexOf(
+      "Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'",
+    );
+    const successfulRestoreIndex = script.indexOf(
+      "foreach ($name in $profileVariables) { Restore-ProcessEnvironment -Name $name }",
+      hookLaneIndex,
+    );
+    const realToolLaneIndex = script.indexOf(
+      "Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-tool-lifecycle.spec.ts'",
+    );
+    expect(successfulRestoreIndex).toBeGreaterThan(hookLaneIndex);
+    expect(successfulRestoreIndex).toBeLessThan(realToolLaneIndex);
+
+    const outerFinallyIndex = script.lastIndexOf('} finally {');
+    const failureRestoreIndex = script.indexOf(
+      "foreach ($name in $environmentToRestore) { Restore-ProcessEnvironment -Name $name }",
+      outerFinallyIndex,
+    );
+    expect(failureRestoreIndex).toBeGreaterThan(outerFinallyIndex);
+    expect(failureRestoreIndex).toBeLessThan(
+      script.indexOf('Remove-VerifiedTempTree -Target $runRoot', failureRestoreIndex),
+    );
   });
 
   it('release workflow builds packages before bundling the desktop sidecar', () => {

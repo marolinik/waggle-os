@@ -11,7 +11,7 @@ $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $runRoot = Join-Path $tempBase ("waggle-windows-external-agents-" + [guid]::NewGuid().ToString('N'))
 $hookProfile = Join-Path $runRoot 'hook-profile'
 $originalEnvironment = @{}
-$profileVariables = @('USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA')
+$profileVariables = @('USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA', 'HERMES_HOME')
 $secretVariables = @(
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
@@ -141,6 +141,7 @@ try {
     Set-ProcessEnvironment -Name 'HOME' -Value $hookProfile
     Set-ProcessEnvironment -Name 'APPDATA' -Value (Join-Path $hookProfile 'AppData\Roaming')
     Set-ProcessEnvironment -Name 'LOCALAPPDATA' -Value (Join-Path $hookProfile 'AppData\Local')
+    Set-ProcessEnvironment -Name 'HERMES_HOME' -Value (Join-Path $hookProfile '.hermes')
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_HOOK_HOME' -Value $hookProfile
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_REAL_HOOKS' -Value '1'
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_REAL_TOOLS' -Value $null
