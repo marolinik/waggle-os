@@ -1169,6 +1169,7 @@ $receipt = [ordered]@{
   scratchRoot = $scratchRoot
   embeddingPayloadReady = $false
   embeddingPayload = $null
+  certifiedTier = $null
   managedModelVerified = $false
   managedModelDigest = $null
   lifecycleData = $null
@@ -1184,6 +1185,8 @@ $receipt = [ordered]@{
       configuredDataMarkerSha256 = $null
       profileMarkerSha256 = $null
       vaultKeySha256 = $null
+      managedModelName = $null
+      managedModelDigest = $null
     }
   } else {
     $null
@@ -1204,6 +1207,8 @@ if ($RequireVersionToVersionUpgrade) {
 New-Item -ItemType Directory -Path $scratchRoot -Force | Out-Null
 $ollamaPort = 0
 $managedRuntimeRoot = Join-Path $dataDir 'runtimes\ollama'
+$managedCertificateModel = 'qwen2.5:0.5b'
+$managedOperationTimeoutSeconds = 3600
 
 try {
   Assert-True (Test-Path -LiteralPath $installerHookPath -PathType Leaf) `
@@ -1428,6 +1433,8 @@ try {
   $upgradeVaultKeySha256 = $null
   $upgradeDataMarkerSha256 = $null
   $upgradeProfileMarkerSha256 = $null
+  $upgradeManagedModelName = $null
+  $upgradeManagedModelDigest = $null
   if ($RequireVersionToVersionUpgrade) {
     Assert-ArtifactIdentity `
       $PreviousInstallerPath `
@@ -1492,6 +1499,43 @@ try {
       Assert-True (Test-Path -LiteralPath $profileDataMarker -PathType Leaf) `
         'Previous launch removed the profile preservation marker.'
       $previousHeaders = Get-CertificateSessionHeaders $previousBaseUrl
+      $previousTier = Invoke-JsonRequest "$previousBaseUrl/api/tier" $previousHeaders
+      Assert-True ([string]$previousTier.tier -ceq 'FREE') `
+        "The protected previous release reported an unexpected effective tier: $($previousTier.tier)"
+      $receipt.checks['previousSoloTier'] = $true
+      if ($VerifyManagedModel) {
+        $previousBootstrapResponse = Invoke-JsonPostRequest `
+          "$previousBaseUrl/api/local-inference/bootstrap" `
+          @{} `
+          $previousHeaders `
+          $managedOperationTimeoutSeconds
+        $previousBootstrap = $previousBootstrapResponse.Content | ConvertFrom-Json
+        Assert-True (
+          [int]$previousBootstrapResponse.StatusCode -eq 200 -and
+          $previousBootstrap.ok -eq $true -and
+          $previousBootstrap.dockerRequired -eq $false
+        ) 'The protected previous release could not bootstrap its managed local runtime.'
+        $previousPullResponse = Invoke-JsonPostRequest `
+          "$previousBaseUrl/api/local-inference/pull" `
+          @{ model = $managedCertificateModel } `
+          $previousHeaders `
+          $managedOperationTimeoutSeconds
+        $previousPull = $previousPullResponse.Content | ConvertFrom-Json
+        Assert-True (
+          [int]$previousPullResponse.StatusCode -eq 200 -and
+          $previousPull.ok -eq $true -and
+          $previousPull.verifiedGeneration -eq $true
+        ) 'The protected previous release could not seed the managed local model.'
+        Assert-True ([string]$previousPull.digest -match '^sha256:[0-9a-f]{64}$') `
+          'The protected previous release returned no immutable managed-model digest.'
+        $upgradeManagedModelName = [string]$previousPull.model
+        $upgradeManagedModelDigest = [string]$previousPull.digest
+        Assert-True (-not [string]::IsNullOrWhiteSpace($upgradeManagedModelName)) `
+          'The protected previous release returned no managed-model identity.'
+        $receipt.upgrade.managedModelName = $upgradeManagedModelName
+        $receipt.upgrade.managedModelDigest = $upgradeManagedModelDigest
+        $receipt.checks['previousManagedModelSeeded'] = $true
+      }
       $certificateLifecycleData = New-CertificateLifecycleData `
         $previousBaseUrl $previousHeaders $runId $dataDir
       $receipt.lifecycleData = $certificateLifecycleData
@@ -1802,7 +1846,11 @@ try {
       'A protected API route did not reject an unauthenticated loopback request'
     $receipt.checks['unauthenticatedProtectedRoute'] = $true
     $headers = Get-CertificateSessionHeaders $baseUrl
-    $null = Invoke-JsonRequest "$baseUrl/api/tier" $headers
+    $tier = Invoke-JsonRequest "$baseUrl/api/tier" $headers
+    Assert-True ([string]$tier.tier -ceq 'FREE') `
+      "A clean Solo install reported an unexpected effective tier: $($tier.tier)"
+    $receipt.certifiedTier = 'FREE'
+    $receipt.checks['soloTier'] = $true
     if ($RequireVersionToVersionUpgrade) {
       Assert-True ($null -ne $certificateLifecycleData) `
         'Upgrade lifecycle data was not created by the previous release.'
@@ -1830,28 +1878,30 @@ try {
         $marketplaceResourceSha256
     ) 'First boot modified the immutable resources\marketplace.db payload.'
     $receipt.checks['marketplaceApi'] = $true
-    $chatProbeMessage = "installer-certificate-no-model-$runId"
-    $chatResponse = Invoke-JsonPostRequest "$baseUrl/api/chat" @{
-      message = $chatProbeMessage
-      sessionId = "installer-certificate-no-model-$runId"
-    } $headers
-    $chatContent = [string]$chatResponse.Content
-    Assert-True ([int]$chatResponse.StatusCode -eq 200) `
-      'Clean no-model chat did not return HTTP 200.'
-    Assert-True (
-      ([string]$chatResponse.Headers['Content-Type']).StartsWith('text/event-stream')
-    ) 'Clean no-model chat did not return an SSE stream.'
-    Assert-True ([regex]::Matches(
-      $chatContent,
-      '(?m)^event:[ \t]*done[ \t]*\r?$'
-    ).Count -eq 1) 'Clean no-model chat did not complete with exactly one done event.'
-    Assert-True (-not ($chatContent -match '(?m)^event:[ \t]*error[ \t]*\r?$')) `
-      'Clean no-model chat emitted an error event.'
-    Assert-True ($chatContent.Contains('No AI model is ready')) `
-      'Clean no-model chat did not report that model setup is required.'
-    Assert-True (-not $chatContent.Contains($chatProbeMessage)) `
-      'Clean no-model chat echoed the prompt instead of reporting setup-required state.'
-    $receipt.checks['noModelChatSetupRequired'] = $true
+    if (-not $RequireVersionToVersionUpgrade) {
+      $chatProbeMessage = "installer-certificate-no-model-$runId"
+      $chatResponse = Invoke-JsonPostRequest "$baseUrl/api/chat" @{
+        message = $chatProbeMessage
+        sessionId = "installer-certificate-no-model-$runId"
+      } $headers
+      $chatContent = [string]$chatResponse.Content
+      Assert-True ([int]$chatResponse.StatusCode -eq 200) `
+        'Clean no-model chat did not return HTTP 200.'
+      Assert-True (
+        ([string]$chatResponse.Headers['Content-Type']).StartsWith('text/event-stream')
+      ) 'Clean no-model chat did not return an SSE stream.'
+      Assert-True ([regex]::Matches(
+        $chatContent,
+        '(?m)^event:[ \t]*done[ \t]*\r?$'
+      ).Count -eq 1) 'Clean no-model chat did not complete with exactly one done event.'
+      Assert-True (-not ($chatContent -match '(?m)^event:[ \t]*error[ \t]*\r?$')) `
+        'Clean no-model chat emitted an error event.'
+      Assert-True ($chatContent.Contains('No AI model is ready')) `
+        'Clean no-model chat did not report that model setup is required.'
+      Assert-True (-not $chatContent.Contains($chatProbeMessage)) `
+        'Clean no-model chat echoed the prompt instead of reporting setup-required state.'
+      $receipt.checks['noModelChatSetupRequired'] = $true
+    }
     $embedding = Invoke-JsonRequest "$baseUrl/api/embedding/status" $headers
     Assert-True ($embedding.activeProvider -eq 'inprocess') `
       "Clean install did not load the in-process embedding model: $($embedding.activeProvider)"
@@ -1867,8 +1917,6 @@ try {
     Assert-True ($localInference.managedRuntime.supported -eq $true) `
       'Managed local inference runtime is not supported by the packaged Windows app'
     if ($VerifyManagedModel) {
-      $managedCertificateModel = 'qwen2.5:0.5b'
-      $managedOperationTimeoutSeconds = 3600
       $bootstrapResponse = Invoke-JsonPostRequest `
         "$baseUrl/api/local-inference/bootstrap" `
         @{} `
@@ -1880,6 +1928,31 @@ try {
       Assert-True ($bootstrap.dockerRequired -eq $false) `
         'The packaged managed local runtime unexpectedly requires Docker.'
       $receipt.checks['managedRuntimeBootstrap'] = $true
+
+      if ($RequireVersionToVersionUpgrade) {
+        Assert-True (
+          -not [string]::IsNullOrWhiteSpace($upgradeManagedModelName) -and
+          $upgradeManagedModelDigest -match '^sha256:[0-9a-f]{64}$'
+        ) 'The upgrade certificate has no previous managed-model identity.'
+        $preservedStatus = Invoke-JsonRequest "$baseUrl/api/local-inference/status" $headers
+        $preservedOllamaServers = @(
+          $preservedStatus.servers | Where-Object { [string]$_.type -eq 'ollama' }
+        )
+        Assert-True ($preservedStatus.offlineReady -eq $true -and $preservedOllamaServers.Count -eq 1) `
+          'The candidate did not start the managed model preserved from the previous release.'
+        Assert-True (@($preservedOllamaServers[0].models) -contains $upgradeManagedModelName) `
+          'The candidate did not advertise the managed model preserved from the previous release.'
+        Assert-True ($null -ne $preservedOllamaServers[0].modelDigests) `
+          'The candidate did not advertise managed-model digests after upgrade.'
+        $preservedDigestProperty = $preservedOllamaServers[0].modelDigests.PSObject.Properties[
+          $upgradeManagedModelName
+        ]
+        Assert-True (
+          $null -ne $preservedDigestProperty -and
+          [string]$preservedDigestProperty.Value -ceq $upgradeManagedModelDigest
+        ) 'The candidate changed the managed-model digest during upgrade.'
+        $receipt.checks['upgradeManagedModelPreserved'] = $true
+      }
 
       $pullResponse = Invoke-JsonPostRequest `
         "$baseUrl/api/local-inference/pull" `
@@ -1896,6 +1969,12 @@ try {
         'The managed local model pull returned no installed model identity.'
       Assert-True ([string]$pull.digest -match '^sha256:[0-9a-f]{64}$') `
         'The managed local model pull returned no immutable manifest digest.'
+      if ($RequireVersionToVersionUpgrade) {
+        Assert-True (
+          [string]$pull.model -ceq $upgradeManagedModelName -and
+          [string]$pull.digest -ceq $upgradeManagedModelDigest
+        ) 'The candidate managed-model verification did not preserve the previous release digest.'
+      }
       $receipt.checks['managedModelPull'] = $true
 
       $managedStatus = Invoke-JsonRequest "$baseUrl/api/local-inference/status" $headers
@@ -2062,7 +2141,73 @@ try {
     $secondProcess.Refresh()
     Assert-True (-not $secondProcess.HasExited) 'The installed desktop process exited after repair'
     $repairHeaders = Get-CertificateSessionHeaders $baseUrl
+    $repairTier = Invoke-JsonRequest "$baseUrl/api/tier" $repairHeaders
+    Assert-True ([string]$repairTier.tier -ceq 'FREE') `
+      "The repaired Solo install reported an unexpected effective tier: $($repairTier.tier)"
+    $receipt.checks['repairSoloTier'] = $true
     Assert-CertificateLifecycleData $baseUrl $repairHeaders $certificateLifecycleData $dataDir
+    if ($VerifyManagedModel) {
+      $managedModelName = [string]$receipt.managedModel.name
+      Assert-True (-not [string]::IsNullOrWhiteSpace($managedModelName)) `
+        'The repair certificate lost the managed model identity.'
+      $repairManagedStatus = $null
+      $repairManagedDeadline = [DateTime]::UtcNow.AddSeconds(300)
+      do {
+        try {
+          $repairManagedStatus = Invoke-JsonRequest "$baseUrl/api/local-inference/status" $repairHeaders
+        } catch {
+          $repairManagedStatus = $null
+        }
+        if ($null -ne $repairManagedStatus -and $repairManagedStatus.offlineReady -eq $true) {
+          break
+        }
+        Start-Sleep -Seconds 1
+      } while ([DateTime]::UtcNow -lt $repairManagedDeadline)
+      Assert-True ($null -ne $repairManagedStatus -and $repairManagedStatus.offlineReady -eq $true) `
+        'The persisted managed local model did not become ready after repair.'
+      $repairOllamaServers = @(
+        $repairManagedStatus.servers | Where-Object { [string]$_.type -eq 'ollama' }
+      )
+      Assert-True ($repairOllamaServers.Count -eq 1) `
+        'The repaired install did not expose exactly one Ollama runtime.'
+      Assert-True (@($repairOllamaServers[0].models) -contains $managedModelName) `
+        'The repaired install did not preserve the certified managed model.'
+      Assert-True ($null -ne $repairOllamaServers[0].modelDigests) `
+        'The repaired install did not advertise managed-model digests.'
+      $repairDigestProperty = $repairOllamaServers[0].modelDigests.PSObject.Properties[
+        $managedModelName
+      ]
+      Assert-True (
+        $null -ne $repairDigestProperty -and
+        [string]$repairDigestProperty.Value -ceq [string]$receipt.managedModelDigest
+      ) 'The repaired install changed the certified managed-model digest.'
+      $receipt.checks['repairManagedModelDigestPreserved'] = $true
+
+      $proxyChatResponse = Invoke-JsonPostRequest "$baseUrl/v1/chat/completions" @{
+        model = "ollama/$managedModelName"
+        messages = @(
+          [ordered]@{
+            role = 'user'
+            content = 'Reply with one short sentence confirming that local proxy inference works.'
+          }
+        )
+        max_tokens = 32
+        stream = $false
+      } $repairHeaders 300
+      Assert-True ([int]$proxyChatResponse.StatusCode -eq 200) `
+        'The repaired built-in proxy did not complete a managed local-model request.'
+      $proxyChat = $proxyChatResponse.Content | ConvertFrom-Json
+      $proxyChoices = @($proxyChat.choices)
+      Assert-True ($proxyChoices.Count -eq 1) `
+        'The repaired built-in proxy returned an unexpected choice count.'
+      $proxyContent = [string]$proxyChoices[0].message.content
+      Assert-True (-not [string]::IsNullOrWhiteSpace($proxyContent)) `
+        'The repaired built-in proxy completed without response content.'
+      Assert-True ([string]$proxyChat.model -eq $managedModelName) `
+        'The repaired built-in proxy did not strip the Ollama routing prefix.'
+      $receipt.managedModel['proxyRestartChatResponseChars'] = $proxyContent.Length
+      $receipt.checks['managedModelProxyRestartChat'] = $true
+    }
     $receipt.checks['repairPreservedData'] = $true
     $receipt.checks['repairRealWorkspaceAndMemoryPreserved'] = $true
     $receipt.checks['relaunchAfterRepair'] = $true

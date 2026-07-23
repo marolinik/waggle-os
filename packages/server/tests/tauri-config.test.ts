@@ -1141,6 +1141,7 @@ describe('CI/CD Configuration', () => {
         expect(windowsSteps).toContain('-ExpectedCandidateInstallerSha256 $candidateSha256');
         expect(windowsSteps).toContain('-ExpectedCandidateVersion $candidateVersion');
         expect(windowsSteps).toContain('-VerifyManagedModel');
+        expect([...windowsSteps.matchAll(/-VerifyManagedModel/g)]).toHaveLength(2);
         expect(windowsSteps).toContain('windows-installer-upgrade-certificate.json');
         expect([...windowsSteps.matchAll(/& \.\/scripts\/certify-windows-installer\.ps1/g)])
           .toHaveLength(2);
@@ -1152,7 +1153,17 @@ describe('CI/CD Configuration', () => {
         expect(handoffStep).toContain('$Receipt.certificationMode, $ExpectedMode');
         expect(handoffStep).toContain("$cleanReceiptData 'same-version-repair'");
         expect(handoffStep).toContain("$receiptData 'version-to-version-upgrade'");
-        expect(handoffStep).toContain('cleanReceiptData.managedModelVerified');
+        expect(handoffStep).toContain('certificateData.managedModelVerified');
+        expect(handoffStep).toContain('certificateData.certifiedTier');
+        expect(handoffStep).toContain("'soloTier'");
+        expect(handoffStep).toContain("'previousSoloTier'");
+        expect(handoffStep).toContain("'repairSoloTier'");
+        expect(handoffStep).toContain("'managedModelProxyRestartChat'");
+        expect(handoffStep).toContain("'previousManagedModelSeeded'");
+        expect(handoffStep).toContain("'upgradeManagedModelPreserved'");
+        expect(handoffStep).toContain("'repairManagedModelDigestPreserved'");
+        expect(handoffStep).toContain('upgrade.managedModelDigest');
+        expect([...handoffStep.matchAll(/'managedModelProxyRestartChat'/g)]).toHaveLength(2);
         expect(handoffStep).toContain('windows-installer-upgrade-certificate.json');
         expect(handoffStep).toContain('previousInstaller.sha256');
         expect(handoffStep).toContain('previousInstalledApp.authenticodeStatus');
@@ -1277,6 +1288,13 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain('No AI model is ready');
     expect(script).toContain("$receipt.checks['noModelChatSetupRequired']");
     expect(script).toContain("$baseUrl/api/tier");
+    expect(script).toContain("$receipt.certifiedTier = 'FREE'");
+    expect(script).toContain("$receipt.checks['soloTier']");
+    expect(script).toContain("$receipt.checks['previousSoloTier']");
+    expect(script).toContain("$receipt.checks['repairSoloTier']");
+    expect(script).toMatch(
+      /if \(-not \$RequireVersionToVersionUpgrade\) \{[\s\S]*?\$chatProbeMessage/,
+    );
     expect(script).toContain('unauthenticatedProtectedRoute');
     expect(script).toContain("'WAGGLE_TRUST_LOCALHOST'");
     expect(script).toContain("'WAGGLE_SQLITE_VEC_PATH'");
@@ -1299,6 +1317,12 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain('$managedOperationTimeoutSeconds = 3600');
     expect(script).toContain('$receipt.managedModelVerified = $true');
     expect(script).toContain("$receipt.checks['managedModelChat']");
+    expect(script).toContain('$baseUrl/v1/chat/completions');
+    expect(script).toContain('model = "ollama/$managedModelName"');
+    expect(script).toContain("$receipt.checks['managedModelProxyRestartChat']");
+    expect(script).toContain("$receipt.checks['previousManagedModelSeeded']");
+    expect(script).toContain("$receipt.checks['upgradeManagedModelPreserved']");
+    expect(script).toContain("$receipt.checks['repairManagedModelDigestPreserved']");
     expect(script).toContain('managedModelDigest');
     expect(script).toContain('managedRuntimeCleanup');
     expect(script).toContain('Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot');
@@ -1367,12 +1391,37 @@ describe('CI/CD Configuration', () => {
     const candidateInstallIndex = script.indexOf('Invoke-RawProcess $InstallerPath', previousInstallIndex);
     const candidateLaunchIndex = script.indexOf('$firstProcess = Start-InstalledApp');
     const candidateRepairIndex = script.lastIndexOf('Invoke-RawProcess $InstallerPath');
+    const previousSoloTierIndex = script.indexOf("$receipt.checks['previousSoloTier']");
+    const previousManagedModelSeedIndex = script.indexOf(
+      "$receipt.checks['previousManagedModelSeeded']",
+    );
+    const upgradeManagedModelPreservedIndex = script.indexOf(
+      "$receipt.checks['upgradeManagedModelPreserved']",
+    );
+    const managedModelProxyRestartIndex = script.indexOf(
+      "$receipt.checks['managedModelProxyRestartChat']",
+    );
+    const repairSoloTierIndex = script.indexOf("$receipt.checks['repairSoloTier']");
+    const repairManagedModelDigestIndex = script.indexOf(
+      "$receipt.checks['repairManagedModelDigestPreserved']",
+    );
     const uninstallIndex = script.indexOf("Invoke-RawProcess $registeredUninstaller '/S'");
     expect(previousInstallIndex).toBeGreaterThanOrEqual(0);
     expect(previousLaunchIndex).toBeGreaterThan(previousInstallIndex);
+    expect(previousSoloTierIndex).toBeGreaterThan(previousLaunchIndex);
+    expect(previousManagedModelSeedIndex).toBeGreaterThan(previousSoloTierIndex);
+    expect(previousManagedModelSeedIndex).toBeLessThan(candidateInstallIndex);
     expect(candidateInstallIndex).toBeGreaterThan(previousLaunchIndex);
     expect(candidateLaunchIndex).toBeGreaterThan(candidateInstallIndex);
+    expect(upgradeManagedModelPreservedIndex).toBeGreaterThan(candidateLaunchIndex);
+    expect(upgradeManagedModelPreservedIndex).toBeLessThan(candidateRepairIndex);
     expect(candidateRepairIndex).toBeGreaterThan(candidateLaunchIndex);
+    expect(repairSoloTierIndex).toBeGreaterThan(candidateRepairIndex);
+    expect(repairManagedModelDigestIndex).toBeGreaterThan(repairSoloTierIndex);
+    expect(repairManagedModelDigestIndex).toBeLessThan(managedModelProxyRestartIndex);
+    expect(repairSoloTierIndex).toBeLessThan(managedModelProxyRestartIndex);
+    expect(managedModelProxyRestartIndex).toBeGreaterThan(candidateRepairIndex);
+    expect(managedModelProxyRestartIndex).toBeLessThan(uninstallIndex);
     expect(uninstallIndex).toBeGreaterThan(candidateRepairIndex);
     expect(script).toContain('sourceFilesClean');
     expect(script).toContain("'scripts/build-sidecar.mjs'");

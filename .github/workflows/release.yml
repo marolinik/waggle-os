@@ -334,7 +334,8 @@ jobs:
             -ExpectedPreviousVersion $env:WAGGLE_UPGRADE_BASE_VERSION `
             -ExpectedPreviousSourceRevision $env:WAGGLE_UPGRADE_BASE_COMMIT `
             -ExpectedCandidateInstallerSha256 $candidateSha256 `
-            -ExpectedCandidateVersion $candidateVersion
+            -ExpectedCandidateVersion $candidateVersion `
+            -VerifyManagedModel
 
           $postCertificationSha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
           if (-not [string]::Equals($postCertificationSha256, $candidateSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -524,13 +525,20 @@ jobs:
               throw 'Lifecycle receipt is missing a validated Authenticode timestamp'
             }
           }
-          if (-not [bool]::True.Equals($cleanReceiptData.managedModelVerified)) {
-            throw 'Clean-install receipt does not prove a managed local-model chat completion'
-          }
-          if ([string]$cleanReceiptData.managedModelDigest -notmatch '^sha256:[0-9a-f]{64}$') {
-            throw 'Clean-install receipt does not bind the managed model to an immutable manifest digest'
-          }
           foreach ($certificateData in @($cleanReceiptData, $receiptData)) {
+            if (-not [bool]::True.Equals($certificateData.managedModelVerified)) {
+              throw 'Lifecycle receipt does not prove a managed local-model chat completion'
+            }
+            if ([string]$certificateData.managedModelDigest -notmatch '^sha256:[0-9a-f]{64}$') {
+              throw 'Lifecycle receipt does not bind the managed model to an immutable manifest digest'
+            }
+            if (-not [string]::Equals(
+                  [string]$certificateData.certifiedTier,
+                  'FREE',
+                  [System.StringComparison]::Ordinal
+                )) {
+              throw 'Lifecycle receipt does not certify the Solo/FREE tier'
+            }
             if ([string]::IsNullOrWhiteSpace([string]$certificateData.lifecycleData.workspaceId) -or
                 [long]$certificateData.lifecycleData.personalFrameId -lt 1 -or
                 [long]$certificateData.lifecycleData.workspaceFrameId -lt 1 -or
@@ -545,14 +553,31 @@ jobs:
               throw 'Lifecycle receipt does not bind real workspace and memory data to an unchanged uninstall manifest'
             }
           }
+          if ([string]::IsNullOrWhiteSpace([string]$receiptData.upgrade.managedModelName) -or
+              [string]$receiptData.upgrade.managedModelDigest -notmatch '^sha256:[0-9a-f]{64}$' -or
+              -not [string]::Equals(
+                [string]$receiptData.upgrade.managedModelName,
+                [string]$receiptData.managedModel.name,
+                [System.StringComparison]::Ordinal
+              ) -or
+              -not [string]::Equals(
+                [string]$receiptData.upgrade.managedModelDigest,
+                [string]$receiptData.managedModelDigest,
+                [System.StringComparison]::Ordinal
+              )) {
+            throw 'Upgrade receipt does not preserve the previous managed-model identity and digest'
+          }
           $cleanRequiredChecks = @(
             'sourceRevision', 'sourceFilesClean', 'generatedInstallerInclude', 'profileDataDeletionAbsent',
             'baseAppDataDeletionNeutralized', 'authenticodeSignature', 'authenticodeSigner',
             'authenticodeTimestamp', 'installedAppAuthenticodeSignature',
             'installedAppAuthenticodeSigner', 'installedAppAuthenticodeTimestamp',
             'silentInstall', 'vaultKeyAclRestricted', 'windowsInboxTools', 'noModelChatSetupRequired',
-            'dockerIndependentRuntimePrerequisites', 'managedRuntimeBootstrap', 'managedModelPull', 'managedModelChat',
-            'managedRuntimeCleanup', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
+            'soloTier', 'dockerIndependentRuntimePrerequisites', 'managedRuntimeBootstrap',
+            'managedModelPull', 'managedModelChat', 'managedModelProxyRestartChat',
+            'managedRuntimeCleanup', 'sameVersionRepair', 'repairSoloTier',
+            'repairManagedModelDigestPreserved',
+            'relaunchAfterRepair', 'silentUninstall',
             'defaultProfileDataDir', 'realWorkspaceAndMemorySeeded',
             'repairRealWorkspaceAndMemoryPreserved', 'uninstallRealWorkspaceAndMemoryPreserved',
             'configuredDataDirPreserved', 'profileDataPathPreserved', 'certificateProfileCleanup',
@@ -571,8 +596,12 @@ jobs:
             'versionToVersionUpgrade', 'upgradeSameInstallDirectory', 'upgradeConfiguredDataPreserved',
             'upgradeProfileDataPreserved', 'upgradeVaultKeyPreserved', 'upgradeRegistrations',
             'candidateLaunch', 'relaunchAfterUpgrade',
-            'silentInstall', 'vaultKeyAclRestricted', 'windowsInboxTools', 'noModelChatSetupRequired',
-            'dockerIndependentRuntimePrerequisites', 'sameVersionRepair', 'relaunchAfterRepair', 'silentUninstall',
+            'silentInstall', 'vaultKeyAclRestricted', 'windowsInboxTools', 'soloTier', 'previousSoloTier',
+            'dockerIndependentRuntimePrerequisites', 'managedRuntimeBootstrap', 'managedModelPull',
+            'managedModelChat', 'managedModelProxyRestartChat', 'managedRuntimeCleanup',
+            'previousManagedModelSeeded', 'upgradeManagedModelPreserved',
+            'sameVersionRepair', 'repairSoloTier', 'repairManagedModelDigestPreserved',
+            'relaunchAfterRepair', 'silentUninstall',
             'defaultProfileDataDir', 'realWorkspaceAndMemorySeeded',
             'upgradeRealWorkspaceAndMemoryPreserved', 'repairRealWorkspaceAndMemoryPreserved',
             'uninstallRealWorkspaceAndMemoryPreserved', 'configuredDataDirPreserved',

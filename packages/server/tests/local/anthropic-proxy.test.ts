@@ -58,6 +58,7 @@ describe('Anthropic Proxy Routes', () => {
   afterEach(async () => {
     if (server) await server.close();
     globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     // Restore env var
     if (originalApiKey !== undefined) {
@@ -89,6 +90,8 @@ describe('Anthropic Proxy Routes', () => {
         vi.stubEnv(envName, '');
       }
       server = createTestServer();
+      const unavailableFetch = vi.fn(async () => new Response(null, { status: 503 }));
+      globalThis.fetch = unavailableFetch as unknown as typeof globalThis.fetch;
       const res = await server.inject({
         method: 'GET',
         url: '/v1/health/readiness',
@@ -107,6 +110,178 @@ describe('Anthropic Proxy Routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json()).toMatchObject({ status: 'ready' });
+    });
+
+    it('reports ready when a loopback Ollama runtime has a local model', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11455');
+      server = createTestServer();
+      const localFetch = vi.fn(async (url: string | URL | Request) => {
+        const payload = String(url).endsWith('/api/tags')
+          ? { models: [{ name: 'qwen3:1.7b' }] }
+          : { capabilities: ['completion', 'tools'] };
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      globalThis.fetch = localFetch as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ status: 'ready' });
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'http://127.0.0.1:11455/api/tags',
+        expect.objectContaining({ redirect: 'error' }),
+      );
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'http://127.0.0.1:11455/api/show',
+        expect.objectContaining({
+          body: JSON.stringify({ model: 'qwen3:1.7b' }),
+          redirect: 'error',
+        }),
+      );
+    });
+
+    it('does not report ready for embedding-only or Ollama cloud aliases', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11455');
+      server = createTestServer();
+      const shownModels: string[] = [];
+      const localFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        const payload = String(url).endsWith('/api/tags')
+          ? {
+              models: [
+                { name: 'all-minilm:latest' },
+                { name: 'bge-m3:latest' },
+                { name: 'qwen3:cloud' },
+                { name: 'llama3.2:3b', remote_host: 'https://ollama.com' },
+              ],
+            }
+          : (() => {
+              shownModels.push(JSON.parse(String(init?.body)).model);
+              return { capabilities: ['embedding'] };
+            })();
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      globalThis.fetch = localFetch as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toMatchObject({ status: 'unavailable' });
+      expect(shownModels).toEqual(['all-minilm:latest', 'bge-m3:latest']);
+    });
+
+    it('coalesces concurrent Ollama readiness probes and bounds capability checks', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11456');
+      server = createTestServer();
+      let tagsCalls = 0;
+      let showCalls = 0;
+      let activeShowCalls = 0;
+      let peakShowCalls = 0;
+      const models = Array.from({ length: 12 }, (_, index) => ({ name: `model-${index}` }));
+      const localFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith('/api/tags')) {
+          tagsCalls += 1;
+          return new Response(JSON.stringify({ models }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        showCalls += 1;
+        activeShowCalls += 1;
+        peakShowCalls = Math.max(peakShowCalls, activeShowCalls);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        activeShowCalls -= 1;
+        const shownModel = JSON.parse(String(init?.body)).model;
+        const capabilities = shownModel === 'model-11' ? ['completion'] : ['embedding'];
+        return new Response(JSON.stringify({ capabilities }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      globalThis.fetch = localFetch as unknown as typeof globalThis.fetch;
+
+      const responses = await Promise.all(Array.from({ length: 8 }, () => server!.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      })));
+      const cachedResponse = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(responses.every((response) => response.statusCode === 200)).toBe(true);
+      expect(cachedResponse.statusCode).toBe(200);
+      expect(tagsCalls).toBe(1);
+      expect(showCalls).toBe(models.length);
+      expect(peakShowCalls).toBeLessThanOrEqual(4);
+    });
+
+    it('refreshes cached Ollama readiness after the short TTL expires', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11457');
+      let now = 10_000;
+      let ready = false;
+      let tagsCalls = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => now);
+      server = createTestServer();
+      const localFetch = vi.fn(async (url: string | URL | Request) => {
+        if (String(url).endsWith('/api/tags')) {
+          tagsCalls += 1;
+          return new Response(JSON.stringify({ models: [{ name: 'qwen3:1.7b' }] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({
+          capabilities: ready ? ['completion'] : ['embedding'],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      globalThis.fetch = localFetch as unknown as typeof globalThis.fetch;
+
+      const unavailable = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+      const cachedUnavailable = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+      ready = true;
+      now += 2_001;
+      const refreshed = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(unavailable.statusCode).toBe(503);
+      expect(cachedUnavailable.statusCode).toBe(503);
+      expect(refreshed.statusCode).toBe(200);
+      expect(tagsCalls).toBe(2);
     });
   });
 
@@ -761,6 +936,137 @@ describe('Anthropic Proxy Routes', () => {
   });
 
   describe('Docker-independent provider routing', () => {
+    it('forwards Ollama models to the loopback runtime without cloud credentials', async () => {
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11455');
+      server = createTestServer();
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'Local route works.' }, finish_reason: 'stop' }],
+        model: 'qwen3:1.7b',
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'ollama/qwen3:1.7b',
+          messages: [{ role: 'user', content: 'test' }],
+          tools: [{
+            type: 'function',
+            function: { name: 'read_file', description: 'Read', parameters: { type: 'object' } },
+          }],
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().choices[0].message.content).toBe('Local route works.');
+      const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+      expect(String(url)).toBe('http://127.0.0.1:11455/v1/chat/completions');
+      expect(init?.method).toBe('POST');
+      expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
+      expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+      expect(init?.redirect).toBe('error');
+      const outbound = JSON.parse(String(init?.body));
+      expect(outbound.model).toBe('qwen3:1.7b');
+      expect(outbound.tools[0].function.name).toBe('read_file');
+    });
+
+    it('passes through Ollama SSE without buffering it into JSON', async () => {
+      vi.stubEnv('OLLAMA_HOST', 'http://localhost:11455');
+      server = createTestServer();
+      const upstream = 'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n';
+      globalThis.fetch = vi.fn(async () => new Response(upstream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'ollama/qwen3:1.7b',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: true,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/event-stream');
+      expect(res.body).toBe(upstream);
+      expect(String(vi.mocked(globalThis.fetch).mock.calls[0][0]))
+        .toBe('http://localhost:11455/v1/chat/completions');
+    });
+
+    it('aborts the Ollama generation when the client disconnects', async () => {
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11455');
+      server = createTestServer();
+      let upstreamSignal: AbortSignal | undefined;
+      globalThis.fetch = vi.fn(async (_url, init) => {
+        upstreamSignal = init?.signal as AbortSignal | undefined;
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(
+              'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+            ));
+            const fallback = setTimeout(() => controller.close(), 500);
+            upstreamSignal?.addEventListener('abort', () => {
+              clearTimeout(fallback);
+              controller.close();
+            }, { once: true });
+          },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }) as unknown as typeof globalThis.fetch;
+
+      await server.listen({ host: '127.0.0.1', port: 0 });
+      const address = server.server.address();
+      if (!address || typeof address === 'string') throw new Error('Test server did not bind TCP');
+      const clientAbort = new AbortController();
+      const clientResponse = await originalFetch(
+        `http://127.0.0.1:${address.port}/v1/chat/completions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'ollama/qwen3:1.7b',
+            messages: [{ role: 'user', content: 'test' }],
+            stream: true,
+          }),
+          signal: clientAbort.signal,
+        },
+      );
+      const clientReader = clientResponse.body?.getReader();
+      expect(clientReader).toBeDefined();
+      await clientReader!.read();
+      clientAbort.abort();
+
+      await vi.waitFor(() => {
+        expect(upstreamSignal?.aborted).toBe(true);
+      }, { timeout: 1_000 });
+    });
+
+    it('rejects a non-loopback Ollama endpoint before making an outbound request', async () => {
+      vi.stubEnv('OLLAMA_HOST', 'http://ollama.example.test');
+      server = createTestServer();
+      globalThis.fetch = vi.fn();
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'ollama/qwen3:1.7b',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error.message).toContain('HTTP loopback');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
     it('forwards OpenAI-compatible models directly without LiteLLM', async () => {
       server = createTestServer({
         vaultProviders: { openai: { value: 'openai-vault-key' } },

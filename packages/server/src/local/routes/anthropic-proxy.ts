@@ -10,7 +10,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync, FastifyInstance, FastifyReply } from 'fastify';
 import { validateOrigin } from '../cors-config.js';
 import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
-import { PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
+import { isRemoteOllamaAlias, PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -91,8 +91,11 @@ function resolveProviderRoute(model: string): ProviderRoute | null {
   if (slash > 0) {
     const prefix = trimmed.slice(0, slash).toLowerCase();
     const providerId = PROVIDER_ALIASES[prefix] ?? prefix;
-    if (!PROVIDER_MODEL_CATALOGS[providerId]) return null;
     const upstreamModel = trimmed.slice(slash + 1);
+    if (providerId === 'ollama') {
+      return upstreamModel ? { providerId, model: upstreamModel } : null;
+    }
+    if (!PROVIDER_MODEL_CATALOGS[providerId]) return null;
     return upstreamModel ? { providerId, model: upstreamModel } : null;
   }
   const providerId = inferProvider(trimmed);
@@ -104,6 +107,118 @@ function completionEndpoint(baseUrl: string): string {
   if (normalized.endsWith('/chat/completions')) return normalized;
   if (normalized.endsWith('/models')) normalized = normalized.slice(0, -'/models'.length);
   return `${normalized}/chat/completions`;
+}
+
+function ollamaBaseUrl(): string | null {
+  const configured = process.env.OLLAMA_HOST ?? 'http://127.0.0.1:11434';
+  try {
+    const url = new URL(configured);
+    const isLoopback = url.hostname === '127.0.0.1'
+      || url.hostname === 'localhost'
+      || url.hostname === '::1'
+      || url.hostname === '[::1]';
+    if (
+      url.protocol !== 'http:'
+      || !isLoopback
+      || url.username
+      || url.password
+      || url.search
+      || url.hash
+      || (url.pathname !== '' && url.pathname !== '/')
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function ollamaCompletionEndpoint(): string | null {
+  const baseUrl = ollamaBaseUrl();
+  return baseUrl ? `${baseUrl}/v1/chat/completions` : null;
+}
+
+const OLLAMA_READINESS_CACHE_MS = 2_000;
+const OLLAMA_READINESS_MAX_CONCURRENCY = 4;
+
+async function probeReadyOllamaModel(baseUrl: string): Promise<boolean> {
+  const signal = AbortSignal.timeout(2_000);
+  try {
+    const response = await fetch(`${baseUrl}/api/tags`, {
+      redirect: 'error',
+      signal,
+    });
+    if (!response.ok) return false;
+    const payload = await response.json() as {
+      models?: Array<{ name?: unknown; remote_host?: unknown }>;
+    };
+    if (!Array.isArray(payload.models)) return false;
+    const localModels = payload.models.flatMap((model) => {
+      if (typeof model.name !== 'string') return [];
+      const remoteHost = typeof model.remote_host === 'string' ? model.remote_host : undefined;
+      return isRemoteOllamaAlias(model.name, remoteHost) ? [] : [model.name];
+    }).slice(0, 64);
+    let nextModelIndex = 0;
+    let foundCompletionModel = false;
+    const workers = Array.from(
+      { length: Math.min(OLLAMA_READINESS_MAX_CONCURRENCY, localModels.length) },
+      async () => {
+        while (!foundCompletionModel) {
+          const model = localModels[nextModelIndex];
+          nextModelIndex += 1;
+          if (!model) return;
+          try {
+            const detail = await fetch(`${baseUrl}/api/show`, {
+              method: 'POST',
+              redirect: 'error',
+              signal,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model }),
+            });
+            if (!detail.ok) continue;
+            const shown = await detail.json() as { capabilities?: unknown };
+            if (
+              Array.isArray(shown.capabilities)
+              && shown.capabilities.some((capability) => capability === 'completion')
+            ) {
+              foundCompletionModel = true;
+            }
+          } catch {
+            // A malformed or unavailable model is not completion-ready.
+          }
+        }
+      }
+    );
+    await Promise.all(workers);
+    return foundCompletionModel;
+  } catch {
+    return false;
+  }
+}
+
+function createOllamaReadinessChecker(): () => Promise<boolean> {
+  let cached: { baseUrl: string; ready: boolean; expiresAt: number } | null = null;
+  let inFlight: { baseUrl: string; promise: Promise<boolean> } | null = null;
+
+  return async () => {
+    const baseUrl = ollamaBaseUrl();
+    if (!baseUrl) return false;
+    const now = Date.now();
+    if (cached?.baseUrl === baseUrl && cached.expiresAt > now) return cached.ready;
+    if (inFlight?.baseUrl === baseUrl) return inFlight.promise;
+
+    const promise = probeReadyOllamaModel(baseUrl).then((ready) => {
+      cached = { baseUrl, ready, expiresAt: Date.now() + OLLAMA_READINESS_CACHE_MS };
+      return ready;
+    });
+    inFlight = { baseUrl, promise };
+    try {
+      return await promise;
+    } finally {
+      if (inFlight?.promise === promise) inFlight = null;
+    }
+  };
 }
 
 function translateAnthropicUsage(usage: AnthropicUsage | undefined) {
@@ -155,6 +270,88 @@ function directProviderBaseUrl(server: FastifyInstance, providerId: string): str
   // Google's native catalog is not under its OpenAI-compatibility namespace.
   if (providerId === 'google') return 'https://generativelanguage.googleapis.com/v1beta/openai';
   return PROVIDER_MODEL_CATALOGS[providerId].endpoint;
+}
+
+async function sendCompatibleResponse(
+  upstream: Response,
+  stream: boolean | undefined,
+  origin: string | undefined,
+  reply: FastifyReply,
+): Promise<unknown> {
+  const contentType = upstream.headers.get('content-type')
+    ?? (stream ? 'text/event-stream' : 'application/json');
+  if (stream && upstream.body) {
+    await reply.hijack();
+    reply.raw.writeHead(upstream.status, {
+      'Content-Type': contentType,
+      'Cache-Control': upstream.headers.get('cache-control') ?? 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': validateOrigin(origin),
+    });
+    const reader = upstream.body.getReader();
+    let completed = false;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        reply.raw.write(Buffer.from(value));
+      }
+      completed = true;
+    } catch {
+      // Upstream or client closed the stream; the finally block terminates it.
+    } finally {
+      if (!completed) await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.end();
+    }
+    return;
+  }
+
+  const payload = Buffer.from(await upstream.arrayBuffer());
+  reply.code(upstream.status).header('Content-Type', contentType);
+  return reply.send(payload);
+}
+
+async function forwardOllamaProvider(
+  route: ProviderRoute,
+  body: ChatCompletionBody,
+  origin: string | undefined,
+  reply: FastifyReply,
+): Promise<unknown> {
+  const url = ollamaCompletionEndpoint();
+  if (!url) {
+    return reply.status(503).send({
+      error: {
+        message: 'Local Ollama requires an HTTP loopback OLLAMA_HOST endpoint.',
+      },
+    });
+  }
+
+  const abortController = new AbortController();
+  const abortUpstream = () => abortController.abort();
+  reply.raw.once('close', abortUpstream);
+  try {
+    const upstream = await fetch(url, {
+      method: 'POST',
+      redirect: 'error',
+      signal: abortController.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(body.stream ? { Accept: 'text/event-stream' } : {}),
+      },
+      body: JSON.stringify({ ...body, model: route.model }),
+    });
+    return await sendCompatibleResponse(upstream, body.stream, origin, reply);
+  } catch (error) {
+    if (abortController.signal.aborted) return;
+    return reply.status(502).send({
+      error: {
+        message: `Ollama API request failed: ${error instanceof Error ? error.message : String(error)}`,
+      },
+    });
+  } finally {
+    reply.raw.off('close', abortUpstream);
+  }
 }
 
 async function forwardCompatibleProvider(
@@ -242,34 +439,7 @@ async function forwardCompatibleProvider(
     };
   }
 
-  const contentType = upstream.headers.get('content-type')
-    ?? (body.stream ? 'text/event-stream' : 'application/json');
-  if (body.stream && upstream.body) {
-    await reply.hijack();
-    reply.raw.writeHead(upstream.status, {
-      'Content-Type': contentType,
-      'Cache-Control': upstream.headers.get('cache-control') ?? 'no-cache',
-      Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': validateOrigin(origin),
-    });
-    const reader = upstream.body.getReader();
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        reply.raw.write(Buffer.from(value));
-      }
-    } catch {
-      // Upstream or client closed the stream; the finally block terminates it.
-    } finally {
-      reply.raw.end();
-    }
-    return;
-  }
-
-  const payload = Buffer.from(await upstream.arrayBuffer());
-  reply.code(upstream.status).header('Content-Type', contentType);
-  return reply.send(payload);
+  return sendCompatibleResponse(upstream, body.stream, origin, reply);
 }
 
 /** Map model names (from various formats) to Anthropic model IDs */
@@ -299,6 +469,8 @@ function mapModel(model: string): string {
 }
 
 export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
+  const hasReadyOllamaModel = createOllamaReadinessChecker();
+
   // Process liveness is independent from whether a completion provider is
   // configured. Installer/startup probes use this endpoint.
   server.get('/v1/health/liveliness', async () => ({ status: 'healthy' }));
@@ -308,9 +480,10 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   // separate from liveness so a clean Solo install remains operational while
   // chat can truthfully ask the user to configure a model.
   server.get('/v1/health/readiness', async (_request, reply) => {
-    const hasConfiguredProvider = Boolean(getAnthropicKey(server))
+    let hasConfiguredProvider = Boolean(getAnthropicKey(server))
       || Object.keys(PROVIDER_MODEL_CATALOGS)
         .some((providerId) => getProviderApiKeys(providerId, server.vault).length > 0);
+    if (!hasConfiguredProvider) hasConfiguredProvider = await hasReadyOllamaModel();
     if (!hasConfiguredProvider) {
       return reply.status(503).send({
         status: 'unavailable',
@@ -330,6 +503,14 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
           message: `Model "${body.model}" does not identify a supported provider. Select a discovered provider/model id.`,
         },
       });
+    }
+    if (route.providerId === 'ollama') {
+      return forwardOllamaProvider(
+        route,
+        body,
+        request.headers.origin as string | undefined,
+        reply,
+      );
     }
     if (route.providerId !== 'anthropic') {
       return forwardCompatibleProvider(
