@@ -235,6 +235,63 @@ export interface LlmProviderStatus {
   checkedAt: string;
 }
 
+export interface WorkspaceCollaborationBinding {
+  /** Tools visible to the owning turn after persona, availability, and intent filtering. */
+  visibleTools: ToolDefinition[];
+  /** Broader policy-filtered pool from which child workers receive their tools. */
+  workerTools: ToolDefinition[];
+  runLoop: AgentRunner;
+  signal: AbortSignal;
+  runChildTransaction: (
+    tools: readonly ToolDefinition[],
+    operation: () => Promise<import('@waggle/agent').AgentResponse>,
+  ) => Promise<import('@waggle/agent').AgentResponse>;
+  defaultModel: string;
+}
+
+const WORKSPACE_COLLABORATION_TOOL_NAMES = new Set([
+  'spawn_agent',
+  'list_agents',
+  'get_agent_result',
+  'compose_workflow',
+  'orchestrate_workflow',
+  'list_harnesses',
+  'run_harness',
+]);
+
+export type WorkspaceCollaborationToolFactory = (
+  workerTools: ToolDefinition[],
+  runLoop: AgentRunner,
+  defaultModel: string,
+  signal?: AbortSignal,
+) => ToolDefinition[];
+
+export function bindWorkspaceChildTools(
+  options: WorkspaceCollaborationBinding,
+  createTools: WorkspaceCollaborationToolFactory,
+): ToolDefinition[] {
+  const enabledNames = new Set(options.visibleTools.map((tool) => tool.name));
+  const workerTools = options.workerTools.filter(
+    (tool) => !WORKSPACE_COLLABORATION_TOOL_NAMES.has(tool.name),
+  );
+  const childRunLoop: AgentRunner = (config) => options.runChildTransaction(
+    config.tools,
+    () => options.runLoop({ ...config, signal: options.signal }),
+  );
+  const replacements = createTools(
+    workerTools,
+    childRunLoop,
+    options.defaultModel,
+    options.signal,
+  ).filter((tool) => enabledNames.has(tool.name));
+  return [
+    ...options.visibleTools.filter(
+      (tool) => !WORKSPACE_COLLABORATION_TOOL_NAMES.has(tool.name),
+    ),
+    ...replacements,
+  ];
+}
+
 export interface AgentState {
   orchestrator: Orchestrator;
   allTools: ToolDefinition[];
@@ -267,6 +324,11 @@ export interface AgentState {
    * (read_other_workspace, list_workspaces, list_workspace_files) scoped to that source.
    */
   buildToolsForSession: (sessionOrch: Orchestrator, workspacePath: string, sourceWorkspaceId?: string) => ToolDefinition[];
+  /**
+   * Recreate collaboration producers after primitive workspace tools are lease-wrapped.
+   * The fresh producers run each child loop as one scope-local transaction.
+   */
+  bindWorkspaceCollaborationTools: (options: WorkspaceCollaborationBinding) => ToolDefinition[];
   /**
    * Activate workspace mind for the given workspace ID. Returns true if switched.
    * @deprecated — use `sessionManager.getOrCreate()` with `createSessionOrchestrator`
@@ -1019,6 +1081,59 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     }
   };
 
+  const createWorkspaceCollaborationTools = (
+    workerTools: ToolDefinition[],
+    runLoop: AgentRunner,
+    defaultModel: string,
+    signal?: AbortSignal,
+  ): ToolDefinition[] => {
+    const workspaceSubAgentTools = createSubAgentTools({
+      availableTools: workerTools,
+      runLoop,
+      litellmUrl: fullConfig.litellmUrl,
+      litellmApiKey,
+      defaultModel,
+      onSubAgentStatus: (event) => {
+        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
+          id: event.agentId,
+          name: event.name,
+          role: event.role,
+          status: event.status === 'error' ? 'failed' : event.status,
+          task: event.task,
+          toolsUsed: event.toolsUsed,
+          startedAt: event.startedAt,
+          completedAt: event.completedAt,
+        }]);
+      },
+    });
+    const workspaceWorkflowTools = createWorkflowTools({
+      availableTools: workerTools,
+      runLoop,
+      litellmUrl: fullConfig.litellmUrl,
+      litellmApiKey,
+      defaultModel,
+      signal,
+      onWorkerStatus: (event) => {
+        const orch = server.agentState.subagentOrchestrator;
+        const agents = orch ? orch.getWorkers().map(w => ({
+          id: w.id, name: w.name, role: w.role, status: w.status,
+          task: w.task, toolsUsed: w.toolsUsed, startedAt: w.startedAt, completedAt: w.completedAt,
+        })) : [{
+          id: event.workerId, name: event.workerState.name, role: event.workerState.role,
+          status: event.workerState.status, task: event.workerState.task,
+          toolsUsed: event.workerState.toolsUsed, startedAt: event.workerState.startedAt,
+          completedAt: event.workerState.completedAt,
+        }];
+        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, agents);
+      },
+    });
+    return [...workspaceSubAgentTools, ...workspaceWorkflowTools];
+  };
+
+  const bindWorkspaceCollaborationTools = (
+    options: WorkspaceCollaborationBinding,
+  ): ToolDefinition[] => bindWorkspaceChildTools(options, createWorkspaceCollaborationTools);
+
   // Factory to rebuild workspace-scoped tools for a given directory.
   // Optional `orchForMindTools` replaces the shared-orchestrator mind tools with
   // a session-specific orchestrator's tools (Option Y fix from Phase A.1 plan).
@@ -1060,46 +1175,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       ...cliTools,
       ...connectorTools,
     ];
-    const wsSub = createSubAgentTools({
-      availableTools: wsBase,
-      runLoop: runAgentLoop,
-      litellmUrl: fullConfig.litellmUrl,
-      litellmApiKey: litellmApiKey,
-      defaultModel: 'claude-sonnet-4-6',
-      onSubAgentStatus: (event) => {
-        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
-          id: event.agentId,
-          name: event.name,
-          role: event.role,
-          status: event.status === 'error' ? 'failed' : event.status,
-          task: event.task,
-          toolsUsed: event.toolsUsed,
-          startedAt: event.startedAt,
-          completedAt: event.completedAt,
-        }]);
-      },
-    });
-    const wsWorkflow = createWorkflowTools({
-      availableTools: wsBase,
-      runLoop: runAgentLoop,
-      litellmUrl: fullConfig.litellmUrl,
-      litellmApiKey: litellmApiKey,
-      defaultModel: 'claude-sonnet-4-6',
-      onWorkerStatus: (event) => {
-        const orch = server.agentState.subagentOrchestrator;
-        const agents = orch ? orch.getWorkers().map(w => ({
-          id: w.id, name: w.name, role: w.role, status: w.status,
-          task: w.task, toolsUsed: w.toolsUsed, startedAt: w.startedAt, completedAt: w.completedAt,
-        })) : [{
-          id: event.workerId, name: event.workerState.name, role: event.workerState.role,
-          status: event.workerState.status, task: event.workerState.task,
-          toolsUsed: event.workerState.toolsUsed, startedAt: event.workerState.startedAt,
-          completedAt: event.workerState.completedAt,
-        }];
-        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, agents);
-      },
-    });
-    return [...wsBase, ...wsSub, ...wsWorkflow];
+    return [
+      ...wsBase,
+      ...createWorkspaceCollaborationTools(wsBase, runAgentLoop, 'claude-sonnet-4-6'),
+    ];
   };
 
   // ── Workspace Session Manager ────────────────────────────────────
@@ -1506,6 +1585,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     buildToolsForWorkspace,
     createSessionOrchestrator,
     buildToolsForSession,
+    bindWorkspaceCollaborationTools,
     activateWorkspaceMind: activateWorkspaceMindWithWeaver,
     getWorkspaceMindDb,
     closeWorkspaceMind,

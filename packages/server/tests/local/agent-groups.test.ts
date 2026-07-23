@@ -4,8 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { FrameStore, MindDB } from '@waggle/core';
-import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/agent';
+import { createWorkflowTools, type AgentLoopConfig, type AgentResponse, type ToolDefinition } from '@waggle/agent';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
+import {
+  bindWorkspaceChildTools,
+  type WorkspaceCollaborationBinding,
+} from '../../src/local/index.js';
 import { localJobRoutes } from '../../src/local/routes/jobs.js';
 import { agentGroupRoutes } from '../../src/local/routes/agent-groups.js';
 import { LocalJobStore } from '../../src/local/job-store.js';
@@ -50,19 +54,19 @@ function createServer(
 }
 
 async function waitForJob(server: ReturnType<typeof Fastify>, jobId: string) {
-  for (let attempt = 0; attempt < 50; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     const response = await server.inject({ method: 'GET', url: `/api/jobs/${jobId}` });
     const job = response.json() as { status: string; output?: Record<string, unknown> };
     if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') return job;
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('job did not finish');
 }
 
 async function waitFor(predicate: () => boolean, message: string): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 400; attempt++) {
     if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(message);
 }
@@ -272,6 +276,7 @@ describe('local agent group execution', () => {
         toolBuilds.push({ cwd, workspaceId });
         return [sessionOnlyTool];
       },
+      bindWorkspaceCollaborationTools: ({ visibleTools }: { visibleTools: ToolDefinition[] }) => visibleTools,
       workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
     } as never);
     server.decorate('agentRunner', (config: AgentLoopConfig) => {
@@ -430,6 +435,7 @@ describe('local agent group execution', () => {
       workspaceTurnCoordinator,
       createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
       buildToolsForSession: () => checkoutTools,
+      bindWorkspaceCollaborationTools: ({ visibleTools }: { visibleTools: ToolDefinition[] }) => visibleTools,
     } as never);
     server.decorate('agentRunner', async (config: AgentLoopConfig) => {
       starts.push(starts.length === 0 ? 'first' : 'second');
@@ -507,6 +513,184 @@ describe('local agent group execution', () => {
     } finally {
       await externalScope.release();
       firstMayFinish.resolve(undefined);
+    }
+  });
+
+  it('serializes nested workflow writers inside each group member checkout lease', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-nested-transaction-'));
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const signalBus = new SignalBus();
+    const firstMayFinish = deferred<void>();
+    const running = new Set<string>();
+    const starts: string[] = [];
+    const reads: string[] = [];
+    let shared = 'v0';
+    let activeRunnerCalls = 0;
+    const workspaceTurnCoordinator = new WorkspaceTurnCoordinator();
+    const externalScope = workspaceTurnCoordinator.createScope(workspaceDir);
+    await externalScope.acquire('write');
+    const checkoutTools: ToolDefinition[] = [
+      { name: 'read_file', description: 'Read shared state', parameters: {}, execute: async () => shared },
+      { name: 'edit_file', description: 'Edit shared state', parameters: {}, execute: async () => 'edited' },
+    ];
+    const buildWorkflowTools = (
+      availableTools: ToolDefinition[],
+      childRunLoop: (config: AgentLoopConfig) => Promise<AgentResponse>,
+      signal?: AbortSignal,
+    ) => createWorkflowTools({
+      availableTools,
+      runLoop: childRunLoop,
+      litellmUrl: 'http://llm.test',
+      litellmApiKey: 'test-key',
+      defaultModel: 'test-model',
+      signal,
+      onWorkerStatus: ({ status, workerState }) => {
+        if (status === 'running') running.add(workerState.name);
+      },
+    });
+    const executeRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      const task = String(config.messages[0]?.content ?? '');
+      if (task.includes('WORKER_A')) {
+        starts.push('A');
+        const seen = shared;
+        reads.push(`A:${seen}`);
+        await firstMayFinish.promise;
+        shared = seen === 'v0' ? 'v1' : 'corrupt-a';
+        return { content: 'A complete', toolsUsed: ['read_file', 'edit_file'], usage: { inputTokens: 1, outputTokens: 1 } };
+      }
+      if (task.includes('WORKER_B')) {
+        starts.push('B');
+        const seen = shared;
+        reads.push(`B:${seen}`);
+        shared = seen === 'v1' ? 'v2' : 'corrupt-b';
+        return { content: 'B complete', toolsUsed: ['read_file', 'edit_file'], usage: { inputTokens: 1, outputTokens: 1 } };
+      }
+      if (config.systemPrompt.includes('# Sub-Agent: General Purpose')) {
+        const workflow = config.tools.find((tool) => tool.name === 'orchestrate_workflow');
+        if (!workflow) throw new Error('Group member did not receive orchestrate_workflow');
+        const output = await workflow.execute({
+          task: 'Exercise nested group checkout isolation',
+          inline_template: {
+            name: 'Nested group writers',
+            description: 'Two parallel checkout writers',
+            aggregation: 'concatenate',
+            steps: [
+              { name: 'Writer A', role: 'writer', task: 'WORKER_A mutate shared state', tools: ['read_file', 'edit_file'] },
+              { name: 'Writer B', role: 'writer', task: 'WORKER_B mutate shared state', tools: ['read_file', 'edit_file'] },
+            ],
+          },
+        });
+        return {
+          content: String(output),
+          toolsUsed: ['orchestrate_workflow'],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      }
+      return {
+        content: 'Writer member complete',
+        toolsUsed: config.tools.map((tool) => tool.name),
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+    const runner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      activeRunnerCalls += 1;
+      try {
+        return await executeRunner(config);
+      } finally {
+        activeRunnerCalls -= 1;
+      }
+    };
+
+    server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('localJobStore', new LocalJobStore());
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('signalBus', signalBus);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: () => ({
+        id: 'workspace-1', name: 'Project', group: 'test', created: new Date().toISOString(),
+        directory: workspaceDir, model: 'test-model',
+      }),
+    } as never);
+    server.decorate('mindCache', { acquire: () => ({}), release: () => {} } as never);
+    server.decorate('multiMind', { personal: {} } as never);
+    server.decorate('agentState', {
+      allTools: checkoutTools,
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      hookRegistry: undefined,
+      spawnSecurityContext: null,
+      workspaceTurnCoordinator,
+      createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
+      buildToolsForSession: () => [
+        ...checkoutTools,
+        ...buildWorkflowTools(checkoutTools, runner),
+      ],
+      bindWorkspaceCollaborationTools: (options: WorkspaceCollaborationBinding) => (
+        bindWorkspaceChildTools(options, buildWorkflowTools)
+      ),
+    } as never);
+    server.decorate('agentRunner', runner);
+    server.addHook('onClose', async () => { registry.close(); });
+    server.register(agentGroupRoutes);
+    server.register(localJobRoutes);
+
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      payload: {
+        name: 'Nested mutating pair',
+        strategy: 'parallel',
+        members: [
+          { agentId: 'general-purpose', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const started = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+      payload: {
+        task: 'Use orchestrate_workflow for two nested writers',
+        workspaceId: 'workspace-1',
+      },
+    });
+    expect(started.statusCode).toBe(202);
+    const { jobId, runIds } = started.json() as { jobId: string; runIds: string[] };
+
+    try {
+      await waitFor(
+        () => runIds.every((id) => registry.get(id)?.progress?.phase === 'workspace_queue'),
+        'nested group members did not reach the held workspace lease',
+      );
+      await externalScope.release();
+      await waitFor(() => starts.length >= 1, 'first nested group writer did not start');
+      await waitFor(() => running.size === 2, 'nested group writers were not both dispatched');
+      expect(starts).toEqual(['A']);
+      expect(reads).toEqual(['A:v0']);
+      expect(shared).toBe('v0');
+      expect(runIds.map((id) => registry.get(id)?.status)).toEqual(['running', 'queued']);
+      firstMayFinish.resolve(undefined);
+      const job = await waitForJob(server, jobId);
+      expect(job.status).toBe('completed');
+      expect(starts).toEqual(['A', 'B']);
+      expect(reads).toEqual(['A:v0', 'B:v1']);
+      expect(shared).toBe('v2');
+    } finally {
+      await externalScope.release();
+      firstMayFinish.resolve(undefined);
+      const current = server.localJobStore.get(jobId);
+      if (current && !['completed', 'failed', 'cancelled'].includes(current.status)) {
+        server.localJobStore.cancel(jobId);
+      }
+      await waitFor(() => activeRunnerCalls === 0, 'nested group runner did not unwind');
+      await waitForJob(server, jobId);
     }
   });
 

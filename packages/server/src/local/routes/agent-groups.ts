@@ -427,11 +427,21 @@ async function executeGroup(
             updateJobWorkerSnapshot(orchestrator);
           };
           const workerScope = workspaceTurnCoordinator.createScope(runContext.cwd, signal);
-          const tools = workerScope.wrapTools(config.tools);
+          let tools = workerScope.wrapTools(config.tools);
           const workspaceAccess = workerScope.classify(tools);
           try {
             if (workspaceAccess !== 'none') await workerScope.acquire(workspaceAccess, markWaiting);
             markRunning();
+            tools = server.agentState.bindWorkspaceCollaborationTools({
+              visibleTools: tools,
+              workerTools: tools,
+              runLoop: baseRunLoop,
+              signal,
+              runChildTransaction: (childTools, operation) => (
+                workerScope.runChildTransaction(childTools, operation)
+              ),
+              defaultModel: config.model,
+            });
             return await baseRunLoop({ ...config, tools });
           } finally {
             await workerScope.release();

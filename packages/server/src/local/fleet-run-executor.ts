@@ -230,19 +230,33 @@ async function executeFleetRun(
     acquired = true;
     const orchestrator = server.agentState.createSessionOrchestrator(mind);
     const persona = listPersonas().find((item) => item.id === personaId) ?? null;
-    let tools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
-    if (persona) tools = applyPersonaToolFilter(tools, persona);
-    tools = filterAvailableTools(tools);
-    tools = selectToolsForTurn(tools, {
-      message: task,
-      preferredToolNames: persona?.tools ?? [],
-    }).tools;
+    const runner: AgentRunner = server.agentRunner ?? runAgentLoop;
+    let workerTools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
+    if (persona) workerTools = applyPersonaToolFilter(workerTools, persona);
+    workerTools = filterAvailableTools(workerTools);
     const workspaceTurnCoordinator = server.agentState.workspaceTurnCoordinator;
     if (workspaceTurnCoordinator) {
       workspaceTurnScope = workspaceTurnCoordinator.createScope(cwd, controller.signal);
-      tools = workspaceTurnScope.wrapTools(tools);
+      workerTools = workspaceTurnScope.wrapTools(workerTools);
+    }
+    let tools = selectToolsForTurn(workerTools, {
+      message: task,
+      preferredToolNames: persona?.tools ?? [],
+    }).tools;
+    if (workspaceTurnScope) {
       const workspaceAccess = workspaceTurnScope.classify(tools);
       if (workspaceAccess !== 'none') await workspaceTurnScope.acquire(workspaceAccess);
+      const activeScope = workspaceTurnScope;
+      tools = server.agentState.bindWorkspaceCollaborationTools({
+        visibleTools: tools,
+        workerTools,
+        runLoop: runner,
+        signal: controller.signal,
+        runChildTransaction: (childTools, operation) => (
+          activeScope.runChildTransaction(childTools, operation)
+        ),
+        defaultModel: model,
+      });
     }
     const taskShape = detectTaskShape(task);
     const runBudget = selectAgentRunBudget({
@@ -281,7 +295,6 @@ async function executeFleetRun(
     });
     publishFleetDance(server, run, 'response', 'task_claim', { phase: 'running', task: 'claimed' }, assignmentId);
 
-    const runner: AgentRunner = server.agentRunner ?? runAgentLoop;
     const result = await runner({
       litellmUrl: server.localConfig.litellmUrl,
       litellmApiKey: server.agentState.litellmApiKey,
