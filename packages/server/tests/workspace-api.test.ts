@@ -50,6 +50,255 @@ describe('Workspace & Session API', () => {
     workspaceId = body.id;
   });
 
+  it('persists linked local storage and routes uploads to it without persisting secrets', async () => {
+    const linkedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-linked-storage-'));
+    const content = 'linked workspace survives metadata reload';
+    const secretSentinel = 'must-never-reach-workspace-json';
+    const ownerSentinel = path.join(linkedRoot, 'owner-sentinel.txt');
+    fs.writeFileSync(ownerSentinel, 'user-owned data', 'utf-8');
+    let linkedWorkspaceId: string | undefined;
+
+    try {
+      const createRes = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/workspaces',
+        payload: {
+          name: 'Linked Storage Persistence',
+          group: 'Test',
+          storageType: 'local',
+          storagePath: linkedRoot,
+          storageConfig: { secretKey: secretSentinel },
+        },
+      });
+      expect(createRes.statusCode).toBe(201);
+      const created = JSON.parse(createRes.body);
+      linkedWorkspaceId = created.id;
+      expect(created.storageType).toBe('local');
+      expect(created.storagePath).toBe(fs.realpathSync.native(linkedRoot));
+      expect(created.storageConfig).toBeUndefined();
+
+      const configPath = path.join(
+        dataDir,
+        'workspaces',
+        linkedWorkspaceId,
+        'workspace.json',
+      );
+      const rawConfig = fs.readFileSync(configPath, 'utf-8');
+      const onDisk = JSON.parse(rawConfig);
+      expect(onDisk.storageType).toBe('local');
+      expect(onDisk.storagePath).toBe(fs.realpathSync.native(linkedRoot));
+      expect(rawConfig).not.toContain(secretSentinel);
+      expect(onDisk.storageConfig).toBeUndefined();
+
+      const { WorkspaceManager } = await import('@waggle/core');
+      expect(new WorkspaceManager(dataDir).get(linkedWorkspaceId)).toMatchObject({
+        storageType: 'local',
+        storagePath: fs.realpathSync.native(linkedRoot),
+      });
+
+      const getRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/workspaces/${linkedWorkspaceId}`,
+      });
+      expect(getRes.statusCode).toBe(200);
+      const reloaded = JSON.parse(getRes.body);
+      expect(reloaded.storageType).toBe('local');
+      expect(reloaded.storagePath).toBe(fs.realpathSync.native(linkedRoot));
+      expect(reloaded.storageConfig).toBeUndefined();
+
+      for (const directory of ['attachments', 'exports', 'notes']) {
+        expect(fs.statSync(path.join(linkedRoot, directory)).isDirectory()).toBe(true);
+      }
+
+      const uploadRes = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/workspaces/${linkedWorkspaceId}/files/upload`,
+        payload: {
+          path: 'notes',
+          name: 'persistence-probe.txt',
+          data: Buffer.from(content, 'utf-8').toString('base64'),
+        },
+      });
+      expect(uploadRes.statusCode).toBe(201);
+      expect(
+        fs.readFileSync(path.join(linkedRoot, 'notes', 'persistence-probe.txt'), 'utf-8'),
+      ).toBe(content);
+      expect(
+        fs.existsSync(
+          path.join(
+            dataDir,
+            'workspaces',
+            linkedWorkspaceId,
+            'files',
+            'notes',
+            'persistence-probe.txt',
+          ),
+        ),
+      ).toBe(false);
+    } finally {
+      if (linkedWorkspaceId) {
+        const deleteRes = await injectWithAuth(server, {
+          method: 'DELETE',
+          url: `/api/workspaces/${linkedWorkspaceId}`,
+        });
+        expect(deleteRes.statusCode).toBe(204);
+        expect(fs.existsSync(linkedRoot)).toBe(true);
+        expect(fs.readFileSync(ownerSentinel, 'utf-8')).toBe('user-owned data');
+      }
+      fs.rmSync(linkedRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid local storage bindings before writing metadata', async () => {
+    const regularFile = path.join(dataDir, 'not-a-storage-directory.txt');
+    fs.writeFileSync(regularFile, 'not a directory', 'utf-8');
+    const collisionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-linked-collision-'));
+    fs.writeFileSync(path.join(collisionRoot, 'notes'), 'blocks the standard directory', 'utf-8');
+    const invalidPayloads = [
+      {
+        name: 'Local Storage Missing Path',
+        group: 'Test',
+        storageType: 'local',
+      },
+      {
+        name: 'Local Storage Regular File',
+        group: 'Test',
+        storageType: 'local',
+        storagePath: regularFile,
+      },
+      {
+        name: 'Local Storage Directory Collision',
+        group: 'Test',
+        storageType: 'local',
+        storagePath: collisionRoot,
+      },
+    ];
+    const unexpectedlyCreated: string[] = [];
+
+    try {
+      for (const payload of invalidPayloads) {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/workspaces',
+          payload,
+        });
+        const body = JSON.parse(res.body);
+        if (res.statusCode === 201 && typeof body.id === 'string') {
+          unexpectedlyCreated.push(body.id);
+        }
+        expect(res.statusCode).toBe(400);
+      }
+
+      const listRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/workspaces',
+      });
+      const names = JSON.parse(listRes.body).map((workspace: { name: string }) => workspace.name);
+      for (const payload of invalidPayloads) {
+        expect(names).not.toContain(payload.name);
+      }
+      expect(fs.existsSync(path.join(collisionRoot, 'attachments'))).toBe(false);
+      expect(fs.existsSync(path.join(collisionRoot, 'exports'))).toBe(false);
+      expect(fs.statSync(path.join(collisionRoot, 'notes')).isFile()).toBe(true);
+    } finally {
+      for (const id of unexpectedlyCreated) {
+        await injectWithAuth(server, {
+          method: 'DELETE',
+          url: `/api/workspaces/${id}`,
+        });
+      }
+      fs.rmSync(collisionRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts non-local storage paths without persisting them as host bindings', async () => {
+    const payloads = [
+      {
+        name: 'Storage Path Without Type',
+        group: 'Test',
+        storagePath: dataDir,
+      },
+      {
+        name: 'Virtual Storage With Retained Path',
+        group: 'Test',
+        storageType: 'virtual',
+        storagePath: dataDir,
+      },
+      {
+        name: 'Team Storage With Bucket Prefix',
+        group: 'Test',
+        storageType: 'team',
+        storagePath: 'team-prefix',
+      },
+    ];
+    const createdIds: string[] = [];
+
+    try {
+      for (const payload of payloads) {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/workspaces',
+          payload,
+        });
+        expect(res.statusCode).toBe(201);
+
+        const created = JSON.parse(res.body) as {
+          id: string;
+          storageType?: string;
+          storagePath?: string;
+        };
+        createdIds.push(created.id);
+        expect(created.storageType).toBeUndefined();
+        expect(created.storagePath).toBeUndefined();
+
+        const onDisk = JSON.parse(fs.readFileSync(
+          path.join(dataDir, 'workspaces', created.id, 'workspace.json'),
+          'utf-8',
+        )) as Record<string, unknown>;
+        expect(onDisk).not.toHaveProperty('storageType');
+        expect(onDisk).not.toHaveProperty('storagePath');
+      }
+    } finally {
+      for (const id of createdIds) {
+        await injectWithAuth(server, {
+          method: 'DELETE',
+          url: `/api/workspaces/${id}`,
+        });
+      }
+    }
+  });
+
+  it('rolls back prepared local directories when metadata creation fails', async () => {
+    const linkedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-linked-rollback-'));
+    const ownerSentinel = path.join(linkedRoot, 'owner-sentinel.txt');
+    fs.writeFileSync(ownerSentinel, 'keep me', 'utf-8');
+    const updateSpy = vi.spyOn(server.workspaceManager, 'update')
+      .mockImplementationOnce(() => { throw new Error('simulated metadata failure'); });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/workspaces',
+        payload: {
+          name: 'Metadata Failure Rollback',
+          group: 'Test',
+          storageType: 'local',
+          storagePath: linkedRoot,
+        },
+      });
+      expect(res.statusCode).toBe(500);
+      for (const directory of ['attachments', 'exports', 'notes']) {
+        expect(fs.existsSync(path.join(linkedRoot, directory))).toBe(false);
+      }
+      expect(fs.readFileSync(ownerSentinel, 'utf-8')).toBe('keep me');
+      expect(server.workspaceManager.list().map(workspace => workspace.name))
+        .not.toContain('Metadata Failure Rollback');
+    } finally {
+      updateSpy.mockRestore();
+      fs.rmSync(linkedRoot, { recursive: true, force: true });
+    }
+  });
+
   // --- I2: Team Workspace Creation ---
 
   it('creates a team workspace with team fields', async () => {

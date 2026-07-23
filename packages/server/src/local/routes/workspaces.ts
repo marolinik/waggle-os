@@ -359,10 +359,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     }
     // Resolve templateId from either templateId or template body field
     const resolvedTemplateId = request.body.templateId ?? request.body.template;
-    // Validate local storagePath exists
-    if (storageType === 'local' && storagePath) {
-      if (!fs.existsSync(storagePath)) {
-        return reply.status(400).send({ error: `Storage path does not exist: ${storagePath}` });
+    let resolvedLocalStoragePath: string | undefined;
+    if (storageType === 'local') {
+      if (!storagePath?.trim()) {
+        return reply.status(400).send({ error: 'Local storage requires storagePath' });
+      }
+      try {
+        resolvedLocalStoragePath = fs.realpathSync.native(storagePath.trim());
+        if (!fs.statSync(resolvedLocalStoragePath).isDirectory()) {
+          return reply.status(400).send({
+            error: `Storage path is not a directory: ${storagePath}`,
+          });
+        }
+      } catch {
+        return reply.status(400).send({
+          error: `Storage path does not exist or is not accessible: ${storagePath}`,
+        });
       }
     }
 
@@ -383,24 +395,99 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
       teamServerToken = boundTeamServer.token;
     }
 
-    const ws = server.workspaceManager.create({
-      name, group, icon, model, personaId, directory, tone,
-      teamId, teamServerUrl: boundTeamServerUrl, teamRole, teamUserId,
-      ...(resolvedTemplateId && { templateId: resolvedTemplateId }),
-      ...(storageType && { storageType }),
-      ...(storagePath && { storagePath }),
-      ...(storageConfig && { storageConfig }),
-    });
+    let preparedLocalProvider: { ensureStructure?: () => void } | undefined;
+    const createdLocalDirectories: string[] = [];
+    const rollbackPreparedLocalDirectories = () => {
+      for (const directory of [...createdLocalDirectories].reverse()) {
+        try { fs.rmdirSync(directory); } catch { /* best-effort rollback */ }
+      }
+    };
+    if (resolvedLocalStoragePath) {
+      try {
+        const { getStorageProvider, STANDARD_DIRS } = await import('../storage/index.js');
+        const missingDirectories: string[] = [];
+        for (const directory of STANDARD_DIRS) {
+          const standardPath = path.join(resolvedLocalStoragePath, directory);
+          try {
+            const stat = fs.lstatSync(standardPath);
+            if (stat.isSymbolicLink() || !stat.isDirectory()) {
+              throw new Error(`Standard workspace path is not a directory: ${directory}`);
+            }
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+              missingDirectories.push(standardPath);
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        try {
+          for (const directory of missingDirectories) {
+            fs.mkdirSync(directory);
+            createdLocalDirectories.push(directory);
+          }
+        } catch (error) {
+          rollbackPreparedLocalDirectories();
+          throw error;
+        }
+
+        preparedLocalProvider = getStorageProvider(
+          {
+            id: 'pending-local-workspace',
+            storageType: 'local',
+            storagePath: resolvedLocalStoragePath,
+          },
+          server.localConfig.dataDir,
+        ) as { ensureStructure?: () => void };
+      } catch {
+        return reply.status(400).send({
+          error: `Local storage cannot initialize its standard directories: ${storagePath}`,
+        });
+      }
+    }
+
+    const ws = (() => {
+      let createdWorkspaceId: string | undefined;
+      try {
+        const created = server.workspaceManager.create({
+          name, group, icon, model, personaId, directory, tone,
+          teamId, teamServerUrl: boundTeamServerUrl, teamRole, teamUserId,
+          ...(resolvedTemplateId && { templateId: resolvedTemplateId }),
+        });
+        createdWorkspaceId = created.id;
+        if (!resolvedLocalStoragePath) return created;
+
+        server.workspaceManager.update(created.id, {
+          storageType: 'local',
+          storagePath: resolvedLocalStoragePath,
+        });
+        const linked = server.workspaceManager.get(created.id);
+        if (!linked) throw new Error('Workspace metadata disappeared during local binding');
+        return linked;
+      } catch (error) {
+        if (createdWorkspaceId) {
+          try { server.workspaceManager.delete(createdWorkspaceId); } catch { /* best-effort rollback */ }
+        }
+        rollbackPreparedLocalDirectories();
+        throw error;
+      }
+    })();
 
     // Auto-create standard file directory structure
     try {
       const { getStorageProvider } = await import('../storage/index.js');
-      const provider = getStorageProvider(
-        { id: ws.id, storageType: storageType ?? 'virtual', storagePath, storageConfig },
+      const provider = preparedLocalProvider ?? getStorageProvider(
+        {
+          id: ws.id,
+          storageType: ws.storageType ?? storageType ?? 'virtual',
+          storagePath: ws.storagePath,
+          storageConfig,
+        },
         server.localConfig.dataDir,
       );
       const maybeStructured = provider as { ensureStructure?: () => void };
-      if (typeof maybeStructured.ensureStructure === 'function') {
+      if (!preparedLocalProvider && typeof maybeStructured.ensureStructure === 'function') {
         maybeStructured.ensureStructure();
       }
     } catch { /* non-blocking */ }

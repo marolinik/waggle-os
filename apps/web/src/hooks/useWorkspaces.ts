@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
+import { toast } from '@/hooks/use-toast';
 import {
   resolveActiveWorkspaceId,
   readPersistedWorkspaceId,
@@ -41,7 +42,7 @@ export const useWorkspaces = () => {
   // P1b D3 plus-clause: errored list revalidates on focus/online/connect-settled.
   useRevalidateOnError(error !== null, fetchWorkspaces);
 
-  const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean; templateId?: string }) => {
+  const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean; templateId?: string; storageType?: Workspace['storageType']; storagePath?: string; storageConfig?: Record<string, unknown> }) => {
     try {
       const ws = await adapter.createWorkspace(data);
       setWorkspaces(prev => [...prev, ws]);
@@ -49,23 +50,15 @@ export const useWorkspaces = () => {
       persistWorkspaceId(ws.id);
       return ws;
     } catch (err) {
-      console.error('[useWorkspaces] create failed, using local fallback:', err);
-      const localWs: Workspace = {
-        id: `local-${Date.now()}`,
-        name: data.name,
-        group: data.group,
-        persona: data.persona,
-        shared: data.shared,
-        templateId: data.templateId,
-        health: 'healthy',
-        memoryCount: 0,
-        sessionCount: 0,
-        lastActive: new Date().toISOString(),
-      };
-      setWorkspaces(prev => [...prev, localWs]);
-      setActiveWorkspaceId(localWs.id);
-      persistWorkspaceId(localWs.id);
-      return localWs;
+      console.error('[useWorkspaces] create failed:', err);
+      const message = err instanceof Error ? err.message : 'Failed to create workspace';
+      setError(message);
+      toast({
+        title: "Couldn't create workspace",
+        description: message,
+        variant: 'destructive',
+      });
+      return null;
     }
   }, []);
 

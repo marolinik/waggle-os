@@ -17,10 +17,12 @@ import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { CONNECT_SETTLED_EVENT } from '@/hooks/useRevalidateOnError';
 
 const mocks = vi.hoisted(() => ({
+  toast: vi.fn(),
   adapter: {
     connect: vi.fn().mockResolvedValue(undefined),
     getTier: vi.fn(),
     getWorkspaces: vi.fn(),
+    createWorkspace: vi.fn(),
     getPermissions: vi.fn().mockResolvedValue({ defaultAutonomy: 'normal', externalGates: {} }),
     getAgentStatus: vi.fn().mockResolvedValue({ active: 0, agents: [] }),
     getNotificationHistory: vi.fn().mockResolvedValue([]),
@@ -49,6 +51,10 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
+vi.mock('@/hooks/use-toast', () => ({
+  toast: mocks.toast,
+  useToast: () => ({ toast: mocks.toast, toasts: [], dismiss: vi.fn() }),
+}));
 
 /** AdapterHttpError stand-in — the real class is mocked away with the module,
  *  so consumers must duck-type on error.name (that is part of the contract). */
@@ -83,6 +89,45 @@ describe('useWorkspaces (P1b)', () => {
     settleConnect();
     await waitFor(() => expect(result.current.workspaces).toHaveLength(2));
     expect(result.current.error).toBeNull();
+  });
+
+  it('failed create does not invent or activate a phantom workspace', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockResolvedValue([{ id: 'w1', name: 'Alpha', group: 'Personal' }]);
+    mocks.adapter.createWorkspace.mockRejectedValue(new Error('Local storage path is invalid'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useWorkspaces());
+
+    try {
+      await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+      act(() => result.current.selectWorkspace('w1'));
+      expect(readPersistedWorkspaceId()).toBe('w1');
+
+      let created: Awaited<ReturnType<typeof result.current.createWorkspace>> | undefined;
+      await act(async () => {
+        created = await result.current.createWorkspace({
+          name: 'Broken Linked Workspace',
+          group: 'Personal',
+          storageType: 'local',
+          storagePath: 'Z:\\missing-workspace',
+        });
+      });
+
+      expect(created).toBeNull();
+      expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w1']);
+      expect(result.current.activeWorkspaceId).toBe('w1');
+      expect(readPersistedWorkspaceId()).toBe('w1');
+      expect(result.current.error).toBe('Local storage path is invalid');
+      expect(mocks.toast).toHaveBeenCalledWith({
+        title: "Couldn't create workspace",
+        description: 'Local storage path is invalid',
+        variant: 'destructive',
+      });
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 });
 
