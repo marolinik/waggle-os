@@ -22,8 +22,13 @@ import { resolveWorkspaceExecutionRoot } from './workspace-execution-root.js';
 import { persistMessage } from './routes/chat-persistence.js';
 import { emitWaggleSignal } from './routes/waggle-signals.js';
 import type { AgentRunner } from './routes/chat.js';
-import { listOllamaChatModelIds, resolveUsableModel } from './model-availability.js';
+import {
+  listOllamaChatModelIds,
+  OllamaModelNotLocalError,
+  resolveUsableModel,
+} from './model-availability.js';
 import type { WorkspaceTurnScope } from './workspace-turn-coordinator.js';
+import { isOfflineOllamaModelReference } from './routes/chat-helpers.js';
 
 const ACTIVE = new Set(['queued', 'starting', 'running', 'waiting_for_approval', 'paused', 'cancelling']);
 
@@ -118,8 +123,9 @@ export async function spawnIsolatedFleetRun(
   const sentinel = (model?: string | null) => !model || model.trim() === 'auto' || model.trim() === 'default';
   const explicitModel = !sentinel(input.model) ? input.model!.trim() : undefined;
   const workspaceModel = workspace.model;
+  const implicitWorkspaceModel = !sentinel(workspaceModel) ? workspaceModel : undefined;
   const selectedModel = explicitModel
-    ?? (!sentinel(workspaceModel) ? workspaceModel : undefined)
+    ?? implicitWorkspaceModel
     ?? server.agentState.currentModel;
   if (!selectedModel || sentinel(selectedModel)) {
     return { statusCode: 503, body: { error: 'model_unavailable', message: 'No executable model is configured' } };
@@ -148,7 +154,18 @@ export async function spawnIsolatedFleetRun(
       };
     }
   } else {
-    model = await resolveUsableModel(server, selectedModel);
+    try {
+      model = await resolveUsableModel(server, selectedModel);
+    } catch (err) {
+      const currentModel = server.agentState.currentModel?.trim();
+      const canRetryCurrentLocal = err instanceof OllamaModelNotLocalError
+        && selectedModel === implicitWorkspaceModel
+        && currentModel
+        && currentModel !== selectedModel
+        && isOfflineOllamaModelReference(currentModel);
+      if (!canRetryCurrentLocal) throw err;
+      model = await resolveUsableModel(server, currentModel);
+    }
   }
   const persona = input.persona ?? workspace.personaId ?? 'general-purpose';
   const room = server.agentRunRegistry.createRoom({

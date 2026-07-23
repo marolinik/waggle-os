@@ -105,6 +105,72 @@ describe('isolated Fleet execution', () => {
     await server.close();
   });
 
+  it('falls back from a stale implicit workspace Ollama model to the installed current model', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-stale-workspace-model-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const currentModel = 'ollama/llama3.2:latest';
+    const runnerModels: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
+      models: [{ name: 'llama3.2:latest' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://127.0.0.1:37421/v1',
+    });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? {
+            id,
+            name: 'Project',
+            group: 'test',
+            created: new Date().toISOString(),
+            directory: workspaceDir,
+            model: 'ollama/removed:latest',
+          }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', { getMaxSessions: () => 10, size: 0, getActive: () => [] } as never);
+    server.decorate('mindCache', { acquire: () => ({}), release: () => {} } as never);
+    server.decorate('agentState', {
+      currentModel,
+      litellmApiKey: 'test-key',
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+      }),
+      buildToolsForSession: () => [],
+    } as never);
+    server.decorate('agentRunner', async (config: { model: string }) => {
+      runnerModels.push(config.model);
+      return { content: 'Done', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    });
+    server.decorate('fleetResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [1], workspaceFrameIds: { [run.workspaceId]: [2] },
+    }));
+    await server.register(fleetRoutes);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: { task: 'Use the installed local model', model: 'auto', parentWorkspaceId: 'workspace-1' },
+    });
+
+    expect(response.statusCode).toBe(202);
+    const body = response.json() as { runId: string; model: string };
+    expect(body.model).toBe(currentModel);
+    await waitFor(() => runnerModels.length === 1, 'fallback Fleet run did not start');
+    expect(runnerModels).toEqual([currentModel]);
+    expect(registry.get(body.runId)?.executor.model).toBe(currentModel);
+    await server.close();
+  });
+
   it('filters availability and selects at most 14 tools from 29 relevant candidates in a 78-tool pool', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-tool-context-'));
     tempDirs.push(dataDir);

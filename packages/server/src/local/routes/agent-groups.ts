@@ -22,7 +22,9 @@ import {
 import type { AgentRunner } from './chat.js';
 import { buildWorkflowFromGroup } from '../../services/agent-group-executor.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
+import { resolveUsableModel } from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
+import { isOfflineOllamaModelReference } from './chat-helpers.js';
 
 interface AgentGroupMember {
   agentId: string;
@@ -221,21 +223,45 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
     const missingPersona = group.members.find((member) => !resolvePersona(member.agentId));
     if (missingPersona) return reply.code(409).send({ error: `Persona no longer exists: ${missingPersona.agentId}` });
 
+    const workspaceId = server.agentRunRegistry && server.workspaceManager
+      ? request.body.workspaceId
+        || server.workspaceManager.getDefault()
+        || server.workspaceManager.list()[0]?.id
+      : undefined;
+    const workspace = workspaceId ? server.workspaceManager.get(workspaceId) : undefined;
+    if (server.agentRunRegistry && server.workspaceManager) {
+      if (!workspaceId) return reply.code(404).send({ error: 'workspace_not_found' });
+      if (!workspace) return reply.code(404).send({ error: 'workspace_not_found' });
+    }
+
+    let localExecutionModel: string | undefined;
+    const workspaceModel = workspace?.model?.trim();
+    const currentModel = server.agentState.currentModel?.trim();
+    const configuredModel = workspaceModel && isOfflineOllamaModelReference(workspaceModel)
+      ? workspaceModel
+      : currentModel;
+    if (configuredModel && isOfflineOllamaModelReference(configuredModel)) {
+      try {
+        localExecutionModel = await resolveUsableModel(server, configuredModel);
+      } catch (error) {
+        return reply.code(409).send({
+          error: 'model_unavailable',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     let runContext: GroupRunContext | undefined;
     if (server.agentRunRegistry && server.workspaceManager) {
-      const workspaceId = request.body.workspaceId
-        || server.workspaceManager.getDefault()
-        || server.workspaceManager.list()[0]?.id;
-      if (!workspaceId) return reply.code(404).send({ error: 'workspace_not_found' });
-      const workspace = server.workspaceManager.get(workspaceId);
-      if (!workspace) return reply.code(404).send({ error: 'workspace_not_found' });
+      const resolvedWorkspaceId = workspaceId!;
+      const resolvedWorkspace = workspace!;
       let cwd: string;
-      try { cwd = resolveWorkspaceExecutionRoot(dataDir, workspace); }
+      try { cwd = resolveWorkspaceExecutionRoot(dataDir, resolvedWorkspace); }
       catch (err) {
         return reply.code(409).send({ error: 'workspace_root_invalid', message: err instanceof Error ? err.message : String(err) });
       }
       const room = server.agentRunRegistry.createRoom({
-        workspaceIds: [workspaceId],
+        workspaceIds: [resolvedWorkspaceId],
         source: 'agent_group',
         executor: { kind: 'coordinator', agentId: group.id },
         title: group.name,
@@ -248,11 +274,11 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
         const persona = resolvePersona(member.agentId)!;
         const run = server.agentRunRegistry.createWorker({
           parentRunId: room.id,
-          workspaceId,
+          workspaceId: resolvedWorkspaceId,
           source: 'agent_group',
           executor: {
             kind: 'waggle_agent', agentId: member.agentId,
-            personaId: persona.id, model: persona.modelPreference,
+            personaId: persona.id, model: localExecutionModel ?? persona.modelPreference,
           },
           title: persona.name,
           task: task.trim(),
@@ -267,7 +293,7 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
         });
         if (assignment) assignmentIds.set(persona.name, assignment.id);
       }
-      runContext = { roomId: room.id, workspaceId, cwd, runs, assignmentIds };
+      runContext = { roomId: room.id, workspaceId: resolvedWorkspaceId, cwd, runs, assignmentIds };
     }
 
     const job = server.localJobStore.create('group', {
@@ -275,7 +301,7 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
       task: task.trim(),
       ...(runContext ? { roomId: runContext.roomId, workspaceId: runContext.workspaceId, cwd: runContext.cwd } : {}),
     });
-    void executeGroup(server, group, task.trim(), job.id, runContext);
+    void executeGroup(server, group, task.trim(), job.id, runContext, localExecutionModel);
 
     return reply.code(202).send({
       jobId: job.id,
@@ -300,6 +326,7 @@ async function executeGroup(
   task: string,
   jobId: string,
   runContext?: GroupRunContext,
+  localExecutionModel?: string,
 ): Promise<void> {
   const signal = server.localJobStore.signal(jobId);
   if (!signal) return;
@@ -343,7 +370,7 @@ async function executeGroup(
         name: persona.name,
         role: member.roleInGroup,
         systemPrompt: persona.systemPrompt,
-        model: persona.modelPreference,
+        model: localExecutionModel ?? persona.modelPreference,
         tools: applyPersonaToolFilter(availableTools, persona)
           .map((tool) => tool.name),
       };

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,6 +11,9 @@ import { agentGroupRoutes } from '../../src/local/routes/agent-groups.js';
 import { LocalJobStore } from '../../src/local/job-store.js';
 import { SignalBus } from '../../src/local/signal-bus.js';
 import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
+
+const originalFetch = globalThis.fetch;
+const originalOllamaHost = process.env.OLLAMA_HOST;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -71,6 +74,10 @@ describe('local agent group execution', () => {
     await server?.close();
     const dataDir = server?.localConfig.dataDir;
     if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
+    globalThis.fetch = originalFetch;
+    if (originalOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+    else process.env.OLLAMA_HOST = originalOllamaHost;
+    vi.restoreAllMocks();
     server = undefined;
   });
 
@@ -209,6 +216,15 @@ describe('local agent group execution', () => {
   it('runs a parallel group in one durable Room with Dance events and two-mind result attribution', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-room-'));
     const workspaceDir = path.join(dataDir, 'project');
+    const localModel = 'ollama/qwen2.5:0.5b';
+    let workspaceModel = localModel;
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11461';
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      models: [{ name: 'qwen2.5:0.5b' }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as unknown as typeof globalThis.fetch;
     fs.mkdirSync(workspaceDir);
     const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
     const signalBus = new SignalBus();
@@ -237,7 +253,7 @@ describe('local agent group execution', () => {
       get: (id: string) => id === 'workspace-1'
         ? {
             id, name: 'Project', group: 'test', created: new Date().toISOString(),
-            directory: workspaceDir, model: 'test-model',
+            directory: workspaceDir, model: workspaceModel,
           }
         : undefined,
     } as never);
@@ -247,7 +263,7 @@ describe('local agent group execution', () => {
     } as never);
     server.decorate('agentState', {
       allTools: [],
-      currentModel: 'fallback-model',
+      currentModel: 'anthropic/cloud-default',
       litellmApiKey: 'test-key',
       hookRegistry: undefined,
       spawnSecurityContext: null,
@@ -296,7 +312,6 @@ describe('local agent group execution', () => {
     }]);
     expect(calls.some(({ config }) => config.tools.some((tool) => tool.name === 'web_search')))
       .toBe(true);
-    expect(calls.every(({ config }) => config.model === 'claude-sonnet-4-6')).toBe(true);
     expect(registry.get(startBody.roomId)?.status).toBe('running');
     expect(startBody.runIds.map((id) => registry.get(id)?.status)).toEqual(['running', 'running']);
     expect(signalBus.query({ teamId: `room::${startBody.roomId}` }).filter((signal) => signal.subtype === 'task_delegation')).toHaveLength(2);
@@ -317,6 +332,8 @@ describe('local agent group execution', () => {
     );
     const room = registry.get(startBody.roomId)!;
     const workerRuns = startBody.runIds.map((id) => registry.get(id)!);
+    expect(calls.every(({ config }) => config.model === localModel)).toBe(true);
+    expect(workerRuns.every((run) => run.executor.model === localModel)).toBe(true);
     expect(room.status).toBe('completed');
     expect(room.memoryRefs.status).toBe('complete');
 
@@ -353,6 +370,20 @@ describe('local agent group execution', () => {
     expect(roomWorkspaceFrame?.content).toContain('Research result');
     expect(roomWorkspaceFrame?.content).toContain('Draft result');
     expect(signalBus.query({ teamId: `room::${startBody.roomId}` }).filter((signal) => signal.subtype === 'routed_share')).toHaveLength(2);
+
+    const runCountBeforeUnavailableModel = registry.snapshot().runs.length;
+    workspaceModel = 'ollama/removed:latest';
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ models: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as unknown as typeof globalThis.fetch;
+    const unavailable = await server.inject({
+      method: 'POST', url: `/api/agent-groups/${groupId}/run`,
+      payload: { task: 'Do not create a run', workspaceId: 'workspace-1' },
+    });
+    expect(unavailable.statusCode).toBe(409);
+    expect(unavailable.json()).toMatchObject({ error: 'model_unavailable' });
+    expect(registry.snapshot().runs).toHaveLength(runCountBeforeUnavailableModel);
   });
 
   it('serializes complete mutating member transactions over one checkout', async () => {
