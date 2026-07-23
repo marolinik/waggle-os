@@ -120,7 +120,15 @@ describe('Anthropic Proxy Routes', () => {
       server = createTestServer();
       const localFetch = vi.fn(async (url: string | URL | Request) => {
         const payload = String(url).endsWith('/api/tags')
-          ? { models: [{ name: 'qwen3:1.7b' }] }
+          ? {
+              models: [
+                { name: '' },
+                { name: '' },
+                { name: '' },
+                { name: '' },
+                { name: 'qwen3:1.7b' },
+              ],
+            }
           : { capabilities: ['completion', 'tools'] };
         return new Response(JSON.stringify(payload), {
           status: 200,
@@ -233,6 +241,114 @@ describe('Anthropic Proxy Routes', () => {
       expect(cachedResponse.statusCode).toBe(200);
       expect(tagsCalls).toBe(1);
       expect(showCalls).toBe(models.length);
+      expect(peakShowCalls).toBeLessThanOrEqual(4);
+    });
+
+    it('gives later queued Ollama models a full capability timeout window', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11458');
+      server = createTestServer();
+      const models = Array.from({ length: 8 }, (_, index) => ({ name: `slow-model-${index}` }));
+      const localFetch = vi.fn(async (
+        url: string | URL | Request,
+        init?: RequestInit,
+      ) => {
+        if (String(url).endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        const signal = init?.signal;
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(signal?.reason ?? new Error('capability probe aborted'));
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, 1_100);
+          if (signal?.aborted) onAbort();
+          else signal?.addEventListener('abort', onAbort, { once: true });
+        });
+        const shownModel = JSON.parse(String(init?.body)).model;
+        const capabilities = shownModel === 'slow-model-7' ? ['completion'] : ['embedding'];
+        return new Response(JSON.stringify({ capabilities }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      globalThis.fetch = localFetch as unknown as typeof globalThis.fetch;
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('bounds readiness latency when many Ollama capability probes stall', async () => {
+      for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+        vi.stubEnv(envName, '');
+      }
+      vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11459');
+      server = createTestServer();
+      const models = Array.from({ length: 64 }, (_, index) => ({ name: `stalled-${index}` }));
+      let showCalls = 0;
+      let activeShowCalls = 0;
+      let peakShowCalls = 0;
+      const localFetch = vi.fn(async (
+        url: string | URL | Request,
+        init?: RequestInit,
+      ) => {
+        if (String(url).endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        showCalls += 1;
+        activeShowCalls += 1;
+        peakShowCalls = Math.max(peakShowCalls, activeShowCalls);
+        const signal = init?.signal;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = () => {
+              clearTimeout(timer);
+              reject(signal?.reason ?? new Error('capability probe aborted'));
+            };
+            const timer = setTimeout(() => {
+              signal?.removeEventListener('abort', onAbort);
+              resolve();
+            }, 300);
+            if (signal?.aborted) onAbort();
+            else signal?.addEventListener('abort', onAbort, { once: true });
+          });
+        } finally {
+          activeShowCalls -= 1;
+        }
+        return new Response(JSON.stringify({ capabilities: ['embedding'] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      globalThis.fetch = localFetch as unknown as typeof globalThis.fetch;
+
+      const startedAt = performance.now();
+      const response = await server.inject({
+        method: 'GET',
+        url: '/v1/health/readiness',
+      });
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(response.statusCode).toBe(503);
+      expect(elapsedMs).toBeLessThan(4_000);
+      expect(showCalls).toBeLessThan(models.length);
+      expect(activeShowCalls).toBe(0);
       expect(peakShowCalls).toBeLessThanOrEqual(4);
     });
 

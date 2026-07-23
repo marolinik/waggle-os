@@ -141,13 +141,22 @@ function ollamaCompletionEndpoint(): string | null {
 
 const OLLAMA_READINESS_CACHE_MS = 2_000;
 const OLLAMA_READINESS_MAX_CONCURRENCY = 4;
+const OLLAMA_READINESS_CALL_TIMEOUT_MS = 2_000;
+const OLLAMA_READINESS_OVERALL_TIMEOUT_MS = 2_750;
 
 async function probeReadyOllamaModel(baseUrl: string): Promise<boolean> {
-  const signal = AbortSignal.timeout(2_000);
+  const probeController = new AbortController();
+  const overallTimer = setTimeout(
+    () => probeController.abort(),
+    OLLAMA_READINESS_OVERALL_TIMEOUT_MS,
+  );
   try {
     const response = await fetch(`${baseUrl}/api/tags`, {
       redirect: 'error',
-      signal,
+      signal: AbortSignal.any([
+        probeController.signal,
+        AbortSignal.timeout(OLLAMA_READINESS_CALL_TIMEOUT_MS),
+      ]),
     });
     if (!response.ok) return false;
     const payload = await response.json() as {
@@ -156,23 +165,28 @@ async function probeReadyOllamaModel(baseUrl: string): Promise<boolean> {
     if (!Array.isArray(payload.models)) return false;
     const localModels = payload.models.flatMap((model) => {
       if (typeof model.name !== 'string') return [];
+      const name = model.name.trim();
+      if (!name) return [];
       const remoteHost = typeof model.remote_host === 'string' ? model.remote_host : undefined;
-      return isRemoteOllamaAlias(model.name, remoteHost) ? [] : [model.name];
+      return isRemoteOllamaAlias(name, remoteHost) ? [] : [name];
     }).slice(0, 64);
     let nextModelIndex = 0;
     let foundCompletionModel = false;
     const workers = Array.from(
       { length: Math.min(OLLAMA_READINESS_MAX_CONCURRENCY, localModels.length) },
       async () => {
-        while (!foundCompletionModel) {
+        while (!foundCompletionModel && !probeController.signal.aborted) {
           const model = localModels[nextModelIndex];
           nextModelIndex += 1;
-          if (!model) return;
+          if (model === undefined) return;
           try {
             const detail = await fetch(`${baseUrl}/api/show`, {
               method: 'POST',
               redirect: 'error',
-              signal,
+              signal: AbortSignal.any([
+                probeController.signal,
+                AbortSignal.timeout(OLLAMA_READINESS_CALL_TIMEOUT_MS),
+              ]),
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ model }),
             });
@@ -183,9 +197,10 @@ async function probeReadyOllamaModel(baseUrl: string): Promise<boolean> {
               && shown.capabilities.some((capability) => capability === 'completion')
             ) {
               foundCompletionModel = true;
+              probeController.abort();
             }
           } catch {
-            // A malformed or unavailable model is not completion-ready.
+            if (probeController.signal.aborted) return;
           }
         }
       }
@@ -194,6 +209,9 @@ async function probeReadyOllamaModel(baseUrl: string): Promise<boolean> {
     return foundCompletionModel;
   } catch {
     return false;
+  } finally {
+    clearTimeout(overallTimer);
+    probeController.abort();
   }
 }
 
