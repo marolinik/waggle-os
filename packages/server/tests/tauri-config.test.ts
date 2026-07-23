@@ -31,6 +31,26 @@ const FIRST_PARTY_RUNTIME_ENTRIES = new Set([
 ]);
 const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
 
+function powershellProbeExecutable() {
+  const pwsh = path.join(
+    process.env.ProgramFiles ?? 'C:\\Program Files',
+    'PowerShell',
+    '7',
+    'pwsh.exe',
+  );
+  if (fs.existsSync(pwsh)) return pwsh;
+  if (process.env.WAGGLE_REQUIRE_PWSH7 === '1') {
+    throw new Error('PowerShell 7 is required for Windows release-workflow probes');
+  }
+  return path.join(
+    process.env.SystemRoot ?? 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  );
+}
+
 function isWindows1252PathSafe(value: string) {
   for (const char of value) {
     const code = char.codePointAt(0) ?? 0;
@@ -968,6 +988,644 @@ describe('CI/CD Configuration', () => {
     expect(content).toContain('TARGET_ARCH: ${{ matrix.arch }}');
   });
 
+  it.runIf(process.platform === 'win32')(
+    'release mode resolver permits only the exact v0.2.0 bootstrap identity',
+    () => {
+      const workflow = fs
+        .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const resolverStart = workflow.indexOf(
+        '          function Resolve-WindowsReleaseMode {',
+      );
+      const resolverEnd = workflow.indexOf(
+        '\n          $releaseMode = Resolve-WindowsReleaseMode',
+        resolverStart,
+      );
+      expect(resolverStart).toBeGreaterThanOrEqual(0);
+      expect(resolverEnd).toBeGreaterThan(resolverStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-release-mode-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const helperSource = workflow
+        .slice(resolverStart, resolverEnd)
+        .replace(/^ {10}/gm, '');
+      const fixtureSource = String.raw`
+function Expect-Mode {
+  param([scriptblock]$Action, [string]$ExpectedMode)
+  $actualMode = & $Action
+  if ($actualMode -ne $ExpectedMode) {
+    throw "Expected mode $ExpectedMode, got $actualMode"
+  }
+}
+
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try {
+    & $Action | Out-Null
+  } catch {
+    $rejected = $true
+  }
+  if (-not $rejected) {
+    throw "Expected release-mode rejection: $Label"
+  }
+}
+
+$candidateSha = 'a' * 40
+$baseSha256 = 'B' * 64
+$baseCommit = 'c' * 40
+
+Expect-Mode {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.0' -CandidateTag 'v0.2.0' -CandidateSha $candidateSha -BootstrapIdentity "v0.2.0@$candidateSha" -BaseTag '' -BaseAssetName '' -BaseSha256 '' -BaseCommit ''
+} 'bootstrap'
+
+Expect-Mode {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag 'v0.2.0' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'upgrade'
+
+Expect-Mode {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.2' -CandidateTag 'v0.2.2' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag 'v0.2.1' -BaseAssetName 'Waggle_0.2.1_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'upgrade'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.0' -CandidateTag 'v0.2.0' -CandidateSha $candidateSha -BootstrapIdentity "v0.2.0@$baseCommit" -BaseTag '' -BaseAssetName '' -BaseSha256 '' -BaseCommit ''
+} 'wrong bootstrap commit'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.0' -CandidateTag 'v0.2.0' -CandidateSha $candidateSha -BootstrapIdentity "v0.2.0@$candidateSha" -BaseTag 'v0.1.9' -BaseAssetName '' -BaseSha256 '' -BaseCommit ''
+} 'bootstrap with partial baseline'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag '' -BaseAssetName '' -BaseSha256 '' -BaseCommit ''
+} 'later release without baseline'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha $candidateSha -BootstrapIdentity "v0.2.1@$candidateSha" -BaseTag 'v0.2.0' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'bootstrap authorization on later release'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag ' ' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'whitespace baseline'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.2' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag 'v0.2.0' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'candidate tag mismatch'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2' -CandidateTag 'v0.2' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag 'v0.2.0' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'malformed candidate version'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha ('A' * 40) -BootstrapIdentity '' -BaseTag 'v0.2.0' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'uppercase candidate commit'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha ('a' * 39) -BootstrapIdentity '' -BaseTag 'v0.2.0' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'short candidate commit'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag 'v0.2.0' -BaseAssetName 'Waggle_0.2.0_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit ''
+} 'upgrade with only three baseline inputs'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.1.9' -CandidateTag 'v0.1.9' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag 'v0.1.8' -BaseAssetName 'Waggle_0.1.8_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'release older than bootstrap'
+
+Expect-Rejection {
+  Resolve-WindowsReleaseMode -CandidateVersion '0.2.1' -CandidateTag 'v0.2.1' -CandidateSha $candidateSha -BootstrapIdentity '' -BaseTag 'v0.1.9' -BaseAssetName 'Waggle_0.1.9_x64-setup.exe' -BaseSha256 $baseSha256 -BaseCommit $baseCommit
+} 'first upgrade without v0.2.0 baseline'
+`;
+
+      try {
+        fs.writeFileSync(probePath, `${helperSource}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `Release-mode probe failed: ${result.stderr || result.stdout}`,
+          );
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('release workflow keeps bootstrap and upgrade artifact paths fail-closed', () => {
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+      'utf-8',
+    );
+    const publisherPath = path.join(ROOT, 'scripts', 'publish-windows-release.ps1');
+    expect(fs.existsSync(publisherPath)).toBe(true);
+    const publisher = fs.readFileSync(publisherPath, 'utf-8');
+    const step = (name: string) => {
+      const marker = `      - name: ${name}`;
+      const start = workflow.indexOf(marker);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(workflow.lastIndexOf(marker)).toBe(start);
+      const end = workflow.indexOf('\n      - name:', start + 1);
+      return workflow.slice(start, end >= 0 ? end : undefined);
+    };
+    const windowsJobStart = workflow.indexOf('  build-windows:');
+    const windowsJobEnd = workflow.indexOf('\n  build-macos:', windowsJobStart);
+    expect(windowsJobStart).toBeGreaterThanOrEqual(0);
+    expect(windowsJobEnd).toBeGreaterThan(windowsJobStart);
+    const windowsJob = workflow.slice(windowsJobStart, windowsJobEnd);
+
+    const resolverStep = step('Resolve Windows release mode');
+    expect(resolverStep).toContain('id: release-mode');
+    expect(resolverStep).toContain(
+      '-CandidateVersion $candidateVersion `',
+    );
+    expect(resolverStep).toContain('-CandidateTag $env:GITHUB_REF_NAME `');
+    expect(resolverStep).toContain('-CandidateSha $env:GITHUB_SHA `');
+    expect(resolverStep).toContain(
+      '"mode=$releaseMode" | Out-File -FilePath $env:GITHUB_OUTPUT',
+    );
+
+    const baselineStep = step('Download signed Windows upgrade baseline');
+    expect(baselineStep).toContain(
+      "if: steps.release-mode.outputs.mode == 'upgrade'",
+    );
+
+    const certificateStep = step('Certify Windows Solo installer lifecycle');
+    expect(certificateStep).toContain(
+      'WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}',
+    );
+    expect(certificateStep).toContain(
+      "if ($env:WAGGLE_RELEASE_MODE -eq 'upgrade') {",
+    );
+    expect(certificateStep).toContain(
+      'Bootstrap certification unexpectedly produced an upgrade receipt',
+    );
+
+    const bootstrapAttestation = step('Attest bootstrap Windows artifacts');
+    expect(bootstrapAttestation).toContain(
+      "if: steps.release-mode.outputs.mode == 'bootstrap'",
+    );
+    expect(bootstrapAttestation).toContain('windows-installer-certificate.json');
+    expect(bootstrapAttestation).not.toContain(
+      'windows-installer-upgrade-certificate.json',
+    );
+
+    const upgradeAttestation = step('Attest upgrade Windows artifacts');
+    expect(upgradeAttestation).toContain(
+      "if: steps.release-mode.outputs.mode == 'upgrade'",
+    );
+    expect(upgradeAttestation).toContain('windows-installer-certificate.json');
+    expect(upgradeAttestation).toContain(
+      'windows-installer-upgrade-certificate.json',
+    );
+
+    const bootstrapUpload = step('Upload Windows bootstrap certificate');
+    expect(bootstrapUpload).toContain(
+      "if: always() && steps.release-mode.outputs.mode == 'bootstrap'",
+    );
+    expect(bootstrapUpload).not.toContain(
+      'windows-installer-upgrade-certificate.json',
+    );
+
+    const upgradeUpload = step('Upload Windows lifecycle certificate');
+    expect(upgradeUpload).toContain(
+      "if: always() && steps.release-mode.outputs.mode == 'upgrade'",
+    );
+    expect(upgradeUpload).toContain(
+      'windows-installer-upgrade-certificate.json',
+    );
+
+    const bootstrapPublish = step('Publish certified Windows bootstrap installer');
+    expect(bootstrapPublish).toContain(
+      "if: success() && startsWith(github.ref, 'refs/tags/v') && steps.release-mode.outputs.mode == 'bootstrap'",
+    );
+    expect(bootstrapPublish).toContain(
+      'WINDOWS_BOOTSTRAP_RELEASE_IDENTITY: ${{ vars.WINDOWS_BOOTSTRAP_RELEASE_IDENTITY }}',
+    );
+    expect(bootstrapPublish).toContain(
+      'WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}',
+    );
+    expect(bootstrapPublish).toContain(
+      'run: ./scripts/publish-windows-release.ps1 -Mode bootstrap',
+    );
+    expect(bootstrapPublish).not.toContain('function ');
+    expect(bootstrapPublish).not.toContain('gh release ');
+
+    const upgradePublish = step('Publish certified Windows installer');
+    expect(upgradePublish).toContain(
+      "if: success() && startsWith(github.ref, 'refs/tags/v') && steps.release-mode.outputs.mode == 'upgrade'",
+    );
+    expect(upgradePublish).toContain(
+      'WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}',
+    );
+    expect(upgradePublish).toContain(
+      'run: ./scripts/publish-windows-release.ps1 -Mode upgrade',
+    );
+    expect(upgradePublish).not.toContain('function ');
+    expect(upgradePublish).not.toContain('gh release ');
+
+    for (const publishStep of [bootstrapPublish, upgradePublish]) {
+      expect(publishStep).toContain('shell: pwsh');
+      expect(publishStep).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
+      expect(publishStep).toContain(
+        'WINDOWS_BOOTSTRAP_RELEASE_IDENTITY: ${{ vars.WINDOWS_BOOTSTRAP_RELEASE_IDENTITY }}',
+      );
+      expect(publishStep).toContain(
+        'WINDOWS_UPGRADE_BASE_TAG: ${{ vars.WINDOWS_UPGRADE_BASE_TAG }}',
+      );
+      expect(publishStep).toContain(
+        'WINDOWS_UPGRADE_BASE_ASSET_NAME: ${{ vars.WINDOWS_UPGRADE_BASE_ASSET_NAME }}',
+      );
+      expect(publishStep).toContain(
+        'WINDOWS_UPGRADE_BASE_SHA256: ${{ vars.WINDOWS_UPGRADE_BASE_SHA256 }}',
+      );
+      expect(publishStep).toContain(
+        'WINDOWS_UPGRADE_BASE_COMMIT: ${{ vars.WINDOWS_UPGRADE_BASE_COMMIT }}',
+      );
+      expect(publishStep).toContain(
+        'WINDOWS_CODESIGN_APPROVED_THUMBPRINT: ${{ vars.WINDOWS_CODESIGN_APPROVED_THUMBPRINT }}',
+      );
+      expect(publishStep).toContain(
+        'WAGGLE_CERTIFIED_CANDIDATE_SHA256: ${{ steps.certify-windows.outputs.candidate_sha256 }}',
+      );
+      expect(publishStep).toContain(
+        'WAGGLE_CERTIFIED_CANDIDATE_VERSION: ${{ steps.certify-windows.outputs.candidate_version }}',
+      );
+    }
+    expect(upgradePublish).toContain(
+      'WAGGLE_UPGRADE_BASE_INSTALLER_PATH: ${{ steps.upgrade-baseline.outputs.installer_path }}',
+    );
+    expect(upgradePublish).toContain(
+      'WAGGLE_UPGRADE_BASE_VERSION: ${{ steps.upgrade-baseline.outputs.base_version }}',
+    );
+    expect(upgradePublish).toContain(
+      'WAGGLE_UPGRADE_BASE_COMMIT: ${{ steps.upgrade-baseline.outputs.base_commit }}',
+    );
+
+    expect([
+      ...windowsJob.matchAll(
+        /^\s*run: \.\/scripts\/publish-windows-release\.ps1 -Mode (?:bootstrap|upgrade)\s*$/gm,
+      ),
+    ]).toHaveLength(2);
+
+    expect(publisher).toContain(
+      "[ValidateSet('bootstrap', 'upgrade')]",
+    );
+    expect(publisher).toContain(
+      '$expectedBootstrapIdentity = "v0.2.0@$env:GITHUB_SHA"',
+    );
+    expect(publisher).toContain(
+      'Bootstrap publication is not bound to the exact authorized v0.2.0 release',
+    );
+    expect(publisher).toContain(
+      'Upgrade publication requires an empty bootstrap authorization and all baseline inputs',
+    );
+    expect(publisher).toContain(
+      'Bootstrap publication found an unexpected upgrade certificate',
+    );
+    expect(publisher).toContain('$releaseAssets = @($installer, $cleanReceipt)');
+    expect(publisher).toContain(
+      '$releaseAssets = @($installer, $cleanReceipt, $upgradeReceipt)',
+    );
+    expect(publisher).toContain('Assert-PassingWindowsCertificateReceipt');
+    expect(publisher).toContain('Assert-ExpectedAuthenticodeSignature');
+    expect(publisher).toContain('Assert-RemoteTagCommit');
+    expect(publisher).toContain('Refusing to use a pre-existing release');
+    expect([
+      ...publisher.matchAll(
+        /^\s*\$createdReleaseId\s*=/gm,
+      ),
+    ]).toHaveLength(0);
+    expect([...publisher.matchAll(/^function Set-ReadOnlyCreatedReleaseId \{/gm)])
+      .toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^Set-ReadOnlyCreatedReleaseId \(\[string\]\$releaseData\.id\)\s*$/gm,
+      ),
+    ]).toHaveLength(1);
+    expect(publisher).not.toMatch(/Set-Variable[^\r\n]*-Force/);
+    expect(publisher).toContain(
+      'Published release assets do not exactly match the certified artifact set',
+    );
+    expect(publisher).toContain('[System.StringComparer]::Ordinal');
+    expect(publisher).not.toContain('Compare-Object');
+    expect([...publisher.matchAll(/^function Assert-ExactReleaseAssets \{/gm)])
+      .toHaveLength(1);
+    expect([...publisher.matchAll(/^function Assert-ReleaseIdentity \{/gm)])
+      .toHaveLength(1);
+    expect([...publisher.matchAll(/^function New-ReleaseAssetManifest \{/gm)])
+      .toHaveLength(1);
+    expect([...publisher.matchAll(/^function Assert-RemoteReleaseAssetContents \{/gm)])
+      .toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^function Assert-ReleaseAssetFileMatchesManifest \{/gm,
+      ),
+    ]).toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^function Assert-LocalReleaseAssetsUnchanged \{/gm,
+      ),
+    ]).toHaveLength(1);
+    expect([...publisher.matchAll(/^\s*gh release create \$tag\b/gm)])
+      .toHaveLength(1);
+    expect([...publisher.matchAll(/^\s*gh release upload \$tag\b/gm)])
+      .toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^\s*gh release edit \$tag --draft=false --prerelease=false\s*$/gm,
+      ),
+    ]).toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^\s*Assert-ExactReleaseAssets \$uploadedRelease \$releaseAssets\s*$/gm,
+      ),
+    ]).toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^\s*Assert-ExactReleaseAssets \$publishedRelease \$releaseAssets\s*$/gm,
+      ),
+    ]).toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^\s*Assert-RemoteReleaseAssetContents \$tag \$uploadedRelease \$releaseAssetManifest 'uploaded'\s*$/gm,
+      ),
+    ]).toHaveLength(1);
+    expect([
+      ...publisher.matchAll(
+        /^\s*Assert-RemoteReleaseAssetContents \$tag \$publishedRelease \$releaseAssetManifest 'published'\s*$/gm,
+      ),
+    ]).toHaveLength(1);
+    const uploadIndex = publisher.indexOf('gh release upload $tag @releaseAssetPaths');
+    const uploadedHashIndex = publisher.indexOf(
+      "Assert-RemoteReleaseAssetContents $tag $uploadedRelease $releaseAssetManifest 'uploaded'",
+    );
+    const publishIndex = publisher.indexOf(
+      'gh release edit $tag --draft=false --prerelease=false',
+    );
+    const publishedHashIndex = publisher.indexOf(
+      "Assert-RemoteReleaseAssetContents $tag $publishedRelease $releaseAssetManifest 'published'",
+    );
+    expect(uploadIndex).toBeGreaterThanOrEqual(0);
+    expect(uploadedHashIndex).toBeGreaterThan(uploadIndex);
+    expect(publishIndex).toBeGreaterThan(uploadedHashIndex);
+    expect(publishedHashIndex).toBeGreaterThan(publishIndex);
+    const tagBindingIndices = [
+      ...publisher.matchAll(
+        /^Assert-PublicationTagBindings \$Mode \$tag \$sourceRevision\s*$/gm,
+      ),
+    ].map((match) => match.index);
+    expect(tagBindingIndices).toHaveLength(3);
+    expect(tagBindingIndices[0]).toBeLessThan(
+      publisher.indexOf('gh release create $tag'),
+    );
+    expect(tagBindingIndices[1]).toBeGreaterThan(
+      publisher.indexOf('gh release create $tag'),
+    );
+    expect(tagBindingIndices[1]).toBeLessThan(uploadIndex);
+    expect(tagBindingIndices[2]).toBeGreaterThan(uploadIndex);
+    expect(tagBindingIndices[2]).toBeLessThan(publishIndex);
+    const remoteHelperStart = publisher.indexOf(
+      'function Assert-RemoteReleaseAssetContents {',
+    );
+    const remoteHelperEnd = publisher.indexOf(
+      '\nfunction Assert-ManagedModelAndMemoryEvidence {',
+      remoteHelperStart,
+    );
+    const remoteHelper = publisher.slice(remoteHelperStart, remoteHelperEnd);
+    expect([
+      ...remoteHelper.matchAll(
+        /^\s*Assert-ReleaseAssetFileMatchesManifest `\s*$/gm,
+      ),
+    ]).toHaveLength(1);
+    const remoteDownloadIndex = remoteHelper.indexOf(
+      'gh release download $Tag --dir $downloadRoot',
+    );
+    const remoteCountIndex = remoteHelper.indexOf(
+      'if ($downloadedFiles.Count -ne $Manifest.Count)',
+    );
+    const remoteHashIndex = remoteHelper.indexOf(
+      'Assert-ReleaseAssetFileMatchesManifest `',
+    );
+    expect(remoteDownloadIndex).toBeGreaterThanOrEqual(0);
+    expect(remoteCountIndex).toBeGreaterThan(remoteDownloadIndex);
+    expect(remoteHashIndex).toBeGreaterThan(remoteCountIndex);
+    expect([
+      ...publisher.matchAll(
+        /^Assert-ReleaseIdentity `\s*$/gm,
+      ),
+    ]).toHaveLength(3);
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'release publisher rejects differently-cased asset names',
+    () => {
+      const publisher = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'publish-windows-release.ps1'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const helperStart = publisher.indexOf('function Assert-ExactReleaseAssets {');
+      const helperEnd = publisher.indexOf('\nfunction ', helperStart + 1);
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-release-assets-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$expectedPath = Join-Path $PSScriptRoot 'Waggle_0.2.0_x64-setup.exe'
+$receiptPath = Join-Path $PSScriptRoot 'windows-installer-certificate.json'
+[System.IO.File]::WriteAllText($expectedPath, 'fixture')
+[System.IO.File]::WriteAllText($receiptPath, 'receipt')
+$expectedAssets = @(
+  Get-Item -LiteralPath $expectedPath
+  Get-Item -LiteralPath $receiptPath
+)
+$exactRelease = [pscustomobject]@{
+  assets = @(
+    [pscustomobject]@{ name = 'Waggle_0.2.0_x64-setup.exe' }
+    [pscustomobject]@{ name = 'windows-installer-certificate.json' }
+  )
+}
+$wrongCaseRelease = [pscustomobject]@{
+  assets = @(
+    [pscustomobject]@{ name = 'waggle_0.2.0_x64-setup.exe' }
+    [pscustomobject]@{ name = 'windows-installer-certificate.json' }
+  )
+}
+$missingRelease = [pscustomobject]@{
+  assets = @([pscustomobject]@{ name = 'Waggle_0.2.0_x64-setup.exe' })
+}
+$extraRelease = [pscustomobject]@{
+  assets = @(
+    [pscustomobject]@{ name = 'Waggle_0.2.0_x64-setup.exe' }
+    [pscustomobject]@{ name = 'windows-installer-certificate.json' }
+    [pscustomobject]@{ name = 'unexpected.txt' }
+  )
+}
+$duplicateRelease = [pscustomobject]@{
+  assets = @(
+    [pscustomobject]@{ name = 'Waggle_0.2.0_x64-setup.exe' }
+    [pscustomobject]@{ name = 'Waggle_0.2.0_x64-setup.exe' }
+  )
+}
+
+Assert-ExactReleaseAssets $exactRelease $expectedAssets
+Expect-Rejection {
+  Assert-ExactReleaseAssets $wrongCaseRelease $expectedAssets
+} 'differently-cased asset'
+Expect-Rejection {
+  Assert-ExactReleaseAssets $missingRelease $expectedAssets
+} 'missing asset'
+Expect-Rejection {
+  Assert-ExactReleaseAssets $extraRelease $expectedAssets
+} 'extra asset'
+Expect-Rejection {
+  Assert-ExactReleaseAssets $duplicateRelease $expectedAssets
+} 'duplicate asset'
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${publisher.slice(helperStart, helperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(`Release asset probe failed: ${result.stderr || result.stdout}`);
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'release publisher binds release identity and exact asset bytes',
+    () => {
+      const publisher = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'publish-windows-release.ps1'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const helperStart = publisher.indexOf('function Assert-ExactReleaseAssets {');
+      const helperEnd = publisher.indexOf(
+        '\nfunction Assert-ManagedModelAndMemoryEvidence {',
+        helperStart,
+      );
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-release-bytes-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$expectedDirectory = New-Item -ItemType Directory -Path (
+  Join-Path $PSScriptRoot 'expected'
+)
+$changedDirectory = New-Item -ItemType Directory -Path (
+  Join-Path $PSScriptRoot 'changed'
+)
+$expectedPath = Join-Path $expectedDirectory.FullName 'asset.bin'
+$changedPath = Join-Path $changedDirectory.FullName 'asset.bin'
+[System.IO.File]::WriteAllText($expectedPath, 'AAAA')
+[System.IO.File]::WriteAllText($changedPath, 'BBBB')
+$manifest = New-ReleaseAssetManifest @((Get-Item -LiteralPath $expectedPath))
+Assert-ReleaseAssetFileMatchesManifest $expectedPath $manifest[0] 'unchanged local asset'
+Expect-Rejection {
+  Assert-ReleaseAssetFileMatchesManifest $changedPath $manifest[0] 'same-size changed asset'
+} 'same-name-size content substitution'
+
+Set-ReadOnlyCreatedReleaseId 'release-A'
+Expect-Rejection {
+  $script:createdReleaseId = 'release-B'
+} 'read-only created release id reassignment'
+if ($script:createdReleaseId -cne 'release-A') {
+  throw 'Read-only created release id changed'
+}
+
+$env:RUNNER_TEMP = Join-Path $PSScriptRoot 'runner'
+New-Item -ItemType Directory -Path $env:RUNNER_TEMP | Out-Null
+$remoteRelease = [pscustomobject]@{
+  assets = @([pscustomobject]@{ name = 'asset.bin' })
+}
+$script:fakeGhAssetPath = $expectedPath
+function gh {
+  if ($args.Count -ne 5 -or
+      [string]$args[0] -cne 'release' -or
+      [string]$args[1] -cne 'download' -or
+      [string]$args[3] -cne '--dir') {
+    throw 'Unexpected fake gh invocation'
+  }
+  Copy-Item -LiteralPath $script:fakeGhAssetPath -Destination (
+    Join-Path ([string]$args[4]) 'asset.bin'
+  )
+  $global:LASTEXITCODE = 0
+}
+Assert-RemoteReleaseAssetContents 'v0.2.0' $remoteRelease $manifest 'fake-valid'
+$script:fakeGhAssetPath = $changedPath
+Expect-Rejection {
+  Assert-RemoteReleaseAssetContents 'v0.2.0' $remoteRelease $manifest 'fake-upload'
+} 'same-name-size remote content substitution'
+
+$created = [pscustomobject]@{
+  id = 'release-A'
+  tagName = 'v0.2.0'
+  name = 'Waggle v0.2.0'
+  isDraft = $true
+  isPrerelease = $false
+}
+$substituted = [pscustomobject]@{
+  id = 'release-B'
+  tagName = 'v0.2.0'
+  name = 'Waggle v0.2.0'
+  isDraft = $true
+  isPrerelease = $false
+}
+Assert-ReleaseIdentity $created 'release-A' 'v0.2.0' $true 'created release'
+Expect-Rejection {
+  Assert-ReleaseIdentity $substituted 'release-A' 'v0.2.0' $true 'substituted release'
+} 'release id substitution'
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${publisher.slice(helperStart, helperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `Release byte-integrity probe failed: ${result.stderr || result.stdout}`,
+          );
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('release and PR macOS builds pin each target to a matching runner architecture', () => {
     for (const workflowName of ['release.yml', 'tauri-build-pr.yml']) {
       const workflow = fs.readFileSync(
@@ -1053,6 +1711,12 @@ describe('CI/CD Configuration', () => {
         path.join(ROOT, '.github', 'workflows', name),
         'utf-8',
       );
+      const publisher = name === 'release.yml'
+        ? fs.readFileSync(
+          path.join(ROOT, 'scripts', 'publish-windows-release.ps1'),
+          'utf-8',
+        )
+        : '';
       const windowsSteps = workflow.slice(
         workflow.indexOf(windowsJob),
         workflow.indexOf(macJob),
@@ -1100,15 +1764,19 @@ describe('CI/CD Configuration', () => {
         expect(windowsSteps.slice(0, certificateIndex)).not.toContain('tagName:');
         expect(windowsSteps.slice(0, certificateIndex)).not.toContain('releaseDraft:');
         expect(handoffStep).toContain('if: success()');
-        expect(handoffStep).toContain('Get-FileHash');
-        expect(handoffStep).toContain('receiptData.installer.sha256');
+        expect(handoffStep).toContain(
+          'run: ./scripts/publish-windows-release.ps1 -Mode upgrade',
+        );
+        expect(publisher).toContain('Get-FileHash');
+        expect(publisher).toContain('receiptData.installer.sha256');
         expect(workflow).not.toContain('workflow_dispatch:');
         expect(windowsSteps).toContain('environment: production-windows-signing');
         expect(windowsSteps).toContain('Validate release tag and app version');
         expect(windowsSteps).toContain("$expectedTag = \"v$version\"");
         expect(windowsSteps).toContain('git merge-base --is-ancestor $env:GITHUB_SHA origin/main');
         expect(workflow).toContain('group: release-${{ github.ref }}');
-        expect(windowsSteps).toContain('Attest certified Windows artifacts');
+        expect(windowsSteps).toContain('Attest bootstrap Windows artifacts');
+        expect(windowsSteps).toContain('Attest upgrade Windows artifacts');
         expect(windowsSteps).toContain('attest-build-provenance@');
         expect(windowsSteps).toContain('WINDOWS_CODESIGN_PFX_BASE64');
         expect(windowsSteps).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
@@ -1147,54 +1815,59 @@ describe('CI/CD Configuration', () => {
           .toHaveLength(2);
         expect(windowsSteps).toContain('Refusing to prune outside the Tauri target');
         expect(windowsSteps).toContain('$minimumFreeBytes = 8GB');
-        expect(handoffStep).toContain('isDraft');
-        expect(handoffStep).toContain('Refusing to modify a published release');
-        expect(handoffStep).toContain('Assert-PassingWindowsCertificateReceipt');
-        expect(handoffStep).toContain('$Receipt.certificationMode, $ExpectedMode');
-        expect(handoffStep).toContain("$cleanReceiptData 'same-version-repair'");
-        expect(handoffStep).toContain("$receiptData 'version-to-version-upgrade'");
-        expect(handoffStep).toContain('certificateData.managedModelVerified');
-        expect(handoffStep).toContain('certificateData.certifiedTier');
-        expect(handoffStep).toContain("'soloTier'");
-        expect(handoffStep).toContain("'previousSoloTier'");
-        expect(handoffStep).toContain("'repairSoloTier'");
-        expect(handoffStep).toContain("'managedModelProxyRestartChat'");
-        expect(handoffStep).toContain("'previousManagedModelSeeded'");
-        expect(handoffStep).toContain("'upgradeManagedModelPreserved'");
-        expect(handoffStep).toContain("'repairManagedModelDigestPreserved'");
-        expect(handoffStep).toContain('upgrade.managedModelDigest');
-        expect([...handoffStep.matchAll(/'managedModelProxyRestartChat'/g)]).toHaveLength(2);
-        expect(handoffStep).toContain('windows-installer-upgrade-certificate.json');
-        expect(handoffStep).toContain('previousInstaller.sha256');
-        expect(handoffStep).toContain('previousInstalledApp.authenticodeStatus');
-        expect(handoffStep).toContain('upgrade.previousVersion');
-        expect(handoffStep).toContain('upgrade.candidateVersion');
-        expect(handoffStep).toContain('upgrade.previousSourceRevision');
-        expect(handoffStep).toContain('Assert-RemoteTagCommit $env:WINDOWS_UPGRADE_BASE_TAG');
-        expect(handoffStep).toContain('$env:WAGGLE_UPGRADE_BASE_COMMIT, $env:WINDOWS_UPGRADE_BASE_COMMIT');
-        expect(handoffStep).toContain('Assert-ExpectedAuthenticodeSignature $installer');
-        expect(handoffStep).toContain('Assert-ExpectedAuthenticodeSignature $baseInstaller');
-        expect(handoffStep).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
-        expect(handoffStep).toContain('$env:GITHUB_REF_NAME');
-        expect(handoffStep).not.toContain("$tag = '${{ github.ref_name }}'");
-        expect(handoffStep).toContain('versionToVersionUpgrade');
-        expect(handoffStep).toContain('upgradeConfiguredDataPreserved');
-        expect(handoffStep).toContain('upgradeProfileDataPreserved');
-        expect(handoffStep).toContain('upgradeVaultKeyPreserved');
-        expect(handoffStep).toContain('installedApp.authenticodeStatus');
-        expect(handoffStep).toContain("signatureType -ne 'Authenticode'");
-        expect(handoffStep).toContain('nonPassingChecks');
-        expect(handoffStep).toContain('generatedInstallerScriptSha256');
-        expect(handoffStep).toContain('managedModelVerified');
-        expect(handoffStep).toContain('managedModelDigest');
-        expect(handoffStep).toContain('noModelChatSetupRequired');
-        expect(handoffStep).toContain('windowsInboxTools');
-        expect(handoffStep).toContain('dockerIndependentRuntimePrerequisites');
-        expect(handoffStep).toContain('managedModelChat');
-        expect(handoffStep).toContain('managedRuntimeCleanup');
-        expect(handoffStep).toContain('git ls-remote --tags origin');
-        expect(handoffStep).toContain('--verify-tag');
-        expect(handoffStep).not.toContain('--clobber');
+        expect(publisher).toContain('isDraft');
+        expect(publisher).toContain('Refusing to use a pre-existing release');
+        expect(publisher).toContain('Assert-PassingWindowsCertificateReceipt');
+        expect(publisher).toContain('$Receipt.certificationMode');
+        expect(publisher).toContain('$ExpectedMode');
+        expect(publisher).toContain("$cleanReceiptData 'same-version-repair'");
+        expect(publisher).toContain("$receiptData 'version-to-version-upgrade'");
+        expect(publisher).toContain('$Receipt.managedModelVerified');
+        expect(publisher).toContain('$Receipt.certifiedTier');
+        expect(publisher).toContain("'soloTier'");
+        expect(publisher).toContain("'previousSoloTier'");
+        expect(publisher).toContain("'repairSoloTier'");
+        expect(publisher).toContain("'managedModelProxyRestartChat'");
+        expect(publisher).toContain("'previousManagedModelSeeded'");
+        expect(publisher).toContain("'upgradeManagedModelPreserved'");
+        expect(publisher).toContain("'repairManagedModelDigestPreserved'");
+        expect(publisher).toContain('upgrade.managedModelDigest');
+        expect([...publisher.matchAll(/'managedModelProxyRestartChat'/g)]).toHaveLength(2);
+        expect(publisher).toContain('windows-installer-upgrade-certificate.json');
+        expect(publisher).toContain('previousInstaller.sha256');
+        expect(publisher).toContain('previousInstalledApp.authenticodeStatus');
+        expect(publisher).toContain('upgrade.previousVersion');
+        expect(publisher).toContain('upgrade.candidateVersion');
+        expect(publisher).toContain('upgrade.previousSourceRevision');
+        expect(publisher).toContain('Assert-PublicationTagBindings');
+        expect(publisher).toContain('WAGGLE_UPGRADE_BASE_COMMIT');
+        expect(publisher).toContain('WINDOWS_UPGRADE_BASE_COMMIT');
+        expect(publisher).toContain(
+          'Certified Windows upgrade baseline commit no longer matches the protected commit',
+        );
+        expect(publisher).toContain('Assert-ExpectedAuthenticodeSignature $installer');
+        expect(publisher).toContain('Assert-ExpectedAuthenticodeSignature $baseInstaller');
+        expect(publisher).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
+        expect(publisher).toContain('$env:GITHUB_REF_NAME');
+        expect(publisher).not.toContain("$tag = '${{ github.ref_name }}'");
+        expect(publisher).toContain('versionToVersionUpgrade');
+        expect(publisher).toContain('upgradeConfiguredDataPreserved');
+        expect(publisher).toContain('upgradeProfileDataPreserved');
+        expect(publisher).toContain('upgradeVaultKeyPreserved');
+        expect(publisher).toContain('installedApp.authenticodeStatus');
+        expect(publisher).toContain("signatureType -ne 'Authenticode'");
+        expect(publisher).toContain('nonPassingChecks');
+        expect(publisher).toContain('generatedInstallerScriptSha256');
+        expect(publisher).toContain('managedModelVerified');
+        expect(publisher).toContain('managedModelDigest');
+        expect(publisher).toContain('noModelChatSetupRequired');
+        expect(publisher).toContain('windowsInboxTools');
+        expect(publisher).toContain('dockerIndependentRuntimePrerequisites');
+        expect(publisher).toContain('managedModelChat');
+        expect(publisher).toContain('managedRuntimeCleanup');
+        expect(publisher).toContain('git ls-remote --tags origin');
+        expect(publisher).toContain('--verify-tag');
+        expect(publisher).not.toContain('--clobber');
       } else {
         expect(windowsSteps).not.toContain('-RequireAuthenticodeSignature');
         expect(windowsSteps).not.toContain('-VerifyManagedModel');
@@ -1211,6 +1884,27 @@ describe('CI/CD Configuration', () => {
     );
     expect([...workflow.matchAll(/\.github\/workflows\/release\.yml/g)]).toHaveLength(2);
     expect([...workflow.matchAll(/\.github\/workflows\/tauri-build-pr\.yml/g)]).toHaveLength(2);
+    expect([...workflow.matchAll(/'scripts\/\*\*'/g)]).toHaveLength(2);
+    const windowsJobStart = workflow.indexOf('  verify-windows:');
+    const windowsJobEnd = workflow.indexOf('\n  verify-macos:', windowsJobStart);
+    expect(windowsJobStart).toBeGreaterThanOrEqual(0);
+    expect(windowsJobEnd).toBeGreaterThan(windowsJobStart);
+    const windowsJob = workflow.slice(windowsJobStart, windowsJobEnd);
+    expect(windowsJob).toContain('runs-on: windows-latest');
+    expect([
+      ...windowsJob.matchAll(/- name: Verify Windows release-mode and publication guards/g),
+    ]).toHaveLength(1);
+    expect(windowsJob).toContain('shell: pwsh');
+    expect(windowsJob).toContain("WAGGLE_REQUIRE_PWSH7: '1'");
+    expect(windowsJob).toContain(
+      'packages/server/tests/tauri-config.test.ts -t "CI/CD Configuration"',
+    );
+    expect(windowsJob.indexOf('- name: Install dependencies')).toBeLessThan(
+      windowsJob.indexOf('- name: Verify Windows release-mode and publication guards'),
+    );
+    expect(
+      windowsJob.indexOf('- name: Verify Windows release-mode and publication guards'),
+    ).toBeLessThan(windowsJob.indexOf('- name: Install locked Tauri CLI'));
   });
 
   it('desktop workflows pin every third-party action to a full commit SHA', () => {
@@ -1531,24 +2225,24 @@ describe('CI/CD Configuration', () => {
   });
 
   it('release publication requires the verified Windows vault-key ACL receipt', () => {
-    const workflow = fs.readFileSync(
-      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+    const publisher = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'publish-windows-release.ps1'),
       'utf-8',
     );
 
-    expect(workflow).toMatch(/\$cleanRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
-    expect(workflow).toMatch(/\$upgradeRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
+    expect(publisher).toMatch(/\$cleanRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
+    expect(publisher).toMatch(/\$upgradeRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
   });
 
   it('release publication requires real default-profile workspace and memory lifecycle evidence', () => {
-    const workflow = fs.readFileSync(
-      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+    const publisher = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'publish-windows-release.ps1'),
       'utf-8',
     );
-    const cleanRequiredChecks = workflow.match(
+    const cleanRequiredChecks = publisher.match(
       /\$cleanRequiredChecks\s*=\s*@\(([\s\S]*?)\r?\n\s*\)/,
     )?.[1];
-    const upgradeRequiredChecks = workflow.match(
+    const upgradeRequiredChecks = publisher.match(
       /\$upgradeRequiredChecks\s*=\s*@\(([\s\S]*?)\r?\n\s*\)/,
     )?.[1];
     expect(cleanRequiredChecks).toBeDefined();
@@ -1565,37 +2259,48 @@ describe('CI/CD Configuration', () => {
       expect(upgradeRequiredChecks).toContain(`'${check}'`);
     }
     expect(upgradeRequiredChecks).toContain("'upgradeRealWorkspaceAndMemoryPreserved'");
-    expect(workflow).toContain('lifecycleData.workspaceId');
-    expect(workflow).toContain('lifecycleData.personalFrameId');
-    expect(workflow).toContain('lifecycleData.workspaceFrameId');
-    expect(workflow).toContain('lifecycleData.preUninstallManifestEntryCount');
-    expect(workflow).toContain('lifecycleData.preUninstallManifestSha256');
-    expect(workflow).toContain('lifecycleData.postUninstallManifestSha256');
-    expect(workflow).toContain('unchanged uninstall manifest');
+    expect(publisher).toContain('lifecycleData.workspaceId');
+    expect(publisher).toContain('lifecycleData.personalFrameId');
+    expect(publisher).toContain('lifecycleData.workspaceFrameId');
+    expect(publisher).toContain('lifecycleData.preUninstallManifestEntryCount');
+    expect(publisher).toContain('lifecycleData.preUninstallManifestSha256');
+    expect(publisher).toContain('lifecycleData.postUninstallManifestSha256');
+    expect(publisher).toContain('unchanged uninstall manifest');
   });
 
   it.runIf(process.platform === 'win32')(
     'release receipt guards reject stringified schema versions and truthy non-booleans',
     () => {
-      const workflow = fs
-        .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+      const publisher = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'publish-windows-release.ps1'), 'utf-8')
         .replace(/\r\n/g, '\n');
-      const envelopeStart = workflow.indexOf(
-        '          function Assert-PassingWindowsCertificateReceipt {',
+      const envelopeStart = publisher.indexOf(
+        'function Assert-PassingWindowsCertificateReceipt {',
       );
-      const checkStart = workflow.indexOf(
-        '          function Assert-PassingWindowsCertificateCheck {',
+      const checkStart = publisher.indexOf(
+        'function Assert-PassingWindowsCertificateCheck {',
       );
-      const verifierStart = workflow.indexOf('\n          $installers =', checkStart);
+      const verifierStart = publisher.indexOf(
+        '\nfunction Assert-ExactReleaseAssets {',
+        checkStart,
+      );
       expect(envelopeStart).toBeGreaterThanOrEqual(0);
       expect(checkStart).toBeGreaterThan(envelopeStart);
       expect(verifierStart).toBeGreaterThan(checkStart);
+      expect([
+        ...publisher.matchAll(
+          /^function Assert-PassingWindowsCertificateReceipt \{/gm,
+        ),
+      ]).toHaveLength(1);
+      expect([
+        ...publisher.matchAll(
+          /^function Assert-PassingWindowsCertificateCheck \{/gm,
+        ),
+      ]).toHaveLength(1);
 
       const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-receipt-types-'));
       const probePath = path.join(probeRoot, 'probe.ps1');
-      const helperSource = workflow
-        .slice(envelopeStart, verifierStart)
-        .replace(/^ {10}/gm, '');
+      const helperSource = publisher.slice(envelopeStart, verifierStart);
       const fixtureSource = String.raw`
 function Expect-Rejection {
   param([scriptblock]$Action, [string]$Label)
@@ -1608,27 +2313,38 @@ $good = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"
 $longVersion = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
 $longVersion.schemaVersion = [long]4
 $stringVersion = '{"schemaVersion":"4","certificationMode":"same-version-repair","status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$wrongVersion = '{"schemaVersion":3,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$missingMode = '{"schemaVersion":4,"status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$wrongMode = '{"schemaVersion":4,"certificationMode":"version-to-version-upgrade","status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$numericMode = '{"schemaVersion":4,"certificationMode":1,"status":"passed","checks":{"proof":true}}' | ConvertFrom-Json
+$missingStatus = '{"schemaVersion":4,"certificationMode":"same-version-repair","checks":{"proof":true}}' | ConvertFrom-Json
+$wrongStatus = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"failed","checks":{"proof":true}}' | ConvertFrom-Json
+$numericStatus = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":1,"checks":{"proof":true}}' | ConvertFrom-Json
 $stringCheck = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":"true"}}' | ConvertFrom-Json
 $numericCheck = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":1}}' | ConvertFrom-Json
+$falseCheck = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{"proof":false}}' | ConvertFrom-Json
+$missingCheck = '{"schemaVersion":4,"certificationMode":"same-version-repair","status":"passed","checks":{}}' | ConvertFrom-Json
 Assert-PassingWindowsCertificateReceipt $good 'same-version-repair' 'good fixture'
 Assert-PassingWindowsCertificateReceipt $longVersion 'same-version-repair' 'PowerShell 7 integer fixture'
 Assert-PassingWindowsCertificateCheck $good 'proof' 'good fixture'
 Expect-Rejection { Assert-PassingWindowsCertificateReceipt $stringVersion 'same-version-repair' 'string version' } 'string version'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $wrongVersion 'same-version-repair' 'wrong version' } 'wrong version'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $missingMode 'same-version-repair' 'missing mode' } 'missing mode'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $wrongMode 'same-version-repair' 'wrong mode' } 'wrong mode'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $numericMode 'same-version-repair' 'numeric mode' } 'numeric mode'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $missingStatus 'same-version-repair' 'missing status' } 'missing status'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $wrongStatus 'same-version-repair' 'wrong status' } 'wrong status'
+Expect-Rejection { Assert-PassingWindowsCertificateReceipt $numericStatus 'same-version-repair' 'numeric status' } 'numeric status'
 Expect-Rejection { Assert-PassingWindowsCertificateCheck $stringCheck 'proof' 'string check' } 'string check'
 Expect-Rejection { Assert-PassingWindowsCertificateCheck $numericCheck 'proof' 'numeric check' } 'numeric check'
+Expect-Rejection { Assert-PassingWindowsCertificateCheck $falseCheck 'proof' 'false check' } 'false check'
+Expect-Rejection { Assert-PassingWindowsCertificateCheck $missingCheck 'proof' 'missing check' } 'missing check'
 `;
 
       try {
         fs.writeFileSync(probePath, `${helperSource}\n${fixtureSource}`, 'utf-8');
-        const powershell = path.join(
-          process.env.SystemRoot ?? 'C:\\Windows',
-          'System32',
-          'WindowsPowerShell',
-          'v1.0',
-          'powershell.exe',
-        );
         const result = spawnSync(
-          powershell,
+          powershellProbeExecutable(),
           ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
           { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
         );

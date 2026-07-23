@@ -71,6 +71,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify Windows release-mode and publication guards
+        shell: pwsh
+        env:
+          WAGGLE_REQUIRE_PWSH7: '1'
+        run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/server/tests/tauri-config.test.ts -t "CI/CD Configuration"
+
       - name: Install locked Tauri CLI
         run: npm ci --prefix app --ignore-scripts
 
