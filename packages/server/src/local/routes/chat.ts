@@ -51,7 +51,11 @@ import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
-import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
+import {
+  canonicalizeModelReference,
+  resolveExplicitRoutableModel,
+  resolveUsableModel,
+} from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
@@ -1297,7 +1301,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       // ── Conversation history management (moved before LLM check so echo mode also persists) ──
       try {
+        const selectedModelBeforeResolution = resolvedModel.trim();
         resolvedModel = await resolveUsableModel(server, resolvedModel);
+        const normalizedOnly = resolvedModel
+          === canonicalizeModelReference(selectedModelBeforeResolution);
+        if (!normalizedOnly) {
+          budgetModelSelected = false;
+          modelSwitchReason = `${selectedModelBeforeResolution} unavailable; ${resolvedModel} selected`;
+        }
       } catch (selectedResolutionError) {
         const unavailableModel = resolvedModel;
         if (budgetModelSelected && unavailableModel !== primaryModel) {

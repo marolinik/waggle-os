@@ -601,6 +601,109 @@ describe('chat smart-router integration', () => {
     expect(persistedTrace.model).toBe('ollama/fallback-test-model');
   });
 
+  it('surfaces automatic preflight model substitution across SSE, history, and trace', async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.setDefaultModel('openai/unavailable-test-model');
+    config.clearBudgetModel();
+    config.clearFallbackModel();
+    config.save();
+    const previousCurrentModel = server.agentState.currentModel;
+    server.agentState.currentModel = primary;
+    const session = 'preflight-model-substitution-provenance';
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Review this TypeScript function', session },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(capturedModel).toBe('primary-test-model');
+      const switchEvents = [...response.body.matchAll(/event: model_switch\r?\ndata: (.+?)(?:\r?\n|$)/g)]
+        .map(match => JSON.parse(match[1]!) as Record<string, unknown>);
+      expect(switchEvents).toEqual([{
+        model: 'ollama/primary-test-model',
+        reason: 'openai/unavailable-test-model unavailable; ollama/primary-test-model selected',
+        primary: 'openai/unavailable-test-model',
+      }]);
+      const doneEvents = [...response.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g)]
+        .map(match => JSON.parse(match[1]!) as { model?: string });
+      expect(doneEvents).toHaveLength(1);
+      expect(doneEvents[0]?.model).toBe('ollama/primary-test-model');
+
+      const historyResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${session}`,
+      });
+      expect(historyResponse.statusCode).toBe(200);
+      expect(historyResponse.json().messages).toContainEqual(
+        expect.objectContaining({
+          role: 'assistant',
+          content: 'ok',
+          model: 'ollama/primary-test-model',
+        }),
+      );
+      expect(loadSessionMessages(tmpDir, 'default', session)).toContainEqual({
+        role: 'assistant',
+        content: 'ok',
+        model: 'ollama/primary-test-model',
+      });
+      const [persistedTrace] = server.traceStore.query({ sessionId: session, limit: 1 });
+      expect(persistedTrace.model).toBe('ollama/primary-test-model');
+    } finally {
+      server.agentState.currentModel = previousCurrentModel;
+    }
+  });
+
+  it.each([
+    'openai/gpt-5.6-sol',
+    'gpt-5.6-sol',
+  ])('surfaces provider-family fallback for %s instead of treating it as model normalization', async (configuredModel) => {
+    const config = new WaggleConfig(tmpDir);
+    config.setDefaultModel(configuredModel);
+    config.clearBudgetModel();
+    config.clearFallbackModel();
+    config.save();
+    const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
+    process.env.OPENROUTER_API_KEY = 'sk-openrouter-provider-family-test';
+    const previousProvider = server.agentState.llmProvider;
+    const previousCurrentModel = server.agentState.currentModel;
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'test',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = '';
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Review this consequential architecture decision.',
+          session: `provider-family-model-substitution-${configuredModel.replace(/[^a-z0-9_-]/gi, '-')}`,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(capturedModel).toBe('openrouter/openai/gpt-5.6-sol');
+      const switchEvents = [...response.body.matchAll(/event: model_switch\r?\ndata: (.+?)(?:\r?\n|$)/g)]
+        .map(match => JSON.parse(match[1]!) as Record<string, unknown>);
+      expect(switchEvents).toEqual([{
+        model: 'openrouter/openai/gpt-5.6-sol',
+        reason: `${configuredModel} unavailable; openrouter/openai/gpt-5.6-sol selected`,
+        primary: configuredModel,
+      }]);
+    } finally {
+      server.agentState.llmProvider = previousProvider;
+      server.agentState.currentModel = previousCurrentModel;
+      if (previousOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousOpenRouterKey;
+    }
+  });
+
   it('sends a bounded relevant subset of 29 eligible tools through the real chat provider path', async () => {
     const previousRunner = server.agentRunner;
     const originalTools = [...server.agentState.allTools];

@@ -95,6 +95,11 @@ function canonicalModelId(model: string, provider: string | null): string {
   return `${provider}/${model}`;
 }
 
+export function canonicalizeModelReference(model: string): string {
+  const trimmed = model.trim();
+  return canonicalModelId(trimmed, providerForModel(trimmed));
+}
+
 async function modelIsRoutable(
   server: FastifyInstance,
   model: string,
