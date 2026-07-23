@@ -156,6 +156,8 @@ export interface SubAgentToolsDeps {
   litellmApiKey: string;
   /** Default model for sub-agents */
   defaultModel?: string;
+  /** Resolve an explicit child override before any durable run or model call. */
+  resolveModel?: (model: string) => Promise<string>;
   /** Optional callback for streaming sub-agent progress */
   onSubAgentToken?: (agentId: string, token: string) => void;
   onSubAgentTool?: (agentId: string, name: string, input: Record<string, unknown>) => void;
@@ -295,7 +297,19 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
         const role = args.role as string;
         const task = args.task as string;
         const context = args.context as string ?? '';
-        const model = args.model as string ?? defaultModel ?? 'claude-sonnet-4-6';
+        const requestedModel = args.model as string | undefined;
+        let model = requestedModel ?? defaultModel ?? 'claude-sonnet-4-6';
+        if (requestedModel !== undefined && deps.resolveModel) {
+          try {
+            model = await deps.resolveModel(requestedModel);
+          } catch (err) {
+            const errMsg = guardSubAgentOutput(
+              err instanceof Error ? err.message : String(err),
+              'error',
+            );
+            return `## Sub-Agent Error: ${name}\n**Error:** Could not resolve the requested model: ${errMsg}`;
+          }
+        }
 
         // Resolve tools for this sub-agent
         let toolNames: string[];

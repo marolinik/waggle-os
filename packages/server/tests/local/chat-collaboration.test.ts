@@ -92,6 +92,7 @@ function bind(
     tools: readonly ToolDefinition[],
     operation: () => Promise<AgentResponse>,
   ) => Promise<AgentResponse>,
+  model = 'model-default',
 ) {
   const visibleTools = [
     ...collaborationNames.map(tool),
@@ -107,7 +108,7 @@ function bind(
     workspaceId: 'workspace-a',
     parentSessionId: sessionId,
     parentTask: 'Coordinate specialists on the release',
-    model: 'model-default',
+    model,
     runLoop,
     runWorkerTransaction,
     securityContext: {
@@ -204,6 +205,68 @@ describe('request-bound chat collaboration', () => {
     const restored = new AgentRunRegistry(path.join(dir, 'agent-runs.json'));
     expect(restored.get(worker.id)?.status).toBe('completed');
     restored.close();
+  });
+
+  it('keeps explicit sub-agent and workflow overrides on the local parent model', async () => {
+    const { registry, server } = setup();
+    const localModel = 'ollama/qwen2.5:0.5b';
+    const runnerModels: string[] = [];
+    const tools = bind(server, async (config) => {
+      runnerModels.push(config.model);
+      return {
+        content: `Completed with ${config.model}`,
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    }, 'local-only-session', undefined, localModel);
+
+    await tools.find((item) => item.name === 'spawn_agent')!.execute({
+      name: 'Pinned sub-agent',
+      role: 'researcher',
+      task: 'Stay local',
+      model: 'claude-sonnet-4-6',
+    });
+    await tools.find((item) => item.name === 'spawn_agent')!.execute({
+      name: 'Empty-model sub-agent',
+      role: 'researcher',
+      task: 'Treat an empty override as local too',
+      model: '',
+    });
+    await tools.find((item) => item.name === 'orchestrate_workflow')!.execute({
+      task: 'Keep the inline workflow local',
+      inline_template: {
+        name: 'Pinned workflow',
+        description: 'Explicitly pinned children',
+        aggregation: 'concatenate',
+        steps: [
+          {
+            name: 'Pinned worker',
+            role: 'writer',
+            task: 'Stay local too',
+            model: 'claude-sonnet-4-6',
+          },
+          {
+            name: 'Empty-model worker',
+            role: 'writer',
+            task: 'Treat an empty override as local too',
+            model: '',
+          },
+        ],
+      },
+    });
+
+    const subagentWorkers = registry.list({
+      source: 'chat_subagent', workspaceId: 'workspace-a',
+    }).filter((run) => run.kind === 'worker');
+    const workflowWorkers = registry.list({
+      source: 'workflow', workspaceId: 'workspace-a',
+    }).filter((run) => run.kind === 'worker');
+    expect(runnerModels).toHaveLength(4);
+    expect(runnerModels.every((model) => model === localModel)).toBe(true);
+    expect(subagentWorkers).toHaveLength(2);
+    expect(subagentWorkers.every((run) => run.executor.model === localModel)).toBe(true);
+    expect(workflowWorkers).toHaveLength(2);
+    expect(workflowWorkers.every((run) => run.executor.model === localModel)).toBe(true);
   });
 
   it('keeps cron origins and spawn policy isolated across overlapping request bindings', async () => {

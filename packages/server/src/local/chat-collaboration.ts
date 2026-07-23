@@ -18,6 +18,7 @@ import type {
   CollaborationWorkerRun,
   WaggleMessage,
 } from '@waggle/shared';
+import { isOfflineOllamaModelReference } from './routes/chat-helpers.js';
 import { emitSubagentStatus } from './routes/notifications.js';
 
 const COLLABORATION_TOOL_NAMES = new Set([
@@ -107,6 +108,9 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         () => runLoop(config),
       )
     : runLoop;
+  const resolveChildModel = isOfflineOllamaModelReference(model)
+    ? async () => model
+    : undefined;
   const subagentAssignments = new Map<string, string | undefined>();
   const workflowContexts = new Map<string, WorkflowContext>();
   let subagentRoom: CollaborationRoomRun | undefined;
@@ -428,6 +432,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       litellmUrl: server.localConfig.litellmUrl,
       litellmApiKey: server.agentState.litellmApiKey,
       defaultModel: model,
+      resolveModel: resolveChildModel,
       hooks: securityContext.hooks,
       getSpawnSecurityContext: () => securityContext,
       runAdapter: subagentAdapter,
@@ -450,6 +455,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       litellmUrl: server.localConfig.litellmUrl,
       litellmApiKey: server.agentState.litellmApiKey,
       defaultModel: model,
+      resolveModel: resolveChildModel,
       hooks: securityContext.hooks,
       getSpawnSecurityContext: () => securityContext,
       skills: server.agentState.skills,
