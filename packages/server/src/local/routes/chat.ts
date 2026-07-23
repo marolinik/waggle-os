@@ -1260,7 +1260,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
       activeSessionOrch = sessionOrch;
-      if (!hasCustomRunner && workspace && workspace !== 'default' && workspacePath) {
+      if (!hasCustomRunner && workspacePath) {
         workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
           workspacePath,
           turnSignal,

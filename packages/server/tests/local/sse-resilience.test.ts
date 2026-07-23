@@ -879,6 +879,222 @@ describe('SSE Stream Resilience', () => {
       }
     }, 30_000);
 
+    it('serializes default-alias and path-only chat turns over the same checkout', async () => {
+      const workspaceRoot = path.join(tmpDir, 'legacy-shared-coder-workspace');
+      fs.mkdirSync(workspaceRoot, { recursive: true });
+      const sharedFile = path.join(workspaceRoot, 'shared.txt');
+      fs.writeFileSync(sharedFile, 'v0', 'utf-8');
+
+      const previousProvider = server.agentState.llmProvider;
+      const previousCurrentModel = server.agentState.currentModel;
+      const previousLitellmUrl = server.localConfig.litellmUrl;
+      const previousOllamaHost = process.env.OLLAMA_HOST;
+      const previousReranker = process.env.WAGGLE_RERANKER;
+
+      server.agentState.llmProvider = {
+        provider: 'ollama',
+        health: 'healthy',
+        detail: 'Test Ollama provider',
+        checkedAt: new Date().toISOString(),
+      };
+      server.agentState.currentModel = 'ollama/local-legacy-queue';
+      server.localConfig.litellmUrl = 'http://proxy.test/v1';
+      process.env.OLLAMA_HOST = 'http://ollama.test';
+      process.env.WAGGLE_RERANKER = '0';
+
+      const deferred = () => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((done) => { resolve = done; });
+        return { promise, resolve };
+      };
+      const aReadObserved = deferred();
+      const releaseAEdit = deferred();
+      const bReadObserved = deferred();
+      const releaseBEdit = deferred();
+      const secondAcquireRequested = deferred();
+      const calls = new Map<'A' | 'B', number>([['A', 0], ['B', 0]]);
+      let aReadResult = '';
+      let bReadResult = '';
+      let acquireCount = 0;
+
+      const coordinator = server.agentState.workspaceTurnCoordinator;
+      const originalCreateScope = coordinator.createScope.bind(coordinator);
+      const createScopeSpy = vi.spyOn(coordinator, 'createScope').mockImplementation(
+        (workspacePath, signal) => {
+          const scope = originalCreateScope(workspacePath, signal);
+          const originalAcquire = scope.acquire.bind(scope);
+          scope.acquire = async (access, onQueued) => {
+            acquireCount += 1;
+            if (acquireCount === 2) secondAcquireRequested.resolve();
+            return originalAcquire(access, onQueued);
+          };
+          return scope;
+        },
+      );
+
+      const streamResponse = (chunks: unknown[]) => new Response(
+        `${chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+      const toolResponse = (id: string, name: string, args: Record<string, unknown>) => streamResponse([
+        {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id,
+                type: 'function',
+                function: { name, arguments: JSON.stringify(args) },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        },
+      ]);
+      const finalResponse = (content: string) => streamResponse([
+        { choices: [{ delta: { content } }] },
+        {
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        },
+      ]);
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'local-legacy-queue' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (!url.endsWith('/chat/completions')) return new Response('', { status: 503 });
+
+        const body = JSON.parse(String(init?.body ?? '{}')) as {
+          messages?: Array<{ role?: string; content?: string }>;
+        };
+        const contents = (body.messages ?? []).map(entry => entry.content ?? '').join('\n');
+        const session = contents.includes('LEGACY_ALIAS_SESSION_A')
+          ? 'A'
+          : contents.includes('LEGACY_PATH_SESSION_B') ? 'B' : null;
+        if (!session) throw new Error('Provider request did not contain a legacy queue-test marker');
+        const call = (calls.get(session) ?? 0) + 1;
+        calls.set(session, call);
+
+        if (session === 'A' && call === 1) {
+          return toolResponse('legacy-a-read', 'read_file', { path: 'shared.txt' });
+        }
+        if (session === 'A' && call === 2) {
+          aReadResult = body.messages
+            ?.filter(entry => entry.role === 'tool')
+            .at(-1)?.content ?? '';
+          aReadObserved.resolve();
+          await releaseAEdit.promise;
+          return toolResponse('legacy-a-edit', 'edit_file', {
+            path: 'shared.txt', old_string: 'v0', new_string: 'v1',
+          });
+        }
+        if (session === 'A' && call === 3) {
+          return finalResponse('LEGACY_ALIAS_SESSION_A complete');
+        }
+        if (session === 'B' && call === 1) {
+          return toolResponse('legacy-b-read', 'read_file', { path: 'shared.txt' });
+        }
+        if (session === 'B' && call === 2) {
+          bReadResult = body.messages
+            ?.filter(entry => entry.role === 'tool')
+            .at(-1)?.content ?? '';
+          bReadObserved.resolve();
+          await releaseBEdit.promise;
+          return toolResponse('legacy-b-edit', 'edit_file', {
+            path: 'shared.txt', old_string: 'v1', new_string: 'v2',
+          });
+        }
+        if (session === 'B' && call === 3) {
+          return finalResponse('LEGACY_PATH_SESSION_B complete');
+        }
+        throw new Error(`Unexpected legacy queue-test provider call ${session}#${call}`);
+      });
+
+      const requestA = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: 'default',
+          workspacePath: workspaceRoot,
+          session: 'legacy-default-alias-a',
+          persona: 'coder',
+          model: 'ollama/local-legacy-queue',
+          autonomy: { level: 'yolo' },
+          message: 'LEGACY_ALIAS_SESSION_A: read shared.txt, then edit_file from v0 to v1.',
+        },
+      });
+      let requestB: ReturnType<typeof injectWithAuth> | undefined;
+
+      try {
+        await Promise.race([
+          aReadObserved.promise,
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('Default-alias chat did not reach its held stale-read boundary')),
+            5_000,
+          )),
+        ]);
+        expect(aReadResult).toContain('v0');
+
+        requestB = injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            workspacePath: workspaceRoot,
+            session: 'legacy-path-only-b',
+            persona: 'coder',
+            model: 'ollama/local-legacy-queue',
+            autonomy: { level: 'yolo' },
+            message: 'LEGACY_PATH_SESSION_B: read shared.txt, then edit_file from v1 to v2.',
+          },
+        });
+
+        const isolationOutcome = await Promise.race([
+          secondAcquireRequested.promise.then(() => 'queued' as const),
+          bReadObserved.promise.then(() => 'stale-read' as const),
+          new Promise<never>((_, reject) => setTimeout(
+            () => reject(new Error('Path-only chat neither queued nor reached the provider')),
+            5_000,
+          )),
+        ]);
+        expect({ isolationOutcome, bReadResult }).toEqual({
+          isolationOutcome: 'queued',
+          bReadResult: '',
+        });
+
+        releaseAEdit.resolve();
+        const responseA = await requestA;
+        expect(responseA.body).toContain('LEGACY_ALIAS_SESSION_A complete');
+
+        releaseBEdit.resolve();
+        const responseB = await requestB;
+        expect(responseB.body).toContain('LEGACY_PATH_SESSION_B complete');
+        expect(responseB.body).toContain('Waiting for another agent to finish editing this workspace');
+        expect(bReadResult).toContain('v1');
+        expect(fs.readFileSync(sharedFile, 'utf-8')).toBe('v2');
+      } finally {
+        releaseAEdit.resolve();
+        releaseBEdit.resolve();
+        await Promise.allSettled([requestA, requestB].filter(Boolean) as Promise<unknown>[]);
+        fetchSpy.mockRestore();
+        createScopeSpy.mockRestore();
+        server.agentState.llmProvider = previousProvider;
+        server.agentState.currentModel = previousCurrentModel;
+        server.localConfig.litellmUrl = previousLitellmUrl;
+        if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = previousOllamaHost;
+        if (previousReranker === undefined) delete process.env.WAGGLE_RERANKER;
+        else process.env.WAGGLE_RERANKER = previousReranker;
+      }
+    }, 30_000);
+
     it('rejects an overlapping turn for the same workspace session before it mutates history', async () => {
       const workspaceResponse = await injectWithAuth(server, {
         method: 'POST',
