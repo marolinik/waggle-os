@@ -22,6 +22,7 @@ import type {
   WaggleMessage,
 } from '@waggle/shared';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
+import { WorkspaceTurnCoordinator } from '../workspace-turn-coordinator.js';
 
 const MAX_WORKSPACES = 8;
 const MAX_PARTICIPANTS = 8;
@@ -113,6 +114,9 @@ const runSchema = z.object({
 
 /** Headless external-agent fan-out. Interactive app launch remains /api/tools/launch. */
 export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
+  const workspaceTurnCoordinator = server.agentState?.workspaceTurnCoordinator
+    ?? new WorkspaceTurnCoordinator();
+
   server.post('/api/tools/run', async (request, reply) => {
     const parsed = runSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -307,6 +311,7 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
       danceUrl: localApiBase(server),
       collaborationRuntime,
       dataDir: server.localConfig.dataDir,
+      workspaceTurnCoordinator,
     });
 
     const runs = [...executionSpecs.map((spec) => spec.run), ...(synthesisSpec ? [synthesisSpec.run] : [])];
@@ -336,6 +341,7 @@ async function executeExternalRoom(
     danceUrl: string;
     collaborationRuntime: WaggleRuntimePaths;
     dataDir: string;
+    workspaceTurnCoordinator: WorkspaceTurnCoordinator;
   },
 ): Promise<void> {
   try {
@@ -387,6 +393,7 @@ async function executeExternalSynthesis(
     danceUrl: string;
     collaborationRuntime: WaggleRuntimePaths;
     dataDir: string;
+    workspaceTurnCoordinator: WorkspaceTurnCoordinator;
   },
 ): Promise<void> {
   const queued = server.agentRunRegistry.get(synthesis.run.id);
@@ -540,14 +547,26 @@ async function executeExternalRun(
     runToken: string;
     collaborationRuntime: WaggleRuntimePaths;
     dataDir: string;
+    workspaceTurnCoordinator: WorkspaceTurnCoordinator;
   },
 ): Promise<void> {
   const controller = new AbortController();
   const unregister = server.agentRunRegistry.registerControls(run.id, {
     cancel: () => controller.abort(),
   });
+  const workspaceTurnScope = options.workspaceTurnCoordinator.createScope(cwd, controller.signal);
   let traceId: number | undefined;
   try {
+    await workspaceTurnScope.acquire(access === 'read-only' ? 'read' : 'write', (position) => {
+      server.agentRunRegistry.update(run.id, {
+        status: 'queued',
+        progress: {
+          phase: 'queued',
+          message: `Waiting for shared workspace (${position} ahead)`,
+        },
+      });
+    });
+    controller.signal.throwIfAborted();
     traceId = server.traceStore?.start({
       sessionId: run.id,
       workspaceId: run.workspaceId,
@@ -561,8 +580,9 @@ async function executeExternalRun(
     }
 
     const managedAgentId = manifest.id === 'openclaw'
-      ? await ensureOpenClawAgent(runner, manifest, binary, run, cwd)
+      ? await ensureOpenClawAgent(runner, manifest, binary, run, cwd, controller.signal)
       : undefined;
+    controller.signal.throwIfAborted();
     const result = await runner({
       manifest,
       binary,
@@ -654,10 +674,11 @@ async function executeExternalRun(
       }
     }
     const message = sanitizeExternalText(rawMessage);
+    const failureStatus = controller.signal.aborted ? 'cancelled' : 'failed';
     const current = server.agentRunRegistry.get(run.id);
     if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
       server.agentRunRegistry.update(run.id, {
-        status: controller.signal.aborted ? 'cancelled' : 'failed',
+        status: failureStatus,
         result: { error: message, summary: message },
       });
     } else if (current) {
@@ -669,9 +690,10 @@ async function executeExternalRun(
     publishDance(server, {
       senderId: `run::${run.id}`, type: 'broadcast', subtype: 'routed_share',
       roomId: run.roomId, runId: run.id, workspaceId: run.workspaceId, toolId: manifest.id,
-      referenceId: options.assignmentId, content: { phase: 'failed', error: message },
+      referenceId: options.assignmentId, content: { phase: failureStatus, error: message },
     });
   } finally {
+    await workspaceTurnScope.release();
     server.agentRunRegistry.revokeCredential(options.runToken);
     unregister();
   }
@@ -788,19 +810,29 @@ async function ensureOpenClawAgent(
   binary: string,
   run: CollaborationWorkerRun,
   cwd: string,
+  signal: AbortSignal,
 ): Promise<string> {
+  signal.throwIfAborted();
   const digest = createHash('sha256').update(`${run.workspaceId}\0${cwd}`).digest('hex').slice(0, 8);
   const base = run.workspaceId.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'workspace';
   const agentId = `waggle-${base}-${digest}`;
   const existing = openClawProvisioning.get(agentId);
-  if (existing) { await existing; return agentId; }
+  if (existing) {
+    await existing;
+    signal.throwIfAborted();
+    return agentId;
+  }
   const provision = (async () => {
-    const list = await runner(commandRequest(manifest, binary, run, cwd, ['agents', 'list', '--json'], `${run.id}-agents-list`));
+    const list = await runner(commandRequest(
+      manifest, binary, run, cwd, ['agents', 'list', '--json'], `${run.id}-agents-list`, signal,
+    ));
+    signal.throwIfAborted();
     if (list.status === 'completed' && openClawAgentExists(list.stdoutTail, agentId)) return;
     const added = await runner(commandRequest(
       manifest, binary, run, cwd,
       ['agents', 'add', agentId, '--workspace', cwd, '--non-interactive', '--json'],
       `${run.id}-agents-add`,
+      signal,
     ));
     if (added.status !== 'completed') throw new Error(`OpenClaw workspace-agent setup failed: ${added.stderrTail || added.summary}`);
   })();
@@ -817,6 +849,7 @@ function commandRequest(
   cwd: string,
   argv: string[],
   runId: string,
+  signal: AbortSignal,
 ): ExternalToolRunRequest {
   const manifest: ToolManifest = {
     ...base,
@@ -831,6 +864,7 @@ function commandRequest(
   return {
     manifest, binary, workspaceId: run.workspaceId, workspacePath: cwd,
     runId, roomId: run.roomId, prompt: '', access: 'native', timeoutMs: 30_000,
+    signal,
   };
 }
 

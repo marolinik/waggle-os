@@ -9,6 +9,7 @@ import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { SignalBus } from '../../src/local/signal-bus.js';
 import { externalToolRunRoutes } from '../../src/local/routes/external-tool-runs.js';
 import { resolveWorkspaceExecutionRoot } from '../../src/local/workspace-execution-root.js';
+import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
 
 const tempDirs: string[] = [];
 const collaborationRuntime = {
@@ -661,6 +662,258 @@ describe('external tool run routes', () => {
     await waitFor(() => registry.get(beta.runId)?.status === 'completed', 'beta did not complete');
     expect(registry.get(beta.runId)?.result?.summary).toBe('Beta done');
     await server.close();
+  });
+
+  it('queues same-checkout external writers and cancels a queued alias before launch', async () => {
+    const dataDir = tempDir();
+    const sharedRoot = path.join(dataDir, 'shared-checkout');
+    fs.mkdirSync(sharedRoot);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const bus = new SignalBus();
+    const started: string[] = [];
+    let releaseAlpha!: () => void;
+    const alphaGate = new Promise<void>((resolve) => { releaseAlpha = resolve; });
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
+    server.decorate('workspaceManager', {
+      get: (id: string) => ['alpha', 'beta', 'gamma'].includes(id)
+        ? { id, name: id, group: 'test', created: new Date().toISOString(), directory: sharedRoot }
+        : undefined,
+    } as never);
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('signalBus', bus);
+    server.decorate('agentState', {
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
+    } as never);
+    server.decorate('externalCollaborationRuntime', collaborationRuntime);
+    server.decorate('externalToolDetector', async () => ({
+      platform: 'win32', detectedAt: new Date().toISOString(),
+      tools: [{
+        id: 'codex', displayName: 'Codex CLI', installed: true,
+        installedPath: 'codex.cmd', version: 'test',
+        hooksInstalled: false, hookPointerPath: null,
+      }],
+    }));
+    server.decorate('externalToolRunner', async (request) => {
+      started.push(request.workspaceId);
+      request.onEvent?.({
+        runId: request.runId, roomId: request.roomId, workspaceId: request.workspaceId,
+        toolId: 'codex', seq: 1, type: 'started',
+        timestamp: new Date().toISOString(), pid: 300 + started.length,
+      });
+      if (request.workspaceId === 'alpha') await alphaGate;
+      return {
+        status: 'completed' as const, exitCode: 0,
+        summary: `${request.workspaceId} done`,
+        stdoutTail: '', stderrTail: '', durationMs: 2,
+      };
+    });
+    server.decorate('externalResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [], workspaceFrameIds: { [run.workspaceId]: [1] },
+    }));
+    await server.register(externalToolRunRoutes);
+
+    try {
+      const response = await server.inject({
+        method: 'POST', url: '/api/tools/run',
+        payload: {
+          toolId: 'codex',
+          workspaceIds: ['alpha', 'beta', 'gamma'],
+          prompt: 'Write to the shared checkout',
+          access: 'workspace-write',
+        },
+      });
+      expect(response.statusCode).toBe(202);
+      const body = response.json() as {
+        roomId: string;
+        runs: Array<{ runId: string; workspaceId: string }>;
+      };
+      const alpha = body.runs.find((run) => run.workspaceId === 'alpha')!;
+      const beta = body.runs.find((run) => run.workspaceId === 'beta')!;
+      const gamma = body.runs.find((run) => run.workspaceId === 'gamma')!;
+      await waitFor(() => registry.get(alpha.runId)?.status === 'running', 'alpha did not start');
+
+      expect(started).toEqual(['alpha']);
+      expect(registry.get(beta.runId)).toMatchObject({
+        status: 'queued',
+        progress: { phase: 'queued' },
+      });
+
+      await registry.control(beta.runId, 'cancel');
+      await waitFor(() => bus.query().some((message) =>
+        message.content.runId === beta.runId
+        && message.content.phase === 'cancelled'),
+      'queued cancellation was not published');
+      expect(registry.get(beta.runId)?.status).toBe('cancelled');
+      expect(started).toEqual(['alpha']);
+
+      releaseAlpha();
+      await waitFor(() => registry.get(alpha.runId)?.status === 'completed', 'alpha did not complete');
+      await waitFor(() => registry.get(gamma.runId)?.status === 'completed', 'gamma did not drain');
+      await waitFor(
+        () => registry.get(body.roomId)?.memoryRefs.status === 'partial',
+        'detached Room did not finalize',
+      );
+      expect(registry.get(alpha.runId)?.result?.summary).toBe('alpha done');
+      expect(registry.get(gamma.runId)?.result?.summary).toBe('gamma done');
+      expect(registry.get(beta.runId)?.status).toBe('cancelled');
+      expect(started).toEqual(['alpha', 'gamma']);
+      expect(bus.query()
+        .filter((message) => message.subtype === 'routed_share' && message.content.runId === beta.runId)
+        .map((message) => message.content.phase))
+        .toEqual(['cancelled']);
+    } finally {
+      releaseAlpha();
+      await server.close();
+    }
+  });
+
+  it('does not launch OpenClaw when cancellation wins the workspace grant handoff', async () => {
+    const dataDir = tempDir();
+    const sharedRoot = path.join(dataDir, 'shared-checkout');
+    fs.mkdirSync(sharedRoot);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const bus = new SignalBus();
+    const runner = vi.fn(async () => ({
+      status: 'completed' as const, exitCode: 0, summary: 'unexpected launch',
+      stdoutTail: '[]', stderrTail: '', durationMs: 1,
+    }));
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
+    server.decorate('workspaceManager', {
+      get: (id: string) => id === 'alpha'
+        ? { id, name: id, group: 'test', created: new Date().toISOString(), directory: sharedRoot }
+        : undefined,
+    } as never);
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('signalBus', bus);
+    server.decorate('agentState', {
+      workspaceTurnCoordinator: {
+        createScope: () => ({
+          acquire: async () => {
+            const run = registry.list({ source: 'external_tool' })
+              .find((candidate) => candidate.kind === 'worker');
+            if (!run) throw new Error('OpenClaw worker was not registered');
+            await registry.control(run.id, 'cancel');
+          },
+          release: async () => undefined,
+        }),
+      },
+    } as never);
+    server.decorate('externalCollaborationRuntime', collaborationRuntime);
+    server.decorate('externalToolDetector', async () => ({
+      platform: 'win32', detectedAt: new Date().toISOString(),
+      tools: [{
+        id: 'openclaw', displayName: 'OpenClaw', installed: true,
+        installedPath: 'openclaw.cmd', version: 'test',
+        hooksInstalled: false, hookPointerPath: null,
+      }],
+    }));
+    server.decorate('externalToolRunner', runner);
+    server.decorate('externalResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [], workspaceFrameIds: { [run.workspaceId]: [] },
+    }));
+    await server.register(externalToolRunRoutes);
+
+    try {
+      const response = await server.inject({
+        method: 'POST', url: '/api/tools/run',
+        payload: {
+          toolId: 'openclaw',
+          workspaceIds: ['alpha'],
+          prompt: 'Write to the shared checkout',
+          access: 'native',
+        },
+      });
+      expect(response.statusCode).toBe(202);
+      const body = response.json() as { runs: Array<{ runId: string }> };
+      await waitFor(() => bus.query().some((message) =>
+        message.content.runId === body.runs[0].runId
+        && message.content.phase === 'cancelled'),
+      'handoff cancellation was not published');
+      expect(registry.get(body.runs[0].runId)?.status).toBe('cancelled');
+      expect(runner).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('stops OpenClaw provisioning after cancellation without adding or launching an agent', async () => {
+    const dataDir = tempDir();
+    const sharedRoot = path.join(dataDir, 'shared-checkout');
+    fs.mkdirSync(sharedRoot);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const bus = new SignalBus();
+    const calls: Array<{ runId: string; signal?: AbortSignal }> = [];
+    let resolveList!: (result: ExternalToolRunResult) => void;
+    const listGate = new Promise<ExternalToolRunResult>((resolve) => { resolveList = resolve; });
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
+    server.decorate('workspaceManager', {
+      get: (id: string) => id === 'alpha'
+        ? { id, name: id, group: 'test', created: new Date().toISOString(), directory: sharedRoot }
+        : undefined,
+    } as never);
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('signalBus', bus);
+    server.decorate('agentState', {
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
+    } as never);
+    server.decorate('externalCollaborationRuntime', collaborationRuntime);
+    server.decorate('externalToolDetector', async () => ({
+      platform: 'win32', detectedAt: new Date().toISOString(),
+      tools: [{
+        id: 'openclaw', displayName: 'OpenClaw', installed: true,
+        installedPath: 'openclaw.cmd', version: 'test',
+        hooksInstalled: false, hookPointerPath: null,
+      }],
+    }));
+    server.decorate('externalToolRunner', async (request) => {
+      calls.push({ runId: request.runId, signal: request.signal });
+      if (calls.length === 1) return listGate;
+      return {
+        status: 'completed' as const, exitCode: 0, summary: 'unexpected launch',
+        stdoutTail: '[]', stderrTail: '', durationMs: 1,
+      };
+    });
+    server.decorate('externalResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [], workspaceFrameIds: { [run.workspaceId]: [] },
+    }));
+    await server.register(externalToolRunRoutes);
+
+    try {
+      const response = await server.inject({
+        method: 'POST', url: '/api/tools/run',
+        payload: {
+          toolId: 'openclaw',
+          workspaceIds: ['alpha'],
+          prompt: 'Write to the shared checkout',
+          access: 'native',
+        },
+      });
+      expect(response.statusCode).toBe(202);
+      const body = response.json() as { runs: Array<{ runId: string }> };
+      await waitFor(() => calls.length === 1, 'OpenClaw list command did not start');
+      await registry.control(body.runs[0].runId, 'cancel');
+      resolveList({
+        status: 'cancelled', exitCode: null, summary: 'Cancelled',
+        stdoutTail: '', stderrTail: '', durationMs: 1,
+      });
+      await waitFor(() => bus.query().some((message) =>
+        message.content.runId === body.runs[0].runId
+        && message.content.phase === 'cancelled'),
+      'provisioning cancellation was not published');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].runId).toContain('-agents-list');
+      expect(calls[0].signal?.aborted).toBe(true);
+      expect(registry.get(body.runs[0].runId)?.status).toBe('cancelled');
+    } finally {
+      resolveList({
+        status: 'cancelled', exitCode: null, summary: 'Cancelled',
+        stdoutTail: '', stderrTail: '', durationMs: 1,
+      });
+      await server.close();
+    }
   });
 
   it('returns explicit errors for unknown workspaces and broken configured roots', async () => {
