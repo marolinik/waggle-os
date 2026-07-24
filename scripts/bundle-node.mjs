@@ -24,6 +24,14 @@ const stagedRuntimeDir = path.join(
   'node_modules',
   'waggle-node-runtime',
 );
+const SAFE_NPM_BRACE_EXPANSION_VERSION = '2.1.2';
+const safeNpmBraceExpansionSource = path.join(
+  root,
+  'node_modules',
+  'archiver-utils',
+  'node_modules',
+  'brace-expansion',
+);
 
 const NODE_VERSION = process.env.WAGGLE_BUNDLED_NODE_VERSION ?? process.versions.node;
 if (!/^\d+\.\d+\.\d+$/.test(NODE_VERSION)) {
@@ -217,6 +225,47 @@ fs.cpSync(npmSource, path.join(stagedRuntimeDir, 'node_modules', 'npm'), {
   recursive: true,
   dereference: true,
 });
+const safeNpmBraceExpansionManifest = path.join(
+  safeNpmBraceExpansionSource,
+  'package.json',
+);
+if (!fs.existsSync(safeNpmBraceExpansionManifest)) {
+  fail('lock-installed brace-expansion hardening source is missing');
+}
+const safeNpmBraceExpansion = JSON.parse(
+  fs.readFileSync(safeNpmBraceExpansionManifest, 'utf8'),
+);
+if (safeNpmBraceExpansion.version !== SAFE_NPM_BRACE_EXPANSION_VERSION) {
+  fail(
+    `lock-installed brace-expansion is ${safeNpmBraceExpansion.version}; `
+    + `expected ${SAFE_NPM_BRACE_EXPANSION_VERSION}`,
+  );
+}
+const stagedNpmBraceExpansion = path.join(
+  stagedRuntimeDir,
+  'node_modules',
+  'npm',
+  'node_modules',
+  'brace-expansion',
+);
+fs.rmSync(stagedNpmBraceExpansion, { recursive: true, force: true });
+fs.cpSync(safeNpmBraceExpansionSource, stagedNpmBraceExpansion, {
+  recursive: true,
+  dereference: true,
+});
+const stagedNpmBraceExpansionVersion = JSON.parse(
+  fs.readFileSync(path.join(stagedNpmBraceExpansion, 'package.json'), 'utf8'),
+).version;
+if (stagedNpmBraceExpansionVersion !== SAFE_NPM_BRACE_EXPANSION_VERSION) {
+  fail(
+    `staged npm brace-expansion is ${stagedNpmBraceExpansionVersion}; `
+    + `expected ${SAFE_NPM_BRACE_EXPANSION_VERSION}`,
+  );
+}
+console.log(
+  `[bundle-node] Hardened bundled npm with brace-expansion `
+  + `${SAFE_NPM_BRACE_EXPANSION_VERSION}`,
+);
 fs.writeFileSync(
   path.join(stagedRuntimeDir, 'package.json'),
   `${JSON.stringify({

@@ -334,6 +334,104 @@ describe('Tauri Production Configuration', () => {
     );
   });
 
+  it('pins patched transitive dependency versions used by desktop builds', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8')) as {
+      overrides?: Record<string, string>;
+    };
+    const lockfile = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf-8'),
+    ) as {
+      packages: Record<string, { version?: string }>;
+    };
+    const expectedOverrides = {
+      'brace-expansion@1': '1.1.16',
+      'brace-expansion@2': '2.1.2',
+      'brace-expansion@5': '5.0.7',
+      'fast-uri': '3.1.4',
+      'find-my-way': '9.7.0',
+      'js-yaml': '4.3.0',
+    };
+
+    expect(manifest.overrides).toMatchObject(expectedOverrides);
+
+    const versionsFor = (packageName: string) => {
+      const matching = Object.entries(lockfile.packages)
+        .filter(([packagePath]) => packagePath.endsWith(`node_modules/${packageName}`));
+      expect(matching.length).toBeGreaterThan(0);
+      for (const [, metadata] of matching) {
+        expect(metadata.version).toEqual(expect.any(String));
+      }
+      return new Set(matching.map(([, metadata]) => metadata.version!));
+    };
+
+    expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.16', '2.1.2', '5.0.7']));
+    expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.4']));
+    expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
+    expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.0']));
+  });
+
+  it('rejects unsafe staged dependency versions without native runtime setup', () => {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-dependency-floor-'));
+    const checker = path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs');
+    const writeManifest = (relative: string, name: string, version: string) => {
+      const packageDir = path.join(fixture, ...relative.split('/'));
+      fs.mkdirSync(packageDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({ name, version }),
+        'utf-8',
+      );
+      return packageDir;
+    };
+    const run = () => spawnSync(
+      process.execPath,
+      [checker, '--dependency-versions-only', fixture],
+      { encoding: 'utf-8', windowsHide: true },
+    );
+    const bundledBrace = [
+      'waggle-node-runtime',
+      'node_modules',
+      'npm',
+      'node_modules',
+      'brace-expansion',
+    ].join('/');
+
+    try {
+      writeManifest('brace-expansion', 'brace-expansion', '5.0.7');
+      writeManifest('fast-uri', 'fast-uri', '3.1.4');
+      writeManifest(bundledBrace, 'brace-expansion', '2.1.2');
+      expect(run().status).toBe(0);
+
+      writeManifest(bundledBrace, 'brace-expansion', '2.0.1');
+      const vulnerableNpm = run();
+      expect(vulnerableNpm.status).toBe(1);
+      expect(vulnerableNpm.stderr).toContain('must be exactly 2.1.2');
+      writeManifest(bundledBrace, 'brace-expansion', '2.1.2');
+
+      writeManifest('fast-uri', 'fast-uri', '3.1.2');
+      const vulnerableFastUri = run();
+      expect(vulnerableFastUri.status).toBe(1);
+      expect(vulnerableFastUri.stderr).toContain('fast-uri@3.1.2');
+      writeManifest('fast-uri', 'fast-uri', '3.1.4');
+
+      writeManifest('vendor/node_modules/js-yaml', 'js-yaml', '4.3.0');
+      const stagedDevDependency = run();
+      expect(stagedDevDependency.status).toBe(1);
+      expect(stagedDevDependency.stderr).toContain('development-only js-yaml');
+      fs.rmSync(path.join(fixture, 'vendor'), { recursive: true, force: true });
+
+      fs.rmSync(
+        path.join(fixture, ...bundledBrace.split('/')),
+        { recursive: true, force: true },
+      );
+      const missingBundledBrace = run();
+      expect(missingBundledBrace.status).toBe(1);
+      expect(missingBundledBrace.stderr).toContain('found missing');
+    } finally {
+      fs.rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
   it('sidecar resource preflight checks bundled Node ABI compatibility', () => {
     const script = fs.readFileSync(
       path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs'),

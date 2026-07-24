@@ -34,6 +34,11 @@ const FIRST_PARTY_RUNTIME_ENTRY_PATTERN = /^(?:dist|package\.json|licen[cs]e(?:\
 const MANUAL_FIRST_PARTY_RUNTIME_TARGETS = new Map([
   ['@waggle/hive-mind-hooks-openclaw', ['dist/handler.bundle.cjs']],
 ]);
+const STAGED_DEPENDENCY_VERSION_ALLOWLISTS = new Map([
+  ['brace-expansion', new Set(['1.1.16', '2.1.2', '5.0.7'])],
+  ['fast-uri', new Set(['3.1.4'])],
+]);
+const STAGED_DEPENDENCY_DENYLIST = new Set(['js-yaml']);
 
 const missing = [];
 const unsafe = [];
@@ -82,6 +87,44 @@ function listPackageDirs(nodeModulesDir) {
     }
   }
   return packageDirs;
+}
+
+function stagedDependencyVersionFailures(nodeModulesDir, packageManifests) {
+  const manifests = packageManifests ?? listPackageDirs(nodeModulesDir)
+    .map((packageDir) => [packageDir, readManifest(packageDir)]);
+  const failures = [];
+
+  for (const [packageDir, manifest] of manifests) {
+    const relative = path.relative(nodeModulesDir, packageDir).split(path.sep).join('/');
+    const allowedVersions = STAGED_DEPENDENCY_VERSION_ALLOWLISTS.get(manifest.name);
+    if (allowedVersions && !allowedVersions.has(manifest.version)) {
+      failures.push(
+        `node_modules/${relative} contains ${manifest.name}@${manifest.version}; `
+        + `allowed versions: ${[...allowedVersions].join(', ')}`,
+      );
+    }
+    if (STAGED_DEPENDENCY_DENYLIST.has(manifest.name)) {
+      failures.push(`node_modules/${relative} contains development-only ${manifest.name}`);
+    }
+  }
+
+  const bundledBraceDir = path.join(
+    nodeModulesDir,
+    'waggle-node-runtime',
+    'node_modules',
+    'npm',
+    'node_modules',
+    'brace-expansion',
+  );
+  const bundledBraceVersion = readManifest(bundledBraceDir).version;
+  if (bundledBraceVersion !== '2.1.2') {
+    failures.push(
+      `node_modules/waggle-node-runtime/node_modules/npm/node_modules/brace-expansion `
+      + `must be exactly 2.1.2; found ${bundledBraceVersion ?? 'missing'}`,
+    );
+  }
+
+  return failures;
 }
 
 function localWorkspacePackageNames() {
@@ -164,6 +207,22 @@ function validateFirstPartyRuntimeTargets(packageDir, manifest) {
   return failures;
 }
 
+const dependencyOnlyIndex = process.argv.indexOf('--dependency-versions-only');
+if (dependencyOnlyIndex >= 0) {
+  const target = process.argv[dependencyOnlyIndex + 1];
+  if (!target) {
+    console.error('[check-sidecar-resources] --dependency-versions-only requires a directory');
+    process.exit(1);
+  }
+  const failures = stagedDependencyVersionFailures(path.resolve(target));
+  if (failures.length > 0) {
+    for (const failure of failures) console.error(failure);
+    process.exit(1);
+  }
+  console.log('[check-sidecar-resources] staged dependency versions are release-safe');
+  process.exit(0);
+}
+
 const servicePath = path.join(resourcesDir, 'service.js');
 if (!fs.existsSync(servicePath)) {
   missing.push('resources/service.js (run: node scripts/build-sidecar.mjs)');
@@ -213,6 +272,12 @@ for (const artifact of sourceArtifacts) {
   unsafe.push(`resources/${artifact} must not be packaged`);
 }
 
+const stagedPackageDirs = listPackageDirs(stagedDepsDir);
+const stagedPackageManifests = stagedPackageDirs
+  .map((packageDir) => [packageDir, readManifest(packageDir)]);
+for (const failure of stagedDependencyVersionFailures(stagedDepsDir, stagedPackageManifests)) {
+  unsafe.push(`resources/${failure}`);
+}
 const firstPartyRoot = path.join(stagedDepsDir, '@waggle');
 const firstPartyPackageDirs = new Map();
 if (fs.existsSync(firstPartyRoot)) {
@@ -231,8 +296,8 @@ for (const name of workspacePackageNames) {
     firstPartyPackageDirs.set(directPackageDir, name);
   }
 }
-for (const packageDir of listPackageDirs(stagedDepsDir)) {
-  const name = readManifest(packageDir).name;
+for (const [packageDir, manifest] of stagedPackageManifests) {
+  const { name } = manifest;
   if (
     typeof name === 'string'
     && (name.startsWith('@waggle/') || workspacePackageNames.has(name))
