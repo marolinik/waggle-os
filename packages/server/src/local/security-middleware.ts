@@ -328,9 +328,22 @@ const DEFAULT_WORKSPACE_MUTATION_PATHS = new Set([
   '/api/tools/launch',
 ]);
 
-const WORKSPACE_WILDCARD_MUTATION_PATHS = new Set([
-  '/api/cron',
+const STORED_CRON_OWNER_PATHS = new Set([
   '/api/cron/:id',
+  '/api/cron/:id/trigger',
+  '/api/automations/:id',
+  '/api/automations/:id/run',
+  '/api/automations/:id/pause',
+]);
+
+const ALL_WORKSPACE_CRON_JOB_TYPES = new Set([
+  'workspace_health',
+]);
+
+const FAN_OUT_MEMORY_ACTIONS = new Set([
+  'index_reconcile',
+  'memory_compact',
+  'memory_lane_extract',
 ]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -364,6 +377,132 @@ function stringArrayFields(
     }
   }
   return values;
+}
+
+function parsedCronJobConfig(
+  jobConfig: unknown,
+  serialized: boolean,
+): Record<string, unknown> | null {
+  let config = asRecord(jobConfig);
+  if (!config && serialized && typeof jobConfig === 'string') {
+    try {
+      config = asRecord(JSON.parse(jobConfig));
+    } catch {
+      return null;
+    }
+  }
+  return config;
+}
+
+function allWorkspaceIds(fastify: FastifyInstance): string[] {
+  return fastify.workspaceManager?.list().map((workspace) => workspace.id) ?? [];
+}
+
+function cronScheduleWorkspaceIds(
+  jobType: unknown,
+  jobConfig: unknown,
+  workspaceId: unknown,
+  fastify: FastifyInstance,
+  serializedJobConfig = false,
+): string[] {
+  const normalizedWorkspaceId = typeof workspaceId === 'string' && workspaceId.length > 0
+    ? workspaceId
+    : null;
+  const explicitOwnerIds = normalizedWorkspaceId
+    && normalizedWorkspaceId !== '*'
+    ? [normalizedWorkspaceId]
+    : [];
+
+  if (typeof jobType !== 'string') return explicitOwnerIds;
+  if (ALL_WORKSPACE_CRON_JOB_TYPES.has(jobType)) {
+    return [...explicitOwnerIds, ...allWorkspaceIds(fastify)];
+  }
+  if (jobType === 'prompt_optimization') {
+    const optimizedWorkspaceIds = fastify.workspaceManager?.list()
+      .filter((workspace) => Boolean(workspace.optimizationEnabled))
+      .map((workspace) => workspace.id) ?? [];
+    return [...explicitOwnerIds, ...optimizedWorkspaceIds];
+  }
+  if (jobType === 'memory_consolidation') {
+    const rawAction = parsedCronJobConfig(jobConfig, serializedJobConfig)?.action;
+    const action = typeof rawAction === 'string' ? rawAction : undefined;
+    if (action !== undefined && FAN_OUT_MEMORY_ACTIONS.has(action)) {
+      return [...explicitOwnerIds, ...allWorkspaceIds(fastify)];
+    }
+  }
+  if (
+    jobType === 'agent_task'
+    && normalizedWorkspaceId === '*'
+  ) {
+    return allWorkspaceIds(fastify);
+  }
+  return explicitOwnerIds;
+}
+
+function storedMutationWorkspaceIds(
+  request: FastifyRequest,
+  fastify: FastifyInstance,
+  routeUrl: string,
+): string[] {
+  const params = asRecord(request.params);
+
+  if (routeUrl === '/api/approval/:requestId') {
+    const requestId = stringFields(params, ['requestId'])[0];
+    if (!requestId) return [];
+    const held = fastify.cronStore?.getPendingAction(requestId);
+    if (!held) return [];
+    if (held.workspace_id && held.workspace_id !== '*') return [held.workspace_id];
+    return ['default'];
+  }
+
+  if (!STORED_CRON_OWNER_PATHS.has(routeUrl)) return [];
+  const id = parseInt(stringFields(params, ['id'])[0] ?? '', 10);
+  if (Number.isNaN(id)) return [];
+  const schedule = fastify.cronStore?.getById(id);
+  if (!schedule) return [];
+
+  const currentWorkspaceIds = cronScheduleWorkspaceIds(
+    schedule.job_type,
+    schedule.job_config,
+    schedule.workspace_id,
+    fastify,
+    true,
+  );
+  if (request.method === 'PATCH') {
+    const body = asRecord(request.body);
+    const hasNextJobConfig = body !== null && Object.hasOwn(body, 'jobConfig');
+    const nextJobConfig = hasNextJobConfig
+      ? body.jobConfig
+      : schedule.job_config;
+    const nextWorkspaceId = body && Object.hasOwn(body, 'workspaceId')
+      ? body.workspaceId
+      : schedule.workspace_id;
+    return [
+      ...currentWorkspaceIds,
+      ...cronScheduleWorkspaceIds(
+        schedule.job_type,
+        nextJobConfig,
+        nextWorkspaceId,
+        fastify,
+        !hasNextJobConfig,
+      ),
+    ];
+  }
+  return currentWorkspaceIds;
+}
+
+function createdCronWorkspaceIds(
+  body: Record<string, unknown> | null,
+  fastify: FastifyInstance,
+  routeUrl: string,
+): string[] {
+  if (routeUrl !== '/api/cron') return [];
+  return cronScheduleWorkspaceIds(
+    body?.jobType,
+    body?.jobConfig,
+    body?.workspaceId === 'global' ? '*' : body?.workspaceId,
+    fastify,
+  );
 }
 
 /**
@@ -409,22 +548,20 @@ function mutationWorkspaceIds(
     ? body.participants.flatMap((participant) =>
       stringArrayFields(asRecord(participant), ['workspaceIds']))
     : [];
+  const bodyWorkspaceIds = stringFields(body, ['workspaceId', 'workspace', 'parentWorkspaceId']);
+  const directBodyWorkspaceIds = request.method === 'POST'
+    && (routeUrl === '/api/cron' || routeUrl === '/api/automations')
+    ? bodyWorkspaceIds.filter((workspaceId) => workspaceId !== 'global')
+    : bodyWorkspaceIds;
   const workspaceIds = [...new Set([
     ...stringFields(params, ['workspaceId']),
-    ...stringFields(body, ['workspaceId', 'workspace', 'parentWorkspaceId']),
+    ...directBodyWorkspaceIds,
     ...stringFields(query, ['workspaceId', 'workspace']),
     ...stringArrayFields(body, ['workspaceIds']),
     ...participantWorkspaceIds,
+    ...storedMutationWorkspaceIds(request, fastify, routeUrl),
+    ...createdCronWorkspaceIds(body, fastify, routeUrl),
   ])];
-  if (
-    WORKSPACE_WILDCARD_MUTATION_PATHS.has(routeUrl)
-    && workspaceIds.some((workspaceId) => workspaceId === '*' || workspaceId === 'global')
-  ) {
-    return [...new Set([
-      ...workspaceIds.filter((workspaceId) => workspaceId !== '*' && workspaceId !== 'global'),
-      ...fastify.workspaceManager.list().map((workspace) => workspace.id),
-    ])];
-  }
   return workspaceIds;
 }
 

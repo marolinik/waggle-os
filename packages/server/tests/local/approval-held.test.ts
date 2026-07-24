@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { MindDB, CronStore } from '@waggle/core';
 import { approvalRoutes } from '../../src/local/routes/approval.js';
+import { securityMiddleware } from '../../src/local/security-middleware.js';
 
 describe('approval routes — held actions (L2 union)', () => {
   let tmpDir: string;
@@ -13,6 +14,7 @@ describe('approval routes — held actions (L2 union)', () => {
   let server: ReturnType<typeof Fastify>;
   let pendingApprovals: Map<string, { toolName: string; input: Record<string, unknown>; timestamp: number; resolve: (v: boolean) => void }>;
   let execSpy: ReturnType<typeof vi.fn>;
+  let literalDefaultIsViewer: boolean;
 
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-appr-'));
@@ -20,16 +22,37 @@ describe('approval routes — held actions (L2 union)', () => {
     store = new CronStore(db);
     pendingApprovals = new Map();
     execSpy = vi.fn(async () => 'email sent');
+    literalDefaultIsViewer = false;
 
     server = Fastify({ logger: false });
     server.decorate('cronStore', store);
     server.decorate('localConfig', { dataDir: tmpDir });
+    server.decorate('workspaceManager', {
+      get: (id: string) => {
+        if (id === 'viewer-workspace') {
+          return { id, name: 'Viewer WS', teamId: 'team-1', teamRole: 'viewer' };
+        }
+        if (id === 'w1') {
+          return { id, name: 'Member WS', teamId: 'team-1', teamRole: 'member' };
+        }
+        if (id === 'default' && literalDefaultIsViewer) {
+          return { id, name: 'Literal Default WS', teamId: 'team-1', teamRole: 'viewer' };
+        }
+        return undefined;
+      },
+      getDefault: () => 'w1',
+      list: () => [
+        { id: 'w1', name: 'Member WS', teamId: 'team-1', teamRole: 'member' },
+        { id: 'viewer-workspace', name: 'Viewer WS', teamId: 'team-1', teamRole: 'viewer' },
+      ],
+    });
     server.decorate('agentState', {
       cronStore: store,
       pendingApprovals,
       approvalGrantStore: { grant: vi.fn() },
       buildToolsForWorkspace: () => [{ name: 'send_email', description: '', parameters: {}, execute: execSpy }],
     });
+    await server.register(securityMiddleware);
     await server.register(approvalRoutes);
   });
   afterEach(async () => {
@@ -38,9 +61,9 @@ describe('approval routes — held actions (L2 union)', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function hold(id = 'pa-1') {
+  function hold(id = 'pa-1', workspaceId: string | null = 'w1') {
     return store.savePendingAction({
-      id, workspaceId: 'w1', source: 'loop:1', toolName: 'send_email',
+      id, workspaceId, source: 'loop:1', toolName: 'send_email',
       argsJson: JSON.stringify({ to: 'x@y.z' }), summary: 'Send follow-up',
       riskLevel: 'medium', approvalClass: 'elevated',
     });
@@ -79,6 +102,55 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(res.json()).toMatchObject({ ok: true, approved: false, status: 'denied' });
     expect(execSpy).not.toHaveBeenCalled();
     expect(store.getPendingAction('pa-1')!.status).toBe('denied');
+  });
+
+  it.each([
+    { approved: true, sourceWorkspaceId: 'w1' },
+    { approved: false, sourceWorkspaceId: 'w1' },
+  ])('viewer cannot decide a held action even with member sourceWorkspaceId ($approved)', async (payload) => {
+    hold('viewer-held', 'viewer-workspace');
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/approval/viewer-held',
+      payload,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(store.getPendingAction('viewer-held')!.status).toBe('held');
+  });
+
+  it.each([null, '*'])('held action owned by %s blocks when its executor target is the literal default viewer workspace', async (workspaceId) => {
+    literalDefaultIsViewer = true;
+    hold('default-held', workspaceId);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/approval/default-held',
+      payload: { approved: true },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(store.getPendingAction('default-held')!.status).toBe('held');
+  });
+
+  it('wildcard held action does not inherit unrelated viewer workspaces outside its executor target', async () => {
+    hold('wildcard-held', '*');
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/approval/wildcard-held',
+      payload: { approved: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, status: 'executed' });
+    expect(execSpy).toHaveBeenCalledOnce();
+    expect(store.getPendingAction('wildcard-held')!.status).toBe('executed');
   });
 
   it('POST on an unknown id is 404', async () => {

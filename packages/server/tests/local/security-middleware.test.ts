@@ -906,14 +906,13 @@ describe('Team viewer read-only enforcement', () => {
   it.each([
     { method: 'POST' as const, url: '/api/cron', workspaceId: 'global' },
     { method: 'POST' as const, url: '/api/cron', workspaceId: '*' },
-    { method: 'PATCH' as const, url: '/api/cron/1', workspaceId: '*' },
   ])('rejects $method $url when $workspaceId expands across a viewer workspace', async (request) => {
     const { server, getMutations } = await createViewerPolicyServer();
     try {
       const response = await server.inject({
         method: request.method,
         url: request.url,
-        payload: { workspaceId: request.workspaceId },
+        payload: { jobType: 'agent_task', workspaceId: request.workspaceId },
       });
       expect(response.statusCode).toBe(403);
       expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
