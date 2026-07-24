@@ -500,12 +500,9 @@ describe('Tauri Production Configuration', () => {
           fixtureChecker,
         );
         const fixtureNode = path.join(fixtureResources, 'node.exe');
-        try {
-          // Preserve the trusted file identity across repeated Windows runtime probes.
-          fs.linkSync(process.execPath, fixtureNode);
-        } catch {
-          fs.copyFileSync(process.execPath, fixtureNode);
-        }
+        // A hardlink shares the running Vitest executable's Windows image lock,
+        // so fixture cleanup cannot delete it until the parent test process exits.
+        fs.copyFileSync(process.execPath, fixtureNode);
         writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
         const fixtureMarketplaceSource = path.join(
           fixtureRoot,
@@ -552,6 +549,11 @@ describe('Tauri Production Configuration', () => {
           fixtureResources,
           `${fixtureNpmRuntimeRoot}/node_modules/npm/package.json`,
           JSON.stringify({ name: 'npm', version: fixtureNpmVersion }),
+        );
+        writeFixtureFile(
+          fixtureResources,
+          `${fixtureNpmRuntimeRoot}/node_modules/npm/node_modules/brace-expansion/package.json`,
+          JSON.stringify({ name: 'brace-expansion', version: '2.1.2' }),
         );
         writeFixtureFile(
           fixtureResources,
@@ -680,7 +682,11 @@ describe('Tauri Production Configuration', () => {
         };
 
         const fixtureMarketplaceBeforeProbe = fs.readFileSync(fixtureMarketplaceResource);
-        expect(runChecker().status).toBe(0);
+        const baselineResult = runChecker();
+        expect(
+          baselineResult.status,
+          baselineResult.stderr || baselineResult.stdout,
+        ).toBe(0);
         expect(fs.readFileSync(fixtureMarketplaceResource)).toEqual(fixtureMarketplaceBeforeProbe);
         for (const target of [
           {
@@ -2419,6 +2425,8 @@ Expect-Rejection {
       fs.symlinkSync(outsideRoot, junctionParent, 'junction');
 
       const fixtureSource = String.raw`
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 function Assert-True {
   param([Parameter(Mandatory = $true)] [bool]$Condition, [Parameter(Mandatory = $true)] [string]$Message)
   if (-not $Condition) { throw $Message }

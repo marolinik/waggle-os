@@ -889,7 +889,8 @@ function Assert-SafeReceiptPath {
     "Receipt parent directory must already exist: $resolvedParent"
   $cursor = Get-Item -LiteralPath $resolvedParent -Force
   while ($null -ne $cursor) {
-    Assert-True $cursor.PSIsContainer "Receipt parent is not a directory: $($cursor.FullName)"
+    Assert-True ($cursor -is [System.IO.DirectoryInfo]) `
+      "Receipt parent is not a directory: $($cursor.FullName)"
     Assert-True (($cursor.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
       "Receipt parent must not be a reparse point: $($cursor.FullName)"
     $cursor = $cursor.Parent
