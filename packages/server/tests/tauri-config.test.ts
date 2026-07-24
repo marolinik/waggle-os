@@ -32,13 +32,36 @@ const FIRST_PARTY_RUNTIME_ENTRIES = new Set([
 const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
 
 function powershellProbeExecutable() {
+  const configuredPwsh = process.env.WAGGLE_PWSH7_PATH;
+  const requirePowerShell7 = (executable: string) => {
+    const result = spawnSync(
+      executable,
+      ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'],
+      { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
+    );
+    const major = Number.parseInt(result.stdout.trim(), 10);
+    if (result.status !== 0 || !Number.isInteger(major) || major < 7) {
+      throw new Error('PowerShell 7 required Windows release-workflow probes');
+    }
+    return executable;
+  };
+  if (configuredPwsh) {
+    if (!fs.existsSync(configuredPwsh)) {
+      throw new Error('Configured PowerShell 7 probe executable is missing');
+    }
+    return requirePowerShell7(configuredPwsh);
+  }
   const pwsh = path.join(
     process.env.ProgramFiles ?? 'C:\\Program Files',
     'PowerShell',
     '7',
     'pwsh.exe',
   );
-  if (fs.existsSync(pwsh)) return pwsh;
+  if (fs.existsSync(pwsh)) {
+    return process.env.WAGGLE_REQUIRE_PWSH7 === '1'
+      ? requirePowerShell7(pwsh)
+      : pwsh;
+  }
   if (process.env.WAGGLE_REQUIRE_PWSH7 === '1') {
     throw new Error('PowerShell 7 is required for Windows release-workflow probes');
   }
@@ -989,6 +1012,32 @@ describe('CI/CD Configuration', () => {
   });
 
   it.runIf(process.platform === 'win32')(
+    'PowerShell 7 workflow override rejects Windows PowerShell 5.1',
+    () => {
+      const previousPath = process.env.WAGGLE_PWSH7_PATH;
+      const previousRequirement = process.env.WAGGLE_REQUIRE_PWSH7;
+      try {
+        process.env.WAGGLE_REQUIRE_PWSH7 = '1';
+        process.env.WAGGLE_PWSH7_PATH = path.join(
+          process.env.SystemRoot ?? 'C:\\Windows',
+          'System32',
+          'WindowsPowerShell',
+          'v1.0',
+          'powershell.exe',
+        );
+        expect(() => powershellProbeExecutable()).toThrow(
+          'PowerShell 7 required Windows release-workflow probes',
+        );
+      } finally {
+        if (previousPath === undefined) delete process.env.WAGGLE_PWSH7_PATH;
+        else process.env.WAGGLE_PWSH7_PATH = previousPath;
+        if (previousRequirement === undefined) delete process.env.WAGGLE_REQUIRE_PWSH7;
+        else process.env.WAGGLE_REQUIRE_PWSH7 = previousRequirement;
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
     'release mode resolver permits only the exact v0.2.0 bootstrap identity',
     () => {
       const workflow = fs
@@ -1928,11 +1977,50 @@ Expect-Rejection {
       'utf-8',
     );
 
+    expect(script.startsWith('#Requires -Version 7.0')).toBe(true);
     expect(script).toContain('Set-StrictMode -Version Latest');
     expect(script).toContain('"/S /D=$installDir"');
+    expect(script).toContain('function Assert-SafeReceiptPath');
+    expect(script).toContain('Assert-SafeReceiptPath $ReceiptPath');
+    expect(script).toContain('function Reserve-CertificateReceiptPath');
+    expect(script).toContain(
+      '$receiptReservation = Reserve-CertificateReceiptPath $ReceiptPath',
+    );
+    expect(script).toContain(
+      'Write-CertificateReceipt $receiptReservation $receiptJson',
+    );
+    expect(script).toContain('Receipt path already exists; refusing to overwrite');
+    expect(script).toContain('Receipt parent must not be a reparse point');
+    expect(script).not.toContain('Set-Content -LiteralPath $ReceiptPath');
+    expect(
+      script.indexOf('$receiptReservation = Reserve-CertificateReceiptPath $ReceiptPath'),
+    ).toBeLessThan(
+      script.indexOf('$scratchOwnershipMarker = New-CertificateScratchRoot'),
+    );
+    expect(script).toContain('function New-CertificateScratchRoot');
+    expect(script).toContain('function Remove-CertificateScratchRoot');
+    expect(script).toContain('[System.IO.FileMode]::CreateNew');
+    expect(script).toContain(
+      '$scratchOwnershipMarker = New-CertificateScratchRoot $scratchRoot $runId',
+    );
+    expect(script).toContain(
+      'Remove-CertificateScratchRoot $scratchRoot $scratchOwnershipMarker $runId',
+    );
+    expect(script).not.toContain(
+      'New-Item -ItemType Directory -Path $scratchRoot -Force | Out-Null',
+    );
+    expect(script).not.toContain(
+      'Remove-Item -LiteralPath $resolvedRoot -Recurse -Force',
+    );
+    expect(script).not.toContain(
+      'Remove-Item -LiteralPath $scratchRoot -Recurse -Force',
+    );
     expect(script).toContain("$env:WAGGLE_PORT = '3333'");
     expect(script).toContain('Assert-TcpPortAvailable 3333');
     expect(script).toContain("$profileDataDir = Join-Path $env:USERPROFILE '.waggle'");
+    expect(script.indexOf('Assert-TcpPortAvailable 3333')).toBeLessThan(
+      script.indexOf('New-Item -ItemType Directory -Path $profileDataDir'),
+    );
     expect(script).toContain('$dataDir = $profileDataDir');
     expect(script).not.toContain("$dataDir = Join-Path $scratchRoot 'data'");
     expect(script).not.toContain('$env:WAGGLE_DATA_DIR = $dataDir');
@@ -2026,6 +2114,44 @@ Expect-Rejection {
     expect(script).toContain('$secondProcess.HasExited');
     expect(script).toContain('Wait-ForInstalledRuntimeStop');
     expect(script).toContain('Assert-NoForeignWaggleProcesses');
+    expect(script).toContain('function Assert-CertificateUninstallPostconditions');
+    const uninstallPostconditionCalls = [
+      ...script.matchAll(/^\s+Assert-CertificateUninstallPostconditions\s+`/gm),
+    ];
+    expect(uninstallPostconditionCalls).toHaveLength(2);
+    const outerFinallyStart = script.lastIndexOf('} finally {');
+    const successUninstallStart = script.indexOf(
+      "$receipt.checks['uninstallerCleanup'] = $true",
+    );
+    expect(successUninstallStart).toBeGreaterThanOrEqual(0);
+    expect(outerFinallyStart).toBeGreaterThan(successUninstallStart);
+    expect(
+      script.slice(successUninstallStart, outerFinallyStart),
+    ).toContain('Assert-CertificateUninstallPostconditions `');
+    expect(script.slice(outerFinallyStart)).toContain(
+      'Assert-CertificateUninstallPostconditions `',
+    );
+    const uninstallPostconditionHelper = script.match(
+      /function Assert-CertificateUninstallPostconditions \{([\s\S]*?)\r?\n\}/,
+    )?.[1];
+    expect(uninstallPostconditionHelper).toBeDefined();
+    expect(uninstallPostconditionHelper).toContain('Wait-ForPathState $InstallDir $false');
+    expect(uninstallPostconditionHelper).toContain(
+      'Wait-ForPathState $UninstallRegistry $false',
+    );
+    expect(uninstallPostconditionHelper).toContain(
+      'Wait-ForPathState $ProductRegistry $false',
+    );
+    expect(uninstallPostconditionHelper).toContain(
+      'Test-RegistryValue $RunRegistry $RunRegistryValue',
+    );
+    expect(uninstallPostconditionHelper).toContain('Wait-ForPathState $shortcut $false');
+    expect(uninstallPostconditionHelper).toContain('Wait-ForInstalledRuntimeStop');
+    expect(uninstallPostconditionHelper).toContain(
+      '-ManagedRuntimeRoot $ManagedRuntimeRoot -AdditionalPorts $AdditionalPorts',
+    );
+    expect(uninstallPostconditionHelper).toContain('Assert-NoForeignWaggleProcesses');
+    expect(uninstallPostconditionHelper).toContain('Assert-TcpPortAvailable $Port');
     expect(script).toContain('foreignProcessCollisionGuard');
     expect(script).not.toMatch(/Get-CimInstance[^\r\n]+-ErrorAction\s+SilentlyContinue/);
     expect(script).toContain('Stop-StartedProcessTree');
@@ -2157,9 +2283,234 @@ Expect-Rejection {
     expect(script).toContain('$startMenuShortcuts');
     expect(script).toContain('Assert-SafeScratchRoot');
     expect(script).not.toMatch(/Get-Process\s+(?:-Name\s+)?['"]?waggle/i);
-    expect(script.lastIndexOf('Remove-Item -LiteralPath $scratchRoot -Recurse -Force'))
+    expect(script.lastIndexOf(
+      'Remove-CertificateScratchRoot $scratchRoot $scratchOwnershipMarker $runId',
+    ))
       .toBeLessThan(script.lastIndexOf('$receipt | ConvertTo-Json'));
   });
+
+  it.runIf(process.platform === 'win32')(
+    'Windows installer certificate preserves sentinels when receipt paths are unsafe',
+    () => {
+      const script = fs
+        .readFileSync(
+          path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+          'utf-8',
+        )
+        .replace(/\r\n/g, '\n');
+      const helperStart = script.indexOf('function Assert-SafeReceiptPath {');
+      const helperEnd = script.indexOf(
+        '\nfunction Assert-SafeScratchRoot {',
+        helperStart + 1,
+      );
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cert-receipt-'));
+      const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cert-outside-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const existingReceipt = path.join(probeRoot, 'existing.json');
+      const hardlinkTarget = path.join(probeRoot, 'hardlink-target.json');
+      const hardlinkReceipt = path.join(probeRoot, 'hardlink.json');
+      const junctionParent = path.join(probeRoot, 'receipt-parent');
+      const outsideSentinel = path.join(outsideRoot, 'sentinel.txt');
+      fs.writeFileSync(existingReceipt, 'existing-receipt-sentinel', 'utf-8');
+      fs.writeFileSync(hardlinkTarget, 'hardlink-sentinel', 'utf-8');
+      fs.linkSync(hardlinkTarget, hardlinkReceipt);
+      fs.writeFileSync(outsideSentinel, 'outside-sentinel', 'utf-8');
+      fs.symlinkSync(outsideRoot, junctionParent, 'junction');
+
+      const fixtureSource = String.raw`
+function Assert-True {
+  param([Parameter(Mandatory = $true)] [bool]$Condition, [Parameter(Mandatory = $true)] [string]$Message)
+  if (-not $Condition) { throw $Message }
+}
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$existingReceipt = Join-Path $PSScriptRoot 'existing.json'
+$hardlinkReceipt = Join-Path $PSScriptRoot 'hardlink.json'
+$hardlinkTarget = Join-Path $PSScriptRoot 'hardlink-target.json'
+$junctionReceipt = Join-Path (Join-Path $PSScriptRoot 'receipt-parent') 'receipt.json'
+$reservedReceipt = Join-Path $PSScriptRoot 'reserved.json'
+Expect-Rejection { Assert-SafeReceiptPath $existingReceipt } 'existing receipt'
+Expect-Rejection { Reserve-CertificateReceiptPath $hardlinkReceipt } 'hardlink receipt'
+Expect-Rejection { Assert-SafeReceiptPath $junctionReceipt } 'junction receipt parent'
+$reservation = Reserve-CertificateReceiptPath $reservedReceipt
+Expect-Rejection { Reserve-CertificateReceiptPath $reservedReceipt } 'second receipt reservation'
+Write-CertificateReceipt $reservation 'reserved-receipt'
+if ((Get-Content -Raw -LiteralPath $existingReceipt) -cne 'existing-receipt-sentinel') {
+  throw 'Existing receipt sentinel changed'
+}
+if ((Get-Content -Raw -LiteralPath $hardlinkTarget) -cne 'hardlink-sentinel') {
+  throw 'Hardlink receipt sentinel changed'
+}
+if ((Get-Content -Raw -LiteralPath $reservedReceipt) -cne 'reserved-receipt') {
+  throw 'Reserved receipt content was not written through its owned handle'
+}
+if ((Get-Content -Raw -LiteralPath '${outsideSentinel.replaceAll('\\', '\\\\')}') -cne 'outside-sentinel') {
+  throw 'Outside sentinel changed'
+}
+if (Test-Path -LiteralPath $junctionReceipt) {
+  throw 'Receipt was written through the junction'
+}
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${script.slice(helperStart, helperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `Windows installer receipt safety probe failed: ${result.stderr || result.stdout}`,
+          );
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+        fs.rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'Windows installer certificate owns scratch roots before guarded cleanup',
+    () => {
+      const script = fs
+        .readFileSync(
+          path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+          'utf-8',
+        )
+        .replace(/\r\n/g, '\n');
+      const manifestStart = script.indexOf('function Get-CertificateRelativePath {');
+      const manifestEnd = script.indexOf(
+        '\nfunction Assert-CertificateDataManifest {',
+        manifestStart,
+      );
+      const scratchStart = script.indexOf('function Assert-SafeScratchRoot {');
+      const scratchEnd = script.indexOf(
+        '\nfunction Remove-CertificateProductRegistry {',
+        scratchStart,
+      );
+      expect(manifestStart).toBeGreaterThanOrEqual(0);
+      expect(manifestEnd).toBeGreaterThan(manifestStart);
+      expect(scratchStart).toBeGreaterThanOrEqual(0);
+      expect(scratchEnd).toBeGreaterThan(scratchStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cert-scratch-'));
+      const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cert-owned-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+function Assert-True {
+  param([Parameter(Mandatory = $true)] [bool]$Condition, [Parameter(Mandatory = $true)] [string]$Message)
+  if (-not $Condition) { throw $Message }
+}
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$existingRunId = '11111111111111111111111111111111'
+$existingRoot = Join-Path $PSScriptRoot "waggle-installer-cert-$existingRunId"
+New-Item -ItemType Directory -Path $existingRoot | Out-Null
+$existingSentinel = Join-Path $existingRoot 'sentinel.txt'
+Set-Content -NoNewline -LiteralPath $existingSentinel -Value 'existing-root-sentinel'
+Expect-Rejection {
+  New-CertificateScratchRoot $existingRoot $existingRunId
+} 'pre-existing scratch root'
+if ((Get-Content -Raw -LiteralPath $existingSentinel) -cne 'existing-root-sentinel') {
+  throw 'Pre-existing scratch sentinel changed'
+}
+
+$validRunId = '22222222222222222222222222222222'
+$validRoot = Join-Path $PSScriptRoot "waggle-installer-cert-$validRunId"
+$validMarker = New-CertificateScratchRoot $validRoot $validRunId
+if ((Split-Path -Leaf $validMarker) -cne ".waggle-installer-certificate-owner-$validRunId") {
+  throw 'Scratch ownership marker name is not exact'
+}
+if ((Get-Content -Raw -LiteralPath $validMarker) -cne $validRunId) {
+  throw 'Scratch ownership marker content is not exact'
+}
+Set-Content -NoNewline -LiteralPath (Join-Path $validRoot 'owned.txt') -Value 'owned'
+$nestedRoot = New-Item -ItemType Directory -Path (Join-Path $validRoot 'nested')
+Set-Content -NoNewline -LiteralPath (Join-Path $nestedRoot 'owned.txt') -Value 'owned'
+Remove-CertificateScratchRoot $validRoot $validMarker $validRunId
+if (Test-Path -LiteralPath $validRoot) {
+  throw 'Owned scratch root was not removed'
+}
+
+$tamperedRunId = '33333333333333333333333333333333'
+$tamperedRoot = Join-Path $PSScriptRoot "waggle-installer-cert-$tamperedRunId"
+$tamperedMarker = New-CertificateScratchRoot $tamperedRoot $tamperedRunId
+$tamperedSentinel = Join-Path $tamperedRoot 'sentinel.txt'
+Set-Content -NoNewline -LiteralPath $tamperedMarker -Value 'wrong-owner'
+Set-Content -NoNewline -LiteralPath $tamperedSentinel -Value 'tampered-root-sentinel'
+Expect-Rejection {
+  Remove-CertificateScratchRoot $tamperedRoot $tamperedMarker $tamperedRunId
+} 'tampered ownership marker'
+if ((Get-Content -Raw -LiteralPath $tamperedSentinel) -cne 'tampered-root-sentinel') {
+  throw 'Tampered scratch sentinel changed'
+}
+
+$reparseRunId = '44444444444444444444444444444444'
+$reparseRoot = Join-Path $PSScriptRoot "waggle-installer-cert-$reparseRunId"
+$reparseMarker = New-CertificateScratchRoot $reparseRoot $reparseRunId
+$outsideRoot = '${outsideRoot.replaceAll('\\', '\\\\')}'
+$outsideSentinel = Join-Path $outsideRoot 'sentinel.txt'
+Set-Content -NoNewline -LiteralPath $outsideSentinel -Value 'outside-sentinel'
+New-Item -ItemType Junction -Path (Join-Path $reparseRoot 'outside') -Target $outsideRoot |
+  Out-Null
+Expect-Rejection {
+  Remove-CertificateScratchRoot $reparseRoot $reparseMarker $reparseRunId
+} 'scratch child reparse point'
+if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
+  throw 'Outside scratch sentinel changed'
+}
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          [
+            script.slice(manifestStart, manifestEnd),
+            script.slice(scratchStart, scratchEnd),
+            fixtureSource,
+          ].join('\n'),
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          {
+            encoding: 'utf-8',
+            timeout: 30_000,
+            windowsHide: true,
+            env: { ...process.env, TEMP: probeRoot, TMP: probeRoot },
+          },
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `Windows installer scratch safety probe failed: ${result.stderr || result.stdout}`,
+          );
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+        fs.rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('accepts Tauri generated NSIS hook dispatch while binding the exact custom include', () => {
     const hookPath = path.join(TAURI_DIR, 'nsis', 'installer.nsi');

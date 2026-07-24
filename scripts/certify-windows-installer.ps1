@@ -1,3 +1,5 @@
+#Requires -Version 7.0
+
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
@@ -823,6 +825,35 @@ function Get-WaggleShortcutPaths {
   )
 }
 
+function Assert-CertificateUninstallPostconditions {
+  param(
+    [Parameter(Mandatory = $true)] [string]$InstallDir,
+    [Parameter(Mandatory = $true)] [string]$UninstallRegistry,
+    [Parameter(Mandatory = $true)] [string]$ProductRegistry,
+    [Parameter(Mandatory = $true)] [string]$RunRegistry,
+    [Parameter(Mandatory = $true)] [string]$RunRegistryValue,
+    [Parameter(Mandatory = $true)] [string[]]$ShortcutPaths,
+    [Parameter(Mandatory = $true)] [string]$AppExecutable,
+    [Parameter(Mandatory = $true)] [string]$ServiceScript,
+    [Parameter(Mandatory = $true)] [int]$Port,
+    [string]$ManagedRuntimeRoot = '',
+    [int[]]$AdditionalPorts = @()
+  )
+
+  Wait-ForPathState $InstallDir $false 90
+  Wait-ForPathState $UninstallRegistry $false 30
+  Wait-ForPathState $ProductRegistry $false 30
+  Assert-True (-not (Test-RegistryValue $RunRegistry $RunRegistryValue)) `
+    'Silent uninstall left or replaced the Waggle autostart entry.'
+  foreach ($shortcut in $ShortcutPaths) {
+    Wait-ForPathState $shortcut $false 30
+  }
+  Wait-ForInstalledRuntimeStop $AppExecutable $ServiceScript $Port `
+    -ManagedRuntimeRoot $ManagedRuntimeRoot -AdditionalPorts $AdditionalPorts
+  Assert-NoForeignWaggleProcesses $AppExecutable
+  Assert-TcpPortAvailable $Port
+}
+
 function Assert-ShortcutTargets {
   param(
     [Parameter(Mandatory = $true)] [string[]]$ShortcutPaths,
@@ -842,16 +873,200 @@ function Assert-ShortcutTargets {
   }
 }
 
+function Assert-SafeReceiptPath {
+  param([Parameter(Mandatory = $true)] [string]$ReceiptPath)
+
+  $resolvedReceipt = [System.IO.Path]::GetFullPath($ReceiptPath)
+  $existingReceipt = Get-Item -LiteralPath $resolvedReceipt -Force -ErrorAction SilentlyContinue
+  Assert-True ($null -eq $existingReceipt) `
+    "Receipt path already exists; refusing to overwrite: $resolvedReceipt"
+
+  $parent = Split-Path -Parent $resolvedReceipt
+  Assert-True (-not [string]::IsNullOrWhiteSpace($parent)) `
+    "Receipt path has no parent directory: $resolvedReceipt"
+  $resolvedParent = [System.IO.Path]::GetFullPath($parent).TrimEnd('\')
+  Assert-True (Test-Path -LiteralPath $resolvedParent -PathType Container) `
+    "Receipt parent directory must already exist: $resolvedParent"
+  $cursor = Get-Item -LiteralPath $resolvedParent -Force
+  while ($null -ne $cursor) {
+    Assert-True $cursor.PSIsContainer "Receipt parent is not a directory: $($cursor.FullName)"
+    Assert-True (($cursor.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+      "Receipt parent must not be a reparse point: $($cursor.FullName)"
+    $cursor = $cursor.Parent
+  }
+}
+
+function Reserve-CertificateReceiptPath {
+  param([Parameter(Mandatory = $true)] [string]$ReceiptPath)
+
+  Assert-SafeReceiptPath $ReceiptPath
+  return [System.IO.File]::Open(
+    $ReceiptPath,
+    [System.IO.FileMode]::CreateNew,
+    [System.IO.FileAccess]::Write,
+    [System.IO.FileShare]::None
+  )
+}
+
+function Write-CertificateReceipt {
+  param(
+    [Parameter(Mandatory = $true)] [System.IO.FileStream]$Reservation,
+    [Parameter(Mandatory = $true)] [string]$Content
+  )
+
+  $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($Content)
+  try {
+    Assert-True ($Reservation.CanWrite -and $Reservation.Length -eq 0) `
+      'Certificate receipt reservation is not exclusively writable and empty.'
+    $Reservation.Write($bytes, 0, $bytes.Length)
+    $Reservation.Flush($true)
+  } finally {
+    $Reservation.Dispose()
+  }
+}
+
 function Assert-SafeScratchRoot {
-  param([Parameter(Mandatory = $true)] [string]$ScratchRoot)
+  param(
+    [Parameter(Mandatory = $true)] [string]$ScratchRoot,
+    [Parameter(Mandatory = $true)] [string]$RunId
+  )
 
   $resolved = [System.IO.Path]::GetFullPath($ScratchRoot).TrimEnd('\')
-  $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
-  $leaf = Split-Path -Leaf $resolved
-  Assert-True ($resolved.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase)) `
-    "Scratch root escaped the system temp directory: $resolved"
-  Assert-True ($leaf.StartsWith('waggle-installer-cert-', [System.StringComparison]::Ordinal)) `
-    "Refusing to clean an unexpected scratch directory: $resolved"
+  $expected = [System.IO.Path]::GetFullPath(
+    (Join-Path ([System.IO.Path]::GetTempPath()) "waggle-installer-cert-$RunId")
+  ).TrimEnd('\')
+  Assert-True ([string]::Equals(
+    $resolved,
+    $expected,
+    [System.StringComparison]::OrdinalIgnoreCase
+  )) "Scratch root is not the exact temp root for certificate run ${RunId}: $resolved"
+}
+
+function Assert-CertificateScratchOwnership {
+  param(
+    [Parameter(Mandatory = $true)] [string]$ScratchRoot,
+    [Parameter(Mandatory = $true)] [string]$OwnershipMarker,
+    [Parameter(Mandatory = $true)] [string]$RunId,
+    [switch]$RequireOnlyMarker
+  )
+
+  $resolvedRoot = [System.IO.Path]::GetFullPath($ScratchRoot).TrimEnd('\')
+  Assert-SafeScratchRoot $resolvedRoot $RunId
+  $rootItem = Get-Item -LiteralPath $resolvedRoot -Force
+  Assert-True ($rootItem.PSIsContainer -and (
+    $rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint
+  ) -eq 0) "Scratch root is missing or is a reparse point: $resolvedRoot"
+  $expectedMarker = Join-Path $resolvedRoot ".waggle-installer-certificate-owner-$RunId"
+  Assert-True ([string]::Equals(
+    [System.IO.Path]::GetFullPath($OwnershipMarker),
+    $expectedMarker,
+    [System.StringComparison]::OrdinalIgnoreCase
+  )) "Scratch ownership marker has an unexpected path: $OwnershipMarker"
+  $markerItem = Get-Item -LiteralPath $expectedMarker -Force
+  Assert-True (-not $markerItem.PSIsContainer -and (
+    $markerItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint
+  ) -eq 0) "Scratch ownership marker is missing or is a reparse point: $expectedMarker"
+  Assert-True ((Get-Content -Raw -LiteralPath $expectedMarker) -ceq $RunId) `
+    "Scratch ownership marker does not match certificate run ${RunId}."
+  $manifest = @(Get-CertificateDataManifest $resolvedRoot -SkipHashes)
+  if ($RequireOnlyMarker) {
+    Assert-True (
+      $manifest.Count -eq 1 -and
+        [string]$manifest[0].path -ceq (Split-Path -Leaf $expectedMarker)
+    ) "Scratch root changed before ownership was established: $resolvedRoot"
+  }
+}
+
+function New-CertificateScratchRoot {
+  param(
+    [Parameter(Mandatory = $true)] [string]$ScratchRoot,
+    [Parameter(Mandatory = $true)] [string]$RunId
+  )
+
+  $resolvedRoot = [System.IO.Path]::GetFullPath($ScratchRoot).TrimEnd('\')
+  Assert-SafeScratchRoot $resolvedRoot $RunId
+  Assert-True (-not (Test-Path -LiteralPath $resolvedRoot)) `
+    "Scratch root already exists; refusing to adopt it: $resolvedRoot"
+  $createdRoot = New-Item -ItemType Directory -Path $resolvedRoot -ErrorAction Stop
+  Assert-True ($createdRoot.PSIsContainer -and (
+    $createdRoot.Attributes -band [System.IO.FileAttributes]::ReparsePoint
+  ) -eq 0) "New scratch root is not a normal directory: $resolvedRoot"
+  $ownershipMarker = Join-Path $resolvedRoot ".waggle-installer-certificate-owner-$RunId"
+  $markerBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($RunId)
+  $markerStream = [System.IO.File]::Open(
+    $ownershipMarker,
+    [System.IO.FileMode]::CreateNew,
+    [System.IO.FileAccess]::Write,
+    [System.IO.FileShare]::None
+  )
+  try {
+    $markerStream.Write($markerBytes, 0, $markerBytes.Length)
+    $markerStream.Flush($true)
+  } finally {
+    $markerStream.Dispose()
+  }
+  Assert-CertificateScratchOwnership $resolvedRoot $ownershipMarker $RunId -RequireOnlyMarker
+  return $ownershipMarker
+}
+
+function Remove-CertificateScratchRoot {
+  param(
+    [Parameter(Mandatory = $true)] [string]$ScratchRoot,
+    [Parameter(Mandatory = $true)] [string]$OwnershipMarker,
+    [Parameter(Mandatory = $true)] [string]$RunId
+  )
+
+  $resolvedRoot = [System.IO.Path]::GetFullPath($ScratchRoot).TrimEnd('\')
+  Assert-CertificateScratchOwnership $resolvedRoot $OwnershipMarker $RunId
+  $manifest = @(Get-CertificateDataManifest $resolvedRoot -SkipHashes)
+  $markerRelativePath = Get-CertificateRelativePath $resolvedRoot $OwnershipMarker
+  foreach ($entry in @($manifest | Where-Object {
+    $_.type -eq 'file' -and -not [string]::Equals(
+      [string]$_.path,
+      $markerRelativePath,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  })) {
+    $entryPath = Join-Path $resolvedRoot ([string]$entry.path).Replace('/', '\')
+    $item = Get-Item -LiteralPath $entryPath -Force -ErrorAction Stop
+    Assert-True (-not $item.PSIsContainer -and (
+      $item.Attributes -band [System.IO.FileAttributes]::ReparsePoint
+    ) -eq 0) "Refusing to remove replaced scratch file: $entryPath"
+    Remove-Item -LiteralPath $entryPath -Force
+  }
+  $directories = @($manifest | Where-Object {
+    $_.type -eq 'directory'
+  } | Sort-Object { ([string]$_.path).Length } -Descending)
+  foreach ($entry in $directories) {
+    $entryPath = Join-Path $resolvedRoot ([string]$entry.path).Replace('/', '\')
+    $item = Get-Item -LiteralPath $entryPath -Force -ErrorAction Stop
+    Assert-True ($item.PSIsContainer -and (
+      $item.Attributes -band [System.IO.FileAttributes]::ReparsePoint
+    ) -eq 0) "Refusing to remove replaced scratch directory: $entryPath"
+    Assert-True (@(Get-ChildItem -LiteralPath $entryPath -Force).Count -eq 0) `
+      "Certificate scratch directory changed during cleanup: $entryPath"
+    Remove-Item -LiteralPath $entryPath -Force
+  }
+  $remaining = @(Get-ChildItem -LiteralPath $resolvedRoot -Force)
+  Assert-True (
+    $remaining.Count -eq 1 -and
+      [string]::Equals(
+        $remaining[0].FullName,
+        [System.IO.Path]::GetFullPath($OwnershipMarker),
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+  ) 'Certificate scratch changed before ownership-marker cleanup.'
+  Assert-CertificateScratchOwnership $resolvedRoot $OwnershipMarker $RunId -RequireOnlyMarker
+  Remove-Item -LiteralPath $OwnershipMarker -Force
+  $rootItem = Get-Item -LiteralPath $resolvedRoot -Force -ErrorAction Stop
+  Assert-True ($rootItem.PSIsContainer -and (
+    $rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint
+  ) -eq 0) "Refusing to remove replaced scratch root: $resolvedRoot"
+  Assert-True (@(Get-ChildItem -LiteralPath $resolvedRoot -Force).Count -eq 0) `
+    "Certificate scratch root changed during cleanup: $resolvedRoot"
+  Remove-Item -LiteralPath $resolvedRoot -Force
+  Assert-True (-not (Test-Path -LiteralPath $resolvedRoot)) `
+    "Certificate scratch cleanup did not remove the owned root: $resolvedRoot"
 }
 
 function Remove-CertificateProductRegistry {
@@ -1063,7 +1278,7 @@ $installerHookPath = [System.IO.Path]::GetFullPath(
 
 $runId = [Guid]::NewGuid().ToString('N')
 $scratchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "waggle-installer-cert-$runId"
-Assert-SafeScratchRoot $scratchRoot
+Assert-SafeScratchRoot $scratchRoot $runId
 $installDir = Join-Path $scratchRoot 'install'
 $profileDataDir = Join-Path $env:USERPROFILE '.waggle'
 $dataDir = $profileDataDir
@@ -1095,6 +1310,8 @@ $profileRootOwned = $false
 $runtimeConfirmedStopped = $false
 $certificateLifecycleData = $null
 $preUninstallDataManifest = @()
+$installedShortcuts = @()
+$uninstallPostconditionsConfirmed = $false
 $environmentNamesToClear = @(
   'WAGGLE_NODE_PATH', 'WAGGLE_DATA_DIR', 'NODE_PATH', 'NODE_OPTIONS', 'DOCKER_HOST',
   'WAGGLE_TRUST_LOCALHOST', 'WAGGLE_SQLITE_VEC_PATH', 'ONNXRUNTIME_NODE_BINDING_PATH',
@@ -1204,13 +1421,15 @@ if ($RequireVersionToVersionUpgrade) {
   $receipt.checks['versionOrder'] = $true
 }
 
-New-Item -ItemType Directory -Path $scratchRoot -Force | Out-Null
+$receiptReservation = Reserve-CertificateReceiptPath $ReceiptPath
+$scratchOwnershipMarker = $null
 $ollamaPort = 0
 $managedRuntimeRoot = Join-Path $dataDir 'runtimes\ollama'
 $managedCertificateModel = 'qwen2.5:0.5b'
 $managedOperationTimeoutSeconds = 3600
 
 try {
+  $scratchOwnershipMarker = New-CertificateScratchRoot $scratchRoot $runId
   Assert-True (Test-Path -LiteralPath $installerHookPath -PathType Leaf) `
     'Configured NSIS installer hook is missing.'
   $installerHookFile = Get-Item -LiteralPath $installerHookPath
@@ -1354,6 +1573,10 @@ try {
   Assert-True (-not (Test-Path -LiteralPath $profileDataDir)) `
     "Profile data already exists at $profileDataDir; run this certificate under a disposable Windows user."
   $profileAbsenceProven = $true
+  # The desktop webview and Rust shell currently share the fixed loopback port
+  # 3333 contract. Refuse before creating profile state rather than clean up
+  # after colliding with another installation.
+  Assert-TcpPortAvailable 3333
   New-Item -ItemType Directory -Path $profileDataDir | Out-Null
   $profileRoot = Get-Item -LiteralPath $profileDataDir -Force
   Assert-True (($profileRoot.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
@@ -1361,9 +1584,6 @@ try {
   Set-Content -LiteralPath $profileDataMarker -Value $runId -Encoding UTF8
   $profileRootOwned = $true
 
-  # The desktop webview and Rust shell currently share the fixed loopback port
-  # 3333 contract. Refuse to run rather than collide with another installation.
-  Assert-TcpPortAvailable 3333
   $env:WAGGLE_PORT = '3333'
   $env:WAGGLE_HOST = '127.0.0.1'
   $ollamaPort = Get-FreeTcpPort
@@ -2233,16 +2453,21 @@ try {
   # and the install directory can disappear before that process finishes the
   # registry and shortcut tail, so wait on the actual postconditions.
   Wait-ForPathState $uninstallRegistry $false 30
-  Assert-True (-not (Test-RegistryValue $runRegistry $runRegistryValue)) `
-    'Silent uninstall left or replaced the Waggle autostart entry'
-  foreach ($shortcut in $installedShortcuts) {
-    Wait-ForPathState $shortcut $false 30
-  }
   $receipt.checks['uninstallerCleanup'] = $true
   Remove-CertificateProductRegistry $productRegistry $installDir
-  Wait-ForPathState $productRegistry $false 30
-  Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-    -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+  Assert-CertificateUninstallPostconditions `
+    -InstallDir $installDir `
+    -UninstallRegistry $uninstallRegistry `
+    -ProductRegistry $productRegistry `
+    -RunRegistry $runRegistry `
+    -RunRegistryValue $runRegistryValue `
+    -ShortcutPaths $shortcutCandidates `
+    -AppExecutable $appExecutable `
+    -ServiceScript $serviceScript `
+    -Port 3333 `
+    -ManagedRuntimeRoot $managedRuntimeRoot `
+    -AdditionalPorts @($ollamaPort)
+  $uninstallPostconditionsConfirmed = $true
   $runtimeConfirmedStopped = $true
   $postUninstallDataManifest = @(Get-CertificateDataManifest $profileDataDir)
   Assert-CertificateDataManifest $preUninstallDataManifest $postUninstallDataManifest
@@ -2280,8 +2505,6 @@ try {
   $receipt.checks['certificateRegistryCleanup'] = $true
   $receipt.checks['configuredDataDirPreserved'] = $true
   $receipt.checks['profileDataPathPreserved'] = $true
-  Assert-NoForeignWaggleProcesses $appExecutable
-  Assert-TcpPortAvailable 3333
   Remove-CertificateProfileData `
     $profileDataDir $profileDataMarker $runId $profileAbsenceProven $runtimeConfirmedStopped
   $profileRootOwned = $false
@@ -2314,11 +2537,6 @@ try {
       Assert-NoForeignWaggleProcesses $appExecutable
       Invoke-RawProcess $uninstaller '/S' 300
       Wait-ForPathState $installDir $false 90
-      Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-        -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
-      Assert-NoForeignWaggleProcesses $appExecutable
-      Assert-TcpPortAvailable 3333
-      $runtimeConfirmedStopped = $true
     } catch {
       $receipt.status = 'failed'
       $receipt['uninstallerCleanupError'] = $_.Exception.Message
@@ -2332,7 +2550,31 @@ try {
       $receipt['cleanupError'] = $_.Exception.Message
     }
   }
-  if ($profileRootOwned) {
+  if ($installerStarted) {
+    $uninstallPostconditionsConfirmed = $false
+    try {
+      Assert-CertificateUninstallPostconditions `
+        -InstallDir $installDir `
+        -UninstallRegistry $uninstallRegistry `
+        -ProductRegistry $productRegistry `
+        -RunRegistry $runRegistry `
+        -RunRegistryValue $runRegistryValue `
+        -ShortcutPaths $shortcutCandidates `
+        -AppExecutable $appExecutable `
+        -ServiceScript $serviceScript `
+        -Port 3333 `
+        -ManagedRuntimeRoot $managedRuntimeRoot `
+        -AdditionalPorts @($ollamaPort)
+      $runtimeConfirmedStopped = $true
+      $uninstallPostconditionsConfirmed = $true
+    } catch {
+      $receipt.status = 'failed'
+      $receipt['uninstallPostconditionError'] = $_.Exception.Message
+    }
+  } elseif (-not $uninstallPostconditionsConfirmed) {
+    $uninstallPostconditionsConfirmed = $runtimeConfirmedStopped
+  }
+  if ($profileRootOwned -and $uninstallPostconditionsConfirmed) {
     try {
       Remove-CertificateProfileData `
         $profileDataDir $profileDataMarker $runId $profileAbsenceProven $runtimeConfirmedStopped
@@ -2341,11 +2583,14 @@ try {
       $receipt.status = 'failed'
       $receipt['profileCleanupError'] = $_.Exception.Message
     }
+  } elseif ($profileRootOwned) {
+    $receipt.status = 'failed'
+    $receipt['profileCleanupError'] = `
+      'Certificate profile was preserved because uninstall postconditions were not proven.'
   }
   if ($receipt.status -eq 'passed' -and -not $KeepArtifacts) {
     try {
-      Assert-SafeScratchRoot $scratchRoot
-      Remove-Item -LiteralPath $scratchRoot -Recurse -Force
+      Remove-CertificateScratchRoot $scratchRoot $scratchOwnershipMarker $runId
     } catch {
       $receipt.status = 'failed'
       $receipt['scratchCleanupError'] = $_.Exception.Message
@@ -2362,9 +2607,8 @@ try {
   }
   $receipt.finishedAt = [DateTime]::UtcNow.ToString('o')
   $receipt['durationSeconds'] = [Math]::Round(([DateTime]::UtcNow - $startedAt).TotalSeconds, 3)
-  $receiptDirectory = Split-Path -Parent $ReceiptPath
-  New-Item -ItemType Directory -Path $receiptDirectory -Force | Out-Null
-  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReceiptPath -Encoding UTF8
+  $receiptJson = $receipt | ConvertTo-Json -Depth 8
+  Write-CertificateReceipt $receiptReservation $receiptJson
 }
 
 if ($receipt.status -ne 'passed') {
