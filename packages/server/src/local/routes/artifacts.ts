@@ -296,7 +296,7 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
   // (A8 reversible — there is no separate archive route; un-archive is the inverse PATCH).
   server.patch<{
     Params: { id: string };
-    Querystring: { workspaceId?: string };
+    Querystring: { workspaceId: string };
     Body: {
       title?: string; kind?: string; status?: string; mimeType?: string;
       storagePath?: string; previewUrl?: string; source?: string; teamId?: string | null;
@@ -311,7 +311,11 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
     if (b.status !== undefined && !asStatus(b.status)) {
       return reply.status(400).send({ error: `Invalid status "${b.status}"` });
     }
-    const owner = resolveOwner(request.params.id, request.query.workspaceId);
+    const workspaceId = request.query.workspaceId;
+    if (!workspaceId) {
+      return reply.status(400).send({ error: 'workspaceId is required' });
+    }
+    const owner = resolveOwner(request.params.id, workspaceId);
     if (!owner) return reply.status(404).send({ error: 'Artifact not found' });
 
     const patch: Partial<Artifact> = {
@@ -354,9 +358,13 @@ export const artifactRoutes: FastifyPluginAsync = async (server) => {
   // the storage routes. The FE gates this behind a scope-and-consequence confirm (J20).
   server.delete<{
     Params: { id: string };
-    Querystring: { workspaceId?: string };
+    Querystring: { workspaceId: string };
   }>('/api/artifacts/:id', async (request, reply) => {
-    const owner = resolveOwner(request.params.id, request.query.workspaceId);
+    const workspaceId = request.query.workspaceId;
+    if (!workspaceId) {
+      return reply.status(400).send({ error: 'workspaceId is required' });
+    }
+    const owner = resolveOwner(request.params.id, workspaceId);
     if (!owner) return reply.status(404).send({ error: 'Artifact not found' });
 
     const removed = deleteArtifactFromWorkspace(dataDir, owner.workspaceId, request.params.id);

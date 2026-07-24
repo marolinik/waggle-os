@@ -21,12 +21,14 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { MindDB, FrameStore, SessionStore } from '@waggle/core';
 import { artifactRoutes } from '../../src/local/routes/artifacts.js';
+import { sessionRoutes } from '../../src/local/routes/sessions.js';
 
 function createTestServer(db: MindDB, dataDir: string) {
   const server = Fastify({ logger: false });
   server.decorate('localConfig', { dataDir });
   server.decorate('workspaceManager', {
     list: () => [{ id: 'ws-test', name: 'Test Workspace' }],
+    get: (id: string) => id === 'ws-test' ? { id, name: 'Test Workspace' } : undefined,
   });
   server.decorate('agentState', {
     getWorkspaceMindDb: () => undefined,
@@ -34,6 +36,7 @@ function createTestServer(db: MindDB, dataDir: string) {
   });
   server.decorate('multiMind', { personal: db });
   server.register(artifactRoutes);
+  server.register(sessionRoutes);
   return server;
 }
 
@@ -106,7 +109,7 @@ describe('Artifact Center routes (Phase 2C)', () => {
   it('PATCH updates status + tags', async () => {
     const a = await createArtifact({ title: 'Report', kind: 'document', workspaceId: 'ws-test' });
     const res = await server.inject({
-      method: 'PATCH', url: `/api/artifacts/${a.id}`,
+      method: 'PATCH', url: `/api/artifacts/${a.id}?workspaceId=ws-test`,
       payload: { status: 'final', tags: ['gtm', 'q3'] },
     });
     expect(res.statusCode).toBe(200);
@@ -114,21 +117,68 @@ describe('Artifact Center routes (Phase 2C)', () => {
     expect(res.json().tags).toEqual(['gtm', 'q3']);
   });
 
+  it('PATCH and DELETE require workspaceId before resolving an artifact owner', async () => {
+    const a = await createArtifact({ title: 'Protected report', kind: 'document', workspaceId: 'ws-test' });
+
+    const patch = await server.inject({
+      method: 'PATCH',
+      url: `/api/artifacts/${a.id}`,
+      payload: { title: 'Mutated without scope' },
+    });
+    expect(patch.statusCode).toBe(400);
+
+    const afterPatch = await server.inject({ method: 'GET', url: `/api/artifacts/${a.id}?workspaceId=ws-test` });
+    expect(afterPatch.statusCode).toBe(200);
+    expect(afterPatch.json().title).toBe('Protected report');
+
+    const del = await server.inject({ method: 'DELETE', url: `/api/artifacts/${a.id}` });
+    expect(del.statusCode).toBe(400);
+
+    const afterDelete = await server.inject({ method: 'GET', url: `/api/artifacts/${a.id}?workspaceId=ws-test` });
+    expect(afterDelete.statusCode).toBe(200);
+  });
+
+  it('PATCH and DELETE require workspace before resolving a session owner', async () => {
+    const sessionsDir = path.join(dataDir, 'workspaces', 'ws-test', 'sessions');
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    const sessionPath = path.join(sessionsDir, 'session-protected.jsonl');
+    fs.writeFileSync(
+      sessionPath,
+      `${JSON.stringify({ type: 'meta', title: 'Original', created: '2026-07-24T00:00:00.000Z' })}\n`,
+      'utf-8',
+    );
+
+    const patch = await server.inject({
+      method: 'PATCH',
+      url: '/api/sessions/session-protected',
+      payload: { title: 'Mutated without scope' },
+    });
+    expect(patch.statusCode).toBe(400);
+    expect(JSON.parse(fs.readFileSync(sessionPath, 'utf-8').trim()).title).toBe('Original');
+
+    const del = await server.inject({
+      method: 'DELETE',
+      url: '/api/sessions/session-protected',
+    });
+    expect(del.statusCode).toBe(400);
+    expect(fs.existsSync(sessionPath)).toBe(true);
+  });
+
   it('PATCH rejects an invalid kind/status', async () => {
     const a = await createArtifact({ title: 'X', kind: 'document', workspaceId: 'ws-test' });
-    expect((await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { kind: 'bogus' } })).statusCode).toBe(400);
-    expect((await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { status: 'bogus' } })).statusCode).toBe(400);
+    expect((await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}?workspaceId=ws-test`, payload: { kind: 'bogus' } })).statusCode).toBe(400);
+    expect((await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}?workspaceId=ws-test`, payload: { status: 'bogus' } })).statusCode).toBe(400);
   });
 
   it('Archive = reversible status:archived (A8), filterable by status', async () => {
     const a = await createArtifact({ title: 'Old deck', kind: 'presentation', workspaceId: 'ws-test' });
-    const arch = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { status: 'archived' } });
+    const arch = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}?workspaceId=ws-test`, payload: { status: 'archived' } });
     expect(arch.json().status).toBe('archived');
 
     expect((await server.inject({ method: 'GET', url: '/api/artifacts?status=draft' })).json().count).toBe(0);
     expect((await server.inject({ method: 'GET', url: '/api/artifacts?status=archived' })).json().count).toBe(1);
 
-    const restore = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { status: 'draft' } });
+    const restore = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}?workspaceId=ws-test`, payload: { status: 'draft' } });
     expect(restore.json().status).toBe('draft');
   });
 
@@ -143,7 +193,7 @@ describe('Artifact Center routes (Phase 2C)', () => {
 
   it('DELETE hard-deletes the index entry (A8 — no tombstone)', async () => {
     const a = await createArtifact({ title: 'Delete me', kind: 'document', workspaceId: 'ws-test' });
-    const del = await server.inject({ method: 'DELETE', url: `/api/artifacts/${a.id}` });
+    const del = await server.inject({ method: 'DELETE', url: `/api/artifacts/${a.id}?workspaceId=ws-test` });
     expect(del.statusCode).toBe(200);
     expect(del.json().deleted).toBe(true);
     expect((await server.inject({ method: 'GET', url: `/api/artifacts/${a.id}` })).statusCode).toBe(404);
@@ -164,10 +214,10 @@ describe('Artifact Center routes (Phase 2C)', () => {
   it('Archive stashes prevStatus so the prior status is restorable (A8, F3)', async () => {
     const a = await createArtifact({ title: 'Final deck', kind: 'presentation', workspaceId: 'ws-test', status: 'final' });
     expect(a.status).toBe('final');
-    const arch = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { status: 'archived' } });
+    const arch = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}?workspaceId=ws-test`, payload: { status: 'archived' } });
     expect(arch.json().status).toBe('archived');
     expect(arch.json().prevStatus).toBe('final');
-    const restore = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}`, payload: { status: 'final' } });
+    const restore = await server.inject({ method: 'PATCH', url: `/api/artifacts/${a.id}?workspaceId=ws-test`, payload: { status: 'final' } });
     expect(restore.json().status).toBe('final');
     expect(restore.json().prevStatus).toBeUndefined(); // cleared on leaving archive
   });

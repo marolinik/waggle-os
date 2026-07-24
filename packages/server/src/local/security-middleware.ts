@@ -307,6 +307,127 @@ const RUN_TOKEN_PATHS = new Set([
   '/api/waggle-dance/signals',
 ]);
 
+const UNSAFE_WORKSPACE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * POST endpoints that project existing workspace data without changing it.
+ * Keep this allowlist exact and intentionally small: new POST reads must opt in,
+ * rather than silently bypassing the Team-viewer policy.
+ */
+const VIEWER_READ_ONLY_POST_EXEMPT_PATHS = new Set([
+  '/api/export',
+  '/api/compliance/export',
+  '/api/compliance/export-pdf',
+  '/api/automations/test',
+  '/api/command/interpret',
+]);
+
+const DEFAULT_WORKSPACE_MUTATION_PATHS = new Set([
+  '/api/fleet/spawn',
+  '/api/agent-groups/:id/run',
+  '/api/tools/launch',
+]);
+
+const WORKSPACE_WILDCARD_MUTATION_PATHS = new Set([
+  '/api/cron',
+  '/api/cron/:id',
+]);
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function stringFields(
+  record: Record<string, unknown> | null,
+  fields: readonly string[],
+): string[] {
+  const values: string[] = [];
+  for (const field of fields) {
+    const value = record?.[field];
+    if (typeof value === 'string' && value.trim()) values.push(value.trim());
+  }
+  return values;
+}
+
+function stringArrayFields(
+  record: Record<string, unknown> | null,
+  fields: readonly string[],
+): string[] {
+  const values: string[] = [];
+  for (const field of fields) {
+    const candidates = record?.[field];
+    if (!Array.isArray(candidates)) continue;
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) values.push(candidate.trim());
+    }
+  }
+  return values;
+}
+
+/**
+ * Resolve the workspace whose state an unsafe request targets. Route parameters
+ * win for /api/workspaces/* so a body cannot redirect authorization to a more
+ * privileged workspace. Other workspace-scoped routes use their established
+ * body/query fields, including Fleet's parent id and multi-workspace Rooms.
+ * The few routes that intentionally fall back to the active/default workspace
+ * must authorize that resolved fallback too.
+ */
+function mutationWorkspaceIds(
+  request: FastifyRequest,
+  fastify: FastifyInstance,
+): string[] {
+  if (!UNSAFE_WORKSPACE_METHODS.has(request.method)) return [];
+
+  const routeUrl = request.routeOptions?.url ?? request.url.split('?')[0];
+  if (VIEWER_READ_ONLY_POST_EXEMPT_PATHS.has(routeUrl)) return [];
+
+  const params = asRecord(request.params);
+  if (routeUrl.startsWith('/api/workspaces/:')) {
+    return stringFields(params, ['workspaceId', 'id']).slice(0, 1);
+  }
+
+  const body = asRecord(request.body);
+  const query = asRecord(request.query);
+  if (DEFAULT_WORKSPACE_MUTATION_PATHS.has(routeUrl)) {
+    const explicitWorkspaceIds = routeUrl === '/api/fleet/spawn'
+      ? stringFields(body, ['parentWorkspaceId'])
+      : stringFields(body, ['workspaceId']);
+    if (explicitWorkspaceIds.length > 0) return explicitWorkspaceIds;
+
+    const fallbackWorkspaceId = routeUrl === '/api/tools/launch'
+      ? fastify.agentState?.activeWorkspaceId
+        ?? fastify.workspaceManager?.getDefault()
+        ?? fastify.workspaceManager?.list()[0]?.id
+      : fastify.workspaceManager?.getDefault()
+        ?? fastify.workspaceManager?.list()[0]?.id;
+    return fallbackWorkspaceId ? [fallbackWorkspaceId] : [];
+  }
+
+  const participantWorkspaceIds = Array.isArray(body?.participants)
+    ? body.participants.flatMap((participant) =>
+      stringArrayFields(asRecord(participant), ['workspaceIds']))
+    : [];
+  const workspaceIds = [...new Set([
+    ...stringFields(params, ['workspaceId']),
+    ...stringFields(body, ['workspaceId', 'workspace', 'parentWorkspaceId']),
+    ...stringFields(query, ['workspaceId', 'workspace']),
+    ...stringArrayFields(body, ['workspaceIds']),
+    ...participantWorkspaceIds,
+  ])];
+  if (
+    WORKSPACE_WILDCARD_MUTATION_PATHS.has(routeUrl)
+    && workspaceIds.some((workspaceId) => workspaceId === '*' || workspaceId === 'global')
+  ) {
+    return [...new Set([
+      ...workspaceIds.filter((workspaceId) => workspaceId !== '*' && workspaceId !== 'global'),
+      ...fastify.workspaceManager.list().map((workspace) => workspace.id),
+    ])];
+  }
+  return workspaceIds;
+}
+
 async function securityMiddlewarePlugin(
   fastify: FastifyInstance,
   opts: SecurityMiddlewareOpts,
@@ -450,6 +571,21 @@ async function securityMiddlewarePlugin(
     }
 
     reply.header('X-RateLimit-Remaining', String(result.remaining));
+  });
+
+  // Team viewers are read-only across every local workspace mutation surface,
+  // not only /api/chat. Resolve the persisted workspace role after Fastify has
+  // parsed params/body/query, then stop before any route handler can mutate.
+  fastify.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
+    for (const workspaceId of mutationWorkspaceIds(request, fastify)) {
+      const workspace = fastify.workspaceManager?.get(workspaceId);
+      if (workspace?.teamId && workspace.teamRole === 'viewer') {
+        return reply.code(403).send({
+          error: 'Viewers cannot modify team workspaces. Ask a team admin to upgrade your role.',
+          code: 'VIEWER_READ_ONLY',
+        });
+      }
+    }
   });
 }
 

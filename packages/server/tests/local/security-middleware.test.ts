@@ -718,3 +718,337 @@ describe('Vault Reveal Origin Enforcement', () => {
     }
   });
 });
+
+// ── Team viewer read-only enforcement ───────────────────────────────────────
+
+describe('Team viewer read-only enforcement', () => {
+  async function createViewerPolicyServer() {
+    const server = Fastify({ logger: false });
+    let mutations = 0;
+
+    server.decorate('workspaceManager', {
+      get(workspaceId: string) {
+        if (workspaceId === 'viewer-workspace') {
+          return { id: workspaceId, teamId: 'team-1', teamRole: 'viewer' };
+        }
+        if (workspaceId === 'member-workspace') {
+          return { id: workspaceId, teamId: 'team-1', teamRole: 'member' };
+        }
+        if (workspaceId === 'personal-workspace') {
+          return { id: workspaceId };
+        }
+        return null;
+      },
+      getDefault() {
+        return 'viewer-workspace';
+      },
+      list() {
+        return [
+          { id: 'viewer-workspace', teamId: 'team-1', teamRole: 'viewer' },
+          { id: 'member-workspace', teamId: 'team-1', teamRole: 'member' },
+          { id: 'personal-workspace' },
+        ];
+      },
+    });
+    server.decorate('agentState', { activeWorkspaceId: 'viewer-workspace' });
+
+    await server.register(securityMiddleware);
+
+    const mutate = async () => {
+      mutations += 1;
+      return { ok: true };
+    };
+    server.post('/api/workspaces/:workspaceId/files/delete', mutate);
+    server.patch('/api/workspaces/:id/tasks/:taskId', mutate);
+    server.put('/api/workspaces/:id/tasks/:taskId', mutate);
+    server.delete('/api/workspaces/:id/tasks/:taskId', mutate);
+    server.post('/api/fleet/:workspaceId/pause', mutate);
+    server.post('/api/fleet/spawn', mutate);
+    server.post('/api/agent-groups/:id/run', mutate);
+    server.post('/api/tools/launch', mutate);
+    server.post('/api/tools/run', mutate);
+    server.post('/api/rooms', mutate);
+    server.post('/api/cron', mutate);
+    server.patch('/api/cron/:id', mutate);
+    server.post('/api/memory/merge', mutate);
+    server.patch('/api/sessions/:sessionId', mutate);
+    server.patch('/api/artifacts/:id', mutate);
+    server.delete('/api/artifacts/:id', mutate);
+    server.post('/api/export', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/compliance/export', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/compliance/export-pdf', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/automations/test', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/command/interpret', async () => ({ ok: true, readOnly: true }));
+    server.get('/api/workspaces/:workspaceId/files', async () => ({ ok: true, readOnly: true }));
+
+    await server.ready();
+    return { server, getMutations: () => mutations };
+  }
+
+  it.each([
+    {
+      label: 'workspace path parameter',
+      request: {
+        method: 'POST' as const,
+        url: '/api/workspaces/viewer-workspace/files/delete',
+      },
+    },
+    {
+      label: 'memory body workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/memory/merge',
+        payload: { workspace: 'viewer-workspace' },
+      },
+    },
+    {
+      label: 'body workspaceId',
+      request: {
+        method: 'POST' as const,
+        url: '/api/memory/merge',
+        payload: { workspaceId: 'viewer-workspace' },
+      },
+    },
+    {
+      label: 'session query workspace',
+      request: {
+        method: 'PATCH' as const,
+        url: '/api/sessions/session-1?workspace=viewer-workspace',
+        payload: { title: 'blocked', workspaceId: 'member-workspace' },
+      },
+    },
+    {
+      label: 'artifact query workspaceId',
+      request: {
+        method: 'PATCH' as const,
+        url: '/api/artifacts/artifact-1?workspaceId=viewer-workspace',
+        payload: { title: 'blocked' },
+      },
+    },
+    {
+      label: 'non-workspaces route parameter',
+      request: {
+        method: 'POST' as const,
+        url: '/api/fleet/viewer-workspace/pause',
+      },
+    },
+    {
+      label: 'task route id parameter',
+      request: {
+        method: 'PATCH' as const,
+        url: '/api/workspaces/viewer-workspace/tasks/task-1',
+        payload: { status: 'done' },
+      },
+    },
+    {
+      label: 'PUT task route id parameter',
+      request: {
+        method: 'PUT' as const,
+        url: '/api/workspaces/viewer-workspace/tasks/task-1',
+        payload: { status: 'done' },
+      },
+    },
+    {
+      label: 'DELETE task route id parameter',
+      request: {
+        method: 'DELETE' as const,
+        url: '/api/workspaces/viewer-workspace/tasks/task-1',
+      },
+    },
+    {
+      label: 'fleet parentWorkspaceId',
+      request: {
+        method: 'POST' as const,
+        url: '/api/fleet/spawn',
+        payload: { task: 'blocked', parentWorkspaceId: 'viewer-workspace' },
+      },
+    },
+    {
+      label: 'top-level workspaceIds array',
+      request: {
+        method: 'POST' as const,
+        url: '/api/rooms',
+        payload: {
+          workspaceIds: ['member-workspace', 'viewer-workspace'],
+          source: 'external_tool',
+          title: 'blocked',
+          task: 'blocked',
+        },
+      },
+    },
+    {
+      label: 'nested participant workspaceIds array',
+      request: {
+        method: 'POST' as const,
+        url: '/api/tools/run',
+        payload: {
+          participants: [
+            { toolId: 'codex', workspaceIds: ['member-workspace'] },
+            { toolId: 'claude-code', workspaceIds: ['viewer-workspace'] },
+          ],
+        },
+      },
+    },
+  ])('rejects viewer mutation resolved from $label before the handler runs', async ({ request }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject(request);
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({
+        code: 'VIEWER_READ_ONLY',
+      });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    { method: 'POST' as const, url: '/api/cron', workspaceId: 'global' },
+    { method: 'POST' as const, url: '/api/cron', workspaceId: '*' },
+    { method: 'PATCH' as const, url: '/api/cron/1', workspaceId: '*' },
+  ])('rejects $method $url when $workspaceId expands across a viewer workspace', async (request) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: request.method,
+        url: request.url,
+        payload: { workspaceId: request.workspaceId },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    '/api/fleet/spawn',
+    '/api/agent-groups/group-1/run',
+    '/api/tools/launch',
+  ])('rejects an implicit default viewer workspace on %s', async (url) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url,
+        payload: url === '/api/fleet/spawn'
+          ? { task: 'blocked', workspaceId: 'member-workspace' }
+          : url === '/api/tools/launch'
+            ? { id: 'codex' }
+            : { task: 'blocked' },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    {
+      label: 'team member',
+      request: {
+        method: 'POST' as const,
+        url: '/api/workspaces/member-workspace/files/delete',
+      },
+    },
+    {
+      label: 'personal workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/workspaces/personal-workspace/files/delete',
+      },
+    },
+  ])('allows $label mutations', async ({ request }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject(request);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    {
+      label: 'Fleet parent workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'allowed',
+          parentWorkspaceId: 'member-workspace',
+          workspaceId: 'viewer-workspace',
+        },
+      },
+    },
+    {
+      label: 'agent group workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/agent-groups/group-1/run',
+        payload: { task: 'allowed', workspaceId: 'member-workspace' },
+      },
+    },
+    {
+      label: 'tool launch workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/tools/launch',
+        payload: { id: 'codex', workspaceId: 'member-workspace' },
+      },
+    },
+  ])('allows an explicit member $label instead of the viewer default', async ({ request }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject(request);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    '/api/export',
+    '/api/compliance/export',
+    '/api/compliance/export-pdf',
+    '/api/automations/test',
+    '/api/command/interpret',
+  ])('allows a viewer to use the read-only POST projection %s', async (url) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url,
+        payload: { workspaceId: 'viewer-workspace' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true, readOnly: true });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('allows an ordinary viewer GET', async () => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/workspaces/viewer-workspace/files',
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true, readOnly: true });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+});
