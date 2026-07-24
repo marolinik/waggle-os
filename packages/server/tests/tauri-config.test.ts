@@ -336,6 +336,7 @@ describe('Tauri Production Configuration', () => {
 
   it('pins patched transitive dependency versions used by desktop builds', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8')) as {
+      engines?: { node?: string };
       overrides?: Record<string, string>;
     };
     const lockfile = JSON.parse(
@@ -350,8 +351,10 @@ describe('Tauri Production Configuration', () => {
       'fast-uri': '3.1.4',
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.0',
+      sharp: '0.35.3',
     };
 
+    expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
     expect(manifest.overrides).toMatchObject(expectedOverrides);
 
     const versionsFor = (packageName: string) => {
@@ -368,6 +371,15 @@ describe('Tauri Production Configuration', () => {
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.4']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.0']));
+    expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
+    const sharpBindings = Object.entries(lockfile.packages)
+      .filter(([packagePath]) => (
+        /node_modules\/@img\/sharp-(?!libvips-)[^/]+$/.test(packagePath)
+      ));
+    expect(sharpBindings.length).toBeGreaterThan(0);
+    expect(new Set(sharpBindings.map(([, metadata]) => metadata.version))).toEqual(
+      new Set(['0.35.3']),
+    );
   });
 
   it('rejects unsafe staged dependency versions without native runtime setup', () => {
@@ -399,6 +411,7 @@ describe('Tauri Production Configuration', () => {
     try {
       writeManifest('brace-expansion', 'brace-expansion', '5.0.7');
       writeManifest('fast-uri', 'fast-uri', '3.1.4');
+      writeManifest('sharp', 'sharp', '0.35.3');
       writeManifest(bundledBrace, 'brace-expansion', '2.1.2');
       expect(run().status).toBe(0);
 
@@ -413,6 +426,12 @@ describe('Tauri Production Configuration', () => {
       expect(vulnerableFastUri.status).toBe(1);
       expect(vulnerableFastUri.stderr).toContain('fast-uri@3.1.2');
       writeManifest('fast-uri', 'fast-uri', '3.1.4');
+
+      writeManifest('sharp', 'sharp', '0.34.5');
+      const vulnerableSharp = run();
+      expect(vulnerableSharp.status).toBe(1);
+      expect(vulnerableSharp.stderr).toContain('sharp@0.34.5');
+      writeManifest('sharp', 'sharp', '0.35.3');
 
       writeManifest('vendor/node_modules/js-yaml', 'js-yaml', '4.3.0');
       const stagedDevDependency = run();
@@ -443,8 +462,44 @@ describe('Tauri Production Configuration', () => {
     expect(script).toContain('SELECT 1 AS ok');
     expect(script).toContain('SELECT vec_version() AS version');
     expect(script).toContain('const onnx = require(process.argv[4])');
+    expect(script).toContain('const { RawImage } = require(process.argv[1])');
+    expect(script).toContain('image.toSharp().resize(1, 1).png().toBuffer()');
+    expect(script).toContain('Buffer.from([137,80,78,71,13,10,26,10])');
+    expect(script).toContain('sharp.versions?.emscripten');
+    expect(script).toContain('if (process.argv[3]) require(process.argv[3])');
     expect(script).toContain('process.arch !== process.argv[2]');
   });
+
+  it.runIf(process.platform === 'win32')(
+    'Sharp 0.35.3 works through the Transformers RawImage consumer',
+    () => {
+      const probe = [
+        'const { RawImage } = require("@huggingface/transformers");',
+        'const sharp = require("sharp");',
+        'if (sharp.versions?.emscripten) throw new Error("Sharp fell back to WASM");',
+        'const image = new RawImage(',
+        'Uint8Array.from([255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255]),',
+        '2,2,4);',
+        'void (async () => {',
+        'const buffer = await image.toSharp().resize(1,1).png().toBuffer();',
+        'const signature = Buffer.from([137,80,78,71,13,10,26,10]);',
+        'if (!buffer.subarray(0,8).equals(signature)) throw new Error("invalid PNG");',
+        'process.stdout.write(JSON.stringify({ bytes: buffer.length }));',
+        '})().catch((error) => { console.error(error); process.exit(1); });',
+      ].join('');
+      const result = spawnSync(process.execPath, ['-e', probe], {
+        cwd: ROOT,
+        encoding: 'utf-8',
+        timeout: 30_000,
+        windowsHide: true,
+      });
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        bytes: expect.any(Number),
+      });
+    },
+  );
 
   it('native bundling is fatal on missing payloads and validates target Mach-O architecture', () => {
     const script = fs.readFileSync(
@@ -608,6 +663,69 @@ describe('Tauri Production Configuration', () => {
           { recursive: true },
         );
         const installedOnnxBinding = path.join(installedOnnxBin, 'onnxruntime_binding.node');
+        const fixtureTransformers = path.join(
+          fixtureResources,
+          'node_modules',
+          '@huggingface',
+          'transformers',
+        );
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          'sharp/package.json',
+          JSON.stringify({ name: 'sharp', version: '0.35.3', main: 'index.cjs' }),
+        );
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          'sharp/index.cjs',
+          'module.exports = { versions: { sharp: "0.35.3", vips: "8.18.3" } };',
+        );
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          '@img/sharp-win32-x64/package.json',
+          JSON.stringify({ name: '@img/sharp-win32-x64', version: '0.35.3' }),
+        );
+        fs.cpSync(
+          path.join(ROOT, 'node_modules', '@img', 'sharp-win32-x64', 'lib'),
+          path.join(
+            fixtureResources,
+            'node_modules',
+            '@img',
+            'sharp-win32-x64',
+            'lib',
+          ),
+          { recursive: true },
+        );
+        const stagedSharpBinding = path.join(
+          fixtureResources,
+          'node_modules',
+          '@img',
+          'sharp-win32-x64',
+          'lib',
+          'sharp-win32-x64-0.35.3.node',
+        );
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          '@huggingface/transformers/package.json',
+          JSON.stringify({ name: '@huggingface/transformers', version: '3.8.1' }),
+        );
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          '@huggingface/transformers/dist/transformers.node.cjs',
+          [
+            'class RawImage {',
+            'toSharp() {',
+            'return {',
+            'resize() { return this; },',
+            'png() { return this; },',
+            'async toBuffer() {',
+            'return Buffer.from([137,80,78,71,13,10,26,10,0]);',
+            '},',
+            '};',
+            '}',
+            '}',
+            'module.exports = { RawImage };',
+          ].join(''),
+        );
 
         for (const entry of requiredNativeFiles) {
           const target = writeFixtureFile(path.join(fixtureResources, 'native'), entry);
@@ -671,18 +789,26 @@ describe('Tauri Production Configuration', () => {
         };
         writeCoreManifest('dist/index.js');
 
-        const runChecker = () => {
-          const result = spawnSync(process.execPath, [fixtureChecker], {
-            encoding: 'utf-8',
-            timeout: 60_000,
-            windowsHide: true,
-          });
-          if (result.error) throw result.error;
-          return result;
+        const runChecker = (
+          { withImageRuntime = false }: { withImageRuntime?: boolean } = {},
+        ) => {
+          const hiddenBinding = `${stagedSharpBinding}.fixture-disabled`;
+          if (!withImageRuntime) fs.renameSync(stagedSharpBinding, hiddenBinding);
+          try {
+            const result = spawnSync(process.execPath, [fixtureChecker], {
+              encoding: 'utf-8',
+              timeout: 60_000,
+              windowsHide: true,
+            });
+            if (result.error) throw result.error;
+            return result;
+          } finally {
+            if (!withImageRuntime) fs.renameSync(hiddenBinding, stagedSharpBinding);
+          }
         };
 
         const fixtureMarketplaceBeforeProbe = fs.readFileSync(fixtureMarketplaceResource);
-        const baselineResult = runChecker();
+        const baselineResult = runChecker({ withImageRuntime: true });
         expect(
           baselineResult.status,
           baselineResult.stderr || baselineResult.stdout,
@@ -766,6 +892,30 @@ describe('Tauri Production Configuration', () => {
           expect(invalidRuntimeResult.status).toBe(1);
           expect(invalidRuntimeResult.stderr).toContain('resources native runtime probe failed');
           fs.writeFileSync(target, original);
+        }
+        const stagedSharpBindingContent = fs.readFileSync(stagedSharpBinding);
+        fs.writeFileSync(stagedSharpBinding, 'not a native payload');
+        const invalidImageRuntimeResult = runChecker({ withImageRuntime: true });
+        expect(invalidImageRuntimeResult.status).toBe(1);
+        expect(invalidImageRuntimeResult.stderr).toContain('resources image runtime probe failed');
+        fs.writeFileSync(stagedSharpBinding, stagedSharpBindingContent);
+
+        for (const target of [
+          {
+            manifest: path.join(fixtureResources, 'node_modules', 'sharp', 'package.json'),
+            diagnostic: 'resources/node_modules/sharp',
+          },
+          {
+            manifest: path.join(fixtureTransformers, 'package.json'),
+            diagnostic: 'resources/node_modules/@huggingface/transformers',
+          },
+        ]) {
+          const content = fs.readFileSync(target.manifest);
+          fs.rmSync(target.manifest);
+          const missingImageDependencyResult = runChecker();
+          expect(missingImageDependencyResult.status).toBe(1);
+          expect(missingImageDependencyResult.stderr).toContain(target.diagnostic);
+          fs.writeFileSync(target.manifest, content);
         }
 
         for (const entry of requiredNativeFiles) {
@@ -947,7 +1097,7 @@ describe('Tauri Production Configuration', () => {
             import: './dist/index.js',
           },
         });
-        expect(runChecker().status).toBe(0);
+        expect(runChecker({ withImageRuntime: true }).status).toBe(0);
 
         fs.writeFileSync(
           coreDistEntry,

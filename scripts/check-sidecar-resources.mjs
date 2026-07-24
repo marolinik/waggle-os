@@ -34,6 +34,7 @@ const FIRST_PARTY_RUNTIME_ENTRY_PATTERN = /^(?:dist|package\.json|licen[cs]e(?:\
 const MANUAL_FIRST_PARTY_RUNTIME_TARGETS = new Map([
   ['@waggle/hive-mind-hooks-openclaw', ['dist/handler.bundle.cjs']],
 ]);
+const REQUIRED_SHARP_VERSION = '0.35.3';
 const STAGED_DEPENDENCY_VERSION_ALLOWLISTS = new Map([
   ['brace-expansion', new Set(['1.1.16', '2.1.2', '5.0.7'])],
   ['fast-uri', new Set(['3.1.4'])],
@@ -101,6 +102,21 @@ function stagedDependencyVersionFailures(nodeModulesDir, packageManifests) {
       failures.push(
         `node_modules/${relative} contains ${manifest.name}@${manifest.version}; `
         + `allowed versions: ${[...allowedVersions].join(', ')}`,
+      );
+    }
+    if (
+      (
+        manifest.name === 'sharp'
+        || (
+          typeof manifest.name === 'string'
+          && /^@img\/sharp-(?!libvips-)/.test(manifest.name)
+        )
+      )
+      && manifest.version !== REQUIRED_SHARP_VERSION
+    ) {
+      failures.push(
+        `node_modules/${relative} contains ${manifest.name}@${manifest.version}; `
+        + `required version: ${REQUIRED_SHARP_VERSION}`,
       );
     }
     if (STAGED_DEPENDENCY_DENYLIST.has(manifest.name)) {
@@ -516,6 +532,20 @@ if (process.platform === 'win32') {
 // dies with MODULE_NOT_FOUND on first boot. Probe a canonical external.
 const stagedBetterSqlite = path.join(stagedDepsDir, 'better-sqlite3');
 const stagedOnnxRuntime = path.join(stagedDepsDir, 'onnxruntime-node');
+const stagedTransformers = path.join(stagedDepsDir, '@huggingface', 'transformers');
+const stagedTransformersEntry = path.join(
+  stagedTransformers,
+  'dist',
+  'transformers.node.cjs',
+);
+const stagedSharp = path.join(stagedDepsDir, 'sharp');
+const stagedSharpWindowsBinding = path.join(
+  stagedDepsDir,
+  '@img',
+  'sharp-win32-x64',
+  'lib',
+  `sharp-win32-x64-${REQUIRED_SHARP_VERSION}.node`,
+);
 const vecExtension = path.join(
   nativeDir,
   `vec0.${process.platform === 'win32' ? 'dll' : process.platform === 'darwin' ? 'dylib' : 'so'}`,
@@ -525,6 +555,32 @@ if (!fs.existsSync(path.join(stagedBetterSqlite, 'package.json'))) {
 }
 if (!fs.existsSync(path.join(stagedOnnxRuntime, 'package.json'))) {
   missing.push('resources/node_modules/onnxruntime-node (run: node scripts/stage-sidecar-deps.mjs)');
+}
+if (!fs.existsSync(path.join(stagedTransformers, 'package.json'))) {
+  missing.push(
+    'resources/node_modules/@huggingface/transformers '
+    + '(run: node scripts/stage-sidecar-deps.mjs)',
+  );
+}
+if (!fs.existsSync(stagedTransformersEntry)) {
+  missing.push(
+    'resources/node_modules/@huggingface/transformers/dist/transformers.node.cjs '
+    + '(run: node scripts/stage-sidecar-deps.mjs)',
+  );
+}
+if (!fs.existsSync(path.join(stagedSharp, 'package.json'))) {
+  missing.push('resources/node_modules/sharp (run: node scripts/stage-sidecar-deps.mjs)');
+}
+if (
+  process.platform === 'win32'
+  && targetArch === 'x64'
+  && !fs.existsSync(stagedSharpWindowsBinding)
+) {
+  missing.push(
+    `resources/node_modules/@img/sharp-win32-x64/lib/`
+    + `sharp-win32-x64-${REQUIRED_SHARP_VERSION}.node `
+    + '(run: node scripts/stage-sidecar-deps.mjs)',
+  );
 }
 if (
   fs.existsSync(nodePath)
@@ -563,6 +619,57 @@ if (
     if (marketplaceProbeRoot) {
       fs.rmSync(marketplaceProbeRoot, { recursive: true, force: true });
     }
+  }
+}
+if (
+  fs.existsSync(nodePath)
+  && fs.existsSync(path.join(stagedTransformers, 'package.json'))
+  && fs.existsSync(stagedTransformersEntry)
+  && fs.existsSync(path.join(stagedSharp, 'package.json'))
+  && (
+    process.platform !== 'win32'
+    || targetArch !== 'x64'
+    || fs.existsSync(stagedSharpWindowsBinding)
+  )
+) {
+  try {
+    const imageProbe = [
+      'const { RawImage } = require(process.argv[1]);',
+      'const sharp = require(process.argv[2]);',
+      'if (process.argv[3]) require(process.argv[3]);',
+      'if (sharp.versions?.emscripten) throw new Error("Sharp fell back to WASM");',
+      'void (async () => {',
+      'const image = new RawImage(',
+      'Uint8Array.from([255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255]),',
+      '2,2,4);',
+      'const buffer = await image.toSharp().resize(1, 1).png().toBuffer();',
+      'const signature = Buffer.from([137,80,78,71,13,10,26,10]);',
+      'if (buffer.length < signature.length || !buffer.subarray(0, 8).equals(signature)) {',
+      'throw new Error("Sharp PNG probe failed");',
+      '}',
+      '})().catch((error) => { console.error(error); process.exit(1); });',
+    ].join('');
+    execFileSync(nodePath, [
+      '-e',
+      imageProbe,
+      stagedTransformersEntry,
+      stagedSharp,
+      ...(
+        process.platform === 'win32' && targetArch === 'x64'
+          ? [stagedSharpWindowsBinding]
+          : []
+      ),
+    ], {
+      cwd: resourcesDir,
+      env: { ...process.env, NODE_PATH: stagedDepsDir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (err) {
+    missing.push(
+      `resources image runtime probe failed for @huggingface/transformers and sharp `
+      + `using bundled ${nodeBinary} for ${targetArch} `
+      + `(${err instanceof Error ? err.message : String(err)})`,
+    );
   }
 }
 if (
