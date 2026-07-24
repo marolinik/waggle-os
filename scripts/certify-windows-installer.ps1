@@ -1320,6 +1320,7 @@ $environmentNamesToClear = @(
   'WAGGLE_EMBEDDING_PROVIDER', 'HIVE_MIND_EMBEDDING_PROVIDER',
   'VOYAGE_API_KEY', 'WAGGLE_VOYAGE_API_KEY', 'WAGGLE_EVAL_MODE',
   'WAGGLE_SUPPRESS_EMBEDDING_WARNING', 'WAGGLE_LITELLM_URL',
+  'WAGGLE_NPM_LIFECYCLE_WITNESS_PREFIX',
   'LITELLM_API_KEY', 'LITELLM_MASTER_KEY',
   'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY',
   'GOOGLE_API_KEY', 'XAI_API_KEY', 'DEEPSEEK_API_KEY',
@@ -1884,12 +1885,18 @@ try {
   Invoke-RawProcess $cmdExe ('/d /s /c ""{0}" --version"' -f $bundledNpxWrapper) 60
 
   $offlinePackageSource = Join-Path $scratchRoot 'offline-npm-package'
+  $offlinePackageArchiveRoot = Join-Path $scratchRoot 'offline-npm-archive'
+  $offlinePackageArchivePayload = Join-Path $offlinePackageArchiveRoot 'package'
+  $offlinePackageArchive = Join-Path $scratchRoot 'waggle-offline-install-probe-1.0.0.tgz'
+  $offlinePackageTar = Join-Path $isolationPath 'tar.exe'
+  $offlineLifecycleWitnessPrefix = Join-Path $scratchRoot 'offline-npm-lifecycle'
   $offlineInstallRoot = Join-Path $scratchRoot 'offline-npm-install'
   $offlineCache = Join-Path $scratchRoot 'offline-npm-cache'
   $isolatedUserConfig = Join-Path $scratchRoot 'empty-user.npmrc'
   $isolatedGlobalConfig = Join-Path $scratchRoot 'empty-global.npmrc'
   New-Item -ItemType Directory -Path @(
     $offlinePackageSource,
+    $offlinePackageArchivePayload,
     $offlineInstallRoot,
     $offlineCache
   ) -Force | Out-Null
@@ -1899,28 +1906,52 @@ try {
     name = 'waggle-offline-install-probe'
     version = '1.0.0'
     scripts = [ordered]@{
-      install = "node -e `"require('node:fs').writeFileSync('lifecycle-ran.txt','unexpected')`""
+      prepare = "node -e `"require('node:fs').writeFileSync(process.env.WAGGLE_NPM_LIFECYCLE_WITNESS_PREFIX + '-prepare-ran.txt','unexpected')`""
+      prepack = "node -e `"require('node:fs').writeFileSync(process.env.WAGGLE_NPM_LIFECYCLE_WITNESS_PREFIX + '-prepack-ran.txt','unexpected')`""
+      install = "node -e `"require('node:fs').writeFileSync(process.env.WAGGLE_NPM_LIFECYCLE_WITNESS_PREFIX + '-install-ran.txt','unexpected')`""
     }
   }
   $offlinePackageManifest | ConvertTo-Json -Depth 4 |
     Set-Content -LiteralPath (Join-Path $offlinePackageSource 'package.json') -Encoding UTF8
+  Copy-Item `
+    -LiteralPath (Join-Path $offlinePackageSource 'package.json') `
+    -Destination (Join-Path $offlinePackageArchivePayload 'package.json')
+  Invoke-RawProcess $offlinePackageTar (
+    '-czf "{0}" -C "{1}" package' -f $offlinePackageArchive, $offlinePackageArchiveRoot
+  ) 60
+  $offlinePackageArchiveItem = Get-Item -LiteralPath $offlinePackageArchive -Force
+  Assert-True (
+    $offlinePackageArchiveItem -is [System.IO.FileInfo] -and
+      ($offlinePackageArchiveItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0
+  ) 'Offline npm probe archive is missing or is a reparse point.'
   Assert-True (@(Get-ChildItem -LiteralPath $offlineCache -Force).Count -eq 0) `
     'Offline npm certificate cache was not clean before the probe.'
+  [Environment]::SetEnvironmentVariable(
+    'WAGGLE_NPM_LIFECYCLE_WITNESS_PREFIX',
+    $offlineLifecycleWitnessPrefix,
+    'Process'
+  )
   $npmInstallOutput = @(
     & $bundledNode $bundledNpmCli install --offline --ignore-scripts --no-audit --no-fund `
       --package-lock=false --save=false --userconfig $isolatedUserConfig `
       --globalconfig $isolatedGlobalConfig --cache $offlineCache --prefix $offlineInstallRoot `
-      -- $offlinePackageSource 2>&1
+      -- $offlinePackageArchive 2>&1
   )
   Assert-True ($LASTEXITCODE -eq 0) `
     "Bundled npm offline local install failed: $($npmInstallOutput -join [Environment]::NewLine)"
   $installedOfflinePackage = Join-Path $offlineInstallRoot 'node_modules\waggle-offline-install-probe'
   Assert-True (Test-Path -LiteralPath (Join-Path $installedOfflinePackage 'package.json') -PathType Leaf) `
     'Bundled npm did not install the local offline package.'
-  Assert-True (-not (Test-Path -LiteralPath (Join-Path $installedOfflinePackage 'lifecycle-ran.txt'))) `
-    'Bundled npm executed a lifecycle script despite --ignore-scripts.'
-  Assert-True (-not (Test-Path -LiteralPath (Join-Path $offlinePackageSource 'lifecycle-ran.txt'))) `
-    'Bundled npm executed a lifecycle script in the local package source.'
+  $installedOfflinePackageItem = Get-Item -LiteralPath $installedOfflinePackage -Force
+  Assert-True (
+    $installedOfflinePackageItem -is [System.IO.DirectoryInfo] -and
+      ($installedOfflinePackageItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0
+  ) 'Bundled npm installed the local offline package as a reparse point.'
+  foreach ($lifecycleMarker in @('prepare-ran.txt', 'prepack-ran.txt', 'install-ran.txt')) {
+    $lifecycleWitness = "$offlineLifecycleWitnessPrefix-$lifecycleMarker"
+    Assert-True (-not (Test-Path -LiteralPath $lifecycleWitness)) `
+      "Bundled npm executed lifecycle script marker $lifecycleMarker despite --ignore-scripts."
+  }
   $receipt.checks['silentInstall'] = $true
   $receipt.checks['bundledRuntimePayload'] = $true
   $receipt.checks['bundledNpmCli'] = $true
@@ -2617,6 +2648,8 @@ if ($receipt.status -ne 'passed') {
     $receipt.error
   } elseif ($receipt.Contains('environmentRestoreError')) {
     $receipt['environmentRestoreError']
+  } elseif ($receipt.Contains('scratchCleanupError')) {
+    $receipt['scratchCleanupError']
   } else {
     'unknown failure'
   }

@@ -2132,6 +2132,20 @@ Expect-Rejection {
     expect(script).toContain("resources\\node.exe");
     expect(script).toContain("resources\\service.js");
     expect(script).toContain("resources\\marketplace.db");
+    expect(script).not.toContain('--install-links');
+    expect(script).toContain("$offlinePackageTar = Join-Path $isolationPath 'tar.exe'");
+    expect(script).toContain(
+      "$offlinePackageArchive = Join-Path $scratchRoot 'waggle-offline-install-probe-1.0.0.tgz'",
+    );
+    expect(script).toContain('Invoke-RawProcess $offlinePackageTar');
+    expect(script).toContain('-- $offlinePackageArchive 2>&1');
+    expect(script).toContain(
+      'Bundled npm installed the local offline package as a reparse point.',
+    );
+    expect(script).toContain('prepare-ran.txt');
+    expect(script).toContain('prepack-ran.txt');
+    expect(script).toContain('install-ran.txt');
+    expect(script).toContain("$receipt.Contains('scratchCleanupError')");
     expect(script).toContain("Join-Path $dataDir 'marketplace.db'");
     expect(script).toContain(
       '$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100',
