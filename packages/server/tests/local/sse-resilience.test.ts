@@ -100,6 +100,43 @@ describe('SSE Stream Resilience', () => {
       server.localConfig.litellmUrl = prevLitellmUrl;
     });
 
+    it('scopes concurrent pathless chat turns to the shared home root', async () => {
+      const prevProvider = server.agentState.llmProvider;
+      const prevLitellmUrl = server.localConfig.litellmUrl;
+      const createScopeSpy = vi.spyOn(
+        server.agentState.workspaceTurnCoordinator,
+        'createScope',
+      );
+      server.agentState.llmProvider = ECHO_MODE_PROVIDER;
+      server.localConfig.litellmUrl = 'http://127.0.0.1:1';
+
+      try {
+        const responses = await Promise.all([
+          injectWithAuth(server, {
+            method: 'POST',
+            url: '/api/chat',
+            payload: { message: 'pathless one', session: 'pathless-home-one' },
+          }),
+          injectWithAuth(server, {
+            method: 'POST',
+            url: '/api/chat',
+            payload: { message: 'pathless two', session: 'pathless-home-two' },
+          }),
+        ]);
+
+        expect(responses.map(response => response.statusCode)).toEqual([200, 200]);
+        expect(createScopeSpy).toHaveBeenCalledTimes(2);
+        expect(createScopeSpy.mock.calls.map(([root]) => root)).toEqual([
+          os.homedir(),
+          os.homedir(),
+        ]);
+      } finally {
+        createScopeSpy.mockRestore();
+        server.agentState.llmProvider = prevProvider;
+        server.localConfig.litellmUrl = prevLitellmUrl;
+      }
+    });
+
     it('returns 400 when message is missing', async () => {
       const res = await injectWithAuth(server, {
         method: 'POST',
