@@ -189,7 +189,52 @@ afterEach(async () => {
 
 describe('managed Ollama supply-chain manifest', () => {
   it('pins official HTTPS release artifacts with exact SHA-256 digests and sizes', () => {
-    expect(OLLAMA_RUNTIME_ARTIFACTS).toHaveLength(4);
+    const supportedTargets = [
+      {
+        platform: 'win32',
+        arch: 'x64',
+        filename: 'ollama-windows-amd64.zip',
+        executableName: 'ollama.exe',
+        rollbackSha256: '56561a8f0a904483303c610e61af61c5a7b6f5496ce3707e207d25d4ff67b89e',
+        rollbackSizeBytes: 1_503_047_573,
+        targetSha256: 'c66dd7dde4d5ec4822eaa57dd421d51aa7c633a3ff36a974040837df73a5969e',
+        targetSizeBytes: 1_457_806_156,
+      },
+      {
+        platform: 'win32',
+        arch: 'arm64',
+        filename: 'ollama-windows-arm64.zip',
+        executableName: 'ollama.exe',
+        rollbackSha256: '82b7d36b63e62a44d3f9853c2f8edb829cf871eaf722ce20070e09e96922c0cc',
+        rollbackSizeBytes: 16_346_970,
+        targetSha256: '8431fc4ccf7e86a273dbcc52e81585fc92133e4d6f9c1abdd3663e2568f2fe90',
+        targetSizeBytes: 209_405_705,
+      },
+      {
+        platform: 'darwin',
+        arch: 'x64',
+        filename: 'ollama-darwin.tgz',
+        executableName: 'ollama',
+        rollbackSha256: '3b12a49c6c4cbafd7ffba5ccba60cbf80274cdc22eea3ead79c646aba888174c',
+        rollbackSizeBytes: 145_356_966,
+        targetSha256: '14462bd438815eb2c1d4c61224744637131ab744e858a2e2562e7fc7fc2c4f7d',
+        targetSizeBytes: 145_790_989,
+      },
+      {
+        platform: 'darwin',
+        arch: 'arm64',
+        filename: 'ollama-darwin.tgz',
+        executableName: 'ollama',
+        rollbackSha256: '3b12a49c6c4cbafd7ffba5ccba60cbf80274cdc22eea3ead79c646aba888174c',
+        rollbackSizeBytes: 145_356_966,
+        targetSha256: '14462bd438815eb2c1d4c61224744637131ab744e858a2e2562e7fc7fc2c4f7d',
+        targetSizeBytes: 145_790_989,
+      },
+    ] as const;
+    expect(OLLAMA_RUNTIME_ARTIFACTS).toHaveLength(supportedTargets.length * 2);
+    expect(new Set(OLLAMA_RUNTIME_ARTIFACTS.map(
+      (artifact) => `${artifact.version}:${artifact.platform}:${artifact.arch}`,
+    )).size).toBe(OLLAMA_RUNTIME_ARTIFACTS.length);
     for (const artifact of OLLAMA_RUNTIME_ARTIFACTS) {
       expect(artifact.url).toBe(
         `https://github.com/ollama/ollama/releases/download/v${artifact.version}/${artifact.filename}`,
@@ -197,7 +242,25 @@ describe('managed Ollama supply-chain manifest', () => {
       expect(artifact.sha256).toMatch(/^[a-f0-9]{64}$/);
       expect(artifact.sizeBytes).toBeGreaterThan(10_000_000);
     }
-    expect(resolveOllamaRuntimeArtifact('win32', 'x64')?.filename).toBe('ollama-windows-amd64.zip');
+    for (const supported of supportedTargets) {
+      const trusted = OLLAMA_RUNTIME_ARTIFACTS.filter(
+        (artifact) => artifact.platform === supported.platform && artifact.arch === supported.arch,
+      );
+      expect(trusted.map((artifact) => artifact.version).sort()).toEqual(['0.32.0', '0.32.3']);
+      expect(trusted.find((artifact) => artifact.version === '0.32.0')).toMatchObject({
+        filename: supported.filename,
+        executableName: supported.executableName,
+        sha256: supported.rollbackSha256,
+        sizeBytes: supported.rollbackSizeBytes,
+      });
+      expect(resolveOllamaRuntimeArtifact(supported.platform, supported.arch)).toMatchObject({
+        version: '0.32.3',
+        filename: supported.filename,
+        executableName: supported.executableName,
+        sha256: supported.targetSha256,
+        sizeBytes: supported.targetSizeBytes,
+      });
+    }
     expect(resolveOllamaRuntimeArtifact('linux', 'x64')).toBeNull();
   });
 
@@ -220,7 +283,7 @@ describe('managed Ollama supply-chain manifest', () => {
     });
     expect(runtime.getStatus()).toMatchObject({
       installed: false,
-      targetVersion: '0.32.0',
+      targetVersion: '0.32.3',
       version: null,
     });
   });

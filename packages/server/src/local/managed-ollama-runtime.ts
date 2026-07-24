@@ -24,8 +24,10 @@ import { createLogger } from './logger.js';
 
 const execFileAsync = promisify(execFile);
 const log = createLogger('managed-ollama');
-const OLLAMA_VERSION = '0.32.0';
-const RELEASE_ROOT = `https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}`;
+const OLLAMA_TARGET_VERSION = '0.32.3';
+const OLLAMA_ROLLBACK_VERSION = '0.32.0';
+const ollamaReleaseRoot = (version: string): string =>
+  `https://github.com/ollama/ollama/releases/download/v${version}`;
 const DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
 const START_TIMEOUT_MS = 45_000;
 const STOP_TIMEOUT_MS = 5_000;
@@ -123,43 +125,83 @@ export interface OllamaRuntimeArtifact {
  */
 export const OLLAMA_RUNTIME_ARTIFACTS: ReadonlyArray<OllamaRuntimeArtifact> = [
   {
-    version: OLLAMA_VERSION,
+    version: OLLAMA_ROLLBACK_VERSION,
     platform: 'win32',
     arch: 'x64',
     filename: 'ollama-windows-amd64.zip',
-    url: `${RELEASE_ROOT}/ollama-windows-amd64.zip`,
+    url: `${ollamaReleaseRoot(OLLAMA_ROLLBACK_VERSION)}/ollama-windows-amd64.zip`,
     sha256: '56561a8f0a904483303c610e61af61c5a7b6f5496ce3707e207d25d4ff67b89e',
     sizeBytes: 1_503_047_573,
     executableName: 'ollama.exe',
   },
   {
-    version: OLLAMA_VERSION,
+    version: OLLAMA_ROLLBACK_VERSION,
     platform: 'win32',
     arch: 'arm64',
     filename: 'ollama-windows-arm64.zip',
-    url: `${RELEASE_ROOT}/ollama-windows-arm64.zip`,
+    url: `${ollamaReleaseRoot(OLLAMA_ROLLBACK_VERSION)}/ollama-windows-arm64.zip`,
     sha256: '82b7d36b63e62a44d3f9853c2f8edb829cf871eaf722ce20070e09e96922c0cc',
     sizeBytes: 16_346_970,
     executableName: 'ollama.exe',
   },
   {
-    version: OLLAMA_VERSION,
+    version: OLLAMA_ROLLBACK_VERSION,
     platform: 'darwin',
     arch: 'x64',
     filename: 'ollama-darwin.tgz',
-    url: `${RELEASE_ROOT}/ollama-darwin.tgz`,
+    url: `${ollamaReleaseRoot(OLLAMA_ROLLBACK_VERSION)}/ollama-darwin.tgz`,
     sha256: '3b12a49c6c4cbafd7ffba5ccba60cbf80274cdc22eea3ead79c646aba888174c',
     sizeBytes: 145_356_966,
     executableName: 'ollama',
   },
   {
-    version: OLLAMA_VERSION,
+    version: OLLAMA_ROLLBACK_VERSION,
     platform: 'darwin',
     arch: 'arm64',
     filename: 'ollama-darwin.tgz',
-    url: `${RELEASE_ROOT}/ollama-darwin.tgz`,
+    url: `${ollamaReleaseRoot(OLLAMA_ROLLBACK_VERSION)}/ollama-darwin.tgz`,
     sha256: '3b12a49c6c4cbafd7ffba5ccba60cbf80274cdc22eea3ead79c646aba888174c',
     sizeBytes: 145_356_966,
+    executableName: 'ollama',
+  },
+  {
+    version: OLLAMA_TARGET_VERSION,
+    platform: 'win32',
+    arch: 'x64',
+    filename: 'ollama-windows-amd64.zip',
+    url: `${ollamaReleaseRoot(OLLAMA_TARGET_VERSION)}/ollama-windows-amd64.zip`,
+    sha256: 'c66dd7dde4d5ec4822eaa57dd421d51aa7c633a3ff36a974040837df73a5969e',
+    sizeBytes: 1_457_806_156,
+    executableName: 'ollama.exe',
+  },
+  {
+    version: OLLAMA_TARGET_VERSION,
+    platform: 'win32',
+    arch: 'arm64',
+    filename: 'ollama-windows-arm64.zip',
+    url: `${ollamaReleaseRoot(OLLAMA_TARGET_VERSION)}/ollama-windows-arm64.zip`,
+    sha256: '8431fc4ccf7e86a273dbcc52e81585fc92133e4d6f9c1abdd3663e2568f2fe90',
+    sizeBytes: 209_405_705,
+    executableName: 'ollama.exe',
+  },
+  {
+    version: OLLAMA_TARGET_VERSION,
+    platform: 'darwin',
+    arch: 'x64',
+    filename: 'ollama-darwin.tgz',
+    url: `${ollamaReleaseRoot(OLLAMA_TARGET_VERSION)}/ollama-darwin.tgz`,
+    sha256: '14462bd438815eb2c1d4c61224744637131ab744e858a2e2562e7fc7fc2c4f7d',
+    sizeBytes: 145_790_989,
+    executableName: 'ollama',
+  },
+  {
+    version: OLLAMA_TARGET_VERSION,
+    platform: 'darwin',
+    arch: 'arm64',
+    filename: 'ollama-darwin.tgz',
+    url: `${ollamaReleaseRoot(OLLAMA_TARGET_VERSION)}/ollama-darwin.tgz`,
+    sha256: '14462bd438815eb2c1d4c61224744637131ab744e858a2e2562e7fc7fc2c4f7d',
+    sizeBytes: 145_790_989,
     executableName: 'ollama',
   },
 ];
@@ -289,7 +331,12 @@ export function resolveOllamaRuntimeArtifact(
   platform: NodeJS.Platform = process.platform,
   arch: string = process.arch,
 ): OllamaRuntimeArtifact | null {
-  return OLLAMA_RUNTIME_ARTIFACTS.find((entry) => entry.platform === platform && entry.arch === arch) ?? null;
+  const targets = OLLAMA_RUNTIME_ARTIFACTS.filter(
+    (entry) => entry.platform === platform
+      && entry.arch === arch
+      && entry.version === OLLAMA_TARGET_VERSION,
+  );
+  return targets.length === 1 ? targets[0] : null;
 }
 
 function isLoopbackEndpoint(baseUrl: string): boolean {
