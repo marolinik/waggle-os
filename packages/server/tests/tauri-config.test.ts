@@ -2186,6 +2186,37 @@ Expect-Rejection {
       path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
       'utf-8',
     );
+    const hookSpec = fs.readFileSync(
+      path.join(ROOT, 'tests', 'e2e', 'launcher-real-hook-lifecycle.spec.ts'),
+      'utf-8',
+    );
+    const toolSpec = fs.readFileSync(
+      path.join(ROOT, 'tests', 'e2e', 'launcher-real-tool-lifecycle.spec.ts'),
+      'utf-8',
+    );
+    const playwrightConfig = fs.readFileSync(
+      path.join(ROOT, 'playwright.config.ts'),
+      'utf-8',
+    );
+
+    expect(script).toContain('[string[]]$HostIds = @()');
+    expect(script).toContain("'WAGGLE_E2E_HOST_IDS'");
+    expect(script).toContain(
+      "Set-ProcessEnvironment -Name 'WAGGLE_E2E_HOST_IDS' -Value $requestedHostIds",
+    );
+    expect(script).toContain('HostIds cannot contain empty values.');
+    expect(script).toContain('$emptyHostIds.Count -gt 0');
+    expect(script).toContain('HostIds cannot contain duplicate values:');
+    expect(playwrightConfig).toContain(
+      "url: new URL('/health', e2eBaseURL).toString()",
+    );
+    expect(playwrightConfig).not.toContain('port: e2ePort');
+    for (const spec of [hookSpec, toolSpec]) {
+      expect(spec).toContain('WAGGLE_E2E_HOST_IDS');
+      expect(spec).toContain('Unknown WAGGLE_E2E_HOST_IDS');
+      expect(spec).toContain('Invalid WAGGLE_E2E_HOST_IDS: empty host ID.');
+      expect(spec).toContain('Duplicate WAGGLE_E2E_HOST_IDS:');
+    }
 
     for (const name of [
       'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_ACCESS_TOKEN', 'GITHUB_TOKEN',

@@ -77,6 +77,32 @@ const HOOK_TOOL_CASES: HookToolCase[] = [
   },
 ];
 
+function selectRequestedHookTools(tools: readonly HookToolCase[]): HookToolCase[] {
+  const raw = process.env.WAGGLE_E2E_HOST_IDS;
+  if (raw === undefined) return [...tools];
+
+  const rawIds = raw.split(',');
+  if (rawIds.some(id => id.trim().length === 0)) {
+    throw new Error('Invalid WAGGLE_E2E_HOST_IDS: empty host ID.');
+  }
+  const requestedIds = rawIds.map(id => id.trim());
+  const duplicateIds = requestedIds.filter(
+    (id, index) => requestedIds.indexOf(id) !== index,
+  );
+  if (duplicateIds.length > 0) {
+    throw new Error(`Duplicate WAGGLE_E2E_HOST_IDS: ${[...new Set(duplicateIds)].join(', ')}`);
+  }
+  const availableIds = new Set(tools.map(tool => tool.id));
+  const unknownIds = requestedIds.filter(
+    id => !availableIds.has(id as HookToolCase['id']),
+  );
+  if (unknownIds.length > 0) {
+    throw new Error(`Unknown WAGGLE_E2E_HOST_IDS: ${unknownIds.join(', ')}`);
+  }
+  const requested = new Set(requestedIds);
+  return tools.filter(tool => requested.has(tool.id));
+}
+
 function normalized(value: string): string {
   return path.resolve(value).toLowerCase();
 }
@@ -111,7 +137,7 @@ function assertIsolatedWindowsProfile(hookHome: string): void {
 }
 
 test.describe('Launcher real Windows hook lifecycle', () => {
-  test('runs all seven packaged hook routes with server-owned CLI wiring and reversible temp-profile cleanup', async ({ request }, testInfo) => {
+  test('runs requested packaged hook routes with server-owned CLI wiring and reversible temp-profile cleanup', async ({ request }, testInfo) => {
     test.setTimeout(240_000);
     test.skip(process.platform !== 'win32', 'This real-host safety lane is Windows-specific.');
     test.skip(
@@ -119,6 +145,7 @@ test.describe('Launcher real Windows hook lifecycle', () => {
       'Use scripts/test-windows-external-agents.ps1 to provide a throwaway Windows profile.',
     );
 
+    const hookToolCases = selectRequestedHookTools(HOOK_TOOL_CASES);
     const hookHome = path.resolve(process.env.WAGGLE_E2E_HOOK_HOME!);
     assertIsolatedWindowsProfile(hookHome);
     fs.mkdirSync(hookHome, { recursive: true });
@@ -140,7 +167,7 @@ test.describe('Launcher real Windows hook lifecycle', () => {
     };
 
     try {
-      for (const tool of HOOK_TOOL_CASES) {
+      for (const tool of hookToolCases) {
         const configPath = inside(hookHome, tool.configPath);
         const pointerPath = inside(hookHome, tool.pointerPath);
         const managedHookDir = tool.managedHookDir ? inside(hookHome, tool.managedHookDir) : null;
@@ -184,9 +211,9 @@ test.describe('Launcher real Windows hook lifecycle', () => {
         body: Buffer.from(JSON.stringify({ hookHome, completed }, null, 2)),
         contentType: 'application/json',
       });
-      expect(completed.map(item => item.id)).toEqual(HOOK_TOOL_CASES.map(tool => tool.id));
+      expect(completed.map(item => item.id)).toEqual(hookToolCases.map(tool => tool.id));
     } finally {
-      for (const tool of HOOK_TOOL_CASES) {
+      for (const tool of hookToolCases) {
         for (const cleanupDir of tool.cleanupDirs) safeRemove(hookHome, cleanupDir);
       }
     }

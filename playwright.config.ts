@@ -86,7 +86,7 @@ export default defineConfig({
    * index.ts — no WAGGLE_FRONTEND_DIR override needed. */
   webServer: {
     command: `npm run build:all && npx tsx packages/server/src/local/start.ts${e2eSkipLiteLLM ? ' --skip-litellm' : ''}`,
-    port: e2ePort,
+    url: new URL('/health', e2eBaseURL).toString(),
     reuseExistingServer: e2eReuseExistingServer,
     timeout: 300_000, // Full workspace build + cold tsx sidecar import can exceed 3 min on Windows
     stdout: 'pipe',

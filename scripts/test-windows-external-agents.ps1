@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+  [string[]]$HostIds = @()
+)
 
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') {
@@ -56,6 +58,7 @@ $secretVariables = @(
   'NODE_OPTIONS'
 )
 $runnerVariables = @(
+  'WAGGLE_E2E_HOST_IDS',
   'WAGGLE_E2E_REAL_HOOKS',
   'WAGGLE_E2E_HOOK_HOME',
   'WAGGLE_E2E_REAL_TOOLS',
@@ -67,6 +70,31 @@ $runnerVariables = @(
   'WAGGLE_E2E_REUSE_EXISTING_SERVER'
 )
 $environmentToRestore = @($profileVariables + $secretVariables + $runnerVariables | Select-Object -Unique)
+$requestedHostIds = if ($HostIds.Count -eq 0) {
+  $null
+} else {
+  $emptyHostIds = @(
+    $HostIds | Where-Object { $_ -match '(^|,)\s*(?=,|$)' }
+  )
+  if ($emptyHostIds.Count -gt 0) {
+    throw 'HostIds cannot contain empty values.'
+  }
+  $normalizedHostIds = @(
+    $HostIds |
+      ForEach-Object { $_ -split ',' } |
+      ForEach-Object { $_.Trim() }
+  )
+  $duplicateHostIds = @(
+    $normalizedHostIds |
+      Group-Object |
+      Where-Object { $_.Count -gt 1 } |
+      ForEach-Object { $_.Name }
+  )
+  if ($duplicateHostIds.Count -gt 0) {
+    throw "HostIds cannot contain duplicate values: $($duplicateHostIds -join ', ')"
+  }
+  $normalizedHostIds -join ','
+}
 
 foreach ($name in $environmentToRestore) {
   $item = Get-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
@@ -134,6 +162,7 @@ try {
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_SKIP_LITELLM' -Value '1'
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_REUSE_EXISTING_SERVER' -Value '0'
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_TEMP_ROOT' -Value $runRoot
+  Set-ProcessEnvironment -Name 'WAGGLE_E2E_HOST_IDS' -Value $requestedHostIds
 
   Push-Location $repoRoot
   try {

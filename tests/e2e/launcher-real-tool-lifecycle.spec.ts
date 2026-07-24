@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&skipBriefing=true&tier=power';
-const TOOL_IDS = SUPPORTED_TOOLS;
-const SAFE_VERSION_ARGS: Partial<Record<typeof TOOL_IDS[number], string[]>> = {
+type ToolId = typeof SUPPORTED_TOOLS[number];
+const SAFE_VERSION_ARGS: Partial<Record<ToolId, string[]>> = {
   'claude-code': ['--version'],
   codex: ['--version'],
   hermes: ['--version'],
@@ -54,6 +54,29 @@ const SECRET_ENV_NAMES = [
   'ALL_PROXY',
   'NODE_OPTIONS',
 ] as const;
+
+function selectRequestedToolIds(tools: readonly ToolId[]): ToolId[] {
+  const raw = process.env.WAGGLE_E2E_HOST_IDS;
+  if (raw === undefined) return [...tools];
+
+  const rawIds = raw.split(',');
+  if (rawIds.some(id => id.trim().length === 0)) {
+    throw new Error('Invalid WAGGLE_E2E_HOST_IDS: empty host ID.');
+  }
+  const requestedIds = rawIds.map(id => id.trim());
+  const duplicateIds = requestedIds.filter(
+    (id, index) => requestedIds.indexOf(id) !== index,
+  );
+  if (duplicateIds.length > 0) {
+    throw new Error(`Duplicate WAGGLE_E2E_HOST_IDS: ${[...new Set(duplicateIds)].join(', ')}`);
+  }
+  const unknownIds = requestedIds.filter(id => !tools.includes(id as ToolId));
+  if (unknownIds.length > 0) {
+    throw new Error(`Unknown WAGGLE_E2E_HOST_IDS: ${unknownIds.join(', ')}`);
+  }
+  const requested = new Set(requestedIds);
+  return tools.filter(tool => requested.has(tool));
+}
 
 type DetectedTool = {
   id: string;
@@ -196,7 +219,7 @@ async function waitForProcessClear(request: APIRequestContext, pid: number): Pro
 }
 
 test.describe('Launcher real Windows supported-route lifecycle', () => {
-  test('covers every built-in tool without credentials, unsafe GUI launch, or fabricated workspace ids', async ({ baseURL, page, request }, testInfo) => {
+  test('covers requested built-in tools without credentials, unsafe GUI launch, or fabricated workspace ids', async ({ baseURL, page, request }, testInfo) => {
     test.setTimeout(240_000);
     test.skip(process.platform !== 'win32', 'This real-host route lane is Windows-specific.');
     test.skip(
@@ -212,6 +235,7 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
       SECRET_ENV_NAMES.filter(name => Boolean(process.env[name])),
       'provider and cloud credentials must be scrubbed by the guarded runner',
     ).toEqual([]);
+    const toolIds = selectRequestedToolIds(SUPPORTED_TOOLS);
     const root = baseURL ?? process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
     const detectionResponse = await request.get('/api/tools/detect');
@@ -220,7 +244,7 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
     expect(detection.platform).toBe('win32');
     expect(
       detection.tools.filter(tool => tool.builtin === true).map(tool => tool.id),
-    ).toEqual(TOOL_IDS);
+    ).toEqual(SUPPORTED_TOOLS);
 
     await page.goto(routeWithSkip('/launcher?watch=1'), { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.waggle-sidebar, [role="navigation"], main', { timeout: 15_000 });
@@ -234,7 +258,7 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
     const results: RouteResult[] = [];
 
     try {
-      for (const toolId of TOOL_IDS) {
+      for (const toolId of toolIds) {
         const tool = detection.tools.find(candidate => candidate.id === toolId)!;
         if (!tool.installed || !tool.installedPath) {
           results.push({
@@ -272,7 +296,7 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
             return;
           }
 
-          const args = SAFE_VERSION_ARGS[tool.id as typeof TOOL_IDS[number]];
+          const args = SAFE_VERSION_ARGS[tool.id as ToolId];
           expect(args, `${tool.displayName} must have an audited no-network version command`).toBeTruthy();
           const launchResponse = await request.post('/api/tools/launch', {
             data: {
@@ -307,7 +331,7 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
         });
       }
 
-      expect(results.map(result => result.id)).toEqual(TOOL_IDS);
+      expect(results.map(result => result.id)).toEqual(toolIds);
       expect(results.some(result => result.status !== 'unavailable'), 'at least one real installed tool route').toBe(true);
       await testInfo.attach('windows-external-tool-route-summary', {
         body: Buffer.from(JSON.stringify({ workspace, results }, null, 2)),
