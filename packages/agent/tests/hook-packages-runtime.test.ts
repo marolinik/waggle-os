@@ -314,7 +314,7 @@ describe('hook package installed lifecycle UX', () => {
         fs.mkdirSync(isolatedResources, { recursive: true });
         fs.copyFileSync(SOURCE_BUNDLED_NODE, bundledNode);
         fs.chmodSync(bundledNode, fs.statSync(SOURCE_BUNDLED_NODE).mode);
-        fs.cpSync(SOURCE_STAGED_NODE_MODULES, isolatedNodeModules, {
+        await fs.promises.cp(SOURCE_STAGED_NODE_MODULES, isolatedNodeModules, {
           recursive: true,
           dereference: true,
         });
@@ -467,7 +467,7 @@ describe('hook package installed lifecycle UX', () => {
           }
         }
       } finally {
-        fs.rmSync(tempRoot, { recursive: true, force: true });
+        await fs.promises.rm(tempRoot, { recursive: true, force: true });
       }
     },
     600_000,
