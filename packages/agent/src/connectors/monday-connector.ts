@@ -8,6 +8,7 @@ import type { VaultStore } from '@waggle/core';
 import type { ConnectorHealth } from '@waggle/shared';
 
 const API_URL = 'https://api.monday.com/v2';
+const BOARD_KINDS = new Set(['public', 'private', 'share']);
 
 export class MondayConnector extends BaseConnector {
   readonly id = 'monday';
@@ -167,8 +168,18 @@ export class MondayConnector extends BaseConnector {
   private async listBoards(params: Record<string, unknown>): Promise<ConnectorResult> {
     const limit = (params.limit as number) ?? 25;
     const page = (params.page as number) ?? 1;
-    const kindFilter = params.board_kind ? `, board_kind: ${params.board_kind}` : '';
-    return this.graphql(`{ boards(limit: ${limit}, page: ${page}${kindFilter}) { id name state board_kind columns { id title type } groups { id title } } }`);
+    const boardKind = params.board_kind;
+    if (boardKind !== undefined && (typeof boardKind !== 'string' || !BOARD_KINDS.has(boardKind))) {
+      return { success: false, error: 'Invalid board_kind' };
+    }
+    const kindDefinition = boardKind ? ', $boardKind: BoardKind' : '';
+    const kindFilter = boardKind ? ', board_kind: $boardKind' : '';
+    const variables: Record<string, unknown> = { limit, page };
+    if (boardKind) variables.boardKind = boardKind;
+    return this.graphql(
+      `query ListBoards($limit: Int, $page: Int${kindDefinition}) { boards(limit: $limit, page: $page${kindFilter}) { id name state board_kind columns { id title type } groups { id title } } }`,
+      variables,
+    );
   }
 
   private async listItems(params: Record<string, unknown>): Promise<ConnectorResult> {
@@ -176,35 +187,52 @@ export class MondayConnector extends BaseConnector {
     const boardId = params.boardId;
     if (params.groupId) {
       return this.graphql(
-        `{ boards(ids: [${boardId}]) { groups(ids: ["${params.groupId}"]) { items_page(limit: ${limit}) { items { id name column_values { id text value } } } } } }`,
+        `query ListGroupItems($boardId: ID!, $groupId: String!, $limit: Int) { boards(ids: [$boardId]) { groups(ids: [$groupId]) { items_page(limit: $limit) { items { id name column_values { id text value } } } } } }`,
+        { boardId, groupId: params.groupId, limit },
       );
     }
     return this.graphql(
-      `{ boards(ids: [${boardId}]) { items_page(limit: ${limit}) { items { id name group { id title } column_values { id text value } } } } }`,
+      `query ListItems($boardId: ID!, $limit: Int) { boards(ids: [$boardId]) { items_page(limit: $limit) { items { id name group { id title } column_values { id text value } } } } }`,
+      { boardId, limit },
     );
   }
 
   private async createItem(params: Record<string, unknown>): Promise<ConnectorResult> {
     const { boardId, itemName, groupId, columnValues } = params;
-    let mutation = `mutation { create_item(board_id: ${boardId}, item_name: "${String(itemName).replace(/"/g, '\\"')}"`;
-    if (groupId) mutation += `, group_id: "${groupId}"`;
-    if (columnValues) mutation += `, column_values: ${JSON.stringify(String(columnValues))}`;
-    mutation += `) { id name } }`;
-    return this.graphql(mutation);
+    const definitions = ['$boardId: ID!', '$itemName: String!'];
+    const arguments_ = ['board_id: $boardId', 'item_name: $itemName'];
+    const variables: Record<string, unknown> = { boardId, itemName };
+
+    if (groupId) {
+      definitions.push('$groupId: String');
+      arguments_.push('group_id: $groupId');
+      variables.groupId = groupId;
+    }
+    if (columnValues) {
+      definitions.push('$columnValues: JSON');
+      arguments_.push('column_values: $columnValues');
+      variables.columnValues = columnValues;
+    }
+
+    return this.graphql(
+      `mutation CreateItem(${definitions.join(', ')}) { create_item(${arguments_.join(', ')}) { id name } }`,
+      variables,
+    );
   }
 
   private async updateItem(params: Record<string, unknown>): Promise<ConnectorResult> {
     const { boardId, itemId, columnValues } = params;
     return this.graphql(
-      `mutation { change_multiple_column_values(board_id: ${boardId}, item_id: ${itemId}, column_values: ${JSON.stringify(String(columnValues))}) { id name } }`,
+      `mutation UpdateItem($boardId: ID!, $itemId: ID!, $columnValues: JSON!) { change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id name } }`,
+      { boardId, itemId, columnValues },
     );
   }
 
   private async searchItems(params: Record<string, unknown>): Promise<ConnectorResult> {
     const limit = (params.limit as number) ?? 25;
-    const query = String(params.query).replace(/"/g, '\\"');
     return this.graphql(
-      `{ items_page_by_column_values(limit: ${limit}, board_id: 0, columns: [{column_id: "name", column_values: ["${query}"]}]) { items { id name board { id name } column_values { id text value } } } }`,
+      `query SearchItems($limit: Int, $query: String!) { items_page_by_column_values(limit: $limit, board_id: 0, columns: [{column_id: "name", column_values: [$query]}]) { items { id name board { id name } column_values { id text value } } } }`,
+      { limit, query: params.query },
     );
   }
 }

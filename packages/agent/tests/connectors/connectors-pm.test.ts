@@ -106,6 +106,64 @@ describe('LinearConnector', () => {
     expect(result.data).toEqual(mockData.data);
   });
 
+  it('binds list_issues filters as GraphQL variables', async () => {
+    const vault = createMockVault('linear', { value: 'lin_api_test123', isExpired: false });
+    await connector.connect(vault);
+    const teamInjection = '__WAGGLE_TEAM__" } }) { viewer { id } } #';
+    const stateInjection = '__WAGGLE_STATE__" } }) { viewer { name } } #';
+    const firstInjection = '__WAGGLE_FIRST__) { viewer { id } } #';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { issues: { nodes: [] } } }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await connector.execute('list_issues', {
+      teamId: teamInjection,
+      state: stateInjection,
+      first: firstInjection,
+    });
+
+    expect(result.success).toBe(true);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.query).not.toContain('__WAGGLE_');
+    expect(body.variables).toEqual({
+      first: firstInjection,
+      filter: {
+        team: { id: { eq: teamInjection } },
+        state: { name: { eq: stateInjection } },
+      },
+    });
+  });
+
+  it('binds list limits and preserves default issue filters', async () => {
+    const vault = createMockVault('linear', { value: 'lin_api_test123', isExpired: false });
+    await connector.connect(vault);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const calls: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
+      ['list_issues', {}, { first: 50 }],
+      ['list_projects', {}, { first: 50 }],
+      ['list_teams', {}, { first: 50 }],
+      ['list_projects', { first: '__WAGGLE_PROJECT_FIRST__' }, { first: '__WAGGLE_PROJECT_FIRST__' }],
+      ['list_teams', { first: '__WAGGLE_TEAM_FIRST__' }, { first: '__WAGGLE_TEAM_FIRST__' }],
+    ];
+
+    for (const [action, params, expectedVariables] of calls) {
+      const callIndex = fetchMock.mock.calls.length;
+      const result = await connector.execute(action, params);
+      expect(result.success).toBe(true);
+      const body = JSON.parse((fetchMock.mock.calls[callIndex][1] as RequestInit).body as string);
+      expect(body.query).not.toContain('__WAGGLE_');
+      expect(body.variables).toEqual(expectedVariables);
+      if (action === 'list_issues') expect(body.query).not.toContain('$filter');
+    }
+  });
+
   it('execute returns error for unknown action', async () => {
     const vault = createMockVault('linear', { value: 'lin_api_test123', isExpired: false });
     await connector.connect(vault);
@@ -418,6 +476,172 @@ describe('MondayConnector', () => {
     const result = await connector.execute('list_boards', {});
     expect(result.success).toBe(true);
     expect(result.data).toEqual(mockData.data);
+  });
+
+  it('binds every action value as an exact GraphQL variable', async () => {
+    const vault = createMockVault('monday', { value: 'monday_api_test123', isExpired: false });
+    await connector.connect(vault);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const cases: Array<[
+      string,
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ]> = [
+      [
+        'list_boards',
+        {
+          limit: '__WAGGLE_BOARD_LIMIT__) { users { id } } #',
+          page: '__WAGGLE_BOARD_PAGE__) { users { email } } #',
+          board_kind: 'private',
+        },
+        {
+          limit: '__WAGGLE_BOARD_LIMIT__) { users { id } } #',
+          page: '__WAGGLE_BOARD_PAGE__) { users { email } } #',
+          boardKind: 'private',
+        },
+      ],
+      [
+        'list_items',
+        {
+          boardId: '__WAGGLE_BOARD_ID__]) { users { id } } #',
+          groupId: '__WAGGLE_GROUP_ID__"]) { users { email } } #',
+          limit: '__WAGGLE_ITEM_LIMIT__) { users { id } } #',
+        },
+        {
+          boardId: '__WAGGLE_BOARD_ID__]) { users { id } } #',
+          groupId: '__WAGGLE_GROUP_ID__"]) { users { email } } #',
+          limit: '__WAGGLE_ITEM_LIMIT__) { users { id } } #',
+        },
+      ],
+      [
+        'create_item',
+        {
+          boardId: '__WAGGLE_CREATE_BOARD__',
+          itemName: '__WAGGLE_ITEM_NAME__") { users { id } } #',
+          groupId: '__WAGGLE_CREATE_GROUP__") { users { email } } #',
+          columnValues: '__WAGGLE_CREATE_COLUMNS__") { users { id } } #',
+        },
+        {
+          boardId: '__WAGGLE_CREATE_BOARD__',
+          itemName: '__WAGGLE_ITEM_NAME__") { users { id } } #',
+          groupId: '__WAGGLE_CREATE_GROUP__") { users { email } } #',
+          columnValues: '__WAGGLE_CREATE_COLUMNS__") { users { id } } #',
+        },
+      ],
+      [
+        'update_item',
+        {
+          boardId: '__WAGGLE_UPDATE_BOARD__',
+          itemId: '__WAGGLE_UPDATE_ITEM__',
+          columnValues: '__WAGGLE_UPDATE_COLUMNS__") { users { id } } #',
+        },
+        {
+          boardId: '__WAGGLE_UPDATE_BOARD__',
+          itemId: '__WAGGLE_UPDATE_ITEM__',
+          columnValues: '__WAGGLE_UPDATE_COLUMNS__") { users { id } } #',
+        },
+      ],
+      [
+        'search_items',
+        {
+          query: '__WAGGLE_SEARCH_QUERY__"]) { users { email } } #',
+          limit: '__WAGGLE_SEARCH_LIMIT__) { users { id } } #',
+        },
+        {
+          query: '__WAGGLE_SEARCH_QUERY__"]) { users { email } } #',
+          limit: '__WAGGLE_SEARCH_LIMIT__) { users { id } } #',
+        },
+      ],
+    ];
+
+    for (const [action, params, expectedVariables] of cases) {
+      const callIndex = fetchMock.mock.calls.length;
+      const result = await connector.execute(action, params);
+      expect(result.success).toBe(true);
+      const body = JSON.parse((fetchMock.mock.calls[callIndex][1] as RequestInit).body as string);
+      expect(body.query).not.toContain('__WAGGLE_');
+      expect(body.query).not.toContain('private');
+      expect(body.variables).toEqual(expectedVariables);
+    }
+  });
+
+  it('preserves defaults and optional Monday action branches', async () => {
+    const vault = createMockVault('monday', { value: 'monday_api_test123', isExpired: false });
+    await connector.connect(vault);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const cases: Array<[
+      string,
+      Record<string, unknown>,
+      Record<string, unknown>,
+      string[],
+    ]> = [
+      ['list_boards', {}, { limit: 25, page: 1 }, ['$boardKind']],
+      [
+        'list_items',
+        { boardId: '__WAGGLE_NO_GROUP_BOARD__' },
+        { boardId: '__WAGGLE_NO_GROUP_BOARD__', limit: 50 },
+        ['$groupId'],
+      ],
+      [
+        'create_item',
+        { boardId: '__WAGGLE_REQUIRED_BOARD__', itemName: '__WAGGLE_REQUIRED_NAME__' },
+        { boardId: '__WAGGLE_REQUIRED_BOARD__', itemName: '__WAGGLE_REQUIRED_NAME__' },
+        ['$groupId', '$columnValues'],
+      ],
+      [
+        'search_items',
+        { query: '__WAGGLE_DEFAULT_SEARCH__' },
+        { limit: 25, query: '__WAGGLE_DEFAULT_SEARCH__' },
+        [],
+      ],
+    ];
+
+    for (const [action, params, expectedVariables, omittedDefinitions] of cases) {
+      const callIndex = fetchMock.mock.calls.length;
+      const result = await connector.execute(action, params);
+      expect(result.success).toBe(true);
+      const body = JSON.parse((fetchMock.mock.calls[callIndex][1] as RequestInit).body as string);
+      expect(body.query).not.toContain('__WAGGLE_');
+      expect(body.variables).toEqual(expectedVariables);
+      for (const omitted of omittedDefinitions) expect(body.query).not.toContain(omitted);
+      if (action === 'list_boards') {
+        expect(body.query).toContain('limit: $limit, page: $page');
+        expect(body.query).not.toContain('limit: 25');
+        expect(body.query).not.toContain('page: 1');
+      }
+    }
+  });
+
+  it('binds valid board kinds and rejects all other values before issuing GraphQL', async () => {
+    const vault = createMockVault('monday', { value: 'monday_api_test123', isExpired: false });
+    await connector.connect(vault);
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    for (const boardKind of ['public', 'private', 'share']) {
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ data: {} }) });
+      const callIndex = fetchMock.mock.calls.length;
+      const result = await connector.execute('list_boards', { board_kind: boardKind });
+      expect(result.success).toBe(true);
+      const body = JSON.parse((fetchMock.mock.calls[callIndex][1] as RequestInit).body as string);
+      expect(body.query).not.toContain(boardKind);
+      expect(body.variables).toEqual({ limit: 25, page: 1, boardKind });
+    }
+
+    for (const invalidKind of [
+      'private) { users { id email } } #',
+      'workspace',
+      42,
+      null,
+      { toString: 1 },
+    ]) {
+      const result = await connector.execute('list_boards', { board_kind: invalidKind });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Invalid board_kind');
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('execute returns error for unknown action', async () => {
