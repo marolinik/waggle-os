@@ -171,7 +171,10 @@ import { log, createLogger } from './logger.js';
 import { installErrorHandler } from './error-handler.js';
 import { seedDefaultCrons } from './setup-crons.js';
 import { registerConnectors } from './setup-connectors.js';
-import { securityMiddleware } from './security-middleware.js';
+import {
+  cronScheduleHasReadOnlyViewerTarget,
+  securityMiddleware,
+} from './security-middleware.js';
 import { LocalScheduler, makeRecordExecutionCallback } from './cron.js';
 import { EvolutionService, isEvolutionAutoEnabled } from './services/evolution-service.js';
 import {
@@ -2418,7 +2421,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       category: 'cron',
       actionUrl: '/settings/mission-control',
     });
-  });
+  }, schedule => !cronScheduleHasReadOnlyViewerTarget(schedule, server));
   scheduler.start();
   server.decorate('scheduler', scheduler);
 

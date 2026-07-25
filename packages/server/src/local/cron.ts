@@ -29,6 +29,9 @@ export interface SchedulerNotification {
 /** Optional bridge to the server's persisted + live notification emitter. */
 export type SchedulerNotificationCallback = (notification: SchedulerNotification) => void;
 
+/** Optional authorization guard for automatic ticks and rate-limit resumes. */
+export type AutoExecutionGuard = (schedule: CronSchedule) => boolean;
+
 /**
  * UX-Refactor Phase 3 (Journey 16): the history-persistence half of the
  * production onJobComplete wiring (local/index.ts). Exported as a named
@@ -89,6 +92,7 @@ export class LocalScheduler {
   private executor: JobExecutor;
   private onJobComplete?: JobCompleteCallback;
   private onNotification?: SchedulerNotificationCallback;
+  private canAutoExecute?: AutoExecutionGuard;
   private timer: NodeJS.Timeout | null = null;
   private ticking = false;
   /** Track consecutive failure count per schedule ID */
@@ -107,11 +111,13 @@ export class LocalScheduler {
     executor: JobExecutor,
     onJobComplete?: JobCompleteCallback,
     onNotification?: SchedulerNotificationCallback,
+    canAutoExecute?: AutoExecutionGuard,
   ) {
     this.store = store;
     this.executor = executor;
     this.onJobComplete = onJobComplete;
     this.onNotification = onNotification;
+    this.canAutoExecute = canAutoExecute;
   }
 
   /** Get the current fail count for a schedule (for testing). */
@@ -225,6 +231,8 @@ export class LocalScheduler {
           continue;
         }
 
+        if (!this.canRunAutomatically(schedule)) continue;
+
         const result = await this.runSchedule(schedule);
         if (result.success) executed++;
       }
@@ -323,7 +331,11 @@ export class LocalScheduler {
         this.pendingResumes.delete(scheduleId);
         return;
       }
-      this.executeJob(current)
+      if (!this.canRunAutomatically(current)) {
+        this.pendingResumes.delete(scheduleId);
+        return;
+      }
+      void this.executeJob(current)
         .catch(() => {})
         .finally(() => {
           const active = this.pendingResumes.get(scheduleId);
@@ -332,6 +344,16 @@ export class LocalScheduler {
     }, delay);
     timer.unref();
     this.pendingResumes.set(scheduleId, { fireAtMs, timer });
+  }
+
+  private canRunAutomatically(schedule: CronSchedule): boolean {
+    if (!this.canAutoExecute) return true;
+    try {
+      return this.canAutoExecute(schedule);
+    } catch (err) {
+      log.error(`Automatic execution guard failed closed: ${schedule.id}`, err);
+      return false;
+    }
   }
 
   private clearPendingResume(scheduleId: number): void {

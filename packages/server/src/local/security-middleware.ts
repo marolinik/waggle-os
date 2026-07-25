@@ -13,6 +13,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
+import type { CronSchedule } from '@waggle/core';
 import { isLoopbackBind } from './net-config.js';
 
 // ── Security Headers ────────────────────────────────────────────────────
@@ -437,6 +438,27 @@ function cronScheduleWorkspaceIds(
     return allWorkspaceIds(fastify);
   }
   return explicitOwnerIds;
+}
+
+/**
+ * Resolve a persisted schedule through the same workspace-target rules used by
+ * the HTTP authorization hook. Automatic scheduler paths do not pass through
+ * Fastify, so they must re-check the current role immediately before running.
+ */
+export function cronScheduleHasReadOnlyViewerTarget(
+  schedule: CronSchedule,
+  fastify: FastifyInstance,
+): boolean {
+  return cronScheduleWorkspaceIds(
+    schedule.job_type,
+    schedule.job_config,
+    schedule.workspace_id,
+    fastify,
+    true,
+  ).some((workspaceId) => {
+    const workspace = fastify.workspaceManager?.get(workspaceId);
+    return Boolean(workspace?.teamId && workspace.teamRole === 'viewer');
+  });
 }
 
 function storedMutationWorkspaceIds(

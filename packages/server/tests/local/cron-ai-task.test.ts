@@ -215,6 +215,94 @@ describe('cron ai_task executor (#17)', () => {
     expect(persisted?.count ?? 0).toBe(0);
   });
 
+  it('automatic tick refuses a workspace Loop after the role is downgraded to viewer', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ finish_reason: 'stop', message: { content: 'NOTHING_TO_DO' } }],
+    }), { status: 200 }));
+    const schedule = server.cronStore.create({
+      name: 'Role downgrade guard',
+      cronExpr: '*/5 * * * *',
+      jobType: 'loop',
+      jobConfig: { prompt: 'Inspect the workspace' },
+      workspaceId: wsId,
+    });
+    server.multiMind.personal.getDatabase().prepare(
+      "UPDATE cron_schedules SET next_run_at = datetime('now', '-1 minute') WHERE id = ?",
+    ).run(schedule.id);
+    const workspaceMind = server.agentState.getWorkspaceMindDb(wsId)!;
+    const countFrames = () => (workspaceMind.getDatabase().prepare(
+      'SELECT COUNT(*) AS count FROM memory_frames',
+    ).get() as { count: number }).count;
+    const framesBefore = countFrames();
+    server.workspaceManager.update(wsId, { teamId: 'team-1', teamRole: 'viewer' });
+    const leaseSpy = vi.spyOn(server.cronStore, 'acquireRunLease');
+    const historyBefore = server.cronStore.getExecutionHistory(schedule.id).length;
+
+    try {
+      const executed = await server.scheduler.tick();
+
+      expect(executed).toBe(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(countFrames()).toBe(framesBefore);
+      expect(leaseSpy).not.toHaveBeenCalled();
+      expect(server.cronStore.getExecutionHistory(schedule.id)).toHaveLength(historyBefore);
+      expect(server.cronStore.getById(schedule.id)?.last_run_at).toBeNull();
+      expect(server.cronStore.getById(schedule.id)?.enabled).toBe(1);
+      expect(server.scheduler.getFailCount(schedule.id)).toBe(0);
+
+      server.workspaceManager.update(wsId, { teamId: 'team-1', teamRole: 'member' });
+      expect(await server.scheduler.tick()).toBe(1);
+      expect(fetchMock).toHaveBeenCalled();
+      expect(leaseSpy).toHaveBeenCalledOnce();
+      expect(server.cronStore.getById(schedule.id)?.last_run_at).not.toBeNull();
+    } finally {
+      server.cronStore.update(schedule.id, { enabled: false });
+      server.workspaceManager.update(wsId, { teamId: undefined, teamRole: undefined });
+    }
+  });
+
+  it('blocks a global agent task atomically when any target is a viewer', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: 'Viewer target', group: 'work' },
+    });
+    expect(res.statusCode).toBe(201);
+    const viewerWorkspaceId = JSON.parse(res.body).id as string;
+    const schedule = server.cronStore.create({
+      name: 'Global role guard',
+      cronExpr: '*/5 * * * *',
+      jobType: 'agent_task',
+      jobConfig: { prompt: 'Inspect every workspace', mode: 'ai_task' },
+      workspaceId: '*',
+    });
+    server.multiMind.personal.getDatabase().prepare(
+      "UPDATE cron_schedules SET next_run_at = datetime('now', '-1 minute') WHERE id = ?",
+    ).run(schedule.id);
+    server.workspaceManager.update(viewerWorkspaceId, {
+      teamId: 'team-1',
+      teamRole: 'viewer',
+    });
+    const leaseSpy = vi.spyOn(server.cronStore, 'acquireRunLease');
+
+    try {
+      expect(await server.scheduler.tick()).toBe(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(leaseSpy).not.toHaveBeenCalled();
+      expect(server.cronStore.getExecutionHistory(schedule.id)).toEqual([]);
+      expect(server.cronStore.getById(schedule.id)?.last_run_at).toBeNull();
+      expect(server.cronStore.getById(schedule.id)?.enabled).toBe(1);
+      expect(server.scheduler.getFailCount(schedule.id)).toBe(0);
+      expect(server.cronStore.getDue().some((due) => due.id === schedule.id)).toBe(true);
+    } finally {
+      server.cronStore.update(schedule.id, { enabled: false });
+      server.workspaceManager.update(viewerWorkspaceId, {
+        teamId: undefined,
+        teamRole: undefined,
+      });
+    }
+  });
+
   it('daily cap (24) skips execution before any agent turn', async () => {
     const schedule = server.cronStore.create({
       name: 'Capped',
