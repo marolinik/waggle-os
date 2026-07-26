@@ -324,10 +324,19 @@ const VIEWER_READ_ONLY_POST_EXEMPT_PATHS = new Set([
 ]);
 
 const DEFAULT_WORKSPACE_MUTATION_PATHS = new Set([
+  '/api/chat',
   '/api/fleet/spawn',
   '/api/agent-groups/:id/run',
   '/api/tools/launch',
 ]);
+
+const resolvedChatWorkspaceIds = new WeakMap<FastifyRequest, string | null>();
+
+export function getResolvedChatWorkspaceId(
+  request: FastifyRequest,
+): string | null | undefined {
+  return resolvedChatWorkspaceIds.get(request);
+}
 
 const STORED_CRON_OWNER_PATHS = new Set([
   '/api/cron/:id',
@@ -552,6 +561,22 @@ function mutationWorkspaceIds(
   const body = asRecord(request.body);
   const query = asRecord(request.query);
   if (DEFAULT_WORKSPACE_MUTATION_PATHS.has(routeUrl)) {
+    if (routeUrl === '/api/chat') {
+      const explicitWorkspaceId = stringFields(
+        { workspace: body?.workspace ?? body?.workspaceId },
+        ['workspace'],
+      )[0];
+      const isLiteralDefaultWorkspace = explicitWorkspaceId === 'default'
+        && !!fastify.workspaceManager?.get('default');
+      const resolvedWorkspaceId = explicitWorkspaceId
+        && (explicitWorkspaceId !== 'default' || isLiteralDefaultWorkspace)
+        ? explicitWorkspaceId
+        : fastify.agentState?.activeWorkspaceId ?? null;
+
+      resolvedChatWorkspaceIds.set(request, resolvedWorkspaceId);
+      return resolvedWorkspaceId ? [resolvedWorkspaceId] : [];
+    }
+
     const explicitWorkspaceIds = routeUrl === '/api/fleet/spawn'
       ? stringFields(body, ['parentWorkspaceId'])
       : stringFields(body, ['workspaceId']);

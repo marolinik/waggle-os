@@ -10,8 +10,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
-import { securityMiddleware, RateLimiter, ENDPOINT_RATE_LIMITS } from '../../src/local/security-middleware.js';
+import Fastify, { type FastifyRequest } from 'fastify';
+import {
+  securityMiddleware,
+  RateLimiter,
+  ENDPOINT_RATE_LIMITS,
+  getResolvedChatWorkspaceId,
+} from '../../src/local/security-middleware.js';
 
 // ── Helper: create a test server with security middleware ─────────────
 
@@ -722,12 +727,30 @@ describe('Vault Reveal Origin Enforcement', () => {
 // ── Team viewer read-only enforcement ───────────────────────────────────────
 
 describe('Team viewer read-only enforcement', () => {
-  async function createViewerPolicyServer() {
+  async function createViewerPolicyServer({
+    activeWorkspaceId = 'viewer-workspace',
+    defaultWorkspaceId = activeWorkspaceId,
+    memberWorkspaceFirst = false,
+    managedDefaultRole = null,
+  }: {
+    activeWorkspaceId?: string | null;
+    defaultWorkspaceId?: string | null;
+    memberWorkspaceFirst?: boolean;
+    managedDefaultRole?: 'viewer' | 'member' | null;
+  } = {}) {
     const server = Fastify({ logger: false });
     let mutations = 0;
+    let capturedChatWorkspaceId: string | null | undefined;
 
     server.decorate('workspaceManager', {
       get(workspaceId: string) {
+        if (workspaceId === 'default' && managedDefaultRole) {
+          return {
+            id: workspaceId,
+            teamId: 'managed-default-team',
+            teamRole: managedDefaultRole,
+          };
+        }
         if (workspaceId === 'viewer-workspace') {
           return { id: workspaceId, teamId: 'team-1', teamRole: 'viewer' };
         }
@@ -740,21 +763,32 @@ describe('Team viewer read-only enforcement', () => {
         return null;
       },
       getDefault() {
-        return 'viewer-workspace';
+        return defaultWorkspaceId;
       },
       list() {
+        const teamWorkspaces = memberWorkspaceFirst
+          ? [
+              { id: 'member-workspace', teamId: 'team-1', teamRole: 'member' },
+              { id: 'viewer-workspace', teamId: 'team-1', teamRole: 'viewer' },
+            ]
+          : [
+              { id: 'viewer-workspace', teamId: 'team-1', teamRole: 'viewer' },
+              { id: 'member-workspace', teamId: 'team-1', teamRole: 'member' },
+            ];
         return [
-          { id: 'viewer-workspace', teamId: 'team-1', teamRole: 'viewer' },
-          { id: 'member-workspace', teamId: 'team-1', teamRole: 'member' },
+          ...teamWorkspaces,
           { id: 'personal-workspace' },
         ];
       },
     });
-    server.decorate('agentState', { activeWorkspaceId: 'viewer-workspace' });
+    server.decorate('agentState', { activeWorkspaceId: activeWorkspaceId ?? undefined });
 
     await server.register(securityMiddleware);
 
-    const mutate = async () => {
+    const mutate = async (request: FastifyRequest) => {
+      if (request.routeOptions.url === '/api/chat') {
+        capturedChatWorkspaceId = getResolvedChatWorkspaceId(request);
+      }
       mutations += 1;
       return { ok: true };
     };
@@ -766,6 +800,7 @@ describe('Team viewer read-only enforcement', () => {
     server.post('/api/fleet/spawn', mutate);
     server.post('/api/agent-groups/:id/run', mutate);
     server.post('/api/tools/launch', mutate);
+    server.post('/api/chat', mutate);
     server.post('/api/tools/run', mutate);
     server.post('/api/rooms', mutate);
     server.post('/api/cron', mutate);
@@ -782,8 +817,203 @@ describe('Team viewer read-only enforcement', () => {
     server.get('/api/workspaces/:workspaceId/files', async () => ({ ok: true, readOnly: true }));
 
     await server.ready();
-    return { server, getMutations: () => mutations };
+    return {
+      server,
+      getMutations: () => mutations,
+      getCapturedChatWorkspaceId: () => capturedChatWorkspaceId,
+    };
   }
+
+  it.each([
+    { label: 'omitted workspace', payload: { message: 'blocked' } },
+    { label: 'legacy workspace alias', payload: { message: 'blocked', workspace: 'default' } },
+    { label: 'legacy workspaceId alias', payload: { message: 'blocked', workspaceId: 'default' } },
+    { label: 'explicit viewer workspace', payload: { message: 'blocked', workspace: 'viewer-workspace' } },
+    { label: 'explicit viewer workspaceId', payload: { message: 'blocked', workspaceId: 'viewer-workspace' } },
+  ])('rejects chat mutation through the implicit viewer workspace from $label', async ({ payload }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload,
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not treat the manager default as an implicit chat workspace', async () => {
+    const {
+      server,
+      getMutations,
+      getCapturedChatWorkspaceId,
+    } = await createViewerPolicyServer({
+      activeWorkspaceId: null,
+      defaultWorkspaceId: 'viewer-workspace',
+      memberWorkspaceFirst: true,
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'allowed' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+      expect(getCapturedChatWorkspaceId()).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('prefers the viewer workspace alias over a conflicting member workspaceId', async () => {
+    const { server, getMutations } = await createViewerPolicyServer({
+      activeWorkspaceId: 'member-workspace',
+      defaultWorkspaceId: 'member-workspace',
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'blocked',
+          workspace: 'viewer-workspace',
+          workspaceId: 'member-workspace',
+        },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not treat the first listed workspace as an implicit chat workspace', async () => {
+    const {
+      server,
+      getMutations,
+      getCapturedChatWorkspaceId,
+    } = await createViewerPolicyServer({
+      activeWorkspaceId: null,
+      defaultWorkspaceId: null,
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'allowed' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+      expect(getCapturedChatWorkspaceId()).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rejects a supplied literal managed-default viewer workspace', async () => {
+    const { server, getMutations } = await createViewerPolicyServer({
+      activeWorkspaceId: 'member-workspace',
+      managedDefaultRole: 'viewer',
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'blocked', workspace: 'default' },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('captures a supplied literal managed-default member workspace', async () => {
+    const {
+      server,
+      getMutations,
+      getCapturedChatWorkspaceId,
+    } = await createViewerPolicyServer({
+      activeWorkspaceId: 'viewer-workspace',
+      managedDefaultRole: 'member',
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'allowed', workspaceId: 'default' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+      expect(getCapturedChatWorkspaceId()).toBe('default');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    {
+      label: 'active member workspace before the viewer manager default',
+      activeWorkspaceId: 'member-workspace',
+      defaultWorkspaceId: 'viewer-workspace',
+      payload: { message: 'allowed' },
+      expectedCapturedWorkspaceId: 'member-workspace',
+    },
+    {
+      label: 'member workspace behind the legacy workspace alias',
+      activeWorkspaceId: 'member-workspace',
+      defaultWorkspaceId: 'viewer-workspace',
+      payload: { message: 'allowed', workspace: 'default' },
+      expectedCapturedWorkspaceId: 'member-workspace',
+    },
+    {
+      label: 'personal workspace behind the legacy workspaceId alias',
+      activeWorkspaceId: 'personal-workspace',
+      defaultWorkspaceId: 'viewer-workspace',
+      payload: { message: 'allowed', workspaceId: 'default' },
+      expectedCapturedWorkspaceId: 'personal-workspace',
+    },
+  ])(
+    'allows chat mutation through the $label',
+    async ({
+      activeWorkspaceId,
+      defaultWorkspaceId,
+      payload,
+      expectedCapturedWorkspaceId,
+    }) => {
+      const {
+        server,
+        getMutations,
+        getCapturedChatWorkspaceId,
+      } = await createViewerPolicyServer({
+        activeWorkspaceId,
+        defaultWorkspaceId,
+      });
+      try {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/api/chat',
+          payload,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ ok: true });
+        expect(getMutations()).toBe(1);
+        expect(getCapturedChatWorkspaceId()).toBe(expectedCapturedWorkspaceId);
+      } finally {
+        await server.close();
+      }
+    },
+  );
 
   it.each([
     {
@@ -959,6 +1189,26 @@ describe('Team viewer read-only enforcement', () => {
       request: {
         method: 'POST' as const,
         url: '/api/workspaces/personal-workspace/files/delete',
+      },
+    },
+    {
+      label: 'chat workspace alias precedence',
+      request: {
+        method: 'POST' as const,
+        url: '/api/chat',
+        payload: {
+          message: 'allowed',
+          workspace: 'member-workspace',
+          workspaceId: 'viewer-workspace',
+        },
+      },
+    },
+    {
+      label: 'chat personal workspaceId',
+      request: {
+        method: 'POST' as const,
+        url: '/api/chat',
+        payload: { message: 'allowed', workspaceId: 'personal-workspace' },
       },
     },
   ])('allows $label mutations', async ({ request }) => {
