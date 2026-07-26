@@ -191,7 +191,8 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
     // 1. bash — Execute shell commands
     {
       name: 'bash',
-      description: 'Execute a shell command in the workspace directory',
+      description: 'Execute an explicitly approved host shell command starting in the workspace directory. This is host-wide execution, not an OS sandbox.',
+      riskLevel: 'high',
       offlineCapable: true,
       parameters: {
         type: 'object',
@@ -961,10 +962,11 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
       },
     },
 
-    // 11. run_code — Execute code in a sandboxed environment
+    // 11. run_code — Execute code in an explicitly approved host child process
     {
       name: 'run_code',
-      description: 'Execute a code snippet in an approved local child process with a minimal environment. This is not an OS sandbox. Supports JavaScript/TypeScript and Python (if installed).',
+      description: 'Execute an explicitly approved code snippet in a host child process starting in the workspace directory. This is host-wide execution, not an OS sandbox. Supports JavaScript/TypeScript and Python (if installed).',
+      riskLevel: 'high',
       offlineCapable: true,
       parameters: {
         type: 'object',

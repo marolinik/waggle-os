@@ -3,6 +3,8 @@ import { createSanitizedEnv, createSystemTools, extractWebPageText } from '../sr
 import { execFileWithTreeTimeout } from '../src/system-tools-helpers.js';
 import { capToolResultForModel } from '../src/agent-run-budget.js';
 import { untrustedContextWrapper } from '../src/untrusted-context.js';
+import { executeToolCall } from '../src/tool-executor.js';
+import { LoopGuard } from '../src/loop-guard.js';
 import type { ToolDefinition } from '../src/tools.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -85,6 +87,41 @@ describe('createSystemTools', () => {
     expect(names).toContain('kill_task');
     expect(names).toContain('run_code');
     expect(tools).toHaveLength(12);
+  });
+
+  it('labels host execution tools high risk and describes their host-wide access', () => {
+    const bash = getTool('bash');
+    const runCode = getTool('run_code');
+
+    expect(bash.riskLevel).toBe('high');
+    expect(runCode.riskLevel).toBe('high');
+    expect(bash.description).toMatch(/host.*not.*sandbox/i);
+    expect(runCode.description).toMatch(/host.*not.*sandbox/i);
+  });
+
+  it('denies ordinary bash without a human-approval mechanism', async () => {
+    let executed = false;
+    const bash = {
+      ...getTool('bash'),
+      execute: async () => {
+        executed = true;
+        return 'executed';
+      },
+    };
+    const result = await executeToolCall({
+      id: 'ordinary-bash',
+      function: {
+        name: 'bash',
+        arguments: JSON.stringify({ command: 'echo hello' }),
+      },
+    }, {
+      toolMap: new Map([['bash', bash]]),
+      guard: new LoopGuard(),
+    });
+
+    expect(result.content).toContain('[BLOCKED]');
+    expect(result.countedAsUsed).toBe(false);
+    expect(executed).toBe(false);
   });
 
   describe('bash', () => {
