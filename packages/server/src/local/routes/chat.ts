@@ -14,6 +14,7 @@ import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
+import { resolveGrantRiskLevel } from '../approval-grants.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
 import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, isClosedWorldRewriteRequest, type AssembledPrompt } from '@waggle/agent';
@@ -376,11 +377,13 @@ interface ApprovalWaitOptions {
     toolName: string;
     input: Record<string, unknown>;
     timestamp: number;
+    riskLevel?: RiskLevel;
   }>;
   cronStore: Pick<CronStore, 'savePendingAction'>;
   requestId: string;
   toolName: string;
   input: Record<string, unknown>;
+  riskLevel?: RiskLevel;
   heldAction: Omit<SavePendingActionInput, 'id' | 'source' | 'expiresAt'>;
   heldEvent: Record<string, unknown>;
   policy: ApprovalTimeoutPolicy;
@@ -400,6 +403,7 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
       toolName: options.toolName,
       input: options.input,
       timestamp: Date.now(),
+      riskLevel: options.riskLevel,
     });
 
     abortHandler = () => {
@@ -1870,6 +1874,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             && (RISK_LEVELS as readonly string[]).includes(ctx.riskLevel)
             ? ctx.riskLevel as RiskLevel
             : undefined;
+          const grantRiskLevel = resolveGrantRiskLevel(
+            ctx.toolName,
+            args,
+            trustedRiskLevel,
+          );
 
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
@@ -1934,8 +1943,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // chose "Always allow" for this (tool, target) combination, skip the
           // approval prompt silently.
           if (
-            !isCriticalNeverAutopass(ctx.toolName, args, trustedRiskLevel)
-            && server.agentState.approvalGrantStore.has(ctx.toolName, args, effectiveWorkspace || null)
+            !isCriticalNeverAutopass(ctx.toolName, args, grantRiskLevel)
+            && server.agentState.approvalGrantStore.has(
+              ctx.toolName,
+              args,
+              effectiveWorkspace || null,
+              grantRiskLevel,
+            )
           ) {
             sendEvent('step', { content: `\u2714 ${ctx.toolName} allowed by saved grant` });
             return { authorize: true };
@@ -2015,7 +2029,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // still cancels this live execution, but preserves the proposed call
           // in the durable Approvals inbox for an explicit later decision.
           const summary = typeof trustMeta?.description === 'string' ? trustMeta.description : describeToolUse(toolName, input);
-          const riskLevel = typeof trustMeta?.riskLevel === 'string' ? trustMeta.riskLevel : 'medium';
+          const riskLevel = typeof trustMeta?.riskLevel === 'string'
+            && (RISK_LEVELS as readonly string[]).includes(trustMeta.riskLevel)
+            ? trustMeta.riskLevel as RiskLevel
+            : grantRiskLevel;
           const approvalClass = typeof trustMeta?.approvalClass === 'string' ? trustMeta.approvalClass : 'elevated';
           const { approved, held, timedOut } = await waitForApprovalDecision({
             pendingApprovals: server.agentState.pendingApprovals,
@@ -2023,6 +2040,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             requestId,
             toolName,
             input,
+            riskLevel,
             heldAction: {
               workspaceId: effectiveWorkspace || null,
               toolName,

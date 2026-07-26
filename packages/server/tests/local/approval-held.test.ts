@@ -6,14 +6,18 @@ import * as os from 'node:os';
 import { MindDB, CronStore } from '@waggle/core';
 import { approvalRoutes } from '../../src/local/routes/approval.js';
 import { securityMiddleware } from '../../src/local/security-middleware.js';
-import { ApprovalGrantStore } from '../../src/local/approval-grants.js';
+import {
+  ApprovalGrantStore,
+  isGrantableTool,
+  resolveGrantRiskLevel,
+} from '../../src/local/approval-grants.js';
 
 describe('approval routes — held actions (L2 union)', () => {
   let tmpDir: string;
   let db: MindDB;
   let store: CronStore;
   let server: ReturnType<typeof Fastify>;
-  let pendingApprovals: Map<string, { toolName: string; input: Record<string, unknown>; timestamp: number; resolve: (v: boolean) => void }>;
+  let pendingApprovals: Map<string, { toolName: string; input: Record<string, unknown>; timestamp: number; riskLevel?: 'low' | 'medium' | 'high' | 'critical'; resolve: (v: boolean) => void }>;
   let execSpy: ReturnType<typeof vi.fn>;
   let buildToolsSpy: ReturnType<typeof vi.fn>;
   let grantSpy: ReturnType<typeof vi.fn>;
@@ -223,6 +227,51 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(grantSpy).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { id: 'delete-skill', toolName: 'delete_skill', input: { name: 'critical-skill' } },
+    { id: 'opaque-high', toolName: 'opaque_plugin_action', input: {}, riskLevel: 'high' as const },
+    {
+      id: 'install-capability',
+      toolName: 'install_capability',
+      input: { name: 'marketplace-skill', source: 'marketplace' },
+    },
+    {
+      id: 'connector-send',
+      toolName: 'connector_outlook_send_email',
+      input: { to: 'user@example.test', subject: 'Hello' },
+      riskLevel: resolveGrantRiskLevel(
+        'connector_outlook_send_email',
+        { to: 'user@example.test', subject: 'Hello' },
+        'medium',
+      ),
+    },
+  ])('downgrades always approval for critical request $toolName', async ({
+    id,
+    toolName,
+    input,
+    riskLevel,
+  }) => {
+    const resolve = vi.fn();
+    pendingApprovals.set(id, {
+      toolName,
+      input,
+      timestamp: 1,
+      riskLevel,
+      resolve,
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/approval/${id}`,
+      payload: { approved: true, always: true, sourceWorkspaceId: 'w1' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ approved: true, always: false });
+    expect(resolve).toHaveBeenCalledWith(true);
+    expect(grantSpy).not.toHaveBeenCalled();
+  });
+
   it('persists always approval for a grantable scoped tool', async () => {
     const resolve = vi.fn();
     const input = { path: 'notes.txt' };
@@ -242,7 +291,12 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ approved: true, always: true });
     expect(resolve).toHaveBeenCalledWith(true);
-    expect(grantSpy).toHaveBeenCalledWith('write_file', input, 'w1');
+    expect(grantSpy).toHaveBeenCalledWith(
+      'write_file',
+      input,
+      'w1',
+      { trustedRiskLevel: undefined },
+    );
   });
 
   it('POST approve is idempotent — re-approving an executed held id is 409 (already decided)', async () => {
@@ -255,8 +309,8 @@ describe('approval routes — held actions (L2 union)', () => {
   });
 });
 
-describe('host execution approval grants', () => {
-  it('ignores legacy host grants, rejects new ones, and preserves scoped file grants', () => {
+describe('critical approval grants', () => {
+  it('ignores legacy critical grants, rejects new ones, and preserves scoped file grants', () => {
     const grantDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-host-grants-'));
     try {
       fs.writeFileSync(
@@ -271,22 +325,83 @@ describe('host execution approval grants', () => {
             description: 'legacy shell grant',
             grantedAt: new Date().toISOString(),
             expiresAt: null,
+          }, {
+            id: 'legacy-delete-skill',
+            toolName: 'delete_skill',
+            targetKey: '*',
+            sourceWorkspaceId: 'w1',
+            description: 'legacy destructive grant',
+            grantedAt: new Date().toISOString(),
+            expiresAt: null,
+          }, {
+            id: 'legacy-install-capability',
+            toolName: 'install_capability',
+            targetKey: '*',
+            sourceWorkspaceId: 'w1',
+            description: 'legacy install grant',
+            grantedAt: new Date().toISOString(),
+            expiresAt: null,
+          }, {
+            id: 'legacy-connector-send',
+            toolName: 'connector_outlook_send_email',
+            targetKey: '*',
+            sourceWorkspaceId: 'w1',
+            description: 'legacy connector send grant',
+            grantedAt: new Date().toISOString(),
+            expiresAt: null,
           }],
         }),
         'utf-8',
       );
       const grants = new ApprovalGrantStore(grantDir);
 
-      for (const toolName of ['bash', 'run_code', 'cli_execute']) {
+      for (const toolName of [
+        'bash',
+        'run_code',
+        'cli_execute',
+        'install_capability',
+        'connector_outlook_send_email',
+      ]) {
         expect(grants.has(toolName, {}, 'w1')).toBe(false);
       }
       expect(grants.list()).toEqual([]);
       for (const toolName of ['bash', 'run_code', 'cli_execute']) {
         expect(() => grants.grant(toolName, {}, 'w1')).toThrow(/cannot be persisted/i);
       }
+      const criticalGrants: Array<{
+        toolName: string;
+        args: Record<string, unknown>;
+        options?: { trustedRiskLevel?: 'low' | 'medium' | 'high' | 'critical' };
+      }> = [
+        { toolName: 'delete_skill', args: { name: 'critical-skill' } },
+        { toolName: 'git_push', args: { force: true, branch: 'main' } },
+        {
+          toolName: 'install_capability',
+          args: { name: 'marketplace-skill', source: 'marketplace' },
+        },
+        {
+          toolName: 'connector_outlook_send_email',
+          args: { to: 'user@example.test', subject: 'Hello' },
+          options: { trustedRiskLevel: 'medium' },
+        },
+        { toolName: 'opaque_plugin_action', args: {}, options: { trustedRiskLevel: 'high' } },
+      ];
+      for (const { toolName, args, options } of criticalGrants) {
+        expect(() => grants.grant(toolName, args, 'w1', options)).toThrow(/cannot be persisted/i);
+      }
 
       grants.grant('write_file', { path: 'notes.txt' }, 'w1');
       expect(grants.has('write_file', { path: 'notes.txt' }, 'w1')).toBe(true);
+      expect(resolveGrantRiskLevel(
+        'connector_outlook_send_email',
+        { to: 'user@example.test' },
+        'medium',
+      )).toBe('high');
+      expect(isGrantableTool(
+        'connector_outlook_send_email',
+        { to: 'user@example.test' },
+        'medium',
+      )).toBe(false);
     } finally {
       fs.rmSync(grantDir, { recursive: true, force: true });
     }

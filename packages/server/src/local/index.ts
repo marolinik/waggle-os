@@ -69,7 +69,7 @@ import {
 } from '@waggle/agent';
 import { PluginRuntimeManager, getStarterSkillsDir, validatePluginManifest } from '@waggle/sdk';
 import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '@waggle/marketplace';
-import { parseTier } from '@waggle/shared';
+import { parseTier, type RiskLevel } from '@waggle/shared';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import { runConnectorFetch } from './connector-harvest.js';
 import { writeAutoSyncSummaryFrame } from './harvest-autosync-frame.js';
@@ -217,6 +217,7 @@ export interface PendingApproval {
   toolName: string;
   input: Record<string, unknown>;
   timestamp: number;
+  riskLevel?: RiskLevel;
 }
 
 /**
