@@ -14,6 +14,7 @@ describe('approval routes — held actions (L2 union)', () => {
   let server: ReturnType<typeof Fastify>;
   let pendingApprovals: Map<string, { toolName: string; input: Record<string, unknown>; timestamp: number; resolve: (v: boolean) => void }>;
   let execSpy: ReturnType<typeof vi.fn>;
+  let buildToolsSpy: ReturnType<typeof vi.fn>;
   let literalDefaultIsViewer: boolean;
 
   beforeEach(async () => {
@@ -22,6 +23,7 @@ describe('approval routes — held actions (L2 union)', () => {
     store = new CronStore(db);
     pendingApprovals = new Map();
     execSpy = vi.fn(async () => 'email sent');
+    buildToolsSpy = vi.fn(() => [{ name: 'send_email', description: '', parameters: {}, execute: execSpy }]);
     literalDefaultIsViewer = false;
 
     server = Fastify({ logger: false });
@@ -50,7 +52,7 @@ describe('approval routes — held actions (L2 union)', () => {
       cronStore: store,
       pendingApprovals,
       approvalGrantStore: { grant: vi.fn() },
-      buildToolsForWorkspace: () => [{ name: 'send_email', description: '', parameters: {}, execute: execSpy }],
+      buildToolsForWorkspace: buildToolsSpy,
     });
     await server.register(securityMiddleware);
     await server.register(approvalRoutes);
@@ -92,6 +94,11 @@ describe('approval routes — held actions (L2 union)', () => {
     const res = await server.inject({ method: 'POST', url: '/api/approval/pa-1', payload: { approved: true } });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, approved: true, status: 'executed' });
+    expect(buildToolsSpy).toHaveBeenCalledWith(
+      path.join(tmpDir, 'workspaces', 'w1', 'files'),
+      undefined,
+      'w1',
+    );
     expect(execSpy).toHaveBeenCalledWith({ to: 'x@y.z' });
     expect(store.getPendingAction('pa-1')!.status).toBe('executed');
   });
@@ -122,9 +129,9 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(store.getPendingAction('viewer-held')!.status).toBe('held');
   });
 
-  it.each([null, '*'])('held action owned by %s blocks when its executor target is the literal default viewer workspace', async (workspaceId) => {
+  it('wildcard held action blocks when its executor target is the literal default viewer workspace', async () => {
     literalDefaultIsViewer = true;
-    hold('default-held', workspaceId);
+    hold('default-held', '*');
 
     const res = await server.inject({
       method: 'POST',
@@ -138,6 +145,22 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(store.getPendingAction('default-held')!.status).toBe('held');
   });
 
+  it('personal held action executes in the personal root without targeting managed default', async () => {
+    literalDefaultIsViewer = true;
+    hold('personal-held', null);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/approval/personal-held',
+      payload: { approved: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, status: 'executed' });
+    expect(buildToolsSpy).toHaveBeenCalledWith(os.homedir(), undefined, undefined);
+    expect(execSpy).toHaveBeenCalledOnce();
+  });
+
   it('wildcard held action does not inherit unrelated viewer workspaces outside its executor target', async () => {
     hold('wildcard-held', '*');
 
@@ -149,6 +172,11 @@ describe('approval routes — held actions (L2 union)', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, status: 'executed' });
+    expect(buildToolsSpy).toHaveBeenCalledWith(
+      path.join(tmpDir, 'workspaces', 'default', 'files'),
+      undefined,
+      'default',
+    );
     expect(execSpy).toHaveBeenCalledOnce();
     expect(store.getPendingAction('wildcard-held')!.status).toBe('executed');
   });

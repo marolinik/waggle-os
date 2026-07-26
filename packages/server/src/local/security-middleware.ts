@@ -482,6 +482,7 @@ function storedMutationWorkspaceIds(
     if (!requestId) return [];
     const held = fastify.cronStore?.getPendingAction(requestId);
     if (!held) return [];
+    if (held.workspace_id === null) return [];
     if (held.workspace_id && held.workspace_id !== '*') return [held.workspace_id];
     return ['default'];
   }

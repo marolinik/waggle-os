@@ -15,11 +15,13 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { PendingActionRow, PendingActionStatus } from '@waggle/core';
 import { scanForInjection, isCriticalNeverAutopass, classifyGatedToolRisk } from '@waggle/agent';
 import { emitNotification } from './routes/notifications.js';
+import { isSafeSegment } from './routes/validate.js';
 
 const nowIso = (): string => new Date().toISOString();
 
@@ -180,11 +182,21 @@ export async function executeHeldAction(server: FastifyInstance, row: PendingAct
     store.updatePendingActionResult(row.id, { status: 'failed', error: 'failed execute-time re-validation', executedAt: nowIso() });
     return { ok: false, status: 'failed', error: 'failed re-validation' };
   }
+  if (row.workspace_id !== null && row.workspace_id !== '*' && !isSafeSegment(row.workspace_id)) {
+    store.updatePendingActionResult(row.id, { status: 'failed', error: 'invalid workspace id', executedAt: nowIso() });
+    return { ok: false, status: 'failed', error: 'invalid workspace id' };
+  }
 
   try {
     const wsId = row.workspace_id && row.workspace_id !== '*' ? row.workspace_id : 'default';
-    const wsPath = path.join(server.localConfig.dataDir, 'workspaces', wsId, 'files');
-    const tools = server.agentState.buildToolsForWorkspace(wsPath, undefined, row.workspace_id ?? undefined);
+    const wsPath = row.workspace_id === null
+      ? os.homedir()
+      : path.join(server.localConfig.dataDir, 'workspaces', wsId, 'files');
+    const tools = server.agentState.buildToolsForWorkspace(
+      wsPath,
+      undefined,
+      row.workspace_id === null ? undefined : wsId,
+    );
     // The maker proposes the friendly bare name `send_email`; the real tool is a
     // connector (connector_<id>_send_email). Resolve the alias against the LIVE
     // pool at execute time (connection state can change between propose + approve).
