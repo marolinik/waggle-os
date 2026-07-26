@@ -12,7 +12,7 @@ import { HIVE_MIND_MARKER } from '../src/adapter.js';
 const execFileAsync = promisify(execFile);
 
 function decodedHookCommand(command: string): string {
-  const match = /^%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command);
+  const match = /^[A-Za-z]:\\[A-Za-z0-9._\\-]+\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command);
   return match ? Buffer.from(match[1], 'base64').toString('utf16le') : command;
 }
 
@@ -163,7 +163,7 @@ describe('install (codex)', () => {
       after.hooks.Stop[0].hooks[0].command,
     ]) {
       if (process.platform === 'win32') {
-        expect(command).toMatch(/^%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe .* -EncodedCommand [A-Za-z0-9+/=]+$/);
+        expect(command).toMatch(/^[A-Za-z]:\\[A-Za-z0-9._\\-]+\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe .* -EncodedCommand [A-Za-z0-9+/=]+$/);
         expect(command).not.toContain('"');
       }
       const payload = decodedHookCommand(command);

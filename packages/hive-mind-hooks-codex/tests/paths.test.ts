@@ -56,6 +56,14 @@ describe('hookCommandFor (codex)', () => {
     expect(cmd).not.toContain('--cli-path');
   });
 
+  it('rejects a Windows root unsafe to embed in either host shell', () => {
+    expect(() => hookCommandFor('C:\\hooks\\session-start.js', undefined, {
+      platform: 'win32',
+      nodePath: 'C:\\runtime\\node.exe',
+      systemRoot: 'C:\\Windows & attacker',
+    })).toThrow(/SystemRoot/);
+  });
+
   it.runIf(process.platform === 'win32')(
     'survives Codex Rust cmd.exe /C dispatch with spaces and apostrophes',
     async () => {
@@ -116,8 +124,12 @@ fn main() {
         });
         expect(compile.status, compile.stderr).toBe(0);
 
-        const command = hookCommandFor(scriptPath, cliPath, { platform: 'win32', nodePath });
-        expect(command).toMatch(/^%SystemRoot%\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand [A-Za-z0-9+/=]+$/);
+        const command = hookCommandFor(scriptPath, cliPath, {
+          platform: 'win32',
+          nodePath,
+          systemRoot: 'C:\\Windows',
+        });
+        expect(command).toMatch(/^C:\\Windows\\System32\\WindowsPowerShell\\v1\.0\\powershell\.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand [A-Za-z0-9+/=]+$/);
         expect(command).not.toContain('"');
         const payload = Buffer.from(command.split(' ').at(-1) as string, 'base64').toString('utf16le');
         expect(payload).toContain(`& '${nodePath.replaceAll("'", "''")}'`);
@@ -136,11 +148,80 @@ fn main() {
           stdoutMarker,
         });
         expect(run.stderr).toBe(stderrMarker);
+
+        const missingCommand = hookCommandFor(scriptPath, cliPath, {
+          platform: 'win32',
+          nodePath: join(root, 'missing-node.exe'),
+          systemRoot: 'C:\\Windows',
+        });
+        const missingRun = spawnSync(rustExe, [], {
+          cwd: root,
+          env: { ...process.env, CODEX_TEST_COMMAND: missingCommand },
+          encoding: 'utf8',
+          windowsHide: true,
+        });
+        expect(missingRun.status, missingRun.stderr).not.toBe(0);
       } finally {
         await rm(root, { recursive: true, force: true });
       }
     },
     30_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'survives Codex PowerShell host dispatch',
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'codex-powershell-host-'));
+      try {
+        const scriptPath = join(root, 'session-start.mjs');
+        const decoyPowerShell = join(root, 'powershell.exe');
+        await writeFile(scriptPath, 'process.stdin.pipe(process.stdout);\n', 'utf8');
+        await writeFile(decoyPowerShell, 'DECOY_WORKSPACE_POWERSHELL', 'utf8');
+
+        const command = hookCommandFor(scriptPath, undefined, {
+          platform: 'win32',
+          nodePath: process.execPath,
+        });
+        const hostPowerShell = join(
+          process.env.SystemRoot ?? 'C:\\Windows',
+          'System32',
+          'WindowsPowerShell',
+          'v1.0',
+          'powershell.exe',
+        );
+        const run = spawnSync(
+          hostPowerShell,
+          ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command],
+          {
+            cwd: root,
+            input: 'POWERSHELL_HOST_OK',
+            encoding: 'utf8',
+            windowsHide: true,
+          },
+        );
+
+        expect(run.status, run.stderr).toBe(0);
+        expect(run.stdout).toBe('POWERSHELL_HOST_OK');
+
+        const missingCommand = hookCommandFor(scriptPath, undefined, {
+          platform: 'win32',
+          nodePath: join(root, 'missing-node.exe'),
+        });
+        const missingRun = spawnSync(
+          hostPowerShell,
+          ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', missingCommand],
+          {
+            cwd: root,
+            encoding: 'utf8',
+            windowsHide: true,
+          },
+        );
+        expect(missingRun.status, missingRun.stderr).not.toBe(0);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+    15_000,
   );
 });
 
