@@ -910,8 +910,13 @@ class LocalAdapter {
     }
   }
 
-  async clearHistory(sessionId: string): Promise<void> {
-    await this.fetch(`/api/chat/history?session=${sessionId}`, { method: 'DELETE' });
+  async clearHistory(
+    workspaceId: string | null,
+    sessionId: string,
+  ): Promise<void> {
+    const params = new URLSearchParams({ session: sessionId });
+    if (workspaceId) params.set('workspace', workspaceId);
+    await this.fetch(`/api/chat/history?${params.toString()}`, { method: 'DELETE' });
   }
 
   async getHistory(workspaceId: string, sessionId: string): Promise<ChatMessage[]> {

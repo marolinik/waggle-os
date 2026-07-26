@@ -232,6 +232,26 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     // Settled thread has no `queued` turns.
     expect(cached!.some(m => m.queued)).toBe(false);
   });
+
+  it('clears server history for the current workspace', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-clear',
+      sessionId: 'sess-clear',
+    }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await result.current.clearHistory();
+    });
+
+    expect(mocks.adapter.clearHistory).toHaveBeenCalledWith(
+      'ws-clear',
+      'sess-clear',
+    );
+  });
 });
 
 // ── ChatApp composer surface (contracts 1a + 2 + queued paint) ──────────────

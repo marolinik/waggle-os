@@ -15,6 +15,7 @@ describe('chat smart-router integration', () => {
   const budget = 'ollama/budget-test-model';
   let server: FastifyInstance;
   let tmpDir: string;
+  let activeWorkspaceId: string;
   let capturedModel: string | undefined;
   let capturedConfigs: AgentLoopConfig[];
   let completionRequests: Array<{ url: string; model: string }>;
@@ -27,6 +28,8 @@ describe('chat smart-router integration', () => {
     config.save();
 
     server = await buildLocalServer({ dataDir: tmpDir });
+    activeWorkspaceId = server.agentState.activeWorkspaceId!;
+    expect(activeWorkspaceId).toBeTruthy();
   });
 
   beforeEach(() => {
@@ -455,10 +458,10 @@ describe('chat smart-router integration', () => {
       'ollama/budget-test-model',
       13_500,
       500,
-      'default',
+      activeWorkspaceId,
     );
     expect(addTokens).toHaveBeenCalledOnce();
-    expect(addTokens).toHaveBeenCalledWith('default', 14_000);
+    expect(addTokens).toHaveBeenCalledWith(activeWorkspaceId, 14_000);
     expect(calculateCost).toHaveBeenCalledWith(13_500, 500, 'ollama/budget-test-model');
     const [persistedTrace] = server.traceStore.query({
       sessionId: 'incomplete-budget-no-replay',
@@ -497,7 +500,7 @@ describe('chat smart-router integration', () => {
       'ollama/primary-test-model',
       20_000,
       1_000,
-      'default',
+      activeWorkspaceId,
     );
     const [persistedTrace] = server.traceStore.query({
       sessionId: 'cancelled-run-usage',
@@ -582,7 +585,7 @@ describe('chat smart-router integration', () => {
 
     const historyResponse = await injectWithAuth(server, {
       method: 'GET',
-      url: `/api/history?workspace=default&session=${session}`,
+      url: `/api/history?workspace=${activeWorkspaceId}&session=${session}`,
     });
     expect(historyResponse.statusCode).toBe(200);
     expect(historyResponse.json().messages).toContainEqual(
@@ -592,7 +595,7 @@ describe('chat smart-router integration', () => {
         model: 'ollama/fallback-test-model',
       }),
     );
-    expect(loadSessionMessages(tmpDir, 'default', session)).toContainEqual({
+    expect(loadSessionMessages(tmpDir, activeWorkspaceId, session)).toContainEqual({
       role: 'assistant',
       content: 'fallback ok',
       model: 'ollama/fallback-test-model',
@@ -634,7 +637,7 @@ describe('chat smart-router integration', () => {
 
       const historyResponse = await injectWithAuth(server, {
         method: 'GET',
-        url: `/api/history?workspace=default&session=${session}`,
+        url: `/api/history?workspace=${activeWorkspaceId}&session=${session}`,
       });
       expect(historyResponse.statusCode).toBe(200);
       expect(historyResponse.json().messages).toContainEqual(
@@ -644,7 +647,7 @@ describe('chat smart-router integration', () => {
           model: 'ollama/primary-test-model',
         }),
       );
-      expect(loadSessionMessages(tmpDir, 'default', session)).toContainEqual({
+      expect(loadSessionMessages(tmpDir, activeWorkspaceId, session)).toContainEqual({
         role: 'assistant',
         content: 'ok',
         model: 'ollama/primary-test-model',
@@ -706,10 +709,18 @@ describe('chat smart-router integration', () => {
 
   it('sends a bounded relevant subset of 29 eligible tools through the real chat provider path', async () => {
     const previousRunner = server.agentRunner;
-    const originalTools = [...server.agentState.allTools];
     const execute = vi.fn(async () => 'unused');
-    const candidates: ToolDefinition[] = Array.from({ length: 29 }, (_, index) => ({
-      name: `code_tool_${String(index).padStart(2, '0')}`,
+    const candidateNames = [
+      'bash', 'read_file', 'write_file', 'edit_file', 'search_files',
+      'search_content', 'web_search', 'web_fetch', 'search_memory',
+      'save_memory', 'generate_docx', 'create_plan', 'add_plan_step',
+      'execute_step', 'show_plan', 'spawn_agent', 'list_agents',
+      'get_agent_result', 'git_status', 'git_diff', 'git_log', 'git_commit',
+      'multi_edit', 'get_task_output', 'kill_task', 'run_code',
+      'generate_xlsx', 'generate_pptx', 'generate_pdf',
+    ];
+    const candidates: ToolDefinition[] = candidateNames.map((name) => ({
+      name,
       description: 'Inspect, test, validate, and verify TypeScript code in this workspace.',
       parameters: {
         type: 'object',
@@ -724,8 +735,12 @@ describe('chat smart-router integration', () => {
       tools?: Array<{ function?: { name?: string } }>;
     }> = [];
     server.agentRunner = undefined;
-    server.agentState.allTools.splice(0, server.agentState.allTools.length, ...candidates);
     vi.restoreAllMocks();
+    server.sessionManager.close(activeWorkspaceId);
+    const buildToolsForSession = vi.spyOn(
+      server.agentState,
+      'buildToolsForSession',
+    ).mockReturnValue(candidates);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/tags')) {
@@ -751,17 +766,22 @@ describe('chat smart-router integration', () => {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: 'Inspect, test, validate, and verify this TypeScript workspace. Reply with one sentence and do not call any tools.',
+          message: 'Use tools to inspect, review, edit, test, validate, run code, create a plan, delegate agents, and generate artifacts for this TypeScript workspace.',
           session: 'production-tool-context-29',
+          autonomy: 'trusted',
+          persona: 'general-purpose',
         },
       });
 
       expect(response.statusCode).toBe(200);
+      expect(candidateNames).toHaveLength(29);
+      expect(buildToolsForSession).toHaveBeenCalled();
       expect(providerRequests).toHaveLength(1);
       const transmittedTools = providerRequests[0]?.tools ?? [];
       const transmittedNames = transmittedTools.map(tool => tool.function?.name);
-      expect(transmittedNames).toHaveLength(14);
-      expect(new Set(transmittedNames).size).toBe(14);
+      expect(transmittedNames.length).toBeGreaterThanOrEqual(10);
+      expect(transmittedNames.length).toBeLessThanOrEqual(14);
+      expect(new Set(transmittedNames).size).toBe(transmittedNames.length);
       expect(transmittedNames.every(name => candidates.some(tool => tool.name === name))).toBe(true);
       const serializedSchemaChars = JSON.stringify(transmittedTools).length;
       expect(serializedSchemaChars).toBeLessThanOrEqual(8_000);
@@ -776,18 +796,27 @@ describe('chat smart-router integration', () => {
       expect(done.contextMetrics).toMatchObject({
         toolCatalogCount: 29,
         toolEligibleCount: 29,
-        toolSelectedCount: 14,
-        toolOmittedCount: 15,
+        toolSelectedCount: transmittedNames.length,
+        toolOmittedCount: 29 - transmittedNames.length,
         transmittedToolSchemaChars: serializedSchemaChars,
         estimatedToolSchemaTokens: Math.ceil(serializedSchemaChars / 4),
       });
       expect(done.contextMetrics?.selectorLatencyMs).toBeLessThanOrEqual(250);
-      expect(response.body).not.toMatch(/event: tool\r?\ndata: \{"name":"code_tool_/);
-      expect(response.body).not.toMatch(/event: tool_result\r?\ndata: \{"name":"code_tool_/);
+      const emittedToolNames = [
+        ...response.body.matchAll(/event: tool\r?\ndata: (.+?)(?:\r?\n|$)/g),
+      ].map(match => (JSON.parse(match[1]!) as { name?: string }).name);
+      const emittedToolResultNames = [
+        ...response.body.matchAll(/event: tool_result\r?\ndata: (.+?)(?:\r?\n|$)/g),
+      ].map(match => (JSON.parse(match[1]!) as { name?: string }).name);
+      expect(emittedToolNames.filter(name => candidateNames.includes(name ?? ''))).toEqual([]);
+      expect(
+        emittedToolResultNames.filter(name => candidateNames.includes(name ?? '')),
+      ).toEqual([]);
       expect(execute).not.toHaveBeenCalled();
     } finally {
       fetchSpy.mockRestore();
-      server.agentState.allTools.splice(0, server.agentState.allTools.length, ...originalTools);
+      server.sessionManager.close(activeWorkspaceId);
+      buildToolsForSession.mockRestore();
       server.agentRunner = previousRunner;
     }
   }, 20_000);

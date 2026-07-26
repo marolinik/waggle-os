@@ -190,11 +190,14 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
   let serverInst: Awaited<ReturnType<typeof buildLocalServer>>;
   let baseUrl: string;
   let authToken: string;
+  let activeWorkspaceId: string;
 
   beforeAll(async () => {
     const tmpDir = makeTmpDir();
 
     serverInst = await buildLocalServer({ dataDir: tmpDir });
+    activeWorkspaceId = serverInst.agentState.activeWorkspaceId!;
+    expect(activeWorkspaceId).toBeTruthy();
 
     // Inject the echo runner — bypasses LiteLLM health check and real LLM calls
     serverInst.agentRunner = echoRunner;
@@ -492,11 +495,15 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       // Let the route's abort catch/finally finish before inspecting both stores.
       await new Promise((resolve) => setTimeout(resolve, 30));
       expect(serverInst.agentState.sessionHistories.get(
-        chatSessionStateKey('default', session),
+        chatSessionStateKey(activeWorkspaceId, session),
       )).toEqual([
         { role: 'user', content: message },
       ]);
-      expect(loadSessionMessages(serverInst.localConfig.dataDir, 'default', session)).toEqual([
+      expect(loadSessionMessages(
+        serverInst.localConfig.dataDir,
+        activeWorkspaceId,
+        session,
+      )).toEqual([
         expect.objectContaining({ role: 'user', content: message }),
       ]);
     } finally {
@@ -534,7 +541,7 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
 
     // Verify server has accumulated 4 messages (user1, assistant1, user2, assistant2)
     const history = serverInst.agentState.sessionHistories.get(
-      chatSessionStateKey('default', session),
+      chatSessionStateKey(activeWorkspaceId, session),
     );
     expect(history).toBeDefined();
     expect(history!.length).toBe(4);
@@ -555,14 +562,17 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       body: JSON.stringify({ message: 'to be cleared', workspace: 'default', session }),
     }).then(r => r.text());
 
-    const stateKey = chatSessionStateKey('default', session);
+    const stateKey = chatSessionStateKey(activeWorkspaceId, session);
     expect(serverInst.agentState.sessionHistories.has(stateKey)).toBe(true);
 
     // Clear it
-    const clearRes = await fetch(`${baseUrl}/api/chat/history?session=${session}`, {
+    const clearRes = await fetch(
+      `${baseUrl}/api/chat/history?workspace=${activeWorkspaceId}&session=${session}`,
+      {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${authToken}` },
-    });
+      },
+    );
     expect(clearRes.status).toBe(200);
     expect(serverInst.agentState.sessionHistories.has(stateKey)).toBe(false);
   });

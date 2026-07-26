@@ -530,11 +530,11 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   const clearHistory = useCallback(async () => {
     if (sessionId) {
       try {
-        await adapter.clearHistory(sessionId);
+        await adapter.clearHistory(workspaceId, sessionId);
       } catch (err) { console.error('[useChat] clear history failed:', err); }
       setMessages([]);
     }
-  }, [sessionId]);
+  }, [sessionId, workspaceId]);
 
   const approveAction = useCallback(async (
     requestId: string,
