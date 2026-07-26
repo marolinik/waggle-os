@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-  [string[]]$HostIds = @()
+  [string[]]$HostIds = @(),
+  [string]$ReceiptDir = '',
+  [string]$RunnerNode = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,9 +11,22 @@ if ($env:OS -ne 'Windows_NT') {
 }
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$script:runnerNodePath = if ([string]::IsNullOrWhiteSpace($RunnerNode)) {
+  (Get-Command node.exe -ErrorAction Stop).Source
+} else {
+  (Resolve-Path -LiteralPath $RunnerNode -ErrorAction Stop).Path
+}
+$script:playwrightCli = (Resolve-Path -LiteralPath (
+  Join-Path $repoRoot 'node_modules\playwright\cli.js'
+)).Path
 $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $runRoot = Join-Path $tempBase ("waggle-windows-external-agents-" + [guid]::NewGuid().ToString('N'))
 $hookProfile = Join-Path $runRoot 'hook-profile'
+$receiptRoot = if ([string]::IsNullOrWhiteSpace($ReceiptDir)) {
+  $null
+} else {
+  [IO.Path]::GetFullPath($ReceiptDir)
+}
 $originalEnvironment = @{}
 $profileVariables = @('USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA', 'HERMES_HOME')
 $secretVariables = @(
@@ -67,7 +82,8 @@ $runnerVariables = @(
   'WAGGLE_E2E_PORT',
   'WAGGLE_E2E_BASE_URL',
   'WAGGLE_E2E_SKIP_LITELLM',
-  'WAGGLE_E2E_REUSE_EXISTING_SERVER'
+  'WAGGLE_E2E_REUSE_EXISTING_SERVER',
+  'PLAYWRIGHT_JSON_OUTPUT_FILE'
 )
 $environmentToRestore = @($profileVariables + $secretVariables + $runnerVariables | Select-Object -Unique)
 $requestedHostIds = if ($HostIds.Count -eq 0) {
@@ -140,29 +156,49 @@ function Remove-VerifiedTempTree([string]$Target) {
   throw $lastError
 }
 
-function Invoke-PlaywrightLane([string]$Spec, [string]$DataDir) {
+function Invoke-PlaywrightLane([string]$Spec, [string]$DataDir, [string]$ReceiptName) {
   $port = Get-FreeLoopbackPort
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_DATA_DIR' -Value $DataDir
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_PORT' -Value ([string]$port)
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_BASE_URL' -Value "http://127.0.0.1:$port"
   Write-Host "Running $Spec on isolated port $port"
-  & $script:npxPath playwright test $Spec --config=playwright.config.ts --project=chromium --reporter=list
+  $playwrightArgs = @(
+    'test',
+    $Spec,
+    '--config=playwright.config.ts',
+    '--project=chromium',
+    '--retries=0'
+  )
+  if ($null -ne $receiptRoot) {
+    Set-ProcessEnvironment -Name 'PLAYWRIGHT_JSON_OUTPUT_FILE' -Value (
+      Join-Path $receiptRoot "$ReceiptName-report.json"
+    )
+    $playwrightArgs += @(
+      '--reporter=list,json',
+      '--output',
+      (Join-Path $receiptRoot $ReceiptName)
+    )
+  } else {
+    Set-ProcessEnvironment -Name 'PLAYWRIGHT_JSON_OUTPUT_FILE' -Value $null
+    $playwrightArgs += '--reporter=list'
+  }
+  & $script:runnerNodePath $script:playwrightCli @playwrightArgs
   if ($LASTEXITCODE -ne 0) {
     throw "$Spec failed with exit code $LASTEXITCODE"
   }
 }
 
-$npxCommand = Get-Command npx.cmd -ErrorAction SilentlyContinue
-if ($null -eq $npxCommand) { $npxCommand = Get-Command npx -ErrorAction Stop }
-$script:npxPath = $npxCommand.Source
-
 try {
   $null = New-Item -ItemType Directory -Path $hookProfile -Force
+  if ($null -ne $receiptRoot) {
+    $null = New-Item -ItemType Directory -Path $receiptRoot -Force
+  }
   foreach ($name in $secretVariables) { Set-ProcessEnvironment -Name $name -Value $null }
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_SKIP_LITELLM' -Value '1'
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_REUSE_EXISTING_SERVER' -Value '0'
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_TEMP_ROOT' -Value $runRoot
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_HOST_IDS' -Value $requestedHostIds
+  Set-ProcessEnvironment -Name 'PLAYWRIGHT_JSON_OUTPUT_FILE' -Value $null
 
   Push-Location $repoRoot
   try {
@@ -174,13 +210,13 @@ try {
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_HOOK_HOME' -Value $hookProfile
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_REAL_HOOKS' -Value '1'
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_REAL_TOOLS' -Value $null
-    Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts' -DataDir (Join-Path $runRoot 'hook-data')
+    Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts' -DataDir (Join-Path $runRoot 'hook-data') -ReceiptName 'hooks'
 
     foreach ($name in $profileVariables) { Restore-ProcessEnvironment -Name $name }
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_HOOK_HOME' -Value $null
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_REAL_HOOKS' -Value $null
     Set-ProcessEnvironment -Name 'WAGGLE_E2E_REAL_TOOLS' -Value '1'
-    Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-tool-lifecycle.spec.ts' -DataDir (Join-Path $runRoot 'tool-data')
+    Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-tool-lifecycle.spec.ts' -DataDir (Join-Path $runRoot 'tool-data') -ReceiptName 'tools'
   } finally {
     Pop-Location
   }

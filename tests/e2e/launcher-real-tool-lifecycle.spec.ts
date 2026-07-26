@@ -331,18 +331,28 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
         });
       }
 
-      expect(results.map(result => result.id)).toEqual(toolIds);
-      expect(results.some(result => result.status !== 'unavailable'), 'at least one real installed tool route').toBe(true);
-      await testInfo.attach('windows-external-tool-route-summary', {
-        body: Buffer.from(JSON.stringify({ workspace, results }, null, 2)),
-        contentType: 'application/json',
-      });
-    } finally {
-      for (const pid of activePids) {
-        await request.post('/api/tools/kill', { data: { pid } }).catch(() => null);
+    expect(results.map(result => result.id)).toEqual(toolIds);
+    if (process.env.WAGGLE_E2E_HOST_IDS) {
+      expect(
+        results.filter(result => result.status === 'unavailable').map(result => result.id),
+        'every explicitly requested host must be installed and healthy',
+      ).toEqual([]);
+      } else {
+        expect(results.some(result => result.status !== 'unavailable'), 'at least one real installed tool route').toBe(true);
       }
-      const deleteResponse = await request.delete(`/api/workspaces/${encodeURIComponent(workspace.id)}`).catch(() => null);
-      if (deleteResponse) expect([204, 404]).toContain(deleteResponse.status());
+    } finally {
+      try {
+        await testInfo.attach('windows-external-tool-route-summary', {
+          body: Buffer.from(JSON.stringify({ workspace, results }, null, 2)),
+          contentType: 'application/json',
+        });
+      } finally {
+        for (const pid of activePids) {
+          await request.post('/api/tools/kill', { data: { pid } }).catch(() => null);
+        }
+        const deleteResponse = await request.delete(`/api/workspaces/${encodeURIComponent(workspace.id)}`).catch(() => null);
+        if (deleteResponse) expect([204, 404]).toContain(deleteResponse.status());
+      }
     }
   });
 });

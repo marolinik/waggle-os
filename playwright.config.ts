@@ -38,12 +38,11 @@ const e2ePort = Number.parseInt(
 const e2eSkipLiteLLM = process.env.WAGGLE_E2E_SKIP_LITELLM !== '0';
 const e2eReuseExistingServer = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER !== '0';
 const e2eEnv = { ...process.env };
-const e2ePathKey = Object.keys(e2eEnv)
-  .find((key) => key.toLowerCase() === 'path') ?? 'PATH';
-e2eEnv[e2ePathKey] = [
-  path.dirname(process.execPath),
-  e2eEnv[e2ePathKey],
-].filter(Boolean).join(path.delimiter);
+const e2eNodeEnvName = 'WAGGLE_E2E_NODE_EXEC';
+const e2eNodeCommand = process.platform === 'win32'
+  ? `"%${e2eNodeEnvName}%"`
+  : `"$${e2eNodeEnvName}"`;
+e2eEnv[e2eNodeEnvName] = process.execPath;
 // Keep the test runner's terminal quiet without changing production logging.
 e2eEnv.FORCE_COLOR = undefined;
 e2eEnv.NO_COLOR = undefined;
@@ -88,10 +87,10 @@ export default defineConfig({
    * the config notices the port is occupied and skips build+start). Set
    * WAGGLE_E2E_REUSE_EXISTING_SERVER=0 for isolated acceptance runs.
    *
-   * The server auto-detects <root>/dist per packages/server/src/local/
-   * index.ts — no WAGGLE_FRONTEND_DIR override needed. */
+  * The server auto-detects <root>/dist per packages/server/src/local/
+  * index.ts — no WAGGLE_FRONTEND_DIR override needed. */
   webServer: {
-    command: `npm run build:all && node node_modules/tsx/dist/cli.mjs packages/server/src/local/start.ts${e2eSkipLiteLLM ? ' --skip-litellm' : ''}`,
+    command: `npm run build:all && ${e2eNodeCommand} node_modules/tsx/dist/cli.mjs packages/server/src/local/start.ts${e2eSkipLiteLLM ? ' --skip-litellm' : ''}`,
     url: new URL('/health', e2eBaseURL).toString(),
     reuseExistingServer: e2eReuseExistingServer,
     timeout: 300_000, // Full workspace build + cold tsx sidecar import can exceed 3 min on Windows

@@ -2822,6 +2822,8 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
     );
 
     expect(script).toContain('[string[]]$HostIds = @()');
+    expect(script).toContain("[string]$ReceiptDir = ''");
+    expect(script).toContain("[string]$RunnerNode = ''");
     expect(script).toContain("'WAGGLE_E2E_HOST_IDS'");
     expect(script).toContain(
       "Set-ProcessEnvironment -Name 'WAGGLE_E2E_HOST_IDS' -Value $requestedHostIds",
@@ -2829,6 +2831,12 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
     expect(script).toContain('HostIds cannot contain empty values.');
     expect(script).toContain('$emptyHostIds.Count -gt 0');
     expect(script).toContain('HostIds cannot contain duplicate values:');
+    expect(script).toContain("'--retries=0'");
+    expect(script).toContain('(Join-Path $receiptRoot $ReceiptName)');
+    expect(script).toContain('& $script:runnerNodePath $script:playwrightCli @playwrightArgs');
+    expect(script).toContain("'PLAYWRIGHT_JSON_OUTPUT_FILE'");
+    expect(script).toContain("'--reporter=list,json'");
+    expect(script).toContain('"$ReceiptName-report.json"');
     expect(playwrightConfig).toContain(
       "url: new URL('/health', e2eBaseURL).toString()",
     );
@@ -2839,6 +2847,30 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
       expect(spec).toContain('Invalid WAGGLE_E2E_HOST_IDS: empty host ID.');
       expect(spec).toContain('Duplicate WAGGLE_E2E_HOST_IDS:');
     }
+    expect(toolSpec).toContain('every explicitly requested host must be installed and healthy');
+    expect(toolSpec).toContain(
+      "results.filter(result => result.status === 'unavailable').map(result => result.id)",
+    );
+    const strictToolAssertionIndex = toolSpec.indexOf(
+      'every explicitly requested host must be installed and healthy',
+    );
+    const toolFinallyIndex = toolSpec.indexOf('} finally {', strictToolAssertionIndex);
+    const toolReceiptIndex = toolSpec.indexOf(
+      "testInfo.attach('windows-external-tool-route-summary'",
+      toolFinallyIndex,
+    );
+    const receiptCleanupFinallyIndex = toolSpec.indexOf(
+      '} finally {',
+      toolReceiptIndex,
+    );
+    const toolKillIndex = toolSpec.indexOf(
+      "request.post('/api/tools/kill'",
+      receiptCleanupFinallyIndex,
+    );
+    expect(toolFinallyIndex).toBeGreaterThan(strictToolAssertionIndex);
+    expect(toolReceiptIndex).toBeGreaterThan(toolFinallyIndex);
+    expect(receiptCleanupFinallyIndex).toBeGreaterThan(toolReceiptIndex);
+    expect(toolKillIndex).toBeGreaterThan(receiptCleanupFinallyIndex);
 
     for (const name of [
       'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_ACCESS_TOKEN', 'GITHUB_TOKEN',
@@ -3061,11 +3093,13 @@ describe('Playwright Visual Regression Setup', () => {
     expect(content).not.toContain('npx tsx packages/server/src/local/start.ts');
   });
 
-  it('starts the E2E server with the same Node runtime as Playwright', () => {
+  it('starts the E2E server with the same Node runtime without shadowing external tool PATH', () => {
     const conf = path.join(ROOT, 'playwright.config.ts');
     const tsxCli = path.join(ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
     const probeSource = `
-      import config from ${JSON.stringify(pathToFileURL(conf).href)};
+      (async () => {
+      process.execPath = process.env.WAGGLE_PROBE_NODE_EXEC;
+      const { default: config } = await import(${JSON.stringify(pathToFileURL(conf).href)});
       const webServer = Array.isArray(config.webServer)
         ? config.webServer[0]
         : config.webServer;
@@ -3073,10 +3107,25 @@ describe('Playwright Visual Regression Setup', () => {
         .find((key) => key.toLowerCase() === 'path');
       console.log(JSON.stringify({
         command: webServer.command,
+        nodeValue: webServer.env.WAGGLE_E2E_NODE_EXEC,
         pathValue: webServer.env[pathKey],
       }));
+      })();
     `;
-    const result = spawnSync(
+    const adversarialNodePaths = process.platform === 'win32'
+      ? [
+          process.execPath,
+          'C:\\Program Files\\Node %PATH% & safe\\node.exe',
+          'C:\\Node (QA) !bang!\\node.exe',
+        ]
+      : [
+          process.execPath,
+          '/opt/Node $HOME `touch nope` & safe/node',
+          '/opt/Node (QA) !bang!/node',
+        ];
+
+    for (const nodePath of adversarialNodePaths) {
+      const result = spawnSync(
       process.execPath,
       [tsxCli, '--eval', probeSource],
       {
@@ -3085,6 +3134,7 @@ describe('Playwright Visual Regression Setup', () => {
         env: {
           ...process.env,
           WAGGLE_E2E_SKIP_LITELLM: '1',
+          WAGGLE_PROBE_NODE_EXEC: nodePath,
         },
         timeout: 30_000,
         windowsHide: true,
@@ -3095,17 +3145,22 @@ describe('Playwright Visual Regression Setup', () => {
     const output = result.stdout.trim().split(/\r?\n/).at(-1);
     const webServer = JSON.parse(output ?? '{}') as {
       command?: string;
+      nodeValue?: string;
       pathValue?: string;
     };
+    const nodeReference = process.platform === 'win32'
+      ? '"%WAGGLE_E2E_NODE_EXEC%"'
+      : '"$WAGGLE_E2E_NODE_EXEC"';
     expect(webServer.command).toBe(
-      'npm run build:all && node node_modules/tsx/dist/cli.mjs '
-      + 'packages/server/src/local/start.ts --skip-litellm',
+      `npm run build:all && ${nodeReference} `
+      + 'node_modules/tsx/dist/cli.mjs packages/server/src/local/start.ts --skip-litellm',
     );
-    expect(webServer.command).not.toContain(process.execPath);
-    expect(webServer.command).not.toContain('%');
-    expect(webServer.pathValue?.split(path.delimiter)[0]).toBe(
-      path.dirname(process.execPath),
-    );
+    expect(webServer.command).not.toContain(nodePath);
+    expect(webServer.nodeValue).toBe(nodePath);
+    const pathKey = Object.keys(process.env)
+      .find((key) => key.toLowerCase() === 'path');
+    expect(webServer.pathValue).toBe(pathKey ? process.env[pathKey] : undefined);
+    }
   });
 
   it('visual test spec exists with 14 test cases (7 views x 2 themes)', () => {
