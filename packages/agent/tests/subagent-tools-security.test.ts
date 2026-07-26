@@ -124,7 +124,7 @@ describe('spawn_agent — SEC-GATE enforcement', () => {
 
   it('(a) the SAME sub-agent critical op is allowed once the request wires an approving hook', async () => {
     const hooks = new HookRegistry();
-    hooks.on('pre:tool', () => { /* approve */ });
+    hooks.on('pre:tool', () => ({ authorize: true }));
     const runner = criticalIssuingRunner();
     const tools = makeTools(runner, () => ({ hooks }));
     const result = await spawn(tools, { name: 'Approved', role: 'custom', task: 'wipe', tools: ['bash'] });

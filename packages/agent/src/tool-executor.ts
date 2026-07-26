@@ -153,6 +153,7 @@ export async function executeToolCall(
   }
 
   // ── Step 4: pre:tool hook ──
+  let approvedByHook = false;
   if (hooks) {
     const hookResult = await hooks.fire('pre:tool', {
       toolName: fnName,
@@ -167,6 +168,7 @@ export async function executeToolCall(
         toolName: fnName,
       };
     }
+    approvedByHook = hookResult.authorized === true;
   }
 
   // ── Step 4b: critical-destructive hard floor (defense-in-depth) ──
@@ -183,12 +185,10 @@ export async function executeToolCall(
     const approvedOutOfBand = confirmCriticalAction
       ? await confirmCriticalAction(fnName, fnArgs)
       : false;
-    // A pre:tool approval gate present at step 4 already vetted this call (a
-    // critical op always trips needsConfirmationWithAutonomy, so reaching here
-    // past a non-cancelled hook means it was approved). No callback and no gate
-    // ⇒ no human in the loop ⇒ deny.
-    const gatedByHook = hooks !== undefined;
-    if (!approvedOutOfBand && !gatedByHook) {
+    // Only an explicit successful hook authorization or approval callback can
+    // cross the hard floor. Registry presence or a swallowed hook error is not
+    // proof that a human or policy gate approved the call.
+    if (!approvedOutOfBand && !approvedByHook) {
       const denyMsg =
         `[BLOCKED] "${fnName}" is a critical, irreversible operation that requires ` +
         `explicit human approval. It was denied because this execution context ` +

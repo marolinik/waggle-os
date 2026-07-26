@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type ToolDefinition, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type ToolDefinition, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -1927,15 +1927,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // H3: Auto-approve all tool requests when WAGGLE_AUTO_APPROVE=1 (testing only)
           if (autoApprove) {
             sendEvent('step', { content: `\u2714 ${ctx.toolName} auto-approved (test mode)` });
-            return;
+            return { authorize: true };
           }
 
           // Phase B.3: check the persistent grant store — if the user previously
           // chose "Always allow" for this (tool, target) combination, skip the
           // approval prompt silently.
-          if (server.agentState.approvalGrantStore.has(ctx.toolName, args, effectiveWorkspace || null)) {
+          if (
+            !isCriticalNeverAutopass(ctx.toolName, args, trustedRiskLevel)
+            && server.agentState.approvalGrantStore.has(ctx.toolName, args, effectiveWorkspace || null)
+          ) {
             sendEvent('step', { content: `\u2714 ${ctx.toolName} allowed by saved grant` });
-            return;
+            return { authorize: true };
           }
 
           const requestId = crypto.randomUUID();
@@ -2069,6 +2072,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           sendEvent('step', { content: `\u2714 ${toolName} approved` });
             emitAuditEvent(server, { workspaceId: executionScopeId, eventType: 'approval_granted', toolName, sessionId, approved: true });
+          return { authorize: true };
         });
 
         // Use workspace-scoped tools if a workspacePath was specified

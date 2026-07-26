@@ -62,11 +62,54 @@ describe('tool-executor critical-destructive hard floor (SEC-GATE step 4b)', () 
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('ALLOWS a critical command when a pre:tool approval hook is wired (main-loop path)', async () => {
+  it('DENIES a critical command when the hook registry has no approval result', async () => {
     const spy = vi.fn();
     const toolMap = new Map([['bash', tool('bash', 'BASH_RAN', spy)]]);
     const hooks = new HookRegistry();
-    hooks.on('pre:tool', () => { /* approve — no cancel */ });
+    const r = await executeToolCall(call('bash', CRITICAL_BASH), {
+      toolMap,
+      guard: new LoopGuard(),
+      hooks,
+    });
+    expect(r.content).toContain('[BLOCKED]');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('DENIES a critical command when only a non-authorizing hook runs', async () => {
+    const spy = vi.fn();
+    const toolMap = new Map([['bash', tool('bash', 'BASH_RAN', spy)]]);
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => undefined);
+    const r = await executeToolCall(call('bash', CRITICAL_BASH), {
+      toolMap,
+      guard: new LoopGuard(),
+      hooks,
+    });
+    expect(r.content).toContain('[BLOCKED]');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('DENIES a critical command when the approval hook throws', async () => {
+    const spy = vi.fn();
+    const toolMap = new Map([['bash', tool('bash', 'BASH_RAN', spy)]]);
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => {
+      throw new Error('approval gate unavailable');
+    });
+    const r = await executeToolCall(call('bash', CRITICAL_BASH), {
+      toolMap,
+      guard: new LoopGuard(),
+      hooks,
+    });
+    expect(r.content).toContain('[BLOCKED]');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('ALLOWS a critical command with explicit pre:tool authorization (main-loop path)', async () => {
+    const spy = vi.fn();
+    const toolMap = new Map([['bash', tool('bash', 'BASH_RAN', spy)]]);
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ authorize: true }));
     const r = await executeToolCall(call('bash', CRITICAL_BASH), { toolMap, guard: new LoopGuard(), hooks });
     expect(r.content).toContain('BASH_RAN');
     expect(r.countedAsUsed).toBe(true);

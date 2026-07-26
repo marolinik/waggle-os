@@ -27,6 +27,7 @@ export interface HookContext {
 export interface HookResult {
   cancelled: boolean;
   reason?: string;
+  authorized?: true;
 }
 
 export interface HookActivityEntry {
@@ -37,7 +38,7 @@ export interface HookActivityEntry {
   workspaceId?: string;
 }
 
-export type HookFn = (ctx: HookContext) => Promise<{ cancel?: boolean; reason?: string } | void> | { cancel?: boolean; reason?: string } | void;
+export type HookFn = (ctx: HookContext) => Promise<{ cancel?: boolean; reason?: string; authorize?: true } | void> | { cancel?: boolean; reason?: string; authorize?: true } | void;
 
 export class HookRegistry {
   private hooks = new Map<HookEvent, Set<HookFn>>();
@@ -67,17 +68,19 @@ export class HookRegistry {
   }
 
   async fire(event: HookEvent, ctx: HookContext): Promise<HookResult> {
+    let authorized = false;
     if (this.parent) {
       const inherited = await this.parent.fire(event, ctx);
       if (inherited.cancelled) {
         this.recordActivity(event, true, inherited.reason, ctx.workspaceId);
         return inherited;
       }
+      authorized = inherited.authorized === true;
     }
     const fns = this.hooks.get(event);
     if (!fns || fns.size === 0) {
       this.recordActivity(event, false, undefined, ctx.workspaceId);
-      return { cancelled: false };
+      return authorized ? { cancelled: false, authorized: true } : { cancelled: false };
     }
 
     for (const fn of fns) {
@@ -87,12 +90,13 @@ export class HookRegistry {
           this.recordActivity(event, true, result.reason, ctx.workspaceId);
           return { cancelled: true, reason: result.reason };
         }
+        if (result?.authorize === true) authorized = true;
       } catch {
         // Hook errors are non-fatal — log but continue
       }
     }
     this.recordActivity(event, false, undefined, ctx.workspaceId);
-    return { cancelled: false };
+    return authorized ? { cancelled: false, authorized: true } : { cancelled: false };
   }
 
   getActivityLog(): readonly HookActivityEntry[] {
