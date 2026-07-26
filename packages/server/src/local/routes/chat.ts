@@ -41,6 +41,7 @@ import {
   chatSessionStateKey,
   isChatSessionStateKeyForWorkspace,
   isolateLegacyDefaultChatSessions,
+  registerChatHistoryRestoreParticipant,
   resolveChatHistoryTarget,
   persistMessage,
   loadSessionMessages,
@@ -673,6 +674,25 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
   // Auto skill capture: track tool sequences per session and dismissed suggestions
   const sessionToolSequences = new Map<string, string[][]>();
   const dismissedCaptureSuggestions = new Set<string>();
+  const unregisterRestoreParticipant = registerChatHistoryRestoreParticipant(
+    server.localConfig.dataDir,
+    {
+      isBusy: () => activeChatTurns.size > 0,
+      onRestored: () => {
+        sessionHistories.clear();
+        systemPromptCache.clear();
+        compressionSummaries.clear();
+        compactionFrameIds.clear();
+        sessionToolSequences.clear();
+        chatHistoryLayout = isolateLegacyDefaultChatSessions(
+          server.localConfig.dataDir,
+        );
+      },
+    },
+  );
+  server.addHook('onClose', async () => {
+    unregisterRestoreParticipant();
+  });
 
   // Build the rich system prompt — behavioral specification, not just tool docs
   // Accepts the caller's orchestrator so per-session orchestrators get their own

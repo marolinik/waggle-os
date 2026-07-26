@@ -19,10 +19,44 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import * as crypto from 'node:crypto';
+import * as zlib from 'node:zlib';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
+import {
+  isChatHistoryRestoreBusy,
+  notifyChatHistoryRestored,
+  registerChatHistoryRestoreParticipant,
+} from '../src/local/routes/chat-persistence.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
+
+function buildUnencryptedBackup(files: Array<{ relativePath: string; content: string }>): string {
+  const manifest = {
+    version: 1,
+    createdAt: new Date().toISOString(),
+    fileCount: files.length,
+    files: files.map((file) => ({
+      relativePath: file.relativePath,
+      content: Buffer.from(file.content, 'utf-8').toString('base64'),
+      sizeBytes: Buffer.byteLength(file.content),
+    })),
+  };
+  const compressed = zlib.gzipSync(Buffer.from(JSON.stringify(manifest), 'utf-8'));
+  return Buffer.concat([
+    Buffer.from('WAGGLE-BACKUP-V1', 'utf-8'),
+    Buffer.alloc(16, 0),
+    Buffer.alloc(16, 0),
+    compressed,
+  ]).toString('base64');
+}
+
+function transcript(content: string): string {
+  return [
+    JSON.stringify({ type: 'meta', title: null, created: new Date().toISOString() }),
+    JSON.stringify({ role: 'user', content, timestamp: new Date().toISOString() }),
+    '',
+  ].join('\n');
+}
 
 describe('Backup & Restore (PM-5)', () => {
   let server: FastifyInstance;
@@ -52,6 +86,23 @@ describe('Backup & Restore (PM-5)', () => {
     const wsDir = path.join(tmpDir, 'workspaces', 'ws-1', 'sessions');
     fs.mkdirSync(wsDir, { recursive: true });
     fs.writeFileSync(path.join(wsDir, 'session-1.jsonl'), '{"role":"user","content":"hello"}\n', 'utf-8');
+
+    const managedDefaultDir = path.join(tmpDir, 'workspaces', 'default');
+    fs.mkdirSync(managedDefaultDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(managedDefaultDir, 'workspace.json'),
+      JSON.stringify({
+        id: 'default',
+        name: 'Managed Default',
+        group: 'test',
+        teamId: 'backup-team',
+        teamRole: 'member',
+        created: new Date().toISOString(),
+      }),
+      'utf-8',
+    );
+    const managedDefaultMind = new MindDB(path.join(managedDefaultDir, 'workspace.mind'));
+    managedDefaultMind.close();
 
     // Create marketplace.db (should be excluded from backup)
     fs.writeFileSync(path.join(tmpDir, 'marketplace.db'), 'fake marketplace data', 'utf-8');
@@ -202,6 +253,257 @@ describe('Backup & Restore (PM-5)', () => {
     expect(body.restored).toBe(true);
     expect(body.filesRestored).toBeGreaterThanOrEqual(3);
     expect(body.backupCreatedAt).toBeDefined();
+  });
+
+  it('restores markerless legacy transcripts only to personal history and invalidates warm cache', async () => {
+    const sessionId = `restored-legacy-${Date.now()}`;
+    const personalSessionPath = path.join(
+      tmpDir,
+      'legacy-chat',
+      'workspaces',
+      'default',
+      'sessions',
+      `${sessionId}.jsonl`,
+    );
+    fs.mkdirSync(path.dirname(personalSessionPath), { recursive: true });
+    fs.writeFileSync(personalSessionPath, transcript('STALE PERSONAL CACHE'), 'utf-8');
+
+    const warm = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?session=${sessionId}`,
+    });
+    expect(warm.statusCode).toBe(200);
+    expect(warm.json().messages[0]?.content).toBe('STALE PERSONAL CACHE');
+
+    const backup = buildUnencryptedBackup([{
+      relativePath: `workspaces/default/sessions/${sessionId}.jsonl`,
+      content: transcript('RESTORED PERSONAL HISTORY'),
+    }]);
+    const restore = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup },
+    });
+    expect(restore.statusCode).toBe(200);
+
+    const personal = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?session=${sessionId}`,
+    });
+    const managed = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=default&session=${sessionId}`,
+    });
+
+    expect(personal.json().messages[0]?.content).toBe('RESTORED PERSONAL HISTORY');
+    expect(managed.json().messages).toEqual([]);
+  });
+
+  it('keeps marker-bearing personal and managed-default transcripts separate without replacing the live marker', async () => {
+    const personalSession = `recorded-personal-${Date.now()}`;
+    const managedSession = `recorded-managed-${Date.now()}`;
+    const markerPath = path.join(tmpDir, 'chat-history-layout.json');
+    const liveMarker = fs.readFileSync(markerPath, 'utf-8');
+    const backup = buildUnencryptedBackup([
+      {
+        relativePath: 'CHAT-HISTORY-LAYOUT.JSON',
+        content: JSON.stringify({ version: 1, status: 'ready' }),
+      },
+      {
+        relativePath: `legacy-chat/workspaces/default/sessions/${personalSession}.jsonl`,
+        content: transcript('RESTORED RECORDED PERSONAL'),
+      },
+      {
+        relativePath: `WORKSPACES/DEFAULT/SESSIONS/${managedSession}.jsonl`,
+        content: transcript('RESTORED RECORDED MANAGED'),
+      },
+      {
+        relativePath: 'WORKSPACES/DEFAULT/WORKSPACE.JSON',
+        content: JSON.stringify({ id: 'default', name: 'Managed Default' }),
+      },
+    ]);
+
+    const restore = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup },
+    });
+    expect(restore.statusCode).toBe(200);
+
+    const personal = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?session=${personalSession}`,
+    });
+    const managed = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=default&session=${managedSession}`,
+    });
+
+    expect(personal.json().messages[0]?.content).toBe('RESTORED RECORDED PERSONAL');
+    expect(managed.json().messages[0]?.content).toBe('RESTORED RECORDED MANAGED');
+    expect(fs.readFileSync(markerPath, 'utf-8')).toBe(liveMarker);
+  });
+
+  it('uses one restore participant identity across data-directory aliases', () => {
+    const aliasPath = path.join(
+      path.dirname(tmpDir),
+      `${path.basename(tmpDir)}-restore-alias`,
+    );
+    fs.symlinkSync(
+      tmpDir,
+      aliasPath,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    let notifications = 0;
+    const unregister = registerChatHistoryRestoreParticipant(tmpDir, {
+      isBusy: () => true,
+      onRestored: () => {
+        notifications++;
+      },
+    });
+
+    try {
+      expect(isChatHistoryRestoreBusy(aliasPath)).toBe(true);
+      notifyChatHistoryRestored(aliasPath);
+      expect(notifications).toBe(1);
+      if (process.platform === 'win32') {
+        expect(isChatHistoryRestoreBusy(tmpDir.toUpperCase())).toBe(true);
+      }
+    } finally {
+      unregister();
+      fs.unlinkSync(aliasPath);
+    }
+  });
+
+  it('rejects filesystem-equivalent restore targets before writing', async () => {
+    const restore = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/restore',
+      payload: {
+        backup: buildUnencryptedBackup([
+          { relativePath: 'Case-Duplicate.txt', content: 'first' },
+          { relativePath: 'case-duplicate.txt', content: 'second' },
+        ]),
+      },
+    });
+
+    expect(restore.statusCode).toBe(409);
+    expect(restore.json().error).toMatch(/duplicate target/i);
+    expect(fs.existsSync(path.join(tmpDir, 'Case-Duplicate.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'case-duplicate.txt'))).toBe(false);
+  });
+
+  it('rejects dot-segment aliases before writing any restore entry', async () => {
+    const safePath = path.join(tmpDir, `must-not-write-${Date.now()}.txt`);
+    const restore = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/restore',
+      payload: {
+        backup: buildUnencryptedBackup([
+          { relativePath: `staging/../${path.basename(safePath)}`, content: 'alias' },
+          { relativePath: 'also-must-not-write.txt', content: 'unrelated' },
+        ]),
+      },
+    });
+
+    expect(restore.statusCode).toBe(400);
+    expect(restore.json()).toMatchObject({ restored: false, filesRestored: 0 });
+    expect(fs.existsSync(safePath)).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'also-must-not-write.txt'))).toBe(false);
+  });
+
+  it('rejects restore before writing while a chat turn is active', async () => {
+    const originalRunner = server.agentRunner;
+    let markTurnStarted!: () => void;
+    let releaseTurn!: () => void;
+    const turnStarted = new Promise<void>((resolve) => {
+      markTurnStarted = resolve;
+    });
+    const turnGate = new Promise<void>((resolve) => {
+      releaseTurn = resolve;
+    });
+    server.agentRunner = async () => {
+      markTurnStarted();
+      await turnGate;
+      return {
+        content: 'turn complete',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    const markerPath = path.join(tmpDir, 'must-not-restore-during-chat.txt');
+    fs.rmSync(markerPath, { force: true });
+    const activeTurn = injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        workspace: server.agentState.activeWorkspaceId,
+        session: `active-restore-${Date.now()}`,
+        message: 'Keep this turn active.',
+      },
+    });
+
+    try {
+      await turnStarted;
+      const restore = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/restore',
+        payload: {
+          backup: buildUnencryptedBackup([{
+            relativePath: path.basename(markerPath),
+            content: 'must not be written',
+          }]),
+        },
+      });
+
+      expect(restore.statusCode).toBe(409);
+      expect(restore.json()).toMatchObject({ code: 'CHAT_TURN_IN_PROGRESS' });
+      expect(fs.existsSync(markerPath)).toBe(false);
+    } finally {
+      releaseTurn();
+      await activeTurn;
+      server.agentRunner = originalRunner;
+    }
+  });
+
+  it('rejects ambiguous markerless default history before writing any archive file', async () => {
+    const sessionId = `ambiguous-restore-${Date.now()}`;
+    const managedSessionPath = path.join(
+      tmpDir,
+      'workspaces',
+      'default',
+      'sessions',
+      `${sessionId}.jsonl`,
+    );
+    fs.rmSync(managedSessionPath, { force: true });
+    const unrelatedPath = path.join(tmpDir, `must-not-restore-${Date.now()}.txt`);
+
+    const restore = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/restore',
+      payload: {
+        backup: buildUnencryptedBackup([
+          {
+            relativePath: `workspaces/default/sessions/${sessionId}.jsonl`,
+            content: transcript('AMBIGUOUS HISTORY'),
+          },
+          {
+            relativePath: 'workspaces/default/workspace.json',
+            content: JSON.stringify({ id: 'default', name: 'Managed Default' }),
+          },
+          {
+            relativePath: path.basename(unrelatedPath),
+            content: 'must not be written',
+          },
+        ]),
+      },
+    });
+
+    expect(restore.statusCode).toBe(409);
+    expect(restore.json().error).toMatch(/ambiguous/i);
+    expect(fs.existsSync(managedSessionPath)).toBe(false);
+    expect(fs.existsSync(unrelatedPath)).toBe(false);
   });
 
   it('restore rejects corrupted/invalid files', async () => {

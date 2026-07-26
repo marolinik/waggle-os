@@ -14,6 +14,7 @@ const CHAT_SESSION_STATE_SEPARATOR = '\u0000';
 const LEGACY_DEFAULT_CHAT_DIR = 'legacy-chat';
 const MANAGED_DEFAULT_CHAT_STATE_ID = '\u0001managed-default';
 const CHAT_HISTORY_LAYOUT_FILE = 'chat-history-layout.json';
+const DEFAULT_CHAT_SESSION_PREFIX = 'workspaces/default/sessions/';
 const CHAT_HISTORY_LAYOUT_VERSION = 1;
 
 export const CHAT_HISTORY_RECOVERY_CODE = 'CHAT_HISTORY_RECOVERY_REQUIRED';
@@ -25,6 +26,131 @@ export type ChatHistoryLayoutStatus =
       code: typeof CHAT_HISTORY_RECOVERY_CODE;
       reason: string;
     };
+
+export interface ChatHistoryRestoreEntry {
+  relativePath: string;
+  content: string;
+}
+
+interface ChatHistoryRestoreParticipant {
+  isBusy: () => boolean;
+  onRestored: () => void;
+}
+
+const restoreParticipants = new Map<string, Set<ChatHistoryRestoreParticipant>>();
+
+function restoreParticipantKey(dataDir: string): string {
+  let resolved: string;
+  try {
+    resolved = fs.realpathSync.native(dataDir);
+  } catch {
+    resolved = path.resolve(dataDir);
+  }
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+export function registerChatHistoryRestoreParticipant(
+  dataDir: string,
+  participant: ChatHistoryRestoreParticipant,
+): () => void {
+  const key = restoreParticipantKey(dataDir);
+  const participants = restoreParticipants.get(key) ?? new Set();
+  participants.add(participant);
+  restoreParticipants.set(key, participants);
+  return () => {
+    participants.delete(participant);
+    if (participants.size === 0) restoreParticipants.delete(key);
+  };
+}
+
+export function isChatHistoryRestoreBusy(dataDir: string): boolean {
+  return [...(restoreParticipants.get(restoreParticipantKey(dataDir)) ?? [])]
+    .some((participant) => participant.isBusy());
+}
+
+export function notifyChatHistoryRestored(dataDir: string): void {
+  for (const participant of restoreParticipants.get(restoreParticipantKey(dataDir)) ?? []) {
+    participant.onRestored();
+  }
+}
+
+/**
+ * Classify archive chat paths before restore writes anything. Pre-layout
+ * `workspaces/default/sessions` belongs to personal chat only when the archive
+ * has no managed-default workspace evidence; otherwise ownership is ambiguous.
+ * The archived marker is validated but never restored over the live marker.
+ */
+export function planChatHistoryRestore<T extends ChatHistoryRestoreEntry>(
+  entries: readonly T[],
+): T[] {
+  const normalized = entries.map((entry) => {
+    if (typeof entry.relativePath !== 'string' || typeof entry.content !== 'string') {
+      throw new Error('Invalid chat history restore entry.');
+    }
+    const relativePath = entry.relativePath.replace(/\\/g, '/');
+    return {
+      entry,
+      relativePath,
+      comparisonPath: relativePath.toLowerCase(),
+    };
+  });
+  const markers = normalized.filter(({ comparisonPath }) =>
+    comparisonPath === CHAT_HISTORY_LAYOUT_FILE);
+  if (markers.length > 1) {
+    throw new Error('Invalid chat history layout: duplicate marker.');
+  }
+
+  const hasRecordedLayout = markers.length === 1;
+  if (hasRecordedLayout) {
+    try {
+      const marker = JSON.parse(
+        Buffer.from(markers[0].entry.content, 'base64').toString('utf-8'),
+      ) as { version?: unknown; status?: unknown };
+      if (
+        marker.version !== CHAT_HISTORY_LAYOUT_VERSION
+        || marker.status !== 'ready'
+      ) {
+        throw new Error('unsupported marker');
+      }
+    } catch {
+      throw new Error('Invalid chat history layout marker in backup.');
+    }
+  }
+
+  const hasDefaultSessions = normalized.some(({ comparisonPath }) =>
+    comparisonPath.startsWith(DEFAULT_CHAT_SESSION_PREFIX));
+  const hasManagedDefaultConfig = normalized.some(({ comparisonPath }) =>
+    comparisonPath === 'workspaces/default/workspace.json');
+  if (!hasRecordedLayout && hasDefaultSessions && hasManagedDefaultConfig) {
+    throw new Error(
+      'Ambiguous markerless default chat history in backup.',
+    );
+  }
+  if (hasRecordedLayout && hasDefaultSessions && !hasManagedDefaultConfig) {
+    throw new Error(
+      'Invalid chat history layout: managed default sessions lack workspace metadata.',
+    );
+  }
+
+  const targetPaths = new Set<string>();
+  const planned: T[] = [];
+  for (const { entry, relativePath, comparisonPath } of normalized) {
+    if (comparisonPath === CHAT_HISTORY_LAYOUT_FILE) continue;
+    const defaultSessionPath = comparisonPath.startsWith(DEFAULT_CHAT_SESSION_PREFIX)
+      ? `${DEFAULT_CHAT_SESSION_PREFIX}${relativePath.slice(DEFAULT_CHAT_SESSION_PREFIX.length)}`
+      : null;
+    const targetPath = defaultSessionPath && !hasRecordedLayout
+      ? `${LEGACY_DEFAULT_CHAT_DIR}/${defaultSessionPath}`
+      : defaultSessionPath ?? relativePath;
+    const targetKey = targetPath.toLowerCase();
+    if (targetPaths.has(targetKey)) {
+      throw new Error(`Invalid chat history layout: duplicate target ${targetPath}.`);
+    }
+    targetPaths.add(targetKey);
+    planned.push({ ...entry, relativePath: targetPath });
+  }
+  return planned;
+}
 
 export function legacyDefaultChatDataDir(dataDir: string): string {
   return path.join(dataDir, LEGACY_DEFAULT_CHAT_DIR);

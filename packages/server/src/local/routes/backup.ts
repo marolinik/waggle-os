@@ -15,6 +15,12 @@ import path from 'node:path';
 import * as crypto from 'node:crypto';
 import * as zlib from 'node:zlib';
 import type { FastifyPluginAsync } from 'fastify';
+import {
+  isChatHistoryRestoreBusy,
+  isolateLegacyDefaultChatSessions,
+  notifyChatHistoryRestored,
+  planChatHistoryRestore,
+} from './chat-persistence.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -442,6 +448,14 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'Backup file is corrupted: invalid manifest' });
     }
 
+    let restoreFiles: FileEntry[];
+    try {
+      restoreFiles = planChatHistoryRestore(manifest.files);
+    } catch (error) {
+      return reply.status(409).send({
+        error: error instanceof Error ? error.message : 'Invalid chat history layout in backup.',
+      });
+    }
     const restoreRoot = createRestoreRoot(dataDir);
 
     // Preview mode: return what will be restored without applying
@@ -449,7 +463,7 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
       const existingFiles: string[] = [];
       const newFiles: string[] = [];
 
-      for (const file of manifest.files) {
+      for (const file of restoreFiles) {
         let targetPath: string;
         try {
           targetPath = resolveRestorePath(restoreRoot, file.relativePath);
@@ -474,11 +488,39 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // Apply restore
+    if (isChatHistoryRestoreBusy(dataDir)) {
+      return reply.status(409).send({
+        error: 'Cannot restore backup while a chat turn is active.',
+        code: 'CHAT_TURN_IN_PROGRESS',
+      });
+    }
+    const currentChatLayout = isolateLegacyDefaultChatSessions(dataDir);
+    if (currentChatLayout.status === 'recovery-required') {
+      return reply.status(409).send({
+        error: currentChatLayout.reason,
+        code: currentChatLayout.code,
+      });
+    }
+    for (const file of restoreFiles) {
+      try {
+        resolveRestorePath(restoreRoot, file.relativePath);
+      } catch {
+        return reply.status(400).send({
+          restored: false,
+          filesRestored: 0,
+          totalFiles: manifest.fileCount,
+          conflicts: [],
+          errors: [`Skipped ${String(file.relativePath)}: path traversal detected`],
+          backupCreatedAt: manifest.createdAt,
+        });
+      }
+    }
+
     let filesRestored = 0;
     const conflicts: string[] = [];
     const errors: string[] = [];
 
-    for (const file of manifest.files) {
+    for (const file of restoreFiles) {
       // Skip marketplace.db — it re-syncs on startup
       if (file.relativePath === 'marketplace.db') continue;
 
@@ -509,6 +551,7 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
       }
     }
 
+    notifyChatHistoryRestored(dataDir);
     return {
       restored: true,
       filesRestored,

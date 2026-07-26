@@ -85,8 +85,9 @@ describe('/api/restore path containment', () => {
       payload: { backup },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(400);
     const json = res.json();
+    expect(json.restored).toBe(false);
     expect(json.filesRestored).toBe(0);
     expect(json.errors).toBeDefined();
     expect(json.errors.some((e: string) => e.includes('path traversal'))).toBe(true);
@@ -106,8 +107,9 @@ describe('/api/restore path containment', () => {
       payload: { backup },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(400);
     const json = res.json();
+    expect(json.restored).toBe(false);
     expect(json.filesRestored).toBe(0);
     expect(json.errors.some((e: string) => e.includes('path traversal'))).toBe(true);
 
@@ -180,8 +182,9 @@ describe('/api/restore path containment', () => {
       payload: { backup },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(400);
     const json = res.json();
+    expect(json.restored).toBe(false);
     expect(json.filesRestored).toBe(0);
     expect(json.errors.some((error: string) => error.includes('path traversal'))).toBe(true);
     expect(fs.readFileSync(outsidePath, 'utf-8')).toBe('original');
