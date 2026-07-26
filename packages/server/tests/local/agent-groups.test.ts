@@ -1181,6 +1181,401 @@ describe('local agent group execution', () => {
     }
   });
 
+  it('waits for active group workers and workspace release before server shutdown cleanup', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-shutdown-drain-'));
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const personalMind = new MindDB(':memory:');
+    const workspaceMind = new MindDB(':memory:');
+    const runnersMayFinish = deferred<void>();
+    const allRunnersAborted = deferred<void>();
+    let activeWorkers = 0;
+    let abortedWorkers = 0;
+    let workspaceMindReleaseCount = 0;
+    let cleanupHookRan = false;
+    let workersAtCleanup = -1;
+    let mindReleasedAtCleanup = false;
+    let closeSettled = false;
+    let closing: Promise<void> | undefined;
+
+    server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: '',
+    });
+    server.decorate('localJobStore', new LocalJobStore());
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: () => ({
+        id: 'workspace-1',
+        name: 'Project',
+        group: 'test',
+        created: new Date().toISOString(),
+        directory: workspaceDir,
+        model: 'test-model',
+      }),
+    } as never);
+    server.decorate('mindCache', {
+      acquire: () => workspaceMind,
+      release: () => { workspaceMindReleaseCount += 1; },
+    } as never);
+    server.decorate('multiMind', { personal: personalMind } as never);
+    server.decorate('agentState', {
+      allTools: [],
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      hookRegistry: undefined,
+      spawnSecurityContext: null,
+      createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
+      buildToolsForSession: () => [],
+      bindWorkspaceCollaborationTools: ({ visibleTools }: WorkspaceCollaborationBinding) => visibleTools,
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
+    } as never);
+    server.decorate('agentRunner', (config: AgentLoopConfig) => {
+      activeWorkers += 1;
+      return new Promise<AgentResponse>((resolve) => {
+        config.signal?.addEventListener('abort', () => {
+          abortedWorkers += 1;
+          if (abortedWorkers === 4) allRunnersAborted.resolve(undefined);
+          void runnersMayFinish.promise.then(() => {
+            activeWorkers -= 1;
+            resolve({
+              content: 'Stopped for shutdown',
+              toolsUsed: [],
+              usage: { inputTokens: 0, outputTokens: 0 },
+            });
+          });
+        }, { once: true });
+      });
+    });
+    await server.register(agentGroupRoutes);
+    server.addHook('onClose', async () => {
+      server!.localJobStore.close();
+      cleanupHookRan = true;
+      workersAtCleanup = activeWorkers;
+      mindReleasedAtCleanup = workspaceMindReleaseCount === 2;
+    });
+
+    try {
+      const created = await server.inject({
+        method: 'POST',
+        url: '/api/agent-groups',
+        payload: {
+          name: 'Shutdown drain group',
+          strategy: 'parallel',
+          members: [
+            { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+            { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+          ],
+        },
+      });
+      const groupId = (created.json() as { id: string }).id;
+      const started = await Promise.all([
+        server.inject({
+          method: 'POST',
+          url: `/api/agent-groups/${groupId}/run`,
+          payload: { task: 'Keep first pair active until shutdown', workspaceId: 'workspace-1' },
+        }),
+        server.inject({
+          method: 'POST',
+          url: `/api/agent-groups/${groupId}/run`,
+          payload: { task: 'Keep second pair active until shutdown', workspaceId: 'workspace-1' },
+        }),
+      ]);
+      expect(started.map((response) => response.statusCode)).toEqual([202, 202]);
+      await waitFor(() => activeWorkers === 4, 'all group workers did not start');
+
+      closing = server.close().then(() => { closeSettled = true; });
+      await allRunnersAborted.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(closeSettled).toBe(false);
+      expect(cleanupHookRan).toBe(false);
+
+      runnersMayFinish.resolve(undefined);
+      await closing;
+      expect(activeWorkers).toBe(0);
+      expect(cleanupHookRan).toBe(true);
+      expect(workersAtCleanup).toBe(0);
+      expect(mindReleasedAtCleanup).toBe(true);
+    } finally {
+      runnersMayFinish.resolve(undefined);
+      if (closing) await closing.catch(() => undefined);
+      await waitFor(
+        () => workspaceMindReleaseCount === 2,
+        'group executions did not release both mind references during shutdown',
+      );
+      registry.close();
+      workspaceMind.close();
+      personalMind.close();
+    }
+  });
+
+  it('does not admit a group execution that resumes model resolution after shutdown starts', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-shutdown-admission-'));
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const localModel = 'ollama/qwen2.5:0.5b';
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const personalMind = new MindDB(':memory:');
+    const workspaceMind = new MindDB(':memory:');
+    const modelLookupStarted = deferred<void>();
+    const modelLookupMayFinish = deferred<void>();
+    const jobStore = new LocalJobStore();
+    const createJob = vi.spyOn(jobStore, 'create');
+    let runnerCalls = 0;
+    let workspaceMindReleased = false;
+    let closeSettled = false;
+    let closing: Promise<void> | undefined;
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11461';
+    globalThis.fetch = vi.fn(async () => {
+      modelLookupStarted.resolve(undefined);
+      await modelLookupMayFinish.promise;
+      return new Response(JSON.stringify({
+        models: [{ name: 'qwen2.5:0.5b' }],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: '',
+    });
+    server.decorate('localJobStore', jobStore);
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: () => ({
+        id: 'workspace-1',
+        name: 'Project',
+        group: 'test',
+        created: new Date().toISOString(),
+        directory: workspaceDir,
+        model: localModel,
+      }),
+    } as never);
+    server.decorate('mindCache', {
+      acquire: () => workspaceMind,
+      release: () => { workspaceMindReleased = true; },
+    } as never);
+    server.decorate('multiMind', { personal: personalMind } as never);
+    server.decorate('agentState', {
+      allTools: [],
+      currentModel: localModel,
+      litellmApiKey: 'test-key',
+      hookRegistry: undefined,
+      spawnSecurityContext: null,
+      createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
+      buildToolsForSession: () => [],
+      bindWorkspaceCollaborationTools: ({ visibleTools }: WorkspaceCollaborationBinding) => visibleTools,
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
+    } as never);
+    server.decorate('agentRunner', async () => {
+      runnerCalls += 1;
+      return {
+        content: 'Should not run during shutdown',
+        toolsUsed: [],
+        usage: { inputTokens: 0, outputTokens: 0 },
+      };
+    });
+    await server.register(agentGroupRoutes);
+    server.addHook('onClose', async () => {
+      server!.localJobStore.close();
+    });
+
+    let pendingStart: ReturnType<typeof server.inject> | undefined;
+    try {
+      const created = await server.inject({
+        method: 'POST',
+        url: '/api/agent-groups',
+        payload: {
+          name: 'Shutdown admission group',
+          strategy: 'parallel',
+          members: [
+            { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+            { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+          ],
+        },
+      });
+      pendingStart = server.inject({
+        method: 'POST',
+        url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+        payload: { task: 'Do not start after shutdown', workspaceId: 'workspace-1' },
+      });
+      await modelLookupStarted.promise;
+
+      closing = server.close().then(() => { closeSettled = true; });
+      await closing;
+      expect(closeSettled).toBe(true);
+
+      modelLookupMayFinish.resolve(undefined);
+      const response = await pendingStart;
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'server_shutting_down' });
+      expect(runnerCalls).toBe(0);
+      expect(createJob).not.toHaveBeenCalled();
+      expect(registry.snapshot().runs).toHaveLength(0);
+      expect(workspaceMindReleased).toBe(false);
+    } finally {
+      modelLookupMayFinish.resolve(undefined);
+      if (pendingStart) await pendingStart.catch(() => undefined);
+      if (closing) await closing.catch(() => undefined);
+      if (runnerCalls > 0) {
+        await waitFor(() => workspaceMindReleased, 'late group execution did not release its workspace mind');
+      }
+      registry.close();
+      workspaceMind.close();
+      personalMind.close();
+    }
+  });
+
+  it('drains every active group before reporting a shutdown cleanup failure', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-shutdown-failure-'));
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const personalMind = new MindDB(':memory:');
+    const workspaceMind = new MindDB(':memory:');
+    const slowWorkersMayFinish = deferred<void>();
+    const firstReleaseFailed = deferred<void>();
+    let activeWorkers = 0;
+    let releaseCalls = 0;
+    let cleanupHookRan = false;
+    let closeSettled = false;
+    let closeError: unknown;
+    let closing: Promise<void> | undefined;
+
+    server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: '',
+    });
+    server.decorate('localJobStore', new LocalJobStore());
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: () => ({
+        id: 'workspace-1',
+        name: 'Project',
+        group: 'test',
+        created: new Date().toISOString(),
+        directory: workspaceDir,
+        model: 'test-model',
+      }),
+    } as never);
+    server.decorate('mindCache', {
+      acquire: () => workspaceMind,
+      release: () => {
+        releaseCalls += 1;
+        if (releaseCalls === 1) {
+          firstReleaseFailed.resolve(undefined);
+          throw new Error('simulated workspace release failure');
+        }
+      },
+    } as never);
+    server.decorate('multiMind', { personal: personalMind } as never);
+    server.decorate('agentState', {
+      allTools: [],
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      hookRegistry: undefined,
+      spawnSecurityContext: null,
+      createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
+      buildToolsForSession: () => [],
+      bindWorkspaceCollaborationTools: ({ visibleTools }: WorkspaceCollaborationBinding) => visibleTools,
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
+    } as never);
+    server.decorate('agentRunner', (config: AgentLoopConfig) => {
+      const waitsForGate = config.messages.some((message) => (
+        typeof message.content === 'string'
+        && message.content.includes('Second cleanup failure run')
+      ));
+      activeWorkers += 1;
+      return new Promise<AgentResponse>((resolve) => {
+        config.signal?.addEventListener('abort', () => {
+          const finish = () => {
+            activeWorkers -= 1;
+            resolve({
+              content: 'Stopped for shutdown failure test',
+              toolsUsed: [],
+              usage: { inputTokens: 0, outputTokens: 0 },
+            });
+          };
+          if (waitsForGate) void slowWorkersMayFinish.promise.then(finish);
+          else finish();
+        }, { once: true });
+      });
+    });
+    await server.register(agentGroupRoutes);
+    server.addHook('onClose', async () => {
+      cleanupHookRan = true;
+      server!.localJobStore.close();
+      registry.close();
+      workspaceMind.close();
+      personalMind.close();
+    });
+
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      payload: {
+        name: 'Shutdown cleanup failure group',
+        strategy: 'parallel',
+        members: [
+          { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const groupId = (created.json() as { id: string }).id;
+    const started = await Promise.all([
+      server.inject({
+        method: 'POST',
+        url: `/api/agent-groups/${groupId}/run`,
+        payload: { task: 'First cleanup failure run', workspaceId: 'workspace-1' },
+      }),
+      server.inject({
+        method: 'POST',
+        url: `/api/agent-groups/${groupId}/run`,
+        payload: { task: 'Second cleanup failure run', workspaceId: 'workspace-1' },
+      }),
+    ]);
+    expect(started.map((response) => response.statusCode)).toEqual([202, 202]);
+    await waitFor(() => activeWorkers === 4, 'cleanup failure workers did not all start');
+
+    try {
+      closing = server.close().then(
+        () => { closeSettled = true; },
+        (error: unknown) => {
+          closeSettled = true;
+          closeError = error;
+        },
+      );
+      await firstReleaseFailed.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(closeSettled).toBe(false);
+      expect(cleanupHookRan).toBe(false);
+      expect(releaseCalls).toBe(1);
+      expect(activeWorkers).toBe(2);
+
+      slowWorkersMayFinish.resolve(undefined);
+      await closing;
+      expect(closeError).toBeInstanceOf(AggregateError);
+      expect((closeError as Error).message)
+        .toContain('Agent group execution cleanup failed during shutdown');
+      expect(activeWorkers).toBe(0);
+      expect(releaseCalls).toBe(2);
+      expect(cleanupHookRan).toBe(true);
+    } finally {
+      slowWorkersMayFinish.resolve(undefined);
+      if (closing) await closing;
+    }
+  });
+
   it('rejects malformed groups before they can create a permanently queued run', async () => {
     server = createServer(async () => ({
       content: 'unused',

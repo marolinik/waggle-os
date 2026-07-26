@@ -132,6 +132,28 @@ function saveGroups(dataDir: string, groups: AgentGroup[]): void {
 
 export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
   const dataDir = server.localConfig.dataDir;
+  const activeExecutions = new Map<string, Promise<void>>();
+  let shuttingDown = false;
+
+  server.addHook('preClose', async () => {
+    shuttingDown = true;
+    const executions = [...activeExecutions.entries()];
+    for (const [jobId] of executions) server.localJobStore.cancel(jobId);
+    const results = await Promise.allSettled(executions.map(([, execution]) => execution));
+    const failures = results.flatMap((result, index) => (
+      result.status === 'rejected'
+        ? [{ jobId: executions[index][0], reason: result.reason }]
+        : []
+    ));
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures.map(({ jobId, reason }) => (
+          `${jobId}: ${reason instanceof Error ? reason.message : String(reason)}`
+        )),
+        'Agent group execution cleanup failed during shutdown',
+      );
+    }
+  });
 
   // GET /api/agent-groups
   server.get('/api/agent-groups', async () => {
@@ -212,6 +234,7 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
     Params: { id: string };
     Body: { task: string; workspaceId?: string; teamId?: string };
   }>('/api/agent-groups/:id/run', async (request, reply) => {
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
     const groups = loadGroups(dataDir);
     const group = groups.find(g => g.id === request.params.id);
     if (!group) return reply.code(404).send({ error: 'Group not found' });
@@ -243,6 +266,7 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
     if (configuredModel && isOfflineOllamaModelReference(configuredModel)) {
       try {
         localExecutionModel = await resolveUsableModel(server, configuredModel);
+        if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
       } catch (error) {
         return reply.code(409).send({
           error: 'model_unavailable',
@@ -301,7 +325,15 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
       task: task.trim(),
       ...(runContext ? { roomId: runContext.roomId, workspaceId: runContext.workspaceId, cwd: runContext.cwd } : {}),
     });
-    void executeGroup(server, group, task.trim(), job.id, runContext, localExecutionModel);
+    const execution = executeGroup(server, group, task.trim(), job.id, runContext, localExecutionModel);
+    activeExecutions.set(job.id, execution);
+    void execution.then(
+      () => { activeExecutions.delete(job.id); },
+      (error: unknown) => {
+        activeExecutions.delete(job.id);
+        server.log.error({ err: error, jobId: job.id }, 'Agent group execution failed');
+      },
+    );
 
     return reply.code(202).send({
       jobId: job.id,
