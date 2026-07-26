@@ -217,6 +217,40 @@ function toOpenAiTool(tool: ToolDefinition): {
   };
 }
 
+interface ToolSelectionMetadata {
+  name: string;
+  description: string;
+  parametersJson: string;
+  normalizedName: string;
+  nameTokens: ReadonlySet<string>;
+  metadataTokens: ReadonlySet<string>;
+}
+
+const TOOL_SELECTION_METADATA = new WeakMap<ToolDefinition, ToolSelectionMetadata>();
+
+function selectionMetadata(tool: ToolDefinition): ToolSelectionMetadata {
+  const cached = TOOL_SELECTION_METADATA.get(tool);
+  const parametersJson = JSON.stringify(tool.parameters);
+  if (cached
+    && cached.name === tool.name
+    && cached.description === tool.description
+    && cached.parametersJson === parametersJson) {
+    return cached;
+  }
+
+  const normalizedName = tool.name.toLowerCase();
+  const metadata: ToolSelectionMetadata = {
+    name: tool.name,
+    description: tool.description,
+    parametersJson,
+    normalizedName,
+    nameTokens: tokensOf(normalizedName),
+    metadataTokens: tokensOf(`${tool.description} ${parametersJson}`),
+  };
+  TOOL_SELECTION_METADATA.set(tool, metadata);
+  return metadata;
+}
+
 /** Exact serialized character count for the schema array sent by agent-loop. */
 export function measureOpenAiToolSchemaChars(tools: readonly ToolDefinition[]): number {
   return JSON.stringify(tools.map(toOpenAiTool)).length;
@@ -265,9 +299,7 @@ export function selectToolsForTurn(
 
   const ranked: Array<{ tool: ToolDefinition; index: number; score: number }> = [];
   for (const { tool, index } of deduplicated) {
-    const normalizedName = tool.name.toLowerCase();
-    const nameTokens = tokensOf(normalizedName);
-    const metadataTokens = tokensOf(`${tool.description} ${JSON.stringify(tool.parameters)}`);
+    const { normalizedName, nameTokens, metadataTokens } = selectionMetadata(tool);
     const exactName = message.includes(normalizedName);
     const currentNameOverlap = isAction ? overlapCount(messageTokens, nameTokens) : 0;
     const currentMetadataOverlap = isAction ? overlapCount(messageTokens, metadataTokens) : 0;

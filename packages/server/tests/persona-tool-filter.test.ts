@@ -355,17 +355,86 @@ describe('selectToolsForTurn - bounded per-turn model context', () => {
     expect(selected.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
   });
 
-  it('selects from a 78-tool pool within a 10ms p95 budget', () => {
+  it('refreshes cached ranking metadata when a tool definition changes', () => {
+    const select = (
+      tool: ToolDefinition,
+      message = 'Fix the failing TypeScript test',
+    ) => (
+      selectToolsForTurn([tool], { message }).tools
+    );
+    const nameTool = selectorTool('dynamic_adapter', 'Forecast the weather.');
+    expect(select(nameTool)).toEqual([]);
+    nameTool.name = 'typescript_fix_helper';
+    expect(select(nameTool, 'Use typescript_fix_helper')).toEqual([nameTool]);
+
+    const descriptionTool = selectorTool('dynamic_adapter', 'Forecast the weather.');
+    expect(select(descriptionTool)).toEqual([]);
+    descriptionTool.description = 'Diagnose a failing TypeScript test.';
+    expect(select(descriptionTool)).toEqual([descriptionTool]);
+
+    const parametersTool = selectorTool('dynamic_adapter', 'Forecast the weather.');
+    expect(select(parametersTool)).toEqual([]);
+    parametersTool.parameters = {
+      type: 'object',
+      properties: {
+        diagnostic: { type: 'string', description: 'TypeScript diagnostic' },
+      },
+    };
+    expect(select(parametersTool)).toEqual([parametersTool]);
+
+    const nestedParametersTool = selectorTool('dynamic_adapter', 'Forecast the weather.');
+    expect(select(nestedParametersTool)).toEqual([]);
+    const properties = nestedParametersTool.parameters.properties as Record<string, unknown>;
+    properties.diagnostic = { type: 'string', description: 'TypeScript diagnostic' };
+    expect(select(nestedParametersTool)).toEqual([nestedParametersTool]);
+  });
+
+  it('keeps the schema cap exact after an in-place parameter mutation', () => {
+    const tool = selectorTool('read_file', 'Read a workspace file.');
+    expect(selectToolsForTurn([tool], {
+      message: 'Read the workspace file',
+    }).tools).toEqual([tool]);
+
+    tool.parameters.properties = {
+      payload: {
+        type: 'string',
+        description: 'x'.repeat(DEFAULT_TURN_SCHEMA_CHAR_LIMIT),
+      },
+    };
+    const selected = selectToolsForTurn([tool], {
+      message: 'Read the workspace file',
+    });
+
+    expect(selected.tools).toEqual([]);
+    expect(selected.schemaChars).toBe(2);
+  });
+
+  it('selects from a stable 78-tool pool within a 10ms p95 budget', () => {
+    const messages = [
+      'Fix the failing TypeScript test and inspect the git diff',
+      'Research the latest benchmark and cite sources',
+    ];
+    for (const message of messages) {
+      const warm = selectToolsForTurn(pool, {
+        message,
+        recentToolNames: ['read_file', 'search_files', 'git_diff'],
+      });
+      expect(warm.tools.length).toBeGreaterThan(0);
+      expect(warm.tools.length).toBeLessThanOrEqual(DEFAULT_TURN_TOOL_LIMIT);
+      expect(warm.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
+    }
+
     const durations: number[] = [];
     for (let i = 0; i < 120; i += 1) {
       const started = performance.now();
-      selectToolsForTurn(pool, {
-        message: i % 2 === 0
-          ? 'Fix the failing TypeScript test and inspect git diff'
-          : 'Research the latest benchmark and cite sources',
+      const selected = selectToolsForTurn(pool, {
+        message: messages[i % messages.length],
         recentToolNames: ['read_file', 'search_files', 'git_diff'],
       });
       durations.push(performance.now() - started);
+      expect(selected.tools.length).toBeGreaterThan(0);
+      expect(selected.tools.length).toBeLessThanOrEqual(DEFAULT_TURN_TOOL_LIMIT);
+      expect(selected.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
     }
     durations.sort((a, b) => a - b);
     const p95 = durations[Math.floor(durations.length * 0.95)] ?? Infinity;
