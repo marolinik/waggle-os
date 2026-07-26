@@ -100,13 +100,20 @@ describe('SSE Stream Resilience', () => {
       server.localConfig.litellmUrl = prevLitellmUrl;
     });
 
-    it('scopes concurrent pathless chat turns to the shared home root', async () => {
+    it('scopes concurrent pathless chat turns to the active workspace root', async () => {
       const prevProvider = server.agentState.llmProvider;
       const prevLitellmUrl = server.localConfig.litellmUrl;
       const createScopeSpy = vi.spyOn(
         server.agentState.workspaceTurnCoordinator,
         'createScope',
       );
+      const activeWorkspaceId = server.agentState.activeWorkspaceId;
+      expect(activeWorkspaceId).toBeTruthy();
+      const activeWorkspace = server.workspaceManager.get(activeWorkspaceId!);
+      expect(activeWorkspace).toBeDefined();
+      const expectedRoot = activeWorkspace!.directory
+        ?? activeWorkspace!.storagePath
+        ?? path.join(tmpDir, 'workspaces', activeWorkspaceId!, 'files');
       server.agentState.llmProvider = ECHO_MODE_PROVIDER;
       server.localConfig.litellmUrl = 'http://127.0.0.1:1';
 
@@ -127,8 +134,8 @@ describe('SSE Stream Resilience', () => {
         expect(responses.map(response => response.statusCode)).toEqual([200, 200]);
         expect(createScopeSpy).toHaveBeenCalledTimes(2);
         expect(createScopeSpy.mock.calls.map(([root]) => root)).toEqual([
-          os.homedir(),
-          os.homedir(),
+          expectedRoot,
+          expectedRoot,
         ]);
       } finally {
         createScopeSpy.mockRestore();
@@ -315,6 +322,8 @@ describe('SSE Stream Resilience', () => {
       const prevLitellmUrl = server.localConfig.litellmUrl;
       const prevMcpRuntime = server.agentState.mcpRuntime;
       const prevOllamaHost = process.env.OLLAMA_HOST;
+      const activeWorkspaceId = server.agentState.activeWorkspaceId;
+      expect(activeWorkspaceId).toBeTruthy();
       const makeTool = (name: string): ToolDefinition => ({
         name,
         description: name,
@@ -322,11 +331,13 @@ describe('SSE Stream Resilience', () => {
         execute: async () => 'ok',
       });
       const globalTool = makeTool('mcp_global_search');
-      const activeTool = makeTool('mcp_default_write');
+      const activeTool = makeTool('mcp_active_workspace_write');
       const foreignTool = makeTool('mcp_other_workspace_admin');
       const getAllTools = vi.fn(() => [globalTool, activeTool, foreignTool]);
       const getToolsForWorkspace = vi.fn((workspaceId: string) =>
-        workspaceId === 'default' ? [globalTool, activeTool] : [globalTool, foreignTool]);
+        workspaceId === activeWorkspaceId
+          ? [globalTool, activeTool]
+          : [globalTool, foreignTool]);
       server.agentState.mcpRuntime = {
         getAllTools,
         getToolsForWorkspace,
@@ -370,7 +381,7 @@ describe('SSE Stream Resilience', () => {
           method: 'POST',
           url: '/api/chat',
           payload: {
-            message: 'Execute the mcp_global_search tool and the mcp_default_write tool',
+            message: 'Execute the mcp_global_search tool and the mcp_active_workspace_write tool',
             model: 'ollama/local-test',
           },
         });
@@ -379,7 +390,7 @@ describe('SSE Stream Resilience', () => {
         expect(transmittedToolNames).toContain(globalTool.name);
         expect(transmittedToolNames).toContain(activeTool.name);
         expect(transmittedToolNames).not.toContain(foreignTool.name);
-        expect(getToolsForWorkspace).toHaveBeenCalledWith('default');
+        expect(getToolsForWorkspace).toHaveBeenCalledWith(activeWorkspaceId);
         expect(getAllTools).not.toHaveBeenCalled();
       } finally {
         fetchSpy.mockRestore();
