@@ -21,8 +21,10 @@ import {
   chatSessionStateKey,
   isolateLegacyDefaultChatSessions,
   loadSessionMessages,
+  persistMessage,
   resolveChatHistoryTarget,
 } from '../src/local/routes/chat-persistence.js';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
 /**
@@ -1488,6 +1490,96 @@ describe('Chat Streaming API', () => {
         }),
       ]);
       expect(loadSessionMessages(tmpDir, 'default', sessionId)).toEqual([]);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(
+        chatSessionStateKey(memberWorkspace.id, sessionId),
+      );
+    }
+  });
+
+  it('retries omitted-workspace history without rewriting a managed viewer workspace named default', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const memberWorkspace = server.workspaceManager.create({
+      name: `Implicit retry member ${nonce}`,
+      group: 'test',
+      teamId: `implicit-retry-team-${nonce}`,
+      teamRole: 'member',
+    });
+    const literalDefaultWorkspace = server.workspaceManager.ensure('default', {
+      name: 'default',
+      group: 'test',
+      teamId: `implicit-retry-team-${nonce}`,
+      teamRole: 'viewer',
+    });
+    const sessionId = `implicit-retry-${nonce}`;
+    const retryMessage = `retry member turn ${nonce}`;
+    const defaultMessage = `viewer default turn ${nonce}`;
+    const originalRunner = server.agentRunner;
+
+    expect(literalDefaultWorkspace.teamRole).toBe('viewer');
+    expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
+    persistMessage(tmpDir, memberWorkspace.id, sessionId, {
+      role: 'user',
+      content: retryMessage,
+    });
+    persistMessage(tmpDir, memberWorkspace.id, sessionId, {
+      role: 'assistant',
+      content: `${GENERATION_FAILED_PREFIX}member failure`,
+    });
+    persistMessage(tmpDir, 'default', sessionId, {
+      role: 'user',
+      content: defaultMessage,
+    });
+    persistMessage(tmpDir, 'default', sessionId, {
+      role: 'assistant',
+      content: `${GENERATION_FAILED_PREFIX}viewer failure`,
+    });
+    const defaultSessionFile = path.join(
+      tmpDir,
+      'workspaces',
+      'default',
+      'sessions',
+      `${sessionId}.jsonl`,
+    );
+    const defaultBytesBefore = fs.readFileSync(defaultSessionFile);
+    server.agentState.sessionHistories.delete(
+      chatSessionStateKey(memberWorkspace.id, sessionId),
+    );
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
+      config.onToken?.(content);
+      return {
+        content,
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: retryMessage, session: sessionId, retry: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(loadSessionMessages(tmpDir, memberWorkspace.id, sessionId)).toEqual([
+        expect.objectContaining({ role: 'user', content: retryMessage }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: `reply:${retryMessage}`,
+        }),
+      ]);
+      expect(fs.readFileSync(defaultSessionFile)).toEqual(defaultBytesBefore);
+      expect(loadSessionMessages(tmpDir, 'default', sessionId)).toEqual([
+        expect.objectContaining({ role: 'user', content: defaultMessage }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: `${GENERATION_FAILED_PREFIX}viewer failure`,
+        }),
+      ]);
     } finally {
       server.agentRunner = originalRunner;
       server.agentState.sessionHistories.delete(
