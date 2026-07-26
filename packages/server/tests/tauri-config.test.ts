@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
@@ -3057,6 +3058,54 @@ describe('Playwright Visual Regression Setup', () => {
     const content = fs.readFileSync(conf, 'utf-8');
     expect(content).toContain('maxDiffPixelRatio');
     expect(content).toContain('localhost:3333');
+    expect(content).not.toContain('npx tsx packages/server/src/local/start.ts');
+  });
+
+  it('starts the E2E server with the same Node runtime as Playwright', () => {
+    const conf = path.join(ROOT, 'playwright.config.ts');
+    const tsxCli = path.join(ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    const probeSource = `
+      import config from ${JSON.stringify(pathToFileURL(conf).href)};
+      const webServer = Array.isArray(config.webServer)
+        ? config.webServer[0]
+        : config.webServer;
+      const pathKey = Object.keys(webServer.env)
+        .find((key) => key.toLowerCase() === 'path');
+      console.log(JSON.stringify({
+        command: webServer.command,
+        pathValue: webServer.env[pathKey],
+      }));
+    `;
+    const result = spawnSync(
+      process.execPath,
+      [tsxCli, '--eval', probeSource],
+      {
+        cwd: ROOT,
+        encoding: 'utf-8',
+        env: {
+          ...process.env,
+          WAGGLE_E2E_SKIP_LITELLM: '1',
+        },
+        timeout: 30_000,
+        windowsHide: true,
+      },
+    );
+
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    const output = result.stdout.trim().split(/\r?\n/).at(-1);
+    const webServer = JSON.parse(output ?? '{}') as {
+      command?: string;
+      pathValue?: string;
+    };
+    expect(webServer.command).toBe(
+      'npm run build:all && node node_modules/tsx/dist/cli.mjs '
+      + 'packages/server/src/local/start.ts --skip-litellm',
+    );
+    expect(webServer.command).not.toContain(process.execPath);
+    expect(webServer.command).not.toContain('%');
+    expect(webServer.pathValue?.split(path.delimiter)[0]).toBe(
+      path.dirname(process.execPath),
+    );
   });
 
   it('visual test spec exists with 14 test cases (7 views x 2 themes)', () => {
