@@ -25,6 +25,19 @@ const THEME_LABELS = {
 } as const;
 
 const VISUAL_MODEL = 'openai/visual-fixture-model';
+const VISUAL_DATE = '2026-07-12T23:39:00';
+const VISUAL_SHELL_WORKSPACE = {
+  id: 'visual-shell-workspace',
+  name: 'Workspace',
+  group: 'workspace',
+  lastActive: '2026-07-12T19:39:00.000Z',
+};
+const VISUAL_WORKSPACE = {
+  id: 'visual-workspace',
+  name: 'Default Workspace',
+  group: 'workspace',
+  lastActive: '2026-07-12T20:39:00.000Z',
+};
 const VISUAL_PROVIDER_META = [
   ['anthropic', 'Anthropic'],
   ['openai', 'OpenAI'],
@@ -67,7 +80,7 @@ async function applyTheme(page: Page, theme: 'dark' | 'light') {
   }, theme);
 }
 
-async function stubDynamicRuntime(page: Page) {
+async function stubDynamicRuntime(page: Page, viewName: typeof VIEWS[number]['name']) {
   const json = (body: unknown) => ({
     status: 200,
     contentType: 'application/json',
@@ -114,10 +127,59 @@ async function stubDynamicRuntime(page: Page) {
     if (route.request().method() === 'GET') return route.fulfill(json({ defaultModel: VISUAL_MODEL }));
     return route.continue();
   });
+
+  if (viewName === 'cockpit') {
+    await page.route('**/api/home/briefing', route => route.fulfill(json({
+      greeting: 'Welcome, Waggle — anything you discuss here will be remembered.',
+      date: VISUAL_DATE,
+      recentWorkspaces: [{
+        ...VISUAL_WORKSPACE,
+        pendingCount: 0,
+        continueSessionId: 'visual-session',
+      }],
+      suggestedActions: [],
+      upNext: [],
+      activeModels: [VISUAL_MODEL],
+      isFirstRun: false,
+      needsReviewCount: 0,
+    })));
+    await page.route('**/api/home/overnight**', route => route.fulfill(json({
+      consolidated: 0,
+      artifactsCreated: 0,
+      automationsCompleted: 0,
+      failures: [],
+      window: {
+        from: '2026-07-11T21:39:00.000Z',
+        to: VISUAL_DATE,
+      },
+    })));
+    await page.route('**/api/workspaces', route => route.fulfill(json([
+      VISUAL_SHELL_WORKSPACE,
+      VISUAL_WORKSPACE,
+    ])));
+    await page.route('**/api/workspaces/*/context', route => {
+      const workspace = route.request().url().includes('/visual-shell-workspace/')
+        ? VISUAL_SHELL_WORKSPACE
+        : VISUAL_WORKSPACE;
+      return route.fulfill(json({
+        workspace,
+        summary: '',
+        pendingTasks: [],
+        stats: { memoryCount: 0, sessionCount: 0, fileCount: 0 },
+      }));
+    });
+    await page.route('**/api/memory/search**', route => route.fulfill(json([])));
+    await page.route('**/api/memory/stats**', route => route.fulfill(json({
+      personal: { frameCount: 0, entityCount: 0, relationCount: 0 },
+      workspace: { frameCount: 0, entityCount: 0, relationCount: 0 },
+      total: { frameCount: 0, entityCount: 0, relationCount: 0 },
+    })));
+    await page.route('**/api/dreams**', route => route.fulfill(json([])));
+  }
 }
 
 async function gotoVisualView(page: Page, view: typeof VIEWS[number], theme: 'dark' | 'light') {
-  await stubDynamicRuntime(page);
+  await stubDynamicRuntime(page, view.name);
   await applyTheme(page, theme);
   const route = view.route === 'chat' ? await firstWorkspaceChatRoute(page) : view.route;
   await page.goto(routeWithSkip(route), { waitUntil: 'domcontentloaded' });
@@ -145,7 +207,14 @@ async function waitForVisualReady(page: Page, viewName: typeof VIEWS[number]['na
     return;
   }
   if (viewName === 'cockpit') {
-    await expect(page.locator('[data-testid="home-cockpit"], [data-testid="home-cockpit-empty"]').first()).toBeVisible({ timeout: 15_000 });
+    const cockpit = page.getByTestId('home-cockpit');
+    await expect(cockpit).toBeVisible({ timeout: 15_000 });
+    await expect(cockpit).toContainText('Welcome, Waggle — anything you discuss here will be remembered.');
+    await expect(page.getByTestId('home-cockpit-ws-visual-workspace')).toHaveCount(1);
+    await expect(page.getByTestId('home-cockpit-start-here')).toContainText('Continue Default Workspace');
+    await expect(cockpit).not.toContainText(/E2E-Audit|Power Workspace/);
+    await expect(page.getByTestId('home-cockpit-recall')).toHaveCount(0);
+    await expect(page.getByTestId('home-dream-diary')).toHaveCount(0);
     return;
   }
   if (viewName === 'settings') {
