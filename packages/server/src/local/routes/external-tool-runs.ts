@@ -116,8 +116,43 @@ const runSchema = z.object({
 export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
   const workspaceTurnCoordinator = server.agentState?.workspaceTurnCoordinator
     ?? new WorkspaceTurnCoordinator();
+  const activeExecutions = new Map<string, Promise<void>>();
+  let shuttingDown = false;
+
+  server.addHook('preClose', async () => {
+    shuttingDown = true;
+    const executions = [...activeExecutions.entries()];
+    const cancellationFailures: Array<{ roomId: string; reason: unknown }> = [];
+    for (const [roomId] of executions) {
+      const room = server.agentRunRegistry.get(roomId);
+      if (!room || ['completed', 'failed', 'cancelled', 'interrupted'].includes(room.status)) continue;
+      try {
+        await server.agentRunRegistry.control(roomId, 'cancel');
+      } catch (error) {
+        const current = server.agentRunRegistry.get(roomId);
+        if (current && ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) continue;
+        cancellationFailures.push({ roomId, reason: error });
+      }
+    }
+    const results = await Promise.allSettled(executions.map(([, execution]) => execution));
+    const executionFailures = results.flatMap((result, index) => (
+      result.status === 'rejected'
+        ? [{ roomId: executions[index][0], reason: result.reason }]
+        : []
+    ));
+    const failures = [...cancellationFailures, ...executionFailures];
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures.map(({ roomId, reason }) => (
+          `${roomId}: ${reason instanceof Error ? reason.message : String(reason)}`
+        )),
+        'External tool execution cleanup failed during shutdown',
+      );
+    }
+  });
 
   server.post('/api/tools/run', async (request, reply) => {
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
     const parsed = runSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -234,6 +269,7 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
         message: 'The packaged Waggle collaboration CLI is missing. Reinstall Waggle or rebuild the sidecar resources.',
       });
     }
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
 
     const room = server.agentRunRegistry.createRoom({
       workspaceIds,
@@ -305,7 +341,7 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
       };
     }
 
-    void executeExternalRoom(server, runner, room.id, executionSpecs, synthesisSpec, {
+    const execution = executeExternalRoom(server, runner, room.id, executionSpecs, synthesisSpec, {
       prompt: body.prompt,
       timeoutMs: body.timeoutMs,
       danceUrl: localApiBase(server),
@@ -313,6 +349,14 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
       dataDir: server.localConfig.dataDir,
       workspaceTurnCoordinator,
     });
+    activeExecutions.set(room.id, execution);
+    void execution.then(
+      () => { activeExecutions.delete(room.id); },
+      (error: unknown) => {
+        activeExecutions.delete(room.id);
+        server.log.error({ err: error, roomId: room.id }, 'External tool execution failed');
+      },
+    );
 
     const runs = [...executionSpecs.map((spec) => spec.run), ...(synthesisSpec ? [synthesisSpec.run] : [])];
 

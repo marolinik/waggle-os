@@ -847,6 +847,7 @@ describe('external tool run routes', () => {
     const calls: Array<{ runId: string; signal?: AbortSignal }> = [];
     let resolveList!: (result: ExternalToolRunResult) => void;
     const listGate = new Promise<ExternalToolRunResult>((resolve) => { resolveList = resolve; });
+    let closePromise: Promise<void> | null = null;
     const server = Fastify({ logger: false });
     server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
     server.decorate('workspaceManager', {
@@ -894,11 +895,15 @@ describe('external tool run routes', () => {
       expect(response.statusCode).toBe(202);
       const body = response.json() as { runs: Array<{ runId: string }> };
       await waitFor(() => calls.length === 1, 'OpenClaw list command did not start');
-      await registry.control(body.runs[0].runId, 'cancel');
+      let closeSettled = false;
+      closePromise = server.close().then(() => { closeSettled = true; });
+      await waitFor(() => calls[0].signal?.aborted === true, 'shutdown did not cancel OpenClaw provisioning');
+      expect(closeSettled).toBe(false);
       resolveList({
         status: 'cancelled', exitCode: null, summary: 'Cancelled',
         stdoutTail: '', stderrTail: '', durationMs: 1,
       });
+      await closePromise;
       await waitFor(() => bus.query().some((message) =>
         message.content.runId === body.runs[0].runId
         && message.content.phase === 'cancelled'),
@@ -912,7 +917,76 @@ describe('external tool run routes', () => {
         status: 'cancelled', exitCode: null, summary: 'Cancelled',
         stdoutTail: '', stderrTail: '', durationMs: 1,
       });
+      if (closePromise) await closePromise;
+      else await server.close();
+    }
+  });
+
+  it('rejects a run whose detector finishes after shutdown admission closes', async () => {
+    const dataDir = tempDir();
+    const sharedRoot = path.join(dataDir, 'shared-checkout');
+    fs.mkdirSync(sharedRoot);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    let detectorStartedResolve!: () => void;
+    let detectorGateResolve!: () => void;
+    const detectorStarted = new Promise<void>((resolve) => { detectorStartedResolve = resolve; });
+    const detectorGate = new Promise<void>((resolve) => { detectorGateResolve = resolve; });
+    const runner = vi.fn(async (): Promise<ExternalToolRunResult> => ({
+      status: 'completed', exitCode: 0, summary: 'must not run',
+      stdoutTail: '', stderrTail: '', durationMs: 1,
+    }));
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
+    server.decorate('workspaceManager', {
+      get: (id: string) => id === 'alpha'
+        ? { id, name: id, group: 'test', created: new Date().toISOString(), directory: sharedRoot }
+        : undefined,
+    } as never);
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('signalBus', new SignalBus());
+    server.decorate('agentState', {
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
+    } as never);
+    server.decorate('externalCollaborationRuntime', collaborationRuntime);
+    server.decorate('externalToolDetector', async () => {
+      detectorStartedResolve();
+      await detectorGate;
+      return {
+        platform: 'win32' as const,
+        detectedAt: new Date().toISOString(),
+        tools: [{
+          id: 'openclaw' as const, displayName: 'OpenClaw', installed: true,
+          installedPath: 'openclaw.cmd', version: 'test',
+          hooksInstalled: false, hookPointerPath: null,
+        }],
+      };
+    });
+    server.decorate('externalToolRunner', runner);
+    await server.register(externalToolRunRoutes);
+    let pending: ReturnType<typeof server.inject> | null = null;
+
+    try {
+      pending = server.inject({
+        method: 'POST', url: '/api/tools/run',
+        payload: {
+          toolId: 'openclaw',
+          workspaceIds: ['alpha'],
+          prompt: 'Must not start after shutdown',
+          access: 'native',
+        },
+      });
+      await detectorStarted;
       await server.close();
+      detectorGateResolve();
+      const response = await pending;
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'server_shutting_down' });
+      expect(registry.list({ source: 'external_tool' })).toHaveLength(0);
+      expect(runner).not.toHaveBeenCalled();
+    } finally {
+      detectorGateResolve();
+      if (pending) await pending.catch(() => undefined);
+      await server.close().catch(() => undefined);
     }
   });
 
