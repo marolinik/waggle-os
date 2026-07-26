@@ -147,6 +147,78 @@ describe('WorkspaceTurnCoordinator', () => {
     await scope.release();
   });
 
+  it('lets an active child finish wrapped writes before releasing the outer writer lease', async () => {
+    const coordinator = new WorkspaceTurnCoordinator();
+    const scope = coordinator.createScope(process.cwd());
+    const competingScope = coordinator.createScope(process.cwd());
+    await scope.acquire('write');
+
+    const childStarted = deferred();
+    const childMayEdit = deferred();
+    const wrappedEdit = scope.wrapTools([{
+      name: 'edit_file',
+      description: '',
+      parameters: {},
+      execute: async () => 'edited',
+    }])[0];
+    const writer = scope.runChildTransaction([{ name: 'edit_file' }], async () => {
+      childStarted.resolve();
+      await childMayEdit.promise;
+      return wrappedEdit.execute({});
+    });
+    await childStarted.promise;
+
+    let releaseSettled = false;
+    const release = scope.release().then(() => { releaseSettled = true; });
+    let competingAcquired = false;
+    const competing = competingScope.acquire('write').then(() => { competingAcquired = true; });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(releaseSettled).toBe(false);
+    expect(competingAcquired).toBe(false);
+
+    await expect(scope.runChildTransaction([{ name: 'edit_file' }], async () => 'late'))
+      .rejects.toThrow('without an active writer lease');
+    childMayEdit.resolve();
+    await expect(writer).resolves.toBe('edited');
+    await release;
+    await competing;
+    expect(competingAcquired).toBe(true);
+    await competingScope.release();
+  });
+
+  it('holds the outer writer lease for an active memory-only child transaction', async () => {
+    const coordinator = new WorkspaceTurnCoordinator();
+    const scope = coordinator.createScope(process.cwd());
+    const competingScope = coordinator.createScope(process.cwd());
+    await scope.acquire('write');
+
+    const childStarted = deferred();
+    const childMayFinish = deferred();
+    const memory = scope.runChildTransaction([{ name: 'search_memory' }], async () => {
+      childStarted.resolve();
+      await childMayFinish.promise;
+      return 'memory';
+    });
+    await childStarted.promise;
+
+    let releaseSettled = false;
+    const release = scope.release().then(() => { releaseSettled = true; });
+    let competingAcquired = false;
+    const competing = competingScope.acquire('write').then(() => { competingAcquired = true; });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(releaseSettled).toBe(false);
+    expect(competingAcquired).toBe(false);
+
+    childMayFinish.resolve();
+    await expect(memory).resolves.toBe('memory');
+    await release;
+    await competing;
+    expect(competingAcquired).toBe(true);
+    await competingScope.release();
+  });
+
   it('classifies checkout reads, writes, knowledge-only tools, and unknown tools conservatively', () => {
     expect(classifyWorkspaceTurnAccess([
       { name: 'search_memory' }, { name: 'web_fetch' }, { name: 'create_skill' },

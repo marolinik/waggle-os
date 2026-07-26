@@ -248,6 +248,8 @@ export class WorkspaceTurnScope {
   private access: WorkspaceTurnAccess = 'none';
   private mutationTail: Promise<void> = Promise.resolve();
   private readonly childTransactions = new WorkspaceTurnCoordinator();
+  private readonly activeChildTransactions = new Set<Promise<void>>();
+  private releasePromise?: Promise<void>;
   private released = false;
 
   constructor(
@@ -286,24 +288,32 @@ export class WorkspaceTurnScope {
     operation: () => Promise<T>,
     externalToolNames: ReadonlySet<string> = new Set<string>(),
   ): Promise<T> {
-    if (this.released || this.access !== 'write' || !this.releaseTurn) {
+    if (this.releasePromise || this.released || this.access !== 'write' || !this.releaseTurn) {
       throw new Error('Child agent attempted to run without an active writer lease');
     }
     if (this.signal?.aborted) throw abortError(this.signal);
 
-    const access = classifyWorkspaceTurnAccess(tools, externalToolNames);
-    if (access === 'none') return operation();
-
-    const releaseChild = await this.childTransactions.acquire(
-      this.resource,
-      access,
-      this.signal,
-    );
+    let settleChild!: () => void;
+    const childSettled = new Promise<void>((resolve) => { settleChild = resolve; });
+    this.activeChildTransactions.add(childSettled);
     try {
-      if (this.signal?.aborted) throw abortError(this.signal);
-      return await operation();
+      const access = classifyWorkspaceTurnAccess(tools, externalToolNames);
+      if (access === 'none') return await operation();
+
+      const releaseChild = await this.childTransactions.acquire(
+        this.resource,
+        access,
+        this.signal,
+      );
+      try {
+        if (this.signal?.aborted) throw abortError(this.signal);
+        return await operation();
+      } finally {
+        releaseChild();
+      }
     } finally {
-      releaseChild();
+      this.activeChildTransactions.delete(childSettled);
+      settleChild();
     }
   }
 
@@ -311,7 +321,9 @@ export class WorkspaceTurnScope {
     access: Exclude<WorkspaceTurnAccess, 'none'>,
     onQueued?: (position: number) => void,
   ): Promise<void> {
-    if (this.releaseTurn || this.released) throw new Error('Workspace turn scope cannot be acquired twice');
+    if (this.releaseTurn || this.releasePromise || this.released) {
+      throw new Error('Workspace turn scope cannot be acquired twice');
+    }
     this.releaseTurn = await this.coordinator.acquire(
       this.resource,
       access,
@@ -322,12 +334,17 @@ export class WorkspaceTurnScope {
   }
 
   async release(): Promise<void> {
+    if (this.releasePromise) return this.releasePromise;
     if (this.released) return;
-    this.released = true;
-    await this.mutationTail.catch(() => undefined);
-    this.releaseTurn?.();
-    this.releaseTurn = undefined;
-    this.access = 'none';
+    this.releasePromise = (async () => {
+      await Promise.allSettled([...this.activeChildTransactions]);
+      await this.mutationTail.catch(() => undefined);
+      this.releaseTurn?.();
+      this.releaseTurn = undefined;
+      this.access = 'none';
+      this.released = true;
+    })();
+    return this.releasePromise;
   }
 
   private async runMutation<T>(operation: () => Promise<T>): Promise<T> {
