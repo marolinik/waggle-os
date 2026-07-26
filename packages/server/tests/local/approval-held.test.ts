@@ -6,6 +6,7 @@ import * as os from 'node:os';
 import { MindDB, CronStore } from '@waggle/core';
 import { approvalRoutes } from '../../src/local/routes/approval.js';
 import { securityMiddleware } from '../../src/local/security-middleware.js';
+import { ApprovalGrantStore } from '../../src/local/approval-grants.js';
 
 describe('approval routes — held actions (L2 union)', () => {
   let tmpDir: string;
@@ -15,6 +16,7 @@ describe('approval routes — held actions (L2 union)', () => {
   let pendingApprovals: Map<string, { toolName: string; input: Record<string, unknown>; timestamp: number; resolve: (v: boolean) => void }>;
   let execSpy: ReturnType<typeof vi.fn>;
   let buildToolsSpy: ReturnType<typeof vi.fn>;
+  let grantSpy: ReturnType<typeof vi.fn>;
   let literalDefaultIsViewer: boolean;
 
   beforeEach(async () => {
@@ -24,6 +26,7 @@ describe('approval routes — held actions (L2 union)', () => {
     pendingApprovals = new Map();
     execSpy = vi.fn(async () => 'email sent');
     buildToolsSpy = vi.fn(() => [{ name: 'send_email', description: '', parameters: {}, execute: execSpy }]);
+    grantSpy = vi.fn();
     literalDefaultIsViewer = false;
 
     server = Fastify({ logger: false });
@@ -51,7 +54,7 @@ describe('approval routes — held actions (L2 union)', () => {
     server.decorate('agentState', {
       cronStore: store,
       pendingApprovals,
-      approvalGrantStore: { grant: vi.fn() },
+      approvalGrantStore: { grant: grantSpy },
       buildToolsForWorkspace: buildToolsSpy,
     });
     await server.register(securityMiddleware);
@@ -199,6 +202,49 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(resolve).toHaveBeenCalledTimes(1);
   });
 
+  it('downgrades always approval for host execution to one explicit call', async () => {
+    const resolve = vi.fn();
+    pendingApprovals.set('live-bash', {
+      toolName: 'bash',
+      input: { command: 'echo approved once' },
+      timestamp: 1,
+      resolve,
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/approval/live-bash',
+      payload: { approved: true, always: true, sourceWorkspaceId: 'w1' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ approved: true, always: false });
+    expect(resolve).toHaveBeenCalledWith(true);
+    expect(grantSpy).not.toHaveBeenCalled();
+  });
+
+  it('persists always approval for a grantable scoped tool', async () => {
+    const resolve = vi.fn();
+    const input = { path: 'notes.txt' };
+    pendingApprovals.set('live-write-file', {
+      toolName: 'write_file',
+      input,
+      timestamp: 1,
+      resolve,
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/approval/live-write-file',
+      payload: { approved: true, always: true, sourceWorkspaceId: 'w1' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ approved: true, always: true });
+    expect(resolve).toHaveBeenCalledWith(true);
+    expect(grantSpy).toHaveBeenCalledWith('write_file', input, 'w1');
+  });
+
   it('POST approve is idempotent — re-approving an executed held id is 409 (already decided)', async () => {
     hold();
     await server.inject({ method: 'POST', url: '/api/approval/pa-1', payload: { approved: true } });
@@ -206,5 +252,43 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(second.statusCode).toBe(409);
     expect(second.json()).toEqual({ error: 'already_decided', status: 'executed' });
     expect(execSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('host execution approval grants', () => {
+  it('ignores legacy host grants, rejects new ones, and preserves scoped file grants', () => {
+    const grantDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-host-grants-'));
+    try {
+      fs.writeFileSync(
+        path.join(grantDir, 'approval-grants.json'),
+        JSON.stringify({
+          version: 1,
+          grants: [{
+            id: 'legacy-bash',
+            toolName: 'bash',
+            targetKey: '*',
+            sourceWorkspaceId: 'w1',
+            description: 'legacy shell grant',
+            grantedAt: new Date().toISOString(),
+            expiresAt: null,
+          }],
+        }),
+        'utf-8',
+      );
+      const grants = new ApprovalGrantStore(grantDir);
+
+      for (const toolName of ['bash', 'run_code', 'cli_execute']) {
+        expect(grants.has(toolName, {}, 'w1')).toBe(false);
+      }
+      expect(grants.list()).toEqual([]);
+      for (const toolName of ['bash', 'run_code', 'cli_execute']) {
+        expect(() => grants.grant(toolName, {}, 'w1')).toThrow(/cannot be persisted/i);
+      }
+
+      grants.grant('write_file', { path: 'notes.txt' }, 'w1');
+      expect(grants.has('write_file', { path: 'notes.txt' }, 'w1')).toBe(true);
+    } finally {
+      fs.rmSync(grantDir, { recursive: true, force: true });
+    }
   });
 });

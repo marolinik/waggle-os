@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { executeHeldAction } from '../held-action-executor.js';
+import { isGrantableTool } from '../approval-grants.js';
 
 /** Parse a held action's args JSON defensively (never throw into the route). */
 function safeParseArgs(json: string): Record<string, unknown> {
@@ -31,10 +32,13 @@ export const approvalRoutes: FastifyPluginAsync = async (server) => {
 
     const pending = server.agentState.pendingApprovals.get(requestId);
     if (pending) {
-      // ── Live (interactive) approval path — unchanged ──
-      // If user chose "Always allow", persist the grant BEFORE resolving so a
-      // subsequent identical request in the same tick would also see the grant.
-      if (approved && always) {
+      // ── Live (interactive) approval path ──
+      // Persist grantable "Always allow" decisions before resolving. Host
+      // execution stays one-shot even if a stale client requests persistence.
+      const persistAlways = approved
+        && !!always
+        && isGrantableTool(pending.toolName);
+      if (persistAlways) {
         try {
           server.agentState.approvalGrantStore.grant(
             pending.toolName,
@@ -47,7 +51,7 @@ export const approvalRoutes: FastifyPluginAsync = async (server) => {
       server.agentState.pendingApprovals.delete(requestId);
       pending.resolve(approved);
 
-      return reply.send({ ok: true, requestId, approved, always: !!always });
+      return reply.send({ ok: true, requestId, approved, always: persistAlways });
     }
 
     // ── Durable held-action path (L2) ──

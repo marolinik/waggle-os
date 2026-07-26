@@ -15,6 +15,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+const NON_GRANTABLE_TOOLS = new Set(['bash', 'run_code', 'cli_execute']);
+
+export function isGrantableTool(toolName: string): boolean {
+  return !NON_GRANTABLE_TOOLS.has(toolName);
+}
+
 export interface ApprovalGrant {
   id: string;
   toolName: string;
@@ -102,7 +108,9 @@ export class ApprovalGrantStore {
       const raw = fs.readFileSync(this.filePath, 'utf-8');
       const parsed = JSON.parse(raw) as StoredFile;
       if (parsed.version === 1 && Array.isArray(parsed.grants)) {
-        this.grants = parsed.grants.filter(g => this.isValidGrant(g));
+        this.grants = parsed.grants.filter(
+          g => this.isValidGrant(g) && isGrantableTool(g.toolName),
+        );
       }
     } catch {
       // Corrupted file — start fresh. Do NOT delete, user may want to recover.
@@ -135,6 +143,7 @@ export class ApprovalGrantStore {
    * Expired grants are treated as absent and pruned from memory.
    */
   has(toolName: string, args: Record<string, unknown>, sourceWorkspaceId: string | null): boolean {
+    if (!isGrantableTool(toolName)) return false;
     const now = Date.now();
     const key = keyForTool(toolName, args);
     let found = false;
@@ -163,6 +172,9 @@ export class ApprovalGrantStore {
     sourceWorkspaceId: string | null,
     opts: { ttlMs?: number } = {},
   ): ApprovalGrant {
+    if (!isGrantableTool(toolName)) {
+      throw new Error(`Approval for ${toolName} cannot be persisted.`);
+    }
     const targetKey = keyForTool(toolName, args);
     const description = describeGrant(toolName, targetKey, sourceWorkspaceId);
     const grantedAt = new Date().toISOString();
