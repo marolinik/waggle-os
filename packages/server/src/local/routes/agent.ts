@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { resolveUsableModel } from '../model-availability.js';
-import { chatSessionStateKey } from './chat-persistence.js';
+import {
+  chatSessionStateKey,
+  isolateLegacyDefaultChatSessions,
+  resolveChatHistoryTarget,
+} from './chat-persistence.js';
 import { assertSafeSegment } from './validate.js';
 
 /**
@@ -11,6 +15,17 @@ import { assertSafeSegment } from './validate.js';
  */
 export const agentRoutes: FastifyPluginAsync = async (server) => {
   const { costTracker } = server.agentState;
+  let chatHistoryLayout = isolateLegacyDefaultChatSessions(
+    server.localConfig.dataDir,
+  );
+  const getChatHistoryLayout = () => {
+    if (chatHistoryLayout.status === 'recovery-required') {
+      chatHistoryLayout = isolateLegacyDefaultChatSessions(
+        server.localConfig.dataDir,
+      );
+    }
+    return chatHistoryLayout;
+  };
 
   // GET /api/agent/status — agent status including cost stats
   server.get('/api/agent/status', async () => {
@@ -79,12 +94,30 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
   // Loads from disk (.jsonl files) if not in RAM, ensuring persistence across restarts
   server.get<{
     Querystring: { session?: string; workspace?: string };
-  }>('/api/history', async (request) => {
-    const sessionId = request.query.session ?? request.query.workspace ?? 'default';
-    const workspaceId = request.query.workspace ?? 'default';
+  }>('/api/history', async (request, reply) => {
+    const suppliedWorkspaceId = request.query.workspace;
+    const sessionId = request.query.session ?? suppliedWorkspaceId ?? 'default';
+    const workspaceId = suppliedWorkspaceId ?? 'default';
     assertSafeSegment(sessionId, 'session');
     assertSafeSegment(workspaceId, 'workspace');
-    const sessionStateKey = chatSessionStateKey(workspaceId, sessionId);
+    const historyTarget = resolveChatHistoryTarget(
+      server.localConfig.dataDir,
+      suppliedWorkspaceId,
+      !!server.workspaceManager?.get('default'),
+    );
+    if (workspaceId === 'default') {
+      const currentChatHistoryLayout = getChatHistoryLayout();
+      if (currentChatHistoryLayout.status === 'recovery-required') {
+        return reply.status(409).send({
+          error: 'Default chat history needs recovery before it can be read.',
+          code: currentChatHistoryLayout.code,
+        });
+      }
+    }
+    const sessionStateKey = chatSessionStateKey(
+      historyTarget.stateWorkspaceId,
+      sessionId,
+    );
 
     // Try in-memory first
     let history = server.agentState.sessionHistories.get(sessionStateKey);
@@ -92,7 +125,11 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
     // If not in RAM, load from disk
     if (!history || history.length === 0) {
       const filePath = path.join(
-        server.localConfig.dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`
+        historyTarget.dataDir,
+        'workspaces',
+        workspaceId,
+        'sessions',
+        `${sessionId}.jsonl`,
       );
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8').trim();

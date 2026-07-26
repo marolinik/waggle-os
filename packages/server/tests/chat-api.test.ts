@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { MindDB, FrameStore, SessionStore } from '@waggle/core';
+import { MindDB, FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
@@ -16,7 +16,13 @@ import {
   isExplicitMemorySaveRequest,
   MAX_CONTEXT_MESSAGES,
 } from '../src/local/routes/chat.js';
-import { chatSessionStateKey, loadSessionMessages } from '../src/local/routes/chat-persistence.js';
+import {
+  chatHistoryDataDir,
+  chatSessionStateKey,
+  isolateLegacyDefaultChatSessions,
+  loadSessionMessages,
+  resolveChatHistoryTarget,
+} from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
 /**
@@ -457,6 +463,8 @@ describe('Chat Streaming API', () => {
     const originalRunner = server.agentRunner;
     const sessionId = `no-mutation-failure-${Date.now()}`;
     const seed = `Analyze this release plan (${Date.now()}). Do not create or edit anything.`;
+    const authorizedWorkspace = server.agentState.activeWorkspaceId;
+    expect(authorizedWorkspace).toBeTruthy();
     server.agentRunner = async () => {
       throw new Error('LiteLLM is not available');
     };
@@ -470,7 +478,11 @@ describe('Chat Streaming API', () => {
 
       expect(parseSSE(res.body).filter(event => event.event === 'error')).toHaveLength(1);
       expect(server.agentState.orchestrator.getFrames().findDuplicate(seed)).toBeNull();
-      const transcript = loadSessionMessages(tmpDir, 'default', sessionId);
+      const transcript = loadSessionMessages(
+        tmpDir,
+        authorizedWorkspace!,
+        sessionId,
+      );
       expect(transcript[0]).toEqual({ role: 'user', content: seed });
       expect(transcript[1].role).toBe('assistant');
       expect(transcript[1].content).toContain('Generation failed: LiteLLM is not available');
@@ -609,6 +621,8 @@ describe('Chat Streaming API', () => {
   it('persists the authoritative resolved model through live and cold history reads', async () => {
     resetRateLimiter(server);
     const sessionId = `model-provenance-${Date.now()}`;
+    const authorizedWorkspace = server.agentState.activeWorkspaceId;
+    expect(authorizedWorkspace).toBeTruthy();
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
@@ -619,7 +633,7 @@ describe('Chat Streaming API', () => {
     expect(done).toBeDefined();
     const resolvedModel = JSON.parse(done!.data).model as string;
     expect(resolvedModel).toBeTruthy();
-    const stateKey = chatSessionStateKey('default', sessionId);
+    const stateKey = chatSessionStateKey(authorizedWorkspace!, sessionId);
 
     const inMemory = server.agentState.sessionHistories.get(stateKey);
     expect(inMemory).toEqual([
@@ -629,7 +643,7 @@ describe('Chat Streaming API', () => {
 
     const liveHistory = await injectWithAuth(server, {
       method: 'GET',
-      url: `/api/history?workspace=default&session=${sessionId}`,
+      url: `/api/history?workspace=${authorizedWorkspace}&session=${sessionId}`,
     });
     expect(liveHistory.statusCode).toBe(200);
     expect(liveHistory.json().messages).toEqual([
@@ -641,14 +655,18 @@ describe('Chat Streaming API', () => {
     server.agentState.sessionHistories.delete(stateKey);
     const coldHistory = await injectWithAuth(server, {
       method: 'GET',
-      url: `/api/history?workspace=default&session=${sessionId}`,
+      url: `/api/history?workspace=${authorizedWorkspace}&session=${sessionId}`,
     });
     expect(coldHistory.statusCode).toBe(200);
     expect(coldHistory.json().messages).toEqual([
       expect.objectContaining({ role: 'user', content: 'Hello' }),
       expect.objectContaining({ role: 'assistant', content: 'Hello world', model: resolvedModel }),
     ]);
-    expect(loadSessionMessages(tmpDir, 'default', sessionId)).toEqual([
+    expect(loadSessionMessages(
+      tmpDir,
+      authorizedWorkspace!,
+      sessionId,
+    )).toEqual([
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hello world', model: resolvedModel },
     ]);
@@ -692,15 +710,15 @@ describe('Chat Streaming API', () => {
     expect(historyB.json().messages.map((entry: { content: string }) => entry.content))
       .toEqual([messageB, `reply:${messageB}`]);
 
-    // The current web client omits workspace when clearing. That legacy request
-    // must evict every volatile scope, then each workspace rehydrates its own disk file.
+    // An omitted workspace is the legacy-default namespace. It must not mutate
+    // unrelated managed workspaces that happen to reuse the same session id.
     const cleared = await injectWithAuth(server, {
       method: 'DELETE',
       url: `/api/chat/history?session=${sessionId}`,
     });
     expect(cleared.statusCode).toBe(200);
-    expect(server.agentState.sessionHistories.has(chatSessionStateKey(workspaceA, sessionId))).toBe(false);
-    expect(server.agentState.sessionHistories.has(chatSessionStateKey(workspaceB, sessionId))).toBe(false);
+    expect(server.agentState.sessionHistories.has(chatSessionStateKey(workspaceA, sessionId))).toBe(true);
+    expect(server.agentState.sessionHistories.has(chatSessionStateKey(workspaceB, sessionId))).toBe(true);
 
     const coldA = await injectWithAuth(server, {
       method: 'GET',
@@ -781,11 +799,92 @@ describe('Chat Streaming API', () => {
       url: `/api/chat/history?session=${session}`,
     });
     expect(legacy.statusCode).toBe(200);
-    expect(state.has(keyA)).toBe(false);
-    expect(state.has(keyB)).toBe(false);
+    expect(state.has(keyA)).toBe(true);
+    expect(state.has(keyB)).toBe(true);
     expect(state.has(session)).toBe(false);
     expect(state.has(keyOther)).toBe(true);
     state.delete(keyOther);
+  });
+
+  it('rejects clear during an active turn then removes warm and cold history', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const workspace = server.workspaceManager.create({
+      name: `Active clear workspace ${nonce}`,
+      group: 'test',
+      teamId: `active-clear-team-${nonce}`,
+      teamRole: 'member',
+    });
+    const sessionId = `active-clear-${nonce}`;
+    const message = `active clear marker ${nonce}`;
+    const originalRunner = server.agentRunner;
+    let releaseTurn!: () => void;
+    let markEntered!: () => void;
+    const entered = new Promise<void>(resolve => {
+      markEntered = resolve;
+    });
+    const released = new Promise<void>(resolve => {
+      releaseTurn = resolve;
+    });
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      markEntered();
+      await released;
+      config.onToken?.('active-clear-finished');
+      return {
+        content: 'active-clear-finished',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+    const turn = injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message,
+        workspace: workspace.id,
+        session: sessionId,
+      },
+    });
+
+    try {
+      await entered;
+      const activeClear = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/chat/history?workspace=${workspace.id}&session=${sessionId}`,
+      });
+      expect(activeClear.statusCode).toBe(409);
+      expect(activeClear.json()).toMatchObject({
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+
+      releaseTurn();
+      expect((await turn).statusCode).toBe(200);
+      const beforeClear = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?workspace=${workspace.id}&session=${sessionId}`,
+      });
+      expect(beforeClear.json().messages).toHaveLength(2);
+
+      const completedClear = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/chat/history?workspace=${workspace.id}&session=${sessionId}`,
+      });
+      expect(completedClear.statusCode).toBe(200);
+      expect(
+        server.agentState.sessionHistories.has(
+          chatSessionStateKey(workspace.id, sessionId),
+        ),
+      ).toBe(false);
+      const afterClear = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?workspace=${workspace.id}&session=${sessionId}`,
+      });
+      expect(afterClear.json().messages).toEqual([]);
+    } finally {
+      releaseTurn();
+      await turn.catch(() => undefined);
+      server.agentRunner = originalRunner;
+    }
   });
 
   it('passes windowed messages to agent runner when history exceeds MAX_CONTEXT_MESSAGES', async () => {
@@ -804,13 +903,15 @@ describe('Chat Streaming API', () => {
 
     // Build a session with 60 messages (30 user + 30 assistant pairs)
     const sessionId = 'window-test-' + Date.now();
+    const authorizedWorkspace = server.agentState.activeWorkspaceId;
+    expect(authorizedWorkspace).toBeTruthy();
     const history = server.agentState.sessionHistories;
     const messages: Array<{ role: string; content: string }> = [];
     for (let i = 0; i < 30; i++) {
       messages.push({ role: 'user', content: `msg-${i}` });
       messages.push({ role: 'assistant', content: `reply-${i}` });
     }
-    history.set(chatSessionStateKey('default', sessionId), messages);
+    history.set(chatSessionStateKey(authorizedWorkspace!, sessionId), messages);
 
     // Send one more message — total becomes 61 (60 existing + 1 new user message)
     await injectWithAuth(server, {
@@ -904,6 +1005,949 @@ describe('Chat Streaming API', () => {
     expect(capturedSignal).toBeInstanceOf(AbortSignal);
 
     server.agentRunner = originalRunner;
+  });
+
+  it('keeps the authorized implicit workspace request-scoped when the global active workspace changes', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const memberWorkspace = server.workspaceManager.create({
+      name: `Chat auth member ${nonce}`,
+      group: 'test',
+      teamId: `chat-auth-team-${nonce}`,
+      teamRole: 'member',
+    });
+    const viewerWorkspace = server.workspaceManager.create({
+      name: `Chat auth viewer ${nonce}`,
+      group: 'test',
+      teamId: `chat-auth-team-${nonce}`,
+      teamRole: 'viewer',
+    });
+    const sessionId = `implicit-workspace-${nonce}`;
+    const message = `request-scoped workspace ${nonce}`;
+    const memoryMarker = `request-scoped memory ${nonce}`;
+    const originalCreateSessionOrchestrator =
+      server.agentState.createSessionOrchestrator;
+    const originalRunner = server.agentRunner;
+    let memoryWrite: Promise<unknown> | undefined;
+    let switchedAfterAuthorization = false;
+
+    expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
+    server.agentState.createSessionOrchestrator = ((workspaceMind?: MindDB) => {
+      const requestOrchestrator = workspaceMind
+        ? originalCreateSessionOrchestrator(workspaceMind)
+        : originalCreateSessionOrchestrator();
+      if (workspaceMind && !switchedAfterAuthorization) {
+        switchedAfterAuthorization = true;
+        expect(server.agentState.activateWorkspaceMind(viewerWorkspace.id)).toBe(true);
+        const saveMemory = requestOrchestrator.getTools()
+          .find(tool => tool.name === 'save_memory');
+        expect(saveMemory).toBeDefined();
+        memoryWrite = Promise.resolve(saveMemory!.execute({
+          content: memoryMarker,
+          importance: 'normal',
+          target: 'workspace',
+        }));
+      }
+      return requestOrchestrator;
+    }) as typeof server.agentState.createSessionOrchestrator;
+    server.agentRunner = undefined as unknown as typeof server.agentRunner;
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message, session: sessionId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(switchedAfterAuthorization).toBe(true);
+      expect(server.agentState.activeWorkspaceId).toBe(viewerWorkspace.id);
+      expect(memoryWrite).toBeDefined();
+      await memoryWrite;
+      const memberMind = server.agentState.getWorkspaceMindDb(memberWorkspace.id);
+      const viewerMind = server.agentState.getWorkspaceMindDb(viewerWorkspace.id);
+      expect(memberMind).not.toBeNull();
+      expect(viewerMind).not.toBeNull();
+      expect(new FrameStore(memberMind!).findDuplicate(memoryMarker)).not.toBeNull();
+      expect(new FrameStore(viewerMind!).findDuplicate(memoryMarker)).toBeNull();
+      expect(
+        server.agentState.sessionHistories.get(
+          chatSessionStateKey(memberWorkspace.id, sessionId),
+        )?.[0],
+      ).toEqual({ role: 'user', content: message });
+    } finally {
+      server.agentState.createSessionOrchestrator =
+        originalCreateSessionOrchestrator;
+      server.agentRunner = originalRunner;
+    }
+  });
+
+  it('keeps the same implicit session isolated when the active workspace changes', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const workspaceA = server.workspaceManager.create({
+      name: `Implicit history A ${nonce}`,
+      group: 'test',
+      teamId: `implicit-history-a-${nonce}`,
+      teamRole: 'member',
+    });
+    const workspaceB = server.workspaceManager.create({
+      name: `Implicit history B ${nonce}`,
+      group: 'test',
+      teamId: `implicit-history-b-${nonce}`,
+      teamRole: 'member',
+    });
+    const sessionId = `implicit-switch-${nonce}`;
+    const messageA = `implicit A marker ${nonce}`;
+    const messageB = `implicit B marker ${nonce}`;
+    const originalRunner = server.agentRunner;
+    const capturedMessages: Array<Array<{ role: string; content: string }>> = [];
+
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedMessages.push(
+        config.messages.map(({ role, content }) => ({ role, content })),
+      );
+      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
+      config.onToken?.(content);
+      return {
+        content,
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      expect(server.agentState.activateWorkspaceMind(workspaceA.id)).toBe(true);
+      const firstResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: messageA, session: sessionId },
+      });
+      expect(firstResponse.statusCode).toBe(200);
+
+      expect(server.agentState.activateWorkspaceMind(workspaceB.id)).toBe(true);
+      const secondResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: messageB, session: sessionId },
+      });
+      expect(secondResponse.statusCode).toBe(200);
+
+      expect(capturedMessages[0]).toEqual([
+        { role: 'user', content: messageA },
+      ]);
+      expect(capturedMessages[1]).toEqual([
+        { role: 'user', content: messageB },
+      ]);
+      expect(
+        server.agentState.sessionHistories.get(
+          chatSessionStateKey(workspaceA.id, sessionId),
+        ),
+      ).toEqual([
+        { role: 'user', content: messageA },
+        expect.objectContaining({
+          role: 'assistant',
+          content: `reply:${messageA}`,
+        }),
+      ]);
+      expect(
+        server.agentState.sessionHistories.get(
+          chatSessionStateKey(workspaceB.id, sessionId),
+        ),
+      ).toEqual([
+        { role: 'user', content: messageB },
+        expect.objectContaining({
+          role: 'assistant',
+          content: `reply:${messageB}`,
+        }),
+      ]);
+
+      server.agentState.sessionHistories.delete(
+        chatSessionStateKey(workspaceA.id, sessionId),
+      );
+      server.agentState.sessionHistories.delete(
+        chatSessionStateKey(workspaceB.id, sessionId),
+      );
+      const coldHistoryA = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?workspace=${workspaceA.id}&session=${sessionId}`,
+      });
+      const coldHistoryB = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?workspace=${workspaceB.id}&session=${sessionId}`,
+      });
+      expect(coldHistoryA.statusCode).toBe(200);
+      expect(coldHistoryB.statusCode).toBe(200);
+      expect(
+        coldHistoryA.json().messages.map((entry: { content: string }) => entry.content),
+      ).toEqual([messageA, `reply:${messageA}`]);
+      expect(
+        coldHistoryB.json().messages.map((entry: { content: string }) => entry.content),
+      ).toEqual([messageB, `reply:${messageB}`]);
+    } finally {
+      server.agentRunner = originalRunner;
+    }
+  });
+
+  it('binds implicit persona and model policy to the authorized workspace', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const memberWorkspace = server.workspaceManager.create({
+      name: `Implicit policy member ${nonce}`,
+      group: 'test',
+      teamId: `implicit-policy-team-${nonce}`,
+      teamRole: 'member',
+    });
+    server.workspaceManager.update(memberWorkspace.id, {
+      personaId: 'planner',
+      model: 'ollama/member-policy-model:latest',
+    });
+
+    const originalRunner = server.agentRunner;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (input) => {
+        if (String(input).endsWith('/api/tags')) {
+          return new Response(JSON.stringify({
+            models: [
+              { name: 'member-policy-model:latest' },
+            ],
+          }), { status: 200 });
+        }
+        return new Response('', { status: 503 });
+      },
+    );
+    let capturedConfig: AgentLoopConfig | undefined;
+
+    expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedConfig = config;
+      config.onToken?.('policy-bound');
+      return {
+        content: 'policy-bound',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: `Use only supplied evidence. Return exactly one JSON envelope with no text before or after. Evidence: policy marker ${nonce}.`,
+          session: `implicit-policy-${nonce}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfig).toBeDefined();
+      expect(capturedConfig!.systemPrompt).toContain('## Persona: Planner');
+      expect(capturedConfig!.systemPrompt).not.toContain('## Persona: Writer');
+      expect(capturedConfig!.model).toBe('member-policy-model:latest');
+    } finally {
+      server.agentRunner = originalRunner;
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('keeps an authorized personal chat independent from a managed workspace named default', async () => {
+    const personalDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'waggle-chat-personal-default-'),
+    );
+    const personalModel = 'ollama/personal-policy-model:latest';
+    const managedModel = 'ollama/managed-default-policy-model:latest';
+    const config = new WaggleConfig(personalDir);
+    config.setDefaultModel(personalModel);
+    config.save();
+
+    const personalServer = await buildLocalServer({ dataDir: personalDir });
+    const initiallyActiveWorkspace = personalServer.agentState.activeWorkspaceId;
+    expect(initiallyActiveWorkspace).toBeTruthy();
+    personalServer.agentState.closeWorkspaceMind(initiallyActiveWorkspace!);
+    expect(personalServer.agentState.activeWorkspaceId).toBeNull();
+    personalServer.workspaceManager.ensure('default', {
+      name: 'default',
+      group: 'test',
+      teamId: 'managed-default-policy-team',
+      teamRole: 'member',
+    });
+    personalServer.workspaceManager.update('default', {
+      personaId: 'writer',
+      model: managedModel,
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (input) => {
+        if (String(input).endsWith('/api/tags')) {
+          return new Response(JSON.stringify({
+            models: [
+              { name: 'personal-policy-model:latest' },
+              { name: 'managed-default-policy-model:latest' },
+            ],
+          }), { status: 200 });
+        }
+        return new Response('', { status: 503 });
+      },
+    );
+    const usageSpy = vi.spyOn(personalServer.agentState.costTracker, 'addUsage');
+    const capturedConfigs: AgentLoopConfig[] = [];
+    personalServer.agentRunner = async (
+      runnerConfig: AgentLoopConfig,
+    ): Promise<AgentResponse> => {
+      capturedConfigs.push(runnerConfig);
+      runnerConfig.onToken?.('personal-policy-bound');
+      return {
+        content: 'personal-policy-bound',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      const response = await injectWithAuth(personalServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Summarize my next personal step.',
+          session: `personal-policy-${Date.now()}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfigs).toHaveLength(1);
+      expect(capturedConfigs[0].model).toBe('personal-policy-model:latest');
+      expect(capturedConfigs[0].systemPrompt).not.toContain('## Persona: Writer');
+      expect(usageSpy).toHaveBeenCalledWith(
+        personalModel,
+        1,
+        1,
+        'personal::default',
+      );
+      expect(personalServer.agentState.activeWorkspaceId).toBeNull();
+
+      expect(capturedConfigs[0].onSkillDistillationFire).toBeTypeOf('function');
+      await capturedConfigs[0].onSkillDistillationFire?.({
+        patternKey: 'personal-pattern',
+        toolsUsed: ['search_memory'],
+        directive: 'Personal skill draft',
+      });
+
+      const commandResponse = await injectWithAuth(personalServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: '/settings',
+          session: `personal-command-${Date.now()}`,
+        },
+      });
+      expect(commandResponse.statusCode).toBe(200);
+      const commandPrompt = capturedConfigs[1].messages.at(-1)?.content ?? '';
+      expect(commandPrompt).toContain('workspace "Personal"');
+      expect(commandPrompt).not.toContain('personal::default');
+
+      expect(personalServer.agentState.activateWorkspaceMind('default')).toBe(true);
+      const managedResponse = await injectWithAuth(personalServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Summarize my managed workspace step.',
+          session: `managed-default-policy-${Date.now()}`,
+          workspace: 'default',
+        },
+      });
+      expect(managedResponse.statusCode).toBe(200);
+      const managedConfig = capturedConfigs.at(-1)!;
+      expect(managedConfig.model).toContain('managed-default-policy-model:latest');
+      expect(managedConfig.onSkillDistillationFire).toBeTypeOf('function');
+      await managedConfig.onSkillDistillationFire?.({
+        patternKey: 'managed-pattern',
+        toolsUsed: ['search_memory'],
+        directive: 'Managed skill draft',
+      });
+
+      const skillShares = personalServer.signalBus.query({
+        subtype: 'skill_share',
+      });
+      expect(skillShares).toEqual(expect.arrayContaining([
+        expect.objectContaining({ teamId: 'personal::default' }),
+        expect.objectContaining({ teamId: 'default' }),
+      ]));
+    } finally {
+      usageSpy.mockRestore();
+      fetchSpy.mockRestore();
+      await personalServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      fs.rmSync(personalDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a viewer workspace whose literal generated id is default', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const memberWorkspace = server.workspaceManager.create({
+      name: `Literal default control ${nonce}`,
+      group: 'test',
+      teamId: `literal-default-team-${nonce}`,
+      teamRole: 'member',
+    });
+    const literalDefaultWorkspace = server.workspaceManager.ensure('default', {
+      name: 'default',
+      group: 'test',
+      teamId: `literal-default-team-${nonce}`,
+      teamRole: 'viewer',
+    });
+
+    expect(literalDefaultWorkspace.id).toBe('default');
+    expect(literalDefaultWorkspace.teamRole).toBe('viewer');
+    expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'must remain read-only', workspace: 'default' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+  });
+
+  it('keeps omitted-workspace history out of a managed viewer workspace named default', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const memberWorkspace = server.workspaceManager.create({
+      name: `Implicit history member ${nonce}`,
+      group: 'test',
+      teamId: `implicit-history-team-${nonce}`,
+      teamRole: 'member',
+    });
+    const literalDefaultWorkspace = server.workspaceManager.ensure('default', {
+      name: 'default',
+      group: 'test',
+      teamId: `implicit-history-team-${nonce}`,
+      teamRole: 'viewer',
+    });
+    const sessionId = `implicit-history-${nonce}`;
+    const firstMessage = `first implicit history turn ${nonce}`;
+    const secondMessage = `second implicit history turn ${nonce}`;
+    const originalRunner = server.agentRunner;
+    const capturedMessages: Array<Array<{ role: string; content: string }>> = [];
+
+    expect(literalDefaultWorkspace.teamRole).toBe('viewer');
+    expect(server.agentState.activateWorkspaceMind(memberWorkspace.id)).toBe(true);
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedMessages.push(
+        config.messages.map(({ role, content }) => ({ role, content })),
+      );
+      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
+      config.onToken?.(content);
+      return {
+        content,
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      const firstResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: firstMessage, session: sessionId },
+      });
+      expect(firstResponse.statusCode).toBe(200);
+      expect(
+        server.agentState.sessionHistories.get(
+          chatSessionStateKey(memberWorkspace.id, sessionId),
+        )?.[0],
+      ).toEqual({ role: 'user', content: firstMessage });
+
+      server.agentState.sessionHistories.delete(
+        chatSessionStateKey(memberWorkspace.id, sessionId),
+      );
+
+      const secondResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: secondMessage, session: sessionId },
+      });
+      expect(secondResponse.statusCode).toBe(200);
+      expect(capturedMessages[1]).toEqual(expect.arrayContaining([
+        { role: 'user', content: firstMessage },
+        { role: 'assistant', content: `reply:${firstMessage}` },
+        { role: 'user', content: secondMessage },
+      ]));
+      expect(loadSessionMessages(tmpDir, memberWorkspace.id, sessionId)).toEqual([
+        expect.objectContaining({ role: 'user', content: firstMessage }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: `reply:${firstMessage}`,
+        }),
+        expect.objectContaining({ role: 'user', content: secondMessage }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: `reply:${secondMessage}`,
+        }),
+      ]);
+      expect(loadSessionMessages(tmpDir, 'default', sessionId)).toEqual([]);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(
+        chatSessionStateKey(memberWorkspace.id, sessionId),
+      );
+    }
+  });
+
+  it('separates a managed literal-default workspace from personal legacy-default session state', async () => {
+    resetRateLimiter(server);
+    const nonce = Date.now();
+    const previousActiveWorkspace = server.agentState.activeWorkspaceId;
+    expect(previousActiveWorkspace).toBeTruthy();
+    server.workspaceManager.ensure('default', {
+      name: 'default',
+      group: 'test',
+    });
+    server.workspaceManager.update('default', {
+      teamId: `literal-default-member-team-${nonce}`,
+      teamRole: 'member',
+    });
+    const sessionId = `default-state-collision-${nonce}`;
+    const legacyMessage = `legacy implicit secret ${nonce}`;
+    const managedMessage = `managed default message ${nonce}`;
+    const originalRunner = server.agentRunner;
+    const capturedMessages: Array<Array<{ role: string; content: string }>> = [];
+
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedMessages.push(
+        config.messages.map(({ role, content }) => ({ role, content })),
+      );
+      const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
+      config.onToken?.(content);
+      return {
+        content,
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      server.agentState.closeWorkspaceMind(previousActiveWorkspace!);
+      expect(server.agentState.activeWorkspaceId).toBeNull();
+      const legacyResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: legacyMessage, session: sessionId },
+      });
+      expect(legacyResponse.statusCode).toBe(200);
+
+      expect(server.agentState.activateWorkspaceMind('default')).toBe(true);
+      const managedResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: managedMessage,
+          session: sessionId,
+          workspace: 'default',
+        },
+      });
+      expect(managedResponse.statusCode).toBe(200);
+      expect(capturedMessages[1]).not.toContainEqual({
+        role: 'user',
+        content: legacyMessage,
+      });
+      expect(loadSessionMessages(tmpDir, 'default', sessionId)).toEqual([
+        expect.objectContaining({ role: 'user', content: managedMessage }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: `reply:${managedMessage}`,
+        }),
+      ]);
+
+      const legacyClear = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/chat/history?session=${sessionId}`,
+      });
+      expect(legacyClear.statusCode).toBe(200);
+      const clearedLegacyHistory = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?session=${sessionId}`,
+      });
+      const preservedManagedHistory = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${sessionId}`,
+      });
+      expect(clearedLegacyHistory.json().messages).toEqual([]);
+      expect(
+        preservedManagedHistory.json().messages.map(
+          (entry: { content: string }) => entry.content,
+        ),
+      ).toEqual([managedMessage, `reply:${managedMessage}`]);
+      expect(loadSessionMessages(
+        chatHistoryDataDir(tmpDir, false),
+        'default',
+        sessionId,
+      )).toEqual([]);
+
+      const managedClear = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/chat/history?workspace=default&session=${sessionId}`,
+      });
+      expect(managedClear.statusCode).toBe(200);
+      const clearedManagedHistory = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${sessionId}`,
+      });
+      expect(clearedManagedHistory.json().messages).toEqual([]);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(
+        chatSessionStateKey('default', sessionId),
+      );
+      server.workspaceManager.update('default', { teamRole: 'viewer' });
+      expect(server.agentState.activateWorkspaceMind(previousActiveWorkspace!)).toBe(true);
+    }
+  });
+
+  it('migrates cold legacy-default history before a managed default workspace can claim the path', async () => {
+    const migrationDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'waggle-chat-history-migration-'),
+    );
+    const sessionId = `legacy-history-${Date.now()}`;
+    const legacyMessage = `legacy cold history ${Date.now()}`;
+    const legacySessionsDir = path.join(
+      migrationDir,
+      'workspaces',
+      'default',
+      'sessions',
+    );
+    const legacyFile = path.join(legacySessionsDir, `${sessionId}.jsonl`);
+    fs.mkdirSync(legacySessionsDir, { recursive: true });
+    fs.writeFileSync(
+      legacyFile,
+      [
+        JSON.stringify({
+          type: 'meta',
+          title: null,
+          created: new Date().toISOString(),
+        }),
+        JSON.stringify({
+          role: 'user',
+          content: legacyMessage,
+          timestamp: new Date().toISOString(),
+        }),
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    let migrationServer = await buildLocalServer({ dataDir: migrationDir });
+    try {
+      const legacyHistory = await injectWithAuth(migrationServer, {
+        method: 'GET',
+        url: `/api/history?session=${sessionId}`,
+      });
+      expect(legacyHistory.statusCode).toBe(200);
+      expect(legacyHistory.json().messages).toEqual([
+        expect.objectContaining({ role: 'user', content: legacyMessage }),
+      ]);
+      expect(fs.existsSync(legacyFile)).toBe(false);
+
+      migrationServer.workspaceManager.ensure('default', {
+        name: 'default',
+        group: 'test',
+        teamId: 'managed-default-history-team',
+        teamRole: 'member',
+      });
+      await migrationServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      migrationServer = await buildLocalServer({ dataDir: migrationDir });
+
+      const restartedLegacyHistory = await injectWithAuth(migrationServer, {
+        method: 'GET',
+        url: `/api/history?session=${sessionId}`,
+      });
+      expect(restartedLegacyHistory.statusCode).toBe(200);
+      expect(restartedLegacyHistory.json().messages).toEqual([
+        expect.objectContaining({ role: 'user', content: legacyMessage }),
+      ]);
+
+      const managedHistory = await injectWithAuth(migrationServer, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${sessionId}`,
+      });
+      expect(managedHistory.statusCode).toBe(200);
+      expect(managedHistory.json().messages).toEqual([]);
+
+      const managedSessionId = `${sessionId}-managed`;
+      const managedMessage = `managed default cold history ${Date.now()}`;
+      migrationServer.agentRunner = async (
+        config: AgentLoopConfig,
+      ): Promise<AgentResponse> => {
+        const content = `reply:${config.messages.at(-1)?.content ?? ''}`;
+        config.onToken?.(content);
+        return {
+          content,
+          toolsUsed: [],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      };
+      const managedPost = await injectWithAuth(migrationServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: managedMessage,
+          workspace: 'default',
+          session: managedSessionId,
+        },
+      });
+      expect(managedPost.statusCode).toBe(200);
+
+      const warmManagedHistory = await injectWithAuth(migrationServer, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${managedSessionId}`,
+      });
+      expect(
+        warmManagedHistory.json().messages.map(
+          (entry: { content: string }) => entry.content,
+        ),
+      ).toEqual([managedMessage, `reply:${managedMessage}`]);
+
+      const managedTarget = resolveChatHistoryTarget(
+        migrationDir,
+        'default',
+        true,
+      );
+      migrationServer.agentState.sessionHistories.delete(
+        chatSessionStateKey(managedTarget.stateWorkspaceId, managedSessionId),
+      );
+      const coldManagedHistory = await injectWithAuth(migrationServer, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${managedSessionId}`,
+      });
+      expect(
+        coldManagedHistory.json().messages.map(
+          (entry: { content: string }) => entry.content,
+        ),
+      ).toEqual([managedMessage, `reply:${managedMessage}`]);
+
+      await migrationServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      migrationServer = await buildLocalServer({ dataDir: migrationDir });
+      const restartedManagedHistory = await injectWithAuth(migrationServer, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${managedSessionId}`,
+      });
+      const finalLegacyHistory = await injectWithAuth(migrationServer, {
+        method: 'GET',
+        url: `/api/history?session=${sessionId}`,
+      });
+      expect(
+        restartedManagedHistory.json().messages.map(
+          (entry: { content: string }) => entry.content,
+        ),
+      ).toEqual([managedMessage, `reply:${managedMessage}`]);
+      expect(finalLegacyHistory.json().messages).toEqual([
+        expect.objectContaining({ role: 'user', content: legacyMessage }),
+      ]);
+    } finally {
+      await migrationServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      fs.rmSync(migrationDir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed without moving ambiguous pre-layout default histories', async () => {
+    const recoveryDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'waggle-chat-history-recovery-'),
+    );
+    const sessionId = `ambiguous-history-${Date.now()}`;
+    const managedSessionsDir = path.join(
+      recoveryDir,
+      'workspaces',
+      'default',
+      'sessions',
+    );
+    const managedCandidate = path.join(
+      managedSessionsDir,
+      `${sessionId}.jsonl`,
+    );
+    const managedContent = [
+      JSON.stringify({
+        type: 'meta',
+        title: null,
+        created: new Date().toISOString(),
+      }),
+      JSON.stringify({
+        role: 'user',
+        content: 'ambiguous canonical transcript',
+        timestamp: new Date().toISOString(),
+      }),
+      '',
+    ].join('\n');
+    fs.mkdirSync(managedSessionsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(recoveryDir, 'workspaces', 'default', 'workspace.json'),
+      JSON.stringify({
+        id: 'default',
+        name: 'default',
+        group: 'test',
+        teamId: 'ambiguous-default-team',
+        teamRole: 'member',
+        created: new Date().toISOString(),
+      }),
+      'utf-8',
+    );
+    const workspaceMind = new MindDB(
+      path.join(recoveryDir, 'workspaces', 'default', 'workspace.mind'),
+    );
+    workspaceMind.close();
+    fs.writeFileSync(managedCandidate, managedContent, 'utf-8');
+
+    let recoveryServer = await buildLocalServer({ dataDir: recoveryDir });
+    try {
+      const legacyHistory = await injectWithAuth(recoveryServer, {
+        method: 'GET',
+        url: `/api/history?session=${sessionId}`,
+      });
+      const managedHistory = await injectWithAuth(recoveryServer, {
+        method: 'GET',
+        url: `/api/history?workspace=default&session=${sessionId}`,
+      });
+      const recoveryPost = await injectWithAuth(recoveryServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'must not append', session: sessionId },
+      });
+      const recoveryDelete = await injectWithAuth(recoveryServer, {
+        method: 'DELETE',
+        url: `/api/chat/history?session=${sessionId}`,
+      });
+
+      expect(legacyHistory.statusCode).toBe(409);
+      expect(managedHistory.statusCode).toBe(409);
+      expect(recoveryPost.statusCode).toBe(409);
+      expect(recoveryDelete.statusCode).toBe(409);
+      expect(legacyHistory.json()).toMatchObject({
+        code: 'CHAT_HISTORY_RECOVERY_REQUIRED',
+      });
+      expect(recoveryPost.json()).toMatchObject({
+        code: 'CHAT_HISTORY_RECOVERY_REQUIRED',
+      });
+      expect(recoveryDelete.json()).toMatchObject({
+        code: 'CHAT_HISTORY_RECOVERY_REQUIRED',
+      });
+      expect(fs.readFileSync(managedCandidate, 'utf-8')).toBe(managedContent);
+
+      await recoveryServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      recoveryServer = await buildLocalServer({ dataDir: recoveryDir });
+      const restartedHistory = await injectWithAuth(recoveryServer, {
+        method: 'GET',
+        url: `/api/history?session=${sessionId}`,
+      });
+      expect(restartedHistory.statusCode).toBe(409);
+      expect(fs.readFileSync(managedCandidate, 'utf-8')).toBe(managedContent);
+    } finally {
+      await recoveryServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      fs.rmSync(recoveryDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves conflicting pre-layout roots and rechecks after recovery', () => {
+    const recoveryDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'waggle-chat-history-conflict-'),
+    );
+    const sourceDir = path.join(
+      recoveryDir,
+      'workspaces',
+      'default',
+      'sessions',
+    );
+    const targetDir = path.join(
+      chatHistoryDataDir(recoveryDir, false),
+      'workspaces',
+      'default',
+      'sessions',
+    );
+    const sourceFile = path.join(sourceDir, 'source.jsonl');
+    const targetFile = path.join(targetDir, 'target.jsonl');
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(sourceFile, 'source transcript\n', 'utf-8');
+    fs.writeFileSync(targetFile, 'target transcript\n', 'utf-8');
+
+    try {
+      const conflict = isolateLegacyDefaultChatSessions(recoveryDir);
+      expect(conflict).toMatchObject({
+        status: 'recovery-required',
+        code: 'CHAT_HISTORY_RECOVERY_REQUIRED',
+      });
+      expect(fs.readFileSync(sourceFile, 'utf-8')).toBe('source transcript\n');
+      expect(fs.readFileSync(targetFile, 'utf-8')).toBe('target transcript\n');
+      expect(
+        fs.existsSync(path.join(recoveryDir, 'chat-history-layout.json')),
+      ).toBe(false);
+
+      fs.rmSync(sourceDir, { recursive: true, force: true });
+      expect(isolateLegacyDefaultChatSessions(recoveryDir)).toEqual({
+        status: 'ready',
+      });
+      expect(fs.readFileSync(targetFile, 'utf-8')).toBe('target transcript\n');
+    } finally {
+      fs.rmSync(recoveryDir, { recursive: true, force: true });
+    }
+  });
+
+  it('retries a transient Windows legacy-history rename failure without losing bytes', () => {
+    const recoveryDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'waggle-chat-history-rename-retry-'),
+    );
+    const sourceDir = path.join(
+      recoveryDir,
+      'workspaces',
+      'default',
+      'sessions',
+    );
+    const targetFile = path.join(
+      chatHistoryDataDir(recoveryDir, false),
+      'workspaces',
+      'default',
+      'sessions',
+      'locked.jsonl',
+    );
+    const sourceFile = path.join(sourceDir, 'locked.jsonl');
+    const sourceBytes = Buffer.from('locked transcript\r\n', 'utf-8');
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.writeFileSync(sourceFile, sourceBytes);
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw Object.assign(new Error('file is temporarily locked'), {
+        code: 'EPERM',
+      });
+    });
+
+    try {
+      const blocked = isolateLegacyDefaultChatSessions(recoveryDir);
+      expect(blocked).toMatchObject({
+        status: 'recovery-required',
+        code: 'CHAT_HISTORY_RECOVERY_REQUIRED',
+      });
+      expect(fs.readFileSync(sourceFile)).toEqual(sourceBytes);
+      expect(fs.existsSync(targetFile)).toBe(false);
+      expect(
+        fs.existsSync(path.join(recoveryDir, 'chat-history-layout.json')),
+      ).toBe(false);
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    try {
+      expect(isolateLegacyDefaultChatSessions(recoveryDir)).toEqual({
+        status: 'ready',
+      });
+      expect(fs.existsSync(sourceFile)).toBe(false);
+      expect(fs.readFileSync(targetFile)).toEqual(sourceBytes);
+    } finally {
+      fs.rmSync(recoveryDir, { recursive: true, force: true });
+    }
   });
 });
 

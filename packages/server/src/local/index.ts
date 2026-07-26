@@ -320,7 +320,10 @@ export interface AgentState {
    * Create a fresh Orchestrator for a workspace session with the given mind mounted.
    * Each session gets its own instance (Option Y fix from docs/plans/phase-a-the-room.md §9).
    */
-  createSessionOrchestrator: (workspaceMind: import('@waggle/core').MindDB) => Orchestrator;
+  createSessionOrchestrator: {
+    (): Orchestrator;
+    (workspaceMind: import('@waggle/core').MindDB): Orchestrator;
+  };
   /**
    * Build the full tool pool for a session, using the session's orchestrator for mind tools.
    * When `sourceWorkspaceId` is provided, also injects Phase B.2 cross-workspace read tools
@@ -1201,14 +1204,14 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
    *
    * See docs/plans/phase-a-the-room.md §9 for the Option X vs Option Y decision.
    */
-  const createSessionOrchestrator = (workspaceMind: MindDB): Orchestrator => {
+  const createSessionOrchestrator = (workspaceMind?: MindDB): Orchestrator => {
     const sessionOrch = new Orchestrator({
       db: multiMind.personal,
       embedder,
       mode: 'local',
       version: '0.4',
     });
-    sessionOrch.setWorkspaceMind(workspaceMind);
+    if (workspaceMind) sessionOrch.setWorkspaceMind(workspaceMind);
     return sessionOrch;
   };
 

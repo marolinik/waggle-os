@@ -37,7 +37,15 @@ import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } f
 
 // ── Extracted modules ──────────────────────────────────────────────────
 import { allowsAutomaticRecall, allowsConversationHistory, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, resolveTurnPersistencePermissions, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
-import { chatSessionStateKey, isChatSessionStateKeyForSession, isChatSessionStateKeyForWorkspace, persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
+import {
+  chatSessionStateKey,
+  isChatSessionStateKeyForWorkspace,
+  isolateLegacyDefaultChatSessions,
+  resolveChatHistoryTarget,
+  persistMessage,
+  loadSessionMessages,
+  stripTrailingFailedPair,
+} from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
   behavioralRulesForPromptPackage,
@@ -61,6 +69,7 @@ import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import { getBoundTeamServer } from '../team-server-binding.js';
 import { fetchTeamServer } from '../team-server-egress.js';
+import { getResolvedChatWorkspaceId } from '../security-middleware.js';
 import type { GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 
@@ -452,6 +461,20 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     userSystemPrompt,
     sessionHistories,
   } = server.agentState;
+  let chatHistoryLayout = isolateLegacyDefaultChatSessions(
+    server.localConfig.dataDir,
+  );
+  const getChatHistoryLayout = () => {
+    if (chatHistoryLayout.status === 'recovery-required') {
+      chatHistoryLayout = isolateLegacyDefaultChatSessions(
+        server.localConfig.dataDir,
+      );
+    }
+    return chatHistoryLayout;
+  };
+  if (chatHistoryLayout.status === 'recovery-required') {
+    log.warn(`[chat] ${chatHistoryLayout.reason}`);
+  }
   const approvalTimeoutPolicy = resolveApprovalTimeoutPolicy();
   let persistedTraceBoundaryId = 0;
   try {
@@ -533,8 +556,12 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     }
   });
 
-  // C3: Cache the base system prompt per session to avoid rebuilding on every message
-  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
+// C3: Cache the base system prompt per session to avoid rebuilding on every message
+const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
+// Workspace IDs are filesystem-backed and cannot contain `:` on Windows.
+// Reserve a non-workspace scope for personal audit/collaboration streams.
+const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
   // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
   // chat-local mutable tools (plans, save counters) and orchestrator receipts
@@ -675,6 +702,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     contextScope: TurnContextScope = 'default',
     selectedToolCount = 0,
     selectedModel?: string,
+    cacheWorkspaceId = workspaceId ?? 'default',
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
@@ -703,7 +731,10 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona.
     // Skip cache entirely when assembled is provided — it reflects per-turn
     // memory recall + task-shape detection that should not be cached across turns.
-    const cacheKey = chatSessionStateKey(workspaceId ?? 'default', sessionId ?? 'default');
+    const cacheKey = chatSessionStateKey(
+      cacheWorkspaceId,
+      sessionId ?? 'default',
+    );
     if (!assembled) {
       const cached = systemPromptCache.get(cacheKey);
       if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode && cached.model === selectedModel) {
@@ -953,9 +984,43 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
       origin, channel: channelMeta,
     } = request.body ?? {};
-    const workspace = _ws ?? _wsId;
-    const requestedSessionId = session ?? sessionIdAlias;
+    const suppliedWorkspace = _ws ?? _wsId;
+    const authorizedWorkspace = getResolvedChatWorkspaceId(request);
+    const workspace = suppliedWorkspace;
     if (workspace) assertSafeSegment(workspace, 'workspace');
+    const workspaceConfig = workspace
+      ? server.workspaceManager?.get(workspace)
+      : undefined;
+    const historyWorkspace = authorizedWorkspace === undefined
+      ? workspace
+      : authorizedWorkspace ?? undefined;
+    const historyWorkspaceConfig = historyWorkspace
+      ? server.workspaceManager?.get(historyWorkspace)
+      : undefined;
+    const historyTarget = resolveChatHistoryTarget(
+      server.localConfig.dataDir,
+      historyWorkspace,
+      !!historyWorkspaceConfig,
+    );
+    const usesNamedWorkspace = historyTarget.isManagedWorkspace;
+    const historyWorkspaceId = historyTarget.workspaceId;
+    const executionWorkspaceId = authorizedWorkspace === null
+      ? undefined
+      : authorizedWorkspace ?? historyWorkspaceId;
+    const executionScopeId = executionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID;
+    const executionWorkspaceConfig = executionWorkspaceId
+      ? server.workspaceManager?.get(executionWorkspaceId)
+      : undefined;
+    if (historyWorkspaceId === 'default') {
+      const currentChatHistoryLayout = getChatHistoryLayout();
+      if (currentChatHistoryLayout.status === 'recovery-required') {
+        return reply.status(409).send({
+          error: 'Default chat history needs recovery before it can be used.',
+          code: currentChatHistoryLayout.code,
+        });
+      }
+    }
+    const requestedSessionId = session ?? sessionIdAlias;
 
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
@@ -982,18 +1047,25 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // so the full turn graph is reconstructable from a single correlation
     // key. Also satisfies EU AI Act Art. 14 traceability requirements.
     const turnId = generateTurnId();
-    logTurnEvent(turnId, { stage: 'chat.turn.start', workspace, model, messageChars: (message ?? '').length });
+    logTurnEvent(turnId, {
+      stage: 'chat.turn.start',
+      workspace: executionWorkspaceId,
+      model,
+      messageChars: (message ?? '').length,
+    });
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
     let workspacePath = workspace ? undefined : explicitWorkspacePath;
     let workspacePathFromTrustedConfig = false;
     if (workspace) {
-      const wsConfig = server.workspaceManager?.get(workspace);
-      const configuredPath = wsConfig?.directory || wsConfig?.storagePath;
-      if (wsConfig && configuredPath) {
+      const configuredPath = workspaceConfig?.directory || workspaceConfig?.storagePath;
+      if (workspaceConfig && configuredPath) {
         try {
-          workspacePath = resolveWorkspaceExecutionRoot(server.localConfig.dataDir, wsConfig);
+          workspacePath = resolveWorkspaceExecutionRoot(
+            server.localConfig.dataDir,
+            workspaceConfig,
+          );
           workspacePathFromTrustedConfig = true;
         } catch (error) {
           log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
@@ -1002,12 +1074,46 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             code: 'WORKSPACE_ROOT_UNAVAILABLE',
           });
         }
-      } else if (workspace !== 'default') {
+      } else if (usesNamedWorkspace) {
         // Virtual workspace storage — managed files directory
         workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
       } else {
         // Legacy default-workspace callers may still supply an anchored managed path.
         workspacePath = explicitWorkspacePath;
+      }
+    }
+    let executionWorkspacePath = workspacePath;
+    if (authorizedWorkspace && authorizedWorkspace !== workspace) {
+      const authorizedConfig = server.workspaceManager?.get(authorizedWorkspace);
+      if (!authorizedConfig || !server.agentState.getWorkspaceMindDb(authorizedWorkspace)) {
+        return reply.status(409).send({
+          error: 'Active workspace is unavailable',
+          code: 'WORKSPACE_NOT_READY',
+        });
+      }
+      if (authorizedConfig.teamId && authorizedConfig.teamRole === 'viewer') {
+        return reply.status(403).send({
+          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
+          code: 'VIEWER_READ_ONLY',
+        });
+      }
+
+      const configuredPath = authorizedConfig.directory || authorizedConfig.storagePath;
+      try {
+        executionWorkspacePath = configuredPath
+          ? resolveWorkspaceExecutionRoot(server.localConfig.dataDir, authorizedConfig)
+          : path.join(
+              server.localConfig.dataDir,
+              'workspaces',
+              authorizedWorkspace,
+              'files',
+            );
+      } catch (error) {
+        log.warn(`[chat] Active workspace root unavailable for ${authorizedWorkspace}: ${(error as Error).message}`);
+        return reply.status(409).send({
+          error: 'Active workspace directory unavailable',
+          code: 'WORKSPACE_ROOT_UNAVAILABLE',
+        });
       }
     }
 
@@ -1025,7 +1131,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
     const requestClosedWorldRewrite = isClosedWorldRewriteRequest(message);
     const turnPersonaId = personaOverride
-      ?? server.workspaceManager?.get(workspace ?? 'default')?.personaId
+      ?? executionWorkspaceConfig?.personaId
       ?? null;
     const turnPersona = turnPersonaId ? resolvePersona(turnPersonaId) : null;
     const { allowMemoryPersistence, allowDerivedPersistence } = resolveTurnPersistencePermissions({
@@ -1071,14 +1177,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // Review Critical #3: viewer RBAC moved above reply.hijack() — after hijack,
     // reply.status(403) silently no-ops and the client gets HTTP 200 + empty SSE stream.
-    if (workspace && workspace !== 'default') {
-      const wsConfig = server.workspaceManager?.get(workspace);
-      if (wsConfig?.teamId && wsConfig?.teamRole === 'viewer') {
+    if (workspaceConfig?.teamId && workspaceConfig?.teamRole === 'viewer') {
         return reply.status(403).send({
           error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
           code: 'VIEWER_READ_ONLY',
         });
-      }
     }
 
     // Review Critical #1: request-supplied paths stay anchored to dataDir.
@@ -1170,16 +1273,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let activeSessionOrch: Orchestrator | undefined;
     let activeChatRuntime: { workspaceSession: WorkspaceSession; sessionId: string; runtime: ChatRuntime } | undefined;
     let workspaceTurnScope: WorkspaceTurnScope | undefined;
-    // Turn-scoped pin for the shared orchestrator's workspace mind (default/
-    // no-workspace chats). Hoisted so the outer finally can release it.
+    // Turn-scoped pin for an implicit/default request-owned workspace mind.
+    // Hoisted so the outer finally can release it.
     let pinnedSharedMindId: string | null = null;
     // A named workspace session owns a long-lived pin. Each active chat turn
     // takes another pin so Fleet kill cannot release/evict its mind before the
     // turn observes the workspace abort signal and unwinds.
     let pinnedWorkspaceMindId: string | null = null;
-    const activeSessionId = requestedSessionId ?? workspace ?? 'default';
-    const activeWorkspaceId = workspace ?? 'default';
-    const activeSessionStateKey = chatSessionStateKey(activeWorkspaceId, activeSessionId);
+    const activeSessionId = requestedSessionId ?? historyWorkspaceId;
+    const activeWorkspaceId = historyWorkspaceId;
+    const activeExecutionWorkspaceId = executionWorkspaceId;
+    const activeSessionStateWorkspaceId = historyTarget.stateWorkspaceId;
+    const activeSessionStateKey = chatSessionStateKey(
+      activeSessionStateWorkspaceId,
+      activeSessionId,
+    );
+    const sessionPersistenceDataDir = historyTarget.dataDir;
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     let activeAttemptModel: string | null = null;
     let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
@@ -1203,7 +1312,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Resolve the agent runner (injectable for tests)
       const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
       const sessionId = activeSessionId;
-      const effectiveWorkspace = activeWorkspaceId;
+      const effectiveWorkspace = activeExecutionWorkspaceId;
       const sessionStateKey = activeSessionStateKey;
 
       // Named workspaces must acquire one coherent chat runtime before any
@@ -1213,8 +1322,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       let sessionOrch: Orchestrator = orchestrator;
       let sessionTools: ToolDefinition[] | undefined;
       let wsSession: WorkspaceSession | undefined;
-      if (!hasCustomRunner && workspace && workspace !== 'default') {
+      if (!hasCustomRunner && usesNamedWorkspace) {
         try {
+          if (!effectiveWorkspace) {
+            throw new Error('Managed workspace identity is unavailable');
+          }
           if (!server.agentState.getWorkspaceMindDb(effectiveWorkspace)) {
             throw new Error('Workspace mind is unavailable');
           }
@@ -1224,7 +1336,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             (m) => server.agentState.createSessionOrchestrator(m),
             (m, o) => server.agentState.buildToolsForSession(
               o,
-              workspacePath ?? effectiveWorkspace,
+              executionWorkspacePath ?? effectiveWorkspace,
               effectiveWorkspace,
             ),
             server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
@@ -1246,7 +1358,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const runtime = acquireChatRuntime(
             candidateSession,
             sessionId,
-            workspacePath ?? effectiveWorkspace,
+            executionWorkspacePath ?? effectiveWorkspace,
             effectiveWorkspace,
           );
 
@@ -1258,18 +1370,36 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           log.warn(`[session] Failed to create workspace chat runtime for "${effectiveWorkspace}": ${(err as Error).message}`);
           throw new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`);
         }
+      } else if (!hasCustomRunner && authorizedWorkspace !== undefined) {
+        try {
+          if (authorizedWorkspace) {
+            const requestMind = server.mindCache.acquire(authorizedWorkspace);
+            pinnedSharedMindId = authorizedWorkspace;
+            sessionOrch = server.agentState.createSessionOrchestrator(requestMind);
+          } else {
+            sessionOrch = server.agentState.createSessionOrchestrator();
+          }
+          sessionTools = server.agentState.buildToolsForSession(
+            sessionOrch,
+            executionWorkspacePath ?? os.homedir(),
+            authorizedWorkspace ?? undefined,
+          );
+        } catch (err) {
+          log.warn(`[session] Failed to create request-scoped chat runtime: ${(err as Error).message}`);
+          throw new Error('Chat workspace is not ready.');
+        }
       }
       activeSessionOrch = sessionOrch;
       if (!hasCustomRunner) {
         workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
-          workspacePath ?? os.homedir(),
+          executionWorkspacePath ?? os.homedir(),
           turnSignal,
         );
       }
 
       // ── Model Pilot: resolve model with fallback chain ──
       const pilotConfig = new WaggleConfig(server.localConfig.dataDir);
-      const wsModelConfig = workspace ? server.workspaceManager?.get(workspace)?.model : undefined;
+      const wsModelConfig = executionWorkspaceConfig?.model;
       const primaryModel = model ?? wsModelConfig ?? pilotConfig.getDefaultModel() ?? 'claude-sonnet-4-6';
       const fallbackModel = pilotConfig.getFallbackModel();
       const budgetModel = pilotConfig.getBudgetModel();
@@ -1335,7 +1465,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Get or create session history — load from disk if not in RAM
       if (!sessionHistories.has(sessionStateKey)) {
         const saved = loadSessionMessages(
-          server.localConfig.dataDir, effectiveWorkspace, sessionId
+          sessionPersistenceDataDir, activeWorkspaceId, sessionId
         );
         sessionHistories.set(sessionStateKey, saved);
       }
@@ -1354,32 +1484,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && history[n - 2].role === 'user') {
           history.splice(n - 2, 2);
         }
-        stripTrailingFailedPair(server.localConfig.dataDir, effectiveWorkspace, sessionId);
+        stripTrailingFailedPair(sessionPersistenceDataDir, activeWorkspaceId, sessionId);
       }
 
       // Add user message to history and persist to disk
       history.push({ role: 'user', content: message });
-      persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'user', content: message });
-
-      // Pin the shared orchestrator's workspace mind for this turn. The named-
-      // workspace path above pins via WorkspaceSession (1f7186a0), but the
-      // default path kept the boot-time handle unpinned — a >20-workspace
-      // fan-out mid-turn could evict and close it across the LLM await
-      // ("The database connection is not open"). acquire() also reopens a
-      // handle that was already closed out-of-band, so re-bind it.
-      if (!wsSession && !hasCustomRunner) {
-        const sharedWsId = server.agentState.activeWorkspaceId;
-        if (sharedWsId && server.mindCache) {
-          try {
-            const freshMind = server.mindCache.acquire(sharedWsId);
-            pinnedSharedMindId = sharedWsId;
-            orchestrator.setWorkspaceMind(freshMind);
-          } catch (err) {
-            // Best-effort: an unpinned turn is the pre-fix behavior.
-            log.warn(`[chat] Could not pin shared workspace mind "${sharedWsId}": ${(err as Error).message}`);
-          }
-        }
-      }
+      persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
 
       // Check whether the configured LLM path can serve a completion. Process
       // liveness is insufficient for the built-in proxy because it also runs
@@ -1424,7 +1534,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (commandRegistry.isCommand(message)) {
         // Build a lightweight command context (same as commands.ts route)
         const cmdContext = {
-          workspaceId: effectiveWorkspace,
+          // Command handlers interpolate this value into user-facing agent
+          // instructions. Keep the non-workspace observability sentinel out of
+          // those prompts so personal commands cannot target a fake workspace.
+          workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
           sessionId,
           searchMemory: async (query: string): Promise<string> => {
             try {
@@ -1437,6 +1550,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
           },
           getWorkspaceState: async (): Promise<string> => {
+            if (!effectiveWorkspace) return 'No workspace state available.';
             const block = buildWorkspaceNowBlock({
               dataDir: server.localConfig.dataDir,
               workspaceId: effectiveWorkspace,
@@ -1474,7 +1588,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           if (turnSignal.aborted) return;
           history.push({ role: 'assistant', content: friendlyError });
-          persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: friendlyError });
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: friendlyError });
           sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
@@ -1489,7 +1603,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (turnSignal.aborted) return;
           // Persist command result
           history.push({ role: 'assistant', content: cmdResult });
-          persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: cmdResult });
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: cmdResult });
           sendEvent('done', {
             content: cmdResult,
             usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -1517,7 +1631,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (turnSignal.aborted) return;
         // Persist echo response so session continuity is maintained
         history.push({ role: 'assistant', content: echoResponse });
-        persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: echoResponse });
+        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: echoResponse });
         sendEvent('done', {
           content: echoResponse,
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -1532,10 +1646,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           || isClosedWorldRewriteRequest(agentMessage);
 
         // Waggle Dance: emit agent start signal
-        emitWaggleSignal({ type: 'agent:started', workspaceId: effectiveWorkspace, content: agentMessage.slice(0, 200) });
+      emitWaggleSignal({ type: 'agent:started', workspaceId: executionScopeId, content: agentMessage.slice(0, 200) });
 
-        // ── Budget check — warn if workspace is over budget ──
-        if (!hasCustomRunner && effectiveWorkspace !== 'default') {
+      // ── Budget check — warn if workspace is over budget ──
+      if (!hasCustomRunner && effectiveWorkspace) {
           const wsBudgetConfig = server.workspaceManager?.get(effectiveWorkspace);
           if (wsBudgetConfig?.budget != null && wsBudgetConfig.budget > 0) {
             const wsUsage = costTracker.getWorkspaceCost(effectiveWorkspace);
@@ -1551,7 +1665,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // shared-orchestrator activation only fires as a fallback when
         // session creation failed (wsSession is undefined) — matches the
         // old behavior for default/personal-only chats and broken workspaces.
-        if (!hasCustomRunner && workspace && !wsSession) {
+      if (!hasCustomRunner && usesNamedWorkspace && !wsSession && effectiveWorkspace) {
           const activated = server.agentState.activateWorkspaceMind(effectiveWorkspace);
           if (!activated) {
             sendEvent('step', { content: `Warning: could not activate workspace memory for "${effectiveWorkspace}". Using personal memory only.` });
@@ -1662,11 +1776,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
         // M2-7: Track session start on first user message
-        if (isFirstUserMessage && server.telemetry) {
-          server.telemetry.track('session_start', {
-            workspaceId: effectiveWorkspace,
-            templateId: server.workspaceManager?.get(effectiveWorkspace)?.templateId ?? null,
-          });
+      if (isFirstUserMessage && server.telemetry) {
+        server.telemetry.track('session_start', {
+          workspaceId: executionScopeId,
+          templateId: effectiveWorkspace
+            ? server.workspaceManager?.get(effectiveWorkspace)?.templateId ?? null
+            : null,
+        });
         }
 
         // Template welcome context — inject on first message in a workspace with a template
@@ -1675,7 +1791,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && isFirstUserMessage
           && !closedWorldRewrite
           && turnMutationPolicy.contextScope === 'default') {
-          const wsTemplateId = server.workspaceManager?.get(effectiveWorkspace)?.templateId;
+        const wsTemplateId = effectiveWorkspace
+          ? server.workspaceManager?.get(effectiveWorkspace)?.templateId
+          : undefined;
           if (wsTemplateId) {
             const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
             const tpl = BUILT_IN_TEMPLATES?.find?.((t) => t.id === wsTemplateId);
@@ -1744,7 +1862,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               // Tag the audit input with the autonomy level so forensics can
               // see WHY the tool was auto-approved.
               emitAuditEvent(server, {
-                workspaceId: effectiveWorkspace,
+                workspaceId: executionScopeId,
                 eventType: 'approval_auto',
                 toolName: ctx.toolName,
                 input: JSON.stringify({ args, _autonomy: autonomyLevel }),
@@ -1863,7 +1981,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           });
             // F2: Audit trail — approval requested
             emitAuditEvent(server, {
-              workspaceId: effectiveWorkspace,
+              workspaceId: executionScopeId,
               eventType: 'approval_requested',
               toolName,
               input: JSON.stringify(input),
@@ -1905,7 +2023,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             onHeld: (expiresAt) => {
               log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — moved to Approvals inbox`);
               emitAuditEvent(server, {
-                workspaceId: effectiveWorkspace,
+                workspaceId: executionScopeId,
                 eventType: 'approval_held',
                 toolName,
                 input: JSON.stringify(input),
@@ -1926,23 +2044,27 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — auto-denied for safety`);
             }
             sendEvent('step', { content: `\u2716 ${toolName} denied by user` });
-            emitAuditEvent(server, { workspaceId: effectiveWorkspace, eventType: 'approval_denied', toolName, sessionId, approved: false });
+            emitAuditEvent(server, { workspaceId: executionScopeId, eventType: 'approval_denied', toolName, sessionId, approved: false });
             return { cancel: true, reason: `User denied ${toolName}` };
           }
           sendEvent('step', { content: `\u2714 ${toolName} approved` });
-            emitAuditEvent(server, { workspaceId: effectiveWorkspace, eventType: 'approval_granted', toolName, sessionId, approved: true });
+            emitAuditEvent(server, { workspaceId: executionScopeId, eventType: 'approval_granted', toolName, sessionId, approved: true });
         });
 
         // Use workspace-scoped tools if a workspacePath was specified
-        if (!hasCustomRunner && workspace && workspace !== 'default' && !sessionTools) {
+      if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
           throw new Error('Workspace chat runtime is unavailable.');
         }
         let effectiveTools = hasCustomRunner
           ? []
-          : workspacePath
-            ? sessionTools
-              ?? server.agentState.buildToolsForWorkspace(workspacePath, sessionOrch, effectiveWorkspace)
-            : allTools;
+          : sessionTools
+            ?? (executionWorkspacePath
+              ? server.agentState.buildToolsForWorkspace(
+                  executionWorkspacePath,
+                  sessionOrch,
+                  authorizedWorkspace ?? effectiveWorkspace,
+                )
+              : allTools);
         const catalogToolNames = new Set(effectiveTools.map(tool => tool.name));
         let toolCatalogCount = catalogToolNames.size;
         let toolEligibleCount = 0;
@@ -2004,7 +2126,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Evidence-bounded turns use only built-in, workspace-rooted reads;
           // do not spend retrieval work or expose ambient external metadata.
           const runningMcpTools = turnMutationPolicy.contextScope === 'default'
-            ? server.agentState.mcpRuntime.getToolsForWorkspace(effectiveWorkspace)
+            ? server.agentState.mcpRuntime.getToolsForWorkspace(executionScopeId)
             : [];
           for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
@@ -2174,7 +2296,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Governance policies for team workspaces — direct call (no HTTP loopback)
         let governancePolicies: { blockedTools?: string[]; allowedSources?: string[] } | undefined;
-        if (wsConfig?.teamId) {
+        if (wsConfig?.teamId && effectiveWorkspace) {
           try {
             governancePolicies = await getGovernancePermissions(
               server.localConfig.dataDir,
@@ -2224,7 +2346,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             server,
             visibleTools: effectiveTools,
             workerTools: spawnAvailableTools,
-            workspaceId: effectiveWorkspace,
+            workspaceId: executionScopeId,
             parentSessionId: sessionId,
             parentTask: agentMessage,
             model: resolvedModel,
@@ -2357,7 +2479,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
             const packagedSystemPrompt = buildSystemPrompt(
               sessionOrch,
-              workspacePath,
+          executionWorkspacePath,
               sessionId,
               history.length,
               effectiveWorkspace,
@@ -2368,6 +2490,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               turnMutationPolicy.contextScope,
               effectiveTools.length,
               logicalModel,
+              activeSessionStateWorkspaceId,
             );
             return turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite
               ? packagedSystemPrompt
@@ -2451,12 +2574,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             sendEvent('step', { content: stepText });
             sendEvent('tool', { name, input });
             // Waggle Dance: emit tool call signal
-            emitWaggleSignal({ type: 'tool:called', workspaceId: effectiveWorkspace, content: `${name}(${JSON.stringify(input).slice(0, 100)})` });
+          emitWaggleSignal({ type: 'tool:called', workspaceId: executionScopeId, content: `${name}(${JSON.stringify(input).slice(0, 100)})` });
             // Track start time for duration calculation
             toolStartTimes.set(name + ':' + toolStartCounter++, Date.now());
-            // F2: Audit trail — log tool call
-            emitAuditEvent(server, {
-              workspaceId: effectiveWorkspace,
+          // F2: Audit trail — log tool call
+          emitAuditEvent(server, {
+            workspaceId: executionScopeId,
               eventType: 'tool_call',
               toolName: name,
               input: JSON.stringify(input),
@@ -2479,9 +2602,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             // Send tool_result SSE event so client can update status + show result
             const isError = result.startsWith('Error:') || result.startsWith('Error ');
             sendEvent('tool_result', { name, result, duration, isError });
-            // F2: Audit trail — log tool result (truncated output)
-            emitAuditEvent(server, {
-              workspaceId: effectiveWorkspace,
+          // F2: Audit trail — log tool result (truncated output)
+          emitAuditEvent(server, {
+            workspaceId: executionScopeId,
               eventType: 'tool_result',
               toolName: name,
               output: result.length > 2000 ? result.slice(0, 2000) + '...[truncated]' : result,
@@ -2500,9 +2623,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               sendEvent('file_created', { filePath, fileAction });
             }
 
-            // TeamSync push — after save_memory in team workspace (fire-and-forget)
-            if (name === 'save_memory' && workspace && !result.startsWith('Error')) {
-              const pushWsConfig = server.workspaceManager?.get(effectiveWorkspace);
+          // TeamSync push — after save_memory in team workspace (fire-and-forget)
+          if (name === 'save_memory' && !result.startsWith('Error')) {
+            const pushWsConfig = activeExecutionWorkspaceId
+              ? server.workspaceManager?.get(activeExecutionWorkspaceId)
+              : undefined;
               if (pushWsConfig?.teamId) {
                 try {
                   const waggleConfig = new WaggleConfig(server.localConfig.dataDir);
@@ -2595,7 +2720,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 const now = new Date();
                 signalBus.record({
                   id: `skill-share-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
-                  teamId: `personal::${effectiveWorkspace ?? 'default'}`,
+            teamId: executionScopeId,
                   senderId: `agent-loop:${activePersonaId ?? 'agent'}`,
                   type: 'broadcast',
                   subtype: 'skill_share',
@@ -2781,15 +2906,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           result.usage.outputTokens,
           resolvedModel,
         );
-        costTracker.addUsage(resolvedModel, result.usage.inputTokens, result.usage.outputTokens, effectiveWorkspace);
+        costTracker.addUsage(
+          resolvedModel,
+          result.usage.inputTokens,
+          result.usage.outputTokens,
+          executionScopeId,
+        );
 
         // L-17 C3: per-session token accumulation for /api/fleet visibility.
         // costTracker is per-workspace cost; sessionManager holds per-session
         // token totals that persist for the life of the active session.
+      if (effectiveWorkspace) {
         server.sessionManager?.addTokens(
           effectiveWorkspace,
           (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
         );
+      }
 
         // ── Finalize the execution trace (self-evolution substrate) ──
         // Default outcome is 'success'; correction-detector may downgrade to
@@ -2948,7 +3080,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             // Build history from other sessions in this workspace only.
             const otherSessions = [...sessionToolSequences.entries()]
               .filter(([id]) => id !== sessionStateKey
-                && isChatSessionStateKeyForWorkspace(id, effectiveWorkspace))
+                && isChatSessionStateKeyForWorkspace(id, activeSessionStateWorkspaceId))
               .map(([, seqs]) => ({ toolSequence: seqs.flat() }));
 
             if (otherSessions.length >= 2) {
@@ -3051,7 +3183,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Add assistant response to history (maintains context for next turn) and persist
         const assistantMessage = { role: 'assistant', content: finalContent, model: resolvedModel };
         history.push(assistantMessage);
-        persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, assistantMessage);
+        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, assistantMessage);
 
         // Send the done event with full response + model info + per-message cost
         const messageCost = result.usage
@@ -3088,19 +3220,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }),
         });
 
-        // Waggle Dance: emit agent completion signal
-        emitWaggleSignal({
-          type: 'agent:completed',
-          workspaceId: effectiveWorkspace,
+      // Waggle Dance: emit agent completion signal
+      emitWaggleSignal({
+        type: 'agent:completed',
+        workspaceId: executionScopeId,
           content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${result.usage?.outputTokens ?? 0} tokens`,
           metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
         });
 
         // Enriched so the notification identifies which agent/workspace/task and
         // deep-links to the output (was a generic "Your agent has completed the task").
-        const wsName =
-          server.agentState.listWorkspaces?.().find((w) => w.id === effectiveWorkspace)?.name ??
-          effectiveWorkspace;
+      const wsName =
+        server.agentState.listWorkspaces?.().find((w) => w.id === effectiveWorkspace)?.name ??
+        'Personal';
         const agentName = personaOverride ? (resolvePersona(personaOverride)?.name ?? 'Agent') : 'Agent';
         const toolCount = (result.toolsUsed ?? []).length;
         emitNotification(server, {
@@ -3109,7 +3241,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
             : `${resolvedModel} · response ready`,
           category: 'agent',
-          actionUrl: `/workspaces/${effectiveWorkspace}/chat`,
+        actionUrl: effectiveWorkspace
+          ? `/workspaces/${effectiveWorkspace}/chat`
+          : '/',
         });
       }
     } catch (err) {
@@ -3128,12 +3262,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             activeAttemptModel,
             billableFailureUsage.inputTokens,
             billableFailureUsage.outputTokens,
-            activeWorkspaceId,
+            activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
           );
-          server.sessionManager?.addTokens(
-            activeWorkspaceId,
-            billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,
-          );
+          if (activeExecutionWorkspaceId) {
+            server.sessionManager?.addTokens(
+              activeExecutionWorkspaceId,
+              billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,
+            );
+          }
         } catch (accountingError) {
           log.warn(
             '[chat] incomplete completion usage accounting failed:',
@@ -3200,7 +3336,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const assistantError = `${GENERATION_FAILED_PREFIX}${errorMessage}`;
         try {
           activeHistory.push({ role: 'assistant', content: assistantError });
-          persistMessage(server.localConfig.dataDir, activeWorkspaceId, activeSessionId, {
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, activeSessionId, {
             role: 'assistant',
             content: assistantError,
           });
@@ -3292,26 +3428,63 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     assertSafeSegment(sessionId, 'session');
     if (workspaceId) assertSafeSegment(workspaceId, 'workspace');
 
+    const historyTarget = resolveChatHistoryTarget(
+      server.localConfig.dataDir,
+      workspaceId,
+      !!server.workspaceManager?.get('default'),
+    );
+    const historyWorkspaceId = historyTarget.workspaceId;
+    if (historyWorkspaceId === 'default') {
+      const currentChatHistoryLayout = getChatHistoryLayout();
+      if (currentChatHistoryLayout.status === 'recovery-required') {
+        return reply.status(409).send({
+          error: 'Default chat history needs recovery before it can be cleared.',
+          code: currentChatHistoryLayout.code,
+        });
+      }
+    }
+    const scopedStateKey = chatSessionStateKey(
+      historyTarget.stateWorkspaceId,
+      sessionId,
+    );
+    if (
+      activeChatTurns.has(scopedStateKey)
+      || (!workspaceId && activeChatTurns.has(sessionId))
+    ) {
+      return reply.status(409).send({
+        error: 'Cannot clear history while this session has an active turn.',
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+    }
+
     const evictSessionState = <T>(state: Map<string, T>): void => {
-      if (workspaceId) {
-        state.delete(chatSessionStateKey(workspaceId, sessionId));
-        return;
-      }
-      for (const stateKey of state.keys()) {
-        if (isChatSessionStateKeyForSession(stateKey, sessionId)) state.delete(stateKey);
-      }
+      state.delete(scopedStateKey);
+      if (!workspaceId) state.delete(sessionId);
     };
+
+    fs.rmSync(
+      path.join(
+        historyTarget.dataDir,
+        'workspaces',
+        historyWorkspaceId,
+        'sessions',
+        `${sessionId}.jsonl`,
+      ),
+      { force: true },
+    );
 
     evictSessionState(sessionHistories);
     evictSessionState(systemPromptCache);
     evictSessionState(compressionSummaries);
     evictSessionState(compactionFrameIds); // #12: next compaction starts a fresh frame
     evictSessionState(sessionToolSequences);
-    if (workspaceId) {
-      const workspaceSession = server.sessionManager.get(workspaceId);
-      if (workspaceSession) chatRuntimes.get(workspaceSession)?.delete(sessionId);
-    } else {
-      for (const workspaceSession of server.sessionManager.getActive()) {
+
+    if (
+      historyTarget.isManagedWorkspace
+      || historyWorkspaceId !== 'default'
+    ) {
+      const workspaceSession = server.sessionManager.get(historyWorkspaceId);
+      if (workspaceSession) {
         chatRuntimes.get(workspaceSession)?.delete(sessionId);
       }
     }
