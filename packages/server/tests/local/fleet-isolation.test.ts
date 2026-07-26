@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { MultiMindCache } from '@waggle/core';
 import {
   createSubAgentTools,
   createWorkflowTools,
@@ -397,6 +398,198 @@ describe('isolated Fleet execution', () => {
     expect(restored.get(first.runId)?.status).toBe('cancelled');
     expect(restored.get(second.runId)?.status).toBe('completed');
     await server.close();
+  });
+
+  it('does not resolve cancellation before the real workspace mind pin is released', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-cancel-drain-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const mindCache = new MultiMindCache({
+      maxOpen: 1,
+      allowedRoot: dataDir,
+      getMindPath: (workspaceId) => path.join(dataDir, `${workspaceId}.mind`),
+    });
+    const runnerStarted = deferred<void>();
+    const abortObserved = deferred<void>();
+    const runnerMayFinish = deferred<void>();
+    const mutationStarted = deferred<void>();
+    const mutationMayFinish = deferred<void>();
+    const recorderCalled = deferred<void>();
+    const workspaceTurnCoordinator = new WorkspaceTurnCoordinator();
+    const competingScope = workspaceTurnCoordinator.createScope(workspaceDir);
+    let mutation: Promise<unknown> | undefined;
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? {
+            id, name: 'Project', group: 'test', created: new Date().toISOString(),
+            directory: workspaceDir, model: 'test-model',
+          }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', {
+      getMaxSessions: () => 10, size: 0, getActive: () => [],
+    } as never);
+    server.decorate('mindCache', mindCache);
+    server.decorate('agentState', {
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({
+          system: 'assembled', responseScaffold: '', debug: {},
+        }),
+      }),
+      buildToolsForSession: () => [{
+        name: 'edit_file',
+        description: '',
+        parameters: {},
+        execute: async () => {
+          mutationStarted.resolve(undefined);
+          await mutationMayFinish.promise;
+          return 'edited';
+        },
+      }],
+      bindWorkspaceCollaborationTools: ({ visibleTools }: { visibleTools: ToolDefinition[] }) => visibleTools,
+      workspaceTurnCoordinator,
+    } as never);
+    server.decorate('agentRunner', (config: AgentLoopConfig) => new Promise<AgentResponse>((resolve) => {
+      const editFile = config.tools.find((tool) => tool.name === 'edit_file');
+      if (!editFile) throw new Error('Fleet runner did not receive edit_file');
+      mutation = editFile.execute({});
+      void mutation.catch(() => undefined);
+      runnerStarted.resolve(undefined);
+      config.signal?.addEventListener('abort', () => {
+        abortObserved.resolve(undefined);
+        void runnerMayFinish.promise.then(() => resolve({
+          content: 'Cancelled',
+          toolsUsed: [],
+          usage: { inputTokens: 0, outputTokens: 0 },
+        }));
+      }, { once: true });
+    }));
+    server.decorate('fleetResultRecorder', async ({ run }) => {
+      recorderCalled.resolve(undefined);
+      return {
+        status: 'complete',
+        personalFrameIds: [],
+        workspaceFrameIds: { [run.workspaceId]: [] },
+      };
+    });
+    server.addHook('onClose', async () => {
+      registry.close();
+      mindCache.closeAll();
+    });
+    await server.register(fleetRoutes);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: {
+        task: 'Edit until cancelled',
+        persona: 'coder',
+        parentWorkspaceId: 'workspace-1',
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    const { runId } = response.json() as { runId: string };
+    await runnerStarted.promise;
+    await mutationStarted.promise;
+    let competingAcquired = false;
+    const competing = competingScope.acquire('write').then(() => { competingAcquired = true; });
+    const eventCursor = registry.snapshot().lastSeq;
+
+    let cancelSettled = false;
+    const cancel = registry.control(runId, 'cancel').then((run) => {
+      cancelSettled = true;
+      return run;
+    });
+    let concurrentCancelSettled = false;
+    let concurrentCancelError: unknown;
+    const concurrentCancel = registry.control(runId, 'cancel').then(
+      (run) => {
+        concurrentCancelSettled = true;
+        return run;
+      },
+      (error: unknown) => {
+        concurrentCancelSettled = true;
+        concurrentCancelError = error;
+        return undefined;
+      },
+    );
+    let lateCancel: Promise<unknown> | undefined;
+    let lateCancelSettled = false;
+    let lateCancelError: unknown;
+    try {
+      await abortObserved.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(cancelSettled).toBe(false);
+      expect(concurrentCancelSettled).toBe(false);
+      expect(registry.get(runId)?.status).toBe('cancelling');
+
+      mindCache.getOrOpen('pressure-1');
+      expect(mindCache.has('workspace-1')).toBe(true);
+
+      runnerMayFinish.resolve(undefined);
+      await recorderCalled.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(cancelSettled).toBe(false);
+      expect(concurrentCancelSettled).toBe(false);
+      expect(registry.get(runId)?.status).toBe('cancelling');
+      expect(competingAcquired).toBe(false);
+
+      lateCancel = registry.control(runId, 'cancel').then(
+        (run) => {
+          lateCancelSettled = true;
+          return run;
+        },
+        (error: unknown) => {
+          lateCancelSettled = true;
+          lateCancelError = error;
+          return undefined;
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(lateCancelSettled).toBe(false);
+
+      mutationMayFinish.resolve(undefined);
+      if (mutation) await mutation;
+      await Promise.all([cancel, concurrentCancel, lateCancel]);
+      expect(concurrentCancelError).toBeUndefined();
+      expect(lateCancelError).toBeUndefined();
+      expect(registry.get(runId)?.status).toBe('cancelled');
+      const terminalRunEvents = registry.eventsSince(eventCursor).events
+        .filter((event) => event.run.id === runId)
+        .map((event) => event.run.status)
+        .filter((status) => ['completed', 'failed', 'cancelled', 'interrupted'].includes(status));
+      expect(terminalRunEvents).toEqual(['cancelled']);
+      await competing;
+      expect(competingAcquired).toBe(true);
+
+      mindCache.getOrOpen('pressure-2');
+      expect(mindCache.has('workspace-1')).toBe(false);
+    } finally {
+      runnerMayFinish.resolve(undefined);
+      mutationMayFinish.resolve(undefined);
+      await Promise.allSettled([
+        ...(mutation ? [mutation] : []),
+        cancel,
+        concurrentCancel,
+        ...(lateCancel ? [lateCancel] : []),
+        competing,
+      ]);
+      await competingScope.release();
+      await server.close();
+    }
   });
 
   it('serializes nested workflow and subagent writers inside one Fleet checkout lease', async () => {

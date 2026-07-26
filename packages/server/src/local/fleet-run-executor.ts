@@ -221,7 +221,14 @@ async function executeFleetRun(
   assignmentId: string | undefined,
 ): Promise<void> {
   const controller = new AbortController();
-  const unregister = server.agentRunRegistry.registerControls(run.id, { cancel: () => controller.abort() });
+  let settleExecution!: () => void;
+  const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
+  const unregister = server.agentRunRegistry.registerControls(run.id, {
+    cancel: async () => {
+      controller.abort();
+      await executionSettled;
+    },
+  });
   let acquired = false;
   let workspaceTurnScope: WorkspaceTurnScope | undefined;
   let traceId: number | undefined;
@@ -327,7 +334,7 @@ async function executeFleetRun(
       : await recordFleetResult(server, run, task, result, mind);
     const totalTokens = result.usage.inputTokens + result.usage.outputTokens;
     server.agentRunRegistry.update(run.id, {
-      status: controller.signal.aborted ? 'cancelled' : 'completed',
+      status: controller.signal.aborted ? 'cancelling' : 'completed',
       result: { summary: result.content, sessionId },
       metrics: {
         toolsUsed: result.toolsUsed,
@@ -362,7 +369,7 @@ async function executeFleetRun(
     const current = server.agentRunRegistry.get(run.id);
     if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
       server.agentRunRegistry.update(run.id, {
-        status: controller.signal.aborted ? 'cancelled' : 'failed',
+        status: controller.signal.aborted ? 'cancelling' : 'failed',
         result: { summary: message, error: message, sessionId },
         progress: null,
       });
@@ -382,9 +389,16 @@ async function executeFleetRun(
       phase: controller.signal.aborted ? 'cancelled' : 'failed', error: message,
     }, assignmentId);
   } finally {
-    unregister();
-    if (workspaceTurnScope) await workspaceTurnScope.release();
-    if (acquired) server.mindCache.release(run.workspaceId);
+    try {
+      if (workspaceTurnScope) await workspaceTurnScope.release();
+    } finally {
+      try {
+        if (acquired) server.mindCache.release(run.workspaceId);
+      } finally {
+        settleExecution();
+        unregister();
+      }
+    }
   }
 }
 

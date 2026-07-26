@@ -289,10 +289,7 @@ export class AgentRunRegistry {
           if (current?.status === 'cancelling') this.applyPatch(id, { status: run.status }, true);
           throw err;
         }
-        const current = this.runs.get(id);
-        return current && TERMINAL_STATUSES.has(current.status)
-          ? clone(current)
-          : this.applyPatch(id, { status: 'cancelled' }, false);
+        return this.finalizeRoomCancellation(id);
       }
       const descendants = this.descendants(run.id).filter((child) => ACTIVE_STATUSES.has(child.status));
       if (descendants.length === 0) return this.applyPatch(run.id, { status: 'cancelled' }, true);
@@ -320,10 +317,30 @@ export class AgentRunRegistry {
       throw err;
     }
 
-    if (action === 'cancel') return this.applyPatch(id, { status: 'cancelled' }, false);
+    if (action === 'cancel') {
+      const current = this.runs.get(id);
+      return current && TERMINAL_STATUSES.has(current.status)
+        ? clone(current)
+        : this.applyPatch(id, { status: 'cancelled' }, false);
+    }
     if (action === 'pause') return this.applyPatch(id, { status: 'paused' }, false);
     if (action === 'resume') return this.applyPatch(id, { status: 'running' }, false);
     return this.get(id)!;
+  }
+
+  finalizeRoomCancellation(id: string): CollaborationRoomRun {
+    const room = this.runs.get(id);
+    if (!room) throw new Error(`Run not found: ${id}`);
+    if (room.kind !== 'room') throw new Error(`Run is not a Room: ${id}`);
+    if (room.status === 'cancelled') return clone(room);
+    if (TERMINAL_STATUSES.has(room.status)) throw new Error(`Run is already ${room.status}`);
+
+    for (const child of this.descendants(room.id).reverse()) {
+      const current = this.runs.get(child.id);
+      if (!current || TERMINAL_STATUSES.has(current.status)) continue;
+      this.applyPatch(child.id, { status: 'cancelled' }, true, false);
+    }
+    return this.applyPatch(id, { status: 'cancelled' }, true) as CollaborationRoomRun;
   }
 
   /**
@@ -391,7 +408,12 @@ export class AgentRunRegistry {
     return clone(run);
   }
 
-  private applyPatch(id: string, patch: CollaborationRunPatch, derived: boolean): CollaborationRun {
+  private applyPatch(
+    id: string,
+    patch: CollaborationRunPatch,
+    derived: boolean,
+    recomputeParent = true,
+  ): CollaborationRun {
     const current = this.runs.get(id);
     if (!current) throw new Error(`Run not found: ${id}`);
     if (patch.status && patch.status !== current.status && !derived) {
@@ -428,7 +450,7 @@ export class AgentRunRegistry {
     this.runs.set(id, next);
     if (TERMINAL_STATUSES.has(next.status)) this.revokeCredentialsForRun(id);
     this.record(next);
-    if (next.kind === 'worker') this.recomputeParent(next.parentRunId);
+    if (recomputeParent && next.kind === 'worker') this.recomputeParent(next.parentRunId);
     return clone(next);
   }
 

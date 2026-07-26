@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { FrameStore, MindDB } from '@waggle/core';
+import { FrameStore, MindDB, MultiMindCache } from '@waggle/core';
 import { createWorkflowTools, type AgentLoopConfig, type AgentResponse, type ToolDefinition } from '@waggle/agent';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import {
@@ -908,6 +908,277 @@ describe('local agent group execution', () => {
     expect(body.runIds.map((id) => registry.get(id)?.status)).toEqual(['cancelled', 'cancelled']);
     expect(server.localJobStore.get(body.jobId)?.status).toBe('cancelled');
     expect(calls.every((call) => call.signal?.aborted)).toBe(true);
+  });
+
+  it('does not resolve Room cancellation before group workers release the real workspace mind pin', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-cancel-drain-'));
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const mindCache = new MultiMindCache({
+      maxOpen: 1,
+      allowedRoot: dataDir,
+      getMindPath: (workspaceId) => path.join(dataDir, `${workspaceId}.mind`),
+    });
+    const personalMind = new MindDB(':memory:');
+    const firstRunnerMayFinish = deferred<void>();
+    const activeAbortObserved = deferred<void>();
+    const activeRunnerMayFinish = deferred<void>();
+    const calls: Array<{ signal?: AbortSignal }> = [];
+    const workspaceTurnCoordinator = new WorkspaceTurnCoordinator();
+    const checkoutTools: ToolDefinition[] = [{
+      name: 'edit_file',
+      description: '',
+      parameters: {},
+      execute: async () => 'edited',
+    }];
+    const competingScope = workspaceTurnCoordinator.createScope(workspaceDir);
+
+    server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: '',
+    });
+    server.decorate('localJobStore', new LocalJobStore());
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: () => ({
+        id: 'workspace-1',
+        name: 'Project',
+        group: 'test',
+        created: new Date().toISOString(),
+        directory: workspaceDir,
+        model: 'test-model',
+      }),
+    } as never);
+    server.decorate('mindCache', mindCache);
+    server.decorate('multiMind', { personal: personalMind } as never);
+    server.decorate('agentState', {
+      allTools: checkoutTools,
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      hookRegistry: undefined,
+      spawnSecurityContext: null,
+      createSessionOrchestrator: () => ({ autoSaveFromExchange: async () => {} }),
+      buildToolsForSession: () => checkoutTools,
+      bindWorkspaceCollaborationTools: ({ visibleTools }: WorkspaceCollaborationBinding) => visibleTools,
+      workspaceTurnCoordinator,
+    } as never);
+    server.decorate('agentRunner', (config: AgentLoopConfig) => {
+      const callIndex = calls.length;
+      calls.push({ signal: config.signal });
+      if (callIndex === 0) {
+        return firstRunnerMayFinish.promise.then(() => ({
+          content: 'Completed before cancellation',
+          toolsUsed: ['edit_file'],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }));
+      }
+      return new Promise<AgentResponse>((resolve) => {
+        config.signal?.addEventListener('abort', () => {
+          activeAbortObserved.resolve(undefined);
+          void activeRunnerMayFinish.promise.then(() => resolve({
+            content: 'Stopped',
+            toolsUsed: [],
+            usage: { inputTokens: 0, outputTokens: 0 },
+          }));
+        }, { once: true });
+      });
+    });
+    server.addHook('onClose', async () => {
+      registry.close();
+      mindCache.closeAll();
+      personalMind.close();
+    });
+    server.register(agentGroupRoutes);
+
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      payload: {
+        name: 'Drain-aware group',
+        strategy: 'parallel',
+        members: [
+          { agentId: 'coder', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const started = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+      payload: { task: 'Keep working until cancellation settles', workspaceId: 'workspace-1' },
+    });
+    expect(started.statusCode).toBe(202);
+    const body = started.json() as { jobId: string; roomId: string; runIds: string[] };
+    await waitFor(() => calls.length === 1, 'first group writer did not start');
+    firstRunnerMayFinish.resolve(undefined);
+    await waitFor(() => calls.length === 2, 'second group writer did not start');
+    await waitFor(
+      () => body.runIds.some((id) => registry.get(id)?.status === 'completed'),
+      'first group worker did not complete before cancellation',
+    );
+    let competingAcquired = false;
+    const competing = competingScope.acquire('write').then(() => { competingAcquired = true; });
+    const eventCursor = registry.snapshot().lastSeq;
+
+    let cancelSettled = false;
+    const cancel = registry.control(body.roomId, 'cancel').then((run) => {
+      cancelSettled = true;
+      return run;
+    });
+    let concurrentCancelSettled = false;
+    let concurrentCancelError: unknown;
+    const concurrentCancel = registry.control(body.roomId, 'cancel').then(
+      (run) => {
+        concurrentCancelSettled = true;
+        return run;
+      },
+      (error: unknown) => {
+        concurrentCancelSettled = true;
+        concurrentCancelError = error;
+        return undefined;
+      },
+    );
+    try {
+      await activeAbortObserved.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(cancelSettled).toBe(false);
+      expect(concurrentCancelSettled).toBe(false);
+      expect(registry.get(body.roomId)?.status).toBe('cancelling');
+      expect(body.runIds.map((id) => registry.get(id)?.status).sort())
+        .toEqual(['cancelling', 'completed']);
+      expect(competingAcquired).toBe(false);
+
+      mindCache.getOrOpen('pressure-1');
+      expect(mindCache.has('workspace-1')).toBe(true);
+
+      activeRunnerMayFinish.resolve(undefined);
+      await Promise.all([cancel, concurrentCancel]);
+      expect(concurrentCancelError).toBeUndefined();
+      expect(registry.get(body.roomId)?.status).toBe('cancelled');
+      expect(body.runIds.map((id) => registry.get(id)?.status).sort())
+        .toEqual(['cancelled', 'completed']);
+      const terminalRoomEvents = registry.eventsSince(eventCursor).events
+        .filter((event) => event.run.id === body.roomId)
+        .map((event) => event.run.status)
+        .filter((status) => ['completed', 'failed', 'cancelled', 'interrupted'].includes(status));
+      expect(terminalRoomEvents).toEqual(['cancelled']);
+      await competing;
+      expect(competingAcquired).toBe(true);
+
+      mindCache.getOrOpen('pressure-2');
+      expect(mindCache.has('workspace-1')).toBe(false);
+    } finally {
+      firstRunnerMayFinish.resolve(undefined);
+      activeRunnerMayFinish.resolve(undefined);
+      await Promise.allSettled([cancel, concurrentCancel, competing]);
+      await competingScope.release();
+    }
+  });
+
+  it('cancels a running group job after workers finish without reversing the terminal Room', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-group-late-job-cancel-'));
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const personalMind = new MindDB(':memory:');
+    const workspaceMind = new MindDB(':memory:');
+    const autoSaveEntered = deferred<void>();
+    const autoSaveMayFinish = deferred<void>();
+    let workspaceMindReleased = false;
+
+    server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: '',
+    });
+    server.decorate('localJobStore', new LocalJobStore());
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: () => ({
+        id: 'workspace-1',
+        name: 'Project',
+        group: 'test',
+        created: new Date().toISOString(),
+        directory: workspaceDir,
+        model: 'test-model',
+      }),
+    } as never);
+    server.decorate('mindCache', {
+      acquire: () => workspaceMind,
+      release: () => { workspaceMindReleased = true; },
+    } as never);
+    server.decorate('multiMind', { personal: personalMind } as never);
+    server.decorate('agentState', {
+      allTools: [],
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      hookRegistry: undefined,
+      spawnSecurityContext: null,
+      createSessionOrchestrator: () => ({
+        autoSaveFromExchange: async () => {
+          autoSaveEntered.resolve(undefined);
+          await autoSaveMayFinish.promise;
+        },
+      }),
+      buildToolsForSession: () => [],
+      bindWorkspaceCollaborationTools: ({ visibleTools }: WorkspaceCollaborationBinding) => visibleTools,
+      workspaceTurnCoordinator: new WorkspaceTurnCoordinator(),
+    } as never);
+    server.decorate('agentRunner', async () => ({
+      content: 'Finished before autosave',
+      toolsUsed: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    server.addHook('onClose', async () => {
+      registry.close();
+      workspaceMind.close();
+      personalMind.close();
+    });
+    server.register(agentGroupRoutes);
+    server.register(localJobRoutes);
+
+    const created = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      payload: {
+        name: 'Late job cancellation group',
+        strategy: 'parallel',
+        members: [
+          { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const started = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${(created.json() as { id: string }).id}/run`,
+      payload: { task: 'Finish workers before autosave', workspaceId: 'workspace-1' },
+    });
+    expect(started.statusCode).toBe(202);
+    const body = started.json() as { jobId: string; roomId: string; runIds: string[] };
+
+    try {
+      await autoSaveEntered.promise;
+      expect(server.localJobStore.get(body.jobId)?.status).toBe('running');
+      expect(registry.get(body.roomId)?.status).toBe('completed');
+      expect(body.runIds.map((id) => registry.get(id)?.status)).toEqual(['completed', 'completed']);
+
+      const cancelled = await server.inject({
+        method: 'POST',
+        url: `/api/jobs/${body.jobId}/cancel`,
+      });
+      expect(cancelled.statusCode).toBe(200);
+      expect(cancelled.json()).toEqual({ cancelled: true, jobId: body.jobId });
+      expect(server.localJobStore.get(body.jobId)?.status).toBe('cancelled');
+      expect(registry.get(body.roomId)?.status).toBe('completed');
+    } finally {
+      autoSaveMayFinish.resolve(undefined);
+      await waitFor(() => workspaceMindReleased, 'group execution did not release the workspace mind');
+    }
   });
 
   it('rejects malformed groups before they can create a permanently queued run', async () => {

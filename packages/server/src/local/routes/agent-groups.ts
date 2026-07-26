@@ -332,18 +332,27 @@ async function executeGroup(
   if (!signal) return;
   server.localJobStore.update(jobId, { status: 'running', startedAt: new Date().toISOString() });
   const unregisterControls: Array<() => void> = [];
+  let settleExecution!: () => void;
+  const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
   let acquired = false;
 
   try {
     if (runContext) {
       unregisterControls.push(server.agentRunRegistry.registerControls(runContext.roomId, {
-        cancel: () => { server.localJobStore.cancel(jobId); },
+        cancel: async () => {
+          server.localJobStore.cancel(jobId);
+          await executionSettled;
+        },
       }));
       signal.addEventListener('abort', () => {
+        const room = server.agentRunRegistry.get(runContext.roomId);
+        if (room && !['completed', 'failed', 'cancelled', 'interrupted'].includes(room.status)) {
+          server.agentRunRegistry.update(runContext.roomId, { status: 'cancelling' });
+        }
         for (const run of runContext.runs.values()) {
           const current = server.agentRunRegistry.get(run.id);
           if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
-            server.agentRunRegistry.update(run.id, { status: 'cancelled', result: { summary: 'Group run cancelled' } });
+            server.agentRunRegistry.update(run.id, { status: 'cancelling', result: { summary: 'Group run cancelled' } });
           }
         }
       }, { once: true });
@@ -465,6 +474,7 @@ async function executeGroup(
       if (!run) return;
       const current = server.agentRunRegistry.get(run.id);
       if (!current || ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) return;
+      if (signal.aborted) return;
       if (workspaceTurnCoordinator && event.workerState.status === 'running') return;
       const status = event.workerState.status === 'done'
         ? 'completed'
@@ -526,7 +536,7 @@ async function executeGroup(
         const current = server.agentRunRegistry.get(run.id);
         if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
           server.agentRunRegistry.update(run.id, {
-            status: signal.aborted ? 'cancelled' : 'failed',
+            status: signal.aborted ? 'cancelling' : 'failed',
             result: { error: durableError },
           });
         }
@@ -541,7 +551,20 @@ async function executeGroup(
     }
   } finally {
     for (const unregister of unregisterControls) unregister();
-    if (acquired && runContext) server.mindCache.release(runContext.workspaceId);
+    try {
+      if (acquired && runContext) server.mindCache.release(runContext.workspaceId);
+    } finally {
+      try {
+        if (runContext && signal.aborted) {
+          const room = server.agentRunRegistry.get(runContext.roomId);
+          if (room?.status === 'cancelling') {
+            server.agentRunRegistry.finalizeRoomCancellation(runContext.roomId);
+          }
+        }
+      } finally {
+        settleExecution();
+      }
+    }
   }
 }
 
