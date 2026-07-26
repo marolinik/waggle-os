@@ -147,6 +147,17 @@ export class WorkspaceTurnCoordinator {
     return new WorkspaceTurnScope(this, canonicalWorkspaceRoot(workspaceRoot), signal);
   }
 
+  tryAcquireWorkspace(
+    workspaceRoot: string,
+    mode: Exclude<WorkspaceTurnAccess, 'none'>,
+  ): (() => void) | undefined {
+    const resource = canonicalWorkspaceRoot(workspaceRoot);
+    const state = this.resources.get(resource) ?? { readers: 0, writer: false, waiters: [] };
+    if (state.waiters.length > 0 || !this.canGrant(state, mode)) return undefined;
+    this.resources.set(resource, state);
+    return this.grant(resource, state, mode);
+  }
+
   async acquire(
     resource: string,
     mode: Exclude<WorkspaceTurnAccess, 'none'>,

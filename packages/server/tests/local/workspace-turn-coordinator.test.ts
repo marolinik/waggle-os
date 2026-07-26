@@ -69,6 +69,26 @@ describe('WorkspaceTurnCoordinator', () => {
     releaseNext();
   });
 
+  it('keeps nonblocking workspace leases behind active holders and queued waiters', async () => {
+    const coordinator = new WorkspaceTurnCoordinator();
+    const workspaceRoot = process.cwd();
+    const resource = canonicalWorkspaceRoot(workspaceRoot);
+    const releaseReader = await coordinator.acquire(resource, 'read');
+    const queuedWriter = coordinator.acquire(resource, 'write');
+
+    expect(coordinator.tryAcquireWorkspace(path.join(workspaceRoot, '.'), 'read')).toBeUndefined();
+    expect(coordinator.tryAcquireWorkspace(workspaceRoot, 'write')).toBeUndefined();
+
+    releaseReader();
+    const releaseWriter = await queuedWriter;
+    expect(coordinator.tryAcquireWorkspace(workspaceRoot, 'write')).toBeUndefined();
+    releaseWriter();
+
+    const releaseImmediate = coordinator.tryAcquireWorkspace(workspaceRoot, 'write');
+    expect(releaseImmediate).toEqual(expect.any(Function));
+    releaseImmediate?.();
+  });
+
   it('serializes mutating child tools inside one writer turn and blocks background shell jobs', async () => {
     const coordinator = new WorkspaceTurnCoordinator();
     const scope = coordinator.createScope(process.cwd());
