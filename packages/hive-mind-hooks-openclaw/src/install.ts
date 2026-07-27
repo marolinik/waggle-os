@@ -86,7 +86,18 @@ const LIFECYCLE_NAMES = ['session-start', 'user-prompt-submit', 'stop', 'pre-com
 export const OPENCLAW_HANDLER_BUNDLE = 'handler.cjs';
 
 const OPENCLAW_HANDLER_ENTRY = 'handler.js';
-export const OPENCLAW_HANDLER_ENTRY_SOURCE = `'use strict';\nmodule.exports = require('./${OPENCLAW_HANDLER_BUNDLE}');\n`;
+export function renderOpenclawHandlerEntrySource(cliPath?: string): string {
+  if (cliPath === undefined) {
+    return `'use strict';\nmodule.exports = require('./${OPENCLAW_HANDLER_BUNDLE}');\n`;
+  }
+  return [
+    `'use strict';`,
+    `const handler = require('./${OPENCLAW_HANDLER_BUNDLE}');`,
+    `module.exports = (event) => handler(event, { cliPath: ${JSON.stringify(cliPath)} });`,
+    '',
+  ].join('\n');
+}
+export const OPENCLAW_HANDLER_ENTRY_SOURCE = renderOpenclawHandlerEntrySource();
 export const OPENCLAW_HANDLER_PACKAGE_JSON = `${JSON.stringify({ private: true, type: 'commonjs' }, null, 2)}\n`;
 
 async function ensureDir(p: string): Promise<void> {
@@ -122,6 +133,7 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
   // Copy the self-contained bundle so the gateway remains independent of this
   // package after installation.
   await ensureDir(paths.hiveHookDir);
+  const cliPath = normalizeCliPath(opts.cliPath);
   await writeFile(paths.hookMdPath, renderHookMd(OPENCLAW_HANDLER_ENTRY), 'utf-8');
   if (!existsSync(paths.handlerSourcePath)) {
     throw new Error(
@@ -133,11 +145,10 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
   // CommonJS while retaining the self-contained bundle's .cjs identity; the
   // hook-local package.json overrides any ancestor `type: module` boundary.
   await copyFile(paths.handlerSourcePath, join(paths.hiveHookDir, OPENCLAW_HANDLER_BUNDLE));
-  await writeFile(paths.installedHandlerPath, OPENCLAW_HANDLER_ENTRY_SOURCE, 'utf-8');
+  await writeFile(paths.installedHandlerPath, renderOpenclawHandlerEntrySource(cliPath), 'utf-8');
   await writeFile(join(paths.hiveHookDir, 'package.json'), OPENCLAW_HANDLER_PACKAGE_JSON, 'utf-8');
 
   // Minimal-touch config edit.
-  const cliPath = normalizeCliPath(opts.cliPath);
   const env: Record<string, string> = { ...(opts.env ?? {}) };
   if (cliPath !== undefined) env['WAGGLE_HIVE_MIND_CLI'] = cliPath;
   const merged = jsonRegister(existingConfig, Object.keys(env).length > 0 ? { env } : {});

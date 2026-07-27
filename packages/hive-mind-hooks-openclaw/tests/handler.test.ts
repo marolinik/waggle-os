@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createLogger } from '@waggle/hive-mind-shim-core';
 import type {
   CliBridge,
@@ -267,5 +270,54 @@ describe('openclawHook default export — fail-open over the live bridge path', 
     // handler's try/catch must swallow any failure and resolve.
     const event = { type: 'agent', action: 'bootstrap', context: { channelId: 'c', bootstrapFiles: [] } };
     await expect(openclawHook(event)).resolves.toBeUndefined();
+  });
+
+  it('uses the loader-pinned CLI path when OpenClaw does not inject entry env', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'hmocl-handler-runtime-'));
+    const cliPath = join(root, 'fake-hive-mind-cli.mjs');
+    const markerPath = join(root, 'cli-calls.txt');
+    const previousCliPath = process.env['WAGGLE_HIVE_MIND_CLI'];
+
+    await writeFile(
+      cliPath,
+      [
+        `import { appendFileSync } from 'node:fs';`,
+        `appendFileSync(${JSON.stringify(markerPath)}, process.argv.slice(2).join(' ') + '\\n');`,
+        `process.stdout.write(JSON.stringify({`,
+        `  ok: true,`,
+        `  tool: 'save_memory',`,
+        `  content: [{`,
+        `    type: 'text',`,
+        `    text: JSON.stringify({ id: 'runtime-pinned-1', workspace: 'personal' }),`,
+        `  }],`,
+        `}));`,
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    delete process.env['WAGGLE_HIVE_MIND_CLI'];
+    try {
+      const { default: openclawHook } = await import('../src/handler.js');
+      await openclawHook(
+        {
+          type: 'message',
+          action: 'received',
+          context: {
+            channelId: 'runtime-channel',
+            content: 'persist through the install-pinned CLI',
+            cwd: root,
+          },
+        },
+        { cliPath },
+      );
+
+      const calls = await readFile(markerPath, 'utf-8');
+      expect(calls).toContain('hook-call save_memory');
+    } finally {
+      if (previousCliPath === undefined) delete process.env['WAGGLE_HIVE_MIND_CLI'];
+      else process.env['WAGGLE_HIVE_MIND_CLI'] = previousCliPath;
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

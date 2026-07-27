@@ -134,10 +134,18 @@ function extractFor(
   }
 }
 
-/** Build a CliBridge, honoring an install-pinned cli path from env. */
-function buildBridge(): ReturnType<typeof createCliBridge> {
+export interface OpenclawHookRuntimeOptions {
+  /** Install-pinned CLI path embedded into the managed handler loader. */
+  readonly cliPath?: string;
+}
+
+/** Build a CliBridge, preferring the loader-pinned path over ambient env. */
+function buildBridge(opts: OpenclawHookRuntimeOptions = {}): ReturnType<typeof createCliBridge> {
   const logger = createLogger({ name: 'openclaw-hooks/handler' });
-  const cliPath = process.env.WAGGLE_HIVE_MIND_CLI;
+  const envCliPath = process.env.WAGGLE_HIVE_MIND_CLI;
+  const cliPath = typeof opts.cliPath === 'string' && opts.cliPath.length > 0
+    ? opts.cliPath
+    : envCliPath;
   // OpenClaw shares its gateway event loop with hooks, so every bridge call â€”
   // including pre-compact cleanup â€” is intentionally best-effort and bounded.
   // A stalled CLI must release the gateway instead of delaying compaction.
@@ -162,7 +170,10 @@ const handler = makeOpenclawHandler(openclawAdapter, {
  *
  * NEVER throws — always returns a resolved promise (fail-open).
  */
-export default async function openclawHook(event: OpenclawRuntimeEvent): Promise<void> {
+export default async function openclawHook(
+  event: OpenclawRuntimeEvent,
+  runtimeOptions: OpenclawHookRuntimeOptions = {},
+): Promise<void> {
   try {
     const lifecycle = lifecycleFor(event);
     if (lifecycle === undefined) return;
@@ -173,12 +184,15 @@ export default async function openclawHook(event: OpenclawRuntimeEvent): Promise
     // with the injected text (the shared body's stdout return is unused
     // in-process).
     if (lifecycle === 'session-start') {
-      await injectBootstrap(ctx, extracted as SessionStartExtracted);
+      await injectBootstrap(ctx, extracted as SessionStartExtracted, runtimeOptions);
       return;
     }
 
     const input: OpenclawHandlerInput = { event, extracted };
-    const hookCtx: HookContext = { bridge: buildBridge(), logger: createLogger({ name: 'openclaw-hooks/handler' }) };
+    const hookCtx: HookContext = {
+      bridge: buildBridge(runtimeOptions),
+      logger: createLogger({ name: 'openclaw-hooks/handler' }),
+    };
     await handler.handle(input, hookCtx);
   } catch {
     // FAIL-OPEN: swallow — the gateway flow must never be affected.
@@ -194,10 +208,11 @@ export default async function openclawHook(event: OpenclawRuntimeEvent): Promise
 async function injectBootstrap(
   ctx: OpenclawRuntimeContext,
   extracted: SessionStartExtracted,
+  runtimeOptions: OpenclawHookRuntimeOptions = {},
 ): Promise<void> {
   const logger = createLogger({ name: 'openclaw-hooks/handler' });
   try {
-    const bridge = buildBridge();
+    const bridge = buildBridge(runtimeOptions);
     const hits: MemoryHit[] = await bridge.recallMemory('', {
       limit: extracted.recallLimit,
       scope: 'personal',

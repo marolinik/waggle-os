@@ -264,6 +264,78 @@ describe('verify (openclaw)', () => {
     }
   });
 
+  it('does not let a caller override mask an unreachable loader-pinned CLI', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    const pinnedCliPath = '/abs/broken-pinned-cli.js';
+    const overrideCliPath = '/abs/working-override-cli.js';
+    await install({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath: pinnedCliPath,
+    });
+
+    const invokedPaths: string[] = [];
+    const recordingSpawn = ((
+      cmd: string,
+      args: readonly string[],
+    ) => {
+      const invokedPath = cmd === process.execPath ? args[0] : cmd;
+      if (invokedPath !== undefined) invokedPaths.push(invokedPath);
+      return mockSpawnImpl({
+        exitCode: invokedPath === pinnedCliPath ? 127 : 0,
+        stderr: invokedPath === pinnedCliPath ? 'not found' : '',
+      })(cmd, args);
+    }) as unknown as typeof import('node:child_process').spawn;
+
+    const result = await verify({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath: overrideCliPath,
+      spawnImpl: recordingSpawn,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.checks.find((c) => c.name === 'hive-mind-cli reachable')?.ok).toBe(false);
+    expect(invokedPaths).toContain(pinnedCliPath);
+    expect(invokedPaths).not.toContain(overrideCliPath);
+  });
+
+  it('does not let a caller override mask an unreachable bare-loader CLI', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    const overrideCliPath = '/abs/working-override-cli.js';
+    await install({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+    });
+
+    const invokedPaths: string[] = [];
+    const recordingSpawn = ((
+      cmd: string,
+      args: readonly string[],
+    ) => {
+      const invokedPath = cmd === process.execPath ? args[0] : cmd;
+      if (invokedPath !== undefined) invokedPaths.push(invokedPath);
+      return mockSpawnImpl({
+        exitCode: invokedPath === 'hive-mind-cli' ? 127 : 0,
+        stderr: invokedPath === 'hive-mind-cli' ? 'not found' : '',
+      })(cmd, args);
+    }) as unknown as typeof import('node:child_process').spawn;
+
+    const result = await verify({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath: overrideCliPath,
+      spawnImpl: recordingSpawn,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.checks.find((c) => c.name === 'hive-mind-cli reachable')?.ok).toBe(false);
+    expect(invokedPaths).toContain('hive-mind-cli');
+    expect(invokedPaths).not.toContain(overrideCliPath);
+  });
+
   it('rejects a tampered pointer cli_path without spawning it', async () => {
     const env = await bootstrap('{ "hooks": {} }');
     envs.push(env);

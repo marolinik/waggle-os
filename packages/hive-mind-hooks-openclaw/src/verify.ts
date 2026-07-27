@@ -5,10 +5,8 @@
  * answers a `--help` probe. Plus the openclaw-specific activation advisory
  * (spec §5.5 / §6.2): hooks are OFF until `hooks.internal.enabled=true`.
  *
- * Probe priority for `cli_path`:
- *   1. Explicit `opts.cliPath` (caller override)
- *   2. `cli_path` recorded in `~/.openclaw/hive-mind-install.json`
- *   3. Bare `'hive-mind-cli'` on PATH
+ * Probe selection follows the managed runtime: the trusted install pin, or
+ * bare `'hive-mind-cli'` on PATH when the loader is unpinned.
  */
 
 import { readFile, access } from 'node:fs/promises';
@@ -22,8 +20,8 @@ import { HIVE_HOOK_ENTRY_KEY, resolvePaths, type ResolvePathsOptions } from './p
 import { parseConfig, hasHiveEntries, HOOKS_KEY } from './json5-merger.js';
 import {
   OPENCLAW_HANDLER_BUNDLE,
-  OPENCLAW_HANDLER_ENTRY_SOURCE,
   OPENCLAW_HANDLER_PACKAGE_JSON,
+  renderOpenclawHandlerEntrySource,
 } from './install.js';
 
 export interface VerifyCheck {
@@ -39,7 +37,10 @@ export interface VerifyResult {
 
 export interface VerifyOptions extends ResolvePathsOptions {
   logger?: Logger;
-  /** Override hive-mind-cli executable name. Default 'hive-mind-cli'. */
+  /**
+   * @deprecated Install with `cliPath` instead. A verify-only path cannot prove
+   * the managed loader's runtime and is therefore ignored for readiness.
+   */
   cliPath?: string;
   /** Test hook for spawn. */
   spawnImpl?: typeof spawn;
@@ -309,9 +310,30 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
       ? `sha256 ${installedBundleHash}`
       : `installed=${installedBundleHash ?? 'unreadable'} trusted=${trustedBundleHash ?? 'unreadable'}`,
   });
+  let cliPathFromPointer: string | undefined;
+  if (existsSync(paths.pointerPath)) {
+    try {
+      const pointerObj = JSON.parse(await readFile(paths.pointerPath, 'utf-8')) as Record<string, unknown>;
+      const pointerCliPath = pointerObj['cli_path'];
+      if (typeof pointerCliPath === 'string' && pointerCliPath.length > 0) {
+        cliPathFromPointer = pointerCliPath;
+      }
+    } catch { /* pointer unreadable — fail the trust comparison below */ }
+  }
+  const cliPathFromConfig = configuredCliPath(parsed);
+  const pointerCliPathTrusted = cliPathFromPointer === cliPathFromConfig;
+  checks.push({
+    name: 'install pointer cli_path matches managed config',
+    ok: pointerCliPathTrusted,
+    detail: pointerCliPathTrusted
+      ? cliPathFromPointer ?? 'no pinned CLI path'
+      : `pointer=${cliPathFromPointer ?? '(none)'} config=${cliPathFromConfig ?? '(none)'}`,
+  });
+  const trustedPointerCliPath = pointerCliPathTrusted ? cliPathFromPointer : undefined;
+
   const entryTrusted = await fileHasExactText(
     paths.installedHandlerPath,
-    OPENCLAW_HANDLER_ENTRY_SOURCE,
+    renderOpenclawHandlerEntrySource(trustedPointerCliPath),
   );
   checks.push({
     name: 'handler.js matches managed loader',
@@ -336,28 +358,8 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
     detail: handlerProbe.output,
   });
 
-  // 5. hive-mind-cli responds to --help (prefer install-pinned --cli-path).
-  let cliPathFromPointer: string | undefined;
-  if (existsSync(paths.pointerPath)) {
-    try {
-      const pointerObj = JSON.parse(await readFile(paths.pointerPath, 'utf-8')) as Record<string, unknown>;
-      const pointerCliPath = pointerObj['cli_path'];
-      if (typeof pointerCliPath === 'string' && pointerCliPath.length > 0) {
-        cliPathFromPointer = pointerCliPath;
-      }
-    } catch { /* pointer unreadable — fall through */ }
-  }
-  const cliPathFromConfig = configuredCliPath(parsed);
-  const pointerCliPathTrusted = cliPathFromPointer === cliPathFromConfig;
-  checks.push({
-    name: 'install pointer cli_path matches managed config',
-    ok: pointerCliPathTrusted,
-    detail: pointerCliPathTrusted
-      ? cliPathFromPointer ?? 'no pinned CLI path'
-      : `pointer=${cliPathFromPointer ?? '(none)'} config=${cliPathFromConfig ?? '(none)'}`,
-  });
-  const trustedPointerCliPath = pointerCliPathTrusted ? cliPathFromPointer : undefined;
-  const cliPath = opts.cliPath ?? trustedPointerCliPath ?? 'hive-mind-cli';
+  // 5. hive-mind-cli responds to --help (prefer the trusted install pin).
+  const cliPath = trustedPointerCliPath ?? 'hive-mind-cli';
   const spawnImpl = opts.spawnImpl ?? spawn;
   const probe = await probeCliVersion(cliPath, spawnImpl, opts.cliProbeTimeoutMs ?? 4000);
   checks.push({
