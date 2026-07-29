@@ -159,6 +159,22 @@ const handler = makeOpenclawHandler(openclawAdapter, {
   stopDebounceMs: DEFAULT_STOP_DEBOUNCE_MS,
 });
 
+const pendingPromptSnapshots = new Map<string, Promise<MemoryHit[]>>();
+const PENDING_PROMPT_SNAPSHOT_TTL_MS = 5 * 60_000;
+
+function promptSnapshotKey(event: OpenclawRuntimeEvent, fallback: string): string {
+  const key = event.sessionKey;
+  return typeof key === 'string' && key.length > 0 ? key : fallback;
+}
+
+function rememberPromptSnapshot(key: string, snapshot: Promise<MemoryHit[]>): void {
+  pendingPromptSnapshots.set(key, snapshot);
+  const expiry = setTimeout(() => {
+    if (pendingPromptSnapshots.get(key) === snapshot) pendingPromptSnapshots.delete(key);
+  }, PENDING_PROMPT_SNAPSHOT_TTL_MS);
+  expiry.unref?.();
+}
+
 /**
  * The OpenClaw default export. Receives the runtime `InternalHookEvent`, maps
  * `event.context` → the extracted payload, and drives the shared bodies.
@@ -180,11 +196,50 @@ export default async function openclawHook(
     const ctx = asContext(event);
     const extracted = extractFor(lifecycle, ctx);
 
+    if (lifecycle === 'user-prompt-submit') {
+      const prompt = extracted as UserPromptExtracted;
+      const key = promptSnapshotKey(event, prompt.sessionId);
+      const previous = pendingPromptSnapshots.get(key);
+      const snapshot = (previous ?? Promise.resolve<MemoryHit[]>([]))
+        .catch(() => [])
+        .then(async () => {
+          const bridge = buildBridge(runtimeOptions);
+          let hits: MemoryHit[] = [];
+          try {
+            hits = await bridge.recallMemory('', {
+              limit: DEFAULT_RECALL_LIMIT,
+              scope: 'personal',
+            });
+          } catch {
+            // Fail open: prompt capture still runs if historical recall fails.
+          }
+          const hookCtx: HookContext = {
+            bridge,
+            logger: createLogger({ name: 'openclaw-hooks/handler' }),
+          };
+          await handler.handle({ event, extracted: prompt }, hookCtx);
+          return hits;
+        })
+        .catch(() => []);
+      rememberPromptSnapshot(key, snapshot);
+      await snapshot;
+      return;
+    }
+
     // SessionStart: drive recall ourselves so we can mutate bootstrapFiles
     // with the injected text (the shared body's stdout return is unused
     // in-process).
     if (lifecycle === 'session-start') {
-      await injectBootstrap(ctx, extracted as SessionStartExtracted, runtimeOptions);
+      const sessionStart = extracted as SessionStartExtracted;
+      const key = promptSnapshotKey(event, sessionStart.sessionId ?? provenanceScope(ctx));
+      const snapshot = pendingPromptSnapshots.get(key);
+      if (snapshot) {
+        const hits = await snapshot;
+        if (pendingPromptSnapshots.get(key) === snapshot) pendingPromptSnapshots.delete(key);
+        await injectBootstrap(ctx, sessionStart, runtimeOptions, hits);
+      } else {
+        await injectBootstrap(ctx, sessionStart, runtimeOptions);
+      }
       return;
     }
 
@@ -209,11 +264,12 @@ async function injectBootstrap(
   ctx: OpenclawRuntimeContext,
   extracted: SessionStartExtracted,
   runtimeOptions: OpenclawHookRuntimeOptions = {},
+  snapshot?: readonly MemoryHit[],
 ): Promise<void> {
   const logger = createLogger({ name: 'openclaw-hooks/handler' });
   try {
-    const bridge = buildBridge(runtimeOptions);
-    const hits: MemoryHit[] = await bridge.recallMemory('', {
+    const hits: readonly MemoryHit[] = snapshot
+      ?? await buildBridge(runtimeOptions).recallMemory('', {
       limit: extracted.recallLimit,
       scope: 'personal',
     });

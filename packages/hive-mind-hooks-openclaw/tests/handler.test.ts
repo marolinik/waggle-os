@@ -272,7 +272,7 @@ describe('openclawHook default export — fail-open over the live bridge path', 
     await expect(openclawHook(event)).resolves.toBeUndefined();
   });
 
-  it('uses the loader-pinned CLI path when OpenClaw does not inject entry env', async () => {
+  it('recalls history before saving the current prompt through the loader-pinned CLI', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hmocl-handler-runtime-'));
     const cliPath = join(root, 'fake-hive-mind-cli.mjs');
     const markerPath = join(root, 'cli-calls.txt');
@@ -283,12 +283,14 @@ describe('openclawHook default export — fail-open over the live bridge path', 
       [
         `import { appendFileSync } from 'node:fs';`,
         `appendFileSync(${JSON.stringify(markerPath)}, process.argv.slice(2).join(' ') + '\\n');`,
+        `const tool = process.argv[3];`,
+        `const payload = tool === 'recall_memory' ? [{ id: 7, content: 'historical decision only', importance: 'important', source: 'openclaw', score: 1, created_at: '2026-07-26T10:00:00.000Z' }] : { id: 'runtime-pinned-1', workspace: 'personal' };`,
         `process.stdout.write(JSON.stringify({`,
         `  ok: true,`,
-        `  tool: 'save_memory',`,
+        `  tool,`,
         `  content: [{`,
         `    type: 'text',`,
-        `    text: JSON.stringify({ id: 'runtime-pinned-1', workspace: 'personal' }),`,
+        `    text: JSON.stringify(payload),`,
         `  }],`,
         `}));`,
         '',
@@ -303,6 +305,7 @@ describe('openclawHook default export — fail-open over the live bridge path', 
         {
           type: 'message',
           action: 'received',
+          sessionKey: 'agent:main:runtime-channel',
           context: {
             channelId: 'runtime-channel',
             content: 'persist through the install-pinned CLI',
@@ -312,8 +315,34 @@ describe('openclawHook default export — fail-open over the live bridge path', 
         { cliPath },
       );
 
-      const calls = await readFile(markerPath, 'utf-8');
-      expect(calls).toContain('hook-call save_memory');
+      const callsAfterMessage = (await readFile(markerPath, 'utf-8')).trim().split(/\r?\n/);
+      expect(callsAfterMessage).toHaveLength(2);
+      expect(callsAfterMessage[0]).toMatch(/^hook-call recall_memory /);
+      expect(callsAfterMessage[1]).toMatch(/^hook-call save_memory /);
+
+      const bootstrapFiles: unknown[] = [];
+      await openclawHook(
+        {
+          type: 'agent',
+          action: 'bootstrap',
+          sessionKey: 'agent:main:runtime-channel',
+          context: {
+            channelId: 'runtime-channel',
+            bootstrapFiles,
+          },
+        },
+        { cliPath },
+      );
+
+      const callsAfterBootstrap = (await readFile(markerPath, 'utf-8')).trim().split(/\r?\n/);
+      expect(callsAfterBootstrap).toHaveLength(2);
+      expect(bootstrapFiles).toEqual([
+        expect.objectContaining({
+          name: 'HIVE_MIND_RECALL.md',
+          content: expect.stringContaining('historical decision only'),
+        }),
+      ]);
+      expect(JSON.stringify(bootstrapFiles)).not.toContain('persist through the install-pinned CLI');
     } finally {
       if (previousCliPath === undefined) delete process.env['WAGGLE_HIVE_MIND_CLI'];
       else process.env['WAGGLE_HIVE_MIND_CLI'] = previousCliPath;
