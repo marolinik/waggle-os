@@ -545,7 +545,9 @@ export async function runHookCommand(
     };
   }
   const args = [runtime.hookEntry, opts.action];
-  if (opts.action === 'install') args.push('--cli-path', runtime.cliEntry);
+  if (opts.action === 'install' || (opts.action === 'verify' && opts.id === 'openclaw')) {
+    args.push('--cli-path', runtime.cliEntry);
+  }
   const result = await deps.execCapture(runtime.nodePath, args, {
     timeoutMs: 60000,
     env: buildExternalProcessEnv(deps.baseEnv, {

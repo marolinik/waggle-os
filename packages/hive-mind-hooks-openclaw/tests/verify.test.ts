@@ -307,8 +307,8 @@ describe('verify (openclaw)', () => {
       spawnImpl: recordingSpawn,
     });
 
-    expect(result.checks.find((c) => c.name === 'pinned Node runtime matches verifier runtime')?.ok).toBe(true);
-    expect(result.checks.find((c) => c.name === 'pinned Node runtime matches install hash')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'packaged Node matches verifier expectation')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'packaged Node matches install receipt')?.ok).toBe(true);
     expect(probes.at(-1)).toEqual({
       command: nodePath,
       args: [cliPath, '--help'],
@@ -349,8 +349,8 @@ describe('verify (openclaw)', () => {
       });
 
       const digestCheck = artifact === 'node'
-        ? 'pinned Node runtime matches install hash'
-        : 'pinned CLI matches install hash';
+        ? 'packaged Node matches install receipt'
+        : 'packaged CLI matches install receipt';
       expect(result.checks.find((check) => check.name === digestCheck)?.ok).toBe(false);
       expect(result.checks.find((check) => check.name === 'installed handler runtime-loads')?.detail)
         .toContain('skipped');
@@ -360,7 +360,7 @@ describe('verify (openclaw)', () => {
     },
   );
 
-  it('does not let a caller override mask an unreachable loader-pinned CLI', async () => {
+  it('rejects a verifier CLI expectation that differs from the loader pin', async () => {
     const env = await bootstrap('{ "hooks": {} }');
     envs.push(env);
     const pinnedCliPath = '/abs/broken-pinned-cli.js';
@@ -393,11 +393,13 @@ describe('verify (openclaw)', () => {
 
     expect(result.ok).toBe(false);
     expect(result.checks.find((c) => c.name === 'hive-mind-cli reachable')?.ok).toBe(false);
-    expect(invokedPaths).toContain(pinnedCliPath);
+    expect(result.checks.find((c) => c.name === 'packaged CLI matches verifier expectation')?.ok)
+      .toBe(false);
+    expect(invokedPaths).not.toContain(pinnedCliPath);
     expect(invokedPaths).not.toContain(overrideCliPath);
   });
 
-  it('does not let a caller override mask an unreachable bare-loader CLI', async () => {
+  it('rejects managed verification when the loader has no runtime pin', async () => {
     const env = await bootstrap('{ "hooks": {} }');
     envs.push(env);
     const overrideCliPath = '/abs/working-override-cli.js';
@@ -428,8 +430,129 @@ describe('verify (openclaw)', () => {
 
     expect(result.ok).toBe(false);
     expect(result.checks.find((c) => c.name === 'hive-mind-cli reachable')?.ok).toBe(false);
-    expect(invokedPaths).toContain('hive-mind-cli');
+    expect(result.checks.find((c) => c.name === 'packaged CLI matches verifier expectation')?.ok)
+      .toBe(false);
+    expect(invokedPaths).not.toContain('hive-mind-cli');
     expect(invokedPaths).not.toContain(overrideCliPath);
+  });
+
+  it('rejects coordinated CLI substitution against the verifier expectation', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    const trustedCliPath = join(env.home, 'trusted-hive-mind-cli.js');
+    const attackerCliPath = join(env.home, 'substituted-hive-mind-cli.js');
+    const nodePath = join(env.home, 'waggle-node.exe');
+    await writeFile(trustedCliPath, 'console.log("trusted");\n', 'utf-8');
+    await writeFile(attackerCliPath, 'console.log("substituted");\n', 'utf-8');
+    await copyFile(process.execPath, nodePath);
+    await install({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath: trustedCliPath,
+      nodePath,
+    });
+
+    const pointerPath = join(env.home, '.openclaw', 'hive-mind-install.json');
+    const pointer = JSON.parse(await readFile(pointerPath, 'utf-8')) as {
+      cli_path: string;
+      extra: { runtime_binding: Record<string, unknown> };
+    };
+    pointer.cli_path = attackerCliPath;
+    pointer.extra.runtime_binding['cli_path'] = attackerCliPath;
+    pointer.extra.runtime_binding['cli_sha256'] = createHash('sha256')
+      .update(await readFile(attackerCliPath))
+      .digest('hex');
+    await writeFile(pointerPath, `${JSON.stringify(pointer, null, 2)}\n`, 'utf-8');
+
+    const config = JSON.parse(await readFile(env.configPath, 'utf-8')) as {
+      hooks: { internal: { entries: { 'hive-mind': { env: Record<string, string> } } } };
+    };
+    config.hooks.internal.entries['hive-mind'].env['WAGGLE_HIVE_MIND_CLI'] = attackerCliPath;
+    await writeFile(env.configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+    const handlerPath = join(env.home, '.openclaw', 'hooks', 'hive-mind', 'handler.js');
+    await writeFile(
+      handlerPath,
+      [
+        `'use strict';`,
+        `const handler = require('./handler.cjs');`,
+        `module.exports = (event) => handler(event, ${JSON.stringify({
+          cliPath: attackerCliPath,
+          nodePath,
+        })});`,
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const probes: string[] = [];
+    const recordingSpawn = ((command: string) => {
+      probes.push(command);
+      return mockSpawnImpl({ exitCode: 0 })(command, []);
+    }) as unknown as typeof import('node:child_process').spawn;
+    const result = await verify({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath: trustedCliPath,
+      nodePath,
+      spawnImpl: recordingSpawn,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.checks.find((c) => c.name === 'packaged CLI matches verifier expectation')?.ok)
+      .toBe(false);
+    expect(probes).toEqual([]);
+  });
+
+  it('rejects a stripped managed binding instead of downgrading to legacy verification', async () => {
+    const env = await bootstrap('{ "hooks": {} }');
+    envs.push(env);
+    const cliPath = join(env.home, 'hive-mind-cli.js');
+    const nodePath = join(env.home, 'waggle-node.exe');
+    await writeFile(cliPath, 'console.log("trusted");\n', 'utf-8');
+    await copyFile(process.execPath, nodePath);
+    await install({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath,
+      nodePath,
+    });
+
+    const pointerPath = join(env.home, '.openclaw', 'hive-mind-install.json');
+    const pointer = JSON.parse(await readFile(pointerPath, 'utf-8')) as Record<string, unknown>;
+    delete pointer['cli_path'];
+    const extra = pointer['extra'] as Record<string, unknown>;
+    delete extra['runtime_binding'];
+    await writeFile(pointerPath, `${JSON.stringify(pointer, null, 2)}\n`, 'utf-8');
+    const config = JSON.parse(await readFile(env.configPath, 'utf-8')) as {
+      hooks: { internal: { entries: { 'hive-mind': { env: Record<string, string> } } } };
+    };
+    delete config.hooks.internal.entries['hive-mind'].env['WAGGLE_HIVE_MIND_CLI'];
+    delete config.hooks.internal.entries['hive-mind'].env['WAGGLE_HOOK_NODE_PATH'];
+    await writeFile(env.configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+    const handlerPath = join(env.home, '.openclaw', 'hooks', 'hive-mind', 'handler.js');
+    await writeFile(
+      handlerPath,
+      "'use strict';\nmodule.exports = require('./handler.cjs');\n",
+      'utf-8',
+    );
+
+    const probes: string[] = [];
+    const recordingSpawn = ((command: string) => {
+      probes.push(command);
+      return mockSpawnImpl({ exitCode: 0 })(command, []);
+    }) as unknown as typeof import('node:child_process').spawn;
+    const result = await verify({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath,
+      requireManagedRuntime: true,
+      spawnImpl: recordingSpawn,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.checks.find((c) => c.name === 'packaged CLI matches verifier expectation')?.ok)
+      .toBe(false);
+    expect(probes).toEqual([]);
   });
 
   it('rejects a tampered pointer cli_path without spawning it', async () => {

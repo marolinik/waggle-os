@@ -362,13 +362,13 @@ describe('runHookCommand', () => {
     expect(calls[0].options?.env?.OPENAI_API_KEY).toBeUndefined();
   });
 
-  it('routes verify and uninstall without install-only CLI arguments', async () => {
+  it('pins the packaged CLI for install and verify but not uninstall', async () => {
     const { calls, execCapture } = captureExec();
     const runtime = testHookRuntime();
-    await runHookCommand({ id: 'claude-code', action: 'verify', runtime, deps: { execCapture } });
-    await runHookCommand({ id: 'claude-code', action: 'uninstall', runtime, deps: { execCapture } });
+    await runHookCommand({ id: 'openclaw', action: 'verify', runtime, deps: { execCapture } });
+    await runHookCommand({ id: 'openclaw', action: 'uninstall', runtime, deps: { execCapture } });
     expect(calls.map((call) => call.args)).toEqual([
-      [runtime.hookEntry, 'verify'],
+      [runtime.hookEntry, 'verify', '--cli-path', runtime.cliEntry],
       [runtime.hookEntry, 'uninstall'],
     ]);
   });

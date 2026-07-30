@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createLogger, type Logger } from '@waggle/hive-mind-shim-core';
+import { normalizeCliPath } from '@waggle/hive-mind-hooks-core';
 import { HIVE_HOOK_ENTRY_KEY, resolvePaths, type ResolvePathsOptions } from './paths.js';
 import { parseConfig, hasHiveEntries, HOOKS_KEY } from './json5-merger.js';
 import {
@@ -38,13 +39,12 @@ export interface VerifyResult {
 
 export interface VerifyOptions extends ResolvePathsOptions {
   logger?: Logger;
-  /**
-   * @deprecated Install with `cliPath` instead. A verify-only path cannot prove
-   * the managed loader's runtime and is therefore ignored for readiness.
-   */
+  /** Authoritative packaged CLI path expected by the launcher/verifier. */
   cliPath?: string;
   /** Expected packaged Node path; production receives this from the launcher runtime. */
   nodePath?: string;
+  /** Fail closed unless a complete packaged Node/CLI binding is present. */
+  requireManagedRuntime?: boolean;
   /** Test hook for spawn. */
   spawnImpl?: typeof spawn;
   /** Test hook for the CLI probe timeout. */
@@ -381,10 +381,13 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
   const nodePathFromConfig = configuredNodePath(parsed);
   const runtimeBindingRead = runtimeBindingFromPointer(pointerObj);
   const runtimeBinding = runtimeBindingRead.binding;
+  const expectedCliPath = normalizeCliPath(opts.cliPath);
   const launcherNodePath = opts.nodePath
     ?? process.env.WAGGLE_HOOK_NODE_PATH
     ?? process.execPath;
-  const runtimeBindingRequired = runtimeBindingRead.declared
+  const runtimeBindingRequired = opts.requireManagedRuntime === true
+    || expectedCliPath !== undefined
+    || runtimeBindingRead.declared
     || nodePathFromConfig !== undefined
     || opts.nodePath !== undefined
     || process.env.WAGGLE_HOOK_NODE_PATH !== undefined;
@@ -396,11 +399,23 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
     && runtimeBinding.node_path === launcherNodePath
   );
   checks.push({
-    name: 'pinned Node runtime matches verifier runtime',
+    name: 'packaged Node matches verifier expectation',
     ok: runtimePathsAgree,
     detail: runtimeBindingRequired
       ? `binding=${runtimeBinding?.node_path ?? '(invalid)'} config=${nodePathFromConfig ?? '(none)'} verifier=${launcherNodePath}`
       : 'legacy install without a packaged runtime binding',
+  });
+  const cliExpectationMatches = expectedCliPath === undefined
+    ? opts.requireManagedRuntime !== true
+    : runtimeBinding !== undefined && runtimeBinding.cli_path === expectedCliPath;
+  checks.push({
+    name: 'packaged CLI matches verifier expectation',
+    ok: cliExpectationMatches,
+    detail: expectedCliPath === undefined
+      ? opts.requireManagedRuntime === true
+        ? 'managed verification requires --cli-path'
+        : 'no authoritative packaged CLI expectation'
+      : `binding=${runtimeBinding?.cli_path ?? '(invalid)'} verifier=${expectedCliPath}`,
   });
   const [currentNodeHash, currentCliHash] = runtimeBinding === undefined
     ? [undefined, undefined]
@@ -419,20 +434,25 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
     && currentCliHash === runtimeBinding.cli_sha256
   );
   checks.push({
-    name: 'pinned Node runtime matches install hash',
+    name: 'packaged Node matches install receipt',
     ok: nodeHashTrusted,
     detail: runtimeBindingRequired
       ? `installed=${runtimeBinding?.node_sha256 ?? '(invalid)'} current=${currentNodeHash ?? '(unreadable)'}`
       : 'legacy install without a packaged runtime binding',
   });
   checks.push({
-    name: 'pinned CLI matches install hash',
+    name: 'packaged CLI matches install receipt',
     ok: cliHashTrusted,
     detail: runtimeBindingRequired
       ? `installed=${runtimeBinding?.cli_sha256 ?? '(invalid)'} current=${currentCliHash ?? '(unreadable)'}`
       : 'legacy install without a packaged runtime binding',
   });
-  const runtimeBindingTrusted = runtimePathsAgree && nodeHashTrusted && cliHashTrusted;
+  // These digests are point-in-time drift receipts, not authentication against
+  // the local account that owns both the current-user app and OpenClaw config.
+  const runtimeBindingTrusted = runtimePathsAgree
+    && cliExpectationMatches
+    && nodeHashTrusted
+    && cliHashTrusted;
   const pointerCliPathTrusted = cliPathFromPointer === cliPathFromConfig
     && (!runtimeBindingRequired || runtimeBinding?.cli_path === cliPathFromPointer);
   checks.push({
