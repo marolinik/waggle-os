@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ManagedRuntimeRollbackError,
@@ -1995,7 +1996,7 @@ setInterval(() => {}, 1000);
     ], expect.objectContaining({
       shell: false,
       windowsHide: true,
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     }));
     expect(spawnImpl.mock.calls[0]?.[2]?.env).toMatchObject({
       OLLAMA_HOST: '127.0.0.1:11434',
@@ -2004,6 +2005,182 @@ setInterval(() => {}, 1000);
     await runtime.stop();
     expect(child.send).toHaveBeenCalledWith('shutdown');
     expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it('allows a verified Windows runtime to become ready after a slow 75-second cold start', async () => {
+    const bytes = Buffer.from('slow cold-start fixture');
+    const dataDir = await temporaryDataDir();
+    let spawnedAt: number | null = null;
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      connected: true,
+      pid: 52_001,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      send: vi.fn((message: unknown) => {
+        if (message !== 'shutdown') return true;
+        child.exitCode = 0;
+        queueMicrotask(() => child.emit('exit', 0, null));
+        return true;
+      }),
+      kill: vi.fn(() => true),
+    });
+    let resolveSpawned!: () => void;
+    const spawned = new Promise<void>((resolve) => {
+      resolveSpawned = resolve;
+    });
+    const spawnImpl = vi.fn(() => {
+      spawnedAt = Date.now();
+      resolveSpawned();
+      return child as never;
+    });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      spawnImpl,
+      probe: async () => spawnedAt !== null && Date.now() - spawnedAt >= 75_000,
+    });
+    await runtime.install();
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-30T12:00:00.000Z'));
+    try {
+      let outcome: { ok: true; value: Awaited<ReturnType<typeof runtime.startInstalled>> }
+        | { ok: false; error: unknown }
+        | undefined;
+      const readiness = runtime.startInstalled().then(
+        (value) => (outcome = { ok: true, value }),
+        (error: unknown) => (outcome = { ok: false, error }),
+      );
+
+      await spawned;
+      await vi.advanceTimersByTimeAsync(44_999);
+      expect(outcome).toBeUndefined();
+      expect(child.send).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(30_501);
+      await readiness;
+      expect(outcome).toMatchObject({
+        ok: true,
+        value: { installedNow: false, startedNow: true },
+      });
+      expect(spawnImpl).toHaveBeenCalledTimes(1);
+      expect(child.send).not.toHaveBeenCalled();
+
+      await runtime.stop();
+      expect(child.send).toHaveBeenCalledTimes(1);
+      expect(child.send).toHaveBeenCalledWith('shutdown');
+      expect(child.kill).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a never-ready Windows cold start and records capped redacted diagnostics', async () => {
+    const bytes = Buffer.from('diagnostic cold-start fixture');
+    const dataDir = await temporaryDataDir();
+    const warn = vi.fn();
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      connected: true,
+      pid: 52_002,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      send: vi.fn((message: unknown) => {
+        if (message !== 'shutdown') return true;
+        child.exitCode = 0;
+        queueMicrotask(() => {
+          child.emit('exit', 0, null);
+          setTimeout(() => {
+            child.stdout.end();
+            child.stderr.end(' TRAILING_FATAL_MARKER\n');
+          }, 25);
+        });
+        return true;
+      }),
+      kill: vi.fn(() => true),
+    });
+    let resolveSpawned!: () => void;
+    const spawned = new Promise<void>((resolve) => {
+      resolveSpawned = resolve;
+    });
+    const spawnImpl = vi.fn(() => {
+      queueMicrotask(() => {
+        child.stdout.write('Authorization: Bearer authorization-secret\n');
+        child.stdout.emit('error', new Error('diagnostic stdout pipe closed'));
+        child.stderr.write(`${'x'.repeat(10_000)} HTTPS_PROXY=https://user:`);
+        child.stderr.write('proxy-secret@proxy.example token=');
+        child.stderr.write('token-secret\u0007 TAIL_MARKER\n');
+      });
+      resolveSpawned();
+      return child as never;
+    });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      spawnImpl,
+      probe: async () => false,
+      warn,
+    });
+    await runtime.install();
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-30T12:00:00.000Z'));
+    try {
+      let outcome: { ok: true; value: Awaited<ReturnType<typeof runtime.startInstalled>> }
+        | { ok: false; error: unknown }
+        | undefined;
+      const readiness = runtime.startInstalled().then(
+        (value) => (outcome = { ok: true, value }),
+        (error: unknown) => (outcome = { ok: false, error }),
+      );
+
+      await spawned;
+      await vi.advanceTimersByTimeAsync(120_500);
+      await readiness;
+
+      expect(outcome?.ok).toBe(false);
+      const publicMessage = outcome && !outcome.ok && outcome.error instanceof Error
+        ? outcome.error.message
+        : '';
+      expect(publicMessage).toContain('120000ms');
+      expect(publicMessage).toContain('/api/tags');
+      expect(publicMessage).not.toContain('proxy-secret');
+      expect(publicMessage).not.toContain('token-secret');
+      expect(publicMessage).not.toContain('authorization-secret');
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      const diagnostic = warn.mock.calls[0]?.[1];
+      expect(diagnostic).toBeInstanceOf(Error);
+      const diagnosticMessage = diagnostic instanceof Error ? diagnostic.message : '';
+      expect(diagnosticMessage).toContain('TAIL_MARKER');
+      expect(diagnosticMessage).toContain('TRAILING_FATAL_MARKER');
+      expect(diagnosticMessage).toContain('[REDACTED]');
+      expect(diagnosticMessage).not.toContain('proxy-secret');
+      expect(diagnosticMessage).not.toContain('token-secret');
+      expect(diagnosticMessage).not.toContain('authorization-secret');
+      expect(Buffer.byteLength(diagnosticMessage)).toBeLessThan(10_000);
+
+      expect(spawnImpl).toHaveBeenCalledTimes(1);
+      expect(child.send).toHaveBeenCalledTimes(1);
+      expect(child.send).toHaveBeenCalledWith('shutdown');
+      expect(child.kill).not.toHaveBeenCalled();
+      expect(runtime.getStatus().running).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('surfaces a watchdog spawn error instead of crashing the sidecar', async () => {

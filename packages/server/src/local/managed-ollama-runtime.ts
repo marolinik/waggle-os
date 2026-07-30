@@ -30,6 +30,10 @@ const ollamaReleaseRoot = (version: string): string =>
   `https://github.com/ollama/ollama/releases/download/v${version}`;
 const DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
 const START_TIMEOUT_MS = 45_000;
+const WINDOWS_START_TIMEOUT_MS = 120_000;
+const START_DIAGNOSTIC_RAW_TAIL_BYTES = 64 * 1024;
+const START_DIAGNOSTIC_TAIL_BYTES = 4 * 1024;
+const START_DIAGNOSTIC_DRAIN_MS = 250;
 const STOP_TIMEOUT_MS = 5_000;
 const WATCHDOG_EXIT_TERMINATION_CONFIRMED = 0;
 const WATCHDOG_EXIT_CLEANUP_UNCONFIRMED = 1;
@@ -53,14 +57,32 @@ const child = spawn(executable, args, {
   env: process.env,
   windowsHide: true,
   shell: false,
-  stdio: 'ignore',
+  stdio: ['ignore', 'pipe', 'pipe'],
   detached: process.platform !== 'win32',
 });
+process.stdout.on('error', () => {});
+process.stderr.on('error', () => {});
+child.stdout?.on('error', () => {});
+child.stderr?.on('error', () => {});
+child.stdout?.pipe(process.stdout);
+child.stderr?.pipe(process.stderr);
 let stopping = false;
 let forceTimer;
+let drainTimer;
+let outputClosed = false;
+let pendingFinishCode;
 const finish = (code) => {
   if (forceTimer) clearTimeout(forceTimer);
+  if (drainTimer) clearTimeout(drainTimer);
   process.exit(code);
+};
+const finishAfterOutput = (code) => {
+  if (outputClosed) return finish(code);
+  if (pendingFinishCode === undefined) pendingFinishCode = code;
+  if (!drainTimer) {
+    drainTimer = setTimeout(() => finish(pendingFinishCode), ${START_DIAGNOSTIC_DRAIN_MS});
+    drainTimer.unref();
+  }
 };
 const stopTree = () => {
   if (stopping) return;
@@ -73,8 +95,8 @@ const stopTree = () => {
       shell: false,
       stdio: 'ignore',
     });
-    killer.once('error', () => finish(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
-    killer.once('exit', (code) => finish(code === 0
+    killer.once('error', () => finishAfterOutput(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
+    killer.once('exit', (code) => finishAfterOutput(code === 0
       ? ${WATCHDOG_EXIT_TERMINATION_CONFIRMED}
       : ${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
   } else {
@@ -97,9 +119,13 @@ const stopTree = () => {
 child.once('spawn', () => {
   if (process.send) process.send({ type: 'spawned', pid: child.pid });
 });
-child.once('error', () => finish(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
+child.once('error', () => finishAfterOutput(${WATCHDOG_EXIT_CLEANUP_UNCONFIRMED}));
 child.once('exit', () => {
-  if (!stopping) finish(${WATCHDOG_EXIT_OWNED_DAEMON_EXITED});
+  if (!stopping) finishAfterOutput(${WATCHDOG_EXIT_OWNED_DAEMON_EXITED});
+});
+child.once('close', () => {
+  outputClosed = true;
+  if (pendingFinishCode !== undefined) finish(pendingFinishCode);
 });
 process.once('disconnect', stopTree);
 process.on('message', (message) => { if (message === 'shutdown') stopTree(); });
@@ -403,6 +429,78 @@ const PROCESS_INSTALLS = new Map<string, Promise<{ executable: string; installed
 
 function isTransientFilesystemError(error: unknown): boolean {
   return TRANSIENT_FILESYSTEM_CODES.has((error as NodeJS.ErrnoException)?.code ?? '');
+}
+
+function redactManagedRuntimeDiagnostic(value: string): string {
+  const redacted = value
+    .replace(/(authorization\s*[:=]\s*)[^\r\n]*/gi, '$1[REDACTED]')
+    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, '$1[REDACTED]@')
+    .replace(
+      /((?:api[_-]?key|token|password|secret|credential|private[_-]?key)\s*[:=]\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;\]}]+)/gi,
+      '$1[REDACTED]',
+    );
+  return Array.from(redacted, (character) => {
+    const code = character.charCodeAt(0);
+    const disallowedControl = (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d)
+      || code === 0x7f;
+    return disallowedControl ? '?' : character;
+  }).join('');
+}
+
+function appendRawDiagnosticTail(current: string, chunk: string | Buffer): string {
+  const next = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+  const combined = Buffer.from(current + next, 'utf8');
+  if (combined.length <= START_DIAGNOSTIC_RAW_TAIL_BYTES) return combined.toString('utf8');
+  return combined
+    .subarray(combined.length - START_DIAGNOSTIC_RAW_TAIL_BYTES)
+    .toString('utf8');
+}
+
+function formatDiagnosticTail(raw: string): string {
+  const combined = Buffer.from(redactManagedRuntimeDiagnostic(raw), 'utf8');
+  if (combined.length <= START_DIAGNOSTIC_TAIL_BYTES) return combined.toString('utf8');
+  return combined
+    .subarray(combined.length - START_DIAGNOSTIC_TAIL_BYTES)
+    .toString('utf8');
+}
+
+async function waitForDiagnosticStreams(child: ChildProcess): Promise<void> {
+  const streams = [child.stdout, child.stderr]
+    .filter((stream): stream is Readable => stream != null);
+  const cleanups: Array<() => void> = [];
+  const waits = streams.map((stream) => new Promise<void>((resolve) => {
+    if (stream.readableEnded || stream.destroyed) {
+      resolve();
+      return;
+    }
+    const finish = () => {
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      stream.off('end', finish);
+      stream.off('close', finish);
+      stream.off('error', finish);
+    };
+    stream.once('end', finish);
+    stream.once('close', finish);
+    stream.once('error', finish);
+    cleanups.push(cleanup);
+  }));
+  if (waits.length === 0) return;
+
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      Promise.all(waits),
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, START_DIAGNOSTIC_DRAIN_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    for (const cleanup of cleanups) cleanup();
+  }
 }
 
 async function waitForFilesystemRetry(attempt: number): Promise<void> {
@@ -1323,6 +1421,12 @@ export class ManagedOllamaRuntime {
 
   private async startInternal(executable: string, artifact: OllamaRuntimeArtifact): Promise<boolean> {
     await mkdir(this.modelsDir, { recursive: true });
+    const startTimeoutMs = this.platform === 'win32'
+      ? WINDOWS_START_TIMEOUT_MS
+      : START_TIMEOUT_MS;
+    const startedAt = Date.now();
+    let stdoutRawTail = '';
+    let stderrRawTail = '';
     const child = this.spawnImpl(process.execPath, [
       '-e',
       MANAGED_OLLAMA_WATCHDOG_SOURCE,
@@ -1332,8 +1436,44 @@ export class ManagedOllamaRuntime {
       env: buildManagedOllamaEnv(this.baseUrl, this.modelsDir),
       windowsHide: true,
       shell: false,
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
+    const captureStdout = (chunk: string | Buffer) => {
+      stdoutRawTail = appendRawDiagnosticTail(stdoutRawTail, chunk);
+    };
+    const captureStderr = (chunk: string | Buffer) => {
+      stderrRawTail = appendRawDiagnosticTail(stderrRawTail, chunk);
+    };
+    const ignoreDiagnosticStreamError = () => {};
+    child.stdout?.on('error', ignoreDiagnosticStreamError);
+    child.stderr?.on('error', ignoreDiagnosticStreamError);
+    child.stdout?.on('data', captureStdout);
+    child.stderr?.on('data', captureStderr);
+    const releaseDiagnosticCapture = () => {
+      child.stdout?.off('data', captureStdout);
+      child.stderr?.off('data', captureStderr);
+      child.stdout?.resume();
+      child.stderr?.resume();
+    };
+    const reportStartupDiagnostics = (reason: string) => {
+      const elapsedMs = Math.max(0, Date.now() - startedAt);
+      const stdoutTail = formatDiagnosticTail(stdoutRawTail);
+      const stderrTail = formatDiagnosticTail(stderrRawTail);
+      const watchdogState = child.exitCode === null
+        ? 'running'
+        : `exited (${child.exitCode})`;
+      this.reportWarning(
+        `Managed Ollama ${artifact.version} startup failed`,
+        new Error([
+          `reason=${reason}`,
+          `endpoint=${this.baseUrl.replace(/\/+$/, '')}/api/tags`,
+          `elapsedMs=${elapsedMs}`,
+          `watchdog=${watchdogState}`,
+          `stdoutTail=${stdoutTail || '<empty>'}`,
+          `stderrTail=${stderrTail || '<empty>'}`,
+        ].join('\n')),
+      );
+    };
     this.child = child;
     let startupError: Error | null = null;
     child.once('error', (error) => {
@@ -1372,7 +1512,7 @@ export class ManagedOllamaRuntime {
     });
 
     try {
-      const deadline = Date.now() + START_TIMEOUT_MS;
+      const deadline = Date.now() + startTimeoutMs;
       while (Date.now() < deadline) {
         if (startupError) throw startupError;
         if (child.exitCode !== null) break;
@@ -1381,25 +1521,53 @@ export class ManagedOllamaRuntime {
         if (child.exitCode !== null || this.child !== child) break;
         if (ready) {
           this.runningArtifact = artifact;
+          releaseDiagnosticCapture();
           return true;
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     } catch (error) {
       if (startupError && child.pid === undefined) {
+        reportStartupDiagnostics('watchdog spawn error');
+        releaseDiagnosticCapture();
         if (this.child === child) this.child = null;
         this.runningArtifact = null;
         throw error;
       }
-      await this.stopChild(child);
+      try {
+        await this.stopChild(child);
+      } catch (stopError) {
+        await waitForDiagnosticStreams(child);
+        reportStartupDiagnostics('startup error with unconfirmed cleanup');
+        releaseDiagnosticCapture();
+        throw stopError;
+      }
+      await waitForDiagnosticStreams(child);
+      reportStartupDiagnostics('startup error');
+      releaseDiagnosticCapture();
       if (this.child === child) this.child = null;
       if (this.runningArtifact === artifact) this.runningArtifact = null;
       throw error;
     }
-    await this.stopChild(child);
+    const watchdogWasRunning = child.exitCode === null;
+    try {
+      await this.stopChild(child);
+    } catch (stopError) {
+      await waitForDiagnosticStreams(child);
+      reportStartupDiagnostics('readiness timeout with unconfirmed cleanup');
+      releaseDiagnosticCapture();
+      throw stopError;
+    }
+    await waitForDiagnosticStreams(child);
+    reportStartupDiagnostics('readiness timeout');
+    releaseDiagnosticCapture();
     if (this.child === child) this.child = null;
     if (this.runningArtifact === artifact) this.runningArtifact = null;
-    throw new Error('Waggle-managed Ollama did not become ready on loopback');
+    throw new Error(
+      `Waggle-managed Ollama ${artifact.version} did not make `
+      + `${this.baseUrl.replace(/\/+$/, '')}/api/tags ready within ${startTimeoutMs}ms `
+      + `(watchdog ${watchdogWasRunning ? 'remained live until cleanup' : 'exited before readiness'})`,
+    );
   }
 
   private requestStop(child: ChildProcess): void {
