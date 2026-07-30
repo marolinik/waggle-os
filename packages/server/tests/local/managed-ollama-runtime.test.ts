@@ -273,6 +273,7 @@ describe('managed Ollama supply-chain manifest', () => {
       OLLAMA_MODELS: 'C:\\Waggle\\models',
       OLLAMA_NOHISTORY: '1',
     });
+    expect(env.OLLAMA_CONTEXT_LENGTH).toBe('32768');
     expect(() => buildManagedOllamaEnv('http://0.0.0.0:11434', 'models')).toThrow(/loopback/i);
     expect(() => buildManagedOllamaEnv('https://127.0.0.1:11434', 'models')).toThrow(/loopback/i);
   });

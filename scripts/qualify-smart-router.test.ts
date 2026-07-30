@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { describe, it } from 'node:test';
 import {
   assertQualifiedChatCase,
   assertQualifiedToolContextCase,
   assertCopiedModelIdentity,
   assertObservedDispatch,
+  assertObservedProviderUsage,
   assertRuntimeStartOwned,
   assertSourceSnapshot,
   aliasesForOwnedCleanup,
@@ -14,10 +16,12 @@ import {
   buildSanitizedEnvironment,
   canonicalizeManifestDigest,
   extractDispatchedToolNames,
+  extractProviderUsage,
   parseSse,
   partitionWindowsProcesses,
   postJsonForStatus,
   recordAliasBeforeCopy,
+  startAuditProxy,
 } from './qualify-smart-router.js';
 import { routeMessage } from '../packages/agent/src/smart-router.js';
 
@@ -57,6 +61,14 @@ describe('qualify-smart-router helpers', () => {
   });
 
   it('requires HTTP SSE success, one done, content, expected model, and exact switch policy', () => {
+    const runtimeMetrics = {
+      estimatedSystemPromptTokens: 7_437,
+      providerInputTokens: 8_005,
+      providerOutputTokens: 244,
+      timeToFirstTokenMs: 5_497,
+      agentLatencyMs: 6_102,
+      totalServerLatencyMs: 6_198,
+    };
     const rawSse = [
       'event: tool',
       'data: {"name":"auto_recall","input":{"query":"test"}}',
@@ -71,7 +83,13 @@ describe('qualify-smart-router helpers', () => {
       'data: {"content":"fallback answer"}',
       '',
       'event: done',
-      'data: {"content":"fallback answer","model":"ollama/fallback","toolsUsed":[]}',
+      `data: ${JSON.stringify({
+        content: 'fallback answer',
+        model: 'ollama/fallback',
+        toolsUsed: [],
+        usage: { inputTokens: 8_005, outputTokens: 244 },
+        contextMetrics: runtimeMetrics,
+      })}`,
       '',
     ].join('\n');
 
@@ -97,7 +115,13 @@ describe('qualify-smart-router helpers', () => {
       'read_file', 'search_files', 'search_content', 'git_status',
       ...Array.from({ length: 10 }, (_, index) => `code_tool_${index}`),
     ];
-    const rawSse = (contextMetrics: Record<string, unknown>) => [
+    const rawSse = (
+      contextMetrics: Record<string, unknown>,
+      usage: Record<string, unknown> = {
+        inputTokens: contextMetrics.providerInputTokens,
+        outputTokens: contextMetrics.providerOutputTokens,
+      },
+    ) => [
       'event: token',
       'data: {"content":"tool context qualified"}',
       '',
@@ -106,6 +130,7 @@ describe('qualify-smart-router helpers', () => {
         content: 'tool context qualified',
         model: 'ollama/primary',
         toolsUsed: [],
+        usage,
         contextMetrics,
       })}`,
       '',
@@ -118,14 +143,21 @@ describe('qualify-smart-router helpers', () => {
       transmittedToolSchemaChars: 6_120,
       estimatedToolSchemaTokens: 1_530,
       selectorLatencyMs: 6,
+      estimatedSystemPromptTokens: 7_437,
+      providerInputTokens: 8_005,
+      providerOutputTokens: 244,
+      timeToFirstTokenMs: 5_497,
+      agentLatencyMs: 6_102,
+      totalServerLatencyMs: 6_198,
     };
     const qualify = (
       overrides: Record<string, unknown> = {},
       dispatchedToolNames: string[] = selectedToolNames,
+      usage?: Record<string, unknown>,
     ) => assertQualifiedToolContextCase({
       httpStatus: 200,
       contentType: 'text/event-stream; charset=utf-8',
-      rawSse: rawSse({ ...validMetrics, ...overrides }),
+      rawSse: rawSse({ ...validMetrics, ...overrides }, usage),
       expectedModel: 'ollama/primary',
       selectedToolNames: dispatchedToolNames,
     });
@@ -143,6 +175,36 @@ describe('qualify-smart-router helpers', () => {
     assert.throws(() => qualify({}, Array(14).fill('calendar_tool')), /unique selected names/i);
     assert.throws(() => qualify({}, Array.from({ length: 14 }, (_, index) => `calendar_tool_${index}`)), /code-inspection relevance/i);
     assert.throws(() => qualify({ selectorLatencyMs: 251 }), /250ms/i);
+    assert.throws(() => qualify({ providerInputTokens: 2_050 }), /provider input.*7,500/i);
+    assert.throws(() => qualify({ providerInputTokens: 6_000 }), /provider input.*7,500/i);
+    assert.throws(() => qualify({ providerInputTokens: 7_499 }), /provider input.*7,500/i);
+    assert.throws(() => qualify({ providerInputTokens: undefined }), /positive integer providerInputTokens/i);
+    assert.throws(() => qualify({ providerOutputTokens: 0 }), /positive integer providerOutputTokens/i);
+    assert.throws(
+      () => qualify(
+        { providerOutputTokens: 245 },
+        selectedToolNames,
+        { inputTokens: 8_005, outputTokens: 244 },
+      ),
+      /token counts.*done\.usage/i,
+    );
+    assert.throws(() => qualify({ timeToFirstTokenMs: undefined }), /finite timeToFirstTokenMs/i);
+    assert.throws(() => qualify({ agentLatencyMs: -1 }), /finite agentLatencyMs/i);
+    assert.throws(() => qualify({ totalServerLatencyMs: Number.POSITIVE_INFINITY }), /finite totalServerLatencyMs/i);
+    assert.throws(() => qualify({ timeToFirstTokenMs: 6_199 }), /timeToFirstTokenMs.*totalServerLatencyMs/i);
+    assert.throws(() => qualify({ agentLatencyMs: 6_199 }), /agentLatencyMs.*totalServerLatencyMs/i);
+    assert.throws(
+      () => qualify({ timeToFirstTokenMs: 15_001, totalServerLatencyMs: 15_002 }),
+      /timeToFirstTokenMs.*15,000/i,
+    );
+    assert.throws(
+      () => qualify({ agentLatencyMs: 60_001, totalServerLatencyMs: 60_002 }),
+      /agentLatencyMs.*60,000/i,
+    );
+    assert.throws(
+      () => qualify({ totalServerLatencyMs: 60_001 }),
+      /totalServerLatencyMs.*60,000/i,
+    );
   });
 
   it('fails closed on errors, duplicate done events, wrong models, or unexpected switches', () => {
@@ -347,10 +409,129 @@ describe('qualify-smart-router helpers', () => {
 
   it('requires independently observed Ollama dispatch to the expected alias', () => {
     const dispatches = [
-      { at: 'now', path: '/v1/chat/completions', model: 'router-primary:latest', bodySha256: 'a'.repeat(64), toolNames: [] },
+      {
+        at: 'now',
+        path: '/v1/chat/completions',
+        model: 'router-primary:latest',
+        bodySha256: 'a'.repeat(64),
+        toolNames: [],
+        providerUsage: { inputTokens: 8_005, outputTokens: 244 },
+      },
     ];
     assert.deepEqual(assertObservedDispatch(dispatches, 0, 'router-primary:latest'), dispatches);
     assert.throws(() => assertObservedDispatch(dispatches, 0, 'router-budget:latest'), /observed Ollama dispatch/i);
+    assert.deepEqual(
+      assertObservedProviderUsage(dispatches, { inputTokens: 8_005, outputTokens: 244 }),
+      { inputTokens: 8_005, outputTokens: 244 },
+    );
+    assert.throws(
+      () => assertObservedProviderUsage(
+        [{ ...dispatches[0], providerUsage: null }],
+        { inputTokens: 8_005, outputTokens: 244 },
+      ),
+      /provider-observed usage/i,
+    );
+    assert.throws(
+      () => assertObservedProviderUsage(dispatches, { inputTokens: 8_004, outputTokens: 244 }),
+      /does not match.*done usage/i,
+    );
+    assert.throws(
+      () => assertObservedProviderUsage([
+        { ...dispatches[0], providerUsage: { inputTokens: 7_000, outputTokens: 122 } },
+        { ...dispatches[0], providerUsage: { inputTokens: 7_000, outputTokens: 122 } },
+      ], { inputTokens: 14_000, outputTokens: 244 }),
+      /exactly one provider dispatch/i,
+    );
+  });
+
+  it('extracts provider-observed token usage from the upstream Ollama stream', () => {
+    const raw = [
+      'data: {"choices":[{"delta":{"content":"ok"}}]}',
+      '',
+      'data: {"choices":[],"usage":{"prompt_tokens":14011,"completion_tokens":244}}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    assert.deepEqual(extractProviderUsage(raw), { inputTokens: 14_011, outputTokens: 244 });
+    assert.equal(extractProviderUsage('data: {"choices":[]}\n\ndata: [DONE]\n\n'), null);
+    assert.equal(extractProviderUsage('data: {"usage":{"prompt_tokens":0,"completion_tokens":2}}\n\n'), null);
+  });
+
+  it('streams audited provider bytes and records usage before delayed HTTP EOF', async () => {
+    let releaseEof = (): void => {};
+    const eofGate = new Promise<void>((resolve) => { releaseEof = resolve; });
+    const upstream = createServer(async (request, response) => {
+      for await (const _chunk of request) {
+        // Drain the request before starting the controlled response.
+      }
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.write('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n');
+      response.write('data: {"choices":[],"usage":{"prompt_tokens":14011,"completion_tokens":244}}\n\n');
+      response.write('data: [DONE]\n\n');
+      await eofGate;
+      response.end();
+    });
+    await new Promise<void>((resolve, reject) => {
+      upstream.once('error', reject);
+      upstream.listen(0, '127.0.0.1', () => resolve());
+    });
+    const address = upstream.address();
+    assert.ok(address && typeof address !== 'string');
+    const dispatches: Parameters<typeof startAuditProxy>[0]['dispatches'] = [];
+    const proxy = await startAuditProxy({
+      port: 0,
+      targetEndpoint: `http://127.0.0.1:${address.port}`,
+      dispatches,
+    });
+    const proxyAddress = proxy.address();
+    assert.ok(proxyAddress && typeof proxyAddress !== 'string');
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const response = await fetch(`http://127.0.0.1:${proxyAddress.port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'router-primary:latest', stream: true }),
+        signal: AbortSignal.timeout(2_000),
+      });
+      assert.equal(response.status, 200);
+      assert.ok(response.body);
+      reader = response.body.getReader();
+      const readWithin = async () => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            reader!.read(),
+            new Promise<never>((_resolve, reject) => {
+              timer = setTimeout(() => reject(new Error('Timed out before streamed [DONE]')), 1_000);
+            }),
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      };
+      let wire = '';
+      while (!wire.includes('data: [DONE]')) {
+        const next = await readWithin();
+        assert.equal(next.done, false);
+        wire += Buffer.from(next.value).toString('utf8');
+      }
+      assert.match(wire, /"content":"ok"/);
+      assert.deepEqual(dispatches[0]?.providerUsage, { inputTokens: 14_011, outputTokens: 244 });
+      releaseEof();
+      while (!(await reader.read()).done) {
+        // Drain the clean EOF.
+      }
+    } finally {
+      releaseEof();
+      await reader?.cancel().catch(() => undefined);
+      proxy.closeAllConnections();
+      upstream.closeAllConnections();
+      await Promise.all([
+        new Promise<void>((resolve) => proxy.close(() => resolve())),
+        new Promise<void>((resolve) => upstream.close(() => resolve())),
+      ]);
+    }
   });
 
   it('extracts transmitted OpenAI tool names from the audited provider payload', () => {

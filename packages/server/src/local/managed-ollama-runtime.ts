@@ -390,6 +390,10 @@ export function buildManagedOllamaEnv(
     OLLAMA_HOST: endpoint.host,
     OLLAMA_MODELS: modelsDir,
     OLLAMA_NOHISTORY: '1',
+    // Ollama otherwise defaults to 4K on common 8 GB GPUs. The qualified
+    // 8K-token tool request plus Waggle's 14K synthesis ceiling needs a
+    // 32K window to retain the full input and leave the promised output room.
+    OLLAMA_CONTEXT_LENGTH: '32768',
   };
 }
 

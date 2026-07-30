@@ -2,6 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { readFile, mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingHttpHeaders, type Server as HttpServer } from 'node:http';
 import net from 'node:net';
@@ -18,6 +19,16 @@ export interface QualifiedChatCase {
   content: string;
   events: SseEvent[];
   toolsUsed: string[];
+  runtimeMetrics: QualifiedRuntimeMetrics;
+}
+
+export interface QualifiedRuntimeMetrics {
+  estimatedSystemPromptTokens: number;
+  providerInputTokens: number;
+  providerOutputTokens: number;
+  timeToFirstTokenMs: number;
+  agentLatencyMs: number;
+  totalServerLatencyMs: number;
 }
 
 export interface QualifiedToolContext {
@@ -48,6 +59,12 @@ export interface DispatchEvidence {
   model: string;
   bodySha256: string;
   toolNames: string[];
+  providerUsage: ProviderUsageEvidence | null;
+}
+
+export interface ProviderUsageEvidence {
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export interface WindowsProcessCandidate extends OwnedProcess {
@@ -60,6 +77,12 @@ export const TOOL_CONTEXT_PROMPT = 'Inspect, test, validate, and verify this Typ
 const QUALIFICATION_DAILY_BUDGET_USD = 1;
 const QUALIFICATION_DAILY_SPEND_USD = 0.8;
 const QUALIFICATION_BUDGET_THRESHOLD = 0.8;
+// Exact-head Qwen qualification observed 8,005 tokens. Keep enough tolerance
+// for randomized session/workspace identifiers while rejecting 2,050/6K truncation.
+const QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_INPUT_TOKENS = 7_500;
+const QUALIFIED_MAX_TIME_TO_FIRST_TOKEN_MS = 15_000;
+const QUALIFIED_MAX_AGENT_LATENCY_MS = 60_000;
+const QUALIFIED_MAX_TOTAL_SERVER_LATENCY_MS = 60_000;
 
 interface QualifierOptions {
   runtimeDataDir: string;
@@ -205,7 +228,76 @@ export function assertQualifiedChatCase(input: {
       }
     }
   }
-  return { content: done.content.trim(), events, toolsUsed: [...done.toolsUsed] as string[] };
+  const runtimeMetrics = assertQualifiedRuntimeMetrics(done);
+  return {
+    content: done.content.trim(),
+    events,
+    toolsUsed: [...done.toolsUsed] as string[],
+    runtimeMetrics,
+  };
+}
+
+function assertQualifiedRuntimeMetrics(done: Record<string, unknown>): QualifiedRuntimeMetrics {
+  const rawMetrics = done.contextMetrics;
+  if (typeof rawMetrics !== 'object' || rawMetrics === null || Array.isArray(rawMetrics)) {
+    throw new Error('Qualified chat requires done.contextMetrics');
+  }
+  const metrics = rawMetrics as Record<string, unknown>;
+  const readPositiveInteger = (name: string): number => {
+    const value = metrics[name];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+      throw new Error(`Qualified chat requires positive integer ${name}`);
+    }
+    return value;
+  };
+  const readFiniteDuration = (name: string): number => {
+    const value = metrics[name];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw new Error(`Qualified chat requires non-negative finite ${name}`);
+    }
+    return value;
+  };
+  const runtimeMetrics: QualifiedRuntimeMetrics = {
+    estimatedSystemPromptTokens: readPositiveInteger('estimatedSystemPromptTokens'),
+    providerInputTokens: readPositiveInteger('providerInputTokens'),
+    providerOutputTokens: readPositiveInteger('providerOutputTokens'),
+    timeToFirstTokenMs: readFiniteDuration('timeToFirstTokenMs'),
+    agentLatencyMs: readFiniteDuration('agentLatencyMs'),
+    totalServerLatencyMs: readFiniteDuration('totalServerLatencyMs'),
+  };
+  const rawUsage = done.usage;
+  if (typeof rawUsage !== 'object' || rawUsage === null || Array.isArray(rawUsage)) {
+    throw new Error('Qualified chat requires done.usage');
+  }
+  const usage = rawUsage as Record<string, unknown>;
+  if (
+    usage.inputTokens !== runtimeMetrics.providerInputTokens
+    || usage.outputTokens !== runtimeMetrics.providerOutputTokens
+  ) {
+    throw new Error('Qualified chat provider token counts must match done.usage');
+  }
+  if (runtimeMetrics.timeToFirstTokenMs > runtimeMetrics.totalServerLatencyMs) {
+    throw new Error('Qualified chat timeToFirstTokenMs cannot exceed totalServerLatencyMs');
+  }
+  if (runtimeMetrics.agentLatencyMs > runtimeMetrics.totalServerLatencyMs) {
+    throw new Error('Qualified chat agentLatencyMs cannot exceed totalServerLatencyMs');
+  }
+  if (runtimeMetrics.timeToFirstTokenMs > QUALIFIED_MAX_TIME_TO_FIRST_TOKEN_MS) {
+    throw new Error(
+      `Qualified chat timeToFirstTokenMs must not exceed ${QUALIFIED_MAX_TIME_TO_FIRST_TOKEN_MS.toLocaleString('en-US')}ms`,
+    );
+  }
+  if (runtimeMetrics.agentLatencyMs > QUALIFIED_MAX_AGENT_LATENCY_MS) {
+    throw new Error(
+      `Qualified chat agentLatencyMs must not exceed ${QUALIFIED_MAX_AGENT_LATENCY_MS.toLocaleString('en-US')}ms`,
+    );
+  }
+  if (runtimeMetrics.totalServerLatencyMs > QUALIFIED_MAX_TOTAL_SERVER_LATENCY_MS) {
+    throw new Error(
+      `Qualified chat totalServerLatencyMs must not exceed ${QUALIFIED_MAX_TOTAL_SERVER_LATENCY_MS.toLocaleString('en-US')}ms`,
+    );
+  }
+  return runtimeMetrics;
 }
 
 export function assertQualifiedToolContextCase(input: {
@@ -273,6 +365,11 @@ export function assertQualifiedToolContextCase(input: {
   ]);
   if (toolContext.selectedToolNames.filter(name => codeInspectionTools.has(name)).length < 2) {
     throw new Error('Qualified tool context must demonstrate code-inspection relevance');
+  }
+  if (qualified.runtimeMetrics.providerInputTokens < QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_INPUT_TOKENS) {
+    throw new Error(
+      `Qualified tool context provider input must be at least ${QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_INPUT_TOKENS.toLocaleString('en-US')} tokens, received ${qualified.runtimeMetrics.providerInputTokens}`,
+    );
   }
   return { ...qualified, toolContext };
 }
@@ -362,6 +459,29 @@ export function assertObservedDispatch(
   if (observed.length === 0 || observed.some(({ model }) => model !== expectedModel)) {
     const models = observed.map(({ model }) => model).join(', ') || '<none>';
     throw new Error(`Expected observed Ollama dispatch to ${expectedModel}, received ${models}`);
+  }
+  return observed;
+}
+
+export function assertObservedProviderUsage(
+  dispatches: DispatchEvidence[],
+  expected: ProviderUsageEvidence,
+): ProviderUsageEvidence {
+  if (dispatches.length !== 1) {
+    throw new Error(`Qualified chat requires exactly one provider dispatch, received ${dispatches.length}`);
+  }
+  const observed = { inputTokens: 0, outputTokens: 0 };
+  for (const dispatch of dispatches) {
+    if (!dispatch.providerUsage) {
+      throw new Error(`Ollama dispatch to ${dispatch.model} is missing provider-observed usage`);
+    }
+    observed.inputTokens += dispatch.providerUsage.inputTokens;
+    observed.outputTokens += dispatch.providerUsage.outputTokens;
+  }
+  if (observed.inputTokens !== expected.inputTokens || observed.outputTokens !== expected.outputTokens) {
+    throw new Error(
+      `Provider-observed usage ${observed.inputTokens}/${observed.outputTokens} does not match done usage ${expected.inputTokens}/${expected.outputTokens}`,
+    );
   }
   return observed;
 }
@@ -669,7 +789,42 @@ export function extractDispatchedToolNames(payload: unknown): string[] {
   });
 }
 
-async function startAuditProxy(input: {
+export function extractProviderUsage(raw: string | Buffer): ProviderUsageEvidence | null {
+  const text = Buffer.isBuffer(raw) ? raw.toString('utf8') : raw;
+  const payloads = text
+    .split(/\r?\n/)
+    .map(line => line.startsWith('data:') ? line.slice(5).trimStart() : '')
+    .filter(payload => payload && payload !== '[DONE]');
+  let observed: ProviderUsageEvidence | null = null;
+  for (const payload of payloads) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) continue;
+    const usage = (parsed as Record<string, unknown>).usage;
+    if (typeof usage !== 'object' || usage === null || Array.isArray(usage)) continue;
+    const rawUsage = usage as Record<string, unknown>;
+    const inputTokens = rawUsage.prompt_tokens;
+    const outputTokens = rawUsage.completion_tokens;
+    if (
+      typeof inputTokens !== 'number'
+      || !Number.isInteger(inputTokens)
+      || inputTokens < 1
+      || typeof outputTokens !== 'number'
+      || !Number.isInteger(outputTokens)
+      || outputTokens < 0
+    ) {
+      continue;
+    }
+    observed = { inputTokens, outputTokens };
+  }
+  return observed;
+}
+
+export async function startAuditProxy(input: {
   port: number;
   targetEndpoint: string;
   dispatches: DispatchEvidence[];
@@ -679,16 +834,19 @@ async function startAuditProxy(input: {
       const requestPath = request.url ?? '/';
       const target = buildOwnedProxyTarget(requestPath, input.targetEndpoint);
       const body = await readRequestBody(request);
+      let dispatch: DispatchEvidence | null = null;
       if (target.pathname === '/v1/chat/completions') {
         const payload = JSON.parse(body.toString('utf8')) as { model?: unknown };
         if (typeof payload.model !== 'string' || !payload.model) throw new Error('Ollama audit request is missing model');
-        input.dispatches.push({
+        dispatch = {
           at: new Date().toISOString(),
           path: target.pathname,
           model: payload.model,
           bodySha256: sha256Text(body),
           toolNames: extractDispatchedToolNames(payload),
-        });
+          providerUsage: null,
+        };
+        input.dispatches.push(dispatch);
       }
       const method = request.method ?? 'GET';
       const upstream = await fetch(target, {
@@ -697,21 +855,38 @@ async function startAuditProxy(input: {
         ...(!['GET', 'HEAD'].includes(method) && body.length > 0 ? { body } : {}),
         signal: AbortSignal.timeout(10 * 60_000),
       });
-      const upstreamBody = Buffer.from(await upstream.arrayBuffer());
       response.statusCode = upstream.status;
       response.statusMessage = upstream.statusText;
       upstream.headers.forEach((value, name) => {
         if (['connection', 'content-length', 'content-encoding', 'transfer-encoding'].includes(name.toLowerCase())) return;
         response.setHeader(name, value);
       });
-      response.setHeader('content-length', String(upstreamBody.length));
-      response.end(upstreamBody);
+      const upstreamChunks: Buffer[] = [];
+      let upstreamSize = 0;
+      if (upstream.body) {
+        for await (const chunk of upstream.body) {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          upstreamSize += buffer.length;
+          if (upstreamSize > 16 * 1024 * 1024) {
+            throw new Error('Audit proxy response exceeded 16 MiB');
+          }
+          upstreamChunks.push(buffer);
+          if (dispatch) {
+            const observedUsage = extractProviderUsage(Buffer.concat(upstreamChunks));
+            if (observedUsage) dispatch.providerUsage = observedUsage;
+          }
+          if (!response.write(buffer)) await once(response, 'drain');
+        }
+      }
+      response.end();
     } catch (error) {
-      if (!response.headersSent) {
+      if (response.headersSent) {
+        response.destroy(error instanceof Error ? error : new Error(String(error)));
+      } else {
         response.statusCode = 502;
         response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
       }
-      response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
     }
   });
   await new Promise<void>((resolve, reject) => {
@@ -769,6 +944,10 @@ async function runChatCase(input: {
         selectedToolNames: observedDispatches.at(-1)?.toolNames ?? [],
       })
     : assertQualifiedChatCase(qualificationInput);
+  assertObservedProviderUsage(observedDispatches, {
+    inputTokens: qualified.runtimeMetrics.providerInputTokens,
+    outputTokens: qualified.runtimeMetrics.providerOutputTokens,
+  });
   const completed = Date.now();
   return {
     name: input.name,
