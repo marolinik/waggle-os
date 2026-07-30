@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
@@ -263,6 +264,101 @@ describe('verify (openclaw)', () => {
       else process.env['ANTHROPIC_API_KEY'] = previousAnthropic;
     }
   });
+
+  it('uses the install-pinned Node runtime for a JavaScript CLI probe', async () => {
+    const env = await bootstrap(undefined);
+    envs.push(env);
+    const cliPath = join(env.home, 'hive-mind-cli.js');
+    const nodePath = join(env.home, 'waggle-node.exe');
+    await writeFile(cliPath, 'console.log("hive-mind-cli");\n', 'utf-8');
+    await copyFile(process.execPath, nodePath);
+    await install({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      cliPath,
+      nodePath,
+    });
+    const pointer = JSON.parse(
+      await readFile(join(env.home, '.openclaw', 'hive-mind-install.json'), 'utf-8'),
+    ) as Record<string, unknown>;
+    const binding = (pointer['extra'] as Record<string, unknown>)['runtime_binding'] as Record<string, unknown>;
+    expect(binding).toMatchObject({
+      version: 1,
+      node_path: nodePath,
+      cli_path: cliPath,
+      node_sha256: createHash('sha256').update(await readFile(nodePath)).digest('hex'),
+      cli_sha256: createHash('sha256').update(await readFile(cliPath)).digest('hex'),
+    });
+    const config = JSON.parse(await readFile(env.configPath, 'utf-8')) as {
+      hooks: { internal: { entries: { 'hive-mind': { env: Record<string, string> } } } };
+    };
+    expect(config.hooks.internal.entries['hive-mind'].env['WAGGLE_HOOK_NODE_PATH']).toBe(nodePath);
+
+    const probes: Array<{ command: string; args: readonly string[] }> = [];
+    const recordingSpawn = ((command: string, args: readonly string[]) => {
+      probes.push({ command, args });
+      return mockSpawnImpl({ exitCode: 0 })(command, args);
+    }) as unknown as typeof import('node:child_process').spawn;
+
+    const result = await verify({
+      home: env.home,
+      handlerSourcePath: env.handlerSource,
+      nodePath,
+      spawnImpl: recordingSpawn,
+    });
+
+    expect(result.checks.find((c) => c.name === 'pinned Node runtime matches verifier runtime')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.name === 'pinned Node runtime matches install hash')?.ok).toBe(true);
+    expect(probes.at(-1)).toEqual({
+      command: nodePath,
+      args: [cliPath, '--help'],
+    });
+  });
+
+  it.each(['node', 'cli'] as const)(
+    'rejects changed pinned %s bytes without spawning the managed runtime',
+    async (artifact) => {
+      const env = await bootstrap(undefined);
+      envs.push(env);
+      const cliPath = join(env.home, 'hive-mind-cli.js');
+      const nodePath = join(env.home, 'waggle-node.exe');
+      await writeFile(cliPath, 'console.log("hive-mind-cli");\n', 'utf-8');
+      await copyFile(process.execPath, nodePath);
+      await install({
+        home: env.home,
+        handlerSourcePath: env.handlerSource,
+        cliPath,
+        nodePath,
+      });
+      await writeFile(
+        artifact === 'node' ? nodePath : cliPath,
+        `tampered-${artifact}`,
+        'utf-8',
+      );
+
+      const probes: Array<{ command: string; args: readonly string[] }> = [];
+      const recordingSpawn = ((command: string, args: readonly string[]) => {
+        probes.push({ command, args });
+        return mockSpawnImpl({ exitCode: 0 })(command, args);
+      }) as unknown as typeof import('node:child_process').spawn;
+      const result = await verify({
+        home: env.home,
+        handlerSourcePath: env.handlerSource,
+        nodePath,
+        spawnImpl: recordingSpawn,
+      });
+
+      const digestCheck = artifact === 'node'
+        ? 'pinned Node runtime matches install hash'
+        : 'pinned CLI matches install hash';
+      expect(result.checks.find((check) => check.name === digestCheck)?.ok).toBe(false);
+      expect(result.checks.find((check) => check.name === 'installed handler runtime-loads')?.detail)
+        .toContain('skipped');
+      expect(result.checks.find((check) => check.name === 'hive-mind-cli reachable')?.detail)
+        .toContain('skipped');
+      expect(probes).toEqual([]);
+    },
+  );
 
   it('does not let a caller override mask an unreachable loader-pinned CLI', async () => {
     const env = await bootstrap('{ "hooks": {} }');

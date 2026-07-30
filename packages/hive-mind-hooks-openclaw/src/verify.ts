@@ -22,6 +22,7 @@ import {
   OPENCLAW_HANDLER_BUNDLE,
   OPENCLAW_HANDLER_PACKAGE_JSON,
   renderOpenclawHandlerEntrySource,
+  type OpenclawRuntimeBinding,
 } from './install.js';
 
 export interface VerifyCheck {
@@ -42,6 +43,8 @@ export interface VerifyOptions extends ResolvePathsOptions {
    * the managed loader's runtime and is therefore ignored for readiness.
    */
   cliPath?: string;
+  /** Expected packaged Node path; production receives this from the launcher runtime. */
+  nodePath?: string;
   /** Test hook for spawn. */
   spawnImpl?: typeof spawn;
   /** Test hook for the CLI probe timeout. */
@@ -77,6 +80,21 @@ function configuredCliPath(config: Record<string, unknown>): string | undefined 
   if (!env || typeof env !== 'object') return undefined;
   const cliPath = (env as Record<string, unknown>)['WAGGLE_HIVE_MIND_CLI'];
   return typeof cliPath === 'string' && cliPath.length > 0 ? cliPath : undefined;
+}
+
+function configuredNodePath(config: Record<string, unknown>): string | undefined {
+  const hooks = config[HOOKS_KEY];
+  if (!hooks || typeof hooks !== 'object') return undefined;
+  const internal = (hooks as Record<string, unknown>)['internal'];
+  if (!internal || typeof internal !== 'object') return undefined;
+  const entries = (internal as Record<string, unknown>)['entries'];
+  if (!entries || typeof entries !== 'object') return undefined;
+  const hiveEntry = (entries as Record<string, unknown>)[HIVE_HOOK_ENTRY_KEY];
+  if (!hiveEntry || typeof hiveEntry !== 'object') return undefined;
+  const env = (hiveEntry as Record<string, unknown>)['env'];
+  if (!env || typeof env !== 'object') return undefined;
+  const nodePath = (env as Record<string, unknown>)['WAGGLE_HOOK_NODE_PATH'];
+  return typeof nodePath === 'string' && nodePath.length > 0 ? nodePath : undefined;
 }
 
 const TERMINATION_GRACE_MS = 250;
@@ -155,10 +173,11 @@ function waitForProbe(
 
 function probeCliVersion(
   cliPath: string,
+  nodePath: string | undefined,
   spawnImpl: typeof spawn,
   timeoutMs: number,
 ): Promise<{ ok: boolean; output: string }> {
-  const command = isJsPath(cliPath) ? process.execPath : cliPath;
+  const command = isJsPath(cliPath) ? nodePath ?? process.execPath : cliPath;
   const args = isJsPath(cliPath) ? [cliPath, '--help'] : ['--help'];
   const child = spawnImpl(command, args, {
     env: runtimeProbeEnv(),
@@ -190,6 +209,42 @@ async function fileHasExactText(filePath: string, expected: string): Promise<boo
   }
 }
 
+function runtimeBindingFromPointer(pointer: Record<string, unknown> | undefined): {
+  declared: boolean;
+  binding?: OpenclawRuntimeBinding;
+} {
+  const extra = pointer?.['extra'];
+  if (!extra || typeof extra !== 'object') return { declared: false };
+  const candidate = (extra as Record<string, unknown>)['runtime_binding'];
+  if (candidate === undefined || candidate === null) return { declared: false };
+  if (!candidate || typeof candidate !== 'object') return { declared: true };
+  const value = candidate as Record<string, unknown>;
+  const sha256 = /^[a-f0-9]{64}$/;
+  if (
+    value['version'] !== 1
+    || typeof value['node_path'] !== 'string'
+    || value['node_path'].length === 0
+    || typeof value['node_sha256'] !== 'string'
+    || !sha256.test(value['node_sha256'])
+    || typeof value['cli_path'] !== 'string'
+    || value['cli_path'].length === 0
+    || typeof value['cli_sha256'] !== 'string'
+    || !sha256.test(value['cli_sha256'])
+  ) {
+    return { declared: true };
+  }
+  return {
+    declared: true,
+    binding: {
+      version: 1,
+      node_path: value['node_path'],
+      node_sha256: value['node_sha256'],
+      cli_path: value['cli_path'],
+      cli_sha256: value['cli_sha256'],
+    },
+  };
+}
+
 function runtimeProbeEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { NODE_PATH: '', NO_COLOR: '1' };
   for (const key of [
@@ -204,6 +259,7 @@ function runtimeProbeEnv(): NodeJS.ProcessEnv {
 
 function probeInstalledHandler(
   handlerPath: string,
+  nodePath: string | undefined,
   timeoutMs: number,
 ): Promise<{ ok: boolean; output: string }> {
   const handlerUrl = pathToFileURL(handlerPath).href;
@@ -212,7 +268,7 @@ function probeInstalledHandler(
     `if (typeof loaded.default !== 'function') throw new Error('installed handler default export is not a function');`,
     `await loaded.default({ type: 'noop', action: 'noop' });`,
   ].join('\n');
-  const child = spawn(process.execPath, ['--input-type=module', '--eval', script], {
+  const child = spawn(nodePath ?? process.execPath, ['--input-type=module', '--eval', script], {
     cwd: dirname(handlerPath),
     env: runtimeProbeEnv(),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -310,10 +366,11 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
       ? `sha256 ${installedBundleHash}`
       : `installed=${installedBundleHash ?? 'unreadable'} trusted=${trustedBundleHash ?? 'unreadable'}`,
   });
+  let pointerObj: Record<string, unknown> | undefined;
   let cliPathFromPointer: string | undefined;
   if (existsSync(paths.pointerPath)) {
     try {
-      const pointerObj = JSON.parse(await readFile(paths.pointerPath, 'utf-8')) as Record<string, unknown>;
+      pointerObj = JSON.parse(await readFile(paths.pointerPath, 'utf-8')) as Record<string, unknown>;
       const pointerCliPath = pointerObj['cli_path'];
       if (typeof pointerCliPath === 'string' && pointerCliPath.length > 0) {
         cliPathFromPointer = pointerCliPath;
@@ -321,7 +378,63 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
     } catch { /* pointer unreadable — fail the trust comparison below */ }
   }
   const cliPathFromConfig = configuredCliPath(parsed);
-  const pointerCliPathTrusted = cliPathFromPointer === cliPathFromConfig;
+  const nodePathFromConfig = configuredNodePath(parsed);
+  const runtimeBindingRead = runtimeBindingFromPointer(pointerObj);
+  const runtimeBinding = runtimeBindingRead.binding;
+  const launcherNodePath = opts.nodePath
+    ?? process.env.WAGGLE_HOOK_NODE_PATH
+    ?? process.execPath;
+  const runtimeBindingRequired = runtimeBindingRead.declared
+    || nodePathFromConfig !== undefined
+    || opts.nodePath !== undefined
+    || process.env.WAGGLE_HOOK_NODE_PATH !== undefined;
+  const runtimePathsAgree = !runtimeBindingRequired || (
+    runtimeBinding !== undefined
+    && runtimeBinding.cli_path === cliPathFromPointer
+    && runtimeBinding.cli_path === cliPathFromConfig
+    && runtimeBinding.node_path === nodePathFromConfig
+    && runtimeBinding.node_path === launcherNodePath
+  );
+  checks.push({
+    name: 'pinned Node runtime matches verifier runtime',
+    ok: runtimePathsAgree,
+    detail: runtimeBindingRequired
+      ? `binding=${runtimeBinding?.node_path ?? '(invalid)'} config=${nodePathFromConfig ?? '(none)'} verifier=${launcherNodePath}`
+      : 'legacy install without a packaged runtime binding',
+  });
+  const [currentNodeHash, currentCliHash] = runtimeBinding === undefined
+    ? [undefined, undefined]
+    : await Promise.all([
+        sha256File(runtimeBinding.node_path),
+        sha256File(runtimeBinding.cli_path),
+      ]);
+  const nodeHashTrusted = !runtimeBindingRequired || (
+    runtimeBinding !== undefined
+    && currentNodeHash !== undefined
+    && currentNodeHash === runtimeBinding.node_sha256
+  );
+  const cliHashTrusted = !runtimeBindingRequired || (
+    runtimeBinding !== undefined
+    && currentCliHash !== undefined
+    && currentCliHash === runtimeBinding.cli_sha256
+  );
+  checks.push({
+    name: 'pinned Node runtime matches install hash',
+    ok: nodeHashTrusted,
+    detail: runtimeBindingRequired
+      ? `installed=${runtimeBinding?.node_sha256 ?? '(invalid)'} current=${currentNodeHash ?? '(unreadable)'}`
+      : 'legacy install without a packaged runtime binding',
+  });
+  checks.push({
+    name: 'pinned CLI matches install hash',
+    ok: cliHashTrusted,
+    detail: runtimeBindingRequired
+      ? `installed=${runtimeBinding?.cli_sha256 ?? '(invalid)'} current=${currentCliHash ?? '(unreadable)'}`
+      : 'legacy install without a packaged runtime binding',
+  });
+  const runtimeBindingTrusted = runtimePathsAgree && nodeHashTrusted && cliHashTrusted;
+  const pointerCliPathTrusted = cliPathFromPointer === cliPathFromConfig
+    && (!runtimeBindingRequired || runtimeBinding?.cli_path === cliPathFromPointer);
   checks.push({
     name: 'install pointer cli_path matches managed config',
     ok: pointerCliPathTrusted,
@@ -329,11 +442,16 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
       ? cliPathFromPointer ?? 'no pinned CLI path'
       : `pointer=${cliPathFromPointer ?? '(none)'} config=${cliPathFromConfig ?? '(none)'}`,
   });
-  const trustedPointerCliPath = pointerCliPathTrusted ? cliPathFromPointer : undefined;
+  const trustedPointerCliPath = pointerCliPathTrusted && runtimeBindingTrusted
+    ? cliPathFromPointer
+    : undefined;
+  const trustedNodePath = runtimeBindingRequired && runtimeBindingTrusted
+    ? runtimeBinding?.node_path
+    : undefined;
 
   const entryTrusted = await fileHasExactText(
     paths.installedHandlerPath,
-    renderOpenclawHandlerEntrySource(trustedPointerCliPath),
+    renderOpenclawHandlerEntrySource(trustedPointerCliPath, trustedNodePath),
   );
   checks.push({
     name: 'handler.js matches managed loader',
@@ -348,9 +466,12 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
     ok: packageTrusted,
     detail: installedPackagePath,
   });
-  const artifactsTrusted = bundleTrusted && entryTrusted && packageTrusted;
+  const artifactsTrusted = bundleTrusted
+    && entryTrusted
+    && packageTrusted
+    && runtimeBindingTrusted;
   const handlerProbe = artifactsTrusted
-    ? await probeInstalledHandler(paths.installedHandlerPath, 4000)
+    ? await probeInstalledHandler(paths.installedHandlerPath, trustedNodePath, 4000)
     : { ok: false, output: 'skipped: installed handler artifacts do not match trusted bytes' };
   checks.push({
     name: 'installed handler runtime-loads',
@@ -361,7 +482,14 @@ export async function verify(opts: VerifyOptions = {}): Promise<VerifyResult> {
   // 5. hive-mind-cli responds to --help (prefer the trusted install pin).
   const cliPath = trustedPointerCliPath ?? 'hive-mind-cli';
   const spawnImpl = opts.spawnImpl ?? spawn;
-  const probe = await probeCliVersion(cliPath, spawnImpl, opts.cliProbeTimeoutMs ?? 4000);
+  const probe = runtimeBindingRequired && !runtimeBindingTrusted
+    ? { ok: false, output: 'skipped: packaged Node/CLI runtime binding is not trusted' }
+    : await probeCliVersion(
+        cliPath,
+        trustedNodePath,
+        spawnImpl,
+        opts.cliProbeTimeoutMs ?? 4000,
+      );
   checks.push({
     name: 'hive-mind-cli reachable',
     ok: probe.ok,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLogger } from '@waggle/hive-mind-shim-core';
@@ -272,17 +272,21 @@ describe('openclawHook default export — fail-open over the live bridge path', 
     await expect(openclawHook(event)).resolves.toBeUndefined();
   });
 
-  it('recalls history before saving the current prompt through the loader-pinned CLI', async () => {
+  it('recalls history through the loader-pinned CLI and Node runtime', async () => {
     const root = await mkdtemp(join(tmpdir(), 'hmocl-handler-runtime-'));
     const cliPath = join(root, 'fake-hive-mind-cli.mjs');
+    const nodePath = join(root, 'waggle-node.exe');
     const markerPath = join(root, 'cli-calls.txt');
+    const runtimePathReceipt = join(root, 'node-paths.txt');
     const previousCliPath = process.env['WAGGLE_HIVE_MIND_CLI'];
+    await copyFile(process.execPath, nodePath);
 
     await writeFile(
       cliPath,
       [
         `import { appendFileSync } from 'node:fs';`,
         `appendFileSync(${JSON.stringify(markerPath)}, process.argv.slice(2).join(' ') + '\\n');`,
+        `appendFileSync(${JSON.stringify(runtimePathReceipt)}, process.execPath + '\\n');`,
         `const tool = process.argv[3];`,
         `const payload = tool === 'recall_memory' ? [{ id: 7, content: 'historical decision only', importance: 'important', source: 'openclaw', score: 1, created_at: '2026-07-26T10:00:00.000Z' }] : { id: 'runtime-pinned-1', workspace: 'personal' };`,
         `process.stdout.write(JSON.stringify({`,
@@ -312,13 +316,22 @@ describe('openclawHook default export — fail-open over the live bridge path', 
             cwd: root,
           },
         },
-        { cliPath },
+        { cliPath, nodePath },
       );
 
       const callsAfterMessage = (await readFile(markerPath, 'utf-8')).trim().split(/\r?\n/);
       expect(callsAfterMessage).toHaveLength(2);
       expect(callsAfterMessage[0]).toMatch(/^hook-call recall_memory /);
       expect(callsAfterMessage[1]).toMatch(/^hook-call save_memory /);
+      const runtimePaths = (await readFile(runtimePathReceipt, 'utf-8'))
+        .trim()
+        .split(/\r?\n/)
+        .map((value) => value.toLowerCase());
+      expect(runtimePaths).toEqual([
+        nodePath.toLowerCase(),
+        nodePath.toLowerCase(),
+      ]);
+      expect(runtimePaths).not.toContain(process.execPath.toLowerCase());
 
       const bootstrapFiles: unknown[] = [];
       await openclawHook(
@@ -331,7 +344,7 @@ describe('openclawHook default export — fail-open over the live bridge path', 
             bootstrapFiles,
           },
         },
-        { cliPath },
+        { cliPath, nodePath },
       );
 
       const callsAfterBootstrap = (await readFile(markerPath, 'utf-8')).trim().split(/\r?\n/);

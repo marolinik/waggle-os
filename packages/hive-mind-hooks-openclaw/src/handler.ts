@@ -33,10 +33,12 @@
  * this package's tree (or have the deps bundled). Documented in the README.
  */
 
+import { spawn } from 'node:child_process';
 import {
   createCliBridge,
   createLogger,
   type MemoryHit,
+  type SpawnFn,
 } from '@waggle/hive-mind-shim-core';
 import {
   buildHookBridgeOptions,
@@ -137,6 +139,8 @@ function extractFor(
 export interface OpenclawHookRuntimeOptions {
   /** Install-pinned CLI path embedded into the managed handler loader. */
   readonly cliPath?: string;
+  /** Install-pinned Node executable used for JavaScript CLI entries. */
+  readonly nodePath?: string;
 }
 
 /** Build a CliBridge, preferring the loader-pinned path over ambient env. */
@@ -146,13 +150,28 @@ function buildBridge(opts: OpenclawHookRuntimeOptions = {}): ReturnType<typeof c
   const cliPath = typeof opts.cliPath === 'string' && opts.cliPath.length > 0
     ? opts.cliPath
     : envCliPath;
+  const nodePath = typeof opts.nodePath === 'string' && opts.nodePath.length > 0
+    ? opts.nodePath
+    : undefined;
+  const isJavaScriptCli = typeof cliPath === 'string'
+    && /\.(?:c|m)?js$/i.test(cliPath);
+  const pinnedNodeSpawn: SpawnFn | undefined = isJavaScriptCli && nodePath
+    ? (_command, args, spawnOptions) => (
+      spawnOptions === undefined
+        ? spawn(nodePath, args)
+        : spawn(nodePath, args, spawnOptions)
+    )
+    : undefined;
   // OpenClaw shares its gateway event loop with hooks, so every bridge call â€”
   // including pre-compact cleanup â€” is intentionally best-effort and bounded.
   // A stalled CLI must release the gateway instead of delaying compaction.
-  return createCliBridge(buildHookBridgeOptions(
-    logger,
-    typeof cliPath === 'string' && cliPath.length > 0 ? cliPath : undefined,
-  ));
+  return createCliBridge({
+    ...buildHookBridgeOptions(
+      logger,
+      typeof cliPath === 'string' && cliPath.length > 0 ? cliPath : undefined,
+    ),
+    ...(pinnedNodeSpawn ? { spawnImpl: pinnedNodeSpawn } : {}),
+  });
 }
 
 const handler = makeOpenclawHandler(openclawAdapter, {
