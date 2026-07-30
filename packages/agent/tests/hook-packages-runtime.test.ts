@@ -246,8 +246,10 @@ describe('hook package installed lifecycle UX', () => {
         const hookEntry = path.join(packageDir, Object.values(manifest.bin)[0]);
         const runHook = (action: 'install' | 'verify' | 'uninstall') => {
           const args = [hookEntry, action];
-          if (action === 'install') {
+          if (action === 'install' || (action === 'verify' && hookPackage.id === 'openclaw')) {
             args.push('--cli-path', fakeCliPath);
+          }
+          if (action === 'install') {
             if (hookPackage.id === 'claude-desktop') {
               args.push('--mcp-entry', fakeCliPath);
             }
@@ -367,7 +369,9 @@ describe('hook package installed lifecycle UX', () => {
           ) as { bin: Record<string, string> };
           const hookEntry = path.join(packageDir, Object.values(manifest.bin)[0]);
           const runHook = (action: 'install' | 'verify' | 'uninstall') => {
-            const args = action === 'install'
+            const shouldPinCli = action === 'install'
+              || (action === 'verify' && hookPackage.id === 'openclaw');
+            const args = shouldPinCli
               ? [hookEntry, action, '--cli-path', stagedCli]
               : [hookEntry, action];
             return runInCwd(
@@ -407,13 +411,31 @@ describe('hook package installed lifecycle UX', () => {
             );
             expect(fs.existsSync(installedHandler)).toBe(true);
             expect(fs.readFileSync(installedHandler, 'utf8')).toBe(
-              "'use strict';\nmodule.exports = require('./handler.cjs');\n",
+              [
+                "'use strict';",
+                "const handler = require('./handler.cjs');",
+                `module.exports = (event) => handler(event, ${JSON.stringify({
+                  cliPath: stagedCli,
+                  nodePath: bundledNode,
+                })});`,
+                '',
+              ].join('\n'),
             );
             expect(fs.readFileSync(installedBundle)).toEqual(
               fs.readFileSync(path.join(packageDir, 'dist', 'handler.bundle.cjs')),
             );
             expect(installedConfig).toContain(stagedCli.replace(/\\/g, '\\\\'));
-            expect(JSON.parse(installedPointer)).toMatchObject({ cli_path: stagedCli });
+            expect(installedConfig).toContain(bundledNode.replace(/\\/g, '\\\\'));
+            expect(JSON.parse(installedPointer)).toMatchObject({
+              cli_path: stagedCli,
+              extra: {
+                runtime_binding: {
+                  version: 1,
+                  cli_path: stagedCli,
+                  node_path: bundledNode,
+                },
+              },
+            });
             expectNoSourceRuntimePaths(
               fs.readFileSync(installedHandler, 'utf8'),
               'openclaw installed handler loader',
