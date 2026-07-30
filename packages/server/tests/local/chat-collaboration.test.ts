@@ -93,6 +93,8 @@ function bind(
     operation: () => Promise<AgentResponse>,
   ) => Promise<AgentResponse>,
   model = 'model-default',
+  parentSignal = new AbortController().signal,
+  hooks?: HookRegistry,
 ) {
   const visibleTools = [
     ...collaborationNames.map(tool),
@@ -101,7 +103,7 @@ function bind(
     tool('search_memory'),
     tool('bash'),
   ];
-  return bindChatCollaborationTools({
+  const bindingOptions = {
     server,
     visibleTools,
     workerTools: visibleTools,
@@ -112,11 +114,14 @@ function bind(
     runLoop,
     runWorkerTransaction,
     securityContext: {
+      hooks,
       blockedTools: ['bash'],
       allowedToolNames: new Set(visibleTools.map((item) => item.name)),
     },
     turnOrigin: { session: sessionId, workspace: 'workspace-a' },
-  });
+    parentSignal,
+  } satisfies Parameters<typeof bindChatCollaborationTools>[0] & { parentSignal: AbortSignal };
+  return bindChatCollaborationTools(bindingOptions);
 }
 
 afterEach(async () => {
@@ -317,6 +322,7 @@ describe('request-bound chat collaboration', () => {
         blockedTools,
         allowedToolNames: new Set(visibleTools.map((item) => item.name)),
       },
+      parentSignal: new AbortController().signal,
       turnOrigin: origin,
     });
 
@@ -557,14 +563,547 @@ describe('request-bound chat collaboration', () => {
     });
   });
 
+  it.each([
+    {
+      name: 'standalone sub-agent',
+      source: 'chat_subagent',
+      toolName: 'spawn_agent',
+      input: {
+        name: 'Parent-cancelled delegate',
+        role: 'researcher',
+        task: 'Hold the workspace transaction until parent cancellation settles',
+      },
+    },
+    {
+      name: 'workflow Room',
+      source: 'workflow',
+      toolName: 'orchestrate_workflow',
+      input: {
+        task: 'Hold the workflow transaction until parent cancellation settles',
+        inline_template: {
+          name: 'Parent-cancelled workflow',
+          description: 'One worker with a cleanup gate',
+          aggregation: 'concatenate',
+          steps: [{ name: 'Worker', role: 'researcher', task: 'Wait for parent cancellation' }],
+        },
+      },
+    },
+  ])('propagates parent chat abort through $name cleanup before terminal status', async ({
+    source, toolName, input,
+  }) => {
+    const { registry, signalBus, server } = setup();
+    const parent = new AbortController();
+    const runnerStarted = deferred<void>();
+    const finishRunner = deferred<AgentResponse>();
+    const cleanupStarted = deferred<void>();
+    const releaseCleanup = deferred<void>();
+    let childSignal: AbortSignal | undefined;
+    let concurrentCancel: Promise<unknown> | undefined;
+
+    const tools = bind(
+      server,
+      (config) => {
+        childSignal = config.signal;
+        runnerStarted.resolve(undefined);
+        config.signal?.addEventListener(
+          'abort',
+          () => finishRunner.reject(new Error('parent chat aborted')),
+          { once: true },
+        );
+        return finishRunner.promise;
+      },
+      `parent-abort-${source}`,
+      async (_selectedTools, operation) => {
+        try {
+          return await operation();
+        } finally {
+          cleanupStarted.resolve(undefined);
+          await releaseCleanup.promise;
+        }
+      },
+      'model-default',
+      parent.signal,
+    );
+    const pending = tools.find((item) => item.name === toolName)!.execute(input);
+
+    try {
+      await runnerStarted.promise;
+      const runs = registry.list({ source, workspaceId: 'workspace-a' });
+      const target = source === 'workflow'
+        ? runs.find((run) => run.kind === 'room')!
+        : runs.find((run) => run.kind === 'worker')!;
+      const beforeAbortSeq = registry.snapshot().lastSeq;
+
+      parent.abort();
+      await waitFor(
+        () => childSignal?.aborted === true,
+        `${source} child signal did not inherit the parent chat abort`,
+      );
+      server.eventBus.on('subagent_status', () => {
+        throw new Error('observer failure must not reverse cancellation');
+      });
+      concurrentCancel = registry.control(target.id, 'cancel');
+      await cleanupStarted.promise;
+
+      expect(registry.get(target.id)?.status).toBe('cancelling');
+      expect(
+        registry.eventsSince(beforeAbortSeq).events
+          .filter((event) => event.run.id === target.id && event.run.status === 'cancelled'),
+      ).toHaveLength(0);
+
+      releaseCleanup.resolve(undefined);
+      await pending;
+      await concurrentCancel;
+      await waitFor(
+        () => registry.get(target.id)?.status === 'cancelled',
+        `${source} did not settle as cancelled after cleanup`,
+      );
+
+      expect(
+        registry.eventsSince(beforeAbortSeq).events
+          .filter((event) => event.run.id === target.id && event.run.status === 'cancelled'),
+      ).toHaveLength(1);
+      expect(signalBus.query({ teamId: `room::${target.roomId}` })
+        .filter((message) => message.content.phase === 'cancelled'))
+        .toHaveLength(1);
+    } finally {
+      finishRunner.resolve({
+        content: 'released after assertion',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      });
+      releaseCleanup.resolve(undefined);
+      await Promise.allSettled([
+        pending,
+        concurrentCancel ?? Promise.resolve(),
+      ]);
+    }
+  });
+
+  it.each([
+    {
+      name: 'standalone sub-agent',
+      source: 'chat_subagent',
+      toolName: 'spawn_agent',
+      input: {
+        name: 'Pre-cancelled delegate',
+        role: 'researcher',
+        task: 'Must never enter the injected runner',
+      },
+    },
+    {
+      name: 'workflow Room',
+      source: 'workflow',
+      toolName: 'orchestrate_workflow',
+      input: {
+        task: 'Must never enter the injected workflow runner',
+        inline_template: {
+          name: 'Pre-cancelled workflow',
+          description: 'One worker that must not start',
+          aggregation: 'concatenate',
+          steps: [{ name: 'Worker', role: 'researcher', task: 'Must not start' }],
+        },
+      },
+    },
+  ])('settles a pre-aborted parent as a durable cancelled $name without invoking its runner', async ({
+    source, toolName, input,
+  }) => {
+    const { registry, server } = setup();
+    const parent = new AbortController();
+    parent.abort();
+    const runner = vi.fn(async (): Promise<AgentResponse> => ({
+      content: 'must not run',
+      toolsUsed: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    const tools = bind(
+      server,
+      runner,
+      `pre-aborted-${source}`,
+      undefined,
+      'model-default',
+      parent.signal,
+    );
+
+    await tools.find((item) => item.name === toolName)!.execute(input);
+    await waitFor(
+      () => registry.list({ source, workspaceId: 'workspace-a' })
+        .some((run) => run.kind === (source === 'workflow' ? 'room' : 'worker')
+          && run.status === 'cancelled'),
+      `${source} did not settle its pre-aborted durable attempt`,
+    );
+
+    const target = registry.list({ source, workspaceId: 'workspace-a' })
+      .find((run) => run.kind === (source === 'workflow' ? 'room' : 'worker'))!;
+    expect(runner).not.toHaveBeenCalled();
+    expect(registry.eventsSince(0).events
+      .filter((event) => event.run.id === target.id && event.run.status === 'running'))
+      .toHaveLength(0);
+    expect(registry.eventsSince(0).events
+      .filter((event) => event.run.id === target.id && event.run.status === 'cancelled'))
+      .toHaveLength(1);
+  });
+
+  it('removes the parent abort listener after a standalone child completes', async () => {
+    const { registry, server } = setup();
+    const parent = new AbortController();
+    const controlSpy = vi.spyOn(registry, 'control');
+    const tools = bind(
+      server,
+      async () => ({
+        content: 'completed before parent shutdown',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      }),
+      'completion-wins-parent-abort',
+      undefined,
+      'model-default',
+      parent.signal,
+    );
+
+    await tools.find((item) => item.name === 'spawn_agent')!.execute({
+      name: 'Completed delegate',
+      role: 'researcher',
+      task: 'Complete normally',
+    });
+    const worker = registry.list({ source: 'chat_subagent', workspaceId: 'workspace-a' })
+      .find((run) => run.kind === 'worker')!;
+    expect(worker.status).toBe('completed');
+    const beforeAbortSeq = registry.snapshot().lastSeq;
+
+    parent.abort();
+    await Promise.resolve();
+
+    expect(controlSpy).not.toHaveBeenCalled();
+    expect(registry.get(worker.id)?.status).toBe('completed');
+    expect(registry.eventsSince(beforeAbortSeq).events).toHaveLength(0);
+  });
+
+  it('keeps startup observability failures best-effort and releases the parent listener', async () => {
+    const { registry, server } = setup();
+    const parent = new AbortController();
+    const controlSpy = vi.spyOn(registry, 'control');
+    server.eventBus.on('subagent_status', () => {
+      throw new Error('broken SSE observer');
+    });
+    const tools = bind(
+      server,
+      async () => ({
+        content: 'observer-independent result',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      }),
+      'observer-failure',
+      undefined,
+      'model-default',
+      parent.signal,
+    );
+
+    const output = await tools.find((item) => item.name === 'spawn_agent')!.execute({
+      name: 'Observer-independent delegate',
+      role: 'researcher',
+      task: 'Complete despite a broken status listener',
+    });
+    const worker = registry.list({ source: 'chat_subagent', workspaceId: 'workspace-a' })
+      .find((run) => run.kind === 'worker')!;
+
+    expect(output).toContain('observer-independent result');
+    expect(worker.status).toBe('completed');
+    parent.abort();
+    await Promise.resolve();
+    expect(controlSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects a workflow worker success that arrives after parent cancellation', async () => {
+    const { registry, workspace, server } = setup();
+    const parent = new AbortController();
+    const runnerStarted = deferred<void>();
+    const finishRunner = deferred<AgentResponse>();
+    let childSignal: AbortSignal | undefined;
+    const tools = bind(
+      server,
+      (config) => {
+        childSignal = config.signal;
+        runnerStarted.resolve(undefined);
+        return finishRunner.promise;
+      },
+      'late-workflow-success',
+      undefined,
+      'model-default',
+      parent.signal,
+    );
+    const pending = tools.find((item) => item.name === 'orchestrate_workflow')!.execute({
+      task: 'Cancel before the worker returns',
+      inline_template: {
+        name: 'Late success workflow',
+        description: 'The runner deliberately ignores its AbortSignal',
+        aggregation: 'concatenate',
+        steps: [{ name: 'Worker', role: 'researcher', task: 'Return only after cancellation' }],
+      },
+    });
+
+    await runnerStarted.promise;
+    parent.abort();
+    expect(childSignal?.aborted).toBe(true);
+    finishRunner.resolve({
+      content: 'LATE_SUCCESS_SENTINEL',
+      toolsUsed: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    const output = await pending;
+    const room = registry.list({ source: 'workflow', workspaceId: 'workspace-a' })
+      .find((run) => run.kind === 'room')!;
+    const worker = registry.list({ source: 'workflow', workspaceId: 'workspace-a' })
+      .find((run) => run.kind === 'worker')!;
+    await waitFor(
+      () => registry.get(room.id)?.status === 'cancelled',
+      'late workflow success did not settle as cancelled',
+    );
+
+    expect(output).not.toContain('LATE_SUCCESS_SENTINEL');
+    expect(registry.get(worker.id)?.status).toBe('cancelled');
+    expect(registry.get(worker.id)?.memoryRefs.status).not.toBe('complete');
+    const memoryProjection = JSON.stringify(
+      workspace.getDatabase().prepare('SELECT content FROM memory_frames ORDER BY id').all(),
+    );
+    expect(memoryProjection).not.toContain('LATE_SUCCESS_SENTINEL');
+  });
+
+  it('preserves completed workflow work while an active sibling drains after parent cancellation', async () => {
+    const { registry, workspace, server } = setup();
+    const parent = new AbortController();
+    const activeStarted = deferred<void>();
+    const finishActive = deferred<AgentResponse>();
+    const tools = bind(
+      server,
+      (config) => {
+        const task = String(config.messages[0]?.content ?? '');
+        if (task.includes('COMPLETE_FIRST')) {
+          return Promise.resolve({
+            content: 'COMPLETED_WORKER_RESULT',
+            toolsUsed: [],
+            usage: { inputTokens: 1, outputTokens: 1 },
+          });
+        }
+        activeStarted.resolve(undefined);
+        return finishActive.promise;
+      },
+      'partial-workflow-parent-abort',
+      undefined,
+      'model-default',
+      parent.signal,
+    );
+    const pending = tools.find((item) => item.name === 'orchestrate_workflow')!.execute({
+      task: 'Cancel only after one worker has completed',
+      inline_template: {
+        name: 'Partial cancellation workflow',
+        description: 'One completed worker and one draining worker',
+        aggregation: 'concatenate',
+        steps: [
+          { name: 'Completed', role: 'researcher', task: 'COMPLETE_FIRST' },
+          { name: 'Active', role: 'writer', task: 'WAIT_UNTIL_CANCELLED' },
+        ],
+      },
+    });
+
+    await activeStarted.promise;
+    await waitFor(
+      () => registry.list({ source: 'workflow', workspaceId: 'workspace-a' })
+        .some((run) => run.kind === 'worker'
+          && run.title === 'Completed'
+          && run.status === 'completed'),
+      'first workflow worker did not complete',
+    );
+    const runs = registry.list({ source: 'workflow', workspaceId: 'workspace-a' });
+    const room = runs.find((run) => run.kind === 'room')!;
+    const completed = runs.find((run) => run.kind === 'worker' && run.title === 'Completed')!;
+    const active = runs.find((run) => run.kind === 'worker' && run.title === 'Active')!;
+
+    parent.abort();
+    await waitFor(
+      () => registry.get(active.id)?.status === 'cancelling',
+      'active workflow worker did not enter cancelling',
+    );
+    expect(registry.get(room.id)?.status).toBe('cancelling');
+    expect(registry.get(completed.id)?.status).toBe('completed');
+    expect(registry.get(completed.id)?.memoryRefs.status).toBe('complete');
+    expect(registry.get(room.id)?.memoryRefs.status).not.toBe('complete');
+
+    finishActive.resolve({
+      content: 'ACTIVE_LATE_SUCCESS_SENTINEL',
+      toolsUsed: [],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    const output = await pending;
+    await waitFor(
+      () => registry.get(room.id)?.status === 'cancelled',
+      'partial workflow Room did not settle as cancelled',
+    );
+
+    expect(output).not.toContain('ACTIVE_LATE_SUCCESS_SENTINEL');
+    expect(registry.get(completed.id)?.status).toBe('completed');
+    expect(registry.get(active.id)?.status).toBe('cancelled');
+    expect(registry.get(room.id)?.memoryRefs.status).not.toBe('complete');
+    const memoryProjection = JSON.stringify(
+      workspace.getDatabase().prepare('SELECT content FROM memory_frames ORDER BY id').all(),
+    );
+    expect(memoryProjection).toContain('COMPLETED_WORKER_RESULT');
+    expect(memoryProjection).not.toContain('ACTIVE_LATE_SUCCESS_SENTINEL');
+    expect(memoryProjection).not.toContain('[Workflow aggregate result]');
+  });
+
+  it('keeps a synthesize workflow cancellable after its base worker completes', async () => {
+    const { registry, server } = setup();
+    const parent = new AbortController();
+    const synthesisStarted = deferred<void>();
+    const finishSynthesis = deferred<AgentResponse>();
+    let synthesisSignal: AbortSignal | undefined;
+    const tools = bind(
+      server,
+      (config) => {
+        if (config.systemPrompt.includes('# Sub-Agent: Synthesizer')) {
+          synthesisSignal = config.signal;
+          synthesisStarted.resolve(undefined);
+          config.signal?.addEventListener(
+            'abort',
+            () => finishSynthesis.reject(new Error('synthesis cancelled')),
+            { once: true },
+          );
+          return finishSynthesis.promise;
+        }
+        return Promise.resolve({
+          content: 'BASE_WORKER_COMPLETE',
+          toolsUsed: [],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        });
+      },
+      'synthesis-parent-abort',
+      undefined,
+      'model-default',
+      parent.signal,
+    );
+    const pending = tools.find((item) => item.name === 'orchestrate_workflow')!.execute({
+      task: 'Synthesize one completed worker',
+      inline_template: {
+        name: 'Cancellable synthesis',
+        description: 'Keep the Room active through synthesis',
+        aggregation: 'synthesize',
+        steps: [{ name: 'Base', role: 'researcher', task: 'Complete the base result' }],
+      },
+    });
+
+    try {
+      await synthesisStarted.promise;
+      const room = registry.list({ source: 'workflow', workspaceId: 'workspace-a' })
+        .find((run) => run.kind === 'room')!;
+      const worker = registry.list({ source: 'workflow', workspaceId: 'workspace-a' })
+        .find((run) => run.kind === 'worker')!;
+      expect(registry.get(worker.id)?.status).toBe('completed');
+      expect(registry.get(room.id)?.status).toBe('running');
+
+      parent.abort();
+      await waitFor(
+        () => synthesisSignal?.aborted === true,
+        'synthesis signal did not inherit the parent abort',
+      );
+      await pending;
+      await waitFor(
+        () => registry.get(room.id)?.status === 'cancelled',
+        'synthesis Room did not settle as cancelled',
+      );
+      expect(registry.get(worker.id)?.status).toBe('completed');
+    } finally {
+      parent.abort();
+      finishSynthesis.reject(new Error('test cleanup'));
+      await Promise.allSettled([pending]);
+    }
+  });
+
+  it('keeps a workflow cancellable until its workflow:end hook and disposal finish', async () => {
+    const { registry, workspace, server } = setup();
+    const parent = new AbortController();
+    const hooks = new HookRegistry();
+    const endHookStarted = deferred<void>();
+    const releaseEndHook = deferred<void>();
+    let workflowSignal: AbortSignal | undefined;
+    hooks.on('workflow:end', async () => {
+      endHookStarted.resolve(undefined);
+      await releaseEndHook.promise;
+    });
+    const tools = bind(
+      server,
+      async (config) => {
+        workflowSignal = config.signal;
+        return {
+          content: 'WORKER_COMPLETE_BEFORE_END_HOOK',
+          toolsUsed: [],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+      'workflow-end-parent-abort',
+      undefined,
+      'model-default',
+      parent.signal,
+      hooks,
+    );
+    const pending = tools.find((item) => item.name === 'orchestrate_workflow')!.execute({
+      task: 'Remain cancellable through the end hook',
+      inline_template: {
+        name: 'End-hook cancellation',
+        description: 'A completed worker with a held lifecycle hook',
+        aggregation: 'concatenate',
+        steps: [{ name: 'Worker', role: 'researcher', task: 'Complete before the hook' }],
+      },
+    });
+
+    try {
+      await endHookStarted.promise;
+      const room = registry.list({ source: 'workflow', workspaceId: 'workspace-a' })
+        .find((run) => run.kind === 'room')!;
+      const worker = registry.list({ source: 'workflow', workspaceId: 'workspace-a' })
+        .find((run) => run.kind === 'worker')!;
+      expect(registry.get(worker.id)?.status).toBe('completed');
+      expect(registry.get(room.id)?.status).toBe('running');
+
+      parent.abort();
+      await waitFor(
+        () => workflowSignal?.aborted === true,
+        'workflow:end parent abort did not reach the workflow signal',
+      );
+      expect(registry.get(room.id)?.status).toBe('cancelling');
+
+      releaseEndHook.resolve(undefined);
+      const output = await pending;
+      expect(output).toContain('Workflow Error');
+      await waitFor(
+        () => registry.get(room.id)?.status === 'cancelled',
+        'workflow:end Room did not settle as cancelled',
+      );
+      expect(registry.get(worker.id)?.status).toBe('completed');
+      expect(registry.get(room.id)?.result?.summary).toBeUndefined();
+      expect(registry.get(room.id)?.memoryRefs.status).not.toBe('complete');
+      const memoryProjection = JSON.stringify(
+        workspace.getDatabase().prepare('SELECT content FROM memory_frames ORDER BY id').all(),
+      );
+      expect(memoryProjection).not.toContain('[Workflow aggregate result]');
+    } finally {
+      parent.abort();
+      releaseEndHook.resolve(undefined);
+      await Promise.allSettled([pending]);
+    }
+  });
+
   it('tracks a parallel workflow as one Room with model-specific durable workers', async () => {
     const { registry, signalBus, server } = setup();
+    const parent = new AbortController();
+    const controlSpy = vi.spyOn(registry, 'control');
     const calls: Array<{ config: AgentLoopConfig; finish: ReturnType<typeof deferred<AgentResponse>> }> = [];
     const tools = bind(server, (config) => {
       const finish = deferred<AgentResponse>();
       calls.push({ config, finish });
       return finish.promise;
-    }, 'workflow-session');
+    }, 'workflow-session', undefined, 'model-default', parent.signal);
     const workflow = tools.find((item) => item.name === 'orchestrate_workflow')!;
     const pending = workflow.execute({
       task: 'Research and draft in parallel',
@@ -608,6 +1147,12 @@ describe('request-bound chat collaboration', () => {
         'task_delegation', 'task_claim', 'routed_share',
       ]));
     }
+    const beforeLateAbort = registry.snapshot().lastSeq;
+    parent.abort();
+    await Promise.resolve();
+    expect(controlSpy).not.toHaveBeenCalled();
+    expect(registry.get(room.id)?.status).toBe('completed');
+    expect(registry.eventsSince(beforeLateAbort).events).toHaveLength(0);
   });
 
   it('routes standalone sub-agents through the same exact-tool transaction boundary', async () => {

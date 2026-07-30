@@ -237,8 +237,8 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
         let aggregated: string;
         try {
           ({ results, aggregated } = await orchestrator.runWorkflow(template));
-          if (runHandle && config.runAdapter?.complete) {
-            await config.runAdapter.complete(runHandle, { results, aggregated });
+          if (runHandle?.signal?.aborted) {
+            throw new Error('Workflow run was cancelled');
           }
 
           // Fire workflow:end hook
@@ -248,6 +248,12 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
               workflowName,
               workflowTask: task,
             });
+          }
+          if (runHandle?.signal?.aborted) {
+            throw new Error('Workflow run was cancelled');
+          }
+          if (runHandle && config.runAdapter?.complete) {
+            await config.runAdapter.complete(runHandle, { results, aggregated });
           }
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));

@@ -256,8 +256,12 @@ export class AgentRunRegistry {
     return { lastSeq: this.lastSeq, resetRequired: false, events };
   }
 
-  update(id: string, patch: CollaborationRunPatch): CollaborationRun {
-    return this.applyPatch(id, patch, false);
+  update(
+    id: string,
+    patch: CollaborationRunPatch,
+    options: { recomputeParent?: boolean } = {},
+  ): CollaborationRun {
+    return this.applyPatch(id, patch, false, options.recomputeParent ?? true);
   }
 
   registerControls(id: string, controls: RunControls): () => void {

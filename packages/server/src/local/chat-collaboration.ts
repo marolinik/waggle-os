@@ -70,6 +70,7 @@ export interface BindChatCollaborationOptions {
   ) => Promise<AgentResponse>;
   securityContext: ChatCollaborationSecurityContext;
   turnOrigin: TurnOrigin;
+  parentSignal: AbortSignal;
 }
 
 interface WorkflowContext {
@@ -78,6 +79,49 @@ interface WorkflowContext {
   workers: Map<string, CollaborationWorkerRun>;
   assignments: Map<string, string | undefined>;
   unregister: () => void;
+  terminalStatus?: 'completed' | 'failed';
+}
+
+function createExecutionSettlement() {
+  let resolve!: () => void;
+  let settled = false;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return {
+    promise,
+    settle() {
+      if (settled) return;
+      settled = true;
+      resolve();
+    },
+  };
+}
+
+function bestEffort<T>(operation: () => T): T | undefined {
+  try {
+    return operation();
+  } catch {
+    return undefined;
+  }
+}
+
+function linkParentCancellation(
+  server: FastifyInstance,
+  runId: string,
+  parentSignal: AbortSignal,
+): () => void {
+  let requested = false;
+  const cancel = () => {
+    if (requested) return;
+    requested = true;
+    void server.agentRunRegistry.control(runId, 'cancel').catch((error) => {
+      const current = server.agentRunRegistry.get(runId);
+      if (!current || TERMINAL.has(current.status)) return;
+      server.log.warn({ err: error, runId }, 'Could not propagate parent cancellation');
+    });
+  };
+  parentSignal.addEventListener('abort', cancel, { once: true });
+  if (parentSignal.aborted) cancel();
+  return () => parentSignal.removeEventListener('abort', cancel);
 }
 
 /**
@@ -88,7 +132,7 @@ interface WorkflowContext {
 export function bindChatCollaborationTools(options: BindChatCollaborationOptions): ToolDefinition[] {
   const {
     server, visibleTools, workspaceId, parentSessionId, parentTask,
-    model, runLoop, securityContext, turnOrigin,
+    model, runLoop, securityContext, turnOrigin, parentSignal,
   } = options;
   const enabledNames = new Set(visibleTools.map((tool) => tool.name));
   const cronReplacements = new Map(
@@ -102,12 +146,17 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     options.workerTools.filter((tool) => !COLLABORATION_TOOL_NAMES.has(tool.name)),
   );
   const runWorkerTransaction = options.runWorkerTransaction;
-  const runWorkerLoop = runWorkerTransaction
-    ? (config: AgentLoopConfig) => runWorkerTransaction(
-        config.tools,
-        () => runLoop(config),
-      )
-    : runLoop;
+  const runWorkerLoop = async (config: AgentLoopConfig) => {
+    if (config.signal?.aborted) throw new Error('Child run was cancelled');
+    const result = runWorkerTransaction
+      ? await runWorkerTransaction(config.tools, () => {
+          if (config.signal?.aborted) throw new Error('Child run was cancelled');
+          return runLoop(config);
+        })
+      : await runLoop(config);
+    if (config.signal?.aborted) throw new Error('Child run was cancelled');
+    return result;
+  };
   const resolveChildModel = isOfflineOllamaModelReference(model)
     ? async () => model
     : undefined;
@@ -139,6 +188,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         });
       }
       const controller = new AbortController();
+      const settlement = createExecutionSettlement();
       const run = server.agentRunRegistry.createWorker({
         parentRunId: subagentRoom.id,
         workspaceId,
@@ -153,27 +203,91 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         task: durableTask,
         capabilities: { cancel: true },
       });
+      let cancellationNotified = false;
       const unregister = server.agentRunRegistry.registerControls(run.id, {
-        cancel: () => controller.abort(),
+        cancel: async () => {
+          controller.abort();
+          await settlement.promise;
+          if (cancellationNotified) return;
+          cancellationNotified = true;
+          const current = workerRun(server.agentRunRegistry.get(run.id));
+          if (!current) return;
+          bestEffort(() => emitSubagentStatus(server, workspaceId, [{
+            id: current.id, name: current.title,
+            role: current.executor.personaId ?? 'agent', status: 'failed',
+            task: current.task, toolsUsed: current.metrics?.toolsUsed ?? [],
+            startedAt: current.startedAt ? Date.parse(current.startedAt) : undefined,
+            completedAt: Date.now(),
+          }]));
+          bestEffort(() => publishDance(server, current, 'broadcast', 'routed_share', {
+            phase: 'cancelled', error: current.result?.error ?? 'Sub-agent cancelled',
+            parentSessionId,
+          }, subagentAssignments.get(current.id)));
+        },
       });
-      const assignment = publishDance(server, run, 'request', 'task_delegation', {
-        task: durableTask, phase: 'queued', role: durableRole, model: durableModel,
-        parentSessionId,
-      });
-      subagentAssignments.set(run.id, assignment?.id);
-      server.agentRunRegistry.update(run.id, {
-        status: 'running',
-        result: { sessionId: parentSessionId },
-        progress: { message: 'Sub-agent started', phase: 'running' },
-      });
-      publishDance(server, run, 'response', 'task_claim', {
-        phase: 'running', role: durableRole, parentSessionId,
-      }, assignment?.id);
-      emitSubagentStatus(server, workspaceId, [{
-        id: run.id, name: durableName, role: durableRole, status: 'running',
-        task: durableTask, toolsUsed: [], startedAt: Date.now(),
-      }]);
-      return { runId: run.id, signal: controller.signal, dispose: unregister };
+      let removeParentCancellation: () => void = () => undefined;
+      try {
+        removeParentCancellation = linkParentCancellation(
+          server,
+          run.id,
+          parentSignal,
+        );
+        const assignment = bestEffort(() => publishDance(
+          server,
+          run,
+          'request',
+          'task_delegation',
+          {
+            task: durableTask, phase: 'queued', role: durableRole, model: durableModel,
+            parentSessionId,
+          },
+        ));
+        subagentAssignments.set(run.id, assignment?.id);
+        const current = server.agentRunRegistry.get(run.id);
+        if (!controller.signal.aborted && current?.status !== 'cancelling') {
+          server.agentRunRegistry.update(run.id, {
+            status: 'running',
+            result: { sessionId: parentSessionId },
+            progress: { message: 'Sub-agent started', phase: 'running' },
+          });
+          bestEffort(() => publishDance(server, run, 'response', 'task_claim', {
+            phase: 'running', role: durableRole, parentSessionId,
+          }, assignment?.id));
+          bestEffort(() => emitSubagentStatus(server, workspaceId, [{
+            id: run.id, name: durableName, role: durableRole, status: 'running',
+            task: durableTask, toolsUsed: [], startedAt: Date.now(),
+          }]));
+        }
+        return {
+          runId: run.id,
+          signal: controller.signal,
+          dispose: () => {
+            removeParentCancellation();
+            settlement.settle();
+            unregister();
+          },
+        };
+      } catch (error) {
+        removeParentCancellation();
+        controller.abort();
+        const current = server.agentRunRegistry.get(run.id);
+        if (current && !TERMINAL.has(current.status) && current.status !== 'cancelling') {
+          bestEffort(() => server.agentRunRegistry.update(run.id, {
+            status: 'failed',
+            result: {
+              error: guardCollaborationText(
+                error instanceof Error ? error.message : String(error),
+                'error',
+              ),
+              sessionId: parentSessionId,
+            },
+            progress: null,
+          }));
+        }
+        settlement.settle();
+        unregister();
+        throw error;
+      }
     },
     complete(handle: { runId: string; signal?: AbortSignal }, result: {
       response: string;
@@ -185,6 +299,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     }) {
       const current = workerRun(server.agentRunRegistry.get(handle.runId));
       if (!current || TERMINAL.has(current.status)) return;
+      if (handle.signal?.aborted || current.status === 'cancelling') return;
       const durableResult = guardCollaborationText(result.response, 'result');
       const durableTools = guardTextList(result.toolsUsed);
       const memoryRefs = recordResult(server, current, workspaceId, current.task, durableResult, 'Chat sub-agent');
@@ -220,13 +335,15 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     }) {
       const current = workerRun(server.agentRunRegistry.get(handle.runId));
       if (!current || TERMINAL.has(current.status)) return;
-      const status = input.cancelled || handle.signal?.aborted ? 'cancelled' : 'failed';
+      const cancelled = input.cancelled || handle.signal?.aborted || current.status === 'cancelling';
+      const status = cancelled ? 'cancelling' : 'failed';
       const durableError = guardCollaborationText(input.error, 'error');
       server.agentRunRegistry.update(current.id, {
         status,
         result: { error: durableError, summary: durableError, sessionId: parentSessionId },
         progress: null,
       });
+      if (cancelled) return;
       emitSubagentStatus(server, workspaceId, [{
         id: current.id, name: current.title,
         role: current.executor.personaId ?? 'agent', status: 'failed',
@@ -235,7 +352,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         completedAt: input.completedAt,
       }]);
       publishDance(server, current, 'broadcast', 'routed_share', {
-        phase: status, error: durableError, parentSessionId,
+        phase: 'failed', error: durableError, parentSessionId,
       }, subagentAssignments.get(current.id));
     },
     list() {
@@ -263,6 +380,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         capabilities: { cancel: true },
       });
       const controller = new AbortController();
+      const settlement = createExecutionSettlement();
       const workers = new Map<string, CollaborationWorkerRun>();
       const assignments = new Map<string, string | undefined>();
       for (const step of input.template.steps) {
@@ -286,46 +404,78 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
         });
         server.agentRunRegistry.update(run.id, { result: { sessionId: parentSessionId } });
         workers.set(step.name, run);
-        const assignment = publishDance(server, run, 'request', 'task_delegation', {
+        const assignment = bestEffort(() => publishDance(server, run, 'request', 'task_delegation', {
           task: durableTask, phase: 'queued', role: durableRole,
           model: durableModel, parentSessionId,
-        });
+        }));
         assignments.set(step.name, assignment?.id);
       }
       const context: WorkflowContext = {
         room, controller, workers, assignments,
         unregister: () => undefined,
       };
+      let cancellationStarted = false;
+      let cancellationNotified = false;
       context.unregister = server.agentRunRegistry.registerControls(room.id, {
-        cancel: () => {
-          controller.abort();
+        cancel: async () => {
+          if (!cancellationStarted) {
+            cancellationStarted = true;
+            controller.abort();
+            for (const worker of workers.values()) {
+              const current = server.agentRunRegistry.get(worker.id);
+              if (current && !TERMINAL.has(current.status)) {
+                server.agentRunRegistry.update(worker.id, {
+                  status: 'cancelling',
+                  result: { summary: 'Workflow cancelled', sessionId: parentSessionId },
+                });
+              }
+            }
+          }
+          await settlement.promise;
+          if (cancellationNotified) return;
+          cancellationNotified = true;
           for (const [name, worker] of workers) {
             const current = server.agentRunRegistry.get(worker.id);
-            if (current && !TERMINAL.has(current.status)) {
-              server.agentRunRegistry.update(worker.id, {
-                status: 'cancelled', result: { summary: 'Workflow cancelled', sessionId: parentSessionId },
-              });
-              emitSubagentStatus(server, workspaceId, [{
+            if (current?.status === 'cancelling') {
+              bestEffort(() => emitSubagentStatus(server, workspaceId, [{
                 id: worker.id, name: worker.title,
                 role: worker.executor.personaId ?? 'agent', status: 'failed',
                 task: worker.task, toolsUsed: current.metrics?.toolsUsed ?? [],
                 startedAt: current.startedAt ? Date.parse(current.startedAt) : undefined,
                 completedAt: Date.now(),
-              }]);
-              publishDance(server, worker, 'broadcast', 'routed_share', {
+              }]));
+              bestEffort(() => publishDance(server, worker, 'broadcast', 'routed_share', {
                 phase: 'cancelled', error: 'Workflow cancelled', parentSessionId,
-              }, assignments.get(name));
+              }, assignments.get(name)));
             }
           }
         },
       });
+      const removeParentCancellation = linkParentCancellation(
+        server,
+        room.id,
+        parentSignal,
+      );
       workflowContexts.set(room.id, context);
       return {
         runId: room.id,
         signal: controller.signal,
         dispose: () => {
-          context.unregister();
+          removeParentCancellation();
           workflowContexts.delete(room.id);
+          try {
+            const current = server.agentRunRegistry.get(room.id);
+            if (!controller.signal.aborted && current && !TERMINAL.has(current.status)
+              && current.status !== 'cancelling') {
+              server.agentRunRegistry.update(room.id, {
+                status: context.terminalStatus ?? 'failed',
+                progress: null,
+              });
+            }
+          } finally {
+            settlement.settle();
+            context.unregister();
+          }
         },
       };
     },
@@ -343,12 +493,11 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       model?: string;
     } }) {
       const context = workflowContexts.get(handle.runId);
+      if (context?.controller.signal.aborted) return;
       const known = context?.workers.get(event.workerState.name);
       const current = known ? workerRun(server.agentRunRegistry.get(known.id)) : undefined;
       if (!context || !current || TERMINAL.has(current.status)) return;
-      const status = context.controller.signal.aborted
-        ? 'cancelled'
-        : event.workerState.status === 'done'
+      const status = event.workerState.status === 'done'
           ? 'completed'
           : event.workerState.status === 'failed'
             ? 'failed'
@@ -360,24 +509,28 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       const memoryRefs = status === 'completed' && durableResult
         ? recordResult(server, current, workspaceId, current.task, durableResult, 'Workflow worker')
         : undefined;
-      server.agentRunRegistry.update(current.id, {
-        status,
-        executor: { model: durableModel },
-        ...(durableResult ? { result: { summary: durableResult, sessionId: parentSessionId } } : {}),
-        ...(durableError ? { result: { error: durableError, sessionId: parentSessionId } } : {}),
-        metrics: {
-          toolsUsed: durableTools,
-          inputTokens: event.workerState.usage.inputTokens,
-          outputTokens: event.workerState.usage.outputTokens,
+      server.agentRunRegistry.update(
+        current.id,
+        {
+          status,
+          executor: { model: durableModel },
+          ...(durableResult ? { result: { summary: durableResult, sessionId: parentSessionId } } : {}),
+          ...(durableError ? { result: { error: durableError, sessionId: parentSessionId } } : {}),
+          metrics: {
+            toolsUsed: durableTools,
+            inputTokens: event.workerState.usage.inputTokens,
+            outputTokens: event.workerState.usage.outputTokens,
+          },
+          ...(memoryRefs ? { memoryRefs } : {}),
+          progress: status === 'running' ? { message: 'Workflow worker running', phase: 'running' } : null,
         },
-        ...(memoryRefs ? { memoryRefs } : {}),
-        progress: status === 'running' ? { message: 'Workflow worker running', phase: 'running' } : null,
-      });
+        TERMINAL.has(status) ? { recomputeParent: false } : undefined,
+      );
       emitSubagentStatus(server, workspaceId, [{
         id: current.id, name: current.title, role: current.executor.personaId ?? 'agent',
         status: status === 'completed'
           ? 'done'
-          : status === 'failed' || status === 'cancelled'
+          : status === 'failed'
             ? 'failed'
             : status === 'running' ? 'running' : 'pending',
         task: current.task, toolsUsed: durableTools,
@@ -397,11 +550,19 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
     complete(handle: { runId: string }, output: { aggregated: string }) {
       const context = workflowContexts.get(handle.runId);
       const current = context ? server.agentRunRegistry.get(context.room.id) : undefined;
-      if (!context || !current || current.status === 'cancelled') return;
+      if (!context || !current || context.controller.signal.aborted
+        || current.status === 'cancelling' || current.status === 'cancelled'
+        || current.status === 'failed' || current.status === 'interrupted') return;
       const durableAggregate = guardCollaborationText(output.aggregated, 'result');
       const memoryRefs = durableAggregate
         ? recordResult(server, context.room, workspaceId, context.room.task, durableAggregate, 'Workflow aggregate')
         : { status: 'failed' as const, personalFrameIds: [], workspaceFrameIds: {} };
+      const workerRuns = [...context.workers.values()]
+        .map((worker) => server.agentRunRegistry.get(worker.id));
+      const status = workerRuns.some((worker) => worker?.status === 'completed')
+        ? 'completed'
+        : 'failed';
+      context.terminalStatus = status;
       server.agentRunRegistry.update(context.room.id, {
         result: { summary: durableAggregate, sessionId: parentSessionId },
         memoryRefs,
@@ -412,16 +573,25 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       const context = workflowContexts.get(handle.runId);
       if (!context) return;
       const durableError = guardCollaborationText(error.message, 'error');
+      const cancelled = context.controller.signal.aborted
+        || server.agentRunRegistry.get(context.room.id)?.status === 'cancelling';
+      if (!cancelled) context.terminalStatus = 'failed';
       for (const worker of context.workers.values()) {
         const current = server.agentRunRegistry.get(worker.id);
         if (current && !TERMINAL.has(current.status)) {
-          server.agentRunRegistry.update(worker.id, {
-            status: context.controller.signal.aborted ? 'cancelled' : 'failed',
-            result: { error: durableError, sessionId: parentSessionId },
-          });
+          server.agentRunRegistry.update(
+            worker.id,
+            {
+              status: cancelled ? 'cancelling' : 'failed',
+              result: { error: durableError, sessionId: parentSessionId },
+            },
+            cancelled ? undefined : { recomputeParent: false },
+          );
         }
       }
-      server.agentRunRegistry.update(context.room.id, { result: { error: durableError, sessionId: parentSessionId } });
+      server.agentRunRegistry.update(context.room.id, {
+        result: { error: durableError, sessionId: parentSessionId },
+      });
     },
   };
 
@@ -438,7 +608,7 @@ export function bindChatCollaborationTools(options: BindChatCollaborationOptions
       runAdapter: subagentAdapter,
       onSubAgentTool: (runId, name) => {
         const current = workerRun(server.agentRunRegistry.get(runId));
-        if (!current || TERMINAL.has(current.status)) return;
+        if (!current || TERMINAL.has(current.status) || current.status === 'cancelling') return;
         const durableName = guardCollaborationText(name, 'input');
         const toolsUsed = [...new Set([...(current.metrics?.toolsUsed ?? []), durableName])];
         server.agentRunRegistry.update(runId, {

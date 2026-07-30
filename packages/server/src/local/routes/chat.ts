@@ -2405,6 +2405,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               blockedTools: governancePolicies?.blockedTools,
               allowedToolNames: spawnAllowedToolNames,
             },
+            parentSignal: turnSignal,
             turnOrigin: {
               session: sessionId,
               workspace: effectiveWorkspace ?? null,
