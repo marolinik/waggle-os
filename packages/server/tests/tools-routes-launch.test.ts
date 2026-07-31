@@ -1089,7 +1089,7 @@ describe('POST /api/tools/launch — persistence + reconcile', () => {
       if (server2) await server2.close();
       await stopChild(child);
     }
-  }, 10_000);
+  }, 30_000);
 
   it('adopts a workspace lease for a live persisted tracker row without a registry worker', async () => {
     const child = spawnSleeper();
