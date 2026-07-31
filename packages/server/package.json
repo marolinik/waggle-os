@@ -30,7 +30,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "adm-zip": "^0.6.0",
     "archiver": "^7.0.1",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.6.2",
     "bullmq": "^5.0.0",
     "cron-parser": "^4.9.0",
     "drizzle-orm": "^0.45.2",

@@ -35,6 +35,7 @@ const MANUAL_FIRST_PARTY_RUNTIME_TARGETS = new Map([
   ['@waggle/hive-mind-hooks-openclaw', ['dist/handler.bundle.cjs']],
 ]);
 const REQUIRED_SHARP_VERSION = '0.35.3';
+const REQUIRED_BETTER_SQLITE_RANGE = '>=12.6.2 <13';
 const STAGED_DEPENDENCY_VERSION_ALLOWLISTS = new Map([
   ['brace-expansion', new Set(['1.1.16', '2.1.2', '5.0.7'])],
   ['fast-uri', new Set(['3.1.4'])],
@@ -90,6 +91,15 @@ function listPackageDirs(nodeModulesDir) {
   return packageDirs;
 }
 
+function isSupportedBetterSqliteVersion(version) {
+  if (typeof version !== 'string') return false;
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
+  if (!match) return false;
+  const [major, minor, patch] = match.slice(1).map(Number);
+  if (![major, minor, patch].every(Number.isSafeInteger)) return false;
+  return major === 12 && (minor > 6 || (minor === 6 && patch >= 2));
+}
+
 function stagedDependencyVersionFailures(nodeModulesDir, packageManifests) {
   const manifests = packageManifests ?? listPackageDirs(nodeModulesDir)
     .map((packageDir) => [packageDir, readManifest(packageDir)]);
@@ -97,11 +107,31 @@ function stagedDependencyVersionFailures(nodeModulesDir, packageManifests) {
 
   for (const [packageDir, manifest] of manifests) {
     const relative = path.relative(nodeModulesDir, packageDir).split(path.sep).join('/');
+    const normalizedRelative = relative.toLowerCase();
+    const isBetterSqlitePath = (
+      normalizedRelative === 'better-sqlite3'
+      || normalizedRelative.endsWith('/node_modules/better-sqlite3')
+    );
     const allowedVersions = STAGED_DEPENDENCY_VERSION_ALLOWLISTS.get(manifest.name);
     if (allowedVersions && !allowedVersions.has(manifest.version)) {
       failures.push(
         `node_modules/${relative} contains ${manifest.name}@${manifest.version}; `
         + `allowed versions: ${[...allowedVersions].join(', ')}`,
+      );
+    }
+    if (isBetterSqlitePath && manifest.name !== 'better-sqlite3') {
+      failures.push(
+        `node_modules/${relative} must identify as better-sqlite3; `
+        + `found name ${JSON.stringify(manifest.name)}`,
+      );
+    }
+    if (
+      (isBetterSqlitePath || manifest.name === 'better-sqlite3')
+      && !isSupportedBetterSqliteVersion(manifest.version)
+    ) {
+      failures.push(
+        `node_modules/${relative} contains better-sqlite3@${manifest.version}; `
+        + `required version: ${REQUIRED_BETTER_SQLITE_RANGE}`,
       );
     }
     if (
@@ -406,19 +436,14 @@ if (!fs.existsSync(nodePath)) {
   try {
     const bundledRuntime = JSON.parse(execFileSync(nodePath, [
       '-p',
-      'JSON.stringify({ arch: process.arch, modules: process.versions.modules, version: process.versions.node })',
+      'JSON.stringify({ arch: process.arch, version: process.versions.node })',
     ], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim());
-    const currentAbi = process.versions.modules;
     bundledNodeVersion = bundledRuntime.version;
-    if (bundledRuntime.modules !== currentAbi) {
-      missing.push(
-        `resources/${nodeBinary} ABI ${bundledRuntime.modules} does not match current Node ABI ${currentAbi} ` +
-        '(run: node scripts/bundle-node.mjs with the same Node used for npm install/stage-sidecar-deps)',
-      );
-    }
+    // The checker may run under a different Node major than the bundled runtime.
+    // The native-module probe below is the authoritative ABI compatibility check.
     if (bundledRuntime.arch !== targetArch) {
       missing.push(
         `resources/${nodeBinary} architecture ${bundledRuntime.arch} does not match target ${targetArch}`,

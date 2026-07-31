@@ -358,6 +358,21 @@ describe('Tauri Production Configuration', () => {
     expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
     expect(manifest.overrides).toMatchObject(expectedOverrides);
 
+    const betterSqliteRanges = [
+      'core',
+      'hive-mind-core',
+      'launcher',
+      'marketplace',
+      'server',
+    ].map((workspace) => {
+      const workspaceManifest = JSON.parse(fs.readFileSync(
+        path.join(ROOT, 'packages', workspace, 'package.json'),
+        'utf-8',
+      )) as { dependencies?: Record<string, string> };
+      return workspaceManifest.dependencies?.['better-sqlite3'];
+    });
+    expect(new Set(betterSqliteRanges)).toEqual(new Set(['^12.6.2']));
+
     const versionsFor = (packageName: string) => {
       const matching = Object.entries(lockfile.packages)
         .filter(([packagePath]) => packagePath.endsWith(`node_modules/${packageName}`));
@@ -373,6 +388,7 @@ describe('Tauri Production Configuration', () => {
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.0']));
     expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
+    expect(versionsFor('better-sqlite3').size).toBe(1);
     const sharpBindings = Object.entries(lockfile.packages)
       .filter(([packagePath]) => (
         /node_modules\/@img\/sharp-(?!libvips-)[^/]+$/.test(packagePath)
@@ -386,7 +402,7 @@ describe('Tauri Production Configuration', () => {
   it('rejects unsafe staged dependency versions without native runtime setup', () => {
     const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-dependency-floor-'));
     const checker = path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs');
-    const writeManifest = (relative: string, name: string, version: string) => {
+    const writeManifest = (relative: string, name?: string, version?: string) => {
       const packageDir = path.join(fixture, ...relative.split('/'));
       fs.mkdirSync(packageDir, { recursive: true });
       fs.writeFileSync(
@@ -412,9 +428,60 @@ describe('Tauri Production Configuration', () => {
     try {
       writeManifest('brace-expansion', 'brace-expansion', '5.0.7');
       writeManifest('fast-uri', 'fast-uri', '3.1.4');
+      writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
       writeManifest('sharp', 'sharp', '0.35.3');
       writeManifest(bundledBrace, 'brace-expansion', '2.1.2');
       expect(run().status).toBe(0);
+      writeManifest('better-sqlite3', 'better-sqlite3', '12.6.2');
+      expect(run().status).toBe(0);
+      writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
+
+      writeManifest('better-sqlite3', 'better-sqlite3', '11.10.0');
+      const legacyBetterSqlite = run();
+      expect(legacyBetterSqlite.status).toBe(1);
+      expect(legacyBetterSqlite.stderr).toContain('better-sqlite3@11.10.0');
+
+      writeManifest('better-sqlite3', 'better-sqlite3', '12.6.1');
+      expect(run().status).toBe(1);
+      writeManifest('better-sqlite3', 'better-sqlite3', '13.0.0');
+      expect(run().status).toBe(1);
+      writeManifest('better-sqlite3', 'not-better-sqlite3', '12.9.0');
+      const spoofedBetterSqlite = run();
+      expect(spoofedBetterSqlite.status).toBe(1);
+      expect(spoofedBetterSqlite.stderr).toContain('must identify as better-sqlite3');
+      writeManifest('better-sqlite3', 'better-sqlite3');
+      const missingBetterSqliteVersion = run();
+      expect(missingBetterSqliteVersion.status).toBe(1);
+      expect(missingBetterSqliteVersion.stderr).toContain('required version: >=12.6.2 <13');
+      for (const invalidVersion of [
+        '12.07.0',
+        '12.9007199254740992.0',
+        '12.6.2-beta.1',
+        '12.6.2+build.1',
+      ]) {
+        writeManifest('better-sqlite3', 'better-sqlite3', invalidVersion);
+        const invalidBetterSqlite = run();
+        expect(
+          invalidBetterSqlite.status,
+          `${invalidVersion}: ${invalidBetterSqlite.stderr}`,
+        ).toBe(1);
+      }
+      fs.rmSync(path.join(fixture, 'better-sqlite3'), { recursive: true, force: true });
+      writeManifest('Better-SQLite3', 'not-better-sqlite3', '12.9.0');
+      const uppercaseDirectBetterSqlite = run();
+      expect(uppercaseDirectBetterSqlite.status).toBe(1);
+      expect(uppercaseDirectBetterSqlite.stderr).toContain('must identify as better-sqlite3');
+      fs.rmSync(path.join(fixture, 'Better-SQLite3'), { recursive: true, force: true });
+      writeManifest(
+        'vendor/node_modules/Better-SQLite3',
+        'not-better-sqlite3',
+        '12.9.0',
+      );
+      const uppercaseNestedBetterSqlite = run();
+      expect(uppercaseNestedBetterSqlite.status).toBe(1);
+      expect(uppercaseNestedBetterSqlite.stderr).toContain('must identify as better-sqlite3');
+      fs.rmSync(path.join(fixture, 'vendor'), { recursive: true, force: true });
+      writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
 
       writeManifest(bundledBrace, 'brace-expansion', '2.0.1');
       const vulnerableNpm = run();
@@ -452,12 +519,13 @@ describe('Tauri Production Configuration', () => {
     }
   });
 
-  it('sidecar resource preflight checks bundled Node ABI compatibility', () => {
+  it('sidecar resource preflight uses bundled runtime probes instead of checker-host ABI', () => {
     const script = fs.readFileSync(
       path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs'),
       'utf-8',
     );
-    expect(script).toContain('process.versions.modules');
+    expect(script).not.toContain('const currentAbi = process.versions.modules');
+    expect(script).not.toContain('does not match current Node ABI');
     expect(script).toContain('execFileSync(nodePath');
     expect(script).toContain('const database = new Database');
     expect(script).toContain('SELECT 1 AS ok');
