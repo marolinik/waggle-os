@@ -597,6 +597,16 @@ const ChatApp = ({
   const followingRef = useRef(true);
   useEffect(() => { followingRef.current = following; }, [following]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const composerEditRevisionRef = useRef(0);
+  const sendSubmissionRef = useRef(0);
+  const composerThreadKey = `${workspaceId ?? ''}\u0000${activeSessionId ?? ''}`;
+  const composerThreadKeyRef = useRef(composerThreadKey);
+  composerThreadKeyRef.current = composerThreadKey;
+  const starterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (starterTimeoutRef.current) clearTimeout(starterTimeoutRef.current);
+    starterTimeoutRef.current = null;
+  }, [composerThreadKey]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const personaPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
@@ -625,6 +635,13 @@ const ChatApp = ({
     if (!last || last.role !== 'assistant' || !last.content) return [];
     return extractSuggestedActions(last.content);
   }, [messages, isLoading]);
+  const persistedMessageIndices = useMemo(() => {
+    let persistedIndex = -1;
+    return messages.map(message => {
+      if (!message.draft && !message.queued) persistedIndex += 1;
+      return persistedIndex;
+    });
+  }, [messages]);
 
   // B3: the latest completed file-write becomes the work-canvas doc; auto-open
   // the canvas when a NEW artifact appears (the user can close it; reopening is
@@ -807,6 +824,37 @@ const ChatApp = ({
     prevCanSendRef.current = canSend;
   }, [canSend]);
 
+  const submitComposerMessage = useCallback((content: string, restoreText = content) => {
+    const submission = ++sendSubmissionRef.current;
+    const editRevision = composerEditRevisionRef.current;
+    const threadKey = composerThreadKeyRef.current;
+    const restoreRejected = () => {
+      if (
+        sendSubmissionRef.current === submission
+        && composerEditRevisionRef.current === editRevision
+        && composerThreadKeyRef.current === threadKey
+      ) {
+        setInput(current => current || restoreText);
+      }
+    };
+
+    setInput('');
+    setShowSlash(false);
+    try {
+      const sendResult = onSendMessage(content);
+      if (sendResult) {
+        void sendResult.then(
+          accepted => {
+            if (accepted === false) restoreRejected();
+          },
+          restoreRejected,
+        );
+      }
+    } catch {
+      restoreRejected();
+    }
+  }, [onSendMessage]);
+
   // F2: mount-once auto-send of the wizard's first task. This fires exactly once,
   // after the session has landed and history has been fetched (so the optimistic
   // turn isn't clobbered by the history replace). Once consumed, the untouched
@@ -820,12 +868,14 @@ const ChatApp = ({
     })) return;
     const text = (initialMessage as string).trim();
     autoSentRef.current = true; // consume BEFORE dispatch: StrictMode/effect-rerun safe
-    if (inputUnchanged) setInput('');
-    void Promise.resolve(onSendMessage(text)).then((ok) => {
-      // If the send failed, restore the untouched seed so the user can retry.
-      if (ok === false && inputUnchanged) setInput(prev => (prev === '' ? text : prev));
-    });
-  }, [autoSendInitial, initialMessage, activeSessionId, historyLoaded, onSendMessage]);
+    submitComposerMessage(text);
+  }, [
+    autoSendInitial,
+    initialMessage,
+    activeSessionId,
+    historyLoaded,
+    submitComposerMessage,
+  ]);
 
   // Router arc P1-B (B2): composer "Best fit" — POST the composer text to
   // /api/route-proposals and inject the proposal as a LOCAL route_proposal
@@ -907,20 +957,15 @@ const ChatApp = ({
     if (text === '/models') {
       // Show available models as a local message
       const models = availableModels?.join(', ') || 'No models loaded';
-      onSendMessage(`Available models: ${models}`);
-      setInput('');
+      submitComposerMessage(`Available models: ${models}`, text);
       return;
     }
     if (text === '/cost') {
-      onSendMessage('/cost');
-      setInput('');
-      setShowSlash(false);
+      submitComposerMessage('/cost', text);
       return;
     }
 
-    onSendMessage(text);
-    setInput('');
-    setShowSlash(false);
+    submitComposerMessage(text);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -954,6 +999,7 @@ const ChatApp = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
+    composerEditRevisionRef.current += 1;
     setInput(val);
     if (val.startsWith('/')) {
       setShowSlash(true);
@@ -1098,12 +1144,20 @@ const ChatApp = ({
                 // the first turn is a single click. Pre-filling the input first
                 // gives the user a visible "this is what's about to ship" beat;
                 // editing the input within the 1s cancels the auto-send.
+                composerEditRevisionRef.current += 1;
+                const editRevision = composerEditRevisionRef.current;
+                const threadKey = composerThreadKeyRef.current;
                 setInput(msg);
                 inputRef.current?.focus();
-                setTimeout(() => {
-                  if (inputRef.current?.value === msg) {
-                    onSendMessage(msg);
-                    setInput('');
+                if (starterTimeoutRef.current) clearTimeout(starterTimeoutRef.current);
+                starterTimeoutRef.current = setTimeout(() => {
+                  starterTimeoutRef.current = null;
+                  if (
+                    composerThreadKeyRef.current === threadKey
+                    && composerEditRevisionRef.current === editRevision
+                    && inputRef.current?.value === msg
+                  ) {
+                    submitComposerMessage(msg);
                   }
                 }, 1000);
               }}
@@ -1112,6 +1166,7 @@ const ChatApp = ({
                 // their starter strings end with ": " — the user must finish
                 // the sentence before sending. Cursor lands at end-of-input
                 // so they can type immediately.
+                composerEditRevisionRef.current += 1;
                 setInput(msg);
                 inputRef.current?.focus();
                 // Move caret to end so typing appends instead of replacing.
@@ -1143,6 +1198,7 @@ const ChatApp = ({
           )}
           {messages.map((msg, msgIdx) => {
             const messagePersona = msg.persona ? getPersonaById(msg.persona) : undefined;
+            const persistedMessageIndex = persistedMessageIndices[msgIdx];
             return (
             <div key={msg.id} className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
               onDoubleClick={() => {
@@ -1188,6 +1244,11 @@ const ChatApp = ({
                     <span className="font-semibold text-[var(--text-2)]">Waggle</span>
                     {messagePersona?.name && <span>· {messagePersona.name}</span>}
                     {msg.model && <span>· {formatModelLabel(msg.model)}</span>}
+                    {msg.draft && (
+                      <span data-testid="chat-draft-status">
+                        · {msg.draft.status === 'stopped' ? 'Stopped draft' : 'Draft'} · not saved
+                      </span>
+                    )}
                   </div>
                 )}
                 <div className={`relative select-text cursor-text group/msg text-sm ${
@@ -1202,7 +1263,14 @@ const ChatApp = ({
                     ? 'rounded-[12px] bg-[var(--surface-2)] px-3 py-2 text-[12px] italic text-[var(--text-muted)]'
                     : 'rounded-[14px] px-3.5 py-2.5 leading-[1.6] text-[var(--text)]'
                 }`}>
-                  {msg.role === 'assistant' && msg.blocks && msg.blocks.length > 0 ? (
+                  {msg.role === 'assistant' && msg.draft?.content ? (
+                    <span
+                      className="whitespace-pre-wrap break-words"
+                      data-testid="chat-draft-content"
+                    >
+                      {msg.draft.content}
+                    </span>
+                  ) : msg.role === 'assistant' && msg.blocks && msg.blocks.length > 0 ? (
                     <BlockRenderer
                       blocks={msg.blocks}
                       isStreaming={isLoading && msg === messages[messages.length - 1]}
@@ -1264,7 +1332,7 @@ const ChatApp = ({
                 {msg.role === 'assistant' && msg.content && (
                   <FeedbackButtons
                     messageId={msg.id}
-                    messageIndex={msgIdx}
+                    messageIndex={persistedMessageIndex}
                     sessionId={activeSessionId ?? undefined}
                     feedback={msg.feedback}
                     content={msg.content}
