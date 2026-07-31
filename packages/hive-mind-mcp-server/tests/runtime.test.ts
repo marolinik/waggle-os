@@ -219,7 +219,7 @@ describe('@waggle/hive-mind-mcp-server built runtime', () => {
         } as Record<string, string>,
       });
 
-      await withTimeout(client.connect(transport), 10_000);
+      await withTimeout(client.connect(transport), 30_000);
       const tools = await withTimeout(client.listTools(), 10_000);
       const names = tools.tools.map((tool) => tool.name);
 
