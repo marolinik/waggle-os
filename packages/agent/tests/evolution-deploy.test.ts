@@ -198,6 +198,12 @@ describe('evolution-deploy', () => {
         })
         .mockImplementationOnce(() => {
           throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+        })
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('locked again'), { code: 'EPERM' });
+        })
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('still busy'), { code: 'EBUSY' });
         });
       const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
 
@@ -205,8 +211,8 @@ describe('evolution-deploy', () => {
         section: 'coreLoop', text: 'v2',
       });
 
-      expect(rename).toHaveBeenCalledTimes(3);
-      expect(wait).toHaveBeenCalledTimes(2);
+      expect(rename).toHaveBeenCalledTimes(5);
+      expect(wait).toHaveBeenCalledTimes(4);
       expect(JSON.parse(fs.readFileSync(second.path, 'utf-8')).text).toBe('v2');
       expect(JSON.parse(fs.readFileSync(second.backupPath!, 'utf-8')).text).toBe('v1');
       expect(fs.existsSync(`${first.path}.tmp`)).toBe(false);
@@ -225,8 +231,8 @@ describe('evolution-deploy', () => {
         section: 'coreLoop', text: 'v2',
       })).toThrow(/still locked/);
 
-      expect(rename).toHaveBeenCalledTimes(4);
-      expect(wait).toHaveBeenCalledTimes(3);
+      expect(rename).toHaveBeenCalledTimes(10);
+      expect(wait).toHaveBeenCalledTimes(9);
       expect(JSON.parse(fs.readFileSync(first.path, 'utf-8')).text).toBe('v1');
       expect(fs.existsSync(`${first.path}.tmp`)).toBe(false);
     });
