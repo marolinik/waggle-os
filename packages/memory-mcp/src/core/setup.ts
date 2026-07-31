@@ -227,7 +227,7 @@ export function getWorkspaceMind(workspaceId: string): WorkspaceMindHandle | nul
 
 export function shutdown(): void {
   _workspaceMindLayerCache.clear();
-  _mindCache.closeAll();
+  _mindCache?.closeAll();
   try { _personalDb?.close(); } catch { /* already closed */ }
   _initialized = false;
 }
