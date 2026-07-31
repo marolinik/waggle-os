@@ -26,6 +26,21 @@ export interface MonthlyAssessment {
   recommendation: string;
 }
 
+/**
+ * Convert a user-visible local calendar month to UTC SQLite bounds.
+ * Stored timestamps use SQLite datetime('now') (UTC), while monthly reports
+ * follow the same local calendar as the cron schedule.
+ */
+function getUtcMonthBounds(yearMonth: string): { startDate: string; endDate: string } {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const toSqliteUtc = (date: Date) => date.toISOString().slice(0, 19).replace('T', ' ');
+
+  return {
+    startDate: toSqliteUtc(new Date(year, month - 1, 1)),
+    endDate: toSqliteUtc(new Date(year, month, 1)),
+  };
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 /**
@@ -35,12 +50,7 @@ function computeMonthCorrectionRate(
   db: import('better-sqlite3').Database,
   yearMonth: string,
 ): { total: number; correctionRate: number } {
-  const startDate = `${yearMonth}-01`;
-  // Compute end date: next month's first day
-  const [year, month] = yearMonth.split('-').map(Number);
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const nextYear = month === 12 ? year + 1 : year;
-  const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  const { startDate, endDate } = getUtcMonthBounds(yearMonth);
 
   try {
     const row = db.prepare(`
@@ -82,11 +92,7 @@ function getTopFeedbackReasons(
   db: import('better-sqlite3').Database,
   yearMonth: string,
 ): { positiveReasons: string[]; negativeReasons: string[] } {
-  const startDate = `${yearMonth}-01`;
-  const [year, month] = yearMonth.split('-').map(Number);
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const nextYear = month === 12 ? year + 1 : year;
-  const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  const { startDate, endDate } = getUtcMonthBounds(yearMonth);
 
   const negativeReasons: string[] = [];
   const positiveReasons: string[] = [];
@@ -147,16 +153,12 @@ function countSkillsInstalled(
   db: import('better-sqlite3').Database,
   yearMonth: string,
 ): number {
-  const startDate = `${yearMonth}-01`;
-  const [year, month] = yearMonth.split('-').map(Number);
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const nextYear = month === 12 ? year + 1 : year;
-  const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  const { startDate, endDate } = getUtcMonthBounds(yearMonth);
 
   try {
     const row = db.prepare(`
       SELECT COUNT(*) as count
-      FROM install_audit_trail
+      FROM install_audit
       WHERE action = 'installed'
         AND timestamp >= ? AND timestamp < ?
     `).get(startDate, endDate) as { count: number } | undefined;
