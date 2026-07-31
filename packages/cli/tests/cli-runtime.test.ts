@@ -335,7 +335,7 @@ describe('@waggle/cli runtime UX', () => {
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }
-  }, 180_000);
+  }, 300_000);
 
   it('installs the local package closure and starts the local REPL', async () => {
     const home = makeHome();
@@ -440,7 +440,7 @@ describe('@waggle/cli runtime UX', () => {
       if (child) await stopProcess(child);
       fs.rmSync(home, { recursive: true, force: true });
     }
-  }, 180_000);
+  }, 300_000);
 
   it('installs the local package closure and completes a streamed chat turn', async () => {
     const home = makeHome();

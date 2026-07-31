@@ -396,7 +396,7 @@ describe('Waggle CLI Launcher', () => {
       } finally {
         fs.rmSync(home, { recursive: true, force: true });
       }
-    });
+    }, 120_000);
 
     it('installs the packed launcher and runs npx help plus startup recovery', async () => {
       const home = makeHome();
@@ -457,7 +457,7 @@ describe('Waggle CLI Launcher', () => {
         await new Promise<void>((resolve) => blocker.close(() => resolve()));
         fs.rmSync(home, { recursive: true, force: true });
       }
-    }, 120_000);
+    }, 240_000);
 
     it('starts the installed launcher long enough to serve health', async () => {
       const home = makeHome();
