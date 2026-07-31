@@ -4,9 +4,10 @@
  * sidecar. The full archive is required because it is the authoritative source
  * for the matching Node binary, Node license, and bundled npm runtime.
  *
- * WAGGLE_BUNDLED_NODE_VERSION may pin an exact release. Otherwise the exact
- * version running this staging script is used so native modules and the
- * packaged runtime share a Node ABI.
+ * Desktop packaging pins one exact supported Node.js release. Release and PR
+ * workflows install dependencies with the same version, and the extracted
+ * runtime proves it can load the installed native SQLite binding before any
+ * packaged runtime resource is replaced.
  */
 
 import fs from 'node:fs';
@@ -33,7 +34,8 @@ const safeNpmBraceExpansionSource = path.join(
   'brace-expansion',
 );
 
-const NODE_VERSION = process.env.WAGGLE_BUNDLED_NODE_VERSION ?? process.versions.node;
+const DESKTOP_NODE_VERSION = '22.23.2';
+const NODE_VERSION = DESKTOP_NODE_VERSION;
 if (!/^\d+\.\d+\.\d+$/.test(NODE_VERSION)) {
   console.error(`[bundle-node] FATAL - invalid Node.js version: ${NODE_VERSION}`);
   process.exit(1);
@@ -88,6 +90,50 @@ const destBinary = path.join(resourcesDir, platform === 'win32' ? 'node.exe' : '
 function fail(message) {
   console.error(`[bundle-node] FATAL - ${message}`);
   process.exit(1);
+}
+
+function assertNativeRuntimeCompatible() {
+  const betterSqlitePath = path.join(root, 'node_modules', 'better-sqlite3');
+  const probe = `
+    const path = require('node:path');
+    const Database = require(path.join(process.argv[1], 'node_modules', 'better-sqlite3'));
+    const database = new Database(':memory:');
+    const row = database.prepare('SELECT 1 AS ok').get();
+    database.close();
+    if (row?.ok !== 1) throw new Error('SQLite query probe returned an invalid result');
+    process.stdout.write(JSON.stringify({
+      version: process.versions.node,
+      abi: process.versions.modules,
+      arch: process.arch,
+    }));
+  `;
+
+  try {
+    const output = execFileSync(nodeSource, ['-e', probe, root], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    const runtime = JSON.parse(output);
+    if (runtime.version !== NODE_VERSION || runtime.arch !== arch) {
+      fail(
+        `native ABI compatibility probe used Node.js v${runtime.version ?? 'unknown'} `
+        + `(${runtime.arch ?? 'unknown'}, ABI ${runtime.abi ?? 'unknown'}); expected `
+        + `v${NODE_VERSION} (${arch})`,
+      );
+    }
+    console.log(
+      `[bundle-node] Native ABI probe passed with Node.js v${runtime.version} `
+      + `(${runtime.arch}, ABI ${runtime.abi})`,
+    );
+  } catch (error) {
+    const detail = String(error?.stderr ?? error?.message ?? error).trim().slice(0, 4_000);
+    fail(
+      `native ABI compatibility probe failed for Node.js v${NODE_VERSION} (${arch}) `
+      + `against ${betterSqlitePath}. Reinstall dependencies with Node.js `
+      + `v${NODE_VERSION} (npm ci) before packaging. ${detail}`,
+    );
+  }
 }
 
 async function download(url, destination) {
@@ -214,6 +260,8 @@ execFileSync('tar', ['-xf', archivePath, '-C', extractDir], { stdio: 'inherit' }
 if (!extractedRuntimeComplete()) {
   fail(`verified archive is missing Node, npm, or required license files: ${archiveName}`);
 }
+
+assertNativeRuntimeCompatible();
 
 fs.copyFileSync(nodeSource, destBinary);
 if (platform !== 'win32') fs.chmodSync(destBinary, 0o755);

@@ -328,11 +328,69 @@ describe('Tauri Production Configuration', () => {
     expect(gitignore).not.toContain('app/src-tauri/resources/service.js.map');
   });
 
-  it('bundle-node defaults to the Node version that stages native deps', () => {
+  it('bundle-node pins the supported desktop Node release used by CI', () => {
     const script = fs.readFileSync(path.join(ROOT, 'scripts', 'bundle-node.mjs'), 'utf-8');
-    expect(script).toContain(
-      'process.env.WAGGLE_BUNDLED_NODE_VERSION ?? process.versions.node',
+    expect(script).toContain("const DESKTOP_NODE_VERSION = '22.23.2'");
+    expect(script).toContain('const NODE_VERSION = DESKTOP_NODE_VERSION');
+    expect(script).not.toContain('process.versions.node;');
+
+    for (const workflowPath of [
+      '.github/workflows/release.yml',
+      '.github/workflows/tauri-build-pr.yml',
+    ]) {
+      const workflow = fs.readFileSync(path.join(ROOT, workflowPath), 'utf-8');
+      expect(workflow.match(/node-version: 22\.23\.2/g), workflowPath).toHaveLength(2);
+      expect(workflow, workflowPath).not.toMatch(/node-version: 20(?:\s|$)/);
+      const runtimeSteps = [...workflow.matchAll(/run: node scripts\/bundle-node\.mjs/g)];
+      const sidecarSteps = [...workflow.matchAll(/run: node scripts\/build-sidecar\.mjs/g)];
+      const nativeSteps = [...workflow.matchAll(/run: node scripts\/bundle-native-deps\.mjs/g)];
+      expect(runtimeSteps, workflowPath).toHaveLength(2);
+      expect(sidecarSteps, workflowPath).toHaveLength(2);
+      expect(nativeSteps, workflowPath).toHaveLength(2);
+      for (let index = 0; index < runtimeSteps.length; index++) {
+        expect(runtimeSteps[index].index, `${workflowPath} job ${index + 1}`).toBeLessThan(
+          sidecarSteps[index].index,
+        );
+        expect(runtimeSteps[index].index, `${workflowPath} job ${index + 1}`).toBeLessThan(
+          nativeSteps[index].index,
+        );
+      }
+    }
+  });
+
+  it('desktop builds verify the selected Node ABI before staging native resources', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'app', 'package.json'), 'utf-8'),
+    ) as { scripts?: Record<string, string> };
+    for (const scriptName of [
+      'tauri:build',
+      'tauri:build:local',
+      'tauri:build:win',
+      'tauri:build:mac:arm64',
+      'tauri:build:mac:x64',
+    ]) {
+      const command = manifest.scripts?.[scriptName] ?? '';
+      expect(command.indexOf('bundle-node.mjs'), scriptName).toBeGreaterThanOrEqual(0);
+      expect(command.indexOf('bundle-node.mjs'), scriptName).toBeLessThan(
+        command.indexOf('build-sidecar.mjs'),
+      );
+      expect(command.indexOf('bundle-node.mjs'), scriptName).toBeLessThan(
+        command.indexOf('bundle-native-deps.mjs'),
+      );
+    }
+
+    const script = fs.readFileSync(path.join(ROOT, 'scripts', 'bundle-node.mjs'), 'utf-8');
+    const probeIndex = script.indexOf('assertNativeRuntimeCompatible();');
+    const mutationIndex = script.indexOf('fs.copyFileSync(nodeSource, destBinary)');
+    const stagedRuntimeMutationIndex = script.indexOf(
+      'fs.rmSync(stagedRuntimeDir, { recursive: true, force: true })',
     );
+    expect(probeIndex).toBeGreaterThanOrEqual(0);
+    expect(mutationIndex).toBeGreaterThan(probeIndex);
+    expect(stagedRuntimeMutationIndex).toBeGreaterThan(probeIndex);
+    expect(script).toContain("const database = new Database(':memory:')");
+    expect(script).toContain('SELECT 1 AS ok');
+    expect(script).toContain('native ABI compatibility probe failed');
   });
 
   it('pins patched transitive dependency versions used by desktop builds', () => {

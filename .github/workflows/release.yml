@@ -139,7 +139,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22.23.2
           cache: npm
 
       - name: Setup Rust
@@ -161,14 +161,14 @@ jobs:
       - name: Build packages (shared -> core -> agent -> server)
         run: npm run build:packages
 
+      - name: Bundle Node.js runtime
+        run: node scripts/bundle-node.mjs
+
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs
 
       - name: Bundle native dependencies
         run: node scripts/bundle-native-deps.mjs
-
-      - name: Bundle Node.js runtime
-        run: node scripts/bundle-node.mjs
 
       - name: Stage sidecar dependencies
         run: node scripts/stage-sidecar-deps.mjs
@@ -538,7 +538,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22.23.2
           cache: npm
 
       - name: Verify runner architecture
@@ -564,14 +564,14 @@ jobs:
       - name: Build packages (shared -> core -> agent -> server)
         run: npm run build:packages
 
+      - name: Bundle Node.js runtime
+        run: node scripts/bundle-node.mjs
+
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs
 
       - name: Bundle native dependencies
         run: node scripts/bundle-native-deps.mjs
-
-      - name: Bundle Node.js runtime
-        run: node scripts/bundle-node.mjs
 
       - name: Stage sidecar dependencies
         run: node scripts/stage-sidecar-deps.mjs
