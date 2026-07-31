@@ -142,16 +142,16 @@ afterEach(() => {
   childProcess.execSync.mockReset();
   childProcess.execFileSync.mockReset();
   for (const dir of tempDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
   for (const path of cleanupPaths.splice(0)) {
-    rmSync(path, { recursive: true, force: true });
+    rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
-  rmSync(isolatedHome, { recursive: true, force: true });
+  rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 afterAll(() => {
-  rmSync(isolatedHome, { recursive: true, force: true });
+  rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('MarketplaceInstaller security boundaries', () => {
