@@ -2685,6 +2685,77 @@ Expect-Rejection {
   });
 
   it.runIf(process.platform === 'win32')(
+    'Windows installer timestamp validation survives JSON date coercion under non-US culture',
+    () => {
+      const script = fs
+        .readFileSync(
+          path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+          'utf-8',
+        )
+        .replace(/\r\n/g, '\n');
+      const helperStart = script.indexOf('function Test-CertificateTimestamp {');
+      const helperEnd = script.indexOf(
+        '\nfunction Assert-ExpectedAuthenticodeSignature {',
+        helperStart,
+      );
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+      expect(script).toContain('Test-CertificateTimestamp $frame.timestamp');
+      expect(script).toContain('Test-CertificateTimestamp $workspace.created');
+      expect(script).not.toContain('TryParse([string]$frame.timestamp');
+      expect(script).not.toContain('TryParse([string]$workspace.created');
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cert-time-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+$culture = [Globalization.CultureInfo]::GetCultureInfo('sr-Latn-RS')
+[Threading.Thread]::CurrentThread.CurrentCulture = $culture
+[Threading.Thread]::CurrentThread.CurrentUICulture = $culture
+$coercedTimestamp = [datetime]::Parse(
+  '2026-07-31T23:24:03.123Z',
+  [Globalization.CultureInfo]::InvariantCulture,
+  [Globalization.DateTimeStyles]::RoundtripKind
+)
+$legacyParsed = [DateTimeOffset]::MinValue
+if ([DateTimeOffset]::TryParse([string]$coercedTimestamp, [ref]$legacyParsed)) {
+  throw 'Fixture no longer reproduces the culture-sensitive cast failure'
+}
+if (-not (Test-CertificateTimestamp $coercedTimestamp)) {
+  throw 'A valid JSON-coerced DateTime was rejected'
+}
+if (-not (Test-CertificateTimestamp '2026-07-31T23:24:03.123Z')) {
+  throw 'A valid ISO timestamp string was rejected'
+}
+foreach ($invalid in @($null, '', 'not-a-timestamp')) {
+  if (Test-CertificateTimestamp $invalid) {
+    throw 'An invalid timestamp was accepted'
+  }
+}
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${script.slice(helperStart, helperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `Windows installer timestamp probe failed: ${result.stderr || result.stdout}`,
+          );
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
     'Windows installer certificate preserves sentinels when receipt paths are unsafe',
     () => {
       const script = fs

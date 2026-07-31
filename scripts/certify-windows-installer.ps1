@@ -46,6 +46,24 @@ function Assert-True {
   if (-not $Condition) { throw $Message }
 }
 
+function Test-CertificateTimestamp {
+  param([AllowNull()] [object]$Value)
+
+  if ($null -eq $Value) { return $false }
+  if ($Value -is [DateTime] -or $Value -is [DateTimeOffset]) { return $true }
+
+  $text = [string]$Value
+  if ([string]::IsNullOrWhiteSpace($text)) { return $false }
+
+  $parsed = [DateTimeOffset]::MinValue
+  return [DateTimeOffset]::TryParse(
+    $text,
+    [Globalization.CultureInfo]::InvariantCulture,
+    [Globalization.DateTimeStyles]::RoundtripKind,
+    [ref]$parsed
+  )
+}
+
 function Assert-ExpectedAuthenticodeSignature {
   param(
     [Parameter(Mandatory = $true)] [object]$Signature,
@@ -432,8 +450,7 @@ function Assert-CertificateLifecycleData {
       'Persisted lifecycle memory lost its importance.'
     Assert-True (@('I', 'P', 'B') -contains [string]$frame.frameType) `
       'Persisted lifecycle memory returned an invalid frame type.'
-    $parsedTimestamp = [DateTimeOffset]::MinValue
-    Assert-True ([DateTimeOffset]::TryParse([string]$frame.timestamp, [ref]$parsedTimestamp)) `
+    Assert-True (Test-CertificateTimestamp $frame.timestamp) `
       'Persisted lifecycle memory returned an invalid timestamp.'
     $parsedAccessCount = 0L
     Assert-True ([long]::TryParse([string]$frame.accessCount, [ref]$parsedAccessCount)) `
@@ -483,8 +500,7 @@ function New-CertificateLifecycleData {
     'Lifecycle certificate workspace returned an unexpected name.'
   Assert-True ([string]$workspace.group -ceq $workspaceGroup) `
     'Lifecycle certificate workspace returned an unexpected group.'
-  $workspaceCreated = [DateTimeOffset]::MinValue
-  Assert-True ([DateTimeOffset]::TryParse([string]$workspace.created, [ref]$workspaceCreated)) `
+  Assert-True (Test-CertificateTimestamp $workspace.created) `
     'Lifecycle certificate workspace returned an invalid creation timestamp.'
 
   $personalContent = "installer-certificate-personal-memory-$RunId"
