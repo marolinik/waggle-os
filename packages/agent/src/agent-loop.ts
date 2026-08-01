@@ -78,6 +78,11 @@ export interface AgentLoopConfig {
   maxTokenBudget?: number;
   /** Maximum completion tokens requested from the provider on any one dispatch. */
   maxOutputTokens?: number;
+  /** Optional provider-native reasoning policy. Omitted to preserve provider defaults. */
+  reasoning?: {
+    enabled: boolean;
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  };
   /** Optional abort signal — when aborted, the agent loop exits between turns */
   signal?: AbortSignal;
   /** Team governance policies — blocked tools and allowed sources.
@@ -554,6 +559,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       messages: requestMessages,
       max_tokens: outputTokenLimit,
     };
+    if (config.reasoning) {
+      body.reasoning = { ...config.reasoning };
+    }
     const currentRequestToolNames = synthesisForced
       ? []
       : turnOpenAiTools.map(tool => tool.function.name);

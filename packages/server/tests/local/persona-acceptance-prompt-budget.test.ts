@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { MindDB } from '@waggle/core';
+import { MindDB, WaggleConfig } from '@waggle/core';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
@@ -155,6 +155,7 @@ describe('persona acceptance prompt budget', () => {
     expect(config.maxTurns).toBe(3);
     expect(config.maxToolRounds).toBe(2);
     expect(config.maxOutputTokens).toBeLessThanOrEqual(persona.maxOutputTokens);
+    expect(config.reasoning).toBeUndefined();
     expect(syntheticInputUpperBound * 3).toBeLessThan(persona.maxInputTokens);
 
     const metrics = events.find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
@@ -167,6 +168,7 @@ describe('persona acceptance prompt budget', () => {
     expect(config.tools).toEqual([]);
     expect(config.messages).toEqual([{ role: 'user', content: persona.prompt }]);
     expect(config.maxOutputTokens).toBe(persona.maxOutputTokens);
+    expect(config.reasoning).toEqual({ enabled: true, effort: 'low' });
     expect(syntheticInputUpperBound).toBeLessThan(persona.maxInputTokens);
     expect(config.systemPrompt).toContain('# SELF-CONTAINED ADVISORY TURN');
     expect(config.systemPrompt).toContain(
@@ -186,6 +188,7 @@ describe('persona acceptance prompt budget', () => {
     expect(config.tools).toEqual([]);
     expect(config.messages).toEqual([{ role: 'user', content: persona.prompt }]);
     expect(config.maxOutputTokens).toBeLessThanOrEqual(persona.maxOutputTokens);
+    expect(config.reasoning).toEqual({ enabled: true, effort: 'low' });
     expect(syntheticInputUpperBound).toBeLessThan(persona.maxInputTokens);
     expect(config.systemPrompt).toContain('# SELF-CONTAINED ADVISORY TURN');
     expect(config.systemPrompt).not.toContain('# Context From Your Memory');
@@ -195,6 +198,53 @@ describe('persona acceptance prompt budget', () => {
 
     const metrics = events.find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
     expect(metrics).toMatchObject({ packageMode: 'compact', toolSelectedCount: 0 });
+  });
+
+  it('clears the Sonnet advisory reasoning policy when retrying on a non-Sonnet fallback', async () => {
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const attempts: AgentLoopConfig[] = [];
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(config);
+      if (attempts.length === 1) {
+        throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
+      }
+      const response = renderVerifierReportEnvelope(CANONICAL_VERIFIER_REPORT);
+      config.onToken?.(response);
+      return {
+        content: response,
+        toolsUsed: [],
+        usage: { inputTokens: 10, outputTokens: 10 },
+      };
+    });
+
+    try {
+      const persona = PERSONA_CASES.find(item => item.id === 'data-engineer')!;
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: persona.prompt,
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: persona.id,
+          session: 'persona-advisory-reasoning-fallback',
+          workspace: 'default',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toHaveLength(2);
+      expect(attempts[0]?.reasoning).toEqual({ enabled: true, effort: 'low' });
+      expect(attempts[1]?.model).toBe('openrouter/openai/gpt-5.4');
+      expect(attempts[1]?.reasoning).toBeUndefined();
+    } finally {
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
   });
 
   it('preserves prior chat for a referential read-only request instead of treating it as self-contained', async () => {
@@ -234,6 +284,7 @@ describe('persona acceptance prompt budget', () => {
       { role: 'user', content: currentMessage },
     ]));
     expect(capturedConfig!.systemPrompt).not.toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(capturedConfig!.reasoning).toBeUndefined();
   });
 
   it.each([
@@ -258,6 +309,7 @@ describe('persona acceptance prompt budget', () => {
     expect(response.statusCode).toBe(200);
     expect(capturedConfig).not.toBeNull();
     expect(capturedConfig!.systemPrompt).not.toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(capturedConfig!.reasoning).toBeUndefined();
     const metrics = parseSse(response.body).find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
     expect(metrics.packageMode).toBe('full');
   });

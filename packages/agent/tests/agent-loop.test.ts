@@ -72,8 +72,22 @@ describe('runAgentLoop', () => {
     // Verify body includes system prompt and user message
     const body = JSON.parse(init.body);
     expect(body.model).toBe('gpt-4');
+    expect(body.reasoning).toBeUndefined();
     expect(body.messages[0]).toEqual({ role: 'system', content: 'You are a helpful assistant.' });
     expect(body.messages[1]).toEqual({ role: 'user', content: 'Hello' });
+  });
+
+  it('forwards an explicit provider reasoning policy without inventing one', async () => {
+    const fetch = mockFetch([{ content: 'Bounded answer.' }]);
+    const config = makeConfig({
+      fetch,
+      reasoning: { enabled: true, effort: 'low' },
+    });
+
+    await runAgentLoop(config);
+
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.reasoning).toEqual({ enabled: true, effort: 'low' });
   });
 
   it('retries once when the model emits raw tool-call markup as text', async () => {

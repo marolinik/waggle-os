@@ -2674,6 +2674,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           selectedToolNames: effectiveTools.map(tool => tool.name),
         });
         let maxOutputTokens: number | undefined;
+        const reasoningForModelAttempt = (logicalModel: string): AgentLoopConfig['reasoning'] =>
+          toolFreeAdvisory
+          && packageMode === 'compact'
+          && logicalModel.trim().toLowerCase() === 'openrouter/anthropic/claude-sonnet-5'
+            ? { enabled: true, effort: 'low' }
+            : undefined;
         if (toolFreeAdvisory) {
           agentRunBudget = {
             ...agentRunBudget,
@@ -2715,6 +2721,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           stream: true,
           ...agentRunBudget,
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
+          reasoning: reasoningForModelAttempt(resolvedModel),
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
@@ -2919,6 +2926,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
             litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
             litellmApiKey: apiKey,
+            reasoning: reasoningForModelAttempt(logicalModel),
           };
         };
 
