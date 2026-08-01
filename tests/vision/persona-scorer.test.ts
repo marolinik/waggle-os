@@ -2203,6 +2203,31 @@ describe('deterministic 100-point persona scorer', () => {
   });
 
   it.each([
+    ['captured affirmative workspace-directory wording', 'This workspace directory is empty.', true],
+    ['uncertain workspace-directory wording', 'I could not confirm whether this workspace directory is empty.', false],
+    ['multiline uncertain workspace-directory wording', 'I could not confirm whether\nthis workspace directory is empty.', false],
+    ['hedged workspace-directory wording', 'This workspace directory may be empty.', false],
+    ['negated workspace-directory wording', 'This workspace directory is not empty.', false],
+  ])('classifies coder empty-workspace evidence: %s', (_label, statement, expected) => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const response = `${statement}\n\nRecommended next engineering step: confirm the intended stack.`;
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(expected);
+  });
+
+  it.each([
     [
       'captured manifest recommendation',
       'The workspace is empty. Recommended next engineering step: establish a minimal project skeleton, e.g. a README and a basic manifest file (`package.json`, `pyproject.toml`, etc.), after the intended stack is confirmed.',
@@ -2272,6 +2297,16 @@ describe('deterministic 100-point persona scorer', () => {
   });
 
   it.each([
+    [
+      'captured descriptive lane headings',
+      '## Lane 1: Researcher — Standards & Risk Assessment\nObjective, inputs, deliverables, dependencies, and merge criteria.\n## Lane 2: Coder — Implementation Fixes\nObjective, inputs, deliverables, dependencies, and merge criteria.\nThe coordinator must verify evidence before accepting either result.',
+      true,
+    ],
+    [
+      'denied descriptive lane headings',
+      '## Lane 1: Researcher — not defined\n## Lane 2: Coder — not defined\nObjectives, inputs, deliverables, dependencies, and merge criteria follow. The coordinator must verify evidence before accepting.',
+      false,
+    ],
     [
       'captured numbered lane headings',
       '## Lane 1 — Researcher\nObjective, inputs, deliverables, dependencies, and merge criteria.\n## Lane 2 — Coder\nObjective, inputs, deliverables, dependencies, and merge criteria.\nThe coordinator must verify evidence before accepting either result.',

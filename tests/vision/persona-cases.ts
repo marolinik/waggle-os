@@ -269,7 +269,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [/(?:search_files|list_workspace_files|read_file)/i],
     responseRules: [
       { id: 'workspace-scope', description: 'Reports on the current workspace', kind: 'pattern', pattern: /workspace/i, points: 10 },
-      { id: 'empty-result', description: 'Accurately reports the fresh virtual workspace as empty', kind: 'pattern', pattern: /(?:\b(?:current|fresh|virtual) workspace (?:is|was) empty\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b)/i, points: 10 },
+      { id: 'empty-result', description: 'Accurately reports the fresh virtual workspace as empty', kind: 'pattern', pattern: /(?:\b(?:current|fresh|virtual) workspace (?:is|was) empty\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|(?:^|[.!?]\s+)\s*this workspace directory is empty\b)/i, points: 10 },
       { id: 'next-step', description: 'Recommends one next engineering step', kind: 'pattern', pattern: /(?:next (?:engineering )?step|recommended next step)/i, points: 10 },
       { id: 'bounded-claim', description: 'Does not claim parent or external repository contents', kind: 'boundedWorkspaceClaims', points: 10 },
       { id: 'concise', description: 'Keeps an empty-workspace report concise', kind: 'maxWords', maxWords: 300, points: 10 },
@@ -320,7 +320,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 3_000,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$)/im, /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$)/im], points: 10 },
+      { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im, /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$|^[ \t]*#{1,6}[ \t]+(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*[-\u2013\u2014:][ \t]+(?!not\b)\S[^\r\n]*$)/im], points: 10 },
       { id: 'lane-contracts', description: 'Provides objectives, inputs, and deliverables', kind: 'allPatterns', patterns: [/objectives?/i, /inputs?/i, /deliverables?/i], points: 10 },
       { id: 'dependencies', description: 'Defines dependencies', kind: 'pattern', pattern: /dependenc(?:y|ies)/i, points: 10 },
       { id: 'merge', description: 'Defines merge criteria', kind: 'pattern', pattern: /merge criteria/i, points: 10 },
