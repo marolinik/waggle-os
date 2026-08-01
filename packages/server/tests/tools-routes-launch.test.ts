@@ -401,16 +401,21 @@ describe('POST /api/tools/launch', () => {
   it('keeps explicit cancellation authoritative when reconciliation observes process exit first', async () => {
     vi.mocked(launchTool).mockClear();
     const sleeper = spawnSleeper();
+    const exitListeners: Array<(code: number | null) => void> = [];
     vi.mocked(launchTool).mockReturnValueOnce({
       ok: true,
       pid: sleeper.pid!,
       executed: { binary: '/server-detected/claude-code', args: [] },
+      output: {
+        onData: () => {},
+        onExit: (listener) => { exitListeners.push(listener); },
+      },
     });
     const launched = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/tools/launch',
       headers: { 'content-type': 'application/json' },
-      payload: { id: 'claude-code', workspaceId },
+      payload: { id: 'claude-code', workspaceId, observe: true },
     });
     expect(launched.statusCode).toBe(202);
     const { runId } = launched.json() as { runId: string };
@@ -420,7 +425,7 @@ describe('POST /api/tools/launch', () => {
     const kill = vi.spyOn(server.toolProcessTracker!, 'kill').mockImplementationOnce(async (pid) => {
       killStarted.resolve();
       await allowKillToSettle.promise;
-      return { ok: true, pid, reason: 'sigterm-ok' };
+      return { ok: true, pid, reason: 'tree-kill-ok' };
     });
     let killRequest: ReturnType<typeof injectWithAuth> | undefined;
 
@@ -432,13 +437,27 @@ describe('POST /api/tools/launch', () => {
         payload: { pid: sleeper.pid },
       });
       await killStarted.promise;
+      const workspace = server.workspaceManager.get(workspaceId)!;
+      const workspaceRoot = resolveWorkspaceExecutionRoot(tmpDir, workspace);
+      expect(
+        server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+      ).toBeUndefined();
+
       await stopChild(sleeper);
+      for (const listener of exitListeners) listener(0);
       await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
 
-      expect(server.agentRunRegistry.get(runId)?.status).toBe('cancelled');
+      expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+      expect(
+        server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+      ).toBeUndefined();
       allowKillToSettle.resolve();
       expect((await killRequest).statusCode).toBe(200);
       expect(server.agentRunRegistry.get(runId)?.status).toBe('cancelled');
+      const releaseAfterTreeCleanup =
+        server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write');
+      expect(releaseAfterTreeCleanup).toEqual(expect.any(Function));
+      releaseAfterTreeCleanup?.();
     } finally {
       allowKillToSettle.resolve();
       if (killRequest) await killRequest;
@@ -469,8 +488,9 @@ describe('POST /api/tools/launch', () => {
       const kill = vi.spyOn(server.toolProcessTracker!, 'kill').mockResolvedValueOnce({
         ok: false,
         pid: sleeper.pid!,
-        reason: 'sigterm-failed-sigkill-failed',
+        reason: 'tree-kill-failed',
       });
+      let cleanupCompleted = false;
 
       try {
         if (surface === 'route') {
@@ -481,16 +501,82 @@ describe('POST /api/tools/launch', () => {
             payload: { pid: sleeper.pid },
           });
           expect(response.statusCode).toBe(500);
+          expect(response.json()).toMatchObject({
+            ok: false,
+            pid: sleeper.pid,
+            reason: 'tree-kill-failed',
+          });
         } else {
           await expect(server.agentRunRegistry.control(runId, 'cancel')).rejects.toThrow(
             `Could not stop process ${sleeper.pid}`,
           );
         }
 
+        expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+        const workspace = server.workspaceManager.get(workspaceId)!;
+        const workspaceRoot = resolveWorkspaceExecutionRoot(tmpDir, workspace);
+        expect(
+          server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+        ).toBeUndefined();
+        const launchCallsBeforeCompeting = vi.mocked(launchTool).mock.calls.length;
+        const competing = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/tools/launch',
+          headers: { 'content-type': 'application/json' },
+          payload: { id: 'hermes', workspaceId },
+        });
+        expect(competing.statusCode).toBe(409);
+        expect(launchTool).toHaveBeenCalledTimes(launchCallsBeforeCompeting);
+
         await stopChild(sleeper);
         await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+        expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+        expect(
+          server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+        ).toBeUndefined();
+
+        const retry = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/tools/kill',
+          headers: { 'content-type': 'application/json' },
+          payload: { pid: sleeper.pid },
+        });
+        expect(retry.statusCode).toBe(404);
+        expect(retry.json().reason).toBe('not-tracked');
+        await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+        expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+        expect(
+          server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+        ).toBeUndefined();
+
+        kill.mockResolvedValueOnce({
+          ok: true,
+          pid: sleeper.pid!,
+          reason: 'tree-kill-ok',
+        });
+        const cleanup = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/tools/kill',
+          headers: { 'content-type': 'application/json' },
+          payload: { pid: sleeper.pid },
+        });
+        expect(cleanup.statusCode).toBe(200);
         expect(server.agentRunRegistry.get(runId)?.status).toBe('cancelled');
+        cleanupCompleted = true;
       } finally {
+        if (!cleanupCompleted) {
+          kill.mockResolvedValueOnce({
+            ok: true,
+            pid: sleeper.pid!,
+            reason: 'tree-kill-ok',
+          });
+          await injectWithAuth(server, {
+            method: 'POST',
+            url: '/api/tools/kill',
+            headers: { 'content-type': 'application/json' },
+            payload: { pid: sleeper.pid },
+          });
+        }
         kill.mockRestore();
         await stopChild(sleeper);
         await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
@@ -834,11 +920,12 @@ describe('POST /api/tools/kill', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('returns 200 + reason=already-dead when the tracked pid is already gone', async () => {
+  it('does not overclaim process-tree cleanup when the tracked pid is already gone', async () => {
     // Use this test runner's pid + an injected isAlive=false would
     // require swapping the tracker entirely. Simpler: register a
     // synthetic pid that the default isAlive (process.kill 0) will
-    // immediately fail on, so the route surfaces 'already-dead'.
+    // immediately fail on. Windows cannot prove that the dead root left no
+    // descendants; POSIX retains its existing already-dead behavior.
     server.toolProcessTracker?.clear();
     const SYNTHETIC_DEAD_PID = 2147483646; // near max int32, very unlikely to be alive
     server.toolProcessTracker?.register(SYNTHETIC_DEAD_PID, 'claude-code');
@@ -848,8 +935,10 @@ describe('POST /api/tools/kill', () => {
       headers: { 'content-type': 'application/json' },
       payload: { pid: SYNTHETIC_DEAD_PID },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().reason).toBe('already-dead');
+    expect(res.statusCode).toBe(process.platform === 'win32' ? 500 : 200);
+    expect(res.json().reason).toBe(
+      process.platform === 'win32' ? 'tree-cleanup-unverified' : 'already-dead',
+    );
     expect(server.toolProcessTracker?.list().find((p) => p.pid === SYNTHETIC_DEAD_PID)).toBeUndefined();
   });
 });

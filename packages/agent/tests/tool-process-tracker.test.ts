@@ -1,10 +1,16 @@
 /**
  * AI-OS Phase 4 polish — process tracker tests.
  *
- * Hermetic — no real processes involved. Liveness is injected.
+ * Hermetic except for the bounded Windows process-tree regression. Liveness
+ * and termination are injected everywhere else.
  */
 
 import { describe, it, expect } from 'vitest';
+import { execFileSync, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { resolveWindowsTaskkillPath } from '../src/external-tool-runner.js';
 import { ToolProcessTracker, type TrackedProcess } from '../src/tool-process-tracker.js';
 
 describe('ToolProcessTracker', () => {
@@ -95,6 +101,102 @@ describe('ToolProcessTracker', () => {
 // ── kill() — E-1 ────────────────────────────────────────────────────
 
 describe('ToolProcessTracker.kill', () => {
+  it.runIf(process.platform === 'win32')('kills the full detached Windows launcher process tree', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle tracker tree '));
+    const readyPath = path.join(tempRoot, 'descendant ready.txt');
+    const markerPath = path.join(tempRoot, 'orphan marker.txt');
+    const childCode = [
+      `const fs = require('node:fs')`,
+      `fs.writeFileSync(${JSON.stringify(readyPath)}, String(process.pid))`,
+      `setTimeout(() => fs.writeFileSync(${JSON.stringify(markerPath)}, 'orphan'), 1200)`,
+      'setInterval(() => {}, 1000)',
+      'setTimeout(() => process.exit(0), 15000)',
+    ].join(';');
+    const parentCode = [
+      `const { spawn } = require('node:child_process')`,
+      `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore', windowsHide: true })`,
+      'child.unref()',
+      'setInterval(() => {}, 1000)',
+      'setTimeout(() => process.exit(0), 15000)',
+    ].join(';');
+    const parent = spawn(process.execPath, ['-e', parentCode], {
+      cwd: tempRoot,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    if (parent.pid == null) throw new Error('Windows process-tree fixture did not start');
+    parent.unref();
+    let childPid: number | undefined;
+
+    try {
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(readyPath) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(fs.existsSync(readyPath)).toBe(true);
+      childPid = Number(fs.readFileSync(readyPath, 'utf8'));
+      expect(Number.isSafeInteger(childPid) && childPid > 0).toBe(true);
+
+      const tracker = new ToolProcessTracker();
+      tracker.register(parent.pid, 'codex', 'workspace with spaces');
+      const result = await tracker.kill(parent.pid, 200);
+      await new Promise((resolve) => setTimeout(resolve, 1_300));
+
+      expect(result).toEqual({ ok: true, pid: parent.pid, reason: 'tree-kill-ok' });
+      expect(fs.existsSync(markerPath)).toBe(false);
+      expect(() => process.kill(childPid!, 0)).toThrow();
+      expect(tracker.size).toBe(0);
+    } finally {
+      for (const pid of [parent.pid, childPid]) {
+        if (!pid || !Number.isSafeInteger(pid)) continue;
+        try {
+          execFileSync(resolveWindowsTaskkillPath(), ['/PID', String(pid), '/T', '/F'], {
+            timeout: 5_000,
+            windowsHide: true,
+            stdio: 'ignore',
+          });
+        } catch {
+          // The fixed path already removed the process tree.
+        }
+      }
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it('fails closed when Windows process-tree termination cannot be proven', async () => {
+    let signalCalls = 0;
+    const tracker = new ToolProcessTracker({
+      platform: 'win32',
+      isAlive: () => true,
+      killTree: async () => false,
+      sendSignal: () => {
+        signalCalls += 1;
+        return true;
+      },
+    });
+    tracker.register(456, 'codex', 'ws-A');
+
+    const result = await tracker.kill(456);
+
+    expect(result).toEqual({ ok: false, pid: 456, reason: 'tree-kill-failed' });
+    expect(signalCalls).toBe(0);
+    expect(tracker.size).toBe(1);
+  });
+
+  it('does not claim Windows tree cleanup when the tracked root is already gone', async () => {
+    const tracker = new ToolProcessTracker({
+      platform: 'win32',
+      isAlive: () => false,
+    });
+    tracker.register(457, 'codex', 'ws-A');
+
+    const result = await tracker.kill(457);
+
+    expect(result).toEqual({ ok: false, pid: 457, reason: 'tree-cleanup-unverified' });
+    expect(tracker.size).toBe(1);
+  });
+
   it('refuses to kill a pid we do not track (UX guard)', async () => {
     const tracker = new ToolProcessTracker({
       isAlive: () => true,
@@ -107,6 +209,7 @@ describe('ToolProcessTracker.kill', () => {
 
   it('reports already-dead and GCs the entry when pid is gone', async () => {
     const tracker = new ToolProcessTracker({
+      platform: 'linux',
       isAlive: () => false, // already dead
       sendSignal: () => true,
     });
@@ -121,6 +224,7 @@ describe('ToolProcessTracker.kill', () => {
     const signals: Array<{ pid: number; signal: NodeJS.Signals | number }> = [];
     let alive = true;
     const tracker = new ToolProcessTracker({
+      platform: 'linux',
       isAlive: () => alive,
       sendSignal: (pid, signal) => {
         signals.push({ pid, signal });
@@ -143,6 +247,7 @@ describe('ToolProcessTracker.kill', () => {
     const signals: Array<NodeJS.Signals | number> = [];
     let alive = true;
     const tracker = new ToolProcessTracker({
+      platform: 'linux',
       isAlive: () => alive,
       sendSignal: (_pid, signal) => {
         signals.push(signal);
@@ -162,6 +267,7 @@ describe('ToolProcessTracker.kill', () => {
 
   it('reports both-failed when neither signal lands', async () => {
     const tracker = new ToolProcessTracker({
+      platform: 'linux',
       isAlive: () => true,
       sendSignal: () => false, // both signals refused (e.g. EPERM)
       delay: async () => undefined,
@@ -254,6 +360,7 @@ describe('ToolProcessTracker — persistence', () => {
     const store = memStore();
     let alive = true;
     const tracker = new ToolProcessTracker({
+      platform: 'linux',
       isAlive: () => alive,
       sendSignal: (_p, s) => {
         if (s === 'SIGTERM') alive = false;

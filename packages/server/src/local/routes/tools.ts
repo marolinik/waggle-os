@@ -261,10 +261,13 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
     };
     binding.unregister = server.agentRunRegistry.registerControls(runId, {
       cancel: async () => {
+        const cancellationAlreadyPending = binding.cancelRequested;
         binding.cancelRequested = true;
         const stopped = await tracker.kill(pid);
         if (!stopped.ok && stopped.reason !== 'already-dead') {
-          if (stopped.reason === 'not-tracked') binding.cancelRequested = false;
+          if (stopped.reason === 'not-tracked' && !cancellationAlreadyPending) {
+            binding.cancelRequested = false;
+          }
           throw new Error(`Could not stop process ${pid}: ${stopped.reason}`);
         }
         settleInteractiveRun(pid, 'cancelled', 'Interactive tool process stopped', runId);
@@ -280,16 +283,18 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
     for (const [pid, binding] of interactiveRuns) {
       const run = server.agentRunRegistry.get(binding.runId);
       if (alive.has(pid) || isProcessAlive(pid)) continue;
+      // A vanished root while cancellation is pending is not proof that its
+      // descendants stopped. Only the awaited tree-kill result may settle the
+      // run and release the shared workspace checkout lease.
+      if (binding.cancelRequested) continue;
       if (!run || terminalStatuses.has(run.status)) {
         releaseInteractiveRun(pid, binding);
         tracker.forget(pid);
       } else {
         settleInteractiveRun(
           pid,
-          binding.cancelRequested ? 'cancelled' : 'interrupted',
-          binding.cancelRequested
-            ? 'Interactive tool process stopped'
-            : 'Interactive tool process disappeared without a final result',
+          'interrupted',
+          'Interactive tool process disappeared without a final result',
           binding.runId,
         );
       }
@@ -548,7 +553,9 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
       if (body.observe && result.output) {
         outputBuffer.attach(result.pid, result.output, (code) => {
           if (binding.cancelRequested) {
-            settleInteractiveRun(result.pid!, 'cancelled', 'Interactive tool process stopped', worker.id);
+            // The root exit can race the asynchronous Windows tree kill. The
+            // awaited cancellation path alone may prove cleanup and release.
+            return;
           } else if (code === 0) {
             settleInteractiveRun(result.pid!, 'completed', 'Interactive tool process exited successfully', worker.id);
           } else if (code == null) {
@@ -672,8 +679,8 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
   // ── POST /api/tools/kill (E-1) ───────────────────────────────────
   // Only kills processes we've previously tracked via /launch — guards
   // against the UI accidentally sending an arbitrary OS pid and nuking
-  // the user's editor. SIGTERM first (graceful), SIGKILL escalation
-  // after a 3-second grace period.
+  // the user's editor. Windows requires verified process-tree cleanup;
+  // POSIX retains graceful SIGTERM with SIGKILL escalation.
   server.post('/api/tools/kill', async (request, reply) => {
     const parsed = killBodySchema.safeParse(request.body);
     if (!parsed.success) {
@@ -682,12 +689,14 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
         .send({ error: 'Validation failed', details: parsed.error.flatten() });
     }
     const binding = interactiveRuns.get(parsed.data.pid);
+    const cancellationAlreadyPending = binding?.cancelRequested === true;
     if (binding) binding.cancelRequested = true;
     const result = await tracker.kill(parsed.data.pid);
     if (!result.ok) {
       if (
         binding &&
         result.reason === 'not-tracked' &&
+        !cancellationAlreadyPending &&
         interactiveRuns.get(parsed.data.pid) === binding
       ) {
         binding.cancelRequested = false;
