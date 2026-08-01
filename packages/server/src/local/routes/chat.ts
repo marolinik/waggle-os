@@ -208,15 +208,75 @@ export function shouldPackageSystemPromptForTurn(
   return !hasCustomRunner || contextScope !== 'default' || closedWorldRewrite;
 }
 
-export function isExplicitGatedToolRequest(message: string): boolean {
-  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
-  if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
-  if (isInlineTextOnlyDraftRequest(message)) return false;
-  return /\b(write|read|edit|modify|create|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
+const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
+const AMBIGUOUS_GATED_ACTION_VERB_SOURCE = String.raw`(?:message|share|post|update)`;
+const NEGATABLE_CAPABILITY_VERB_SOURCE = String.raw`(?:${EXPLICIT_GATED_ACTION_VERB_SOURCE}|${AMBIGUOUS_GATED_ACTION_VERB_SOURCE}|use|call|invoke|search|research|investigate)`;
+const CAPABILITY_GERUND_SOURCE = String.raw`(?:writing|reading|editing|modifying|creating|generating|exporting|downloading|committing|pushing|pulling|merging|branching|running|executing|installing|deleting|removing|inspecting|reviewing|analy[sz]ing|fixing|debugging|testing|validating|verifying|checking|building|compiling|typechecking|linting|refactoring|implementing|drafting|preparing|scheduling|sending|emailing|messaging|sharing|publishing|uploading|updating|posting|delegating|coordinating|orchestrating|browsing|navigating|opening|clicking|filling|querying|calculating|computing|using|calling|invoking|searching|researching|investigating)`;
+const NEGATABLE_CAPABILITY_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|shell|browser|web|internet)`;
+const NEGATED_CAPABILITY_RESUME_SOURCE = String.raw`(?:\b(?:but|however|yet|instead|then)\b|[:\u2013\u2014]\s*(?=(?:please\s+)?${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
+const WITHOUT_CAPABILITY_RESUME_SOURCE = String.raw`(?:${NEGATED_CAPABILITY_RESUME_SOURCE}|\band\s+(?=${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
+const NEGATED_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${NEGATED_CAPABILITY_RESUME_SOURCE})[^,.;!?\r\n])*(?=${NEGATED_CAPABILITY_RESUME_SOURCE}|[,.;!?\r\n]|$)`;
+const DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${NEGATED_CAPABILITY_RESUME_SOURCE})[^.;!?\r\n])*(?=${NEGATED_CAPABILITY_RESUME_SOURCE}|[.;!?\r\n]|$)`;
+const WITHOUT_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${WITHOUT_CAPABILITY_RESUME_SOURCE})[^,.;!?\r\n])*(?=${WITHOUT_CAPABILITY_RESUME_SOURCE}|[,.;!?\r\n]|$)`;
+const EXPLICIT_GATED_ACTION_PATTERN = new RegExp(String.raw`\b${EXPLICIT_GATED_ACTION_VERB_SOURCE}\b`, 'i');
+const DIRECT_NEGATED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b(?:do\s+not|don['\u2019]t|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|may\s+not|cannot|can\s+not|can['\u2019]t)\s+${NEGATABLE_CAPABILITY_VERB_SOURCE}\b${DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const WITHOUT_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\bwithout\s+(?:${CAPABILITY_GERUND_SOURCE}\b|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b|(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b)${WITHOUT_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const NOMINAL_NEGATED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b(?:no\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}|avoid\s+(?:${CAPABILITY_GERUND_SOURCE}\b(?:\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})?|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}|(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})|not\s+(?:${CAPABILITY_GERUND_SOURCE}\b(?:\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})?|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})|refrain\s+from\s+(?:${CAPABILITY_GERUND_SOURCE}\b(?:\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})?|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})|(?:using\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}|(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}(?:\s+use)?)\s+(?:is|remains)\s+(?:prohibited|forbidden|disallowed|not\s+(?:allowed|needed|required|necessary)))\b${NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const NO_NEED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b(?:(?:there\s+is|there['\u2019]s)\s+no\s+need|(?:you\s+)?(?:do\s+not|don['\u2019]t)\s+need)\s+to\s+(?:use|call|invoke)\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b${NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const NOT_IN_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\bnot\s+(?:in|to|as)\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b${NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const AMBIGUOUS_GATED_ACTION_PATTERN = new RegExp(
+  String.raw`(?:^|[.;:!?\r\n][ \t]*|\b(?:and|then|please|to)\s+)(?:[-+*][ \t]+|\d+[.)][ \t]+)?(?:please\s+)?(?:(?:share|post|update)\s+(?:(?:the|this|that|it|a|an|my|our|your)\b|(?:result|report|file|document|dashboard|record)\b)|message\s+(?:(?:the|this|that|a|my|our|your)\b|(?:me|us|him|her|them|team|finance)\b))`,
+  'i',
+);
+
+function stripNegatedCapabilityClauses(message: string): string {
+  return message
+    .replace(DIRECT_NEGATED_CAPABILITY_PATTERN, ' ')
+    .replace(WITHOUT_CAPABILITY_PATTERN, ' ')
+    .replace(NOMINAL_NEGATED_CAPABILITY_PATTERN, ' ')
+    .replace(NO_NEED_CAPABILITY_PATTERN, ' ')
+    .replace(NOT_IN_CAPABILITY_PATTERN, ' ');
+}
+
+function hasExplicitGatedToolIntent(message: string): boolean {
+  return EXPLICIT_GATED_ACTION_PATTERN.test(message)
+    || AMBIGUOUS_GATED_ACTION_PATTERN.test(message)
+    || /\b(file|docx|document|artifact|workbook|spreadsheet|xlsx|terminal|shell|bash|command|calculator|cross-workspace|other workspace)\b/i.test(message)
     || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
     || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
     || isExplicitPlanAuthoringRequest(message);
+}
+
+export function isExplicitGatedToolRequest(message: string): boolean {
+  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
+  if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
+  const actionableMessage = stripNegatedCapabilityClauses(message);
+  if (isInlineTextOnlyDraftRequest(actionableMessage)) return false;
+  if (isInlineSelfContainedCalculationRequest(actionableMessage)) return false;
+  return hasExplicitGatedToolIntent(actionableMessage);
+}
+
+function isInlineSelfContainedCalculationRequest(message: string): boolean {
+  if (!/\b(?:calculate|compute)\b/i.test(message)) return false;
+  const suppliedNumbers = message.match(/(?<![\w.])[-+]?\d[\d,.]*(?:\.\d+)?%?/g) ?? [];
+  if (suppliedNumbers.length < 2) return false;
+  return !hasExplicitGatedToolIntent(message.replace(/\b(?:calculate|compute)\b/gi, ' '));
 }
 
 function isInlineTextOnlyDraftRequest(message: string): boolean {

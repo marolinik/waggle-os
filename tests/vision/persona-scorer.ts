@@ -237,6 +237,138 @@ function successfulPrimaryFetchIdentities(
   return successful;
 }
 
+const RUNWAY_FORMULA_CORES = [
+  /(?<![\w.])(?:[$\u20ac\u00a3]\s*)?40[,.]?000(?:\.0{1,2})?\s*(?:\/|\u00f7|divided by)\s*(?:[$\u20ac\u00a3]\s*)?10[,.]?000(?:\.0{1,2})?\b/gi,
+  /\bcash(?:\s+(?:balance|on\s+hand))?\s*(?:\/|\u00f7|divided by)\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn|net\s+burn|burn)(?:\s+rate)?\b/gi,
+  /\\frac\s*\{\s*\\text\s*\{\s*cash(?:\s+(?:balance|on\s+hand))?\s*\}\s*\}\s*\{\s*\\text\s*\{\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn)(?:\s+rate)?\s*\}\s*\}/gi,
+  /\\frac\s*\{\s*\\?\$?\s*40(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}\s*\{\s*\\?\$?\s*10(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}/gi,
+] as const;
+
+function lastPatternIndex(text: string, pattern: RegExp): number {
+  let last = -1;
+  for (const match of text.matchAll(pattern)) {
+    if (match.index !== undefined) last = match.index;
+  }
+  return last;
+}
+
+function hasAffirmedRunwayFormula(response: string): boolean {
+  const text = response
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/["\u201c\u201d]/g, '')
+    .replace(/^[ \t]*(?:>[ \t]*)+/gm, '')
+    .replace(/^[ \t]*[-+*][ \t]+/gm, '')
+    .replace(/^[ \t]*\d+[.)][ \t]+/gm, '')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/~~([^~\n]+)~~/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/\*([^\s*](?:[^*\n]*[^\s*])?)\*/g, '$1')
+    .replace(/_([^\s_](?:[^_\n]*[^\s_])?)_/g, '$1');
+
+  for (const corePattern of RUNWAY_FORMULA_CORES) {
+    const matches = text.matchAll(new RegExp(corePattern.source, corePattern.flags));
+    for (const match of matches) {
+      const start = match.index;
+      if (start === undefined) continue;
+      const end = start + match[0].length;
+      const labelWindowStart = Math.max(0, start - 260);
+      const labelWindow = text.slice(labelWindowStart, start);
+      const labels = [...labelWindow.matchAll(/\b(?:formula|runway(?:\s*\(months\))?)\b/gi)];
+      const label = labels.at(-1);
+      if (!label || label.index === undefined) continue;
+
+      const labelStart = labelWindowStart + label.index;
+      const rawPrefixStart = Math.max(0, labelStart - 180);
+      const rawPrefix = text.slice(rawPrefixStart, start);
+      const labelOffset = labelStart - rawPrefixStart;
+      const sentenceBoundary = Math.max(
+        rawPrefix.lastIndexOf('.'),
+        rawPrefix.lastIndexOf('?'),
+        rawPrefix.lastIndexOf('!'),
+      ) + 1;
+      const correctionMatches = [...rawPrefix.matchAll(
+        /(?:^|[.;!?\n][ \t]*)\b(?:instead|rather)\b(?![ \t]+(?:of|than)\b)[ \t,:\u2013\u2014-]*/gi,
+      )];
+      const correction = correctionMatches.at(-1);
+      const correctionBoundary = correction?.index === undefined
+        ? 0
+        : correction.index + correction[0].length;
+      const positiveUseMatches = [...rawPrefix.matchAll(/[;:\u2013\u2014][ \t]*use\b[ \t]*/gi)];
+      const positiveUse = positiveUseMatches.at(-1);
+      const positiveUseBoundary = positiveUse?.index === undefined
+        ? 0
+        : positiveUse.index + positiveUse[0].length;
+      const scopedQualifierMatches = [...rawPrefix.matchAll(
+        /\bformula\s+(?:isn't|wasn't|is\s+not|was\s+not)\s+exactly\s+(?:gross(?:\s+monthly)?\s+burn|monthly\s+gross\s+burn)[ \t]*[:\u2013\u2014][ \t]*/gi,
+      )];
+      const scopedQualifier = scopedQualifierMatches.at(-1);
+      const scopedQualifierBoundary = scopedQualifier?.index === undefined
+        ? 0
+        : scopedQualifier.index + scopedQualifier[0].length;
+      const assertionBoundary = Math.max(
+        sentenceBoundary,
+        correctionBoundary,
+        positiveUseBoundary,
+        scopedQualifierBoundary,
+      );
+      const isTexFormula = corePattern.source.includes('\\\\frac');
+      const scopedHeader = positiveUseBoundary === assertionBoundary
+        && labelOffset >= sentenceBoundary
+        && labelOffset < positiveUseBoundary;
+      const staleTexAllowed = isTexFormula
+        && labelOffset < assertionBoundary
+        && rawPrefix.slice(assertionBoundary).trim() === '';
+      if (labelOffset < assertionBoundary && !staleTexAllowed && !scopedHeader) continue;
+      const labelClauseBoundary = Math.max(
+        rawPrefix.lastIndexOf('.', labelOffset - 1),
+        rawPrefix.lastIndexOf('?', labelOffset - 1),
+        rawPrefix.lastIndexOf('!', labelOffset - 1),
+      ) + 1;
+      const prefix = labelOffset < assertionBoundary && !scopedHeader
+        ? rawPrefix.slice(labelClauseBoundary)
+        : rawPrefix.slice(assertionBoundary);
+      const lastDeniedLabel = Math.max(
+        lastPatternIndex(prefix, /\b(?:incorrect|wrong|false)\s+(?:formula|calculation)\b/gi),
+        lastPatternIndex(prefix, /\b(?:the\s+)?following\s+formula\s+(?:is|was)\s+(?:false|wrong|incorrect)\b/gi),
+        lastPatternIndex(prefix, /\b(?:the\s+)?(?:formula|calculation)\s+(?:is|was)\s+(?:false|wrong|incorrect|invalid)\b/gi),
+        lastPatternIndex(prefix, /\b(?:formula|runway(?:\s*\(months\))?)\b[^.\n]{0,100}\b(?:should|must)\s+(?:not|never)\s+be\s+(?:calculated|computed)(?:\s+as)?\b/gi),
+        lastPatternIndex(prefix, /\b(?:the\s+)?(?:formula|calculation)\s+(?:(?:should|must)\s+(?:not|never)\s+be\s+(?:used|trusted|accepted)|cannot\s+be\s+(?:used|trusted|accepted)|(?:isn't|wasn't|is\s+not|was\s+not)\s+(?:correct|valid|accurate))\b/gi),
+        lastPatternIndex(prefix, /\b(?:do not|don't|never|avoid)\s+(?:calculate|compute)\b[^.;\n]{0,100}\b(?:formula|runway(?:\s*\(months\))?)\b/gi),
+        lastPatternIndex(prefix, /\b(?:formula|runway(?:\s*\(months\))?)\b[^.;\n]{0,100}\bdoes\s+not\s+equal\b/gi),
+      );
+      const lastAffirmedLabel = lastPatternIndex(
+        prefix,
+        /\b(?:correct|valid|affirmed|actual|right|proper)\s+(?:formula|calculation)\b/gi,
+      );
+      const formulaIsDenied = /\b(?:this|that)\s+(?:is|was)\s+not\s+(?:the\s+)?formula\b/i.test(prefix)
+        || lastDeniedLabel > lastAffirmedLabel
+        || /\b(?:cannot|can't|can\s+not|(?:un|not\s+)able\s+to)\s+(?:confirm|verify|establish|determine|say)\b[^.\n]{0,120}\b(?:formula|calculation)\b/i.test(prefix)
+        || (isTexFormula && /\b(?:do not|don't|never|avoid)\s+(?:use|trust|accept)\s*$/i.test(prefix))
+        || /\b(?:the|this|that)\s+formula\s+(?:isn't|wasn't|is\s+not|was\s+not)(?:\s+exactly)?[ :=-]*$/i.test(prefix)
+        || /\b(?:the|this|that)\s+formula\s+(?:isn't|wasn't|is\s+not|was\s+not)\s+exactly\b(?:(?![.;\n]).){0,80}$/i.test(prefix)
+        || /\b(?:do not|don't|never|avoid|reject|distrust)\s+(?:use|trust|accept)\s+(?:(?:this|that|the)\s+)?(?:formula|calculation)\b/i.test(prefix)
+        || /\b(?:do not|don't|never)\s+(?:use|trust|accept)\s+(?:the\s+)?following[^\n]*\n\s*(?:formula|runway)\b/i.test(prefix)
+        || /\b(?:do not|don't|never)\s+(?:use|trust|accept)\s*:[ \t]*\n\s*(?:formula|runway)\b/i.test(prefix)
+        || /\b(?:formula|runway(?:\s*\(months\))?)\b[^.\n]{0,100}\b(?:(?:do not|don't|never)\s+(?:use|trust|accept)|avoid(?:\s+using)?|reject|distrust)\b/i.test(prefix)
+        || /\b(?:formula|runway(?:\s*\(months\))?)\b[^.\n]{0,80}\bnot\s+(?:the\s+)?(?:formula|calculation|cash|runway)\b/i.test(prefix);
+      if (formulaIsDenied) continue;
+
+      const suffix = text.slice(end, end + 240);
+      const invalidFormulaExtension = /^[ \t]*(?:[*\u00d7^]|\/[ \t]*|[+-][ \t]*)\s*(?:[$\u20ac\u00a3]?\d+(?:[.,]\d+)?|cash|burn|revenue)\b/i.test(suffix);
+      const directlyDenied = /^[ \t]*(?:(?:[-\u2014,:;][ \t]*)?(?:(?:(?:which|that)[ \t]+)?(?:is|was|seems?|remains?)[ \t]+(?:false|incorrect|wrong|unreliable|unsupported|unconfirmed|not[ \t]+(?:(?:the[ \t]+)?(?:correct|valid|accurate)(?:[ \t]+formula)?|usable|recommended))|(?:isn't|wasn't)[ \t]+(?:correct|valid|accurate|usable|recommended)|(?:(?:which|that)[ \t]+)?(?:should|must)[ \t]+(?:not|never)[ \t]+be[ \t]+(?:used|trusted|accepted)|(?:(?:which|that)[ \t]+)?cannot[ \t]+be[ \t]+(?:used|trusted|correct|valid|accurate)|not[ \t]+(?:correct|valid|accurate|usable|recommended)|wrong|false|incorrect|unreliable|unsupported|unconfirmed)|\?[ \t]*no\b)/i.test(suffix);
+      const deniedInFollowingSentence = /^[ \t]*(?:[.!?][ \t]*(?:\n[ \t]*)*|(?:\n[ \t]*)+)(?:(?:however|but|yet)[ \t]*,?[ \t]*)?(?:(?:this|that|the)\s+(?:formula|calculation|runway(?:\s+formula)?)|this|that|it)\s+(?:(?:is|was|seems?|remains?)\s+(?:false|incorrect|wrong|unreliable|unsupported|unconfirmed|not\s+(?:(?:the\s+)?(?:correct|valid|accurate)(?:\s+formula)?|usable|recommended))|(?:should|must)\s+(?:(?:not|never)\s+be\s+(?:used|trusted|accepted)|be\s+(?:avoided|rejected|distrusted))|cannot\s+be\s+(?:used|trusted|correct|valid|accurate))/i.test(suffix);
+      const deniedByReference = /^[ \t]*[,;][ \t]*(?:(?:however|but|yet)[ \t]*,?[ \t]*)?(?:(?:this|that|the)\s+(?:formula|calculation)|it)\s+(?:(?:is|was|seems?|remains?)\s+(?:false|incorrect|wrong|not\s+(?:(?:the\s+)?(?:correct|valid|accurate)(?:\s+formula)?|usable|recommended))|(?:should|must)\s+(?:not|never)\s+be\s+(?:used|trusted|accepted)|cannot\s+be\s+(?:used|trusted|correct|valid|accurate))/i.test(suffix);
+      const deniedByStandaloneCorrection = /^[ \t]*(?:[.!?][ \t]*(?:\n[ \t]*)*|(?:\n[ \t]*)+)(?:wrong|incorrect|false)[ \t]*(?:[.!?](?=\s|$)|$)/i.test(suffix);
+      const deniedByActorReference = /^[ \t]*(?:[.!?][ \t]*(?:\n[ \t]*)*|(?:\n[ \t]*)+)(?:we|you)\s+(?:should|must)\s+(?:not|never)\s+(?:use|trust|accept)\s+(?:it|(?:this|that|the)\s+formula)\b/i.test(suffix);
+      const deniedByImperativeReference = /^[ \t]*(?:[.!?][ \t]*(?:\n[ \t]*)*|(?:\n[ \t]*)+)(?:do not|don't|never)\s+(?:use|trust|accept)\s+(?:it|(?:this|that|the)\s+formula)\b/i.test(suffix);
+      if (!invalidFormulaExtension && !directlyDenied && !deniedInFollowingSentence && !deniedByReference && !deniedByStandaloneCorrection && !deniedByActorReference && !deniedByImperativeReference) return true;
+    }
+  }
+  return false;
+}
+
 function evaluateResponseRule(
   rule: PersonaResponseRule,
   evidence: PersonaTrialEvidence,
@@ -244,6 +376,8 @@ function evaluateResponseRule(
   switch (rule.kind) {
     case 'pattern':
       return rule.pattern.test(evidence.response);
+    case 'runwayFormula':
+      return hasAffirmedRunwayFormula(evidence.response);
     case 'allPatterns':
       return rule.patterns.every(pattern => pattern.test(evidence.response));
     case 'notPattern':

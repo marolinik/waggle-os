@@ -1,4 +1,4 @@
-import { BEHAVIORAL_SPEC, CLOSED_WORLD_REWRITE_CONTRACT, getPersona, type AgentPersona, type AssembledPrompt } from '@waggle/agent';
+import { BEHAVIORAL_SPEC, CLOSED_WORLD_REWRITE_CONTRACT, detectTaskShape, getPersona, type AgentPersona, type AssembledPrompt } from '@waggle/agent';
 import { describe, expect, it } from 'vitest';
 import {
   behavioralRulesForPromptPackage,
@@ -156,6 +156,113 @@ describe('chat prompt packaging', () => {
 
     expect(isExplicitGatedToolRequest(message)).toBe(false);
     expect(filterGatedToolsForConversationalTurn(tools, message, 'normal')).toEqual([]);
+  });
+
+  it('keeps a supplied inline calculation tool-free and compact', () => {
+    const finance = PERSONA_CASES.find(item => item.id === 'finance-owner')!;
+    const tools = [
+      { name: 'calculator' },
+      { name: 'search_memory' },
+      { name: 'read_file' },
+      { name: 'write_file' },
+      { name: 'send_email' },
+      { name: 'create_calendar_event' },
+    ];
+    const explicitCapabilityRequest = isExplicitGatedToolRequest(finance.prompt);
+    const selected = filterGatedToolsForConversationalTurn(tools, finance.prompt, 'normal');
+    const taskShape = detectTaskShape(finance.prompt);
+
+    expect(explicitCapabilityRequest).toBe(false);
+    expect(selected).toEqual([]);
+    expect(taskShape.complexity).toBe('simple');
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message: finance.prompt,
+      selectedToolCount: selected.length,
+      explicitCapabilityRequest,
+      taskComplexity: taskShape.complexity,
+    })).toBe('compact');
+    const workbookRequest = 'Create an XLSX runway workbook using cash 40000 and burn 10000.';
+    expect(isExplicitGatedToolRequest(workbookRequest)).toBe(true);
+    expect(filterGatedToolsForConversationalTurn(tools, workbookRequest, 'normal'))
+      .toContainEqual({ name: 'write_file' });
+    expect(isExplicitGatedToolRequest('Please calculate 40000 / 10000 in a workbook.')).toBe(true);
+
+    const savedFilesRequest = 'Calculate runway from the two values in my saved files.';
+    expect(isExplicitGatedToolRequest(savedFilesRequest)).toBe(true);
+    expect(filterGatedToolsForConversationalTurn(tools, savedFilesRequest, 'normal'))
+      .toContainEqual({ name: 'read_file' });
+
+    const explicitCalculatorRequest = 'Calculate 40000 / 10000. Do not create files, but use calculator.';
+    expect(isExplicitGatedToolRequest(explicitCalculatorRequest)).toBe(true);
+    expect(filterGatedToolsForConversationalTurn(tools, explicitCalculatorRequest, 'normal'))
+      .toContainEqual({ name: 'calculator' });
+
+    for (const negatedCalculatorRequest of [
+      'Do not use the calculator tool. Calculate 40000 / 10000.',
+      'Calculate 40000 / 10000. Do not create files, but do not use calculator.',
+      'Without using the calculator tool, calculate 40000 / 10000.',
+      'Calculate 40000 / 10000 using the supplied figures.',
+      'Calculate 40000 / 10000; you must not use a calculator.',
+      'Calculate 40000 / 10000; you should not use a calculator.',
+      'Calculate 40000 / 10000; you cannot use a calculator.',
+      'Avoid using the calculator; calculate 40000 / 10000.',
+      'No calculator: calculate 40000 / 10000 from the supplied figures.',
+      'Calculate 40000 / 10000, not using the calculator.',
+      'Calculate 40000 / 10000 without use of a calculator.',
+      'Do not use: calculator. Calculate 40000 / 10000.',
+      'Avoid using: calculator. Calculate 40000 / 10000.',
+      'Avoid the calculator. Calculate 40000 / 10000 from supplied figures.',
+      'Refrain from using the calculator; calculate 40000 / 10000.',
+      'Calculator use is prohibited; calculate 40000 / 10000.',
+      'Using a calculator is prohibited; calculate 40000 / 10000.',
+      'The calculator is prohibited; calculate 40000 / 10000.',
+      'Calculator use is not allowed; calculate 40000 / 10000.',
+      'Calculate 40000 / 10000. You do not need to use a calculator.',
+      'There is no need to use a calculator; calculate 40000 / 10000.',
+      'Calculate 40000 / 10000. A calculator is not needed.',
+      'Calculate 40000 / 10000 and return the answer here, not in a file.',
+      'The share price is 10 dollars; calculate 40000 / 10000.',
+      'Calculate 40000 / 10000 and phrase it as a clear message.',
+      'Do not email and publish the result.',
+      'Do not email, publish, or upload the result.',
+      'Do not create and edit files. Reply with OK.',
+    ]) {
+      expect(isExplicitGatedToolRequest(negatedCalculatorRequest), negatedCalculatorRequest).toBe(false);
+      expect(filterGatedToolsForConversationalTurn(tools, negatedCalculatorRequest, 'normal'))
+        .not.toContainEqual({ name: 'calculator' });
+    }
+
+    const negativeOnlyEdit = 'Do not edit files. Reply with OK.';
+    expect(isExplicitGatedToolRequest(negativeOnlyEdit)).toBe(false);
+    expect(filterGatedToolsForConversationalTurn(tools, negativeOnlyEdit, 'normal')).toEqual([]);
+
+    const calculatorAfterDenial = 'Calculate 40000 / 10000 without creating a file and use the calculator tool.';
+    expect(isExplicitGatedToolRequest(calculatorAfterDenial)).toBe(true);
+    expect(filterGatedToolsForConversationalTurn(tools, calculatorAfterDenial, 'normal'))
+      .toContainEqual({ name: 'calculator' });
+
+    const emailRequest = 'Calculate 40000 / 10000 and email the result to the CFO.';
+    expect(isExplicitGatedToolRequest(emailRequest)).toBe(true);
+    expect(filterGatedToolsForConversationalTurn(tools, emailRequest, 'normal'))
+      .toContainEqual({ name: 'send_email' });
+    for (const externalActionRequest of [
+      'Calculate 40000 / 10000 and update the dashboard.',
+      'Calculate 40000 / 10000 and message the finance team.',
+      'Calculate 40000 / 10000 and share the result.',
+      'Calculate 40000 / 10000 and publish the report.',
+      'Calculate 40000 / 10000 and upload the result.',
+      'Do not use the calculator\nCalculate 40000 / 10000 and email the result to the CFO.',
+      'Calculate 40000 / 10000. Do not use the calculator\nUpdate the dashboard with the result.',
+      'Calculate 40000 / 10000 without using the calculator\nMessage the finance team with the result.',
+      'Do not use the calculator\n- Calculate 40000 / 10000\n- Share the result.',
+      'Never use the calculator\nUpload the result after calculating 40000 / 10000.',
+      'Do not use the calculator: calculate 40000 / 10000 and email the result.',
+      'Do not use the calculator — calculate 40000 / 10000 and publish the result.',
+      'Avoid using the calculator: calculate 40000 / 10000 and email the result.',
+    ]) {
+      expect(isExplicitGatedToolRequest(externalActionRequest), externalActionRequest).toBe(true);
+    }
   });
 
   it('keeps a supplied-only exclusive verifier contract tool-free', () => {

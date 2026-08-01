@@ -325,6 +325,126 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 
+  it('accepts a live plain-language runway formula using cash on hand and the division glyph', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const completeResponse = (formula: string) => [
+      'Runway is 4.00 months.',
+      formula,
+      'Biggest assumption: net burn stays constant and no new revenue arrives.',
+      'Two actions: reduce monthly burn and increase monthly revenue.',
+    ].join('\n');
+    const score = (response: string) => scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+    const result = score(completeResponse(
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+    ));
+
+    expect(result.checks.find(check => check.id === 'formula')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(completeResponse(
+      'Revenue is not included; formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+    )).checks.find(check => check.id === 'formula')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    for (const validClarification of [
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate—not gross monthly burn.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate; revenue is not included.',
+      'Revenue is not included, so the formula is Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: because revenue is not included, Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula (not gross burn): Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Revenue is not included, but formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate; do not use gross monthly burn.',
+      'The formula is not based on gross monthly burn; Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'The formula is not revenue-adjusted; Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Unlike the incorrect formula burn divided by cash, the correct formula is Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate. Wrong inputs would change the result.',
+      'The incorrect formula in the prior report was reversed. Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Incorrect formula: burn divided by cash. Instead, Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Incorrect formula: burn divided by cash; Instead, Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      '> > Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Formula: $40,000 / $10,000 = 4 months.',
+      'The formula is not exactly gross monthly burn; Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Formula: do not use gross monthly burn; use Cash on Hand / Net Monthly Burn Rate.',
+      'Incorrect formula: burn divided by cash; rather, Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'The formula is not exactly gross monthly burn: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'The formula is not exactly gross monthly burn — Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Formula: do not use gross monthly burn — use Cash on Hand / Net Monthly Burn Rate.',
+      'Incorrect formula: burn divided by cash; the actual formula is Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Incorrect formula: burn divided by cash; the right formula is Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+    ]) {
+      expect(score(completeResponse(validClarification)).checks.find(check => check.id === 'formula'))
+        .toMatchObject({ passed: true, pointsAwarded: 10 });
+    }
+    for (const invalidFormula of [
+      'Formula: Runway (months) = Net Monthly Burn Rate ÷ Cash on Hand.',
+      'This is not the formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: do not use Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: don’t use Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate is wrong.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate is false.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate is not the correct formula.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate should not be used.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate isn’t correct.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate—wrong.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate—not correct.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate? No.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate. This formula is false.',
+      'Formula: Runway (months) = **Cash on Hand ÷ Net Monthly Burn Rate** is wrong.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate\nThis formula is wrong.',
+      'Do not use the following:\nFormula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate. However, this formula is false.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate, which is wrong.',
+      'The formula isn’t Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate. It is false.',
+      'The report says "Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate", but that formula is wrong.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate should never be used.',
+      'Incorrect formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate. Wrong.',
+      'The following formula is false:\nFormula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Do not use:\nFormula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate, which should not be used.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate. This is wrong.',
+      'Do not use this formula: Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula is false: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'The formula is wrong: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'The formula is not exactly Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Runway (months) should not be calculated as Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate, which cannot be used.',
+      '> Do not use:\n> Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'The formula is wrong. Instead of using Cash on Hand / Net Monthly Burn Rate, use burn divided by cash.',
+      'The formula is wrong. Instead, do not use Cash on Hand / Net Monthly Burn Rate.',
+      '> > Do not use:\n> > Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Formula should not be used: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Formula cannot be used: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      "Formula isn't correct: Runway (months) = Cash on Hand / Net Monthly Burn Rate.",
+      'The formula is not correct: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Never calculate Runway (months) as Cash on Hand / Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate. We should not use it.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate. Do not use it.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate.\n- This is wrong.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate * 12.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate. This formula should be avoided.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate is unreliable.',
+      'I cannot confirm whether the formula is Cash on Hand / Net Monthly Burn Rate.',
+      'I cannot say whether the formula is Cash on Hand / Net Monthly Burn Rate.',
+      'I am not able to confirm whether the formula is Cash on Hand / Net Monthly Burn Rate.',
+      'The formula is invalid: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      'Runway (months) does not equal Cash on Hand / Net Monthly Burn Rate.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate.\n1. This is wrong.',
+    ]) {
+      expect(score(completeResponse(invalidFormula)).checks.find(check => check.id === 'formula'), invalidFormula)
+        .toMatchObject({ passed: false, pointsAwarded: 0 });
+    }
+  });
+
   it('accepts numeric TeX division but rejects a bare four-month result', () => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const completeResponse = (formula: string) => [
@@ -337,9 +457,32 @@ describe('deterministic 100-point persona scorer', () => {
       String.raw`\frac{40{,}000}{10{,}000} = 4`,
       String.raw`\frac{40{,}000.00}{10{,}000.00} = 4`,
       String.raw`\frac{40\,000{.}0}{10\,000{.}00} = 4`,
+      String.raw`Formula: Runway (months) = \frac{\text{Cash on Hand}}{\text{Net Monthly Burn Rate}} = 4`,
     ];
     const bare = completeResponse('The runway result is four months.');
     const reversed = completeResponse(String.raw`\frac{10{,}000}{40{,}000} = 0.25`);
+    const deniedAsWrong = completeResponse([
+      'The formula is wrong.',
+      String.raw`\frac{40{,}000}{10{,}000} = 4`,
+    ].join('\n'));
+    const deniedForUse = completeResponse([
+      'Do not use this formula.',
+      String.raw`\frac{40{,}000}{10{,}000} = 4`,
+    ].join('\n'));
+    const deniedBareTex = completeResponse([
+      'Runway is the topic.',
+      'Do not use',
+      String.raw`\frac{40{,}000}{10{,}000} = 4`,
+    ].join('\n'));
+    const deniedSemanticTex = completeResponse(
+      String.raw`Formula is wrong. Do not use \frac{\text{cash balance}}{\text{monthly net burn}}.`,
+    );
+    const rejectedSemanticTex = completeResponse(
+      String.raw`Runway context. Reject \frac{\text{cash balance}}{\text{monthly net burn}}.`,
+    );
+    const neverCalculateSemanticTex = completeResponse(
+      String.raw`Runway context. Never calculate \frac{\text{cash balance}}{\text{monthly net burn}}.`,
+    );
     const score = (response: string) => scorePersonaTrial(finance, evidence({
       prompt: finance.prompt,
       response,
@@ -353,7 +496,7 @@ describe('deterministic 100-point persona scorer', () => {
         pointsAwarded: 10,
       });
     }
-    for (const response of [bare, reversed]) {
+    for (const response of [bare, reversed, deniedAsWrong, deniedForUse, deniedBareTex, deniedSemanticTex, rejectedSemanticTex, neverCalculateSemanticTex]) {
       expect(score(response).checks.find(check => check.id === 'formula')).toMatchObject({
         passed: false,
         pointsAwarded: 0,
