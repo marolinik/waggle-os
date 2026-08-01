@@ -120,6 +120,169 @@ describe('persona acceptance prompt budget', () => {
     }
   });
 
+  async function capturePersonaTurn(personaId: 'coder' | 'data-engineer' | 'coordinator') {
+    const persona = PERSONA_CASES.find(item => item.id === personaId)!;
+    capturedConfig = null;
+    capturedSyntheticInputUpperBound = 0;
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: persona.prompt,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: persona.id,
+        session: `persona-acceptance-${personaId}-budget`,
+        workspace: 'default',
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    return {
+      persona,
+      config: capturedConfig!,
+      events: parseSse(response.body),
+      syntheticInputUpperBound: capturedSyntheticInputUpperBound,
+    };
+  }
+
+  it('supports Coder search then read within a lean three-dispatch envelope', async () => {
+    const { persona, config, events, syntheticInputUpperBound } = await capturePersonaTurn('coder');
+    const selectedNames = config.tools.map(tool => tool.name);
+
+    expect(selectedNames).toContain('search_files');
+    expect(selectedNames.every(name => ['read_file', 'search_files', 'search_content'].includes(name))).toBe(true);
+    expect(config.systemPrompt).toMatch(/equivalent glob retries add no evidence/i);
+    expect(config.maxTurns).toBe(3);
+    expect(config.maxToolRounds).toBe(2);
+    expect(config.maxOutputTokens).toBeLessThanOrEqual(persona.maxOutputTokens);
+    expect(syntheticInputUpperBound * 3).toBeLessThan(persona.maxInputTokens);
+
+    const metrics = events.find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
+    expect(metrics.toolSelectedCount).toBeGreaterThan(0);
+  });
+
+  it('keeps the exact Data Engineer advisory turn tool-free, recall-free, compact, and completion-bounded', async () => {
+    const { persona, config, events, syntheticInputUpperBound } = await capturePersonaTurn('data-engineer');
+
+    expect(config.tools).toEqual([]);
+    expect(config.messages).toEqual([{ role: 'user', content: persona.prompt }]);
+    expect(config.maxOutputTokens).toBeLessThan(persona.maxOutputTokens);
+    expect(syntheticInputUpperBound).toBeLessThan(persona.maxInputTokens);
+    expect(config.systemPrompt).toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(config.systemPrompt).not.toContain('# Context From Your Memory');
+    expect(config.systemPrompt).not.toContain('# Recalled Memories');
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+
+    const metrics = events.find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
+    expect(metrics).toMatchObject({ packageMode: 'compact', toolSelectedCount: 0 });
+  });
+
+  it('keeps the exact Coordinator decomposition tool-free, recall-free, compact, and bounded', async () => {
+    const { persona, config, events, syntheticInputUpperBound } = await capturePersonaTurn('coordinator');
+
+    expect(config.tools).toEqual([]);
+    expect(config.messages).toEqual([{ role: 'user', content: persona.prompt }]);
+    expect(config.maxOutputTokens).toBeLessThanOrEqual(persona.maxOutputTokens);
+    expect(syntheticInputUpperBound).toBeLessThan(persona.maxInputTokens);
+    expect(config.systemPrompt).toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(config.systemPrompt).not.toContain('# Context From Your Memory');
+    expect(config.systemPrompt).not.toContain('# Recalled Memories');
+    expect(config.onSkillDistillationFire).toBeUndefined();
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+
+    const metrics = events.find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
+    expect(metrics).toMatchObject({ packageMode: 'compact', toolSelectedCount: 0 });
+  });
+
+  it('preserves prior chat for a referential read-only request instead of treating it as self-contained', async () => {
+    const session = 'persona-referential-history-budget';
+    const priorMessage = 'The supplied release note has two blockers: installer signing and proxy recovery.';
+    const first = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: priorMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'data-engineer',
+        session,
+        workspace: 'default',
+      },
+    });
+    expect(first.statusCode).toBe(200);
+
+    capturedConfig = null;
+    const currentMessage = 'Draft a plan based on what we discussed. Do not write files or execute code.';
+    const second = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: currentMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'data-engineer',
+        session,
+        workspace: 'default',
+      },
+    });
+
+    expect(second.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.messages).toEqual(expect.arrayContaining([
+      { role: 'user', content: priorMessage },
+      { role: 'user', content: currentMessage },
+    ]));
+    expect(capturedConfig!.systemPrompt).not.toContain('# SELF-CONTAINED ADVISORY TURN');
+  });
+
+  it.each([
+    ['automated', { origin: 'automation' }],
+    ['trusted', { autonomy: { level: 'trusted' } }],
+  ] as const)('keeps %s advisory turns on the full operating contract', async (_label, mode) => {
+    const persona = PERSONA_CASES.find(item => item.id === 'data-engineer')!;
+    capturedConfig = null;
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: persona.prompt,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: persona.id,
+        session: `persona-advisory-${_label}-full-contract`,
+        workspace: 'default',
+        ...mode,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.systemPrompt).not.toContain('# SELF-CONTAINED ADVISORY TURN');
+    const metrics = parseSse(response.body).find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
+    expect(metrics.packageMode).toBe('full');
+  });
+
+  it.each([
+    'Summarize our previous decisions. Do not write files or execute code.',
+    'Explain what we decided. Do not write files or execute code.',
+    'Draft the agreed plan. Do not write files or execute code.',
+  ])('keeps first-turn owned context requests memory-capable: %s', async (message) => {
+    capturedConfig = null;
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'data-engineer',
+        session: `persona-owned-context-${message.slice(0, 12).replace(/\W+/g, '-').toLowerCase()}`,
+        workspace: 'default',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.systemPrompt).not.toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(capturedConfig!.tools.map(tool => tool.name)).toContain('search_memory');
+  });
+
   it('keeps the exact verifier turn compact and below a conservative synthetic input bound', async () => {
     const verifier = PERSONA_CASES.find(persona => persona.id === 'verifier')!;
     const response = await injectWithAuth(server, {

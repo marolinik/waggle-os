@@ -14,9 +14,11 @@ import {
   canUseBudgetModelWithoutCloudEgress,
   classifyExplicitTurnMutationPolicy,
   filterToolsByTurnMutationPolicy,
+  isExplicitToolFreeAdvisoryRequest,
   isRegulatedContent,
   isRetryableError,
   resolveTurnPersistencePermissions,
+  selectAdvisoryMaxOutputTokens,
   shouldSuggestSchedule,
   describeToolUse,
   type TurnMutationPolicy,
@@ -373,6 +375,125 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       denyAgentLaunch: true,
     }));
     expect(allowsAutomaticRecall(coordinator)).toBe(true);
+  });
+
+  it('recognizes self-contained advisory turns without swallowing explicit evidence requests', () => {
+    for (const id of ['data-engineer', 'coordinator'] as const) {
+      const prompt = canonicalPrompt(id);
+      expect(isExplicitToolFreeAdvisoryRequest(
+        prompt,
+        classifyExplicitTurnMutationPolicy(prompt),
+      ), id).toBe(true);
+    }
+
+    const coderPrompt = canonicalPrompt('coder');
+    expect(isExplicitToolFreeAdvisoryRequest(
+      coderPrompt,
+      classifyExplicitTurnMutationPolicy(coderPrompt),
+    )).toBe(false);
+
+    for (const prompt of [
+      'Design the migration using the files in this current workspace. Do not write files or execute code.',
+      'Outline two review lanes after searching my saved memory. Do not edit files or launch agents.',
+      'Design a current deployment recommendation from the latest online documentation. Do not write files or execute code.',
+      'Design a migration and cite official sources. Do not write files or execute code.',
+      'Decompose this review based on our previous discussion. Do not edit files or launch agents.',
+      'Design a migration with web_search. Do not write files or execute code.',
+      'Summarize the text above. Do not write files or execute code.',
+      'Okay, outline that plan. Do not edit files or launch agents.',
+      'Now decompose it. Do not edit files or launch agents.',
+      'Now summarize them. Do not write files or execute code.',
+      'Decompose those into lanes. Do not edit files or launch agents.',
+      'Outline the remaining work. Do not edit files or launch agents.',
+      'Explain package.json. Do not write files or execute code.',
+      'Summarize "README.md". Do not write files or execute code.',
+      'Prepare a summary from Slack. Do not write files or execute code.',
+      'Summarize the attached PDF. Do not write files or execute code.',
+      'Summarize the document I attached. Do not write files or execute code.',
+      'Prepare a summary using Salesforce. Do not write files or execute code.',
+      'Prepare a summary from salesforce. Do not write files or execute code.',
+      'Prepare a summary from hubspot. Do not write files or execute code.',
+      'Summarize records in airtable. Do not write files or execute code.',
+      'Summarize my inbox. Do not write files or execute code.',
+      'Prepare an agenda from my calendar. Do not write files or execute code.',
+      'Summarize the open tasks in Linear. Do not write files or execute code.',
+      'Draft an email based on the record in Salesforce. Do not write files or execute code.',
+      'Draft a response based on the customer email below. Do not write files or execute code.',
+      'Summarize the repository architecture. Do not write files or execute code.',
+      'Explain the codebase structure. Do not write files or execute code.',
+      "Summarize today's AI news. Do not write files or execute code.",
+      'Explain the current weather in Belgrade. Do not write files or execute code.',
+      'Send an email to Alice. Do not write files or launch agents.',
+      'Draft and send an email to Alice. Do not write files or launch agents.',
+      'Draft and email Alice a response. Do not write files or launch agents.',
+      'Schedule a meeting tomorrow. Do not write files or launch agents.',
+      'Prepare and schedule a meeting tomorrow. Do not write files or launch agents.',
+      'Post the update to Slack. Do not write files or launch agents.',
+      'Draft a response and post it to Slack. Do not write files or launch agents.',
+      'Prepare and upload the report. Do not write files or launch agents.',
+      'Draft and share the update. Do not write files or launch agents.',
+      'Draft and message Alice. Do not write files or launch agents.',
+      'Draft a response, email Alice. Do not write files or launch agents.',
+      'Prepare the report; upload to Drive. Do not write files or launch agents.',
+      'Draft the update: post it to Slack. Do not write files or launch agents.',
+      'Draft the response \u2014 email Alice. Do not write files or launch agents.',
+      'Design a plan, create a Jira ticket. Do not write files or launch agents.',
+      'Delete the calendar event. Do not write files or launch agents.',
+      'Design a plan and create a Jira ticket. Do not write files or launch agents.',
+      'Outline the review. Do not edit files or launch agents, but inspect this workspace.',
+      'Design the migration. Do not write files or execute code; search my saved memory first.',
+      'Design the migration without editing files or running code, using the attached schema.',
+      'Outline a plan without editing files or running code based on the current repository.',
+      'Do not edit files or launch agents, inspect this workspace first and outline the result.',
+      'Outline the review. Do not edit files or launch agents, then search my saved memory.',
+    ]) {
+      expect(isExplicitToolFreeAdvisoryRequest(
+        prompt,
+        classifyExplicitTurnMutationPolicy(prompt),
+      ), prompt).toBe(false);
+    }
+  });
+
+  it('caps advisory output from answer-length intent rather than unrelated adjectives', () => {
+    expect(selectAdvisoryMaxOutputTokens(canonicalPrompt('data-engineer'))).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(canonicalPrompt('coordinator'))).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens('Give a concise answer about the migration.')).toBe(2_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain the limits of a 256-token context window in detail. Do not write files or execute code.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain the limitations of a model with a 256 token output limit in detail.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain a model configured for at most 512 tokens in detail.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens('Give an answer of at most 500 words.')).toBe(750);
+    expect(selectAdvisoryMaxOutputTokens('Summarize in at most 120 words.')).toBe(256);
+    expect(selectAdvisoryMaxOutputTokens('Write no fewer than 5000 words.')).toBe(7_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain why a 5000-word report is difficult to review in detail.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Outline how to summarize a 5000-word guide without losing structure.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain a 256-token response buffer thoroughly.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain how an API should write at most 512 tokens to its response buffer.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write about why a 5000-word report is difficult to review.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a detailed 5000-token guide to compact cameras. Do not write files or execute code.',
+    )).toBe(5_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Could you write a 5000-word report? Do not write files or execute code.',
+    )).toBe(7_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Please can you draft a 5000-token guide? Do not write files or execute code.',
+    )).toBe(5_000);
   });
 
   it('filters the canonical policies before downstream tool selection', () => {

@@ -37,7 +37,7 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { allowsAutomaticRecall, allowsConversationHistory, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, resolveTurnPersistencePermissions, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { allowsAutomaticRecall, allowsConversationHistory, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   isChatSessionStateKeyForWorkspace,
@@ -53,6 +53,7 @@ import {
   behavioralRulesForPromptPackage,
   composeClosedWorldChatPrompt,
   composeEvidenceBoundedChatPrompt,
+  composeToolFreeAdvisoryChatPrompt,
   composeChatPromptTail,
   selectChatPromptPackageMode,
   type ChatPromptPackageMode,
@@ -302,9 +303,13 @@ export function isExplicitMemoryRecallRequest(message: string): boolean {
     || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(message);
   const explicitMemoryLookup = /\b(?:search|find|look up|show|list|open|inspect|retrieve)\s+(?:me\s+)?(?:(?:in|inside|within)\s+)?(?:(?:my|our|your|the|saved|previous|prior)\s+)?memor(?:y|ies)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|containing|regarding)\b))/i;
   const ownedContextLookup = /\b(?:search|find|look up|recall|retrieve)\s+(?:(?:my|our)\s+(?:saved\s+)?|(?:saved|previous|prior)\s+)(?:[\w'-]+\s+){0,3}(?:notes?|preferences?|decisions?|history|context)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|on|containing|regarding)\b))/i;
+  const ownedPriorContext = /\b(?:our|my)\s+(?:(?:previous|prior|earlier|agreed)\s+)?(?:decisions?|agreements?|plans?|choices?|conclusions?|discussion|context)\b/i.test(message)
+    || /\b(?:the\s+)?agreed\s+(?:plan|decision|approach|scope|next steps?)\b/i.test(message)
+    || /\bwhat\s+(?:we|I)\s+(?:decided|agreed|discussed|chose|selected)\b/i.test(message);
   return directRecall
     || explicitMemoryLookup.test(message)
-    || ownedContextLookup.test(message);
+    || ownedContextLookup.test(message)
+    || ownedPriorContext;
 }
 
 export function isExplicitMemorySaveRequest(message: string): boolean {
@@ -787,6 +792,7 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
     selectedToolCount = 0,
     selectedModel?: string,
     cacheWorkspaceId = workspaceId ?? 'default',
+    toolFreeAdvisory = false,
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
@@ -809,6 +815,14 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
         persona: closedWorldPersona,
         assembled: assembled ?? null,
         behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+      });
+    }
+    if (toolFreeAdvisory) {
+      const advisoryPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+      return composeToolFreeAdvisoryChatPrompt({
+        persona: advisoryPersona,
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+        packageMode,
       });
     }
 
@@ -1213,21 +1227,31 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
     }
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+    const toolFreeAdvisoryCandidate = autonomyLevel === 'normal'
+      && !isAutomatedTurn
+      && !isExplicitMemoryRecallRequest(message)
+      && !isExplicitMemorySaveRequest(message)
+      && !isExplicitExternalResearchRequest(message)
+      && isExplicitToolFreeAdvisoryRequest(message, turnMutationPolicy);
+    let toolFreeAdvisory = false;
     const requestClosedWorldRewrite = isClosedWorldRewriteRequest(message);
     const turnPersonaId = personaOverride
       ?? executionWorkspaceConfig?.personaId
       ?? null;
     const turnPersona = turnPersonaId ? resolvePersona(turnPersonaId) : null;
-    const { allowMemoryPersistence, allowDerivedPersistence } = resolveTurnPersistencePermissions({
+    const turnPersistence = resolveTurnPersistencePermissions({
       policy: turnMutationPolicy,
       isAutomatedTurn,
       personaIsReadOnly: turnPersona?.isReadOnly === true,
       closedWorldRewrite: requestClosedWorldRewrite,
     });
-    const allowResponseDecoration = allowsPostResponseDecoration(
+    let allowMemoryPersistence = turnPersistence.allowMemoryPersistence;
+    let allowDerivedPersistence = turnPersistence.allowDerivedPersistence;
+    const turnAllowsResponseDecoration = allowsPostResponseDecoration(
       turnMutationPolicy,
       requestClosedWorldRewrite,
     );
+    let allowResponseDecoration = turnAllowsResponseDecoration;
 
     // R6-001: path-traversal guard on the session-persistence path segments.
     // `workspace` and the resolved session alias come straight from the request body and are
@@ -1571,6 +1595,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         stripTrailingFailedPair(sessionPersistenceDataDir, activeWorkspaceId, sessionId);
       }
 
+      // Current-message-only packaging is safe only when there is no prior
+      // conversation to erase. Capability classifiers above separately keep
+      // workspace, memory, connector, and web evidence requests tool-capable.
+      toolFreeAdvisory = toolFreeAdvisoryCandidate && history.length === 0;
+      allowMemoryPersistence = !toolFreeAdvisory && turnPersistence.allowMemoryPersistence;
+      allowDerivedPersistence = !toolFreeAdvisory && turnPersistence.allowDerivedPersistence;
+      allowResponseDecoration = !toolFreeAdvisory && turnAllowsResponseDecoration;
+
       // Add user message to history and persist to disk
       history.push({ role: 'user', content: message });
       persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
@@ -1759,6 +1791,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // ── Automatic memory recall ─────────────────────────────
         if (!hasCustomRunner
           && !closedWorldRewrite
+          && !toolFreeAdvisory
           && allowsAutomaticRecall(turnMutationPolicy)) {
           try {
             sendEvent('step', { content: 'Recalling relevant memories...' });
@@ -1825,6 +1858,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!hasCustomRunner
           && isFirstUserMessage
           && !closedWorldRewrite
+          && !toolFreeAdvisory
           && turnMutationPolicy.contextScope === 'default') {
           try {
             const optimizer = await getOptimizerService(server);
@@ -1874,6 +1908,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!hasCustomRunner
           && isFirstUserMessage
           && !closedWorldRewrite
+          && !toolFreeAdvisory
           && turnMutationPolicy.contextScope === 'default') {
         const wsTemplateId = effectiveWorkspace
           ? server.workspaceManager?.get(effectiveWorkspace)?.templateId
@@ -1895,6 +1930,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let assembled: AssembledPrompt | null = null;
         if (!hasCustomRunner
           && turnMutationPolicy.contextScope === 'default'
+          && !toolFreeAdvisory
           && isEnabled('PROMPT_ASSEMBLER')) {
           try {
             assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler, model: resolvedModel });
@@ -2190,7 +2226,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (!hasCustomRunner && activePersona) {
           effectiveTools = applyPersonaToolFilter(effectiveTools, activePersona);
         }
-        if (closedWorldRewrite) {
+        if (closedWorldRewrite || toolFreeAdvisory) {
           effectiveTools = [];
           spawnAvailableTools = [];
         }
@@ -2214,7 +2250,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
         const externalToolNames = new Set<string>();
         const retrievedToolNames = new Set<string>();
-        if (!hasCustomRunner && !closedWorldRewrite) {
+        if (!hasCustomRunner && !closedWorldRewrite && !toolFreeAdvisory) {
           effectiveTools = filterAvailableTools(effectiveTools);
           spawnAvailableTools = effectiveTools;
 
@@ -2316,7 +2352,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? verifiedCompressionModel
             : null;
         }
-        if (closedWorldRewrite) {
+        if (closedWorldRewrite || toolFreeAdvisory) {
           windowedMessages = [{ role: 'user', content: agentMessage }];
         } else if (!allowsConversationHistory(turnMutationPolicy)) {
           windowedMessages = buildTurnMessageWindow(history, agentMessage, turnMutationPolicy);
@@ -2554,6 +2590,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             isAutomatedTurn,
             explicitCapabilityRequest,
             taskComplexity: turnTaskShape.complexity,
+            explicitToolFreeAdvisory: toolFreeAdvisory,
             exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
               || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
           });
@@ -2594,8 +2631,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               effectiveTools.length,
               logicalModel,
               activeSessionStateWorkspaceId,
+              toolFreeAdvisory,
             );
-            return turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite
+            return turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite || toolFreeAdvisory
               ? packagedSystemPrompt
               : ambiguityPrefix
                 + packagedSystemPrompt
@@ -2610,6 +2648,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Build routing suggestions from the exact executable/serialized set.
         const capabilityRouter = hasCustomRunner
+          || toolFreeAdvisory
           || !allowsConversationHistory(turnMutationPolicy)
           ? undefined
           : new CapabilityRouter({
@@ -2629,11 +2668,31 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           maxIterations: 90,
           freeToolCalls: ['execute_code'],
         });
-        const agentRunBudget = selectAgentRunBudget({
+        let agentRunBudget = selectAgentRunBudget({
           taskShape: turnTaskShape.type,
           complexity: turnTaskShape.complexity,
           selectedToolNames: effectiveTools.map(tool => tool.name),
         });
+        let maxOutputTokens: number | undefined;
+        if (toolFreeAdvisory) {
+          agentRunBudget = {
+            ...agentRunBudget,
+            maxTurns: 1,
+            maxToolRounds: 1,
+            maxTokenBudget: 18_000,
+            synthesisReserveTokens: 3_000,
+          };
+          maxOutputTokens = selectAdvisoryMaxOutputTokens(agentMessage);
+        } else if (turnMutationPolicy.contextScope === 'workspace-only') {
+          agentRunBudget = {
+            ...agentRunBudget,
+            maxTurns: 3,
+            maxToolRounds: 2,
+            maxTokenBudget: 19_000,
+            synthesisReserveTokens: 2_500,
+          };
+          maxOutputTokens = 2_500;
+        }
         log.info(
           `[chat] agent budget: turns=${agentRunBudget.maxTurns} `
           + `toolRounds=${agentRunBudget.maxToolRounds} tokens=${agentRunBudget.maxTokenBudget}`,
@@ -2655,6 +2714,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           messages: windowedMessages,
           stream: true,
           ...agentRunBudget,
+          ...(maxOutputTokens ? { maxOutputTokens } : {}),
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,

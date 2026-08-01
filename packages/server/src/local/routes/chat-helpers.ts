@@ -242,6 +242,71 @@ export function classifyExplicitTurnMutationPolicy(message: string): TurnMutatio
   };
 }
 
+/**
+ * Detect a self-contained, explicitly non-executing advisory request. This is
+ * intentionally narrower than generic read-only intent: any request for
+ * workspace, memory, web, document, or tool evidence remains tool-capable.
+ */
+export function isExplicitToolFreeAdvisoryRequest(
+  message: string,
+  policy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
+): boolean {
+  if (policy.contextScope !== 'default') return false;
+  const actionable = withoutQuotedText(message).trim();
+  if (!actionable) return false;
+
+  const explicitlyNonExecuting = policy.denyAllMutations
+    || (policy.denyFileWrites && (policy.denyCodeExecution || policy.denyAgentLaunch));
+  if (!explicitlyNonExecuting) return false;
+  const affirmative = actionable.replace(
+    /\b(?:do not|don['\u2019]t|never|without)\b[^.?!;\r\n]*?(?=\s*(?:,\s*(?=(?:but|however|then|using|from|via|inspect|search|browse|read|open|list|scan|query|retrieve|recall|look up|find)\b)|;|\bbut\b|\bhowever\b|\bbased on\b|[.?!]|$))/gi,
+    ' ',
+  );
+  if (!/\b(?:design|decompose|outline|explain|summari[sz]e|draft|prepare|propose|recommend|map|write)\b/i.test(affirmative)) {
+    return false;
+  }
+
+  const explicitLookup = /https?:\/\//i.test(affirmative)
+    || /\b(?:search|browse|inspect|read|open|list|scan|query|retrieve|recall|look up|find)\b[^.?!\r\n]{0,100}\b(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|web|internet|online|sources?|documents?|documentation)\b/i.test(affirmative)
+    || /\b(?:current|existing|this|our|my|saved|previous|prior|attached|uploaded)\s+(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|documents?|pdfs?|emails?|messages?|spreadsheets?|tickets?|records?|inbox|calendar|tasks?)\b/i.test(affirmative)
+    || /\b(?:our|the|a)?\s*(?:previous|prior|earlier)\s+(?:conversation|discussion|messages?|chat)\b/i.test(affirmative)
+    || /\b(?:latest|current|recent)\s+(?:online|web|external|release|documentation|docs?|sources?|news|pricing|benchmark)\b/i.test(affirmative)
+    || /\b(?:cite|include|provide|link)\b[^.?!\r\n]{0,60}\b(?:sources?|citations?|references?|links?)\b/i.test(affirmative)
+    || /\b(?:text|content|message|details?|information)\s+(?:above|earlier|previously)\b/i.test(affirmative)
+    || /\b(?:from|using|via|in)\s+(?:(?:my|our|the|a|an)\s+)?(?:slack|teams|email|outlook|notion|drive|calendar|jira|linear|github|gitlab|salesforce|inbox|database|spreadsheet|document|file|workspace|repo(?:sitory)?)\b/i.test(affirmative)
+    || /\b(?:based on|using|from)\s+(?:the\s+)?(?:attached|uploaded|saved|previous|prior)\b/i.test(affirmative)
+    || /\b(?:use|call|invoke)\b[^.?!\r\n]{0,80}\b(?:tool|plugin|mcp|connector|calculator)\b/i.test(affirmative)
+    || /\b(?:web_search|web_fetch|search_memory|read_file|search_files|search_content|bash|run_code|spawn_agent)\b/i.test(affirmative)
+    || /(?:^|[.?!]\s*|[,;:\u2014]\s*|\b(?:and|then|also|but|however)\s+)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge(?!\s+criteria\b)|deploy)\b/i.test(affirmative)
+    || /\b(?:that|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
+    || /\b(?:attached|uploaded|below)\b/i.test(message)
+    || /\b(?:customer|client|internal|external)\s+(?:email|message|thread|ticket|case|record|document|file)\b/i.test(affirmative)
+    || /\b(?:using|from|via)\s+(?:the\s+)?[A-Z][A-Za-z0-9_-]*/.test(affirmative)
+    || /\b(?:from|using|via|in)\s+(?:(?:my|our|the|a|an)\s+)?[A-Za-z][\w-]*(?:\s+[A-Za-z][\w-]*){0,2}(?=\s*(?:[.?!,;]|$))/i.test(affirmative)
+    || /\b(?:repository|repo|codebase|weather|news)\b/i.test(affirmative)
+    || /\b[\w.-]+\.[A-Za-z][A-Za-z0-9]{0,7}\b/.test(message)
+    || /(?:^|\s)[A-Za-z]:\\[^\s]+|(?:^|\s)\.?(?:\.\/|\.\\)[^\s]+/.test(message);
+  return !explicitLookup;
+}
+
+/** Bound self-contained advisory completions without treating subject adjectives as length intent. */
+export function selectAdvisoryMaxOutputTokens(message: string): number {
+  const requestedTokens = message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:write|draft|prepare|produce|create|give|provide|return|generate)\s+(?:(?:a|an|the)\s+)?(?:(?!(?:about|why|how)\b)[A-Za-z][\w-]*\s+){0,3}(\d{2,5})[ -]?token\s+(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\b/i)
+    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:answer|respond|reply|summari[sz]e|write|draft|explain|give|provide|return)\s+(?:(?:in)\s+|(?:(?:a|an|the)\s+)?(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\s+(?:of\s+)?)?(?:at most|at least|up to|no more than|no fewer than|under|within|exactly|about|approximately|roughly)\s+(\d{2,5})[ -]?tokens?\b/i);
+  if (requestedTokens) {
+    return Math.min(12_000, Math.max(256, Number.parseInt(requestedTokens[1], 10)));
+  }
+  const requestedWords = message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:write|draft|prepare|produce|create|give|provide|return|generate)\s+(?:(?:a|an|the)\s+)?(?:(?!(?:about|why|how)\b)[A-Za-z][\w-]*\s+){0,3}(\d{2,5})[ -]?word\s+(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\b/i)
+    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:answer|respond|reply|summari[sz]e|write|draft|explain|give|provide|return)\s+(?:(?:in)\s+|(?:(?:a|an|the)\s+)?(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\s+(?:of\s+)?)?(?:at most|at least|up to|no more than|no fewer than|under|within|exactly|about|approximately|roughly)\s+(\d{2,5})[ -]?words?\b/i);
+  if (requestedWords) {
+    const tokenEstimate = Math.ceil(Number.parseInt(requestedWords[1], 10) * 1.5);
+    return Math.min(12_000, Math.max(256, tokenEstimate));
+  }
+  const briefAnswer = /\b(?:compact|concise|brief|short)\s+(?:answer|response|reply|summary|report|plan|explanation|output)\b/i.test(message)
+    || /\b(?:answer|respond|reply|summari[sz]e)\b[^.?!\r\n]{0,40}\b(?:briefly|concisely)\b/i.test(message);
+  return briefAnswer ? 2_500 : 3_000;
+}
+
 /** Automatic recall is incompatible with an explicit evidence boundary. */
 export function allowsAutomaticRecall(policy: TurnMutationPolicy): boolean {
   return allowsConversationHistory(policy);
