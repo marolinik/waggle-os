@@ -542,6 +542,120 @@ function hasAffirmedRunwayAssumption(response: string): boolean {
   return false;
 }
 
+function milestoneIds(value: string): string[] {
+  return Array.from(value.matchAll(/\bM\d+\b/gi), match => match[0].toUpperCase());
+}
+
+function markdownTableCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map(cell => cell.trim());
+}
+
+function directDependencyIsAffirmed(response: string, start: number, end: number): boolean {
+  const prefixStart = Math.max(
+    response.lastIndexOf('\n', start - 1),
+    response.lastIndexOf('.', start - 1),
+    response.lastIndexOf(';', start - 1),
+    response.lastIndexOf('!', start - 1),
+    response.lastIndexOf('?', start - 1),
+  ) + 1;
+  const prefix = response.slice(prefixStart, start);
+  if (/\b(?:false|incorrect|wrong|untrue|disputed)\s+that\s*$/i.test(prefix)) return false;
+  if (/\b(?:disput(?:e[sd]?|ing)|den(?:y|ies|ied|ying)|reject(?:s|ed|ing)?|doubt(?:s|ed|ing)?|challeng(?:e[sd]?|ing)|refut(?:e[sd]?|ing))\s+(?:the\s+)?(?:claim|assertion|statement)?\s*(?:that\s*)?$/i.test(prefix)) {
+    return false;
+  }
+  if (/\bno\s+(?:evidence|proof|basis)\s+(?:that|for)\s*$/i.test(prefix)) return false;
+  if (/\b(?:do\s+not|don't|never|must\s+not|should\s+not|cannot|can't)\s+(?:[a-z]+\s+){0,4}$/i.test(prefix)) {
+    return false;
+  }
+
+  const suffixMatch = /[.!?;\n]/.exec(response.slice(end));
+  const suffixEnd = suffixMatch?.index === undefined ? response.length : end + suffixMatch.index;
+  const suffix = response.slice(end, suffixEnd);
+  if (response[suffixEnd] === '?') return false;
+  return !/\b(?:(?:is|was|remains?)\s+not\s+(?:established|confirmed|verified|valid)|(?:is|was|remains?)\s+(?:wrong|false|invalid|disputed|unverified|unconfirmed|unsupported))\b/i.test(suffix);
+}
+
+function hasDeniedDependencyLanguage(value: string): boolean {
+  const normalized = value.replace(/\bnot\s+only\b/gi, '');
+  return /[?]|\b(?:not|never|none|tbd|unknown|uncertain|unverified|unconfirmed|unestablished|false|disputed|unordered|cannot|can't|doesn't|don't|may|might|could|possibly|perhaps|potentially|likely)\b/i.test(normalized);
+}
+
+function affirmativeMilestoneIds(value: string): string[] {
+  const normalized = value.replace(/\bnot\s+only\b/gi, '');
+  if (/[?]|\b(?:none|tbd|unknown|uncertain|unverified|unconfirmed|unestablished)\b/i.test(normalized)) {
+    return [];
+  }
+  if (/^\s*(?:(?:does?|do)\s+not|cannot|can't|doesn't|don't)\s+depend\b/i.test(normalized)) {
+    return [];
+  }
+
+  const affirmed: string[] = [];
+  for (const match of normalized.matchAll(/\bM\d+\b/gi)) {
+    const prefix = normalized.slice(0, match.index);
+    let fragmentStart = 0;
+    for (const boundary of prefix.matchAll(/[,;]|\b(?:and|but|plus)\b/gi)) {
+      fragmentStart = boundary.index + boundary[0].length;
+    }
+    const fragment = prefix.slice(fragmentStart);
+    if (!/\b(?:not|never|no|cannot|can't|doesn't|don't)\b/i.test(fragment)) {
+      affirmed.push(match[0].toUpperCase());
+    }
+  }
+  return affirmed;
+}
+
+function hasMilestoneDependencyMap(response: string): boolean {
+  const text = response
+    .replace(/(?:\*\*|__)(M\d+)(?:\*\*|__)/gi, '$1')
+    .replace(/`(M\d+)`/gi, '$1');
+
+  for (const match of text.matchAll(/\b(M\d+)\b\s+(?:(?:directly\s+)?depends?|depends?\s+directly)\s+on\s+\b(M\d+)\b/gi)) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (match[1].toUpperCase() !== match[2].toUpperCase()
+      && directDependencyIsAffirmed(text, start, end)) {
+      return true;
+    }
+  }
+
+  for (const match of text.matchAll(/\bcritical\s+path\b\s*:?\s*([^\r\n]{0,360})/gi)) {
+    const prefix = text.slice(text.lastIndexOf('\n', match.index - 1) + 1, match.index);
+    const path = match[1].replace(/^(?:\*\*|__)\s*/, '');
+    if (/\b(?:no|not\s+(?:necessarily\s+)?(?:a|the))\s*$/i.test(prefix) || hasDeniedDependencyLanguage(path)) continue;
+
+    for (const edge of path.matchAll(/\b(M\d+)\b[^;\r\n!?]{0,180}(?:\u2192|->|=>)[^;\r\n!?]{0,180}\b(M\d+)\b/gi)) {
+      if (edge[1].toUpperCase() !== edge[2].toUpperCase()) return true;
+    }
+  }
+
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/^\s*\|/.test(lines[index])) continue;
+    const headers = markdownTableCells(lines[index]);
+    const dependencyIndex = headers.findIndex(header => /^(?:depends?\s+on|dependencies?)$/i.test(header));
+    if (dependencyIndex < 0) continue;
+
+    for (let rowIndex = index + 1; rowIndex < lines.length && /^\s*\|/.test(lines[rowIndex]); rowIndex += 1) {
+      const row = markdownTableCells(lines[rowIndex]);
+      if (row.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
+
+      const dependencyCell = row[dependencyIndex] ?? '';
+      const dependencyIds = affirmativeMilestoneIds(dependencyCell);
+      if (dependencyIds.length === 0) continue;
+
+      const targetIds = milestoneIds(row.filter((_, cellIndex) => cellIndex !== dependencyIndex).join(' '));
+      if (targetIds.some(target => dependencyIds.some(dependency => target !== dependency))) return true;
+    }
+  }
+
+  return false;
+}
+
 function evaluateResponseRule(
   rule: PersonaResponseRule,
   evidence: PersonaTrialEvidence,
@@ -549,6 +663,8 @@ function evaluateResponseRule(
   switch (rule.kind) {
     case 'pattern':
       return rule.pattern.test(evidence.response);
+    case 'dependencyMap':
+      return hasMilestoneDependencyMap(evidence.response);
     case 'runwayFormula':
       return hasAffirmedRunwayFormula(evidence.response);
     case 'runwayAssumption':

@@ -30,6 +30,7 @@ interface BaseResponseRule {
 
 export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'pattern'; pattern: RegExp })
+  | (BaseResponseRule & { kind: 'dependencyMap' })
   | (BaseResponseRule & { kind: 'runwayFormula' })
   | (BaseResponseRule & { kind: 'runwayAssumption' })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
@@ -213,7 +214,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'milestones', description: 'Defines milestones', kind: 'pattern', pattern: /milestones?/i, points: 10 },
-      { id: 'dependencies', description: 'Maps dependencies', kind: 'pattern', pattern: /dependenc(?:y|ies)/i, points: 10 },
+      { id: 'dependencies', description: 'Maps dependencies', kind: 'dependencyMap', points: 10 },
       { id: 'owners', description: 'Assigns owners by role', kind: 'allPatterns', patterns: [/owners?/i, /role/i], points: 10 },
       { id: 'risks-exit', description: 'Includes risks and exit criteria', kind: 'allPatterns', patterns: [/risks?/i, /exit criteria/i], points: 10 },
       { id: 'no-invented-schedule', description: 'Does not invent a calendar schedule', kind: 'notPattern', pattern: /(?:week\s*\d+|\d+[ -]?week effort|target date:)/i, points: 10 },

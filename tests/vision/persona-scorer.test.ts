@@ -1378,7 +1378,7 @@ describe('deterministic 100-point persona scorer', () => {
   it('distinguishes a discussed model-unavailable scenario from a real failure banner', () => {
     const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
     const response = [
-      'Milestones and dependencies assign owners by role.',
+      'Milestones: M2 depends on M1; owners are assigned by role.',
       'Risks and exit criteria include failure-mode tests for model unavailable, proxy down, and bad config.',
     ].join('\n');
     const result = scorePersonaTrial(projectManager, evidence({
@@ -1406,6 +1406,116 @@ describe('deterministic 100-point persona scorer', () => {
       expect(failureResult.score).toBe(0);
       expect(failureResult.criticalFailures.map(item => item.code)).toContain('corruption_or_hang');
     }
+  });
+
+  it('credits an explicit directed critical path as a dependency map', () => {
+    const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
+    const response = [
+      '## Milestones',
+      '| Milestone | Depends On |',
+      '|---|---|',
+      '| M1 Native packaging | — |',
+      '| M2 Local model bundling | M1 |',
+      '**Critical path:** M1 → M2 → M3.',
+      '## Owners by Role',
+      'Release Manager owns coordination; QA Lead owns acceptance.',
+      '## Risks and Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+    const result = scorePersonaTrial(projectManager, evidence({
+      prompt: projectManager.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: projectManager.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(true);
+    expect(result).toMatchObject({ score: 100, passed: true });
+  });
+
+  it.each([
+    [
+      'populated depends-on table',
+      '| Milestone | Depends On |\n|---|---|\n| M1 | — |\n| M2 | M1 |',
+      true,
+    ],
+    ['direct milestone relation', 'M2 depends on M1.', true],
+    ['direct milestone relation with adverb', 'M2 depends directly on M1.', true],
+    ['Markdown-emphasized milestone relation', '**M2** depends on **M1**.', true],
+    ['directed critical path', 'Critical path: M1 → (M2 & M3 in parallel) → M4.', true],
+    ['generic dependency claim', 'Milestones and dependencies assign owners by role.', false],
+    ['unknown dependencies', 'Dependencies: unknown.', false],
+    ['unprovided dependencies', 'Dependencies: not provided.', false],
+    ['empty depends-on table', '| Milestone | Depends On |\n|---|---|', false],
+    [
+      'placeholder-only depends-on rows',
+      '| Milestone | Depends On |\n|---|---|\n| M1 | — |\n| M2 | None |\n| M3 | TBD |',
+      false,
+    ],
+    ['negated milestone relation', 'M2 does not depend on M1.', false],
+    ['false-that milestone relation', 'It is false that M2 depends on M1.', false],
+    ['disputed milestone relation', 'It is disputed that M2 depends on M1.', false],
+    ['disputed relation claim', 'We dispute the claim that M2 depends on M1.', false],
+    ['false trailing relation claim', 'The claim that M2 depends on M1 is false.', false],
+    ['false trailing coordinated claim', 'M2 depends on M1, but that claim is false.', false],
+    ['unsupported milestone relation', 'There is no evidence that M2 depends on M1.', false],
+    ['do-not-claim milestone relation', 'Do not claim M2 depends on M1.', false],
+    ['trailing-wrong milestone relation', 'M2 depends on M1, which is wrong.', false],
+    ['unknown critical path', 'Critical path: TBD.', false],
+    ['single-node critical path', 'Critical path: M1.', false],
+    ['self dependency', 'M1 depends on M1.', false],
+    ['self-loop critical path', 'Critical path: M1 → M1.', false],
+    ['is-not critical path', 'Critical path is not M1 → M2.', false],
+    ['questioned critical path', 'Critical path: M1 → M2? No.', false],
+    ['no critical path', 'No critical path: M1 → M2.', false],
+    ['not-the critical path', 'Not the critical path: M1 → M2.', false],
+    ['unestablished critical path', 'Critical path: M1 → M2 is not established.', false],
+    ['modal critical path', 'Critical path may be M1 → M2.', false],
+    ['not-necessarily critical path', 'This is not necessarily the critical path: M1 → M2.', false],
+    ['unrelated later arrow', 'Critical path: M1 and M2 remain unordered; notes → pending.', false],
+    [
+      'negated dependency table prose',
+      '| Milestone | Depends On |\n|---|---|\n| M1 | does not depend on M2 |',
+      false,
+    ],
+    [
+      'negated dependency table id',
+      '| Milestone | Depends On |\n|---|---|\n| M1 | not M2 |',
+      false,
+    ],
+    [
+      'affirmative not-only dependency table',
+      '| Milestone | Depends On |\n|---|---|\n| M4 | Not only M2 but also M3 |',
+      true,
+    ],
+    [
+      'mixed dependency table',
+      '| Milestone | Depends On |\n|---|---|\n| M4 | M1, not M2 |',
+      true,
+    ],
+    [
+      'required dependency table',
+      '| Milestone | Depends On |\n|---|---|\n| M4 | M1 (not optional) |',
+      true,
+    ],
+  ])('classifies a project dependency map: %s', (_label, dependencyText, expected) => {
+    const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
+    const response = [
+      '## Milestones',
+      dependencyText,
+      '## Owners by Role',
+      'Release Manager owns coordination.',
+      '## Risks and Exit Criteria',
+      'Risk: packaging failure. Exit criteria: clean Windows install succeeds.',
+    ].join('\n');
+    const result = scorePersonaTrial(projectManager, evidence({
+      prompt: projectManager.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: projectManager.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(expected);
   });
 
   it('awards the live empty-workspace coder response the full criterion and a 100/100 trial', () => {
