@@ -369,6 +369,179 @@ function hasAffirmedRunwayFormula(response: string): boolean {
   return false;
 }
 
+const RUNWAY_ASSUMPTION_MARKER = /\b(?:(?:biggest|key|main|primary)\s+)?assumptions?\b|\bassum(?:e[sd]?|ing)\b/gi;
+const RUNWAY_BURN_SUBJECT = String.raw`\b(?:(?:current|net|monthly)\s+){0,3}burn(?:\s+rate)?\b`;
+const RUNWAY_BURN_AMOUNT = String.raw`(?:[$\u20ac\u00a3]\s*)?10[,.]?000(?:\.0{1,2})?`;
+const RUNWAY_BURN_AMOUNT_PERIOD = String.raw`${RUNWAY_BURN_AMOUNT}(?:\s*(?:\/\s*month|per\s+month))?`;
+const RUNWAY_BURN_CONTEXT = String.raw`${RUNWAY_BURN_SUBJECT}(?:\s*\(\s*(?:currently\s+)?${RUNWAY_BURN_AMOUNT_PERIOD}\s*\)|\s+(?:of|at)\s+${RUNWAY_BURN_AMOUNT_PERIOD})?(?:\s+and\s+(?:monthly\s+)?revenue)?`;
+const RUNWAY_BURN_STABILITY = new RegExp(String.raw`(?:${RUNWAY_BURN_CONTEXT}(?:${[
+  String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?|as)\s+(?:the\s+same|constant|flat|stable|steady|unchanged|fixed)\b`,
+  String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?)\s+(?:(?:at|exactly)\s+)?${RUNWAY_BURN_AMOUNT}\b`,
+  String.raw`\s+does\s+not\s+change\b`,
+].join('|')})|\b(?:flat|constant|stable|steady|fixed)\s+${RUNWAY_BURN_SUBJECT}\s+of\s+${RUNWAY_BURN_AMOUNT_PERIOD}\b)`, 'gi');
+const RUNWAY_FLOW_NOUN = String.raw`(?:revenue|income|cash inflows?)`;
+const RUNWAY_FLOW_ARTIFACT = String.raw`(?:forecast|projection|estimate|outlook|growth|data|figures?|information|visibility|target|plan|guidance|statement)`;
+const RUNWAY_ZERO_VALUE = String.raw`(?:\bzero\b|(?:[$\u20ac\u00a3]\s*)?0(?:\.0{1,2})?\b)`;
+const RUNWAY_ZERO_REVENUE = new RegExp(String.raw`\b(?:${[
+  String.raw`(?:no|zero)\s+(?:(?:new|additional|monthly|offsetting)\s+)?${RUNWAY_FLOW_NOUN}(?!\s+${RUNWAY_FLOW_ARTIFACT}\b)`,
+  String.raw`revenue\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be)\s+(?:at\s+|exactly\s+)?${RUNWAY_ZERO_VALUE}`,
+  String.raw`revenue\s+(?:is\s+)?(?:treated|model(?:l)?ed)\s+(?:as|at)\s+${RUNWAY_ZERO_VALUE}`,
+  String.raw`(?:the\s+)?revenue\s+(?:forecast|projection|estimate|outlook)\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be)\s+(?:at\s+|exactly\s+)?${RUNWAY_ZERO_VALUE}`,
+].join('|')})`, 'gi');
+const RUNWAY_PASSIVE_ZERO_REVENUE = new RegExp(String.raw`\b(?:${[
+  String.raw`no\s+(?:(?:new|additional|monthly|offsetting)\s+)?${RUNWAY_FLOW_NOUN}\s+(?:is|was)\s+assumed`,
+  String.raw`revenue\s+(?:is|was)\s+assumed\s+to\s+(?:be|stay|remain)\s+(?:at\s+)?${RUNWAY_ZERO_VALUE}`,
+].join('|')})\b`, 'gi');
+const RUNWAY_DURATION_WORD_VALUES: Record<string, number> = {
+  a: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+};
+
+function hasSubRunwayDuration(suffix: string): boolean {
+  if (/\b(?:this\s+month|until\s+(?:the\s+)?next\s+month|temporarily|briefly)\b/i.test(suffix)) {
+    return true;
+  }
+
+  const durationPattern = /\b(?:for|over|through)\s+(?:the\s+)?(?:(first|next|only)\s+)?(?:(\d+(?:\.\d+)?)|(a|one|two|three|four))?\s*(months?|days?|quarters?)\b/gi;
+  for (const match of suffix.matchAll(durationPattern)) {
+    const qualifier = match[1];
+    const numericValue = match[2];
+    const wordValue = match[3];
+    if (!qualifier && !numericValue && !wordValue) continue;
+
+    const value = numericValue
+      ? Number(numericValue)
+      : wordValue
+        ? RUNWAY_DURATION_WORD_VALUES[wordValue.toLowerCase()]
+        : 1;
+    if (!Number.isFinite(value)) continue;
+
+    const unit = match[4].toLowerCase();
+    const durationInMonths = unit.startsWith('day')
+      ? value / 30
+      : unit.startsWith('quarter')
+        ? value * 3
+        : value;
+    if (durationInMonths < 4) return true;
+  }
+  return false;
+}
+
+function hasImmediateRunwayAssumptionDenial(text: string, clauseEnd: number): boolean {
+  const followingSentence = text.slice(clauseEnd, clauseEnd + 180);
+  return /^[.!?\n]\s*(?:(?:however|but|yet)\s*,?\s*)?(?:(?:(?:this|that|the)\s+)?assumption|this|that|it)\s+(?:(?:is|was|seems?|remains?)\s+(?:rejected|invalid|wrong|false|unsupported|unverified|unproven)|(?:has|have|had)\s+not\s+been\s+(?:verified|confirmed|validated|supported|accepted)|(?:should|must)\s+(?:not|never)\s+be\s+(?:used|trusted|accepted)|cannot\s+be\s+(?:used|trusted|accepted))\b/i.test(followingSentence);
+}
+
+function runwayAssumptionClauseStart(text: string, index: number): number {
+  let start = 0;
+  for (const match of text.slice(0, index).matchAll(/[!?;\n]|[.](?=\s|$)/g)) {
+    if (match.index !== undefined) start = match.index + match[0].length;
+  }
+  return start;
+}
+
+function runwayAssumptionClauseEnd(text: string, index: number): number {
+  const suffix = text.slice(index);
+  const match = /[!?;\n]|[.](?=\s|$)/.exec(suffix);
+  return match?.index === undefined ? text.length : index + match.index;
+}
+
+function runwayAssumptionFactIsAffirmed(text: string, start: number, end: number): boolean {
+  const clauseStart = runwayAssumptionClauseStart(text, start);
+  const clauseEnd = runwayAssumptionClauseEnd(text, end);
+  const prefix = text.slice(clauseStart, start);
+  const fact = text.slice(start, end);
+  const suffix = text.slice(end, clauseEnd);
+  const normalizedFact = fact.replace(/\bdoes\s+not\s+change\b/gi, 'remains unchanged');
+
+  if (text[clauseEnd] === '?') return false;
+  if (/\b(?:if|unless|whether|may|might|could|would|should)\b/i.test(prefix)) return false;
+  if (/\b(?:reject(?:s|ed|ing)?|disput(?:e[sd]?|ing)|den(?:y|ies|ied|ying)|refut(?:e[sd]?|ing)|challeng(?:e[sd]?|ing)|doubt(?:s|ed|ing)?|invalid|false|unsupported|unverified|unproven)\b/i.test(prefix)) return false;
+  if (/\bno\s+(?:reasonable\s+)?basis\s+for\b/i.test(prefix)) return false;
+  if (/\bno\s+(?:evidence|proof|support)\s+that\b/i.test(prefix)) return false;
+  if (/\bno\s+(?:reason|basis)\s+to\s+(?:accept|believe|trust|use)\b/i.test(prefix)) return false;
+  if (/\b(?:(?:has|have|had)\s+not|hasn't|haven't|hadn't)\s+(?:been\s+)?(?:verified|confirmed|validated|supported|accepted)\b/i.test(prefix)) return false;
+  if (/\b(?:do|does|did)\s+not\s+(?:show|support|establish|prove|mean|let|allow|expect|assume|accept)\b/i.test(prefix)) return false;
+  if (/\b(?:cannot|can't)(?:\s+\w+){0,2}\s+(?:assume|accept|rely|conclude|claim|show|support|prove|confirm)\b/i.test(prefix)) return false;
+  if (/\b(?:no|not(?:\s+(?:that|necessarily|an?))?)\s*$/i.test(prefix)) return false;
+  if (/\b(?:if|unless|whether|may|might|could|would|should)\b/i.test(normalizedFact)) return false;
+  if (/\b(?:not|never|cannot|can't|isn't|wasn't|doesn't|don't|won't|no\s+longer|far\s+from|anything\s+but|rarely|unlikely|invalid|wrong|false|rejected|unsupported)\b/i.test(normalizedFact)) return false;
+  if (/\bfail(?:s|ed|ing)?\s+to\b/i.test(normalizedFact)) return false;
+  if (/\b(?:do|does|is|was|will|would|should|could)\s+not\b/i.test(normalizedFact)) return false;
+  if (/\bno\s+(?:(?:net|monthly)\s+){0,2}burn\b/i.test(normalizedFact)) return false;
+  if (/^\s*(?:may|might|could|would|should)\b/i.test(suffix)) return false;
+  if (/\b(?:if|unless|provided\s+that|on\s+condition\s+that)\b/i.test(suffix)) return false;
+  if (/\b(?:invalid|wrong|false|rejected|unsupported|unverified|unproven|reject(?:s|ed|ing)?)\b/i.test(suffix)) return false;
+  if (hasSubRunwayDuration(suffix)) return false;
+  if (/^\s*[,\u2013\u2014-]?\s*(?:(?:which|that|this|it)\s+)?(?:is|was|seems?|remains?)?\s*(?:not\s+expected|invalid|wrong|false|rejected|unsupported|unverified|unproven)\b/i.test(suffix)) return false;
+  if (hasImmediateRunwayAssumptionDenial(text, clauseEnd)) return false;
+  return true;
+}
+
+function hasAffirmedRunwayAssumption(response: string): boolean {
+  const text = response
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/^[ \t]*(?:>[ \t]*)+/gm, '')
+    .replace(/^[ \t]*(?:[-+*#]+[ \t]*)+/gm, '')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1');
+
+  for (const marker of text.matchAll(new RegExp(
+    RUNWAY_ASSUMPTION_MARKER.source,
+    RUNWAY_ASSUMPTION_MARKER.flags,
+  ))) {
+    const start = marker.index;
+    if (start === undefined) continue;
+    const end = start + marker[0].length;
+    const markerPrefix = text.slice(Math.max(0, start - 80), start);
+    const markerSuffix = text.slice(end, end + 80);
+    const markerIsAssumeVerb = /^assum(?:e[sd]?|ing)$/i.test(marker[0]);
+    const markerIsDenied = /\b(?:no|without)\s+(?:(?:stated|explicit)\s+)?$/i.test(markerPrefix)
+      || /\bnot\s+(?:an?\s+)?$/i.test(markerPrefix)
+      || /\b(?:cannot|can't|do\s+not|don't|never)\s+$/i.test(markerPrefix)
+      || (markerIsAssumeVerb && /\b(?:cannot|can't)(?:\s+\w+){1,3}\s+$/i.test(markerPrefix))
+      || /\b(?:reject(?:s|ed|ing)?|(?:cannot|can't|do\s+not|don't|never)\s+accept)\s+(?:the\s+)?$/i.test(markerPrefix)
+      || /\b(?:reject(?:s|ed|ing)?|disput(?:e[sd]?|ing)|den(?:y|ies|ied|ying)|refut(?:e[sd]?|ing)|challeng(?:e[sd]?|ing)|doubt(?:s|ed|ing)?)(?:\s+as\s+\w+(?:\s+\w+){0,2})?\s+(?:that\s+)?(?:the\s+)?$/i.test(markerPrefix)
+      || /\b(?:cannot|can't)(?:\s+\w+){0,2}\s+(?:accept|rely\s+on|trust|use)\s+(?:the\s+)?$/i.test(markerPrefix)
+      || /\bno\s+(?:reasonable\s+)?basis\s+for\s+(?:the\s+)?$/i.test(markerPrefix)
+      || /\bno\s+(?:reason|basis)\s+to\s+(?:accept|believe|trust|use)\s+(?:the\s+)?$/i.test(markerPrefix)
+      || /\b(?:(?:has|have|had)\s+not|hasn't|haven't|hadn't)\s+(?:been\s+)?(?:verified|confirmed|validated|supported|accepted)\s+(?:the\s+)?$/i.test(markerPrefix)
+      || /\b(?:rejected|invalid|false|wrong|unsupported|unverified|unproven|disclaimed)\s+(?:the\s+)?$/i.test(markerPrefix)
+      || /^\s+(?:review|sensitivity|analysis)\b/i.test(markerSuffix)
+      || /^\s*(?:(?:has|have|had)\s+not|hasn't|haven't|hadn't)\s+(?:been\s+)?(?:verified|confirmed|validated|supported|accepted)\b/i.test(markerSuffix)
+      || /^\s*(?:is|was|seems?|remains?)\s+(?:not|never|invalid|wrong|false|rejected|unsupported|unverified|unproven)\b/i.test(markerSuffix);
+    if (markerIsDenied) continue;
+
+    const window = text.slice(start, end + 420);
+    for (const factPattern of [RUNWAY_BURN_STABILITY, RUNWAY_ZERO_REVENUE]) {
+      for (const fact of window.matchAll(new RegExp(factPattern.source, factPattern.flags))) {
+        const factStart = fact.index;
+        if (factStart === undefined) continue;
+        const markerBridge = window.slice(marker[0].length, factStart);
+        if (/[!?;]|[.](?=\s|$)/.test(markerBridge)) continue;
+        if (runwayAssumptionFactIsAffirmed(window, factStart, factStart + fact[0].length)) {
+          return true;
+        }
+      }
+    }
+  }
+  for (const fact of text.matchAll(new RegExp(
+    RUNWAY_PASSIVE_ZERO_REVENUE.source,
+    RUNWAY_PASSIVE_ZERO_REVENUE.flags,
+  ))) {
+    const factStart = fact.index;
+    if (factStart !== undefined
+      && runwayAssumptionFactIsAffirmed(text, factStart, factStart + fact[0].length)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function evaluateResponseRule(
   rule: PersonaResponseRule,
   evidence: PersonaTrialEvidence,
@@ -378,6 +551,8 @@ function evaluateResponseRule(
       return rule.pattern.test(evidence.response);
     case 'runwayFormula':
       return hasAffirmedRunwayFormula(evidence.response);
+    case 'runwayAssumption':
+      return hasAffirmedRunwayAssumption(evidence.response);
     case 'allPatterns':
       return rule.patterns.every(pattern => pattern.test(evidence.response));
     case 'notPattern':

@@ -627,6 +627,528 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 
+  it.each([
+    [
+      'live flat-burn and zero-revenue statement',
+      'Biggest assumption: The burn rate stays flat at $10,000/month with zero revenue for the full period.',
+      true,
+    ],
+    [
+      'fixed numeric burn',
+      'Biggest assumption: Monthly burn remains at $10,000 throughout the runway.',
+      true,
+    ],
+    [
+      'unchanged burn',
+      'Biggest assumption: Current monthly burn continues unchanged for four months.',
+      true,
+    ],
+    [
+      'fixed burn wording',
+      'Biggest assumption: Burn is fixed at $10,000 per month.',
+      true,
+    ],
+    [
+      'no additional revenue',
+      'Biggest assumption: No additional revenue arrives during the runway.',
+      true,
+    ],
+    [
+      'stable burn',
+      'Biggest assumption: monthly burn remains stable.',
+      true,
+    ],
+    [
+      'steady burn',
+      'Biggest assumption: monthly burn holds steady at $10,000.',
+      true,
+    ],
+    [
+      'numeric burn without at',
+      'Biggest assumption: monthly burn remains $10,000 per month.',
+      true,
+    ],
+    [
+      'same monthly burn',
+      'Biggest assumption: monthly burn stays the same each month.',
+      true,
+    ],
+    [
+      'cannot ignore an affirmed assumption',
+      'We cannot ignore the assumption that monthly burn remains constant.',
+      true,
+    ],
+    [
+      'affirmative future burn',
+      'Biggest assumption: monthly burn will remain constant for four months.',
+      true,
+    ],
+    [
+      'affirmative future zero revenue',
+      'Biggest assumption: revenue will remain zero for four months.',
+      true,
+    ],
+    [
+      'parenthetical burn amount',
+      'Biggest assumption: monthly burn ($10,000 per month) remains constant throughout the runway.',
+      true,
+    ],
+    [
+      'coordinated burn subject',
+      'Biggest assumption: monthly burn and revenue remain constant throughout the runway.',
+      true,
+    ],
+    [
+      'burn amount modifier',
+      'Biggest assumption: monthly burn of $10,000 remains constant throughout the runway.',
+      true,
+    ],
+    [
+      'coordinated monthly revenue subject',
+      'Biggest assumption: monthly burn and monthly revenue remain constant throughout the runway.',
+      true,
+    ],
+    [
+      'revenue treated as zero',
+      'Biggest assumption: revenue is treated as zero because no forecast is available.',
+      true,
+    ],
+    [
+      'revenue modeled at zero',
+      'Biggest assumption: revenue is modeled at zero for the full runway.',
+      true,
+    ],
+    [
+      'flat burn noun phrase',
+      'Biggest assumption: a flat monthly burn rate of $10,000.',
+      true,
+    ],
+    [
+      'direct passive zero-revenue assumption',
+      'Revenue is assumed to be zero for the four-month runway.',
+      true,
+    ],
+    [
+      'current parenthetical burn amount',
+      'Biggest assumption: monthly burn (currently $10,000 per month) remains constant throughout the runway.',
+      true,
+    ],
+    [
+      'burn amount introduced by at',
+      'Biggest assumption: monthly burn at $10,000 remains constant throughout the runway.',
+      true,
+    ],
+    [
+      'zero-valued revenue forecast',
+      'Biggest assumption: the revenue forecast is zero for the full runway.',
+      true,
+    ],
+    [
+      'zero-valued revenue projection',
+      'Biggest assumption: the revenue projection remains zero for the full runway.',
+      true,
+    ],
+    [
+      'numeric zero revenue',
+      'Biggest assumption: revenue remains at 0.',
+      true,
+    ],
+    [
+      'passive no-revenue assumption',
+      'No revenue is assumed during the runway.',
+      true,
+    ],
+    [
+      'plural assumptions with affirmative no-change wording',
+      'Key assumptions: monthly burn does not change and revenue remains at zero.',
+      true,
+    ],
+    [
+      'explicit denial',
+      'Biggest assumption: The burn rate does not stay flat and is not constant.',
+      false,
+    ],
+    [
+      'conditional sensitivity statement',
+      'Assumption sensitivity: If burn stays constant, runway would be four months.',
+      false,
+    ],
+    [
+      'explicitly disclaimed assumption',
+      'No assumption is made here; revenue remains zero.',
+      false,
+    ],
+    [
+      'trailing rejection',
+      'Biggest assumption: Burn stays constant, which is wrong.',
+      false,
+    ],
+    [
+      'false assumption label',
+      'The assumption is false: burn stays constant.',
+      false,
+    ],
+    [
+      'rejected assumption label',
+      'The rejected assumption is that burn stays constant.',
+      false,
+    ],
+    [
+      'hedged burn',
+      'Biggest assumption: monthly burn may remain constant.',
+      false,
+    ],
+    [
+      'hedged revenue',
+      'Biggest assumption: revenue may remain at zero.',
+      false,
+    ],
+    [
+      'conditional burn',
+      'Biggest assumption: monthly burn stays constant only if we cut costs.',
+      false,
+    ],
+    [
+      'nonzero revenue',
+      'Biggest assumption: revenue remains nonzero.',
+      false,
+    ],
+    [
+      'no-longer constant burn',
+      'Biggest assumption: monthly burn is no longer constant.',
+      false,
+    ],
+    [
+      'invalid assumption label',
+      'This assumption is invalid: monthly burn stays constant.',
+      false,
+    ],
+    [
+      'later-sentence borrowing',
+      'Assumption review: none identified. Monthly burn stays constant.',
+      false,
+    ],
+    [
+      'cannot assume',
+      'We cannot assume zero revenue.',
+      false,
+    ],
+    [
+      'above-zero revenue',
+      'Biggest assumption: revenue remains above zero.',
+      false,
+    ],
+    [
+      'anything-but-zero revenue',
+      'Biggest assumption: revenue is anything but zero.',
+      false,
+    ],
+    [
+      'plain trailing condition',
+      'Biggest assumption: monthly burn stays constant if sales stall.',
+      false,
+    ],
+    [
+      'question rather than assumption',
+      'Biggest assumption: Does monthly burn stay constant?',
+      false,
+    ],
+    [
+      'far-from constant burn',
+      'Biggest assumption: monthly burn is far from constant.',
+      false,
+    ],
+    [
+      'later invalidation',
+      'Biggest assumption: Burn is fixed at $10,000 per month, but this assumption is invalid.',
+      false,
+    ],
+    [
+      'later rejection',
+      'Biggest assumption: Burn stays constant for four months, but we reject that assumption.',
+      false,
+    ],
+    [
+      'comma condition',
+      'Assumption: Monthly burn stays constant, if current spending patterns persist.',
+      false,
+    ],
+    [
+      'adverbial cannot assume',
+      'We cannot reasonably assume zero revenue.',
+      false,
+    ],
+    [
+      'failed stability',
+      'Biggest assumption: monthly burn fails to remain constant.',
+      false,
+    ],
+    [
+      'temporary flat burn',
+      'Biggest assumption: monthly burn stays flat this month but rises next month.',
+      false,
+    ],
+    [
+      'temporary zero revenue',
+      'Biggest assumption: revenue remains zero for one month, then sales begin.',
+      false,
+    ],
+    [
+      'unverified assumption label',
+      'The assumption is unverified: monthly burn remains constant.',
+      false,
+    ],
+    [
+      'active rejection',
+      'We reject the assumption that monthly burn stays constant.',
+      false,
+    ],
+    [
+      'active do-not-accept rejection',
+      'Do not accept the assumption that revenue remains zero.',
+      false,
+    ],
+    [
+      'cross-subject stability borrowing',
+      'Biggest assumption: monthly burn rises while revenue remains constant.',
+      false,
+    ],
+    [
+      'cross-subject numeric borrowing',
+      'Biggest assumption: monthly burn rises while revenue remains at $10,000.',
+      false,
+    ],
+    [
+      'cross-subject adjective borrowing',
+      'Biggest assumption: monthly burn remains high while revenue is constant.',
+      false,
+    ],
+    [
+      'cross-subject zero-revenue borrowing',
+      'Biggest assumption: revenue outlook says burn remains at 0.',
+      false,
+    ],
+    [
+      'trailing unverified assumption',
+      'Biggest assumption: monthly burn stays constant, but this assumption is unverified.',
+      false,
+    ],
+    [
+      'active cannot-accept rejection',
+      'We cannot accept the assumption that monthly burn remains constant.',
+      false,
+    ],
+    [
+      'rejected claim between marker and burn',
+      'Biggest assumption: we reject the claim that monthly burn remains constant.',
+      false,
+    ],
+    [
+      'do-not-let denial between marker and burn',
+      'Biggest assumption: do not let monthly burn be constant.',
+      false,
+    ],
+    [
+      'false-that denial between marker and revenue',
+      'Biggest assumption: it is false that revenue remains zero.',
+      false,
+    ],
+    [
+      'two-month temporary burn',
+      'Biggest assumption: monthly burn stays flat for two months, then rises.',
+      false,
+    ],
+    [
+      'until-next-month temporary burn',
+      'Biggest assumption: monthly burn remains constant until next month, then increases.',
+      false,
+    ],
+    [
+      'disputed assumption',
+      'We dispute the assumption that monthly burn remains constant.',
+      false,
+    ],
+    [
+      'cannot-rely-on assumption',
+      'We cannot rely on the assumption that revenue remains zero.',
+      false,
+    ],
+    [
+      'qualified active rejection',
+      'We reject as unrealistic the assumption that monthly burn remains constant.',
+      false,
+    ],
+    [
+      'missing revenue forecast',
+      'Assumption: no revenue forecast is available.',
+      false,
+    ],
+    [
+      'evidence denial before burn',
+      'Assumption: evidence does not show monthly burn remains constant.',
+      false,
+    ],
+    [
+      'direct not-zero denial',
+      'Assumption: not zero revenue.',
+      false,
+    ],
+    [
+      'temporary passive zero revenue',
+      'No revenue is assumed for two months, then sales begin.',
+      false,
+    ],
+    [
+      'no basis for assumption',
+      'There is no basis for the assumption that monthly burn remains constant.',
+      false,
+    ],
+    [
+      'adverbial cannot-accept rejection',
+      'We cannot reasonably accept the assumption that revenue remains zero.',
+      false,
+    ],
+    [
+      'doubted assumption',
+      'We doubt that the assumption that monthly burn remains constant is valid.',
+      false,
+    ],
+    [
+      'first-three-month temporary burn',
+      'Biggest assumption: monthly burn stays flat for the first three months, then rises.',
+      false,
+    ],
+    [
+      'ninety-day temporary burn',
+      'Biggest assumption: monthly burn stays flat for 90 days, then rises.',
+      false,
+    ],
+    [
+      'missing revenue target',
+      'Assumption: no revenue target is available.',
+      false,
+    ],
+    [
+      'missing revenue guidance',
+      'Assumption: no revenue guidance is available.',
+      false,
+    ],
+    [
+      'missing income forecast',
+      'Assumption: no income forecast is available.',
+      false,
+    ],
+    [
+      'missing cash-inflow projection',
+      'Assumption: no cash inflow projection is available.',
+      false,
+    ],
+    [
+      'cannot-confirm burn denial',
+      'Assumption: we cannot confirm monthly burn remains constant.',
+      false,
+    ],
+    [
+      'first-two-month temporary burn',
+      'Assumption: monthly burn stays constant for the first two months, then rises.',
+      false,
+    ],
+    [
+      'no evidence for burn stability',
+      'Assumption: there is no evidence that monthly burn remains constant.',
+      false,
+    ],
+    [
+      'assumption has not been verified',
+      'The assumption has not been verified: monthly burn remains constant.',
+      false,
+    ],
+    [
+      'assumption has not been verified contraction',
+      "We haven't verified the assumption that revenue remains zero.",
+      false,
+    ],
+    [
+      'no reason to accept assumption',
+      'We have no reason to accept the assumption that monthly burn remains constant.',
+      false,
+    ],
+    [
+      'next-three-month temporary burn',
+      'Biggest assumption: monthly burn stays flat for the next three months, then rises.',
+      false,
+    ],
+    [
+      'next-ninety-day temporary burn',
+      'Biggest assumption: monthly burn stays flat over the next 90 days, then rises.',
+      false,
+    ],
+    [
+      'fractional sub-runway burn duration',
+      'Biggest assumption: monthly burn remains constant for 3.5 months, then rises.',
+      false,
+    ],
+    [
+      'hundred-day sub-runway revenue duration',
+      'Biggest assumption: no revenue for 100 days, then sales begin.',
+      false,
+    ],
+    [
+      'first-quarter sub-runway duration',
+      'Biggest assumption: monthly burn stays constant through the first quarter.',
+      false,
+    ],
+    [
+      'one-hundred-nineteen-day sub-runway boundary',
+      'Biggest assumption: monthly burn stays constant for 119 days.',
+      false,
+    ],
+    [
+      'one-hundred-twenty-day runway boundary',
+      'Biggest assumption: monthly burn stays constant for 120 days.',
+      true,
+    ],
+    [
+      'following-sentence assumption rejection',
+      'Biggest assumption: monthly burn remains constant. This assumption is rejected.',
+      false,
+    ],
+    [
+      'following-sentence assumption unverified',
+      'Biggest assumption: revenue remains zero. However, this assumption is unverified.',
+      false,
+    ],
+    [
+      'following-sentence fact denial',
+      'Biggest assumption: no revenue. This is wrong.',
+      false,
+    ],
+    [
+      'following-line assumption rejection',
+      'Biggest assumption: monthly burn remains constant\nThis assumption is rejected.',
+      false,
+    ],
+  ])('classifies the finance runway assumption: %s', (_label, assumption, expected) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway = 4.00 months.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn Rate.',
+      assumption,
+      '1. Cut monthly burn.',
+      '2. Generate near-term revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'assumption')?.passed).toBe(expected);
+  });
+
   it('accepts the valid live finance formatting and cash-inflow action', () => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const response = [

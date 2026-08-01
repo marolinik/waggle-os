@@ -31,6 +31,7 @@ interface BaseResponseRule {
 export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'pattern'; pattern: RegExp })
   | (BaseResponseRule & { kind: 'runwayFormula' })
+  | (BaseResponseRule & { kind: 'runwayAssumption' })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'notPattern'; pattern: RegExp })
   | (BaseResponseRule & { kind: 'verifierContract' })
@@ -247,7 +248,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     responseRules: [
       { id: 'runway', description: 'Positively calculates four months of runway', kind: 'pattern', pattern: positiveRunwayPattern, points: 10 },
       { id: 'formula', description: 'States cash divided by monthly net burn', kind: 'runwayFormula', points: 10 },
-      { id: 'assumption', description: 'Names the constant-burn/no-revenue assumption', kind: 'allPatterns', patterns: [/assumption/i, /(?:burn.*constant|no (?:new )?revenue|revenue remains zero)/i], points: 10 },
+      { id: 'assumption', description: 'Names the constant-burn/no-revenue assumption', kind: 'runwayAssumption', points: 10 },
       { id: 'two-actions', description: 'Gives positive cost and revenue or cash-inflow actions', kind: 'allPatterns', patterns: [costActionPattern, cashActionPattern], points: 10 },
       { id: 'no-false-impact', description: 'Avoids false dollar-to-month claims and schedule CTAs', kind: 'notPattern', pattern: /(?:each dollar saved.*(?:one|1).*month|\/schedule|calendar event)/i, points: 10 },
     ],
