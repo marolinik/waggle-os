@@ -34,6 +34,7 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'timedAgenda'; durationMinutes: number; minimumBlocks: number })
   | (BaseResponseRule & { kind: 'runwayFormula' })
   | (BaseResponseRule & { kind: 'runwayAssumption' })
+  | (BaseResponseRule & { kind: 'boundedWorkspaceClaims' })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'notPattern'; pattern: RegExp })
   | (BaseResponseRule & { kind: 'verifierContract' })
@@ -79,12 +80,14 @@ const primaryResearchDomains = [
   ...postgresPrimaryResearchDomains,
 ] as const;
 
-const positiveFailureVerb = String.raw`(?<!not )(?<!cannot )(?<!can't )(?<!never )(?<!no longer )\b(?:(?:still\s+)?(?:show(?:s|ing)?|have|report(?:s|ing)?|return(?:s|ing)?|produce(?:s|ing)?)|remain(?:s|ing)?)\s+(?:two|2)\s+failures?\b`;
+const affirmedFactClause = String.raw`(?<!not true that )(?<!not true that the )(?<!not true that \*\*)(?<!not true that __)(?<!not true that \*)(?<!not true that _)(?<!false that )(?<!false that the )(?<!false that \*\*)(?<!false that __)(?<!false that \*)(?<!false that _)`;
+const affirmedBrowserTests = `${affirmedFactClause}${String.raw`\bbrowser tests?\b`}`;
+const positiveFailureVerb = String.raw`(?<!not )(?<!cannot )(?<!can't )(?<!don't )(?<!doesn't )(?<!didn't )(?<!aren't )(?<!isn't )(?<!never )(?<!no longer )\b(?:currently\s+show(?:s|ing)?\s+(?:two|2)\s+remaining\s+failures?|(?:(?:still\s+)?(?:show(?:s|ing)?|have|report(?:s|ing)?|return(?:s|ing)?|produce(?:s|ing)?)|remain(?:s|ing)?)\s+(?:two|2)\s+failures?)\b`;
 const windowsBrowserFailuresPattern = new RegExp([
-  `${String.raw`\bbrowser tests?\b[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,50}`}${positiveFailureVerb}`,
-  `${String.raw`\bbrowser tests?\b[^.\r\n]{0,60}`}${positiveFailureVerb}${String.raw`[^.\r\n]{0,60}\bWindows\b`}`,
-  String.raw`\bbrowser tests?\b[^.\r\n]{0,30}\b(?:two|2)\s+failures?\b[^.\r\n]{0,20}\b(?:remain|persist|exist)\b[^.\r\n]{0,60}\bWindows\b`,
-  String.raw`(?<!not )(?<!no longer )\b(?:two|2)\s+browser test failures?\s+(?:still\s+)?(?:persist|remain|exist)\b[^.\r\n]{0,60}\bWindows\b`,
+  `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,50}`}${positiveFailureVerb}`,
+  `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,60}`}${positiveFailureVerb}${String.raw`[^.\r\n]{0,60}\bWindows\b`}`,
+  `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:two|2)\s+failures?\b[^.\r\n]{0,20}\b(?:remain|persist|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
+  `${affirmedFactClause}${String.raw`(?<!not )(?<!no longer )\b(?:two|2)\s+browser test failures?\s+(?:still\s+)?(?:persist|remain|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
 ].join('|'), 'i');
 const positiveRecommendationLead = String.raw`(?:(?<!cannot )(?<!can't )(?<!not )\b(?:recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[\s\S]){0,80}|(?:^|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:\*\*)?|(?:^|[.!?]\s+|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:we|you|the team)[ \t]+should[ \t]+)`;
 const delayRecommendationPattern = new RegExp(`${positiveRecommendationLead}${String.raw`\bdelay(?:ing)?\s+(?:the\s+)?release\b[\s\S]{0,240}\b(?:until|once)\b[\s\S]{0,180}(?:gaps?|failures?|smart router|cloud credentials)`}`, 'im');
@@ -268,7 +271,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       { id: 'workspace-scope', description: 'Reports on the current workspace', kind: 'pattern', pattern: /workspace/i, points: 10 },
       { id: 'empty-result', description: 'Accurately reports the fresh virtual workspace as empty', kind: 'pattern', pattern: /(?:\b(?:current|fresh|virtual) workspace (?:is|was) empty\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b)/i, points: 10 },
       { id: 'next-step', description: 'Recommends one next engineering step', kind: 'pattern', pattern: /(?:next (?:engineering )?step|recommended next step)/i, points: 10 },
-      { id: 'bounded-claim', description: 'Does not claim parent or external repository contents', kind: 'notPattern', pattern: /(?:parent director(?:y|ies)|outside (?:this|the) workspace|repository contains|package\.json)/i, points: 10 },
+      { id: 'bounded-claim', description: 'Does not claim parent or external repository contents', kind: 'boundedWorkspaceClaims', points: 10 },
       { id: 'concise', description: 'Keeps an empty-workspace report concise', kind: 'maxWords', maxWords: 300, points: 10 },
     ],
   },
@@ -317,7 +320,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 3_000,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/researcher lane/i, /coder lane/i], points: 10 },
+      { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/(?:\bresearcher\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*researcher(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$)/im, /(?:\bcoder\s+lane\b|^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?lane\s+\d+\s*[-\u2013\u2014:]\s*coder(?:[ \t]+\([^\r\n)]+\))?[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$)/im], points: 10 },
       { id: 'lane-contracts', description: 'Provides objectives, inputs, and deliverables', kind: 'allPatterns', patterns: [/objectives?/i, /inputs?/i, /deliverables?/i], points: 10 },
       { id: 'dependencies', description: 'Defines dependencies', kind: 'pattern', pattern: /dependenc(?:y|ies)/i, points: 10 },
       { id: 'merge', description: 'Defines merge criteria', kind: 'pattern', pattern: /merge criteria/i, points: 10 },

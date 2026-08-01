@@ -586,6 +586,21 @@ describe('deterministic 100-point persona scorer', () => {
       requestPersonaId: writer.id,
     }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
 
+    const capturedRemainingResponse = [
+      '**MEMO**',
+      'Release was planned for Friday. API tests are passing. Browser tests currently show two remaining failures on Windows.',
+      'The smart router has not been tested without cloud credentials.',
+      '**Recommendation:** Delay release until these gaps are closed.',
+    ].join('\n\n');
+    expect(scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: capturedRemainingResponse,
+      persistedResponse: capturedRemainingResponse,
+      tokenStreamResponse: capturedRemainingResponse,
+      renderedAssistantResponse: capturedRemainingResponse,
+      requestPersonaId: writer.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
     const inventedRiskResponse = `${boldLabelResponse} Shipping before these gaps are closed carries unverified risk to release stability.`;
     const inventedRiskResult = scorePersonaTrial(writer, evidence({
       prompt: writer.prompt,
@@ -611,7 +626,57 @@ describe('deterministic 100-point persona scorer', () => {
       'The smart router has not been exercised without cloud credentials.',
       'I do not think we should delay release until the failures are closed; ship now.',
     ].join(' ');
-    for (const invalidResponse of [misleading, scopedNegation]) {
+    const deniedCapturedGrammar = [
+      'We planned to ship Friday. API tests are passing.',
+      'Browser tests do not currently show two remaining failures on Windows.',
+      'The smart router has not been exercised without cloud credentials.',
+      'Delay release until the gaps are closed.',
+    ].join(' ');
+    const resolvedCapturedGrammar = deniedCapturedGrammar.replace(
+      'do not currently',
+      'no longer currently',
+    );
+    const wrongCountCapturedGrammar = deniedCapturedGrammar.replace(
+      'do not currently show two',
+      'currently show three',
+    );
+    const contractedDenialCapturedGrammar = deniedCapturedGrammar.replace(
+      'do not currently',
+      "don't currently",
+    );
+    const contractedPastDenialCapturedGrammar = deniedCapturedGrammar.replace(
+      'do not currently',
+      "didn't currently",
+    );
+    const outerDenialCapturedGrammar = deniedCapturedGrammar.replace(
+      'Browser tests do not currently show two remaining failures on Windows.',
+      'It is not true that browser tests currently show two remaining failures on Windows.',
+    );
+    const formattedOuterDenialCapturedGrammar = outerDenialCapturedGrammar.replace(
+      'browser tests',
+      '**browser tests**',
+    );
+    const contractedPluralDenialCapturedGrammar = deniedCapturedGrammar.replace(
+      'do not currently show',
+      "aren't currently showing",
+    );
+    const contractedSingularDenialCapturedGrammar = deniedCapturedGrammar.replace(
+      'Browser tests do not currently show',
+      "The browser test isn't currently showing",
+    );
+    for (const invalidResponse of [
+      misleading,
+      scopedNegation,
+      deniedCapturedGrammar,
+      resolvedCapturedGrammar,
+      wrongCountCapturedGrammar,
+      contractedDenialCapturedGrammar,
+      contractedPastDenialCapturedGrammar,
+      outerDenialCapturedGrammar,
+      formattedOuterDenialCapturedGrammar,
+      contractedPluralDenialCapturedGrammar,
+      contractedSingularDenialCapturedGrammar,
+    ]) {
       const misleadingResult = scorePersonaTrial(writer, evidence({
         prompt: writer.prompt,
         response: invalidResponse,
@@ -1498,6 +1563,56 @@ describe('deterministic 100-point persona scorer', () => {
       '| Milestone | Depends On |\n|---|---|\n| M4 | M1 (not optional) |',
       true,
     ],
+    [
+      'captured named phase dependency table',
+      '| Milestone | Depends On | Why |\n|---|---|---|\n| Local model bundling (2) | Native packaging (1) | installer prerequisite |\n| Smart router (4) | Local models (2) + Proxy (3) | endpoints required |',
+      true,
+    ],
+    [
+      'named phase self dependency',
+      '| Milestone | Depends On |\n|---|---|\n| Local model bundling (2) | Local model bundling (2) |',
+      false,
+    ],
+    [
+      'denied named phase dependency',
+      '| Milestone | Depends On |\n|---|---|\n| Local model bundling (2) | not Native packaging (1) |',
+      false,
+    ],
+    [
+      'generic phase-order prose',
+      'Milestones are sequenced by dependency order (Phase 1 through Phase 6).',
+      false,
+    ],
+    [
+      'suffix-denied named phase dependency',
+      '| Milestone | Depends On |\n|---|---|\n| Local model bundling (2) | Native packaging (1) is not required |',
+      false,
+    ],
+    [
+      'clause-denied named phase dependency',
+      '| Milestone | Depends On |\n|---|---|\n| Local model bundling (2) | Native packaging (1), but it is not a dependency |',
+      false,
+    ],
+    [
+      'conflicting structural target identifiers',
+      '| Phase | Milestone | Depends On |\n|---|---|---|\n| 5 | Windows verification (11) | Phase 5 |',
+      false,
+    ],
+    [
+      'tentative named phase dependency',
+      '| Milestone | Depends On |\n|---|---|\n| Local model bundling (2) | possibly Native packaging (1) |',
+      false,
+    ],
+    [
+      'contracted suffix-denied named phase dependency',
+      "| Milestone | Depends On |\n|---|---|\n| Local model bundling (2) | Native packaging (1) isn't required |",
+      false,
+    ],
+    [
+      'optional named phase dependency',
+      '| Milestone | Depends On |\n|---|---|\n| Local model bundling (2) | Native packaging (1) is optional |',
+      false,
+    ],
   ])('classifies a project dependency map: %s', (_label, dependencyText, expected) => {
     const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
     const response = [
@@ -2085,6 +2200,123 @@ describe('deterministic 100-point persona scorer', () => {
       passed: false,
       pointsAwarded: 0,
     });
+  });
+
+  it.each([
+    [
+      'captured manifest recommendation',
+      'The workspace is empty. Recommended next engineering step: establish a minimal project skeleton, e.g. a README and a basic manifest file (`package.json`, `pyproject.toml`, etc.), after the intended stack is confirmed.',
+      true,
+    ],
+    [
+      'captured future scaffold offer',
+      'The current workspace is empty. The next engineering step is to confirm the stack; once confirmed, I can create the initial structure such as `README.md` and `package.json`.',
+      true,
+    ],
+    [
+      'affirmed inspected manifest',
+      'The current workspace is empty, but I found package.json in the parent repository. Recommended next engineering step: inspect it.',
+      false,
+    ],
+    [
+      'affirmed workspace manifest',
+      'The current workspace contains package.json. Recommended next engineering step: inspect it.',
+      false,
+    ],
+    [
+      'affirmed present manifest',
+      'The current workspace is empty. package.json is present outside this workspace. Recommended next engineering step: inspect it.',
+      false,
+    ],
+    [
+      'truthful manifest absence',
+      'The current workspace is empty. No package.json was found. Recommended next engineering step: confirm the intended stack.',
+      true,
+    ],
+    [
+      'truthful manifest nonexistence',
+      "The current workspace is empty. package.json doesn't exist. Recommended next engineering step: confirm the intended stack.",
+      true,
+    ],
+    [
+      'affirmed parent repository manifest',
+      'The current workspace is empty. package.json is in the parent repository. Recommended next engineering step: inspect it.',
+      false,
+    ],
+    [
+      'hypothetical future manifest read',
+      'The current workspace is empty. After you add it, I can read package.json to verify the manifest. Recommended next engineering step: confirm the intended stack.',
+      true,
+    ],
+    [
+      'affirmed discovered workspace manifest',
+      'The current workspace is empty, but I discovered package.json in this workspace. Recommended next engineering step: inspect it.',
+      false,
+    ],
+  ])('classifies bounded coder workspace claims: %s', (_label, response, expected) => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'bounded-claim')?.passed).toBe(expected);
+  });
+
+  it.each([
+    [
+      'captured numbered lane headings',
+      '## Lane 1 — Researcher\nObjective, inputs, deliverables, dependencies, and merge criteria.\n## Lane 2 — Coder\nObjective, inputs, deliverables, dependencies, and merge criteria.\nThe coordinator must verify evidence before accepting either result.',
+      true,
+    ],
+    [
+      'canonical lane-first labels',
+      '## Researcher lane\nObjective, inputs, deliverables, dependencies, and merge criteria.\n## Coder lane\nObjective, inputs, deliverables, dependencies, and merge criteria.\nThe coordinator must verify evidence before accepting either result.',
+      true,
+    ],
+    [
+      'roles mentioned without lane assignments',
+      'A researcher and coder are available. Objectives, inputs, deliverables, dependencies, and merge criteria follow. The coordinator must verify evidence before accepting.',
+      false,
+    ],
+    [
+      'denied numbered lane labels',
+      'There is no Lane 1: Researcher and no Lane 2: Coder. Objectives, inputs, deliverables, dependencies, and merge criteria follow. The coordinator must verify evidence before accepting.',
+      false,
+    ],
+    [
+      'numbered lane prose without section labels',
+      'The lane 1 researcher and lane 2 coder are available. Objectives, inputs, deliverables, dependencies, and merge criteria follow. The coordinator must verify evidence before accepting.',
+      false,
+    ],
+    [
+      'imperative denial of numbered lanes',
+      'Do not define Lane 1: Researcher or Lane 2: Coder. Objectives, inputs, deliverables, dependencies, and merge criteria follow. The coordinator must verify evidence before accepting.',
+      false,
+    ],
+    [
+      'suffix-denied numbered lane headings',
+      'Lane 1: Researcher is not defined.\nLane 2: Coder is not defined.\nObjectives, inputs, deliverables, dependencies, and merge criteria follow. The coordinator must verify evidence before accepting.',
+      false,
+    ],
+  ])('classifies coordinator lane labels: %s', (_label, response, expected) => {
+    const coordinator = PERSONA_CASES.find(persona => persona.id === 'coordinator')!;
+    const result = scorePersonaTrial(coordinator, evidence({
+      prompt: coordinator.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coordinator.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-lanes')?.passed).toBe(expected);
   });
 
   it('awards the exact live general-purpose response 100 for substantive prioritization', () => {

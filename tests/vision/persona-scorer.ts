@@ -857,8 +857,34 @@ function hasTimedAgenda(
   return elapsedMinutes === durationMinutes;
 }
 
-function milestoneIds(value: string): string[] {
-  return Array.from(value.matchAll(/\bM\d+\b/gi), match => match[0].toUpperCase());
+interface DependencyReference {
+  id: string;
+  index: number;
+  text: string;
+}
+
+function dependencyReferences(value: string, includeNamedPhases = false): DependencyReference[] {
+  const references: DependencyReference[] = Array.from(value.matchAll(/\bM(\d+)\b/gi), match => ({
+    id: `M${Number(match[1])}`,
+    index: match.index,
+    text: match[0],
+  }));
+  if (includeNamedPhases) {
+    for (const pattern of [/\bPhase\s+(\d+)\b/gi, /\((\d+)\)/g]) {
+      for (const match of value.matchAll(pattern)) {
+        references.push({
+          id: `M${Number(match[1])}`,
+          index: match.index,
+          text: match[0],
+        });
+      }
+    }
+  }
+  return references.sort((left, right) => left.index - right.index);
+}
+
+function milestoneIds(value: string, includeNamedPhases = false): string[] {
+  return dependencyReferences(value, includeNamedPhases).map(reference => reference.id);
 }
 
 function markdownTableCells(line: string): string[] {
@@ -897,28 +923,37 @@ function directDependencyIsAffirmed(response: string, start: number, end: number
 
 function hasDeniedDependencyLanguage(value: string): boolean {
   const normalized = value.replace(/\bnot\s+only\b/gi, '');
-  return /[?]|\b(?:not|never|none|tbd|unknown|uncertain|unverified|unconfirmed|unestablished|false|disputed|unordered|cannot|can't|doesn't|don't|may|might|could|possibly|perhaps|potentially|likely)\b/i.test(normalized);
+  return /[?]|\b(?:not|never|none|tbd|unknown|uncertain|unverified|unconfirmed|unestablished|false|disputed|unordered|optional|cannot|can't|doesn't|don't|isn't|aren't|may|might|could|possibly|perhaps|potentially|likely)\b/i.test(normalized);
 }
 
-function affirmativeMilestoneIds(value: string): string[] {
-  const normalized = value.replace(/\bnot\s+only\b/gi, '');
+function affirmativeMilestoneIds(value: string, includeNamedPhases = false): string[] {
+  const normalized = value
+    .replace(/\bnot\s+only\b/gi, '')
+    .replace(/\bnot\s+optional\b/gi, '');
   if (/[?]|\b(?:none|tbd|unknown|uncertain|unverified|unconfirmed|unestablished)\b/i.test(normalized)) {
     return [];
   }
   if (/^\s*(?:(?:does?|do)\s+not|cannot|can't|doesn't|don't)\s+depend\b/i.test(normalized)) {
     return [];
   }
+  if (/\b(?:but|and)\s+(?:it|this|that)\s+(?:is|was)\s+not\s+(?:required|a\s+dependenc(?:y|ies))\b/i.test(normalized)) {
+    return [];
+  }
 
   const affirmed: string[] = [];
-  for (const match of normalized.matchAll(/\bM\d+\b/gi)) {
-    const prefix = normalized.slice(0, match.index);
+  for (const reference of dependencyReferences(normalized, includeNamedPhases)) {
+    const prefix = normalized.slice(0, reference.index);
     let fragmentStart = 0;
     for (const boundary of prefix.matchAll(/[,;]|\b(?:and|but|plus)\b/gi)) {
       fragmentStart = boundary.index + boundary[0].length;
     }
     const fragment = prefix.slice(fragmentStart);
-    if (!/\b(?:not|never|no|cannot|can't|doesn't|don't)\b/i.test(fragment)) {
-      affirmed.push(match[0].toUpperCase());
+    const suffixStart = reference.index + reference.text.length;
+    const suffixBoundary = /[,;]|\b(?:and|but|plus)\b/i.exec(normalized.slice(suffixStart));
+    const suffixEnd = suffixBoundary ? suffixStart + suffixBoundary.index : normalized.length;
+    const referenceClause = `${fragment} ${normalized.slice(suffixStart, suffixEnd)}`;
+    if (!hasDeniedDependencyLanguage(referenceClause)) {
+      affirmed.push(reference.id);
     }
   }
   return affirmed;
@@ -960,15 +995,51 @@ function hasMilestoneDependencyMap(response: string): boolean {
       if (row.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
 
       const dependencyCell = row[dependencyIndex] ?? '';
-      const dependencyIds = affirmativeMilestoneIds(dependencyCell);
+      const dependencyIds = affirmativeMilestoneIds(dependencyCell, true);
       if (dependencyIds.length === 0) continue;
 
-      const targetIds = milestoneIds(row.filter((_, cellIndex) => cellIndex !== dependencyIndex).join(' '));
-      if (targetIds.some(target => dependencyIds.some(dependency => target !== dependency))) return true;
+      const identifierTargetIndices = headers
+        .map((header, cellIndex) => (/^(?:#|id|phase)$/i.test(header) ? cellIndex : -1))
+        .filter(cellIndex => cellIndex >= 0 && cellIndex !== dependencyIndex);
+      const milestoneTargetIndices = headers
+        .map((header, cellIndex) => (/^milestones?$/i.test(header) ? cellIndex : -1))
+        .filter(cellIndex => cellIndex >= 0 && cellIndex !== dependencyIndex);
+      const targetIndices = identifierTargetIndices.length > 0
+        ? identifierTargetIndices
+        : milestoneTargetIndices.length > 0
+          ? milestoneTargetIndices
+          : row.map((_, cellIndex) => cellIndex).filter(cellIndex => cellIndex !== dependencyIndex).slice(0, 1);
+      const targetIds = targetIndices.flatMap((cellIndex) => {
+        const cell = row[cellIndex] ?? '';
+        const ids = milestoneIds(cell, true);
+        if (/^(?:#|phase)$/i.test(headers[cellIndex] ?? '') && /^\s*\d+\s*$/.test(cell)) {
+          ids.push(`M${Number(cell.trim())}`);
+        }
+        return ids;
+      });
+      const uniqueTargetIds = [...new Set(targetIds)];
+      if (uniqueTargetIds.length !== 1) continue;
+      if (dependencyIds.some(dependency => uniqueTargetIds[0] !== dependency)) return true;
     }
   }
 
   return false;
+}
+
+function hasOnlyBoundedWorkspaceClaims(response: string): boolean {
+  const withoutSafePackageMentions = response
+    .replace(/`/g, '')
+    .replace(/\bno\s+package\.json\s+(?:was\s+)?(?:found|present|discovered|detected|located)\b/gi, '')
+    .replace(/\bpackage\.json\s+(?:(?:does?|did|is|was|has|have)\s+not|doesn't|didn't|isn't|wasn't|hasn't|haven't|never)\s+(?:exist|present|found|read|opened|inspected|checked)\b/gi, '')
+    .replace(/\b(?:(?:do|does|did|have|has|will|would|could|should|may|might|can)\s+not|don't|doesn't|didn't|haven't|hasn't|won't|wouldn't|couldn't|shouldn't|can't|never)\s+(?:find|inspect|open|read|check|search|discover|detect|locate)\b[^.\r\n]{0,80}\bpackage\.json\b/gi, '')
+    .replace(/\b(?:can|could|will|would|may|might|should)\s+(?:create|add|read|inspect|open|check|search|use|discover|detect|locate)\b[^.\r\n]{0,80}\bpackage\.json\b/gi, '');
+
+  return ![
+    /\b(?:found|inspected|opened|read|checked|searched|discovered|detected|located)\b[^.\r\n]{0,80}\bpackage\.json\b/i,
+    /\bpackage\.json\b[^.\r\n]{0,60}\b(?:was\s+(?:found|discovered|detected|located)|exists?|is\s+present|is\s+(?:located\s+)?(?:in|inside|outside))\b/i,
+    /\b(?:workspace|repository|parent\s+director(?:y|ies))\b[^.\r\n]{0,60}\b(?:contains?|includes?|has|holds?)\b[^.\r\n]{0,60}\bpackage\.json\b/i,
+    /\bpackage\.json\b[^.\r\n]{0,60}\b(?:parent|external)\s+repository\b/i,
+  ].some(pattern => pattern.test(withoutSafePackageMentions));
 }
 
 function evaluateResponseRule(
@@ -986,6 +1057,8 @@ function evaluateResponseRule(
       return hasAffirmedRunwayFormula(evidence.response);
     case 'runwayAssumption':
       return hasAffirmedRunwayAssumption(evidence.response);
+    case 'boundedWorkspaceClaims':
+      return hasOnlyBoundedWorkspaceClaims(evidence.response);
     case 'allPatterns':
       return rule.patterns.every(pattern => pattern.test(evidence.response));
     case 'notPattern':
