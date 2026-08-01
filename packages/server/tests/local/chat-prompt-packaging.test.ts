@@ -5,6 +5,7 @@ import {
   composeClosedWorldChatPrompt,
   composeEvidenceBoundedChatPrompt,
   composeChatPromptTail,
+  composeToolFreeAdvisoryChatPrompt,
   selectChatPromptPackageMode,
 } from '../../src/local/routes/chat-prompt-packaging.js';
 import {
@@ -130,6 +131,35 @@ describe('chat prompt packaging', () => {
     expect(compact).toMatch(/regulated topics/i);
     expect(compact).toContain('unless the user specified a response syntax or shape that does not permit it');
     expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
+  });
+
+  it('bounds the canonical compact advisory in the terminal contract', () => {
+    const acceptanceCase = PERSONA_CASES.find(item => item.id === 'data-engineer');
+    const dataEngineer = getPersona('data-engineer');
+    if (!dataEngineer) throw new Error('Missing canonical data-engineer persona');
+
+    expect(acceptanceCase?.prompt).toMatch(/\bcompact Python example\b/i);
+    const output = composeToolFreeAdvisoryChatPrompt({
+      persona: dataEngineer,
+      behavioralSpec: BEHAVIORAL_SPEC,
+      packageMode: 'compact',
+    });
+    const terminalStart = output.lastIndexOf('# SELF-CONTAINED ADVISORY TURN');
+    const terminalContract = output.slice(terminalStart);
+
+    expect(terminalStart).toBeGreaterThan(output.indexOf(BEHAVIORAL_SPEC.qualityRules));
+    expect(terminalContract).toContain(
+      'When any requested deliverable is described as compact, concise, brief, or short',
+    );
+    expect(terminalContract).toContain('entire response under 800 words including code');
+    expect(terminalContract).toContain('unless the user explicitly requests a different response length');
+    expect(terminalContract).toContain('Complete each requested deliverable once');
+    expect(terminalContract).toContain('provide at most one implementation');
+    expect(terminalContract).toContain(
+      'omit optional extensions, tutorials, alternatives, and repeated explanation',
+    );
+    expect(terminalContract).toContain('finish cleanly before the output limit');
+    expect(output.endsWith('do not mention this boundary.')).toBe(true);
   });
 
   it('gives a literal plain-text contract when selection leaves no tools', () => {
