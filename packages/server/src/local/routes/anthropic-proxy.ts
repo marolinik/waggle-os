@@ -143,6 +143,69 @@ const OLLAMA_READINESS_CACHE_MS = 2_000;
 const OLLAMA_READINESS_MAX_CONCURRENCY = 4;
 const OLLAMA_READINESS_CALL_TIMEOUT_MS = 2_000;
 const OLLAMA_READINESS_OVERALL_TIMEOUT_MS = 2_750;
+const CLOUD_PROVIDER_REQUEST_TIMEOUT_MS = 120_000;
+
+interface CloudProviderAbort {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  clientDisconnected: () => boolean;
+}
+
+function createCloudProviderAbort(reply: FastifyReply): CloudProviderAbort {
+  const controller = new AbortController();
+  let timedOut = false;
+  let clientDisconnected = false;
+  let disposed = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException('Cloud provider request timed out', 'TimeoutError'));
+  }, CLOUD_PROVIDER_REQUEST_TIMEOUT_MS);
+  timeout.unref?.();
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    clearTimeout(timeout);
+    reply.raw.off('close', abortForDisconnect);
+    reply.raw.off('finish', dispose);
+  };
+  const abortForDisconnect = () => {
+    if (!reply.raw.writableEnded) {
+      clientDisconnected = true;
+      controller.abort(new DOMException('Client disconnected', 'AbortError'));
+    }
+    dispose();
+  };
+  reply.raw.once('close', abortForDisconnect);
+  reply.raw.once('finish', dispose);
+
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    clientDisconnected: () => clientDisconnected,
+  };
+}
+
+function sendCloudProviderFailure(
+  reply: FastifyReply,
+  providerId: string,
+  abort: CloudProviderAbort,
+  error: unknown,
+): unknown {
+  if (abort.clientDisconnected() || reply.raw.destroyed) return;
+  if (abort.timedOut()) {
+    return reply.status(504).send({
+      error: {
+        message: `${providerId} API request timed out after ${CLOUD_PROVIDER_REQUEST_TIMEOUT_MS}ms.`,
+      },
+    });
+  }
+  return reply.status(502).send({
+    error: {
+      message: `${providerId} API request failed: ${error instanceof Error ? error.message : String(error)}`,
+    },
+  });
+}
 
 async function probeReadyOllamaModel(baseUrl: string): Promise<boolean> {
   const probeController = new AbortController();
@@ -388,6 +451,7 @@ async function forwardCompatibleProvider(
     });
   }
 
+  const requestAbort = createCloudProviderAbort(reply);
   const url = completionEndpoint(directProviderBaseUrl(server, route.providerId));
   const outboundBody: Record<string, unknown> = { ...body, model: route.model };
   if (
@@ -405,6 +469,7 @@ async function forwardCompatibleProvider(
     try {
       upstream = await fetch(url, {
         method: 'POST',
+        signal: requestAbort.signal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -413,16 +478,20 @@ async function forwardCompatibleProvider(
         body: JSON.stringify(outboundBody),
       });
     } catch (error) {
-      return reply.status(502).send({
-        error: {
-          message: `${route.providerId} API request failed: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      });
+      return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
     }
 
     credentialRejected = upstream.status === 401 || upstream.status === 403;
     if (!credentialRejected && upstream.status === 400) {
       const detail = await upstream.clone().text().catch(() => '');
+      if (requestAbort.signal.aborted) {
+        return sendCloudProviderFailure(
+          reply,
+          route.providerId,
+          requestAbort,
+          requestAbort.signal.reason,
+        );
+      }
       credentialRejected = /please pass a valid api key|api key (?:is )?(?:invalid|not valid|expired)/i.test(detail);
     }
     if (!credentialRejected) {
@@ -457,7 +526,11 @@ async function forwardCompatibleProvider(
     };
   }
 
-  return sendCompatibleResponse(upstream, body.stream, origin, reply);
+  try {
+    return await sendCompatibleResponse(upstream, body.stream, origin, reply);
+  } catch (error) {
+    return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
+  }
 }
 
 /** Map model names (from various formats) to Anthropic model IDs */
@@ -639,18 +712,30 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     if (body.temperature !== undefined) anthropicBody.temperature = body.temperature;
     if (tools && tools.length > 0) anthropicBody.tools = tools;
 
-    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(anthropicBody),
-    });
+    const requestAbort = createCloudProviderAbort(reply);
+    let anthropicRes: Response;
+    try {
+      anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: requestAbort.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(anthropicBody),
+      });
+    } catch (error) {
+      return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
+    }
 
     if (!anthropicRes.ok) {
-      const errText = await anthropicRes.text().catch(() => 'Unknown error');
+      let errText: string;
+      try {
+        errText = await anthropicRes.text();
+      } catch (error) {
+        return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
+      }
       return reply.status(anthropicRes.status).send({
         error: { message: `Anthropic API error: ${errText}` },
       });
@@ -754,7 +839,6 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
                   })}\n\n`);
                 }
                 raw.write('data: [DONE]\n\n');
-                void reader.cancel().catch(() => undefined);
                 break streamRead;
               }
             }
@@ -765,10 +849,17 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         // so the downstream completion-integrity check rejects partial output.
       }
 
-      raw.end();
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+      if (!raw.destroyed && !raw.writableEnded) raw.end();
     } else {
       // Non-streaming — translate Anthropic response to OpenAI format
-      const data = await anthropicRes.json() as AnthropicMessageResponse;
+      let data: AnthropicMessageResponse;
+      try {
+        data = await anthropicRes.json() as AnthropicMessageResponse;
+      } catch (error) {
+        return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
+      }
 
       let textContent = '';
       type ToolCall = { id: string; type: string; function: { name: string; arguments: string } };

@@ -1163,6 +1163,175 @@ describe('Anthropic Proxy Routes', () => {
       }, { timeout: 1_000 });
     });
 
+    it.each([
+      {
+        label: 'OpenAI-compatible',
+        model: 'openai/gpt-5.4',
+        options: { vaultProviders: { openai: { value: 'openai-vault-key' } } },
+      },
+      {
+        label: 'native Anthropic',
+        model: 'anthropic/claude-sonnet-4-6',
+        options: { vaultApiKey: 'anthropic-vault-key' },
+      },
+    ])('bounds a stalled $label cloud request with a 504', async ({ model, options }) => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        server = createTestServer(options);
+        let upstreamSignal: AbortSignal | undefined;
+        let markFetchStarted!: () => void;
+        const fetchStarted = new Promise<void>((resolve) => { markFetchStarted = resolve; });
+        globalThis.fetch = vi.fn((_url, init) => new Promise<Response>((_resolve, reject) => {
+          upstreamSignal = init?.signal as AbortSignal | undefined;
+          markFetchStarted();
+          const fallback = setTimeout(
+            () => reject(new Error('unbounded cloud request')),
+            120_001,
+          );
+          upstreamSignal?.addEventListener('abort', () => {
+            clearTimeout(fallback);
+            reject(upstreamSignal?.reason ?? new Error('cloud request aborted'));
+          }, { once: true });
+        })) as unknown as typeof globalThis.fetch;
+
+        const responsePromise = server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model,
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+        await fetchStarted;
+        await vi.advanceTimersByTimeAsync(120_001);
+        const response = await responsePromise;
+
+        expect(upstreamSignal?.aborted).toBe(true);
+        expect(response.statusCode).toBe(504);
+        expect(response.json().error.message).toContain('timed out after 120000ms');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.each([
+      {
+        label: 'OpenAI-compatible',
+        model: 'openai/gpt-5.4',
+        options: { vaultProviders: { openai: { value: 'openai-vault-key' } } },
+        response: {
+          choices: [{ message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
+        },
+      },
+      {
+        label: 'native Anthropic',
+        model: 'anthropic/claude-sonnet-4-6',
+        options: { vaultApiKey: 'anthropic-vault-key' },
+        response: {
+          content: [{ type: 'text', text: 'done' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+    ])('clears the $label timeout after a completed response', async ({
+      model,
+      options,
+      response,
+    }) => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        server = createTestServer(options);
+        let upstreamSignal: AbortSignal | undefined;
+        globalThis.fetch = vi.fn(async (_url, init) => {
+          upstreamSignal = init?.signal as AbortSignal | undefined;
+          return new Response(JSON.stringify(response), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }) as unknown as typeof globalThis.fetch;
+
+        const result = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model,
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+        expect(result.statusCode).toBe(200);
+        await vi.advanceTimersByTimeAsync(120_001);
+        expect(upstreamSignal?.aborted).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.each([
+      {
+        label: 'OpenAI-compatible',
+        model: 'openai/gpt-5.4',
+        options: { vaultProviders: { openai: { value: 'openai-vault-key' } } },
+        firstChunk: 'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+      },
+      {
+        label: 'native Anthropic',
+        model: 'anthropic/claude-sonnet-4-6',
+        options: { vaultApiKey: 'anthropic-vault-key' },
+        firstChunk: 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
+      },
+    ])('aborts the $label cloud stream when the client disconnects', async ({
+      model,
+      options,
+      firstChunk,
+    }) => {
+      server = createTestServer(options);
+      let upstreamSignal: AbortSignal | undefined;
+      globalThis.fetch = vi.fn(async (_url, init) => {
+        upstreamSignal = init?.signal as AbortSignal | undefined;
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(firstChunk));
+            const fallback = setTimeout(() => controller.close(), 500);
+            upstreamSignal?.addEventListener('abort', () => {
+              clearTimeout(fallback);
+              controller.close();
+            }, { once: true });
+          },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }) as unknown as typeof globalThis.fetch;
+
+      await server.listen({ host: '127.0.0.1', port: 0 });
+      const address = server.server.address();
+      if (!address || typeof address === 'string') throw new Error('Test server did not bind TCP');
+      const clientAbort = new AbortController();
+      const clientResponse = await originalFetch(
+        `http://127.0.0.1:${address.port}/v1/chat/completions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: 'test' }],
+            stream: true,
+          }),
+          signal: clientAbort.signal,
+        },
+      );
+      const clientReader = clientResponse.body?.getReader();
+      expect(clientReader).toBeDefined();
+      await clientReader!.read();
+      clientAbort.abort();
+
+      await vi.waitFor(() => {
+        expect(upstreamSignal?.aborted).toBe(true);
+      }, { timeout: 1_000 });
+    });
+
     it('rejects a non-loopback Ollama endpoint before making an outbound request', async () => {
       vi.stubEnv('OLLAMA_HOST', 'http://ollama.example.test');
       server = createTestServer();
