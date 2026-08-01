@@ -9,10 +9,11 @@
  * Run the expensive matrix through the built-in proxy with a real provider:
  *   WAGGLE_E2E_SKIP_LITELLM=1 npx playwright test tests/vision/personas.spec.ts
  */
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type Response, type TestInfo } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import {
   PERSONA_CASES,
@@ -320,6 +321,183 @@ function appendTransportError(denial: ApprovalAutoDenial, message: string): void
     : message;
 }
 
+async function armChatWireCapture(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    interface BrowserChatCapture {
+      bodyText: string;
+      error: string | null;
+      settled: boolean;
+      terminal: boolean;
+    }
+    interface BrowserChatCaptureRegistry {
+      captures: BrowserChatCapture[];
+      restore: (() => void) | null;
+    }
+    const scope = window as typeof window & {
+      __wagglePersonaChatCapture?: BrowserChatCaptureRegistry;
+    };
+    const registry = scope.__wagglePersonaChatCapture ?? {
+      captures: [],
+      restore: null,
+    };
+    scope.__wagglePersonaChatCapture = registry;
+    registry.restore?.();
+
+    const cursor = registry.captures.length;
+    const originalFetch = window.fetch.bind(window);
+    let restored = false;
+    const restore = () => {
+      if (restored) return;
+      restored = true;
+      if (window.fetch === wrappedFetch) window.fetch = originalFetch;
+      if (registry.restore === restore) registry.restore = null;
+    };
+    const isTerminalEventBlock = (block: string) => {
+      const lines = block.split('\n');
+      if (!lines.some(line => /^event:\s*(done|error)\s*$/.test(line))) return false;
+      const dataLine = lines.find(line => /^data:\s?/.test(line));
+      if (!dataLine) return false;
+      try {
+        JSON.parse(dataLine.replace(/^data:\s?/, ''));
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const hasTerminalEvent = (body: string, allowOpenBlock = false) => {
+      const normalized = body.replace(/\r\n/g, '\n');
+      const blocks = normalized.split('\n\n');
+      const openBlock = blocks.pop() ?? '';
+      if (blocks.some(isTerminalEventBlock)) return true;
+      return allowOpenBlock
+        && normalized.endsWith('\n')
+        && isTerminalEventBlock(openBlock);
+    };
+
+    const wrappedFetch: typeof window.fetch = async (input, init) => {
+      const method = (init?.method
+        ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      const rawUrl = input instanceof Request
+        ? input.url
+        : input instanceof URL
+          ? input.href
+          : String(input);
+      const isChatRequest = method === 'POST'
+        && new URL(rawUrl, window.location.href).pathname === '/api/chat';
+      try {
+        const response = await originalFetch(input, init);
+        const isSuccessfulSse = isChatRequest
+          && response.ok
+          && (response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream');
+        if (!isSuccessfulSse) return response;
+
+        const capture: BrowserChatCapture = {
+          bodyText: '',
+          error: null,
+          settled: false,
+          terminal: false,
+        };
+        registry.captures.push(capture);
+        try {
+          const clone = response.clone();
+          const reader = clone.body?.getReader();
+          if (!reader) {
+            capture.error = 'Chat SSE response did not expose a readable body.';
+            capture.settled = true;
+          } else {
+            void (async () => {
+              const decoder = new TextDecoder('utf-8');
+              try {
+                while (true) {
+                  const chunk = await reader.read();
+                  if (chunk.done) {
+                    capture.bodyText += decoder.decode();
+                    if (hasTerminalEvent(capture.bodyText)) capture.terminal = true;
+                    if (!capture.terminal) {
+                      capture.error = 'Chat SSE response ended before a terminal event.';
+                    }
+                    capture.settled = true;
+                    return;
+                  }
+                  capture.bodyText += decoder.decode(chunk.value, { stream: true });
+                }
+              } catch (error) {
+                capture.terminal = hasTerminalEvent(capture.bodyText, true);
+                if (!capture.terminal) {
+                  capture.error = error instanceof Error ? error.message : String(error);
+                }
+                capture.settled = true;
+              } finally {
+                try { reader.releaseLock(); } catch { /* reader already released */ }
+              }
+            })();
+          }
+        } catch (error) {
+          capture.error = error instanceof Error ? error.message : String(error);
+          capture.settled = true;
+        }
+        restore();
+        return response;
+      } catch (error) {
+        if (isChatRequest) restore();
+        throw error;
+      }
+    };
+
+    window.fetch = wrappedFetch;
+    registry.restore = restore;
+    return cursor;
+  });
+}
+
+async function readCapturedChatBody(
+  page: Page,
+  cursor: number,
+  deadlineAt: number,
+): Promise<Buffer> {
+  await page.waitForFunction((captureCursor) => {
+    const scope = window as typeof window & {
+      __wagglePersonaChatCapture?: {
+        captures: Array<{ settled: boolean }>;
+      };
+    };
+    return scope.__wagglePersonaChatCapture?.captures[captureCursor]?.settled === true;
+  }, cursor, {
+    timeout: remainingDeadlineMs(deadlineAt, 'capturing the chat wire response'),
+  });
+  const capture = await page.evaluate((captureCursor) => {
+    const scope = window as typeof window & {
+      __wagglePersonaChatCapture?: {
+        captures: Array<{
+          bodyText: string;
+          error: string | null;
+          terminal: boolean;
+        }>;
+      };
+    };
+    return scope.__wagglePersonaChatCapture?.captures[captureCursor] ?? null;
+  }, cursor);
+  if (!capture) throw new Error('Chat wire capture did not observe a successful SSE response.');
+  if (!capture.terminal) {
+    throw new Error(capture.error ?? 'Chat wire capture ended before a terminal SSE event.');
+  }
+  return Buffer.from(capture.bodyText, 'utf8');
+}
+
+async function disarmChatWireCapture(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const scope = window as typeof window & {
+      __wagglePersonaChatCapture?: { restore: (() => void) | null };
+    };
+    scope.__wagglePersonaChatCapture?.restore?.();
+  }).catch(() => {});
+}
+
+function isTimeoutFailure(error: unknown): boolean {
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return /(?:timed out|timeout|deadline expired)/i.test(message);
+}
+
 async function captureBodyWithApprovalDenials(
   page: Page,
   bodyPromise: Promise<Buffer>,
@@ -452,9 +630,11 @@ async function sendAndCapture(
   let requestUrl = `${BASE}/api/chat`;
   let requestPayload: ChatRequestPayload = { message: prompt };
   let httpStatus = 0;
+  let captureCursor: number | null = null;
   try {
     await target.waitFor({ state: 'visible', timeout: 15_000 });
     await target.fill(prompt, { timeout: 30_000 });
+    captureCursor = await armChatWireCapture(page);
     const requestResult = page.waitForRequest(
       request => request.method() === 'POST' && new URL(request.url()).pathname === '/api/chat',
       { timeout: remainingDeadlineMs(deadlineAt, 'waiting for chat request') },
@@ -462,9 +642,24 @@ async function sendAndCapture(
       request => ({ request, error: null }),
       error => ({ request: null, error }),
     );
-    const responseResult = page.waitForResponse(
-      response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/chat',
+    const isChatResponse = (response: Response) =>
+      response.request().method() === 'POST'
+        && new URL(response.url()).pathname === '/api/chat';
+    const firstResponseResult = page.waitForResponse(
+      isChatResponse,
       { timeout: remainingDeadlineMs(deadlineAt, 'waiting for chat response headers') },
+    ).then(
+      response => ({ response, error: null }),
+      error => ({ response: null, error }),
+    );
+    let observedChatResponses = 0;
+    const retryResponseResult = page.waitForResponse(
+      response => {
+        if (!isChatResponse(response)) return false;
+        observedChatResponses += 1;
+        return observedChatResponses === 2;
+      },
+      { timeout: 0 },
     ).then(
       response => ({ response, error: null }),
       error => ({ response: null, error }),
@@ -476,26 +671,51 @@ async function sendAndCapture(
       await target.press('Enter');
     }
 
-    const [requestOutcome, responseOutcome] = await Promise.all([requestResult, responseResult]);
+    const [requestOutcome, firstResponseOutcome] = await Promise.all([requestResult, firstResponseResult]);
     if (requestOutcome.request) {
       requestUrl = requestOutcome.request.url();
       requestPayload = parseRequestPayload(requestOutcome.request.postData());
     }
-    if (responseOutcome.error) throw responseOutcome.error;
-    const response = responseOutcome.response;
+    if (firstResponseOutcome.error) throw firstResponseOutcome.error;
+    let response = firstResponseOutcome.response;
     if (!response) throw new Error('Chat response headers were not captured.');
+    httpStatus = response.status();
+    if (response.status() === 401) {
+      const retryWaitMs = remainingDeadlineMs(
+        deadlineAt,
+        'waiting for the authorized chat retry',
+        20_000,
+      );
+      const retryOutcome = await Promise.race([
+        retryResponseResult,
+        page.waitForTimeout(retryWaitMs).then(() => {
+          throw new Error('Chat request remained unauthorized after HTTP 401; no retry response arrived.');
+        }),
+      ]);
+      if (retryOutcome.error) throw retryOutcome.error;
+      if (!retryOutcome.response) {
+        throw new Error('Authorized chat retry response headers were not captured.');
+      }
+      response = retryOutcome.response;
+    }
     if (!requestOutcome.request) {
       requestUrl = response.url();
       requestPayload = parseRequestPayload(response.request().postData());
     }
     httpStatus = response.status();
+    const responseContentType = response.headers()['content-type'] ?? '';
+    if (!response.ok() || !responseContentType.toLowerCase().includes('text/event-stream')) {
+      throw new Error(
+        `Chat response was HTTP ${httpStatus} with content type ${responseContentType || '(missing)'}.`,
+      );
+    }
     // Playwright's response.text() can honor a missing/legacy HTTP charset and
     // mojibake UTF-8 punctuation on Windows. The chat wire contract is UTF-8;
     // decode the captured bytes explicitly so wire, UI, and persisted evidence
     // are compared without a test-harness encoding artifact.
     const body = (await captureBodyWithApprovalDenials(
       page,
-      response.body(),
+      readCapturedChatBody(page, captureCursor, deadlineAt),
       deadlineAt,
       options.approvalScreenshotPrefix,
       approvalAutoDenials,
@@ -524,10 +744,12 @@ async function sendAndCapture(
       events: [],
       parseErrors: [],
       done: null,
-      timedOut: true,
+      timedOut: isTimeoutFailure(error),
       transportError: error instanceof Error ? error.message : String(error),
       approvalAutoDenials,
     };
+  } finally {
+    if (captureCursor !== null) await disarmChatWireCapture(page);
   }
 }
 
@@ -755,6 +977,156 @@ test('persona harness preserves denial evidence and exits at the absolute body d
     responseStatus: null,
     transportError: expect.stringContaining('No matching approval-denial response'),
   });
+});
+
+test('persona harness distinguishes transport failures from response deadlines', () => {
+  expect(isTimeoutFailure(new Error(
+    'response.body: Protocol error (Network.getResponseBody): No data found for resource',
+  ))).toBe(false);
+  expect(isTimeoutFailure(new Error(
+    'Chat response body deadline expired while waiting for stream completion.',
+  ))).toBe(true);
+});
+
+test('persona harness captures completed SSE when the browser consumer cancels after done', async ({ page }) => {
+  const responsePrefix = [
+    'event: token',
+    'data: {"content":"captured"}',
+    '',
+    'event: done',
+  ].join('\n') + '\n';
+  const terminalDataLine = 'data: {"content":"captured"}\n';
+  const terminalData = 'data: {"content":"captured"}\n\n';
+  const duplicateTerminal = 'event: done\ndata: {"content":"captured"}\n\n';
+  const server = createServer((request, response) => {
+    if (request.url === '/api/chat') {
+      let requestBody = '';
+      request.setEncoding('utf8');
+      request.on('data', chunk => { requestBody += chunk; });
+      request.on('end', () => {
+        const message = (JSON.parse(requestBody) as { message?: string }).message;
+        if (message === 'http failure' || message?.startsWith('auth ')) {
+          const status = message === 'http failure' ? 500 : 401;
+          response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+          response.end(JSON.stringify({ error: `synthetic ${status}` }));
+          return;
+        }
+        response.writeHead(200, {
+          'cache-control': 'no-cache',
+          connection: 'keep-alive',
+          'content-type': 'text/event-stream; charset=utf-8',
+        });
+        response.flushHeaders();
+        response.write(responsePrefix);
+        const splitBeforeDelimiter = message === 'capture split terminal';
+        const sendTerminal = setTimeout(
+          () => response.write(splitBeforeDelimiter ? terminalDataLine : terminalData),
+          25,
+        );
+        const completeTransport = setTimeout(
+          () => response.end(splitBeforeDelimiter ? '\n' : duplicateTerminal),
+          200,
+        );
+        response.once('close', () => {
+          clearTimeout(sendTerminal);
+          clearTimeout(completeTransport);
+        });
+      });
+      return;
+    }
+
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    response.end([
+      '<textarea></textarea>',
+      '<button aria-label="Send">Send</button>',
+      '<script>',
+      'document.querySelector("button").addEventListener("click", async () => {',
+      '  const message = document.querySelector("textarea").value;',
+      '  const controller = new AbortController();',
+      '  const send = () => fetch("/api/chat", {',
+      '    method: "POST",',
+      '    headers: { "content-type": "application/json" },',
+      '    body: JSON.stringify({ message }),',
+      '    signal: controller.signal,',
+      '  });',
+      '  let response = await send();',
+      '  if (response.status === 401 && message !== "auth refresh failure") response = await send();',
+      '  const reader = response.body.getReader();',
+      '  const decoder = new TextDecoder();',
+      '  let body = "";',
+      '  while (true) {',
+      '    const chunk = await reader.read();',
+      '    if (chunk.done) break;',
+      '    body += decoder.decode(chunk.value, { stream: true });',
+      '    if (/event: done\\r?\\ndata: [^\\n]+\\r?\\n/.test(body)) {',
+      '      if (message === "capture split terminal") controller.abort();',
+      '      await reader.cancel();',
+      '      break;',
+      '    }',
+      '  }',
+      '});',
+      '</script>',
+    ].join(''));
+  });
+
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen);
+    server.listen(0, '127.0.0.1', () => resolveListen());
+  });
+  try {
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Synthetic chat server did not bind.');
+    await page.goto(`http://127.0.0.1:${address.port}`);
+
+    const splitWire = await sendAndCapture(page, 'capture split terminal', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-split-terminal'),
+    });
+    expect(splitWire.transportError).toBeNull();
+    expect(splitWire.timedOut).toBe(false);
+    expect(splitWire.done).toMatchObject({ content: 'captured' });
+    expect(splitWire.events.filter(event => event.event === 'done')).toHaveLength(1);
+
+    const wire = await sendAndCapture(page, 'capture this', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-cancelled-stream'),
+    });
+
+    expect(wire.transportError).toBeNull();
+    expect(wire.timedOut).toBe(false);
+    expect(wire.done).toMatchObject({ content: 'captured' });
+    expect(wire.events.filter(event => event.event === 'done')).toHaveLength(2);
+
+    const httpFailure = await sendAndCapture(page, 'http failure', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-http-failure'),
+    });
+    expect(httpFailure.requestPayload.message).toBe('http failure');
+    expect(httpFailure.httpStatus).toBe(500);
+    expect(httpFailure.timedOut).toBe(false);
+    expect(httpFailure.transportError).toContain(
+      'HTTP 500 with content type application/json; charset=utf-8',
+    );
+
+    const authFailure = await sendAndCapture(page, 'auth retry failure', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-auth-retry-failure'),
+    });
+    expect(authFailure.httpStatus).toBe(401);
+    expect(authFailure.timedOut).toBe(false);
+    expect(authFailure.transportError).toContain('HTTP 401');
+
+    const authRefreshFailure = await sendAndCapture(page, 'auth refresh failure', {
+      bodyTimeoutMs: 800,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-auth-refresh-failure'),
+    });
+    expect(authRefreshFailure.httpStatus).toBe(401);
+    expect(authRefreshFailure.timedOut).toBe(false);
+    expect(authRefreshFailure.transportError).toContain('remained unauthorized after HTTP 401');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>(resolveClose => server.close(() => resolveClose()));
+  }
 });
 
 test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'} (${REPEATS} repeats each)`, () => {
