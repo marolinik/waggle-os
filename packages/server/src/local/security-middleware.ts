@@ -299,13 +299,18 @@ export interface SecurityMiddlewareOpts {
   rateLimiter?: RateLimiterConfig;
   /** Session token for bearer auth. When set, all non-exempt routes require Authorization header. */
   sessionToken?: string;
-  /** Validate a narrow per-run credential for the two WaggleDance transport routes. */
+  /** Validate a narrow per-run credential for WaggleDance and one model-completion route. */
   authenticateRunToken?: (token: string) => boolean;
 }
 
-const RUN_TOKEN_PATHS = new Set([
-  '/api/waggle-dance/signal',
-  '/api/waggle-dance/signals',
+const RUN_TOKEN_METHODS = new Map<string, string>([
+  ['/api/waggle-dance/signal', 'POST'],
+  ['/api/waggle-dance/signals', 'GET'],
+]);
+
+/** OpenClaw's OpenAI-compatible client can send only a Bearer credential here. */
+const RUN_TOKEN_BEARER_PATHS = new Set([
+  '/v1/chat/completions',
 ]);
 
 const UNSAFE_WORKSPACE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -686,12 +691,20 @@ async function securityMiddlewarePlugin(
         (trustLocalhost && isLocalhost);
       const rawRunToken = request.headers['x-waggle-run-token'];
       const runToken = typeof rawRunToken === 'string' ? rawRunToken : undefined;
-      const runTokenEligible = RUN_TOKEN_PATHS.has(requestPath);
-      const runTokenValid = Boolean(
+      const authHeader = request.headers.authorization;
+      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+      const runTokenEligible = RUN_TOKEN_METHODS.get(requestPath) === request.method;
+      const headerRunTokenValid = Boolean(
         runTokenEligible && runToken && opts.authenticateRunToken?.(runToken),
       );
+      const bearerRunTokenValid = Boolean(
+        request.method === 'POST'
+          && RUN_TOKEN_BEARER_PATHS.has(requestPath)
+          && bearerToken
+          && opts.authenticateRunToken?.(bearerToken),
+      );
+      const runTokenValid = headerRunTokenValid || bearerRunTokenValid;
       if (!isAuthExempt && !runTokenValid) {
-        const authHeader = request.headers.authorization;
         // P1b-SSE: header-less GETs on the SSE allowlist may authenticate via
         // `?token=` (EventSource cannot send headers). A header, when present,
         // always wins — the query path is a fallback transport, not an

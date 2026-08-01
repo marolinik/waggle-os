@@ -51,7 +51,16 @@ async function createTestServer(opts?: {
   server.post('/api/waggle-dance/signal', async () => {
     return { ok: true };
   });
+  server.get('/api/waggle-dance/signal', async () => {
+    return { ok: true };
+  });
   server.get('/api/waggle-dance/signals', async () => {
+    return { ok: true };
+  });
+  server.post('/api/waggle-dance/signals', async () => {
+    return { ok: true };
+  });
+  server.post('/v1/chat/completions', async () => {
     return { ok: true };
   });
   server.post('/api/vault/:name/reveal', async () => {
@@ -423,7 +432,7 @@ describe('Bearer Token Authentication', () => {
     }
   });
 
-  it('accepts a narrow run token only on WaggleDance transport routes', async () => {
+  it('accepts a narrow run token only on WaggleDance transport and model completion routes', async () => {
     const runToken = 'run-token-with-enough-entropy-1234567890';
     const server = await createTestServer({
       sessionToken: TEST_TOKEN,
@@ -441,17 +450,54 @@ describe('Bearer Token Authentication', () => {
       });
       expect(receive.statusCode).toBe(200);
 
+      const completion = await server.inject({
+        method: 'POST', url: '/v1/chat/completions',
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(completion.statusCode).toBe(200);
+
       const unrelated = await server.inject({
         method: 'GET', url: '/api/test',
         headers: { 'x-waggle-run-token': runToken },
       });
       expect(unrelated.statusCode).toBe(401);
+      const unrelatedBearer = await server.inject({
+        method: 'GET', url: '/api/test',
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(unrelatedBearer.statusCode).toBe(401);
+      const wrongTransport = await server.inject({
+        method: 'POST', url: '/v1/chat/completions',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(wrongTransport.statusCode).toBe(401);
+      const danceBearer = await server.inject({
+        method: 'POST', url: '/api/waggle-dance/signal',
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(danceBearer.statusCode).toBe(401);
+      const wrongSendMethod = await server.inject({
+        method: 'GET', url: '/api/waggle-dance/signal',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(wrongSendMethod.statusCode).toBe(401);
+      const wrongReceiveMethod = await server.inject({
+        method: 'POST', url: '/api/waggle-dance/signals',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(wrongReceiveMethod.statusCode).toBe(401);
       const wrong = await server.inject({
         method: 'POST', url: '/api/waggle-dance/signal',
         headers: { 'x-waggle-run-token': 'wrong-run-token-with-enough-entropy-123' },
       });
       expect(wrong.statusCode).toBe(401);
       expect(wrong.json().code).toBe('INVALID_TOKEN');
+      const wrongCompletion = await server.inject({
+        method: 'POST', url: '/v1/chat/completions',
+        headers: { authorization: 'Bearer wrong-run-token-with-enough-entropy-123' },
+      });
+      expect(wrongCompletion.statusCode).toBe(401);
+      expect(wrongCompletion.json().code).toBe('INVALID_TOKEN');
     } finally {
       await server.close();
     }
