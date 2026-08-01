@@ -1518,6 +1518,517 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result.checks.find(check => check.id === 'dependencies')?.passed).toBe(expected);
   });
 
+  it.each([
+    [
+      'captured 30 min agenda with mojibake clock-range separators',
+      [
+        '# Launch-Readiness Meeting Agenda (30 min)',
+        '| Time | Block |',
+        '|---|---|',
+        '| 0:00\u00e2\u20ac\u201c0:02 | Welcome |',
+        '| 0:02\u00e2\u20ac\u201c0:07 | Status |',
+        '| 0:07\u00e2\u20ac\u201c0:30 | Decisions |',
+      ].join('\n'),
+      true,
+    ],
+    [
+      'hyphenated 30-minute agenda with clock ranges',
+      '# 30-minute agenda\n- 0:00-0:05 Welcome\n- 0:05-0:20 Readiness\n- 0:20-0:30 Decisions',
+      true,
+    ],
+    [
+      '30 minutes with multiple per-block durations',
+      '# Launch agenda — 30 minutes\n- 5 min: Welcome\n- 10 minutes: Status\n- 15 mins: Decisions',
+      true,
+    ],
+    [
+      '30 minutes with minute-offset ranges',
+      '# Launch agenda — 30 minutes\n- 0–5 min: Welcome\n- 5–15 min: Status\n- 15–30 min: Decisions',
+      true,
+    ],
+    [
+      'minute-offset ranges must begin at the agenda origin',
+      '# Launch agenda — 30 minutes\n10-20 min: Welcome\n20-40 min: Decisions',
+      false,
+    ],
+    [
+      'mixed range and duration blocks may form one exact agenda',
+      '# Launch agenda — 30 minutes\n- 0:00-0:05 Welcome\n- 10 min: Status\n- 15 min: Decisions',
+      true,
+    ],
+    [
+      'range duration annotations must agree with the encoded interval',
+      '# Launch agenda — 30 minutes\n- 0:00-0:10 Status (15 min)\n- 0:10-0:30 Decisions (20 min)',
+      false,
+    ],
+    [
+      'matching range duration annotations preserve an exact agenda',
+      '# Launch agenda — 30 minutes\n- 0:00-0:10 Status (10 min)\n- 0:10-0:30 Decisions (20 min)',
+      true,
+    ],
+    [
+      'allocated range duration annotations must agree with the interval',
+      '# Launch agenda — 30 minutes\n- 0:00-0:10 Status (15 min allocated)\n- 0:10-0:30 Decisions',
+      false,
+    ],
+    [
+      'bracketed range duration annotations must agree with the interval',
+      '# Launch agenda — 30 minutes\n- 0:00-0:10 Status [15 min]\n- 0:10-0:30 Decisions',
+      false,
+    ],
+    [
+      'common annotation tails must agree with the interval',
+      '# Launch agenda — 30 minutes\n- 0:00-0:10 Status (15 min allotted)\n- 0:10-0:30 Decisions',
+      false,
+    ],
+    [
+      'table duration columns must agree with their clock ranges',
+      '# Launch agenda — 30 minutes\n| Time | Duration | Block |\n|---|---|---|\n| 0:00-0:10 | 15 min | Status |\n| 0:10-0:30 | 20 min | Decisions |',
+      false,
+    ],
+    [
+      'a duration adjective in the block label is not a range annotation',
+      '# Launch agenda — 30 minutes\n- 0:00-0:10 Review the 5-minute demo\n- 0:10-0:30 Decide launch',
+      true,
+    ],
+    [
+      'a duration adjective in a duration-only block label is not a second block',
+      '# Launch agenda — 30 minutes\n- 10 min: Review the 5-minute demo\n- 20 min: Decide launch',
+      true,
+    ],
+    [
+      'duration-only block annotations must agree with the leading allocation',
+      '# Launch agenda — 30 minutes\n- 10 min: Status (15 min allocated)\n- 20 min: Decisions',
+      false,
+    ],
+    [
+      'duration adjectives without leading allocations are not agenda blocks',
+      '# Launch agenda — 30 minutes\n- Discuss the 10-minute demo\n- Use the 20-minute briefing',
+      false,
+    ],
+    [
+      '30 minutes with unbulleted clock ranges',
+      '# Launch agenda — 30 minutes\n0:00–0:05 Welcome\n0:05–0:20 Status\n0:20–0:30 Decisions',
+      true,
+    ],
+    [
+      'valid duration blocks plus an unrelated pre-read duration',
+      [
+        '# Launch agenda — 30 minutes',
+        '- 5 min: Welcome',
+        '- 10 min: Status',
+        '- 15 min: Decisions',
+        '## Pre-Read Checklist',
+        '- [ ] Read the 5 min briefing note.',
+      ].join('\n'),
+      true,
+    ],
+    [
+      'qualified pre-read heading ends agenda block collection',
+      [
+        '# Launch agenda — 30 minutes',
+        '- 5 min: Welcome',
+        '- 10 min: Status',
+        '- 15 min: Decisions',
+        'Pre-read checklist (before meeting)',
+        '- Read the 5 min briefing note.',
+      ].join('\n'),
+      true,
+    ],
+    [
+      'dash-qualified pre-read heading ends agenda block collection',
+      [
+        'Launch agenda - 30 minutes',
+        '0:00-0:15 Status',
+        '0:15-0:30 Decisions',
+        'Pre-read checklist - before meeting',
+        '- Read the 5 min briefing note.',
+      ].join('\n'),
+      true,
+    ],
+    [
+      'bulleted pre-read heading cannot supply the agenda time blocks',
+      [
+        'Launch agenda - 30 minutes',
+        '- Pre-read checklist:',
+        '  - Read the 5 min product note.',
+        '  - Read the 10 min engineering note.',
+        '  - Read the 10 min QA note.',
+        '  - Read the 5 min support note.',
+      ].join('\n'),
+      false,
+    ],
+    [
+      'bulleted bold pre-read heading cannot supply the agenda time blocks',
+      [
+        'Launch agenda - 30 minutes',
+        '- **Pre-read checklist:**',
+        '  - Read the 5 min product note.',
+        '  - Read the 10 min engineering note.',
+        '  - Read the 10 min QA note.',
+        '  - Read the 5 min support note.',
+      ].join('\n'),
+      false,
+    ],
+    [
+      'numbered pre-read heading cannot supply the agenda time blocks',
+      'Launch agenda - 30 minutes\n1. Pre-read checklist:\n- 5 min Product\n- 10 min Engineering\n- 10 min QA\n- 5 min Support',
+      false,
+    ],
+    [
+      'short pre-read heading cannot supply the agenda time blocks',
+      'Launch agenda - 30 minutes\nShort pre-read checklist:\n- 5 min Product\n- 10 min Engineering\n- 10 min QA\n- 5 min Support',
+      false,
+    ],
+    [
+      'qualified pre-read heading with digits remains excluded',
+      'Launch agenda - 30 minutes\nPre-read checklist — complete 24 hours before\n- 5 min Product\n- 10 min Engineering\n- 10 min QA\n- 5 min Support',
+      false,
+    ],
+    [
+      'plain pre-read heading before the meeting remains excluded',
+      'Launch agenda - 30 minutes\nPre-read checklist before meeting:\n- 5 min Product\n- 10 min Engineering\n- 15 min QA',
+      false,
+    ],
+    [
+      'italic pre-read heading remains excluded',
+      'Launch agenda - 30 minutes\n_Pre-read checklist_\n- 5 min Product\n- 10 min Engineering\n- 10 min QA\n- 5 min Support',
+      false,
+    ],
+    [
+      'bold pre-read heading with a trailing qualifier remains excluded',
+      'Launch agenda - 30 minutes\n**Pre-read checklist:** complete before meeting\n- 5 min Product\n- 10 min Engineering\n- 15 min QA',
+      false,
+    ],
+    [
+      'pre-read heading mentioning the launch agenda remains excluded',
+      'Launch agenda - 30 minutes\n## Pre-read checklist for launch agenda\n- 5 min Product\n- 10 min Engineering\n- 10 min QA\n- 5 min Support',
+      false,
+    ],
+    [
+      'duration blocks must not exceed the declared agenda length',
+      '# Launch agenda — 30 minutes\n- 15 min: Status\n- 15 min: Decisions\n- 10 min: Wrap-up',
+      false,
+    ],
+    [
+      'multiple duration blocks on one row cannot hide an overlong agenda',
+      '# Launch agenda — 30 min\n- 15 min Status\n- 15 min Decisions; 20 min Wrap-up',
+      false,
+    ],
+    [
+      'comma-separated duration blocks cannot hide an overlong agenda',
+      '# Launch agenda — 30 min\n- 10 min Status, 20 min Wrap-up\n- 20 min Decisions',
+      false,
+    ],
+    [
+      'and-separated duration blocks cannot hide an overlong agenda',
+      '# Launch agenda — 30 min\n- 10 min Status and 20 min Wrap-up\n- 20 min Decisions',
+      false,
+    ],
+    [
+      'label-first parenthetical durations form a valid agenda',
+      '# Launch agenda — 30 min\n- Welcome (5 min)\n- Status (10 min)\n- Decisions (15 min)',
+      true,
+    ],
+    [
+      'bold leading durations form a valid agenda',
+      '# Launch agenda — 30 min\n- **10 min:** Status\n- **20 min:** Decisions',
+      true,
+    ],
+    [
+      'clock ranges must not exceed the declared agenda length',
+      '# Launch agenda — 30 minutes\n- 0:00-0:15 Status\n- 0:15-0:30 Decisions\n- 0:30-0:40 Wrap-up',
+      false,
+    ],
+    [
+      'unlabeled extra range still invalidates the agenda length',
+      '# Launch agenda — 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions\n0:30-0:40',
+      false,
+    ],
+    [
+      'multiple extra ranges on one agenda line invalidate the agenda length',
+      '# Launch agenda — 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions\n0:30-0:35 Q&A; 0:35-0:40 Wrap-up',
+      false,
+    ],
+    [
+      'duration-only line inherits the preceding agenda heading',
+      '# Launch-readiness agenda\n30 min\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      true,
+    ],
+    [
+      'trailing total declaration preserves the preceding agenda timeline',
+      '# Launch-readiness agenda\n0:00-0:15 Status\n0:15-0:30 Decisions\n**Total time: 30 minutes**',
+      true,
+    ],
+    [
+      'bulleted total declaration is not an extra duration block',
+      '# Launch agenda — 30 minutes\n- 10 min: Status\n- 20 min: Decisions\n- Total time: 30 minutes',
+      true,
+    ],
+    [
+      'leading total declaration is not a duration block',
+      '# Launch agenda\n30 min total\n0:00-0:10 Status\n0:10-0:30 Decisions',
+      true,
+    ],
+    [
+      'later conflicting total duration invalidates the agenda',
+      '# Launch agenda — 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions\nTotal duration: 45 minutes',
+      false,
+    ],
+    [
+      'later generic duration invalidates the agenda',
+      '# Launch agenda — 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions\nDuration: 45 minutes',
+      false,
+    ],
+    [
+      'later meeting length invalidates the agenda',
+      '# Launch agenda — 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions\nMeeting length: 45 minutes',
+      false,
+    ],
+    [
+      'pre-read totals do not contradict the meeting duration',
+      '# Launch agenda — 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions\n## Pre-read checklist\nTotal time: 5 minutes',
+      true,
+    ],
+    [
+      'agenda heading may mention a required pre-read',
+      '# Launch agenda (30 min) — pre-read required\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      true,
+    ],
+    [
+      'prose durations are not agenda blocks',
+      '# Launch agenda — 30 minutes\nPreparation takes 5 min. Demo takes 10 min. Follow-up takes 15 min.',
+      false,
+    ],
+    [
+      'pre-read durations are not agenda blocks',
+      [
+        '# Launch agenda — 30 minutes',
+        '## Pre-Read Checklist',
+        '- [ ] Read the 5 min product note.',
+        '- [ ] Read the 10 min engineering note.',
+        '- [ ] Read the 15 min QA note.',
+      ].join('\n'),
+      false,
+    ],
+    [
+      'timed pre-read heading is not a meeting-duration declaration',
+      [
+        '## Pre-Read Checklist (30 min)',
+        '- [ ] Read the 5 min product note.',
+        '- [ ] Read the 10 min engineering note.',
+        '- [ ] Read the 15 min QA note.',
+      ].join('\n'),
+      false,
+    ],
+    [
+      'meeting-duration copy inside a pre-read section is not an agenda declaration',
+      [
+        '## Pre-Read Checklist',
+        'Meeting duration: 30 minutes',
+        '- [ ] Read the 5 min product note.',
+        '- [ ] Read the 10 min engineering note.',
+        '- [ ] Read the 15 min QA note.',
+      ].join('\n'),
+      false,
+    ],
+    [
+      'meeting pre-read prose is not an agenda declaration',
+      'The meeting pre-read takes 30 minutes.\n- 5 min: Product note\n- 10 min: Engineering note\n- 15 min: QA note',
+      false,
+    ],
+    [
+      'total pre-read time is not a meeting-duration declaration',
+      'Total pre-read time: 30 minutes\n- 5 min: Product note\n- 10 min: Engineering note\n- 15 min: QA note',
+      false,
+    ],
+    ['30 min heading without time blocks', '# Launch agenda (30 min)\nDiscuss readiness and decide.', false],
+    [
+      '45-minute agenda with explicit ranges',
+      '# Launch agenda (45 min)\n- 0:00-0:15 Status\n- 0:15-0:45 Decisions',
+      false,
+    ],
+    ['30-minute heading with one bare timestamp', '# 30-minute agenda\nStart at 09:00.', false],
+    ['30-minute heading with only one interval', '# 30-minute agenda\n- 0:00-0:30 Discussion', false],
+    [
+      'alternative ranges on one prose line are not separate blocks',
+      '# 30-minute agenda\nSchedule options: 9:00-9:15 or 9:15-9:30.',
+      false,
+    ],
+    [
+      'alternative ranges on separate prose lines are not agenda blocks',
+      '# 30-minute agenda\nOption A is 9:00-9:15.\nOption B is 9:15-9:30.',
+      false,
+    ],
+    [
+      'bulleted alternative ranges are not one committed agenda',
+      '# 30-minute agenda\n- Option A: 9:00-9:15\n- Option B: 9:15-9:30',
+      false,
+    ],
+    [
+      'dash-delimited alternative ranges are not one committed agenda',
+      '# 30-minute agenda\n- Option A — 9:00-9:15\n- Option B — 9:15-9:30',
+      false,
+    ],
+    [
+      'choice ranges are not one committed agenda',
+      '# 30-minute agenda\n- Choice A: 9:00-9:15\n- Choice B: 9:15-9:30',
+      false,
+    ],
+    [
+      'scenario ranges are not one committed agenda',
+      '# 30-minute agenda\n- Scenario A: 9:00-9:15\n- Scenario B: 9:15-9:30',
+      false,
+    ],
+    [
+      'table option ranges are not one committed agenda',
+      '# 30-minute agenda\n| Option | Time |\n|---|---|\n| Option A | 9:00-9:15 |\n| Option B | 9:15-9:30 |',
+      false,
+    ],
+    [
+      'alternative schedule heading does not extend the committed agenda',
+      '# 30-minute agenda\n0:00-0:10 Status\n## Alternative schedule\n0:10-0:30 Decisions',
+      false,
+    ],
+    [
+      'absolute AM clock ranges form a contiguous agenda',
+      '# 30-minute agenda\n- 9:00 AM–9:15 AM Status\n- 9:15 AM–9:30 AM Decisions',
+      true,
+    ],
+    [
+      '130-minute agenda must not alias 30 minutes',
+      '# 130 minute agenda\n- 0:00-1:00 Status\n- 1:00-2:10 Decisions',
+      false,
+    ],
+    [
+      'negated 30-minute agenda declaration',
+      'This is not a 30 min agenda.\n- 0:00-0:05 Status\n- 0:05-0:10 Decisions',
+      false,
+    ],
+    [
+      'qualified negation of the 30-minute duration',
+      'This agenda is not actually 30 minutes.\n- 0:00-0:15 Status\n- 0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'anything-but denial of the 30-minute duration',
+      'This agenda is anything but 30 minutes.\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'far-from denial of the 30-minute duration',
+      'This agenda is far from 30 minutes.\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'article-bearing anything-but denial of the 30-minute duration',
+      'This is anything but a 30-minute agenda.\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'article-bearing far-from denial of the 30-minute duration',
+      'This is far from a 30-minute agenda.\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'less-than qualifier contradicts the 30-minute duration',
+      '# Launch agenda — less than 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'approximate qualifier does not declare an exact 30-minute duration',
+      '# Launch agenda — about 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'maximum qualifier does not declare an exact duration',
+      '# Launch agenda — maximum 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'maximum qualifier before a colon does not declare an exact duration',
+      '# Launch agenda — Maximum duration: 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'duration range does not declare an exact duration',
+      '# Launch agenda — 25–30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'parenthetical approximation does not declare an exact duration',
+      '# Launch agenda — 30 minutes (approximately)\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'plus-or-minus qualifier does not declare an exact duration',
+      '# Launch agenda — 30 minutes ± 5\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'trailing upper-bound qualifier does not declare an exact duration',
+      '# Launch agenda — 30 minutes or less\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'trailing approximation does not declare an exact duration',
+      '# Launch agenda — 30 minutes, approximately\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'exact qualifier preserves an exact 30-minute declaration',
+      '# Launch agenda — exactly 30 minutes\n0:00-0:15 Status\n0:15-0:30 Decisions',
+      true,
+    ],
+    [
+      'not-only construction affirms the duration',
+      'This is not only a 30-minute agenda but also a decision forum.\n- 0:00-0:15 Status\n- 0:15-0:30 Decisions',
+      true,
+    ],
+    [
+      'never a 30-minute agenda',
+      'This is never a 30 min agenda.\n- 0:00-0:15 Status\n- 0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'cannot be a 30-minute agenda',
+      'This cannot be a 30 min agenda.\n- 0:00-0:15 Status\n- 0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'cannot-contraction 30-minute agenda',
+      "This can't be a 30 min agenda.\n- 0:00-0:15 Status\n- 0:15-0:30 Decisions",
+      false,
+    ],
+    [
+      'curly cannot-contraction 30-minute agenda',
+      'This can’t be a 30 min agenda.\n- 0:00-0:15 Status\n- 0:15-0:30 Decisions',
+      false,
+    ],
+    [
+      'agenda explicitly without a 30-minute duration',
+      'Agenda without a 30-minute duration.\n- 0:00-0:05 Status\n- 0:05-0:10 Decisions',
+      false,
+    ],
+  ])('classifies executive-assistant duration blocks: %s', (_label, agenda, expected) => {
+    const executiveAssistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const response = [
+      agenda,
+      '## Desired Decisions',
+      '- Approve launch readiness.',
+      '## Pre-Read Checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const result = scorePersonaTrial(executiveAssistant, evidence({
+      prompt: executiveAssistant.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: executiveAssistant.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(expected);
+  });
+
   it('awards the live empty-workspace coder response the full criterion and a 100/100 trial', () => {
     const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
     const response = [

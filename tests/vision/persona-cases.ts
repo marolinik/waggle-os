@@ -31,6 +31,7 @@ interface BaseResponseRule {
 export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'pattern'; pattern: RegExp })
   | (BaseResponseRule & { kind: 'dependencyMap' })
+  | (BaseResponseRule & { kind: 'timedAgenda'; durationMinutes: number; minimumBlocks: number })
   | (BaseResponseRule & { kind: 'runwayFormula' })
   | (BaseResponseRule & { kind: 'runwayAssumption' })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
@@ -230,7 +231,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 2_000,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'duration-blocks', description: 'Uses time blocks for a 30-minute meeting', kind: 'allPatterns', patterns: [/30[- ]minute/i, /(?:\d{1,2}:\d{2}|\d+\s*(?:min|minutes))/i], points: 10 },
+      { id: 'duration-blocks', description: 'Uses time blocks for a 30-minute meeting', kind: 'timedAgenda', durationMinutes: 30, minimumBlocks: 2, points: 10 },
       { id: 'decisions', description: 'Names desired decisions', kind: 'pattern', pattern: /desired decisions?|decision(?:s| owner)/i, points: 10 },
       { id: 'preread', description: 'Provides a pre-read checklist', kind: 'allPatterns', patterns: [/pre-read/i, /(?:checklist|\[[ x]\])/i], points: 10 },
       { id: 'participants', description: 'Covers all four participant groups', kind: 'allPatterns', patterns: [/product/i, /engineering/i, /\bQA\b/i, /support/i], points: 10 },

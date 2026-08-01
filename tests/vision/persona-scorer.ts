@@ -542,6 +542,321 @@ function hasAffirmedRunwayAssumption(response: string): boolean {
   return false;
 }
 
+function durationMentionIsAffirmed(text: string, start: number, end: number): boolean {
+  const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+  const lineEndMatch = /\n/.exec(text.slice(end));
+  const lineEnd = lineEndMatch?.index === undefined ? text.length : end + lineEndMatch.index;
+  const prefix = text.slice(lineStart, start);
+  const suffix = text.slice(end, lineEnd);
+
+  if (/\b(?:max(?:imum)?|min(?:imum)?|approximately|about|around|roughly|nearly|almost)\b[^.!?;\n]{0,40}$/i.test(prefix)) {
+    return false;
+  }
+  if (/\d+\s*(?:-|[\u2013\u2014]|to)\s*$/i.test(prefix)) {
+    return false;
+  }
+
+  const clauseBoundary = Math.max(
+    prefix.lastIndexOf(','),
+    prefix.lastIndexOf(';'),
+    prefix.lastIndexOf(':'),
+    prefix.lastIndexOf('.'),
+    prefix.lastIndexOf('!'),
+    prefix.lastIndexOf('?'),
+  ) + 1;
+  const clausePrefix = prefix.slice(clauseBoundary);
+  if (/\b(?:anything\s+but|far\s+from|nowhere\s+near)\s+(?:(?:an?|the)\s+)?(?:[\p{L}-]+\s+){0,2}$/iu.test(clausePrefix)) {
+    return false;
+  }
+  if (/\b(?:less\s+than|more\s+than|at\s+least|at\s+most|up\s+to|under|over|below|above|max(?:imum)?|min(?:imum)?|about|around|approximately|roughly|nearly|almost)\s*$/i.test(clausePrefix)) {
+    return false;
+  }
+  const denials = [...clausePrefix.matchAll(
+    /\b(?:no|not|never|without|cannot|can't|won't|wouldn't|shouldn't|couldn't|mustn't|isn't|wasn't|doesn't|didn't)\b/gi,
+  )];
+  const denial = denials.at(-1);
+  if (denial?.index !== undefined) {
+    const bridge = clausePrefix.slice(denial.index + denial[0].length);
+    const isNotOnly = /^not$/i.test(denial[0]) && /^\s+only\b/i.test(bridge);
+    if (!isNotOnly && !/\b(?:but|instead|rather)\b/i.test(bridge)) return false;
+  }
+  if (/^\s*(?:agenda|meeting|duration)?\s*(?:is|was)\s+(?:not|false|wrong)\b/i.test(suffix)) {
+    return false;
+  }
+  if (/^\s*[,;:]?\s*(?:\(\s*)?(?:\+|\u00b1|\+\/-|or\s+(?:more|less|so)|at\s+(?:least|most)|max(?:imum)?\b|min(?:imum)?\b|approx(?:imately)?\b|about\b|around\b|roughly\b|nearly\b|almost\b)/i.test(suffix)) {
+    return false;
+  }
+  return !/^\s*\?\s*(?:no|not)\b/i.test(suffix);
+}
+
+function hasTimedAgenda(
+  response: string,
+  durationMinutes: number,
+  minimumBlocks: number,
+): boolean {
+  const text = response
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u2018\u2019]/g, "'");
+  const lines = text.split('\n');
+  type AgendaSection = 'agenda' | 'excluded' | 'other';
+  const headingText = (line: string): string | null => {
+    const markdownHeading = /^\s*#{1,6}\s+(.+?)\s*$/.exec(line);
+    const boldHeading = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?\*\*([^*]+?)\s*:?\*\*\s*:?[ \t]*$/.exec(line);
+    const boldExcludedHeadingWithSuffix = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?\*\*((?:(?:short\s+)?pre[- ]read(?: checklist)?|desired decisions?|participants?|notes?|follow[- ]?up)\s*):?\*\*\s*:?[ \t]+[\p{L}\p{N}][\p{L}\p{N}\s-]*[ \t]*$/iu.exec(line);
+    const italicHeading = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:_([^_]+)_|\*([^*]+)\*)\s*:?[ \t]*$/.exec(line);
+    const plainHeading = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?((?:agenda|time blocks?|schedule|run of show|(?:short\s+)?pre[- ]read(?: checklist)?|desired decisions?|participants?|notes?|follow[- ]?up)(?:\s*(?:\([^)]*\)|[-\u2013\u2014]\s*[\p{L}\p{N}][\p{L}\p{N}\s-]*|(?:for|before|after|due|complete)\s+[\p{L}\p{N}][\p{L}\p{N}\s-]*))?)\s*:?[ \t]*$/iu.exec(line);
+    return markdownHeading?.[1]
+      ?? boldHeading?.[1]
+      ?? boldExcludedHeadingWithSuffix?.[1]
+      ?? italicHeading?.[1]
+      ?? italicHeading?.[2]
+      ?? plainHeading?.[1]
+      ?? null;
+  };
+  const sectionForHeading = (heading: string): AgendaSection => {
+    if (/^\s*(?:alternative|option|choice|scenario)\b/i.test(heading)) {
+      return 'other';
+    }
+    if (/^\s*(?:(?:short\s+)?pre[- ]read|desired decisions?|participants?|notes?|follow[- ]?up)\b/i.test(heading)) {
+      return 'excluded';
+    }
+    if (/\b(?:agenda|time blocks?|schedule|run of show|launch-readiness)\b/i.test(heading)) {
+      return 'agenda';
+    }
+    if (/\b(?:pre[- ]read|desired decisions?|participants?|notes?|follow[- ]?up)\b/i.test(heading)) {
+      return 'excluded';
+    }
+    if (/\b(?:total(?:\s+time)?|meeting\s+duration)\b/i.test(heading)) return 'agenda';
+    return /\bmeeting\b/i.test(heading) ? 'agenda' : 'other';
+  };
+  const rangeAnnotationValues = (line: string): number[] => {
+    const values: number[] = [];
+    for (const match of line.matchAll(/\b(\d{1,3})\s*-?\s*(?:mins?|minutes?)\b/gi)) {
+      if (match.index === undefined) continue;
+      const prefix = line.slice(0, match.index);
+      const suffix = line.slice(match.index + match[0].length);
+      const closeParen = suffix.indexOf(')');
+      const closeBracket = suffix.indexOf(']');
+      const inParentheses = prefix.lastIndexOf('(') > prefix.lastIndexOf(')') && closeParen >= 0;
+      const inBrackets = prefix.lastIndexOf('[') > prefix.lastIndexOf(']') && closeBracket >= 0;
+      const groupedTail = inParentheses
+        ? suffix.slice(0, closeParen).trim()
+        : inBrackets ? suffix.slice(0, closeBracket).trim() : '';
+      const hasAnnotationTail = /^(?:allocated|allotted|allocation|block|slot|duration|total|for)\b/i.test(
+        inParentheses || inBrackets ? groupedTail : suffix.trimStart(),
+      );
+      const hasAnnotationPrefix = /\b(?:allocated|allocation|block|duration)\s*:?\s*$/i.test(prefix);
+      const isGroupedAnnotation = inParentheses || inBrackets;
+      const isTableCell = /\|\s*$/.test(prefix) && /^\s*\|/.test(suffix);
+      const endsLine = /^\s*$/.test(suffix);
+      if (isGroupedAnnotation || isTableCell || hasAnnotationTail || hasAnnotationPrefix || endsLine) {
+        values.push(Number(match[1]));
+      }
+    }
+    return values;
+  };
+  const clockMinute = (hourText: string, minuteText: string, meridiem?: string): number | null => {
+    const hour = Number(hourText);
+    const minute = Number(minuteText);
+    if (!meridiem) return hour * 60 + minute;
+    if (hour < 1 || hour > 12) return null;
+    return ((hour % 12) + (/^pm$/i.test(meridiem) ? 12 : 0)) * 60 + minute;
+  };
+  const durationPattern = new RegExp(
+    String.raw`\b${durationMinutes}\s*-?\s*(?:mins?|minutes?)\b`,
+    'gi',
+  );
+  let declaredDurationLine = -1;
+  let agendaBlockStartLine = -1;
+  let currentAgendaStartLine = -1;
+  let lineOffset = 0;
+  let section: AgendaSection = 'other';
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const heading = headingText(line);
+    if (heading) {
+      const nextSection = sectionForHeading(heading);
+      if (nextSection === 'agenda' && section !== 'agenda') currentAgendaStartLine = lineIndex;
+      if (nextSection !== 'agenda') currentAgendaStartLine = -1;
+      section = nextSection;
+    }
+    const hasExcludedLineContext = /\b(?:pre[- ]read|desired decisions?|participants?|notes?|follow[- ]?up)\b/i.test(line);
+    const hasStrongAgendaContext = /\b(?:agenda|meeting\s+duration|launch-readiness)\b/i.test(line);
+    const hasExplicitAgendaContext = hasStrongAgendaContext
+      || (!hasExcludedLineContext && /\b(?:meeting|total(?:\s+time)?)\b/i.test(line));
+    const hasStandaloneDurationContext = /\bduration\b/i.test(line)
+      && !hasExcludedLineContext;
+    const lineAllowedInAgenda = !hasExcludedLineContext || hasStrongAgendaContext;
+    const isDurationContext = (section === 'agenda' && lineAllowedInAgenda)
+      || (section === 'other' && (hasExplicitAgendaContext || hasStandaloneDurationContext));
+    if (isDurationContext) {
+      for (const match of line.matchAll(new RegExp(durationPattern.source, durationPattern.flags))) {
+        if (match.index === undefined) continue;
+        const start = lineOffset + match.index;
+        if (durationMentionIsAffirmed(text, start, start + match[0].length)) {
+          declaredDurationLine = lineIndex;
+          agendaBlockStartLine = section === 'agenda' && currentAgendaStartLine >= 0
+            ? currentAgendaStartLine
+            : lineIndex;
+          break;
+        }
+      }
+    }
+    if (declaredDurationLine >= 0) break;
+    lineOffset += line.length + 1;
+  }
+  if (declaredDurationLine < 0) return false;
+
+  let declarationOffset = 0;
+  let declarationSection: AgendaSection = 'other';
+  for (const line of lines) {
+    const heading = headingText(line);
+    if (heading) declarationSection = sectionForHeading(heading);
+    const hasExcludedLineContext = /\b(?:pre[- ]read|desired decisions?|participants?|notes?|follow[- ]?up)\b/i.test(line);
+    const isStructuredLine = /^\s*(?:[-*+]|\d+[.)])\s+/.test(line);
+    const hasExplicitDeclarationContext = declarationSection !== 'excluded'
+      && !hasExcludedLineContext && (
+      /\b(?:meeting\s+(?:duration|length)|total(?:\s+(?:time|duration))?|duration)\b/i.test(line)
+      || /\bmeeting\s+(?:is|runs|lasts)\b/i.test(line)
+      || (heading !== null && declarationSection === 'agenda')
+      || (!isStructuredLine && /\bagenda\b/i.test(line))
+    );
+    if (hasExplicitDeclarationContext) {
+      for (const match of line.matchAll(/\b(\d{1,3})\s*-?\s*(?:mins?|minutes?)\b/gi)) {
+        if (match.index === undefined || Number(match[1]) === durationMinutes) continue;
+        const start = declarationOffset + match.index;
+        if (durationMentionIsAffirmed(text, start, start + match[0].length)) return false;
+      }
+    }
+    declarationOffset += line.length + 1;
+  }
+
+  const agendaBlocks: Array<{
+    kind: 'clock' | 'offset' | 'duration';
+    duration: number;
+    start?: number;
+    end?: number;
+  }> = [];
+  let invalidAgendaBlock = false;
+  section = 'agenda';
+  for (let lineIndex = agendaBlockStartLine; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const heading = headingText(line);
+    if (lineIndex > declaredDurationLine && heading) section = sectionForHeading(heading);
+    if (section !== 'agenda') continue;
+
+    const isStructuredBlock = /^\s*(?:[-*+]|\d+[.)])\s+/.test(line)
+      || /^\s*\|.*\|\s*$/.test(line);
+    const clockMatches = [...line.matchAll(
+      /\b(\d{1,2}):([0-5]\d)\s*(am|pm)?\s*(?:-|[\u2013\u2014]|\u00e2\u20ac\u201c|to)\s*(\d{1,2}):([0-5]\d)\s*(am|pm)?\b/gi,
+    )];
+    const offsetMatches = [...line.matchAll(
+      /\b(\d{1,3})\s*(?:-|[\u2013\u2014]|\u00e2\u20ac\u201c|to)\s*(\d{1,3})\s*(?:mins?|minutes?)\b/gi,
+    )];
+    const intervalFreeLine = [...clockMatches, ...offsetMatches]
+      .sort((left, right) => (right.index ?? 0) - (left.index ?? 0))
+      .reduce((value, match) => {
+        const index = match.index ?? 0;
+        return `${value.slice(0, index)}${value.slice(index + match[0].length)}`;
+      }, line);
+    const durationAnnotations = rangeAnnotationValues(intervalFreeLine);
+    const intervalCount = clockMatches.length + offsetMatches.length;
+    const isAlternativeBlock = /(?:^|\|)\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:option|alternative|choice|scenario)\s+[a-z0-9]+\b/i.test(line);
+    if (isAlternativeBlock && (intervalCount > 0 || durationAnnotations.length > 0)) {
+      invalidAgendaBlock = true;
+      continue;
+    }
+    if (intervalCount === 1) {
+      const match = clockMatches[0] ?? offsetMatches[0];
+      const startsLine = match.index !== undefined && line.slice(0, match.index).trim().length === 0;
+      const isDistinctBlock = isStructuredBlock || startsLine;
+      if (isDistinctBlock) {
+        if (!/[\p{L}]/u.test(line.replace(match[0], ''))) {
+          invalidAgendaBlock = true;
+          continue;
+        }
+        if (clockMatches.length === 1) {
+          const startMeridiem = match[3] || match[6];
+          const endMeridiem = match[6] || match[3];
+          const start = clockMinute(match[1], match[2], startMeridiem);
+          const end = clockMinute(match[4], match[5], endMeridiem);
+          if (start === null || end === null) {
+            invalidAgendaBlock = true;
+            continue;
+          }
+          const intervalDuration = end - start;
+          const annotationMatches = durationAnnotations.length === 0
+            || (durationAnnotations.length === 1 && durationAnnotations[0] === intervalDuration);
+          if (intervalDuration > 0 && annotationMatches) {
+            agendaBlocks.push({ kind: 'clock', start, end, duration: intervalDuration });
+          }
+          else invalidAgendaBlock = true;
+        } else {
+          const start = Number(match[1]);
+          const end = Number(match[2]);
+          const intervalDuration = end - start;
+          const annotationMatches = durationAnnotations.length === 0
+            || (durationAnnotations.length === 1 && durationAnnotations[0] === intervalDuration);
+          if (intervalDuration > 0 && annotationMatches) {
+            agendaBlocks.push({ kind: 'offset', start, end, duration: intervalDuration });
+          }
+          else invalidAgendaBlock = true;
+        }
+      }
+    } else if (intervalCount > 1) {
+      const firstMatch = [...clockMatches, ...offsetMatches]
+        .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))[0];
+      const startsLine = firstMatch.index !== undefined
+        && line.slice(0, firstMatch.index).trim().length === 0;
+      if (isStructuredBlock || startsLine) invalidAgendaBlock = true;
+    }
+    if (intervalCount > 0) continue;
+
+    const durationMatch = /^\s*(?:(?:[-*+]|\d+[.)])\s+|\|\s*)?(?:\[[ xX]\]\s+)?(?:\*\*)?(\d{1,3})\s*-?\s*(?:mins?|minutes?)\b\s*:?(?:\*\*)?/i.exec(line);
+    if (!durationMatch) {
+      const isDeclarationLine = /^\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:total(?:\s+(?:time|duration))?|meeting\s+(?:duration|length)|duration)\b/i.test(line);
+      const labelFirstValues = isStructuredBlock && !isDeclarationLine
+        ? rangeAnnotationValues(line)
+        : [];
+      if (labelFirstValues.length === 1 && /[\p{L}]/u.test(line)) {
+        agendaBlocks.push({ kind: 'duration', duration: labelFirstValues[0] });
+      } else if (labelFirstValues.length > 1) {
+        invalidAgendaBlock = true;
+      }
+      continue;
+    }
+    const remainder = line.slice(durationMatch[0].length);
+    if (!/[\p{L}]/u.test(remainder)) continue;
+    if (/^\s*(?:total|duration|meeting\s+duration)\b/i.test(remainder)) continue;
+    const hasAdditionalAllocation = /(?:^|[;,|]|\band\b)\s*(?:[-*+]\s+)?\d{1,3}\s*-?\s*(?:mins?|minutes?)\b/i.test(remainder);
+    if (hasAdditionalAllocation) {
+      invalidAgendaBlock = true;
+      continue;
+    }
+    const value = Number(durationMatch[1]);
+    const secondaryAnnotations = rangeAnnotationValues(remainder);
+    if (secondaryAnnotations.some(annotation => annotation !== value)) {
+      invalidAgendaBlock = true;
+      continue;
+    }
+    if (value > 0) agendaBlocks.push({ kind: 'duration', duration: value });
+    else invalidAgendaBlock = true;
+  }
+
+  if (invalidAgendaBlock || agendaBlocks.length < minimumBlocks) return false;
+  let elapsedMinutes = 0;
+  let clockOrigin: number | null = null;
+  for (const block of agendaBlocks) {
+    if (block.kind === 'offset' && block.start !== elapsedMinutes) return false;
+    if (block.kind === 'clock') {
+      clockOrigin ??= block.start! - elapsedMinutes;
+      if (block.start !== clockOrigin + elapsedMinutes) return false;
+    }
+    elapsedMinutes += block.duration;
+  }
+  return elapsedMinutes === durationMinutes;
+}
+
 function milestoneIds(value: string): string[] {
   return Array.from(value.matchAll(/\bM\d+\b/gi), match => match[0].toUpperCase());
 }
@@ -665,6 +980,8 @@ function evaluateResponseRule(
       return rule.pattern.test(evidence.response);
     case 'dependencyMap':
       return hasMilestoneDependencyMap(evidence.response);
+    case 'timedAgenda':
+      return hasTimedAgenda(evidence.response, rule.durationMinutes, rule.minimumBlocks);
     case 'runwayFormula':
       return hasAffirmedRunwayFormula(evidence.response);
     case 'runwayAssumption':
