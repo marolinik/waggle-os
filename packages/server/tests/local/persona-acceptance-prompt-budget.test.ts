@@ -166,9 +166,12 @@ describe('persona acceptance prompt budget', () => {
 
     expect(config.tools).toEqual([]);
     expect(config.messages).toEqual([{ role: 'user', content: persona.prompt }]);
-    expect(config.maxOutputTokens).toBeLessThan(persona.maxOutputTokens);
+    expect(config.maxOutputTokens).toBe(persona.maxOutputTokens);
     expect(syntheticInputUpperBound).toBeLessThan(persona.maxInputTokens);
     expect(config.systemPrompt).toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(config.systemPrompt).toContain(
+      'unless the user named them or explicitly asked you to identify, recommend, or compare them',
+    );
     expect(config.systemPrompt).not.toContain('# Context From Your Memory');
     expect(config.systemPrompt).not.toContain('# Recalled Memories');
     expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);

@@ -201,6 +201,7 @@ export function composeToolFreeAdvisoryChatPrompt(
     behavioralRulesForPromptPackage(options.behavioralSpec, options.packageMode),
     `# SELF-CONTAINED ADVISORY TURN
 Use the current user message and general knowledge only. Do not use recalled memory, prior chat, workspace state, goals, templates, skills, connectors, or external sources.
+Use generic categories when context is missing. Do not introduce specific regulations, compliance frameworks, vendors, platforms, regions, or deployment technologies as assumed facts or requirements unless the user named them or explicitly asked you to identify, recommend, or compare them.
 No tools are available. Produce the requested answer directly and do not mention this boundary.`,
   ].filter(Boolean).join('\n\n');
 }

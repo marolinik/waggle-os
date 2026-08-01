@@ -259,52 +259,106 @@ export function isExplicitToolFreeAdvisoryRequest(
     || (policy.denyFileWrites && (policy.denyCodeExecution || policy.denyAgentLaunch));
   if (!explicitlyNonExecuting) return false;
   const affirmative = actionable.replace(
-    /\b(?:do not|don['\u2019]t|never|without)\b[^.?!;\r\n]*?(?=\s*(?:,\s*(?=(?:but|however|then|using|from|via|inspect|search|browse|read|open|list|scan|query|retrieve|recall|look up|find)\b)|;|\bbut\b|\bhowever\b|\bbased on\b|[.?!]|$))/gi,
+    /\b(?:do not|don['\u2019]t|never|without)\b[^.?!;:\r\n]*?(?=\s*(?:,\s*(?=(?:but|however|yet|then|using|from|via|inspect|search|browse|read|open|list|scan|query|retrieve|recall|look up|find)\b)|[;:]|\bbut\b|\bhowever\b|\byet\b|\bbased on\b|[.?!]|$))/gi,
     ' ',
   );
-  if (!/\b(?:design|decompose|outline|explain|summari[sz]e|draft|prepare|propose|recommend|map|write)\b/i.test(affirmative)) {
+  if (!/\b(?:design|decompose|outline|explain|compare|describe|discuss|teach|summari[sz]e|draft|prepare|propose|recommend|map|write|provide|produce|generate|implement)\b/i.test(affirmative)) {
     return false;
   }
 
+  const technologyNameUsage = /\b(?:explain|design|generate|write|build|implement|discuss|compare|describe|teach)\b[^.?!\r\n]{0,120}[\s"'`](?:node|react|vue|next|nuxt|deno|bun)\.js["'`]?(?=$|[\s"'`,;:.!?])/i.test(message);
+  const quotedFilenames = message.match(/["'`](?:[^"'`\r\n\\/]+[\\/])*[^"'`\r\n]+\.[A-Za-z0-9]{1,8}["'`]/gi) ?? [];
+  const bareFilenames = message.match(/\b[a-z0-9_-][a-z0-9_.-]*\.[A-Za-z][A-Za-z0-9]{0,7}\b/gi) ?? [];
+  const matchedFilenames = [...quotedFilenames, ...bareFilenames];
+  const technologyFilenames = new Set(['node.js', 'react.js', 'vue.js', 'next.js', 'nuxt.js', 'deno.js', 'bun.js']);
+  const onlyTechnologyFilenames = matchedFilenames.length > 0
+    && matchedFilenames.every(name => technologyFilenames.has(name.replace(/^["'`]|["'`]$/g, '').toLowerCase()));
+  const technologyFileIntent = /(?:\bfile\b[^.?!\r\n]{0,60}["'`]?(?:node|react|vue|next|nuxt|deno|bun)\.js|(?:node|react|vue|next|nuxt|deno|bun)\.js["'`]?[^.?!\r\n]{0,60}\bfile\b(?!\s+system\b))/i.test(message);
+  const filenameEvidence = (matchedFilenames.length > 0
+    && (!onlyTechnologyFilenames || !technologyNameUsage || technologyFileIntent))
+    || /(?:^|[\s"'`])(?:Dockerfile|Makefile|Jenkinsfile|Procfile|README(?:\.[A-Za-z0-9_-]+)?|\.gitignore|\.gitattributes|\.npmrc|\.nvmrc|\.env(?:\.[A-Za-z0-9_-]+)?)(?=$|[\s"'`,;:.!?])/i.test(message);
+  const methodExplanation = /\b(?:explain|describe|outline)\s+how\s+to\b/i.test(affirmative);
   const explicitLookup = /https?:\/\//i.test(affirmative)
     || /\b(?:search|browse|inspect|read|open|list|scan|query|retrieve|recall|look up|find)\b[^.?!\r\n]{0,100}\b(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|web|internet|online|sources?|documents?|documentation)\b/i.test(affirmative)
     || /\b(?:current|existing|this|our|my|saved|previous|prior|attached|uploaded)\s+(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|documents?|pdfs?|emails?|messages?|spreadsheets?|tickets?|records?|inbox|calendar|tasks?)\b/i.test(affirmative)
     || /\b(?:our|the|a)?\s*(?:previous|prior|earlier)\s+(?:conversation|discussion|messages?|chat)\b/i.test(affirmative)
     || /\b(?:latest|current|recent)\s+(?:online|web|external|release|documentation|docs?|sources?|news|pricing|benchmark)\b/i.test(affirmative)
+    || (!methodExplanation && /\b(?:summari[sz]e|review|analy[sz]e|extract)\b[^.?!\r\n]{0,80}\b(?:external|online|web)\s+(?:sources?|documents?|data|evidence)\b/i.test(affirmative))
+    || (!methodExplanation && /\b(?:design|recommend|propose|summari[sz]e|review|analy[sz]e|extract|prepare|produce|write|draft|provide)\b[^.?!\r\n]{0,100}\b(?:from|using|based on)\s+(?:the\s+)?(?:external|online|web)\s+(?:sources?|documents?|data|evidence)\b/i.test(affirmative))
     || /\b(?:cite|include|provide|link)\b[^.?!\r\n]{0,60}\b(?:sources?|citations?|references?|links?)\b/i.test(affirmative)
     || /\b(?:text|content|message|details?|information)\s+(?:above|earlier|previously)\b/i.test(affirmative)
-    || /\b(?:from|using|via|in)\s+(?:(?:my|our|the|a|an)\s+)?(?:slack|teams|email|outlook|notion|drive|calendar|jira|linear|github|gitlab|salesforce|inbox|database|spreadsheet|document|file|workspace|repo(?:sitory)?)\b/i.test(affirmative)
+    || /\b(?:current|open|existing|this|our|my|the)\s+(?:jira|linear|github|gitlab|salesforce|hubspot|airtable|workday|sap)\s+(?:issues?|tickets?|tasks?|records?|cases?|accounts?|deals?|pull\s+requests?|bases?|repositories|repos?|projects?|workspaces?|messages?|threads?|contacts?|opportunities)\b/i.test(affirmative)
+    || (!methodExplanation && /\b(?:summari[sz]e|review|analy[sz]e|extract)\b[^.?!\r\n]{0,80}\b(?:jira|linear|github|gitlab|salesforce|hubspot|airtable|workday|sap)\s+(?:issues?|tickets?|tasks?|records?|cases?|accounts?|deals?|pull\s+requests?|bases?|repositories|repos?|projects?|workspaces?|messages?|threads?|contacts?|opportunities)\b/i.test(affirmative))
+    || /\b(?:from|using|via|in)\s+(?:(?:my|our|the|a|an)\s+)?(?:slack|teams|email|outlook|notion|drive|calendar|jira|linear|github|gitlab|salesforce|hubspot|airtable|workday|sap|inbox|database|spreadsheet|document|file|workspace|repo(?:sitory)?)\b/i.test(affirmative)
     || /\b(?:based on|using|from)\s+(?:the\s+)?(?:attached|uploaded|saved|previous|prior)\b/i.test(affirmative)
     || /\b(?:use|call|invoke)\b[^.?!\r\n]{0,80}\b(?:tool|plugin|mcp|connector|calculator)\b/i.test(affirmative)
     || /\b(?:web_search|web_fetch|search_memory|read_file|search_files|search_content|bash|run_code|spawn_agent)\b/i.test(affirmative)
+    || /\bgit\s+(?:status|diff|log|show|branch)\b/i.test(affirmative)
     || /(?:^|[.?!]\s*|[,;:\u2014]\s*|\b(?:and|then|also|but|however)\s+)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge(?!\s+criteria\b)|deploy)\b/i.test(affirmative)
-    || /\b(?:that|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
+    || /\b(?:once\s+(?:done|complete)|after(?:wards|\s+that)?)\b[^.?!\r\n]{0,40}\b(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge|deploy)\b/i.test(affirmative)
+    || /\b(?:that|this|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
+    || /\b(?:we|you)\s+(?:discussed|mentioned|agreed)\b/i.test(affirmative)
+    || /\bfrom\s+before\b/i.test(affirmative)
     || /\b(?:attached|uploaded|below)\b/i.test(message)
     || /\b(?:customer|client|internal|external)\s+(?:email|message|thread|ticket|case|record|document|file)\b/i.test(affirmative)
-    || /\b(?:using|from|via)\s+(?:the\s+)?[A-Z][A-Za-z0-9_-]*/.test(affirmative)
-    || /\b(?:from|using|via|in)\s+(?:(?:my|our|the|a|an)\s+)?[A-Za-z][\w-]*(?:\s+[A-Za-z][\w-]*){0,2}(?=\s*(?:[.?!,;]|$))/i.test(affirmative)
+    || /\b(?:using|from|via)\s+(?:the\s+)?[A-Z][A-Za-z0-9_-]*(?:\s+[A-Z][A-Za-z0-9_-]*){0,2}\s+(?:api|crm|database|dataset|records?|tickets?|messages?|inbox|calendar|documents?|files?|workspace|repo(?:sitory)?)\b/i.test(affirmative)
     || /\b(?:repository|repo|codebase|weather|news)\b/i.test(affirmative)
-    || /\b[\w.-]+\.[A-Za-z][A-Za-z0-9]{0,7}\b/.test(message)
+    || filenameEvidence
     || /(?:^|\s)[A-Za-z]:\\[^\s]+|(?:^|\s)\.?(?:\.\/|\.\\)[^\s]+/.test(message);
   return !explicitLookup;
 }
 
+const ADVISORY_REQUEST_PREFIX = String.raw`(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?`;
+const ADVISORY_PRODUCE_VERB = String.raw`(?:design|write|draft|prepare|produce|create|build|give|provide|return|generate|implement|include|show|compose)`;
+const ADVISORY_SAME_SENTENCE = String.raw`(?:(?![?!]|\.(?:\s|$))[^\r\n])`;
+const ADVISORY_CODE_ARTIFACT = String.raw`(?:code(?:\s+(?:example|sample|snippet|implementation))?|example|sample|snippet|script|program|implementation)`;
+const ADVISORY_CODE_ARTIFACT_REQUEST = String.raw`${ADVISORY_REQUEST_PREFIX}${ADVISORY_PRODUCE_VERB}(?!\s+(?:about|why|how)\b)${ADVISORY_SAME_SENTENCE}{0,320}\b${ADVISORY_CODE_ARTIFACT}\b(?!\s+(?:plan|strategy|roadmap|guide|overview|approach|proposal)\b)`;
+const ADVISORY_LENGTH_QUALIFIER = String.raw`(?:at most|at least|up to|no more than|no fewer than|no longer than|under|exactly|about|approximately|roughly)`;
+const ADVISORY_OUTPUT_BOUND_END = String.raw`\b(?=\s*(?:$|[.?!;:](?:\s|$)|,\s*(?:please\b|if\s+possible\b|including\s+(?:comments?|documentation|docstrings?|tests?|examples?|type\s+annotations?)\b)|(?:or\s+(?:fewer|less)|(?:in\s+)?total)\s*(?:$|[.?!;:](?:\s|$))))`;
+const COMPLETE_CODE_ARTIFACT = /\b(?:complete|runnable|executable|self-contained|syntactically valid|compil(?:able|es?)|all (?:required )?imports?)\b/i;
+const NEGATED_COMPLETE_CODE_ARTIFACT = /\b(?:(?:not(?:\s+(?:necessarily|fully))?|need(?:s)?\s+not|does(?:n't| not)\s+(?:need|have)\s+to|needn['\u2019]t)\s+(?:(?:be\s+)?(?:complete|runnable|executable|self-contained|syntactically valid|compilable)|(?:include|have)\s+all (?:required )?imports?)|does(?:n't| not)\s+need\s+all (?:required )?imports?|not\s+(?:a\s+)?(?:complete|runnable|executable|self-contained|syntactically valid|compilable)(?:\s+one)?|without\s+(?:including\s+)?all (?:required )?imports?|non-(?:runnable|executable|self-contained|compilable))\b/i;
+const CODE_ARTIFACT_REQUEST = new RegExp(ADVISORY_CODE_ARTIFACT_REQUEST, 'i');
+
+function matchRequestedArtifactLength(
+  message: string,
+  unit: 'token' | 'word',
+): RegExpMatchArray | null {
+  const importTail = String.raw`(?:\s+(?:with|including)\s+all (?:required )?imports?)?`;
+  const qualifiedLead = String.raw`(?:\s+(?:in|within)\s+(?:(?:${ADVISORY_LENGTH_QUALIFIER})\s+)?|\s+under\s+|\s+using\s+(?:${ADVISORY_LENGTH_QUALIFIER})\s+|\s+with\s+(?:a\s+)?maximum\s+of\s+|[\s,;:\u2014]+(?:(?:limited\s+to|capped\s+at|${ADVISORY_LENGTH_QUALIFIER})\s+))`;
+  const qualifiedBound = message.match(new RegExp(
+    String.raw`${ADVISORY_CODE_ARTIFACT_REQUEST}${importTail}${qualifiedLead}(\d{1,6})[ -]?${unit}s?${ADVISORY_OUTPUT_BOUND_END}`,
+    'i',
+  ));
+  if (qualifiedBound) return qualifiedBound;
+  return message.match(new RegExp(
+    String.raw`${ADVISORY_CODE_ARTIFACT_REQUEST}${importTail}\s+(?:(?:and|with)\s+)?(?:a|an)\s+(\d{1,6})[ -]?${unit}s?\s+limit${ADVISORY_OUTPUT_BOUND_END}`,
+    'i',
+  ));
+}
+
 /** Bound self-contained advisory completions without treating subject adjectives as length intent. */
 export function selectAdvisoryMaxOutputTokens(message: string): number {
-  const requestedTokens = message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:write|draft|prepare|produce|create|give|provide|return|generate)\s+(?:(?:a|an|the)\s+)?(?:(?!(?:about|why|how)\b)[A-Za-z][\w-]*\s+){0,3}(\d{2,5})[ -]?token\s+(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\b/i)
-    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:answer|respond|reply|summari[sz]e|write|draft|explain|give|provide|return)\s+(?:(?:in)\s+|(?:(?:a|an|the)\s+)?(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\s+(?:of\s+)?)?(?:at most|at least|up to|no more than|no fewer than|under|within|exactly|about|approximately|roughly)\s+(\d{2,5})[ -]?tokens?\b/i);
+  const requestedTokens = message.match(/(?:^|[.?!]\s*)(?:keep|limit|cap)\s+(?:the\s+)?(?:answer|response|reply|output)\s+(?:to|at|under|within|below|no more than|at most)\s+(\d{2,5})[ -]?tokens?\b/i)
+    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:write|draft|prepare|produce|create|give|provide|return|generate)\s+(?:(?:a|an|the)\s+)?(?:(?!(?:about|why|how)\b)[A-Za-z][\w-]*\s+){0,3}(\d{2,5})[ -]?token\s+(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\b/i)
+    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:answer|respond|reply|summari[sz]e|write|draft|explain|give|provide|return)\s+(?:(?:in)\s+|(?:(?:a|an|the)\s+)?(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\s+(?:of\s+)?)?(?:at most|at least|up to|no more than|no fewer than|under|within|exactly|about|approximately|roughly)\s+(\d{2,5})[ -]?tokens?\b/i)
+    ?? matchRequestedArtifactLength(message, 'token');
   if (requestedTokens) {
     return Math.min(12_000, Math.max(256, Number.parseInt(requestedTokens[1], 10)));
   }
-  const requestedWords = message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:write|draft|prepare|produce|create|give|provide|return|generate)\s+(?:(?:a|an|the)\s+)?(?:(?!(?:about|why|how)\b)[A-Za-z][\w-]*\s+){0,3}(\d{2,5})[ -]?word\s+(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\b/i)
-    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:answer|respond|reply|summari[sz]e|write|draft|explain|give|provide|return)\s+(?:(?:in)\s+|(?:(?:a|an|the)\s+)?(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\s+(?:of\s+)?)?(?:at most|at least|up to|no more than|no fewer than|under|within|exactly|about|approximately|roughly)\s+(\d{2,5})[ -]?words?\b/i);
+  const requestedWords = message.match(/(?:^|[.?!]\s*)(?:keep|limit|cap)\s+(?:the\s+)?(?:answer|response|reply|output)\s+(?:to|at|under|within|below|no more than|at most)\s+(\d{2,5})[ -]?words?\b/i)
+    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:write|draft|prepare|produce|create|give|provide|return|generate)\s+(?:(?:a|an|the)\s+)?(?:(?!(?:about|why|how)\b)[A-Za-z][\w-]*\s+){0,3}(\d{2,5})[ -]?word\s+(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\b/i)
+    ?? message.match(/(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:answer|respond|reply|summari[sz]e|write|draft|explain|give|provide|return)\s+(?:(?:in)\s+|(?:(?:a|an|the)\s+)?(?:answer|response|reply|summary|report|plan|explanation|guide|output|memo|draft)\s+(?:of\s+)?)?(?:at most|at least|up to|no more than|no fewer than|under|within|exactly|about|approximately|roughly)\s+(\d{2,5})[ -]?words?\b/i)
+    ?? matchRequestedArtifactLength(message, 'word');
   if (requestedWords) {
     const tokenEstimate = Math.ceil(Number.parseInt(requestedWords[1], 10) * 1.5);
     return Math.min(12_000, Math.max(256, tokenEstimate));
   }
+  const completeCodeArtifact = CODE_ARTIFACT_REQUEST.test(message)
+    && COMPLETE_CODE_ARTIFACT.test(message)
+    && !NEGATED_COMPLETE_CODE_ARTIFACT.test(message);
   const briefAnswer = /\b(?:compact|concise|brief|short)\s+(?:answer|response|reply|summary|report|plan|explanation|output)\b/i.test(message)
     || /\b(?:answer|respond|reply|summari[sz]e)\b[^.?!\r\n]{0,40}\b(?:briefly|concisely)\b/i.test(message);
-  return briefAnswer ? 2_500 : 3_000;
+  return briefAnswer ? 2_500 : completeCodeArtifact ? 4_500 : 3_000;
 }
 
 /** Automatic recall is incompatible with an explicit evidence boundary. */

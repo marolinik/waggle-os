@@ -302,8 +302,8 @@ export function isExplicitMemoryRecallRequest(message: string): boolean {
     || /\bwhat do you remember\s*[?.!,;:]?\s*$/i.test(message)
     || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(message);
   const explicitMemoryLookup = /\b(?:search|find|look up|show|list|open|inspect|retrieve)\s+(?:me\s+)?(?:(?:in|inside|within)\s+)?(?:(?:my|our|your|the|saved|previous|prior)\s+)?memor(?:y|ies)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|containing|regarding)\b))/i;
-  const ownedContextLookup = /\b(?:search|find|look up|recall|retrieve)\s+(?:(?:my|our)\s+(?:saved\s+)?|(?:saved|previous|prior)\s+)(?:[\w'-]+\s+){0,3}(?:notes?|preferences?|decisions?|history|context)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|on|containing|regarding)\b))/i;
-  const ownedPriorContext = /\b(?:our|my)\s+(?:(?:previous|prior|earlier|agreed)\s+)?(?:decisions?|agreements?|plans?|choices?|conclusions?|discussion|context)\b/i.test(message)
+  const ownedContextLookup = /\b(?:search|find|look up|recall|retrieve)\s+(?:(?:my|our)\s+saved\s+|(?:saved|previous|prior)\s+)(?:[\w'-]+\s+){0,3}(?:notes?|preferences?|decisions?|history|context)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|on|containing|regarding)\b))/i;
+  const ownedPriorContext = /\b(?:our|my)\s+(?:(?:(?:previous|prior|earlier|agreed)\s+)?(?:decisions?|agreements?|plans?|choices?|conclusions?|discussion)|(?:previous|prior|earlier|agreed)\s+context)\b/i.test(message)
     || /\b(?:the\s+)?agreed\s+(?:plan|decision|approach|scope|next steps?)\b/i.test(message)
     || /\bwhat\s+(?:we|I)\s+(?:decided|agreed|discussed|chose|selected)\b/i.test(message);
   return directRecall

@@ -385,6 +385,36 @@ describe('classifyExplicitTurnMutationPolicy', () => {
         classifyExplicitTurnMutationPolicy(prompt),
       ), id).toBe(true);
     }
+    for (const prompt of [
+      'Design a complete ETL in Python with all imports. Do not write files or execute code.',
+      'Design a complete ETL using Python with all imports. Do not write files or execute code.',
+      'Provide a complete runnable example in Python with all imports. Do not write files or execute code.',
+      'Draft a response in Serbian. Do not write files or launch agents.',
+      'Outline a plan from first principles. Do not edit files or launch agents.',
+      'Write a concise plan in the response. Do not write files or execute code.',
+      'Generate a runnable Node.js script with all imports. Do not write files or execute code.',
+      'Design a React.js component. Do not write files or execute code.',
+      'Explain node.js module resolution. Do not write files or execute code.',
+      'Explain "Node.js" module resolution. Do not write files or execute code.',
+      'Prepare a summary using Serbian. Do not write files or execute code.',
+      'Prepare a summary using Markdown. Do not write files or execute code.',
+      'Explain why external sources can be unreliable. Do not write files or execute code.',
+      'Design a policy for evaluating external sources. Do not write files or execute code.',
+      'Explain what a Jira issue is. Do not write files or execute code.',
+      'Design a generic Jira issue template. Do not write files or execute code.',
+      'Design a GitHub project structure from first principles. Do not write files or execute code.',
+      'Explain the tradeoffs of using external sources. Do not write files or execute code.',
+      'Explain why decisions based on external evidence can be risky. Do not write files or execute code.',
+      'Compare "Vue.js" and "React.js" architectures. Do not write files or execute code.',
+      'Explain Node.js file system APIs. Do not write files or execute code.',
+      'Explain how to summarize external sources. Do not write files or execute code.',
+      'Explain how to review a Jira issue. Do not write files or execute code.',
+    ]) {
+      expect(isExplicitToolFreeAdvisoryRequest(
+        prompt,
+        classifyExplicitTurnMutationPolicy(prompt),
+      ), prompt).toBe(true);
+    }
 
     const coderPrompt = canonicalPrompt('coder');
     expect(isExplicitToolFreeAdvisoryRequest(
@@ -413,6 +443,12 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       'Prepare a summary using Salesforce. Do not write files or execute code.',
       'Prepare a summary from salesforce. Do not write files or execute code.',
       'Prepare a summary from hubspot. Do not write files or execute code.',
+      'Prepare a summary using Acme CRM. Do not write files or execute code.',
+      'Prepare a summary from Acme records. Do not write files or execute code.',
+      'Prepare a summary using Workday. Do not write files or execute code.',
+      'Prepare a summary using SAP. Do not write files or execute code.',
+      'Summarize Jira issue. Do not write files or launch agents.',
+      'Prepare a summary from external sources. Do not write files or launch agents.',
       'Summarize records in airtable. Do not write files or execute code.',
       'Summarize my inbox. Do not write files or execute code.',
       'Prepare an agenda from my calendar. Do not write files or execute code.',
@@ -446,6 +482,41 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       'Outline a plan without editing files or running code based on the current repository.',
       'Do not edit files or launch agents, inspect this workspace first and outline the result.',
       'Outline the review. Do not edit files or launch agents, then search my saved memory.',
+      'Review my calendar. Do not write files or launch agents.',
+      'Summarize the current Jira issue. Do not write files or launch agents.',
+      'Check git status. Do not write files or execute code.',
+      'Summarize git status. Do not write files or execute code.',
+      'Explain git diff. Do not write files or execute code.',
+      'Continue and summarize the above. Do not write files or execute code.',
+      'Outline the review. Do not edit files or launch agents: inspect this workspace first.',
+      'Design the migration. Do not write files or execute code, yet search my saved memory.',
+      'Now outline this plan. Do not edit files or launch agents.',
+      'Outline the plan we discussed. Do not edit files or launch agents.',
+      'Outline the plan from before. Do not edit files or launch agents.',
+      'Summarize the current Salesforce account. Do not write files or execute code.',
+      'Summarize the current HubSpot deal. Do not write files or execute code.',
+      'Summarize the current GitHub pull request. Do not write files or execute code.',
+      'Summarize the current Airtable base. Do not write files or execute code.',
+      'Design a plan and once done create a Jira ticket. Do not write files or launch agents.',
+      'Summarize Dockerfile. Do not write files or execute code.',
+      'Summarize "Makefile". Do not write files or execute code.',
+      'Explain .gitignore. Do not write files or execute code.',
+      'Summarize the contents of "node.js". Do not write files or execute code.',
+      'Summarize the contents of react.js. Do not write files or execute code.',
+      'Summarize current Jira tickets. Do not write files or execute code.',
+      'Summarize the open Linear tasks. Do not write files or execute code.',
+      'Summarize current Salesforce accounts. Do not write files or execute code.',
+      'Summarize current HubSpot deals. Do not write files or execute code.',
+      'Summarize current Airtable records. Do not write files or execute code.',
+      'Summarize current GitHub pull requests. Do not write files or execute code.',
+      'Explain the file "node.js". Do not write files or execute code.',
+      'Explain "node.js" file contents. Do not write files or execute code.',
+      'Explain Node.js, then summarize package.json. Do not write files or execute code.',
+      'Compare "Node.js" runtimes, then summarize "config.json". Do not write files or execute code.',
+      'Read package.json and explain Node.js. Do not write files or execute code.',
+      'Explain Node.js using package.json. Do not write files or execute code.',
+      'Summarize external sources. Do not write files or launch agents.',
+      'Design a recommendation based on web data. Do not write files or execute code.',
     ]) {
       expect(isExplicitToolFreeAdvisoryRequest(
         prompt,
@@ -455,7 +526,7 @@ describe('classifyExplicitTurnMutationPolicy', () => {
   });
 
   it('caps advisory output from answer-length intent rather than unrelated adjectives', () => {
-    expect(selectAdvisoryMaxOutputTokens(canonicalPrompt('data-engineer'))).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(canonicalPrompt('data-engineer'))).toBe(4_500);
     expect(selectAdvisoryMaxOutputTokens(canonicalPrompt('coordinator'))).toBe(3_000);
     expect(selectAdvisoryMaxOutputTokens('Give a concise answer about the migration.')).toBe(2_500);
     expect(selectAdvisoryMaxOutputTokens(
@@ -482,6 +553,186 @@ describe('classifyExplicitTurnMutationPolicy', () => {
     expect(selectAdvisoryMaxOutputTokens(
       'Explain how an API should write at most 512 tokens to its response buffer.',
     )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain why complete Python examples should include all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Give a concise answer that includes a complete Python example with all imports.',
+    )).toBe(2_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a concise answer with a complete Python example and all imports.',
+    )).toBe(2_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 1200 tokens.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Design a complete Python example with all imports, exactly 1200 tokens.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 800 words.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Rust example with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Go implementation with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete runnable example in Python with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Generate a runnable Node.js script with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Show a syntactically valid C# program with all required imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 1200 tokens. Do not write files or execute code.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, limited to 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, no more than 700 words.',
+    )).toBe(1_050);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 5 tokens.',
+    )).toBe(256);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 100000 tokens.',
+    )).toBe(12_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Give a concise answer with a complete Python example in exactly 1200 tokens.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete implementation plan.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that does not need to be complete.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script that writes at most 512 tokens to its response buffer.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example for analyzing a 5000-word report.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, not limited to 1200 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, not capped at 900 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that does not need to include all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that does not need all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example, not a complete one.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example without all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example without including all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a non-runnable Python example.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that is not fully runnable.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      "Provide a Python example that needn't be complete.",
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      "Provide a Python example that needn't include all imports.",
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 1200-token limit.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in exactly 1200 tokens, please.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in at most 900 tokens, including comments.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in exactly 1200 tokens, if possible.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in at most 900 tokens, including type annotations.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example no longer than 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 512-token limit in its response buffer.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 512-token limit per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 512-token limit for every generated chunk.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a complete Python script that summarizes each report in exactly 1200 words.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Build a complete Python program that returns output in exactly 1200 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example for a model response buffer capped at 512 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example using at most 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports no more than 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example. Keep the answer under 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with a maximum of 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a runnable Python example using at most 512 tokens of model context per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens of context for each chunk.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script with all imports, no more than 512 tokens in its response buffer.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a runnable Python example using at most 512 tokens of prompt context per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a runnable Python example using at most 512 tokens in the context window.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens per chunk.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script with all imports, no more than 512 tokens in each API response.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script with all imports, no more than 512 tokens for every response.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens or fewer per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens in total per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 900 tokens; include tests.',
+    )).toBe(900);
     expect(selectAdvisoryMaxOutputTokens(
       'Write about why a 5000-word report is difficult to review.',
     )).toBe(3_000);
