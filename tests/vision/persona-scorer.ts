@@ -1381,6 +1381,26 @@ function visibleWords(value: string): string[] {
     .match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+function normalizeInlineCodeSuffixesInLine(line: string): string {
+  const output: string[] = [];
+  let cursor = 0;
+  for (const match of line.matchAll(/`([^`\r\n]+)`/g)) {
+    if (match.index === undefined || match.index < cursor) continue;
+    const end = match.index + match[0].length;
+    const suffix = line.slice(end).match(/^[\p{L}\p{N}]+/u)?.[0];
+    output.push(line.slice(cursor, match.index));
+    if (suffix) {
+      output.push(match[1], suffix);
+      cursor = end + suffix.length;
+    } else {
+      output.push(match[0]);
+      cursor = end;
+    }
+  }
+  output.push(line.slice(cursor));
+  return output.join('');
+}
+
 function normalizeInlineCodeSuffixes(markdown: string): string {
   let fenced = false;
   return markdown.replace(/\r\n?/g, '\n').split('\n').map(line => {
@@ -1393,7 +1413,7 @@ function normalizeInlineCodeSuffixes(markdown: string): string {
       return line;
     }
     // Markdown joins an inline-code token and its suffix into one visible word.
-    return line.replace(/`([^`\r\n]+)`([\p{L}\p{N}]+)/gu, '$1$2');
+    return normalizeInlineCodeSuffixesInLine(line);
   }).join('\n');
 }
 

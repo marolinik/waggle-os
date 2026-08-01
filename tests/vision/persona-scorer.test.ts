@@ -2205,6 +2205,7 @@ describe('deterministic 100-point persona scorer', () => {
   it.each([
     ['captured affirmative workspace-directory wording', 'This workspace directory is empty.', true],
     ['captured affirmative search-return wording', 'I ran an exhaustive glob search and it returned **no files**.', true],
+    ['captured affirmative workspace-search wording', 'The workspace search returned no files.', true],
     ['uncertain workspace-directory wording', 'I could not confirm whether this workspace directory is empty.', false],
     ['multiline uncertain workspace-directory wording', 'I could not confirm whether\nthis workspace directory is empty.', false],
     ['hedged workspace-directory wording', 'This workspace directory may be empty.', false],
@@ -2212,6 +2213,9 @@ describe('deterministic 100-point persona scorer', () => {
     ['uncertain search-return wording', 'I could not confirm whether the search ran and it returned **no files**.', false],
     ['hedged search-return wording', 'I may have run the search and it returned **no files**.', false],
     ['negated search-return wording', 'I ran the search and it did not return **no files**.', false],
+    ['uncertain workspace-search wording', 'I could not confirm whether the workspace search returned no files.', false],
+    ['hedged workspace-search wording', 'The workspace search may have returned no files.', false],
+    ['negated workspace-search wording', 'The workspace search returned files, not no files.', false],
   ])('classifies coder empty-workspace evidence: %s', (_label, statement, expected) => {
     const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
     const response = `${statement}\n\nRecommended next engineering step: confirm the intended stack.`;
@@ -2803,6 +2807,15 @@ describe('deterministic 100-point persona scorer', () => {
 
     expect(visibleMarkdownPreservesText(response, 'Stable event_ids across retries.')).toBe(true);
     expect(visibleMarkdownPreservesText(response, 'Stable event_ids retries.')).toBe(false);
+  });
+
+  it('pairs multiple inline-code spans before folding a suffix', () => {
+    const response = 'Retry covers `OperationalError` with locked; other `OperationalError`s propagate.';
+
+    expect(visibleMarkdownPreservesText(
+      response,
+      'Retry covers OperationalError with locked; other OperationalErrors propagate.',
+    )).toBe(true);
   });
 
   it('keeps backtick-delimited shell text literal inside fenced code', () => {
