@@ -266,9 +266,21 @@ describe('managed Ollama supply-chain manifest', () => {
   });
 
   it('binds the managed daemon to loopback and isolates its model store', () => {
-    const env = buildManagedOllamaEnv('http://127.0.0.1:11434', 'C:\\Waggle\\models', { PATH: 'fixture' });
+    const managedProfile = 'C:\\Waggle\\runtimes\\ollama\\profile';
+    const env = buildManagedOllamaEnv(
+      'http://127.0.0.1:11434',
+      'C:\\Waggle\\models',
+      {
+        PATH: 'fixture',
+        HOME: 'C:\\External\\Home',
+        USERPROFILE: 'C:\\External\\Profile',
+      },
+      managedProfile,
+    );
     expect(env).toMatchObject({
       PATH: 'fixture',
+      HOME: managedProfile,
+      USERPROFILE: managedProfile,
       OLLAMA_HOST: '127.0.0.1:11434',
       OLLAMA_MODELS: 'C:\\Waggle\\models',
       OLLAMA_NOHISTORY: '1',
@@ -2000,9 +2012,12 @@ setInterval(() => {}, 1000);
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     }));
     expect(spawnImpl.mock.calls[0]?.[2]?.env).toMatchObject({
+      HOME: path.resolve(dataDir, 'runtimes', 'ollama', 'profile'),
+      USERPROFILE: path.resolve(dataDir, 'runtimes', 'ollama', 'profile'),
       OLLAMA_HOST: '127.0.0.1:11434',
       OLLAMA_NOHISTORY: '1',
     });
+    expect(existsSync(path.resolve(dataDir, 'runtimes', 'ollama', 'profile'))).toBe(true);
     await runtime.stop();
     expect(child.send).toHaveBeenCalledWith('shutdown');
     expect(child.kill).not.toHaveBeenCalled();

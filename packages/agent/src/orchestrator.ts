@@ -86,6 +86,8 @@ export interface OrchestratorConfig {
    * creation failure soft-fails to RRF-only ordering.
    */
   reranker?: Reranker;
+  /** Optional managed cache root for the lazy in-process reranker model. */
+  rerankerCacheDir?: string;
   /** AI-OS #6 — durable "why" breadcrumb injected into buildSystemPrompt. */
   goalAncestry?: GoalAncestry;
 }
@@ -145,6 +147,7 @@ export class Orchestrator {
   private cognify: CognifyPipeline;
   /** W4.2: memoized reranker promise — resolves undefined on creation failure. */
   private rerankerPromise: Promise<Reranker | undefined> | null = null;
+  private readonly rerankerCacheDir: string | undefined;
 
   /** Team sync client — set for team workspaces, null for personal */
   private teamSync: import('@waggle/core').TeamSync | null = null;
@@ -162,6 +165,7 @@ export class Orchestrator {
     this.mode = config.mode ?? 'local';
     this.version = config.version ?? '0.0.0';
     this.skills = config.skills ?? [];
+    this.rerankerCacheDir = config.rerankerCacheDir;
     this.goalAncestry = config.goalAncestry ?? null;
     this.identity = new IdentityLayer(config.db);
     this.awareness = new AwarenessLayer(config.db);
@@ -477,7 +481,8 @@ export class Orchestrator {
    * W4.2/W4.5: lazy cross-encoder reranker — DEFAULT ON since the W4.5 live
    * smoke (real ONNX load + 58-83ms warm recalls verified through the real
    * server). Kill switch: WAGGLE_RERANKER=0. First use downloads the ~22MB
-   * model (cached at ~/.hive-mind/models); creation failure (offline, OOM)
+   * model (cached at the configured managed path, or ~/.hive-mind/models for
+   * standalone callers); creation failure (offline, OOM)
    * memoizes undefined: recall soft-fails to RRF-only ordering, never throws.
    */
   private getReranker(): Promise<Reranker | undefined> {
@@ -486,7 +491,10 @@ export class Orchestrator {
       this.rerankerPromise = Promise.resolve(undefined);
       return this.rerankerPromise;
     }
-    this.rerankerPromise = createInProcessReranker().catch((e: unknown) => {
+    const rerankerConfig = this.rerankerCacheDir
+      ? { cacheDir: this.rerankerCacheDir }
+      : undefined;
+    this.rerankerPromise = createInProcessReranker(rerankerConfig).catch((e: unknown) => {
       logger.warn('reranker unavailable — falling back to RRF ordering', {
         error: e instanceof Error ? e.message : String(e),
       });

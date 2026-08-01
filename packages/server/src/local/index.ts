@@ -663,19 +663,22 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Decorate server with embedding provider for status endpoints
   server.decorate('embeddingProvider', embeddingProvider);
 
+  const waggleHome = fullConfig.dataDir || path.join(os.homedir(), '.waggle');
+  const rerankerCacheDir = path.join(waggleHome, 'models', 'reranker');
+
   // Orchestrator — connects to personal .mind
   const orchestrator = new Orchestrator({
     db: multiMind.personal,
     embedder,
     mode: 'local',
     version: '0.4',
+    rerankerCacheDir,
   });
   ensureIdentity(orchestrator.getIdentity());
 
   // Build tools — use a default workspace (homedir), but tools are rebuilt
   // per-request when a workspace directory is specified in chat.
   const defaultWorkspace = os.homedir();
-  const waggleHome = fullConfig.dataDir || path.join(os.homedir(), '.waggle');
   const mindTools = orchestrator.getTools();
   const systemTools = createSystemTools({
     workspace: defaultWorkspace,
@@ -1211,6 +1214,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       embedder,
       mode: 'local',
       version: '0.4',
+      rerankerCacheDir,
     });
     if (workspaceMind) sessionOrch.setWorkspaceMind(workspaceMind);
     return sessionOrch;

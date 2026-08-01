@@ -380,6 +380,7 @@ export function buildManagedOllamaEnv(
   baseUrl: string,
   modelsDir: string,
   source: NodeJS.ProcessEnv = process.env,
+  managedProfileDir?: string,
 ): NodeJS.ProcessEnv {
   if (!isLoopbackEndpoint(baseUrl)) {
     throw new Error('Waggle-managed Ollama must bind to an HTTP loopback endpoint');
@@ -387,6 +388,9 @@ export function buildManagedOllamaEnv(
   const endpoint = new URL(baseUrl);
   return {
     ...source,
+    ...(managedProfileDir
+      ? { HOME: managedProfileDir, USERPROFILE: managedProfileDir }
+      : {}),
     OLLAMA_HOST: endpoint.host,
     OLLAMA_MODELS: modelsDir,
     OLLAMA_NOHISTORY: '1',
@@ -556,6 +560,7 @@ async function findExecutable(root: string, executableName: string): Promise<str
 export class ManagedOllamaRuntime {
   private readonly root: string;
   private readonly modelsDir: string;
+  private readonly profileDir: string;
   private readonly artifact: OllamaRuntimeArtifact | null;
   private readonly artifactCatalog: ReadonlyArray<OllamaRuntimeArtifact>;
   private readonly platform: NodeJS.Platform;
@@ -591,6 +596,7 @@ export class ManagedOllamaRuntime {
     this.arch = arch;
     this.root = path.resolve(dataDir, 'runtimes', 'ollama');
     this.modelsDir = path.resolve(dataDir, 'models', 'ollama');
+    this.profileDir = path.resolve(this.root, 'profile');
     this.artifact = dependencies.artifact === undefined
       ? resolveOllamaRuntimeArtifact(platform, arch)
       : dependencies.artifact;
@@ -1425,6 +1431,7 @@ export class ManagedOllamaRuntime {
 
   private async startInternal(executable: string, artifact: OllamaRuntimeArtifact): Promise<boolean> {
     await mkdir(this.modelsDir, { recursive: true });
+    await mkdir(this.profileDir, { recursive: true });
     const startTimeoutMs = this.platform === 'win32'
       ? WINDOWS_START_TIMEOUT_MS
       : START_TIMEOUT_MS;
@@ -1437,7 +1444,7 @@ export class ManagedOllamaRuntime {
       executable,
       JSON.stringify(['serve']),
     ], {
-      env: buildManagedOllamaEnv(this.baseUrl, this.modelsDir),
+      env: buildManagedOllamaEnv(this.baseUrl, this.modelsDir, process.env, this.profileDir),
       windowsHide: true,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
