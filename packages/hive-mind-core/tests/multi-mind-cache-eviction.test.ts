@@ -67,6 +67,29 @@ describe('MultiMindCache eviction / session-pinning', () => {
     cache.closeAll();
   });
 
+  it('shrinks an over-cap cache as soon as a pinned mind is released', () => {
+    const cache = makeCache(2);
+    const dbA = cache.acquire('A');
+    const dbB = cache.acquire('B');
+    const dbC = cache.acquire('C');
+
+    // All entries are pinned while C opens, so correctness temporarily wins
+    // over the soft cap. Releasing A must immediately make it the eviction
+    // candidate instead of leaving all three handles open indefinitely.
+    expect(cache.size).toBe(3);
+    cache.release('A');
+
+    expect(cache.size).toBe(2);
+    expect(cache.has('A')).toBe(false);
+    expect(dbA.isOpen()).toBe(false);
+    expect(dbB.isOpen()).toBe(true);
+    expect(dbC.isOpen()).toBe(true);
+
+    cache.release('B');
+    cache.release('C');
+    cache.closeAll();
+  });
+
   it('REOPEN-GUARD: a handle closed out-of-band is transparently reopened', () => {
     const cache = makeCache(2);
     const dbA = cache.getOrOpen('A');

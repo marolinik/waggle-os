@@ -130,7 +130,12 @@ export class MultiMindCache {
    */
   release(workspaceId: string): void {
     const entry = this.cache.get(workspaceId);
-    if (entry && entry.pins > 0) entry.pins -= 1;
+    if (!entry || entry.pins === 0) return;
+
+    entry.pins -= 1;
+    if (entry.pins === 0 && this.cache.size > this.maxOpen) {
+      this.evictLRU();
+    }
   }
 
   has(workspaceId: string): boolean {
