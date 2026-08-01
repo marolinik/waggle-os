@@ -11,6 +11,7 @@ import {
   containsFailureCopy,
   markdownCodeSegmentsMatch,
   scorePersonaTrial,
+  validatePythonSyntax,
   visibleMarkdownPreservesText,
   type CapturedSseEvent,
   type PersonaTrialEvidence,
@@ -201,7 +202,9 @@ function scoreWithCurrentScorer(artifact: Record<string, unknown>): ReceiptScore
   const workspace = record(artifact.workspace);
   const journey = record(artifact.journey);
   const browser = record(artifact.browser);
+  const codeValidation = record(artifact.codeValidation);
   const exactResponse = typeof response.exact === 'string' ? response.exact : '';
+  const verifiedPython = validatePythonSyntax(exactResponse);
   const inputTokens = numberOrNull(responseTokens.input) ?? 0;
   const outputTokens = numberOrNull(responseTokens.output) ?? 0;
   const doneEventCount = numberOrNull(response.doneEventCount) ?? 0;
@@ -251,7 +254,16 @@ function scoreWithCurrentScorer(artifact: Record<string, unknown>): ReceiptScore
       || inputTokens <= 0
       || outputTokens <= 0
       || containsFailureCopy(exactResponse),
-    codeValidation: record(artifact.codeValidation),
+    codeValidation: {
+      pythonSyntaxValid: codeValidation.available === true
+        && codeValidation.syntaxValid === true
+        && verifiedPython.available
+        && verifiedPython.syntaxValid,
+      pythonImportsPresent: codeValidation.available === true
+        && codeValidation.importsPresent === true
+        && verifiedPython.available
+        && verifiedPython.importsPresent,
+    },
   };
   const current = scorePersonaTrial(persona, evidence);
   const capturedPassed = record(artifact.score).passed === true;
