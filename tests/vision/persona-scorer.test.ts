@@ -1109,6 +1109,152 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts live unbounded-downside and production-crash rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '## Recommended order',
+      '1. Production memory bug — investigate first',
+      '2. Close the customer — second',
+      '3. Repair onboarding friction — third',
+      '## Justification',
+      '- Memory bug goes first because it is the only item with unbounded downside. If it is a leak that degrades or crashes production, it can actively damage the customer relationship and worsen onboarding friction.',
+      '- Closing the customer comes second because it is time-boxed and high-value. Deals have momentum and external deadlines that erode if left alone.',
+      '- Onboarding friction comes third because it is important but not urgent in the same way. It is a systemic, ongoing problem.',
+      '## First action today',
+      'Pull the memory and heap profiling data for the affected service to size the blast radius.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('does not borrow a crash rationale from a different priority', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. Investigate the production memory bug.',
+      '2. Close the customer because the deal has external momentum and near-term revenue.',
+      '3. Repair onboarding after recent crashes because activation suffers.',
+      'First action today: open the memory bug report.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+    expect(result).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
+  it('does not borrow an unbounded-downside basis from another priority', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. Investigate the production memory bug; the customer deal has unbounded downside.',
+      '2. Close the customer because the deal has external momentum and near-term revenue.',
+      '3. Repair onboarding because reducing friction improves activation.',
+      'First action today: open the memory bug report.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+    expect(result).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
+  it('does not credit a negated unbounded-downside rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    for (const memoryRationale of [
+      'does not have unbounded downside',
+      "doesn't have unbounded downside",
+      'has no unbounded downside',
+      'is not an unbounded downside',
+      "isn't an unbounded downside",
+      'isn’t an unbounded downside',
+      'is without unbounded downside',
+      'lacks any unbounded downside',
+      'cannot be considered an unbounded downside',
+      'cannot pose an unbounded downside',
+      'cannot represent an unbounded downside',
+      'does not pose an unbounded downside',
+      'does not actually pose an unbounded downside',
+      'does not—and cannot—pose an unbounded downside',
+      "doesn't represent an unbounded downside",
+      'never has unbounded downside',
+    ]) {
+      const response = [
+        'Priority order:',
+        '1. Investigate the production memory bug.',
+        '2. Close the customer.',
+        '3. Repair onboarding friction.',
+        `The memory bug ${memoryRationale}.`,
+        'The customer comes next because the deal has external momentum and near-term revenue.',
+        'Onboarding follows because reducing friction improves activation.',
+        'First action today: open the memory bug report.',
+      ].join('\n');
+      const result = scorePersonaTrial(generalPurpose, evidence({
+        prompt: generalPurpose.prompt,
+        response,
+        persistedResponse: response,
+        requestPersonaId: generalPurpose.id,
+      }));
+
+      expect(result.checks.find(check => check.id === 'justification'), memoryRationale)
+        .toMatchObject({ passed: false, pointsAwarded: 0 });
+      expect(result, memoryRationale).toMatchObject({ score: 90, rawScore: 90, passed: false });
+    }
+  });
+
+  it('keeps an affirmed downside basis after unrelated clause negation', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    for (const memoryRationale of [
+      'is not hypothetical; it has unbounded downside',
+      'cannot be ignored; it has unbounded downside',
+    ]) {
+      const response = [
+        'Priority order:',
+        '1. Investigate the production memory bug.',
+        '2. Close the customer.',
+        '3. Repair onboarding friction.',
+        `The memory bug ${memoryRationale}.`,
+        'The customer comes next because the deal has external momentum and near-term revenue.',
+        'Onboarding follows because reducing friction improves activation.',
+        'First action today: open the memory bug report.',
+      ].join('\n');
+      const result = scorePersonaTrial(generalPurpose, evidence({
+        prompt: generalPurpose.prompt,
+        response,
+        persistedResponse: response,
+        requestPersonaId: generalPurpose.id,
+      }));
+
+      expect(result.checks.find(check => check.id === 'justification'), memoryRationale)
+        .toMatchObject({ passed: true, pointsAwarded: 10 });
+      expect(result, memoryRationale).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    }
+  });
+
   it('rejects a bare ordered list with a placeholder rationale', () => {
     const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
     const response = [
