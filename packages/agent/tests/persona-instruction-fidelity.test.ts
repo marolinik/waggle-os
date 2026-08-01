@@ -78,10 +78,13 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/files or schedules/i);
   });
 
-  it('Data Engineer self-checks compact examples before presenting them', () => {
+  it('Data Engineer self-checks and scopes compact examples before presenting them', () => {
     const prompt = personaPrompt('data-engineer');
     expect(prompt).toMatch(/imports.*name scope.*control flow.*count semantics/i);
     expect(prompt).toMatch(/not executed.*unverified/i);
+    expect(prompt).toMatch(/compact example or compact design.*whole answer.*900 words/i);
+    expect(prompt).toMatch(/each requested dimension once.*one minimal complete example/i);
+    expect(prompt).toMatch(/omit optional extensions.*unless.*requested/i);
   });
 
   it('Verifier never upgrades an attributed claim into verified evidence', () => {
