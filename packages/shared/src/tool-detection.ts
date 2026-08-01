@@ -165,7 +165,7 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: false, resumable: true, liveWaggleDance: false },
     task: {
       argvTemplate: ['chat', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
-      resumeArgvTemplate: ['chat', '--resume', '{sessionId}', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
+      resumeArgvTemplate: ['chat', '--resume', '{sessionId}', '--no-restore-cwd', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
       accessArgs: { native: [] }, promptTransport: 'arg', outputDialect: 'hermes-text', workspaceBinding: 'cwd',
       permissionModes: ['native'], resumable: true,
     },

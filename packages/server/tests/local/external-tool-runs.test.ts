@@ -415,8 +415,10 @@ describe('external tool run routes', () => {
     expect(calls.every((call) => call.cliEntry === collaborationRuntime.cliEntry)).toBe(true);
     expect(calls.every((call) => call.dataDir === dataDir)).toBe(true);
     expect(calls.every((call) => call.prompt.includes('Inspect both workspaces'))).toBe(true);
-    expect(calls.every((call) => call.prompt.includes(JSON.stringify(call.workspacePath)))).toBe(true);
-    expect(calls.every((call) => call.prompt.includes('Resolve every relative task path from that root'))).toBe(true);
+    expect(calls.every((call) => !call.prompt.includes(call.workspacePath))).toBe(true);
+    expect(calls.every((call) => !call.prompt.includes(JSON.stringify(call.workspacePath)))).toBe(true);
+    expect(calls.every((call) => call.prompt.includes('working directory is already the assigned workspace root'))).toBe(true);
+    expect(calls.every((call) => call.prompt.includes('Use only relative paths from that root'))).toBe(true);
     expect(calls.every((call) => call.prompt.includes('host-managed relays'))).toBe(true);
     expect(calls.every((call) => call.prompt.includes('Do not inspect WAGGLE_* variables'))).toBe(true);
     expect(calls.every((call) => !call.prompt.includes("'dance' 'receive' '--json'"))).toBe(true);

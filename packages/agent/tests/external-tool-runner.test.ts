@@ -266,6 +266,36 @@ describe('runExternalTool', () => {
     expect(result).toMatchObject({ status: 'completed', summary: 'Hermes finished', sessionId: 'hermes-session' });
   });
 
+  it('keeps resumed Hermes sessions in the newly assigned workspace', async () => {
+    const child = new FakeChild();
+    let args: string[] = [];
+    let cwd = '';
+    const prompt = baseRequest('hermes').prompt;
+    const promise = runExternalTool({
+      ...baseRequest('hermes'),
+      access: 'native',
+      sessionId: '20260801_resume',
+    }, {
+      resolveWorkspacePath: () => 'C:\\assigned-workspace',
+      spawnProcess: (_binary, value, options) => {
+        args = value;
+        cwd = options.cwd;
+        queueMicrotask(() => {
+          child.stdout.emit('data', 'Hermes resumed\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    await expect(promise).resolves.toMatchObject({ status: 'completed', summary: 'Hermes resumed' });
+    expect(cwd).toBe('C:\\assigned-workspace');
+    expect(args).toEqual([
+      'chat', '--resume', '20260801_resume', '--no-restore-cwd', '-q', prompt,
+      '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints',
+    ]);
+  });
+
   it('keeps Hermes reasoning as progress and parses its stderr session trailer', async () => {
     const child = new FakeChild();
     const events: Array<{ type: string; text?: string }> = [];

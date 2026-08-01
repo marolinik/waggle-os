@@ -636,7 +636,6 @@ async function executeExternalRun(
       roomId: run.roomId,
       prompt: collaborationPrompt(
         options.prompt,
-        cwd,
         options.collaborationRuntime,
         manifest.capabilities?.liveWaggleDance === true,
       ),
@@ -964,12 +963,11 @@ function localApiBase(server: FastifyInstance): string {
 
 function collaborationPrompt(
   userPrompt: string,
-  workspaceRoot: string,
   runtime: WaggleRuntimePaths,
   liveDance: boolean,
 ): string {
-  const workspaceInstruction = `The assigned workspace root is ${JSON.stringify(workspaceRoot)}. ` +
-    `Resolve every relative task path from that root.`;
+  const workspaceInstruction = 'The process working directory is already the assigned workspace root. ' +
+    'Use only relative paths from that root (starting at ".") and do not pass the absolute host path to file tools.';
   if (!liveDance) {
     return `${userPrompt}\n\n` +
       `## Waggle Room collaboration\n` +
