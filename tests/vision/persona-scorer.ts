@@ -1381,10 +1381,26 @@ function visibleWords(value: string): string[] {
     .match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
+function normalizeInlineCodeSuffixes(markdown: string): string {
+  let fenced = false;
+  return markdown.replace(/\r\n?/g, '\n').split('\n').map(line => {
+    if (fenced) {
+      if (/^\s*```\s*$/.test(line)) fenced = false;
+      return line;
+    }
+    if (/^\s*```\s*[A-Za-z0-9_+-]*\s*$/.test(line)) {
+      fenced = true;
+      return line;
+    }
+    // Markdown joins an inline-code token and its suffix into one visible word.
+    return line.replace(/`([^`\r\n]+)`([\p{L}\p{N}]+)/gu, '$1$2');
+  }).join('\n');
+}
+
 function expectedVisibleWords(markdown: string): string[] {
   const visibleSource = segmentText(markdown)
     .filter(segment => segment.kind === 'text')
-    .map(segment => segment.content
+    .map(segment => normalizeInlineCodeSuffixes(segment.content)
       // Fence metadata is not visible; the fenced body remains visible.
       .replace(/^\s*```\s*[A-Za-z0-9_+-]*\s*$/gm, '')
       // Link targets are attributes for safe links, not visible prose.

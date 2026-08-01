@@ -2204,10 +2204,14 @@ describe('deterministic 100-point persona scorer', () => {
 
   it.each([
     ['captured affirmative workspace-directory wording', 'This workspace directory is empty.', true],
+    ['captured affirmative search-return wording', 'I ran an exhaustive glob search and it returned **no files**.', true],
     ['uncertain workspace-directory wording', 'I could not confirm whether this workspace directory is empty.', false],
     ['multiline uncertain workspace-directory wording', 'I could not confirm whether\nthis workspace directory is empty.', false],
     ['hedged workspace-directory wording', 'This workspace directory may be empty.', false],
     ['negated workspace-directory wording', 'This workspace directory is not empty.', false],
+    ['uncertain search-return wording', 'I could not confirm whether the search ran and it returned **no files**.', false],
+    ['hedged search-return wording', 'I may have run the search and it returned **no files**.', false],
+    ['negated search-return wording', 'I ran the search and it did not return **no files**.', false],
   ])('classifies coder empty-workspace evidence: %s', (_label, statement, expected) => {
     const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
     const response = `${statement}\n\nRecommended next engineering step: confirm the intended stack.`;
@@ -2792,6 +2796,19 @@ describe('deterministic 100-point persona scorer', () => {
       'search_files("*/")',
       'value = 2 * attempt',
     ])).toBe(false);
+  });
+
+  it('preserves an inline-code suffix when Markdown renders it as one DOM word', () => {
+    const response = 'Stable `event_id`s across retries.';
+
+    expect(visibleMarkdownPreservesText(response, 'Stable event_ids across retries.')).toBe(true);
+    expect(visibleMarkdownPreservesText(response, 'Stable event_ids retries.')).toBe(false);
+  });
+
+  it('keeps backtick-delimited shell text literal inside fenced code', () => {
+    const response = ['```sh', 'echo `date`s', '```'].join('\n');
+
+    expect(visibleMarkdownPreservesText(response, 'echo `date`s')).toBe(true);
   });
 
   it('accepts exact raw GitHub README URLs only for allowlisted primary repositories', () => {
