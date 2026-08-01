@@ -63,6 +63,7 @@ $secretVariables = @(
   'NPM_TOKEN',
   'HF_TOKEN',
   'HUGGING_FACE_HUB_TOKEN',
+  'RENDER_API_KEY',
   'SSH_AUTH_SOCK',
   'GIT_ASKPASS',
   'SSH_ASKPASS',
@@ -72,6 +73,13 @@ $secretVariables = @(
   'ALL_PROXY',
   'NODE_OPTIONS'
 )
+$secretNamePattern = '(?i)(^|_)(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|TOKEN|SECRET|PASSWORD|CREDENTIALS?|COOKIE|DSN)(_|$)'
+$ambientSecretVariables = @(
+  Get-ChildItem Env: |
+    Where-Object { $_.Name -match $secretNamePattern } |
+    ForEach-Object { $_.Name }
+)
+$secretVariables = @($secretVariables + $ambientSecretVariables | Select-Object -Unique)
 $runnerVariables = @(
   'WAGGLE_E2E_HOST_IDS',
   'WAGGLE_E2E_REAL_HOOKS',
@@ -125,6 +133,87 @@ function Restore-ProcessEnvironment([string]$Name) {
   Set-ProcessEnvironment -Name $Name -Value $originalEnvironment[$Name]
 }
 
+function Get-ReceiptStrings($Node) {
+  if ($null -eq $Node) { return }
+  if ($Node -is [string]) {
+    $Node
+    return
+  }
+  if ($Node -is [pscustomobject]) {
+    foreach ($property in $Node.PSObject.Properties) {
+      Get-ReceiptStrings -Node $property.Value
+    }
+    return
+  }
+  if ($Node -is [System.Collections.IEnumerable]) {
+    foreach ($item in $Node) {
+      Get-ReceiptStrings -Node $item
+    }
+  }
+}
+
+function Remove-UnsafeReceipt([string]$ReceiptPath) {
+  if ([string]::IsNullOrWhiteSpace($ReceiptPath)) { return }
+  if (-not (Test-Path -LiteralPath $ReceiptPath -PathType Leaf)) {
+    throw "Expected Playwright receipt was not created: $ReceiptPath"
+  }
+
+  $receipt = Get-Content -Raw -LiteralPath $ReceiptPath | ConvertFrom-Json
+  $receiptStrings = @(Get-ReceiptStrings -Node $receipt)
+  $artifactText = @{}
+  foreach ($file in Get-ChildItem -LiteralPath $receiptRoot -Recurse -File) {
+    $artifactText[$file.FullName] = [IO.File]::ReadAllText($file.FullName)
+  }
+  $unsafePaths = @()
+  $leakedVariables = @()
+  foreach ($name in $secretVariables) {
+    $value = $originalEnvironment[$name]
+    if ([string]::IsNullOrEmpty($value)) { continue }
+    $jsonValue = ConvertTo-Json -InputObject $value -Compress
+    $escapedValue = if ($jsonValue.Length -ge 2) {
+      $jsonValue.Substring(1, $jsonValue.Length - 2)
+    } else {
+      $jsonValue
+    }
+
+    $nameLeaked = $false
+    foreach ($entry in $artifactText.GetEnumerator()) {
+      if ($entry.Value.Contains($value) -or $entry.Value.Contains($escapedValue)) {
+        $unsafePaths += $entry.Key
+        $nameLeaked = $true
+      }
+    }
+    foreach ($candidate in $receiptStrings) {
+      if ($candidate.Contains($value) -or $candidate.Contains($escapedValue)) {
+        $unsafePaths += $ReceiptPath
+        $nameLeaked = $true
+      }
+      if ($candidate.Length -ge 8 -and $candidate.Length % 4 -eq 0 -and
+          $candidate -match '^[A-Za-z0-9+/]*={0,2}$') {
+        try {
+          $decoded = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($candidate))
+          if ($decoded.Contains($value) -or $decoded.Contains($escapedValue)) {
+            $unsafePaths += $ReceiptPath
+            $nameLeaked = $true
+          }
+        } catch {
+          # Not every base64-shaped reporter string is valid base64.
+        }
+      }
+    }
+    if ($nameLeaked) { $leakedVariables += $name }
+  }
+  if ($leakedVariables.Count -eq 0) { return }
+
+  foreach ($path in @($unsafePaths | Select-Object -Unique)) {
+    Remove-Item -LiteralPath $path -Force
+  }
+  throw (
+    'Unsafe Playwright artifacts removed: captured secret values found for environment variables: ' +
+    (@($leakedVariables | Select-Object -Unique) -join ', ')
+  )
+}
+
 function Get-FreeLoopbackPort {
   $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
   try {
@@ -158,6 +247,7 @@ function Remove-VerifiedTempTree([string]$Target) {
 
 function Invoke-PlaywrightLane([string]$Spec, [string]$DataDir, [string]$ReceiptName) {
   $port = Get-FreeLoopbackPort
+  $receiptPath = $null
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_DATA_DIR' -Value $DataDir
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_PORT' -Value ([string]$port)
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_BASE_URL' -Value "http://127.0.0.1:$port"
@@ -170,9 +260,8 @@ function Invoke-PlaywrightLane([string]$Spec, [string]$DataDir, [string]$Receipt
     '--retries=0'
   )
   if ($null -ne $receiptRoot) {
-    Set-ProcessEnvironment -Name 'PLAYWRIGHT_JSON_OUTPUT_FILE' -Value (
-      Join-Path $receiptRoot "$ReceiptName-report.json"
-    )
+    $receiptPath = Join-Path $receiptRoot "$ReceiptName-report.json"
+    Set-ProcessEnvironment -Name 'PLAYWRIGHT_JSON_OUTPUT_FILE' -Value $receiptPath
     $playwrightArgs += @(
       '--reporter=list,json',
       '--output',
@@ -183,8 +272,10 @@ function Invoke-PlaywrightLane([string]$Spec, [string]$DataDir, [string]$Receipt
     $playwrightArgs += '--reporter=list'
   }
   & $script:runnerNodePath $script:playwrightCli @playwrightArgs
-  if ($LASTEXITCODE -ne 0) {
-    throw "$Spec failed with exit code $LASTEXITCODE"
+  $exitCode = $LASTEXITCODE
+  Remove-UnsafeReceipt -ReceiptPath $receiptPath
+  if ($exitCode -ne 0) {
+    throw "$Spec failed with exit code $exitCode"
   }
 }
 

@@ -3178,10 +3178,18 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
       'STRIPE_SECRET_KEY', 'DATABASE_URL', 'SSH_AUTH_SOCK', 'GIT_ASKPASS',
       'HTTPS_PROXY', 'AWS_SHARED_CREDENTIALS_FILE',
       'GOOGLE_APPLICATION_CREDENTIALS', 'KUBECONFIG', 'DOCKER_CONFIG',
-      'NODE_OPTIONS',
+      'NODE_OPTIONS', 'RENDER_API_KEY',
     ]) {
       expect(script, name).toContain(`'${name}'`);
+      expect(toolSpec, name).toContain(`'${name}'`);
     }
+    expect(script).toContain('$ambientSecretVariables');
+    expect(script).toContain('$secretNamePattern');
+    expect(script).toContain('Remove-UnsafeReceipt');
+    expect(script).toContain('Expected Playwright receipt was not created');
+    expect(script).toContain('[Convert]::FromBase64String');
+    expect(script).toContain('Get-ChildItem -LiteralPath $receiptRoot -Recurse -File');
+    expect(script).toContain('captured secret values found for environment variables');
     expect(script).toContain("'WAGGLE_E2E_REUSE_EXISTING_SERVER'");
     expect(script).toContain(
       "Set-ProcessEnvironment -Name 'WAGGLE_E2E_REUSE_EXISTING_SERVER' -Value '0'",
@@ -3423,6 +3431,7 @@ describe('Playwright Visual Regression Setup', () => {
         command: webServer.command,
         nodeValue: webServer.env.WAGGLE_E2E_NODE_EXEC,
         pathValue: webServer.env[pathKey],
+        secretValue: webServer.env.WAGGLE_PROBE_AMBIENT_API_KEY,
       }));
       })();
     `;
@@ -3449,6 +3458,7 @@ describe('Playwright Visual Regression Setup', () => {
           ...process.env,
           WAGGLE_E2E_SKIP_LITELLM: '1',
           WAGGLE_PROBE_NODE_EXEC: nodePath,
+          WAGGLE_PROBE_AMBIENT_API_KEY: 'must-not-enter-playwright-config',
         },
         timeout: 30_000,
         windowsHide: true,
@@ -3461,6 +3471,7 @@ describe('Playwright Visual Regression Setup', () => {
       command?: string;
       nodeValue?: string;
       pathValue?: string;
+      secretValue?: string;
     };
     const nodeReference = process.platform === 'win32'
       ? '"%WAGGLE_E2E_NODE_EXEC%"'
@@ -3471,9 +3482,8 @@ describe('Playwright Visual Regression Setup', () => {
     );
     expect(webServer.command).not.toContain(nodePath);
     expect(webServer.nodeValue).toBe(nodePath);
-    const pathKey = Object.keys(process.env)
-      .find((key) => key.toLowerCase() === 'path');
-    expect(webServer.pathValue).toBe(pathKey ? process.env[pathKey] : undefined);
+    expect(webServer.pathValue).toBeUndefined();
+    expect(webServer.secretValue).toBeUndefined();
     }
   });
 

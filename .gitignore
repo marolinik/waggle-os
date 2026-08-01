@@ -218,6 +218,8 @@ app/src-tauri/resources/service.js
 playwright-report/
 test-results/
 tests/screenshots/
+/.playwright-cli/
+/output/
 s*.png
 screen*.png
 # …but never the committed persona avatars (sales-rep/support-agent match s*.png)

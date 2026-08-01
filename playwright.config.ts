@@ -37,16 +37,19 @@ const e2ePort = Number.parseInt(
 ) || 3333;
 const e2eSkipLiteLLM = process.env.WAGGLE_E2E_SKIP_LITELLM !== '0';
 const e2eReuseExistingServer = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER !== '0';
-const e2eEnv = { ...process.env };
 const e2eNodeEnvName = 'WAGGLE_E2E_NODE_EXEC';
 const e2eNodeCommand = process.platform === 'win32'
   ? `"%${e2eNodeEnvName}%"`
   : `"$${e2eNodeEnvName}"`;
-e2eEnv[e2eNodeEnvName] = process.execPath;
-// Keep the test runner's terminal quiet without changing production logging.
-e2eEnv.FORCE_COLOR = undefined;
-e2eEnv.NO_COLOR = undefined;
-e2eEnv.NODE_OPTIONS = `${e2eEnv.NODE_OPTIONS ?? ''} --disable-warning=DEP0040`.trim();
+// Playwright merges process.env when it launches the web server. Keep this
+// config object limited to explicit safe overrides because JSON reporters
+// serialize it verbatim.
+const e2eEnv: NodeJS.ProcessEnv = {
+  [e2eNodeEnvName]: process.execPath,
+  FORCE_COLOR: undefined,
+  NO_COLOR: undefined,
+  NODE_OPTIONS: '--disable-warning=DEP0040',
+};
 
 export default defineConfig({
   testDir: './tests',
