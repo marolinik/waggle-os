@@ -639,15 +639,93 @@ function Assert-CertificateDataManifest {
 }
 
 function Get-CertificateDataManifestDigest {
-  param([Parameter(Mandatory = $true)] [object[]]$Manifest)
+  param(
+    [Parameter(Mandatory = $true)]
+    [AllowEmptyCollection()]
+    [object[]]$manifest
+  )
 
-  $payload = $Manifest | ConvertTo-Json -Compress -Depth 4
+  $payload = ConvertTo-Json -InputObject @($manifest) -Compress -Depth 4
   $sha256 = [System.Security.Cryptography.SHA256]::Create()
   try {
     $digest = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($payload))
     return ([System.BitConverter]::ToString($digest)).Replace('-', '')
   } finally {
     $sha256.Dispose()
+  }
+}
+
+function Get-ExternalProfileRootSnapshot {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Name,
+    [Parameter(Mandatory = $true)] [string]$Path
+  )
+
+  $resolvedPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+  $parentPath = [System.IO.Path]::GetDirectoryName($resolvedPath)
+  $leafName = [System.IO.Path]::GetFileName($resolvedPath)
+  Assert-True (-not [string]::IsNullOrWhiteSpace($parentPath)) `
+    "External profile root has no parent directory: $resolvedPath"
+  Assert-True (Test-Path -LiteralPath $parentPath -PathType Container) `
+    "External profile root parent is missing: $parentPath"
+  $matches = @(
+    Get-ChildItem -LiteralPath $parentPath -Force |
+      Where-Object {
+        [string]::Equals($_.Name, $leafName, [System.StringComparison]::OrdinalIgnoreCase)
+      }
+  )
+  Assert-True ($matches.Count -le 1) `
+    "External profile root has ambiguous directory entries: $resolvedPath"
+  if ($matches.Count -eq 0) {
+    return [ordered]@{
+      name = $Name
+      path = $resolvedPath
+      existedBefore = $false
+      entryCount = 0
+      manifestSha256 = $null
+    }
+  }
+
+  $root = $matches[0]
+  Assert-True ($root.PSIsContainer) `
+    "External profile root must be a directory: $resolvedPath"
+  Assert-True (($root.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+    "External profile root must not be a reparse point: $resolvedPath"
+  $manifest = @(Get-CertificateDataManifest $resolvedPath)
+  return [ordered]@{
+    name = $Name
+    path = $resolvedPath
+    existedBefore = $true
+    entryCount = $manifest.Count
+    manifestSha256 = (Get-CertificateDataManifestDigest $manifest)
+  }
+}
+
+function Assert-ExternalProfileRootsUnchanged {
+  param([Parameter(Mandatory = $true)] [object[]]$Expected)
+
+  foreach ($baseline in @($Expected)) {
+    if (-not [bool]$baseline.existedBefore) {
+      $actual = Get-ExternalProfileRootSnapshot `
+        -Name ([string]$baseline.name) `
+        -Path ([string]$baseline.path)
+      Assert-True (-not [bool]$actual.existedBefore) `
+        "Installer created external profile root '$($baseline.name)': $($baseline.path)"
+      continue
+    }
+
+    $actual = Get-ExternalProfileRootSnapshot `
+      -Name ([string]$baseline.name) `
+      -Path ([string]$baseline.path)
+    Assert-True ([bool]$actual.existedBefore) `
+      "Installer removed external profile root '$($baseline.name)': $($baseline.path)"
+    Assert-True ([long]$actual.entryCount -eq [long]$baseline.entryCount) `
+      "Installer changed external profile root entry count '$($baseline.name)'."
+    Assert-True ([string]::Equals(
+      [string]$actual.manifestSha256,
+      [string]$baseline.manifestSha256,
+      [System.StringComparison]::Ordinal
+    )) "Installer changed external profile root '$($baseline.name)'."
   }
 }
 
@@ -1298,6 +1376,10 @@ $scratchRoot = Join-Path ([System.IO.Path]::GetTempPath()) "waggle-installer-cer
 Assert-SafeScratchRoot $scratchRoot $runId
 $installDir = Join-Path $scratchRoot 'install'
 $profileDataDir = Join-Path $env:USERPROFILE '.waggle'
+$externalProfileRootTargets = @(
+  [ordered]@{ name = '.hive-mind'; path = (Join-Path $env:USERPROFILE '.hive-mind') }
+  [ordered]@{ name = '.ollama'; path = (Join-Path $env:USERPROFILE '.ollama') }
+)
 $dataDir = $profileDataDir
 $appExecutable = Join-Path $installDir 'waggle.exe'
 $serviceScript = Join-Path $installDir 'resources\service.js'
@@ -1323,6 +1405,8 @@ $shortcutCandidates = Get-WaggleShortcutPaths
 $startedAt = [DateTime]::UtcNow
 $installerStarted = $false
 $profileAbsenceProven = $false
+$externalProfileRootsPreProven = $false
+$externalProfileRootBaselines = @()
 $profileRootOwned = $false
 $runtimeConfirmedStopped = $false
 $certificateLifecycleData = $null
@@ -1337,6 +1421,7 @@ $environmentNamesToClear = @(
   'VOYAGE_API_KEY', 'WAGGLE_VOYAGE_API_KEY', 'WAGGLE_EVAL_MODE',
   'WAGGLE_SUPPRESS_EMBEDDING_WARNING', 'WAGGLE_LITELLM_URL',
   'WAGGLE_NPM_LIFECYCLE_WITNESS_PREFIX',
+  'OLLAMA_MODELS', 'HF_HOME', 'HF_HUB_CACHE', 'TRANSFORMERS_CACHE', 'XDG_CACHE_HOME',
   'LITELLM_API_KEY', 'LITELLM_MASTER_KEY',
   'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY',
   'GOOGLE_API_KEY', 'XAI_API_KEY', 'DEEPSEEK_API_KEY',
@@ -1591,6 +1676,34 @@ try {
   Assert-True (-not (Test-Path -LiteralPath $profileDataDir)) `
     "Profile data already exists at $profileDataDir; run this certificate under a disposable Windows user."
   $profileAbsenceProven = $true
+  $processHome = [Environment]::GetEnvironmentVariable('HOME', 'Process')
+  if (-not [string]::IsNullOrWhiteSpace($processHome)) {
+    Assert-True ([string]::Equals(
+      [System.IO.Path]::GetFullPath($processHome).TrimEnd('\'),
+      [System.IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\'),
+      [System.StringComparison]::OrdinalIgnoreCase
+    )) 'HOME must resolve to USERPROFILE so external profile isolation cannot be redirected.'
+  }
+  $externalProfileRootBaselines = @(
+    foreach ($target in $externalProfileRootTargets) {
+      Get-ExternalProfileRootSnapshot `
+        -Name ([string]$target.name) `
+        -Path ([string]$target.path)
+    }
+  )
+  $receipt.evidence['externalProfileRoots'] = @(
+    foreach ($baseline in $externalProfileRootBaselines) {
+      [ordered]@{
+        name = [string]$baseline.name
+        path = [string]$baseline.path
+        existedBefore = [bool]$baseline.existedBefore
+        entryCount = [long]$baseline.entryCount
+        manifestSha256 = $baseline.manifestSha256
+      }
+    }
+  )
+  $externalProfileRootsPreProven = $true
+  $receipt.checks['externalProfileRootsPreProven'] = $true
   # The desktop webview and Rust shell currently share the fixed loopback port
   # 3333 contract. Refuse before creating profile state rather than clean up
   # after colliding with another installation.
@@ -2636,6 +2749,19 @@ try {
     $receipt['profileCleanupError'] = `
       'Certificate profile was preserved because uninstall postconditions were not proven.'
   }
+  if ($externalProfileRootsPreProven) {
+    try {
+      Assert-ExternalProfileRootsUnchanged $externalProfileRootBaselines
+      $receipt.checks['externalProfileRootsUnchanged'] = $true
+    } catch {
+      $receipt.status = 'failed'
+      $receipt['externalProfileIsolationError'] = $_.Exception.Message
+    }
+  } elseif ($receipt.status -eq 'passed') {
+    $receipt.status = 'failed'
+    $receipt['externalProfileIsolationError'] = `
+      'External profile roots were not proven before installer execution.'
+  }
   if ($receipt.status -eq 'passed' -and -not $KeepArtifacts) {
     try {
       Remove-CertificateScratchRoot $scratchRoot $scratchOwnershipMarker $runId
@@ -2662,6 +2788,8 @@ try {
 if ($receipt.status -ne 'passed') {
   $failureDetail = if ($receipt.error) {
     $receipt.error
+  } elseif ($receipt.Contains('externalProfileIsolationError')) {
+    $receipt['externalProfileIsolationError']
   } elseif ($receipt.Contains('environmentRestoreError')) {
     $receipt['environmentRestoreError']
   } elseif ($receipt.Contains('scratchCleanupError')) {

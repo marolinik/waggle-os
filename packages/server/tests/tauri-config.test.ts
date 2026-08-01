@@ -2441,6 +2441,25 @@ Expect-Rejection {
     expect(script).toContain('Assert-CertificateDataManifest');
     expect(script).toContain('Get-CertificateDataManifestDigest');
     expect(script).toContain('Get-CertificateRelativePath');
+    expect(script).toContain('function Get-ExternalProfileRootSnapshot');
+    expect(script).toContain('function Assert-ExternalProfileRootsUnchanged');
+    expect(script).toContain('Get-ChildItem -LiteralPath $parentPath -Force');
+    expect(script).toContain("Join-Path $env:USERPROFILE '.hive-mind'");
+    expect(script).toContain("Join-Path $env:USERPROFILE '.ollama'");
+    expect(script).toContain('ConvertTo-Json -InputObject @($manifest)');
+    expect(script).toContain('$externalProfileRootsPreProven = $true');
+    expect(script).toContain("$receipt.checks['externalProfileRootsUnchanged'] = $true");
+    expect(script).toContain("$receipt['externalProfileIsolationError']");
+    expect(script).toContain("$receipt.Contains('externalProfileIsolationError')");
+    for (const cacheVariable of [
+      'OLLAMA_MODELS',
+      'HF_HOME',
+      'HF_HUB_CACHE',
+      'TRANSFORMERS_CACHE',
+      'XDG_CACHE_HOME',
+    ]) {
+      expect(script).toContain(`'${cacheVariable}'`);
+    }
     expect(script).not.toContain('[System.IO.Path]::GetRelativePath');
     expect(script).toContain("$receipt.checks['defaultProfileDataDir']");
     expect(script).toContain("$receipt.checks['realWorkspaceAndMemorySeeded']");
@@ -2683,6 +2702,91 @@ Expect-Rejection {
     ))
       .toBeLessThan(script.lastIndexOf('$receipt | ConvertTo-Json'));
   });
+
+  it.runIf(process.platform === 'win32')(
+    'Windows installer external-profile proof detects created and changed roots',
+    () => {
+      const script = fs
+        .readFileSync(
+          path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+          'utf-8',
+        )
+        .replace(/\r\n/g, '\n');
+      const helperStart = script.indexOf('function Assert-True {');
+      const helperEnd = script.indexOf('\nfunction Get-HttpStatusCode {', helperStart);
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-profile-proof-'));
+      const probePath = path.join(probeRoot, 'profile-proof.ps1');
+      const escapedRoot = probeRoot.replace(/'/g, "''");
+      const fixtureSource = `
+$fixtureRoot = '${escapedRoot}'
+$absentRoot = Join-Path $fixtureRoot 'absent-root'
+$absentSnapshot = Get-ExternalProfileRootSnapshot -Name '.absent' -Path $absentRoot
+if ($absentSnapshot.existedBefore) { throw 'Absent fixture was reported present' }
+Set-Content -LiteralPath $absentRoot -Value 'unexpected file' -Encoding UTF8
+$fileMutationRejected = $false
+try { Assert-ExternalProfileRootsUnchanged @($absentSnapshot) } catch { $fileMutationRejected = $true }
+if (-not $fileMutationRejected) { throw 'External file root was accepted as absent' }
+Remove-Item -LiteralPath $absentRoot -Force
+New-Item -ItemType Directory -Path $absentRoot | Out-Null
+$absentMutationRejected = $false
+try { Assert-ExternalProfileRootsUnchanged @($absentSnapshot) } catch { $absentMutationRejected = $true }
+if (-not $absentMutationRejected) { throw 'Created external root was accepted' }
+Remove-Item -LiteralPath $absentRoot -Recurse -Force
+
+$junctionRoot = Join-Path $fixtureRoot 'dangling-junction'
+$junctionSnapshot = Get-ExternalProfileRootSnapshot -Name '.junction' -Path $junctionRoot
+$junctionTarget = Join-Path $fixtureRoot 'junction-target'
+New-Item -ItemType Directory -Path $junctionTarget | Out-Null
+New-Item -ItemType Junction -Path $junctionRoot -Target $junctionTarget | Out-Null
+Remove-Item -LiteralPath $junctionTarget -Recurse -Force
+$junctionMutationRejected = $false
+try { Assert-ExternalProfileRootsUnchanged @($junctionSnapshot) } catch { $junctionMutationRejected = $true }
+if (-not $junctionMutationRejected) { throw 'Dangling junction was accepted as absent' }
+Remove-Item -LiteralPath $junctionRoot -Force
+
+$emptyRoot = Join-Path $fixtureRoot 'empty-root'
+New-Item -ItemType Directory -Path $emptyRoot | Out-Null
+$emptySnapshot = Get-ExternalProfileRootSnapshot -Name '.empty' -Path $emptyRoot
+if ([string]::IsNullOrWhiteSpace([string]$emptySnapshot.manifestSha256)) {
+  throw 'Empty external root did not receive a stable manifest digest'
+}
+Assert-ExternalProfileRootsUnchanged @($emptySnapshot)
+
+$presentRoot = Join-Path $fixtureRoot 'present-root'
+New-Item -ItemType Directory -Path $presentRoot | Out-Null
+Set-Content -LiteralPath (Join-Path $presentRoot 'sentinel.txt') -Value 'before' -Encoding UTF8
+$presentSnapshot = Get-ExternalProfileRootSnapshot -Name '.present' -Path $presentRoot
+Assert-ExternalProfileRootsUnchanged @($presentSnapshot)
+Set-Content -LiteralPath (Join-Path $presentRoot 'sentinel.txt') -Value 'after' -Encoding UTF8
+$contentMutationRejected = $false
+try { Assert-ExternalProfileRootsUnchanged @($presentSnapshot) } catch { $contentMutationRejected = $true }
+if (-not $contentMutationRejected) { throw 'Changed external root was accepted' }
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${script.slice(helperStart, helperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `Windows external-profile proof probe failed: ${result.stderr || result.stdout}`,
+          );
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.runIf(process.platform === 'win32')(
     'Windows installer timestamp validation survives JSON date coercion under non-US culture',
@@ -3154,6 +3258,19 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
 
     expect(publisher).toMatch(/\$cleanRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
     expect(publisher).toMatch(/\$upgradeRequiredChecks\s*=\s*@\([\s\S]*'vaultKeyAclRestricted'[\s\S]*\)/);
+  });
+
+  it('release publication requires external profile isolation evidence', () => {
+    const publisher = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'publish-windows-release.ps1'),
+      'utf-8',
+    );
+    expect(publisher).toMatch(
+      /\$cleanRequiredChecks\s*=\s*@\([\s\S]*'externalProfileRootsUnchanged'[\s\S]*\)/,
+    );
+    expect(publisher).toMatch(
+      /\$upgradeRequiredChecks\s*=\s*@\([\s\S]*'externalProfileRootsUnchanged'[\s\S]*\)/,
+    );
   });
 
   it('release publication requires real default-profile workspace and memory lifecycle evidence', () => {

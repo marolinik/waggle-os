@@ -536,7 +536,7 @@ $cleanRequiredChecks = @(
   'realWorkspaceAndMemorySeeded', 'repairRealWorkspaceAndMemoryPreserved',
   'uninstallRealWorkspaceAndMemoryPreserved', 'configuredDataDirPreserved',
   'profileDataPathPreserved', 'certificateProfileCleanup',
-  'environmentRestored'
+  'externalProfileRootsUnchanged', 'environmentRestored'
 )
 foreach ($checkName in $cleanRequiredChecks) {
   Assert-PassingWindowsCertificateCheck `
@@ -697,7 +697,7 @@ if ($Mode -ceq 'bootstrap') {
     'repairRealWorkspaceAndMemoryPreserved',
     'uninstallRealWorkspaceAndMemoryPreserved',
     'configuredDataDirPreserved', 'profileDataPathPreserved',
-    'certificateProfileCleanup', 'environmentRestored'
+    'certificateProfileCleanup', 'externalProfileRootsUnchanged', 'environmentRestored'
   )
   foreach ($checkName in $upgradeRequiredChecks) {
     Assert-PassingWindowsCertificateCheck `
