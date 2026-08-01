@@ -1030,6 +1030,7 @@ describe('ChatApp — streaming interaction contract', () => {
     pendingApproval: null,
     onApprove: noop,
     workspaceId: 'ws-1',
+    activeSessionId: null as string | null,
     onStopStreaming: noop as () => void,
   };
 

@@ -71,7 +71,7 @@ function flattenBlocks(blocks: ContentBlock[]): string {
 function replaceTextBlocks(blocks: ContentBlock[], content: string): ContentBlock[] {
   const firstTextIndex = blocks.findIndex(block => block.type === 'text');
   const firstText = firstTextIndex >= 0 ? blocks[firstTextIndex] as TextContentBlock : undefined;
-  const next = blocks.filter(block => block.type !== 'text');
+  const next: ContentBlock[] = blocks.filter(block => block.type !== 'text');
   if (!content) return next;
   const insertAt = firstTextIndex < 0 ? next.length : Math.min(firstTextIndex, next.length);
   next.splice(insertAt, 0, {

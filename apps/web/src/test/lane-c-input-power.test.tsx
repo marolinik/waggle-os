@@ -198,14 +198,17 @@ describe('useChat — send queue (never locks, never drops)', () => {
         autonomy,
       }: {
         activePersona: string;
-        autonomy: { level: 'normal' | 'yolo' };
+        autonomy: { level: 'normal' | 'yolo'; expiresAt: number | null };
       }) => useChat({
         workspaceId: 'ws-1',
         sessionId: 'sess-queued-persona',
         persona: activePersona,
         autonomy,
       }),
-      { initialProps: { activePersona: 'planner', autonomy: { level: 'normal' as const } } },
+      { initialProps: {
+        activePersona: 'planner',
+        autonomy: { level: 'normal' as const, expiresAt: null },
+      } },
     );
     await act(async () => { await Promise.resolve(); });
 
@@ -215,7 +218,7 @@ describe('useChat — send queue (never locks, never drops)', () => {
       await Promise.resolve();
       await hook.result.current.sendMessage('queued as planner');
     });
-    hook.rerender({ activePersona: 'coder', autonomy: { level: 'yolo' } });
+    hook.rerender({ activePersona: 'coder', autonomy: { level: 'yolo', expiresAt: null } });
 
     await act(async () => {
       gate.resolve();
@@ -989,6 +992,8 @@ describe('ChatApp — composer input primacy', () => {
     onClearHistory: noop,
     pendingApproval: null,
     onApprove: noop,
+    workspaceId: null as string | null,
+    availableModels: [] as string[],
     activeSessionId: null as string | null,
     historyLoaded: false,
     initialMessage: undefined as string | undefined,
