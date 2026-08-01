@@ -2230,6 +2230,9 @@ describe('deterministic 100-point persona scorer', () => {
       '| Architecture | Client-server | Fact (pgvector): confirmed in the README. |\n| Desktop fit | Embedded | Inference (SQLite): lower operational overhead. |',
     ))).toBe(true);
     expect(rule.patterns.every(pattern => pattern.test(
+      'SQLite is embedded (fact, [sqlite-vec README](https://github.com/asg017/sqlite-vec)). Desktop overhead is lower (inference from that deployment model).',
+    ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
       '- Fact (pgvector): confirmed in the README.\n- Inference (SQLite): lower operational overhead.',
     ))).toBe(true);
     expect(rule.patterns.every(pattern => pattern.test(
@@ -2256,9 +2259,19 @@ describe('deterministic 100-point persona scorer', () => {
       'Fact-check failed.\n**Inference:** tentative.',
       'Fact — unavailable.\nInference: tentative.',
       '| Basis | Fact from no source |\nInference: tentative.',
+      'SQLite is embedded (fact, unverified source). Inference: tentative.',
+      'SQLite is embedded (fact, unknown). Inference: tentative.',
+      'SQLite is embedded (fact, source unavailable). Inference: tentative.',
+      'SQLite is embedded (fact, not verified). Inference: tentative.',
+      'SQLite is embedded (fact, opinion). Inference: tentative.',
+      'SQLite is embedded (fact, [not verified](https://github.com/example)). Inference: tentative.',
+      'SQLite may fit desktops (inference, [sqlite-vec README](https://github.com/asg017/sqlite-vec)). Inference: tentative.',
     ]) {
       expect(rule.patterns.every(pattern => pattern.test(response))).toBe(false);
     }
+    expect(rule.patterns.every(pattern => pattern.test(
+      'SQLite is embedded (fact, [sqlite-vec README](https://github.com/asg017/sqlite-vec)).',
+    ))).toBe(false);
     expect(rule.patterns.every(pattern => pattern.test(
       '## What\'s NOT Verified (sqlite-vec)\nNo source was fetched.\n**Inference:** Treat all feature claims as tentative.',
     ))).toBe(false);
