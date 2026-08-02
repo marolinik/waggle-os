@@ -238,6 +238,8 @@ export interface DetectedTool {
   /** Tool id — a built-in ToolId or a loaded third-party adapter id (#5). */
   id: string;
   displayName: string;
+  /** Release qualification inherited from the manifest. Omitted means supported. */
+  releaseStatus?: ToolReleaseStatus;
   /** True when the tool manifest allows launching from the dock. */
   launchable?: boolean;
   /** True when the tool manifest declares hook support. */

@@ -72,7 +72,12 @@ export class ExecutorRegistry {
     });
 
     const externals = BUILTIN_TOOL_MANIFESTS
-      .filter((manifest) => manifest.capabilities?.headlessTask === true && manifest.task)
+      .filter((manifest) => (
+        manifest.releaseStatus !== 'roadmap'
+        && manifest.launchable
+        && manifest.capabilities?.headlessTask === true
+        && manifest.task
+      ))
       .map((manifest): ExecutorCandidate => {
         const detected = detectedById.get(manifest.id);
         const installed = detected?.installed === true;

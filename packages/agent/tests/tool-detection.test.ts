@@ -180,10 +180,11 @@ describe('detectInstalledTools', () => {
     expect(result.tools).toHaveLength(SUPPORTED_TOOLS.length + 1);
   });
 
-  it('carries canonical task capabilities for headless and GUI-only built-ins', async () => {
+  it('carries canonical task capabilities and release status for built-ins', async () => {
     const result = await detectInstalledTools(makeDeps());
     const codex = result.tools.find((tool) => tool.id === 'codex');
     const cursor = result.tools.find((tool) => tool.id === 'cursor');
+    const openclaw = result.tools.find((tool) => tool.id === 'openclaw');
 
     expect(codex?.capabilities).toMatchObject({
       interactiveLaunch: true,
@@ -199,6 +200,16 @@ describe('detectInstalledTools', () => {
       resumable: false,
     });
     expect(cursor?.permissionModes).toEqual([]);
+    expect(cursor).toMatchObject({
+      releaseStatus: 'roadmap',
+      launchable: false,
+      hookCapable: false,
+    });
+    expect(openclaw).toMatchObject({
+      releaseStatus: 'roadmap',
+      launchable: false,
+      hookCapable: false,
+    });
   });
 
   it('reports platform and ISO detectedAt', async () => {

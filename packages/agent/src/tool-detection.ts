@@ -768,6 +768,7 @@ const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[] | Pro
 function withManifestMetadata(tool: DetectedTool, manifest: ToolManifest): DetectedTool {
   return {
     ...tool,
+    releaseStatus: manifest.releaseStatus,
     launchable: tool.launchable ?? manifest.launchable,
     hookCapable: manifest.hookCapable,
     builtin: manifest.builtin === true,
