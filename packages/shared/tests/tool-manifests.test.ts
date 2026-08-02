@@ -8,22 +8,35 @@ describe('BUILTIN_TOOL_MANIFESTS', () => {
   it('has one manifest per supported tool, ids matching SUPPORTED_TOOLS', () => {
     expect(BUILTIN_TOOL_MANIFESTS.map((m) => m.id).sort()).toEqual([...SUPPORTED_TOOLS].sort());
   });
-  it('marks every built-in as builtin:true and launchable', () => {
+  it('marks every registered surface as built in', () => {
     for (const m of BUILTIN_TOOL_MANIFESTS) {
       expect(m.builtin).toBe(true);
-      expect(m.launchable).toBe(true);
     }
   });
-  it('keeps desktop-only surfaces out of the hook cohort', () => {
+
+  it('keeps roadmap integrations detectable but outside launch and hook cohorts', () => {
+    const roadmap = BUILTIN_TOOL_MANIFESTS.filter((m) => m.releaseStatus === 'roadmap');
+    expect(roadmap.map((m) => m.id)).toEqual(['cursor', 'openclaw']);
+    for (const manifest of roadmap) {
+      expect(manifest.launchable).toBe(false);
+      expect(manifest.hookCapable).toBe(false);
+    }
+  });
+
+  it('keeps desktop-only and roadmap surfaces out of the hook cohort', () => {
     expect(BUILTIN_TOOL_MANIFESTS.filter((m) => !m.hookCapable).map((m) => m.id)).toEqual([
+      'cursor',
       'hermes-desktop',
+      'openclaw',
     ]);
   });
-  it('derives TOOL_DISPLAY_NAMES + LAUNCH_COHORT from the manifests (unchanged values)', () => {
+  it('derives TOOL_DISPLAY_NAMES and the release-qualified launch cohort from manifests', () => {
     expect(TOOL_DISPLAY_NAMES['claude-code']).toBe('Claude Code');
     expect(TOOL_DISPLAY_NAMES['codex']).toBe('Codex CLI');
     expect(TOOL_DISPLAY_NAMES['hermes-desktop']).toBe('Hermes Desktop');
-    expect([...LAUNCH_COHORT].sort()).toEqual([...SUPPORTED_TOOLS].sort());
+    expect([...LAUNCH_COHORT].sort()).toEqual(
+      SUPPORTED_TOOLS.filter((id) => id !== 'cursor' && id !== 'openclaw').sort(),
+    );
   });
   it('models Hermes CLI and Desktop as separate execution surfaces', () => {
     const cli = BUILTIN_TOOL_MANIFESTS.find((m) => m.id === 'hermes')!;

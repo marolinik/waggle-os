@@ -6,9 +6,8 @@
  * shipped a `bin`; the other hook packages were Wave 2/3 `export {}` stubs
  * with no bin, so `npx @waggle/hive-mind-hooks-<id>` ALWAYS failed for the
  * user. HOOKS_COHORT fixed this by gating hook actions on the tools whose
- * package actually ships a bin. The cohort has since grown as Tier-A/B
- * packages landed (claude-code, claude-desktop, codex, codex-desktop, cursor,
- * hermes, openclaw).
+ * package actually ships a bin and is release-supported. Roadmap packages may
+ * remain installed in the repository without being exposed to users.
  *
  * The existing tool-launcher tests mock execCapture and only assert the
  * npx command SHAPE, so the binless-stub failure was invisible. These
@@ -29,7 +28,7 @@ import {
   type HookRuntimePaths,
   type ToolLauncherDeps,
 } from '../src/tool-launcher.js';
-import { SUPPORTED_TOOLS, LAUNCH_COHORT, type ToolId } from '@waggle/shared';
+import { BUILTIN_TOOL_MANIFESTS, LAUNCH_COHORT, type ToolId } from '@waggle/shared';
 
 // packages/agent/tests → packages/
 const PACKAGES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -59,13 +58,23 @@ describe('HOOKS_COHORT grounding (R8-001)', () => {
     }
   });
 
-  it('contains every tool that DOES ship a real hook bin (no real target dropped)', () => {
-    const realTargets = SUPPORTED_TOOLS.filter((id) => hookPackageHasBin(id));
+  it('contains every release-supported tool that ships a real hook bin', () => {
+    const realTargets = BUILTIN_TOOL_MANIFESTS
+      .filter((manifest) => manifest.releaseStatus !== 'roadmap')
+      .map((manifest) => manifest.id as ToolId)
+      .filter((id) => hookPackageHasBin(id));
     expect([...HOOKS_COHORT].sort()).toEqual([...realTargets].sort());
   });
 
-  it('matches the current real-bin cohort (snapshot tripwire)', () => {
-    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw']);
+  it('matches the current release-supported real-bin cohort (snapshot tripwire)', () => {
+    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'hermes']);
+  });
+
+  it('keeps roadmap hook packages on disk but outside the supported cohort', () => {
+    for (const id of ['cursor', 'openclaw'] as const) {
+      expect(hookPackageHasBin(id)).toBe(true);
+      expect(HOOKS_COHORT).not.toContain(id);
+    }
   });
 
   it('is a subset of LAUNCH_COHORT (all hook targets are launchable)', () => {

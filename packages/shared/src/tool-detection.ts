@@ -75,6 +75,8 @@ export interface ToolCapabilities {
   liveWaggleDance: boolean;
 }
 
+export type ToolReleaseStatus = 'supported' | 'roadmap';
+
 /**
  * AI-OS #5 — declarative descriptor for one external tool. The single source of
  * truth for the per-tool facts that used to be duplicated across SUPPORTED_TOOLS
@@ -85,6 +87,8 @@ export interface ToolCapabilities {
 export interface ToolManifest {
   id: string;
   displayName: string;
+  /** Omitted means supported; roadmap integrations remain detectable but inert. */
+  releaseStatus?: ToolReleaseStatus;
   launchable: boolean;
   hookCapable: boolean;
   /** Built-in-only pointer root; third-party adapters always use the user home. */
@@ -101,7 +105,7 @@ export interface ToolManifest {
   capabilities?: ToolCapabilities;
   /** Present only when the adapter has a verified, capturable headless lane. */
   task?: ToolTaskSpec;
-  /** true = first-party (the 7); false/absent = loaded third-party. */
+  /** true = first-party built-in; false/absent = loaded third-party. */
   builtin?: boolean;
 }
 
@@ -134,7 +138,7 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
   {
-    id: 'cursor', displayName: 'Cursor', launchable: true, hookCapable: true,
+    id: 'cursor', displayName: 'Cursor', releaseStatus: 'roadmap', launchable: false, hookCapable: false,
     hookPointer: '.cursor/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
@@ -176,7 +180,7 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
   {
-    id: 'openclaw', displayName: 'OpenClaw', launchable: true, hookCapable: true,
+    id: 'openclaw', displayName: 'OpenClaw', releaseStatus: 'roadmap', launchable: false, hookCapable: false,
     hookPointer: '.openclaw/hive-mind-install.json', detect: { kind: 'path', binaryName: 'openclaw' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
     task: {
@@ -191,10 +195,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
 /**
  * Tools the launcher dock + hook installer support end-to-end.
  *
- * Phase 1 shipped with 3 entries (Claude Code, Cursor, Claude
- * Desktop — D3). Phase 4 extends to every built-in launch surface. Hook support
- * remains independently capability-gated because desktop-only surfaces need
- * not have a hook installer.
+ * Registered integrations can remain detectable for compatibility while
+ * `releaseStatus: 'roadmap'` keeps them out of both launch and hook cohorts.
  */
 export const LAUNCH_COHORT: readonly ToolId[] =
   BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id as ToolId);

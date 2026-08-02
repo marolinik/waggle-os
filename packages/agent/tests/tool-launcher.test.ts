@@ -87,8 +87,8 @@ describe('launchTool', () => {
   it('injects WAGGLE_WORKSPACE_ID env when provided', () => {
     const { calls, spawnDetached } = captureSpawn();
     launchTool({
-      id: 'cursor',
-      installedPath: '/Applications/Cursor.app/Contents/MacOS/Cursor',
+      id: 'codex-desktop',
+      installedPath: '/Applications/Codex.app/Contents/MacOS/Codex',
       workspaceId: 'ws-kvark',
       deps: { spawnDetached },
     });
@@ -155,8 +155,8 @@ describe('launchTool', () => {
   it('does not inject env when workspaceId is absent', () => {
     const { calls, spawnDetached } = captureSpawn();
     launchTool({
-      id: 'cursor',
-      installedPath: '/Applications/Cursor.app/Contents/MacOS/Cursor',
+      id: 'codex-desktop',
+      installedPath: '/Applications/Codex.app/Contents/MacOS/Codex',
       deps: { spawnDetached },
     });
     expect(calls[0].options.env?.WAGGLE_WORKSPACE_ID).toBeUndefined();
@@ -190,9 +190,8 @@ describe('launchTool', () => {
   });
 
   it.each<ToolId>([
-    'claude-code', 'cursor', 'claude-desktop',
-    'codex', 'codex-desktop', 'hermes', 'openclaw',
-  ])('accepts every cohort tool (%s) after Phase 4 expansion', (id) => {
+    'claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'hermes', 'hermes-desktop',
+  ])('accepts every release-supported launch cohort tool (%s)', (id) => {
     const { spawnDetached } = captureSpawn();
     const result = launchTool({
       id,
@@ -202,6 +201,21 @@ describe('launchTool', () => {
     expect(result.ok).toBe(true);
     expect(result.pid).toBe(12345);
   });
+
+  it.each<ToolId>(['cursor', 'openclaw'])(
+    'rejects roadmap tool %s without spawning it',
+    (id) => {
+      const { calls, spawnDetached } = captureSpawn();
+      const result = launchTool({
+        id,
+        installedPath: `/somewhere/${id}`,
+        deps: { spawnDetached },
+      });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('not launchable');
+      expect(calls).toHaveLength(0);
+    },
+  );
 
   it('rejects empty installedPath', () => {
     const { spawnDetached } = captureSpawn();
@@ -362,13 +376,15 @@ describe('runHookCommand', () => {
     expect(calls[0].options?.env?.OPENAI_API_KEY).toBeUndefined();
   });
 
-  it('pins the packaged CLI for install and verify but not uninstall', async () => {
+  it('pins the packaged CLI for install but not verify or uninstall', async () => {
     const { calls, execCapture } = captureExec();
     const runtime = testHookRuntime();
-    await runHookCommand({ id: 'openclaw', action: 'verify', runtime, deps: { execCapture } });
-    await runHookCommand({ id: 'openclaw', action: 'uninstall', runtime, deps: { execCapture } });
+    await runHookCommand({ id: 'claude-code', action: 'install', runtime, deps: { execCapture } });
+    await runHookCommand({ id: 'claude-code', action: 'verify', runtime, deps: { execCapture } });
+    await runHookCommand({ id: 'claude-code', action: 'uninstall', runtime, deps: { execCapture } });
     expect(calls.map((call) => call.args)).toEqual([
-      [runtime.hookEntry, 'verify', '--cli-path', runtime.cliEntry],
+      [runtime.hookEntry, 'install', '--cli-path', runtime.cliEntry],
+      [runtime.hookEntry, 'verify'],
       [runtime.hookEntry, 'uninstall'],
     ]);
   });
@@ -419,9 +435,8 @@ describe('runHookCommand', () => {
     expect(result.error).toContain('exec failed');
   });
 
-  // R8-001: hook management is gated on HOOKS_COHORT. All seven built-ins now
-  // ship real bins, including Claude Desktop's MCP bridge, so they all route.
-  it.each<ToolId>(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'])(
+  // R8-001: hook management is gated on the release-supported HOOKS_COHORT.
+  it.each<ToolId>(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'hermes'])(
     'routes the hook command for HOOKS_COHORT tool (%s)',
     async (id) => {
       const { calls, execCapture } = captureExec();
@@ -429,6 +444,17 @@ describe('runHookCommand', () => {
       const result = await runHookCommand({ id, action: 'install', runtime, deps: { execCapture } });
       expect(result.ok).toBe(true);
       expect(calls[0].args).toEqual([runtime.hookEntry, 'install', '--cli-path', runtime.cliEntry]);
+    },
+  );
+
+  it.each<ToolId>(['cursor', 'openclaw'])(
+    'refuses hook commands for roadmap tool %s without invoking exec',
+    async (id) => {
+      const { calls, execCapture } = captureExec();
+      const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('not supported');
+      expect(calls).toHaveLength(0);
     },
   );
 
