@@ -497,7 +497,7 @@ try {
   $hermesMindPath = Initialize-IsolatedMindWorkspace -MindRoot $mindRoot -WorkspaceId $hermesWorkspaceId
   $commonEnvironment = @{
     HIVE_MIND_DATA_DIR = $mindRoot
-    HIVE_MIND_SCOPES = 'personal,workspace'
+    HIVE_MIND_SCOPES = 'memory:read,memory:write'
     HIVE_MIND_SHIM_LOG_LEVEL = 'error'
     WAGGLE_SIGNAL_EMIT = '0'
     NO_COLOR = '1'
