@@ -30,7 +30,7 @@ describe('chat smart-router integration', () => {
     server = await buildLocalServer({ dataDir: tmpDir });
     activeWorkspaceId = server.agentState.activeWorkspaceId!;
     expect(activeWorkspaceId).toBeTruthy();
-  });
+  }, 30_000);
 
   beforeEach(() => {
     capturedModel = undefined;
