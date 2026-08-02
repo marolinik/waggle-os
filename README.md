@@ -1,6 +1,18 @@
 # Waggle OS
 
-Workspace-native AI agent platform with persistent memory, model-agnostic orchestration, and skill-extensible capabilities. It ships as a Tauri 2.0 desktop binary (Windows/macOS) with a Vite-bundled web app and a Node.js sidecar.
+Workspace-native AI agent platform with persistent memory, model-agnostic orchestration, and skill-extensible capabilities. The current release candidate is a Windows-first Tauri 2.0 desktop app with a Vite-bundled web UI and a bundled Node.js sidecar; macOS certification remains on the roadmap.
+
+## Current Release Scope
+
+The active launch gate is **Windows Solo**. Its in-scope external-agent release cohort is **Claude Code, Codex, and Hermes**. Each tool uses the user's own installation and authentication; Waggle does not redistribute provider credentials or bypass provider terms.
+
+- **Cursor and OpenClaw are roadmap integrations.** They remain registered for detection and future development, but the production launcher, hooks, Fleet/task path, and direct run API do not offer them.
+- Claude Desktop, Codex Desktop, and Hermes Desktop may appear as detected convenience launch surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
+- **ChatGPT/OpenAI is a model and memory-import surface**, not a separate local coding-agent launcher.
+- The Windows Solo desktop bundles its Node sidecar and a no-Python OpenAI-compatible proxy. **Docker, Python, and an external LiteLLM service are not prerequisites** for the desktop app. Docker/LiteLLM deployment files remain available for optional server and team deployments.
+- Ollama is optional. The default embedding path can run in process; a local Ollama model may be selected for offline chat/routing when installed.
+
+Release approval is evidence-gated. See the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md); historical audit documents are not current ship authority.
 
 ## Architecture
 
@@ -115,7 +127,7 @@ run. See [`.env.example`](./.env.example) for the full contract.
 | `ANTHROPIC_API_KEY` | Recommended | Claude API key. Optional in `.env` — can be set in-app instead (vault). |
 | `OPENAI_API_KEY` | No | Enables OpenAI models and optional OpenAI embeddings. |
 | `EMBEDDING_PROVIDER` | No | `auto` (default) · `inprocess` · `ollama` · `voyage` · `openai` · `mock`. `auto` tries in-process → Ollama → API → mock. |
-| `LITELLM_BASE_URL` | No | LiteLLM proxy URL for multi-model routing (default `http://localhost:4000`). |
+| `LITELLM_BASE_URL` | No | Optional external LiteLLM-compatible proxy URL. The Windows Solo desktop uses its bundled no-Python proxy unless explicitly configured otherwise. |
 | `DATABASE_URL` | Team only | PostgreSQL connection string. |
 | `REDIS_URL` | Team only | Redis for the background job queue. |
 

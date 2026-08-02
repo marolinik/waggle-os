@@ -16,8 +16,9 @@ If you're about to write code, **Section 3** is the most important thing you'll 
 
 ## 1. What Waggle OS Actually Is
 
-**Waggle OS** is a workspace-native AI agent platform with persistent memory. It ships as a
-Tauri 2.0 desktop binary for Windows and macOS, with a Vite-bundled web app and a Node.js sidecar.
+**Waggle OS** is a workspace-native AI agent platform with persistent memory. The active release
+candidate is a Windows-first Tauri 2.0 desktop app with a Vite-bundled web UI and a bundled Node.js
+sidecar. macOS packaging, signing, notarization, and runtime certification are roadmap work.
 
 **Strategic function:** Waggle is the demand-creation and qualification engine for KVARK —
 Egzakta Group's sovereign enterprise AI platform.
@@ -38,21 +39,35 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Key Technology Facts (Verified April 2026)
+### Current Release Qualification Contract (2026-08-02)
+
+- Launch gate: **Windows Solo only**.
+- In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
+  uses the user's own installed client and its official user authentication.
+- **Cursor and OpenClaw are roadmap-only**: detection metadata may remain, but production launch,
+  hooks, Fleet/task dispatch, and direct run routes must fail closed for them.
+- Claude Desktop, Codex Desktop, and Hermes Desktop may remain as detected convenience launch
+  surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
+- ChatGPT/OpenAI is a model/provider and memory-import surface, not a separate launcher target.
+- The Windows Solo artifact bundles the Node sidecar and no-Python OpenAI-compatible proxy.
+  Docker, Python, and external LiteLLM are optional deployment choices, not desktop prerequisites.
+- Do not claim release approval until the current launch recommendation's exact-HEAD gates pass.
+
+### Key Technology Facts (Verified August 2026)
 
 | Layer | Stack |
 |---|---|
 | Frontend | React **19** + TypeScript + Vite + Tailwind 4 + base-ui/react |
 | Desktop | Tauri 2.0 (Rust shell) |
 | Backend | Fastify sidecar (Node.js, bundled into Tauri) |
-| LLM routing | LiteLLM (see `litellm-config.yaml`) |
+| LLM routing | Bundled no-Python OpenAI-compatible proxy for Windows Solo; optional LiteLLM deployment config |
 | Database | SQLite via @waggle/core (better-sqlite3 + sqlite-vec-windows-x64) |
 | Memory | FrameStore + HybridSearch + KnowledgeGraph + IdentityLayer + AwarenessLayer |
 | Agent runtime | `packages/agent/src/agent-loop.ts` |
 | Billing | Stripe (installed; `stripe@^21.0.1`) |
 | Design | Hive DS — honey #e5a000 / hive-950 #08090c / accent #a78bfa |
 | Tests | Vitest (unit) + Playwright (E2E) |
-| Deploy | Dockerfile + docker-compose.production.yml + render.yaml |
+| Deploy | Windows Tauri installer; optional Dockerfile + docker-compose.production.yml + render.yaml |
 
 Package manager: npm (root) with `bun.lock` also present. Node >= 20.
 
@@ -67,7 +82,7 @@ waggle-os/
 ├── apps/
 │   ├── web/             # <-- MAIN web app UI (this is where most components live)
 │   └── www/             # Landing page (waggle-os.ai)
-├── packages/            # 16 workspace packages (see below)
+├── packages/            # 28 workspace packages (see below)
 ├── sidecar/             # Node.js sidecar bundled into Tauri
 ├── scripts/             # build-sidecar, bundle-native-deps, bundle-node
 ├── tests/               # Cross-cutting integration tests
@@ -81,7 +96,7 @@ waggle-os/
 └── package.json (workspaces: apps/*, packages/*)
 ```
 
-### Packages (`packages/`, 27 workspaces — verified 2026-05-28)
+### Packages (`packages/`, 28 workspaces — verified 2026-08-02)
 ```
 Core (15):
 admin-web       cli             launcher        marketplace
@@ -89,15 +104,15 @@ agent           core            memory-mcp      optimizer
 sdk             server          shared          waggle-dance
 weaver          wiki-compiler   worker
 
-hive-mind OSS split (12 — synced to marolinik/hive-mind, see §7.5):
+hive-mind OSS source set (13 — curated forward-port target is marolinik/hive-mind; see §7.5):
 hive-mind-core   hive-mind-cli   hive-mind-shim-core   hive-mind-mcp-server
-hive-mind-wiki-compiler
-hive-mind-hooks-{Codex, Codex-desktop, codex, codex-desktop,
+hive-mind-wiki-compiler   hive-mind-hooks-core
+hive-mind-hooks-{claude-code, claude-desktop, codex, codex-desktop,
                  cursor, hermes, openclaw}
 ```
 > Note: the prior list said "16" and included `ui`, which has no `package.json`
-> (not a workspace). Real count is 27. The 12 `hive-mind-*` packages were added
-> since the April verification.
+> (not a workspace). The live count is 28: 15 product packages and 13
+> `hive-mind-*` packages.
 
 ### `packages/agent/src/` — MOST ACTIVE (94 .ts files + 4 subdirs)
 
@@ -556,7 +571,7 @@ Do not recreate or expose outside gating.
 - **Premium harness reached HONEST 21/21** (May 2026 S1) — every pillar regression-locked + composing. Full agent suite 2657/2657. See `memory/project_session_handoff_0519_s1.md`.
 
 **AI-OS arc (May 2026 S1/S2, 14 commits on origin):**
-- Phase 0 — Tool detection PoC (`packages/agent/src/tool-detection.ts`) for all 7 supported AI tools, hermetic + cross-platform.
+- Phase 0 — Tool detection PoC (`packages/agent/src/tool-detection.ts`) for eight registered AI-tool surfaces, hermetic + cross-platform. Registration is broader than release support.
 - Phase 1A — WaggleDance v2 dispatcher branches wired (discovery/routed_share/model_recipe/knowledge_match/task_claim/model_recommendation).
 - Phase 1B — Local sidecar surface (`/api/waggle-dance/signal` + `/signals`), SignalBus ring buffer, personal-tier-eligible.
 - Phase 1C — Bridge: v2 bus → existing `/api/waggle/signals` UI stream (zero frontend changes).
@@ -565,7 +580,7 @@ Do not recreate or expose outside gating.
 - Phase 2A — Launcher backend (`/api/tools/launch`, `/api/tools/hooks`).
 - Phase 2B — LauncherApp dock surface (`apps/web/src/components/os/apps/LauncherApp.tsx`).
 - Phase 3 — Skill diffusion (D1 fire → `skill_share` broadcast via `onSkillDistillationFire` callback).
-- Phase 4 — Full 7-tool launch cohort + Mission Control inventory tile + Memory provenance badge + launch-with-prompt textarea + process tracker / 'Running' badge.
+- Phase 4 — Eight-tool inventory/detection surface + Mission Control tile + Memory provenance badge + launch-with-prompt textarea + process tracker / 'Running' badge. The in-scope agent-integration release cohort is Claude Code, Codex, and Hermes; Cursor and OpenClaw are roadmap-only.
 
 End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSPACE_ID` env → hook captures → shim emitter → bus → bridge → UI. Rollback tag: `checkpoint/pre-ai-os-2026-05-20`. AI-OS exploration doc: `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 
@@ -574,7 +589,7 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 |---|---|---|
 | 1 | Spawn Agent + Dock wiring | P36 already wired in `Dock.tsx`+`Desktop.tsx`; P35 third-tier fallback (LiteLLM → runtime model → provider catalogs) landed `14942be`. Residual: runtime verification on a clean install. |
 | 2 | Light mode finish | P40/P41 + CR-2 — semantic-token migration is done (no hive-950 references except a comment); remaining issues are render-time fine-tuning (BootScreen visual polish + a few header-styling judgments) that need a binary build to validate. |
-| 3 | Wave 2/3 hook implementations | **Mostly DONE (corrected 2026-06-29).** 6 of 7 hook packages ship real bins: Codex + the 2026-06-01 Wave 2/3 port (codex, codex-desktop, cursor, hermes, openclaw). Only `hive-mind-hooks-Codex-desktop` remains a binless `export {}` stub (deferred MCP-bridge category). The dock (`LauncherApp.tsx`) now exposes hook install/verify/uninstall for all 6 via the corrected `HOOKS_COHORT` (was hardcoded `['Codex']`). Residual: Codex-desktop MCP-bridge hook only. |
+| 3 | External-tool release cohort | **Windows Solo scope fixed 2026-08-02.** Claude Code, Codex, and Hermes are the in-scope agent-integration cohort. Cursor and OpenClaw implementations remain in-tree as roadmap work and are fail-closed in production surfaces. Claude Desktop, Codex Desktop, and Hermes Desktop are convenience launch surfaces, not separate agent-acceptance targets. |
 
 **Closed during May 2026 backlog sweep:**
 - ✅ OW-6 PersonaSwitcher two-tier — shipped via M-01 (`PersonaSwitcher.tsx` + `lib/persona-tier.ts` + `lib/persona-tooltip.ts`); 26/26 tests passing
