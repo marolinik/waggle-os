@@ -12,6 +12,20 @@ import { externalToolRunRoutes } from '../../src/local/routes/external-tool-runs
 import { resolveWorkspaceExecutionRoot } from '../../src/local/workspace-execution-root.js';
 import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
 
+// Preserve the deferred OpenClaw implementation's deep regression coverage in
+// this file. Production-default roadmap rejection is tested separately without
+// this explicit test-only registry override.
+vi.mock('@waggle/agent', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@waggle/agent')>();
+  return {
+    ...actual,
+    getToolRegistry: (...args: Parameters<typeof actual.getToolRegistry>) =>
+      actual.getToolRegistry(...args).map((manifest) => manifest.id === 'openclaw'
+        ? { ...manifest, releaseStatus: 'supported' as const, launchable: true }
+        : manifest),
+  };
+});
+
 const tempDirs: string[] = [];
 const collaborationRuntime = {
   nodePath: 'C:\\Waggle Runtime\\node.exe',
@@ -1641,7 +1655,7 @@ describe('external tool run routes', () => {
     await server.close();
   });
 
-  it('rejects GUI-only tools with an explicit task-capability error', async () => {
+  it('rejects a roadmap GUI tool before task capability checks', async () => {
     const dataDir = tempDir();
     const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
     const server = Fastify({ logger: false });
@@ -1652,7 +1666,10 @@ describe('external tool run routes', () => {
       payload: { toolId: 'cursor', workspaceIds: ['alpha'], prompt: 'Do work' },
     });
     expect(response.statusCode).toBe(409);
-    expect(response.json().error).toBe('TOOL_NOT_HEADLESS');
+    expect(response.json()).toMatchObject({
+      error: 'tool_not_release_supported',
+      toolId: 'cursor',
+    });
     await server.close();
   });
 

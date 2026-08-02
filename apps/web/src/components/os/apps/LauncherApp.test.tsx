@@ -266,13 +266,16 @@ describe('LauncherApp · captured tasks', () => {
     expect(onOpenRoom).toHaveBeenCalledWith('room-multi');
   });
 
-  it('does not offer a captured task for a GUI-only tool', async () => {
+  it('labels a roadmap tool and offers no launch, task, or hook actions', async () => {
     mocks.adapter.detectTools.mockResolvedValue({
       platform: 'darwin',
       detectedAt: '2026-07-11T00:00:00.000Z',
       tools: [{
-        id: 'cursor',
-        displayName: 'Cursor',
+          id: 'cursor',
+          displayName: 'Cursor',
+          releaseStatus: 'roadmap',
+          launchable: false,
+          hookCapable: false,
         installed: true,
         installedPath: '/Applications/Cursor.app',
         version: '1.0.0',
@@ -291,9 +294,14 @@ describe('LauncherApp · captured tasks', () => {
 
     render(<LauncherApp workspaces={[{ id: 'ws-a', name: 'Alpha' }]} />);
 
-    expect(await screen.findByText('Cursor')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^launch$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /run task/i })).not.toBeInTheDocument();
+    const card = await screen.findByTestId('launcher-tool-cursor');
+    expect(within(card).getByText('Roadmap')).toBeInTheDocument();
+    expect(within(card).getByText(/detection retained for compatibility/i)).toBeInTheDocument();
+    expect(within(card).queryByText('Detect only')).not.toBeInTheDocument();
+    expect(within(card).queryByText('Hooks active')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: /^launch$/i })).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: /run task/i })).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: /install hooks/i })).not.toBeInTheDocument();
   });
 
   it('launches Hermes Desktop but excludes it and a broken CLI from captured teams', async () => {

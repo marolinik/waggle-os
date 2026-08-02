@@ -1,10 +1,9 @@
 /**
  * AI-OS Phase 2B — LauncherApp.
  *
- * Dock surface for the AI-OS tool launcher. Lists every supported AI execution
- * surface. All 8 are launchable; Hermes Desktop is the only one without hook
- * management, while desktop-only surfaces remain ineligible for captured
- * headless tasks. Each card includes detection status, hook-install status,
+ * Dock surface for the AI-OS tool launcher. Lists registered AI execution
+ * surfaces while keeping roadmap integrations visibly inert. Each card
+ * includes detection status, hook-install status,
  * and its supported actions:
  *
  *   Launch in workspace X / Install hooks / Verify hooks / Uninstall hooks
@@ -41,6 +40,7 @@ import {
   BUILTIN_TOOL_MANIFESTS,
   type ExternalToolAccess,
   type ToolCapabilities,
+  type ToolReleaseStatus,
 } from '@waggle/shared';
 
 // #5 — derived from the shared manifest registry (single source of truth),
@@ -54,6 +54,7 @@ const HOOKS_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m)
 interface DetectedTool {
   id: string;
   displayName: string;
+  releaseStatus?: ToolReleaseStatus;
   launchable?: boolean;
   hookCapable?: boolean;
   builtin?: boolean;
@@ -117,12 +118,15 @@ const HOOK_PATH_RE = /([A-Za-z]:\\[^\s]+|\/[^\s]+)/;
 const MAX_VISIBLE_HOOK_DETAILS = 6;
 
 const toolCanLaunch = (tool: DetectedTool): boolean =>
-  tool.launchable ?? LAUNCH_COHORT.includes(tool.id);
+  tool.releaseStatus !== 'roadmap'
+  && (tool.launchable ?? LAUNCH_COHORT.includes(tool.id));
 
 const launchUnavailableMessage = (tool: DetectedTool): string =>
-  tool.installed && tool.diagnostic
-    ? 'Launch is blocked for this install. Follow the note above, then refresh.'
-    : 'Detection ready. This adapter is not configured for launch.';
+  tool.releaseStatus === 'roadmap'
+    ? 'Roadmap integration. Detection retained for compatibility; launch, tasks, and hooks are deferred.'
+    : tool.installed && tool.diagnostic
+      ? 'Launch is blocked for this install. Follow the note above, then refresh.'
+      : 'Detection ready. This adapter is not configured for launch.';
 
 const toolUsesInlinePrompt = (tool: DetectedTool): boolean =>
   toolAcceptsInlinePrompt(tool.id) || tool.acceptsInlinePrompt === true;
@@ -140,7 +144,7 @@ const defaultAccessForTool = (tool: DetectedTool): ExternalToolAccess | null => 
 
 const toolCanRunCapturedTask = (tool: DetectedTool): boolean =>
   tool.installed &&
-  tool.launchable !== false &&
+  toolCanLaunch(tool) &&
   tool.capabilities?.headlessTask === true &&
   (tool.permissionModes?.length ?? 0) > 0;
 
@@ -765,7 +769,7 @@ const LauncherApp = ({ activeWorkspaceId, workspaces = [], onOpenRoom }: Launche
                           Not installed
                         </Badge>
                       )}
-                      {tool.hooksInstalled && (
+                      {tool.hooksInstalled && tool.releaseStatus !== 'roadmap' && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4" style={{ background: 'var(--honey-wash)', color: 'var(--honey)' }}>
                           Hooks active
                         </Badge>
@@ -788,7 +792,11 @@ const LauncherApp = ({ activeWorkspaceId, workspaces = [], onOpenRoom }: Launche
                           Running
                         </button>
                       )}
-                      {!launchable && (
+                      {tool.releaseStatus === 'roadmap' ? (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                          Roadmap
+                        </Badge>
+                      ) : !launchable && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
                           Detect only
                         </Badge>

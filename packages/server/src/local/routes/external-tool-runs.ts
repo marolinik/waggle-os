@@ -207,6 +207,13 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
     for (const input of participantInputs) {
       const manifest = manifests.find((candidate) => candidate.id === input.toolId);
       if (!manifest) return reply.code(404).send({ error: 'tool_not_registered', toolId: input.toolId });
+      if (manifest.releaseStatus === 'roadmap' || !manifest.launchable) {
+        return reply.code(409).send({
+          error: 'tool_not_release_supported',
+          toolId: input.toolId,
+          message: `${manifest.displayName} is an experimental roadmap integration and is not enabled in this release.`,
+        });
+      }
       if (!manifest.capabilities?.headlessTask || !manifest.task) {
         return reply.code(409).send({
           error: 'TOOL_NOT_HEADLESS', toolId: input.toolId,
