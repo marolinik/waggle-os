@@ -4,7 +4,12 @@
 
 ## What this is
 
-`hive-mind-core` is the persistence + retrieval substrate that powers Waggle OS's memory layer. It also stands alone as an Apache-2.0 OSS package, distributed via `git subtree split` from the `marolinik/waggle-os` monorepo into `marolinik/hive-mind`.
+`hive-mind-core` is the persistence + retrieval substrate that powers Waggle OS's memory layer. The public Apache-2.0 distribution lives in `marolinik/hive-mind` and is produced from this canonical source by a maintainer-curated forward-port.
+
+> **Publication boundary:** this monorepo package is private and must never be
+> published or pushed as a raw subtree split. It contains Waggle-only files and
+> interleaved `install_audit` schema/migration logic. The curated forward-port
+> adapts the public layout/imports and removes all excluded material.
 
 ## What's inside
 
@@ -40,6 +45,6 @@
 
 ## Status
 
-Migrated from `marolinik/hive-mind` repo into `marolinik/waggle-os` monorepo at `packages/hive-mind-core/` per CC Sesija B brief 2026-04-30. Future development happens in this monorepo; `git subtree split` periodically emits `packages/hive-mind-core/` to `marolinik/hive-mind` for OSS distribution.
+Migrated from `marolinik/hive-mind` into the canonical `marolinik/waggle-os` monorepo at `packages/hive-mind-core/` on 2026-04-30. Future development happens here. `scripts/oss-subtree-split.sh` is an inspection/curation starting point only; the public mirror is updated through a reviewed, curated forward-port.
 
 License: Apache-2.0.

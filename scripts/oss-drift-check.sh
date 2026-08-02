@@ -5,7 +5,8 @@
 #
 # WHY THIS EXISTS (§7.5 policy, ratified 2026-06-11):
 #   The monorepo is the SOLE source of truth for the memory substrate; the
-#   OSS mirror is generated FROM it. That invariant broke once: the
+#   OSS mirror is produced FROM it by a maintainer-curated forward-port. That
+#   invariant broke once: the
 #   cross-encoder reranker (inprocess-reranker.ts + HybridSearch options)
 #   was authored directly on the OSS repo during the LoCoMo benchmark arc
 #   and existed ONLY there — discovered by the W4 recon (2026-06-11),
@@ -27,7 +28,7 @@
 #   OSS_HIVE_MIND_DIR env var.
 #
 # WHEN TO RUN (maintainer ritual — manual, not CI):
-#   - before every OSS release push (alongside oss-subtree-split.sh)
+#   - before every OSS release push (as input to the curated forward-port)
 #   - after any benchmark/experiment arc that touched a hive-mind checkout
 #
 # Mapping (OSS repo keeps its own package layout):
@@ -117,7 +118,8 @@ done
 if [[ $drift -eq 1 ]]; then
   echo "[oss-drift-check] DRIFT DETECTED. Policy (§7.5): the monorepo is the"
   echo "[oss-drift-check] sole source — reverse-port ONLY-IN-OSS work here first,"
-  echo "[oss-drift-check] then regenerate the mirror via scripts/oss-subtree-split.sh."
+    echo "[oss-drift-check] then prepare a maintainer-curated forward-port."
+    echo "[oss-drift-check] scripts/oss-subtree-split.sh is inspection-only; never push its raw branches."
   exit 1
 fi
 echo "[oss-drift-check] All mapped surfaces clean."

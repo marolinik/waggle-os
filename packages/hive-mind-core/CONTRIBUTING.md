@@ -1,25 +1,25 @@
 # Contributing to `@waggle/hive-mind-core`
 
-This package is the substrate of the Waggle OS memory layer + the Apache 2.0 OSS subtree-split target. Contributions are welcome from anyone — the substrate is built to be a standalone OSS library, not a Waggle-only artifact.
+This package is the canonical source for the Waggle OS memory substrate and the maintainer-curated Apache-2.0 OSS distribution. Contributions are welcome, but this monorepo package is private because its tree also contains Waggle-only material that must not be published directly.
 
 ## How the package is distributed
 
-`@waggle/hive-mind-core` lives in the `marolinik/waggle-os` monorepo at `packages/hive-mind-core/`. From there, `git subtree split` periodically emits the contents to a public OSS repo at `github.com/marolinik/hive-mind`.
+`@waggle/hive-mind-core` lives in the `marolinik/waggle-os` monorepo at `packages/hive-mind-core/`. The public `github.com/marolinik/hive-mind` layout is produced by a maintainer-curated forward-port: adapt package layout/imports, remove excluded files and interleaved schema logic, review the diff, then publish from the OSS checkout. A raw subtree split is never a publish source.
 
-If you're reading this on **github.com/marolinik/hive-mind** (the OSS mirror): file issues + PRs against THAT repo. The maintainer (Egzakta Group) periodically merges accepted upstream changes back into `marolinik/waggle-os` via the inverse subtree-pull.
+If you're reading this on **github.com/marolinik/hive-mind** (the OSS mirror): file issues + PRs against that repo. A maintainer must intentionally port accepted changes back into `marolinik/waggle-os` before the next curated forward-port.
 
-If you're reading this on **github.com/marolinik/waggle-os** (the canonical monorepo): file issues + PRs directly here. Changes ship to OSS via the next `subtree split` cycle.
+If you're reading this on **github.com/marolinik/waggle-os** (the canonical monorepo): file issues + PRs directly here. Public-surface changes ship only through the next curated forward-port.
 
-The OSS-export filter excludes Waggle-proprietary files documented in `EXTRACTION.md` (when present) — currently `vault.ts`, `evolution-runs.ts`, `execution-traces.ts`, `improvement-signals.ts`, and `compliance/**` stay in `@waggle/core`, not `@waggle/hive-mind-core`. PRs touching those files belong on the waggle-os monorepo only.
+The curated export excludes `src/mind/evolution-runs.ts`, `execution-traces.ts`, and `improvement-signals.ts`, plus the interleaved `install_audit` DDL/migration inside `src/mind/schema.ts` and `db.ts`. Vault and compliance code remains in `@waggle/core` and is outside this package. A file filter alone cannot enforce the interleaved exclusion.
 
 ## Direction of development (maintainers — ratified 2026-06-11)
 
 **The monorepo is the sole source of truth. Maintainers must not author features directly on the OSS mirror.** This invariant broke once: the cross-encoder reranker was written directly on `marolinik/hive-mind` during a benchmark arc and existed only there until a recon pass found it and reverse-ported it (waggle-os `f47ee8f`). The rules that prevent a repeat:
 
-1. Substrate changes are authored in `waggle-os/packages/hive-mind-core/` first; the mirror is regenerated via `scripts/oss-subtree-split.sh` afterward.
+1. Substrate changes are authored in `waggle-os/packages/hive-mind-core/` first; the mirror is updated by a reviewed, maintainer-curated forward-port. `scripts/oss-subtree-split.sh` is inspection-only and its raw branches must never be pushed.
 2. Work done in a scratch `hive-mind` checkout (benchmarks, experiments) must be reverse-ported into the monorepo in the same work arc — never left to accumulate on the mirror.
 3. Run `scripts/oss-drift-check.sh` before every OSS release push and after any arc that touched a hive-mind checkout. It file-diffs the mapped source trees and flags ONLY-IN-OSS files (the reverse-port failure mode), ONLY-IN-MONO files (pending export), and divergent edits.
-4. External contributor PRs against the OSS repo are welcome (see above) — the maintainer merges accepted changes back into the monorepo via subtree-pull, then re-splits.
+4. External contributor PRs against the OSS repo are welcome (see above) — the maintainer ports accepted changes back into the monorepo first, then prepares the next curated forward-port.
 
 ## Setting up the dev environment
 
@@ -65,7 +65,7 @@ The repository uses ESLint at the workspace root — run `npm run lint` from the
 6. **Open the PR** against `main` of waggle-os. Include in the PR body:
    - What changed + why
    - Test plan (which test files added/modified)
-   - Whether the change affects the OSS subtree-split surface (i.e., introduces new public exports, changes existing public types, deprecates surface)
+   - Whether the change affects the curated OSS surface (i.e., introduces new public exports, changes existing public types, or deprecates a surface)
 
 Maintainer review aim: 2 business days for triage, additional time for substantial changes.
 

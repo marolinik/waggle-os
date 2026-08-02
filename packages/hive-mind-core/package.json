@@ -1,6 +1,7 @@
 {
   "name": "@waggle/hive-mind-core",
   "version": "0.1.0",
+  "private": true,
   "description": "hive-mind substrate: FrameStore, HybridSearch, KnowledgeGraph, IdentityLayer, AwarenessLayer, harvest pipeline, scoring, ontology, embedders, prompt-injection scanner, logger.",
   "type": "module",
   "main": "dist/index.js",

@@ -27,6 +27,7 @@ import { join, resolve } from 'node:path';
 
 const REPO_ROOT = resolve(__dirname, '..');
 const SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'oss-subtree-split.sh');
+const DRIFT_SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'oss-drift-check.sh');
 const PACKAGES_DIR = join(REPO_ROOT, 'packages');
 
 describe('oss-subtree-split.sh — static guards', () => {
@@ -140,7 +141,32 @@ describe('oss-subtree-split.sh — package-level shape', () => {
     const pkg = JSON.parse(readFileSync(join(PACKAGES_DIR, name, 'package.json'), 'utf-8'));
     expect(
       pkg.license,
-      `${name} must be Apache-2.0 to ship via the OSS subtree-split (matches the OSS repo's license).`,
+      `${name} must be Apache-2.0 to participate in the curated OSS distribution.`,
     ).toBe('Apache-2.0');
+  });
+});
+
+describe('hive-mind publication boundary', () => {
+  it('keeps the canonical monorepo core package private', () => {
+    const pkg = JSON.parse(
+      readFileSync(join(PACKAGES_DIR, 'hive-mind-core', 'package.json'), 'utf-8'),
+    );
+
+    expect(
+      pkg.private,
+      'The canonical package contains Waggle-only source and must never be published directly.',
+    ).toBe(true);
+  });
+
+  it('routes mirror remediation through a curated forward-port, never a raw split push', () => {
+    const splitScript = readFileSync(SCRIPT_PATH, 'utf-8');
+    const driftScript = readFileSync(DRIFT_SCRIPT_PATH, 'utf-8');
+
+    expect(splitScript).toContain('DO NOT push them raw');
+    expect(splitScript).toContain('NOT OSS-publishable as-is');
+    expect(driftScript).toContain('curated forward-port');
+    expect(driftScript).not.toContain(
+      'regenerate the mirror via scripts/oss-subtree-split.sh',
+    );
   });
 });
