@@ -3133,7 +3133,7 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
     expect(script).toContain('$emptyHostIds.Count -gt 0');
     expect(script).toContain('HostIds cannot contain duplicate values:');
     expect(script).toContain("'--retries=0'");
-    expect(script).toContain('(Join-Path $receiptRoot $ReceiptName)');
+    expect(script).toContain('$playwrightOutput = Join-Path $runRoot "playwright-$ReceiptName"');
     expect(script).toContain('& $script:runnerNodePath $script:playwrightCli @playwrightArgs');
     expect(script).toContain("'PLAYWRIGHT_JSON_OUTPUT_FILE'");
     expect(script).toContain("'--reporter=list,json'");
@@ -3185,19 +3185,38 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
     }
     expect(script).toContain('$ambientSecretVariables');
     expect(script).toContain('$secretNamePattern');
-    expect(script).toContain('Remove-UnsafeReceipt');
-    expect(script).toContain('Expected Playwright receipt was not created');
+    expect(script).toContain("$rawReceiptRoot = Join-Path $runRoot 'raw-receipts'");
+    expect(script).toContain('Publish-SafeReceipt');
+    expect(script).toContain('Expected reporter receipt was not created');
+    expect(script).toContain("kind = 'playwright-summary'");
+    expect(script).toContain("kind = 'vitest-summary'");
+    expect(script).toContain('Unknown reporter receipt schema');
+    expect(script).toContain('Reporter receipt did not prove an exact successful lane');
+    expect(script).toContain('Reporter receipt did not bind the expected test specification');
+    expect(script).toContain('Safe receipt identity mismatch');
+    expect(script).toContain('Safe receipt host roster mismatch');
+    expect(script).toContain('Safe receipt target already exists');
+    expect(script).toContain('Receipt contains absolute host paths');
     expect(script).toContain('[Convert]::FromBase64String');
-    expect(script).toContain('Get-ChildItem -LiteralPath $receiptRoot -Recurse -File');
     expect(script).toContain('captured secret values found for environment variables');
+    expect(script).toContain('function Resolve-ReceiptLayout');
+    expect(script).toContain('StagingRoot = Join-Path $parent (');
+    expect(script).toContain('$receiptLayout = Resolve-ReceiptLayout -RequestedReceiptDir $ReceiptDir');
+    expect(script).toContain('$receiptStagingOwned = $false');
+    expect(script).toContain('$receiptStagingOwned = $true');
+    expect(script).toContain('Publish-ReceiptSet');
+    expect(script).toContain('[IO.Directory]::Move($StagingRoot, $FinalRoot)');
+    expect(script).not.toContain("Set-ProcessEnvironment -Name 'PLAYWRIGHT_JSON_OUTPUT_FILE' -Value $receiptPath");
     expect(script).toContain("'WAGGLE_E2E_REUSE_EXISTING_SERVER'");
     expect(script).toContain(
       "Set-ProcessEnvironment -Name 'WAGGLE_E2E_REUSE_EXISTING_SERVER' -Value '0'",
     );
-    expect(script).toContain(
-      "$profileVariables = @('USERPROFILE', 'HOME', 'APPDATA', " +
-      "'LOCALAPPDATA', 'HERMES_HOME')",
-    );
+    for (const name of [
+      'USERPROFILE', 'HOME', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
+      'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'HERMES_HOME', 'HERMES_PROFILE',
+    ]) {
+      expect(script).toContain(`'${name}'`);
+    }
     expect(script).toContain(
       '$environmentToRestore = @($profileVariables + $secretVariables + ' +
       '$runnerVariables | Select-Object -Unique)',
@@ -3212,6 +3231,16 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
         "Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'",
       ),
     );
+    expect(script).toContain('$authenticatedHermesLease = $null');
+    expect(script).toContain('Refusing to overwrite an existing Hermes authenticated profile');
+    expect(script).toContain('function New-OwnedHermesProfile');
+    expect(script).toContain('function Remove-OwnedHermesProfile');
+    expect(script).toContain('Hermes authenticated profile ownership verification failed');
+    expect(script).toContain('$profileCreateExitCode = $LASTEXITCODE');
+    expect(script).toContain('Complete-AuthenticatedIsolationCleanup `');
+    expect(script).toContain('-HermesLease $authenticatedHermesLease `');
+    expect(script).toContain('-SourceAuthEvidence $sourceAuthEvidence `');
+    expect(script).toContain('ReceiptDir must be a fresh path owned by this run');
     const hookLaneIndex = script.indexOf(
       "Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'",
     );
@@ -3225,15 +3254,848 @@ if ((Get-Content -Raw -LiteralPath $outsideSentinel) -cne 'outside-sentinel') {
     expect(successfulRestoreIndex).toBeGreaterThan(hookLaneIndex);
     expect(successfulRestoreIndex).toBeLessThan(realToolLaneIndex);
 
-    const outerFinallyIndex = script.lastIndexOf('} finally {');
-    const failureRestoreIndex = script.indexOf(
+    const failureRestoreIndex = script.lastIndexOf(
       "foreach ($name in $environmentToRestore) { Restore-ProcessEnvironment -Name $name }",
-      outerFinallyIndex,
     );
+    const outerFinallyIndex = script.lastIndexOf('} finally {', failureRestoreIndex);
     expect(failureRestoreIndex).toBeGreaterThan(outerFinallyIndex);
     expect(failureRestoreIndex).toBeLessThan(
       script.indexOf('Remove-VerifiedTempTree -Target $runRoot', failureRestoreIndex),
     );
+    expect(script.indexOf('Publish-ReceiptSet -StagingRoot $receiptStagingRoot')).toBeGreaterThan(
+      script.indexOf('Remove-VerifiedTempTree -Target $runRoot', failureRestoreIndex),
+    );
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'projects external-agent reporter output into strict path-free receipts',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const helperStart = runner.indexOf('function Assert-NoReparsePointInPath');
+      const helperEnd = runner.indexOf('\nfunction Get-FreeLoopbackPort', helperStart);
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+      const helperSource = runner.slice(helperStart, helperEnd);
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-receipt-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$repoRoot = 'C:\Users\Tester\repo'
+$runRoot = Join-Path $PSScriptRoot 'owned-run'
+$rawReceiptRoot = Join-Path $runRoot 'raw-receipts'
+$receiptRoot = Join-Path $PSScriptRoot 'published-receipts'
+$receiptStagingRoot = Join-Path $PSScriptRoot '.published-receipts.staging-probe'
+$null = New-Item -ItemType Directory -Path $rawReceiptRoot -Force
+$null = New-Item -ItemType Directory -Path $receiptStagingRoot
+$secretVariables = @('WAGGLE_PROBE_API_KEY')
+$originalEnvironment = @{ WAGGLE_PROBE_API_KEY = 'probe-secret-value-6f34a0' }
+$receiptHostIds = @('claude-code', 'codex', 'hermes')
+$authenticatedHostIds = @('claude-code', 'codex', 'hermes')
+
+function Assert-Probe([bool]$Condition, [string]$Message) {
+  if (-not $Condition) { throw $Message }
+}
+function Write-ProbeJson([string]$Path, $Value) {
+  [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+}
+function Assert-RejectedReceipt(
+  $Value,
+  [string]$Label,
+  [string]$ExpectedKind = 'playwright-summary',
+  [string]$ExpectedSpec = 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'
+) {
+  $token = [guid]::NewGuid().ToString('N')
+  $rawPath = Join-Path $rawReceiptRoot "$token.raw.json"
+  $safePath = Join-Path $receiptStagingRoot "$token-report.json"
+  Write-ProbeJson $rawPath $Value
+  $rejected = $false
+  try {
+    Publish-SafeReceipt -RawReceiptPath $rawPath -SafeReceiptPath $safePath -ExpectedKind $ExpectedKind -ExpectedSpec $ExpectedSpec -ReceiptLane $token -ExpectedHostIds $receiptHostIds
+  } catch { $rejected = $true }
+  Assert-Probe $rejected "$Label was accepted"
+  Assert-Probe (-not (Test-Path -LiteralPath $rawPath)) "$Label raw receipt was retained"
+  Assert-Probe (-not (Test-Path -LiteralPath $safePath)) "$Label safe receipt was published"
+}
+function New-PassingPlaywrightReceipt(
+  [string]$Spec = 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'
+) {
+  [pscustomobject]@{
+    configFile = Join-Path $repoRoot 'playwright.config.ts'
+    config = [pscustomobject]@{ rootDir = Join-Path $repoRoot 'tests' }
+    stats = [pscustomobject]@{ expected = 1; unexpected = 0; flaky = 0; skipped = 0 }
+    suites = @([pscustomobject]@{
+      file = $Spec.Substring('tests/'.Length)
+      attachments = @([pscustomobject]@{
+        body = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('D:\private\tool.exe probe-secret-value-6f34a0'))
+      })
+    })
+  }
+}
+
+$unownedSentinel = Join-Path $receiptStagingRoot 'unowned-sentinel.txt'
+[IO.File]::WriteAllText($unownedSentinel, 'preserve-me', [Text.UTF8Encoding]::new($false))
+Remove-VerifiedReceiptStaging $receiptStagingRoot $receiptRoot $false
+Assert-Probe ([IO.File]::ReadAllText($unownedSentinel) -ceq 'preserve-me') 'Unowned staging collision was deleted'
+Remove-Item -LiteralPath $unownedSentinel -Force
+
+$playwrightRawPath = Join-Path $rawReceiptRoot 'hooks.raw.json'
+$playwrightPath = Join-Path $receiptStagingRoot 'hooks-report.json'
+Write-ProbeJson $playwrightRawPath (New-PassingPlaywrightReceipt)
+Publish-SafeReceipt -RawReceiptPath $playwrightRawPath -SafeReceiptPath $playwrightPath -ExpectedKind 'playwright-summary' -ExpectedSpec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts' -ReceiptLane 'hooks' -ExpectedHostIds $receiptHostIds
+Assert-Probe (-not (Test-Path -LiteralPath $playwrightRawPath)) 'Playwright raw receipt survived projection'
+$playwrightText = [IO.File]::ReadAllText($playwrightPath)
+$playwright = $playwrightText | ConvertFrom-Json
+Assert-Probe ($playwright.kind -ceq 'playwright-summary') 'Playwright projection kind mismatch'
+Assert-Probe ($playwright.success -is [bool] -and $playwright.success) 'Playwright projection did not prove success'
+Assert-Probe ($playwright.spec -ceq 'tests/e2e/launcher-real-hook-lifecycle.spec.ts') 'Playwright spec identity missing'
+Assert-Probe (($playwright.hostIds -join ',') -ceq ($receiptHostIds -join ',')) 'Playwright host roster missing'
+Assert-Probe (-not $playwrightText.Contains('C:\Users')) 'Direct host path survived projection'
+Assert-Probe (-not $playwrightText.Contains('probe-secret-value-6f34a0')) 'Secret survived projection'
+Assert-Probe (-not $playwrightText.Contains('body')) 'Base64 attachment survived projection'
+
+$toolsRawPath = Join-Path $rawReceiptRoot 'tools.raw.json'
+$toolsPath = Join-Path $receiptStagingRoot 'tools-report.json'
+Write-ProbeJson $toolsRawPath (New-PassingPlaywrightReceipt 'tests/e2e/launcher-real-tool-lifecycle.spec.ts')
+Publish-SafeReceipt -RawReceiptPath $toolsRawPath -SafeReceiptPath $toolsPath -ExpectedKind 'playwright-summary' -ExpectedSpec 'tests/e2e/launcher-real-tool-lifecycle.spec.ts' -ReceiptLane 'tools' -ExpectedHostIds $receiptHostIds
+
+$vitestRawPath = Join-Path $rawReceiptRoot 'authenticated-tasks.raw.json'
+$vitestPath = Join-Path $receiptStagingRoot 'authenticated-tasks-report.json'
+$vitest = [pscustomobject]@{
+  success = $true
+  numTotalTestSuites = 2; numPassedTestSuites = 2; numFailedTestSuites = 0; numPendingTestSuites = 0
+  numTotalTests = 1; numPassedTests = 1; numFailedTests = 0; numPendingTests = 0; numTodoTests = 0
+  testResults = @([pscustomobject]@{ name = 'C:\Users\Tester\repo\tests\integration\external-agent-collaboration.live.test.ts' })
+}
+Write-ProbeJson $vitestRawPath $vitest
+Publish-SafeReceipt -RawReceiptPath $vitestRawPath -SafeReceiptPath $vitestPath -ExpectedKind 'vitest-summary' -ExpectedSpec 'tests/integration/external-agent-collaboration.live.test.ts' -ReceiptLane 'authenticated-tasks' -ExpectedHostIds $authenticatedHostIds -HermesProvider 'openai-codex' -HermesModel 'gpt-5.5'
+Assert-Probe (-not (Test-Path -LiteralPath $vitestRawPath)) 'Vitest raw receipt survived projection'
+$vitestProjection = [IO.File]::ReadAllText($vitestPath) | ConvertFrom-Json
+Assert-Probe ($vitestProjection.kind -ceq 'vitest-summary') 'Vitest projection kind mismatch'
+Assert-Probe ($vitestProjection.passedTests -eq 1) 'Vitest exact pass count was not retained'
+Assert-Probe ($vitestProjection.hermesProvider -ceq 'openai-codex') 'Vitest Hermes provider identity missing'
+Assert-Probe ($vitestProjection.hermesModel -ceq 'gpt-5.5') 'Vitest Hermes model identity missing'
+Remove-Item -LiteralPath $vitestPath -Force
+
+Assert-RejectedReceipt (New-PassingPlaywrightReceipt 'tests/e2e/launcher-real-tool-lifecycle.spec.ts') 'Mismatched Playwright specification'
+$spoofedPlaywright = New-PassingPlaywrightReceipt 'tests/e2e/launcher-real-tool-lifecycle.spec.ts'
+$spoofedPlaywright.suites[0].attachments += [pscustomobject]@{
+  note = 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'
+}
+Assert-RejectedReceipt $spoofedPlaywright 'Spoofed Playwright specification'
+Assert-RejectedReceipt (New-PassingPlaywrightReceipt) 'Mismatched reporter kind' 'vitest-summary' 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'
+
+$spoofedVitest = $vitest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$spoofedVitest.testResults[0].name = 'C:\Users\Tester\repo\tests\integration\unrelated.test.ts'
+$spoofedVitest.testResults[0] | Add-Member -NotePropertyName note -NotePropertyValue 'tests/integration/external-agent-collaboration.live.test.ts'
+Assert-RejectedReceipt $spoofedVitest 'Spoofed Vitest specification' 'vitest-summary' 'tests/integration/external-agent-collaboration.live.test.ts'
+
+$extraResultVitest = $vitest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$extraResultVitest.testResults += [pscustomobject]@{
+  name = 'C:\Users\Tester\repo\tests\integration\unrelated.test.ts'
+}
+Assert-RejectedReceipt $extraResultVitest 'Extra Vitest result file' 'vitest-summary' 'tests/integration/external-agent-collaboration.live.test.ts'
+
+$skipped = New-PassingPlaywrightReceipt
+$skipped.stats.expected = 0
+$skipped.stats.skipped = 1
+Assert-RejectedReceipt $skipped 'Skipped Playwright receipt'
+
+$missingPlaywrightField = New-PassingPlaywrightReceipt
+$missingPlaywrightField.stats.PSObject.Properties.Remove('flaky')
+Assert-RejectedReceipt $missingPlaywrightField 'Omitted Playwright field'
+$stringPlaywrightCounts = New-PassingPlaywrightReceipt
+$stringPlaywrightCounts.stats.expected = '1'
+$stringPlaywrightCounts.stats.unexpected = '0'
+$stringPlaywrightCounts.stats.flaky = '0'
+$stringPlaywrightCounts.stats.skipped = '0'
+Assert-RejectedReceipt $stringPlaywrightCounts 'String Playwright counts'
+$failedPlaywrightCast = New-PassingPlaywrightReceipt
+$failedPlaywrightCast.stats.expected = 'not-a-number'
+Assert-RejectedReceipt $failedPlaywrightCast 'Invalid Playwright count'
+
+$stringVitestBoolean = $vitest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$stringVitestBoolean.success = 'false'
+Assert-RejectedReceipt $stringVitestBoolean 'String Vitest boolean' 'vitest-summary' 'tests/integration/external-agent-collaboration.live.test.ts'
+$stringVitestCount = $vitest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$stringVitestCount.numTotalTests = '1'
+Assert-RejectedReceipt $stringVitestCount 'String Vitest count' 'vitest-summary' 'tests/integration/external-agent-collaboration.live.test.ts'
+$missingVitestField = $vitest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+$missingVitestField.PSObject.Properties.Remove('numTodoTests')
+Assert-RejectedReceipt $missingVitestField 'Omitted Vitest field' 'vitest-summary' 'tests/integration/external-agent-collaboration.live.test.ts'
+
+Assert-RejectedReceipt ([pscustomobject]@{ success = $true }) 'Malformed reporter schema'
+
+$invalidJsonPath = Join-Path $rawReceiptRoot 'invalid-json-report.json'
+$invalidSafePath = Join-Path $receiptStagingRoot 'invalid-json-report.json'
+[IO.File]::WriteAllText($invalidJsonPath, '{', [Text.UTF8Encoding]::new($false))
+$invalidJsonRejected = $false
+try {
+  Publish-SafeReceipt -RawReceiptPath $invalidJsonPath -SafeReceiptPath $invalidSafePath -ExpectedKind 'playwright-summary' -ExpectedSpec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts' -ReceiptLane 'invalid-json' -ExpectedHostIds $receiptHostIds
+} catch { $invalidJsonRejected = $true }
+Assert-Probe $invalidJsonRejected 'Invalid reporter JSON was accepted'
+Assert-Probe (-not (Test-Path -LiteralPath $invalidJsonPath)) 'Invalid raw JSON receipt was retained'
+Assert-Probe (-not (Test-Path -LiteralPath $invalidSafePath)) 'Invalid JSON produced a safe receipt'
+
+$collisionStage = Join-Path $PSScriptRoot '.published-receipts.staging-collision'
+$null = New-Item -ItemType Directory -Path $collisionStage
+$savedStagingRoot = $receiptStagingRoot
+$receiptStagingRoot = $collisionStage
+$collisionRawPath = Join-Path $rawReceiptRoot 'collision.raw.json'
+$collisionSafePath = Join-Path $collisionStage 'collision-report.json'
+Write-ProbeJson $collisionRawPath (New-PassingPlaywrightReceipt)
+[IO.File]::WriteAllText($collisionSafePath, 'sentinel', [Text.UTF8Encoding]::new($false))
+$writeRejected = $false
+try {
+  Publish-SafeReceipt -RawReceiptPath $collisionRawPath -SafeReceiptPath $collisionSafePath -ExpectedKind 'playwright-summary' -ExpectedSpec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts' -ReceiptLane 'collision' -ExpectedHostIds $receiptHostIds
+} catch { $writeRejected = $true }
+Assert-Probe $writeRejected 'Projection write failure was accepted'
+Assert-Probe (-not (Test-Path -LiteralPath $collisionRawPath)) 'Raw receipt survived projection collision'
+Assert-Probe ([IO.File]::ReadAllText($collisionSafePath) -ceq 'sentinel') 'Existing safe receipt was overwritten'
+$receiptStagingRoot = $savedStagingRoot
+Remove-Item -LiteralPath $collisionStage -Recurse -Force
+
+$missingStage = Join-Path $PSScriptRoot '.published-receipts.staging-missing'
+$null = New-Item -ItemType Directory -Path $missingStage
+Copy-Item -LiteralPath $playwrightPath -Destination (Join-Path $missingStage 'hooks-report.json')
+$missingFinal = Join-Path $PSScriptRoot 'missing-final'
+$missingRejected = $false
+try { Publish-ReceiptSet $missingStage $missingFinal @('hooks-report.json', 'tools-report.json') } catch { $missingRejected = $true }
+Assert-Probe $missingRejected 'Incomplete receipt set was published'
+Assert-Probe (-not (Test-Path -LiteralPath $missingFinal)) 'Incomplete final receipt directory exists'
+
+$extraStage = Join-Path $PSScriptRoot '.published-receipts.staging-extra'
+$null = New-Item -ItemType Directory -Path $extraStage
+Copy-Item -LiteralPath $playwrightPath -Destination (Join-Path $extraStage 'hooks-report.json')
+Copy-Item -LiteralPath $toolsPath -Destination (Join-Path $extraStage 'tools-report.json')
+Copy-Item -LiteralPath $toolsPath -Destination (Join-Path $extraStage 'unexpected-report.json')
+$extraFinal = Join-Path $PSScriptRoot 'extra-final'
+$extraRejected = $false
+try { Publish-ReceiptSet $extraStage $extraFinal @('hooks-report.json', 'tools-report.json') } catch { $extraRejected = $true }
+Assert-Probe $extraRejected 'Receipt set with an extra file was published'
+Assert-Probe (-not (Test-Path -LiteralPath $extraFinal)) 'Extra final receipt directory exists'
+
+$outsideReceiptParent = Join-Path $PSScriptRoot 'outside-receipt-parent'
+$receiptJunction = Join-Path $PSScriptRoot 'receipt-parent-junction'
+$unsafeFinal = Join-Path $receiptJunction 'unsafe-final'
+$unsafeStage = Join-Path $receiptJunction '.unsafe-final.staging-probe'
+$null = New-Item -ItemType Directory -Path $outsideReceiptParent
+$null = New-Item -ItemType Junction -Path $receiptJunction -Target $outsideReceiptParent
+$null = New-Item -ItemType Directory -Path $unsafeStage
+$outsideSentinel = Join-Path $unsafeStage 'preserve-me.txt'
+[IO.File]::WriteAllText($outsideSentinel, 'preserve-me', [Text.UTF8Encoding]::new($false))
+$junctionCleanupRejected = $false
+try { Remove-VerifiedReceiptStaging $unsafeStage $unsafeFinal $true } catch {
+  $junctionCleanupRejected = $_.Exception.Message -like '*reparse point*'
+}
+Assert-Probe $junctionCleanupRejected 'Receipt cleanup traversed a reparse ancestor'
+Assert-Probe ([IO.File]::ReadAllText($outsideSentinel) -ceq 'preserve-me') 'Receipt cleanup deleted outside content'
+
+Publish-ReceiptSet $receiptStagingRoot $receiptRoot @('hooks-report.json', 'tools-report.json')
+Assert-Probe (Test-Path -LiteralPath $receiptRoot -PathType Container) 'Exact receipt set was not published'
+Assert-Probe (-not (Test-Path -LiteralPath $receiptStagingRoot)) 'Staging directory survived atomic publication'
+$publishedNames = @(Get-ChildItem -LiteralPath $receiptRoot -File | ForEach-Object Name | Sort-Object)
+Assert-Probe (($publishedNames -join ',') -ceq 'hooks-report.json,tools-report.json') 'Published receipt set was not exact'
+Assert-Probe (@(Get-ChildItem -LiteralPath $rawReceiptRoot -File).Count -eq 0) 'Raw reporter receipts survived'
+`;
+
+      try {
+        fs.writeFileSync(probePath, `${helperSource}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'normalizes trailing-separator Windows receipt layout to an atomic sibling',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Resolve-ReceiptLayout');
+      const functionEnd = runner.indexOf('\n$repoRoot', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-receipt-layout-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$expectedRoot = Join-Path $PSScriptRoot 'receipts'
+$requestedRoot = $expectedRoot + [IO.Path]::DirectorySeparatorChar
+$layout = Resolve-ReceiptLayout -RequestedReceiptDir $requestedRoot
+if (-not $layout.Root.Equals($expectedRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Receipt root was not normalized' }
+if (-not $layout.Parent.Equals($PSScriptRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Receipt parent was not the direct sibling parent' }
+if (-not [IO.Path]::GetDirectoryName($layout.StagingRoot).Equals($PSScriptRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Receipt staging was not a sibling' }
+if (-not [IO.Path]::GetFileName($layout.StagingRoot).StartsWith('.receipts.staging-', [StringComparison]::Ordinal)) { throw 'Receipt staging name was not owned' }
+if (Test-Path -LiteralPath $expectedRoot) { throw 'Final receipt directory was created during layout' }
+`;
+      try {
+        fs.writeFileSync(probePath, `${runner.slice(functionStart, functionEnd)}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'preserves a colliding authenticated Hermes profile without invoking its CLI',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Assert-NoReparsePointInPath');
+      const functionEnd = runner.indexOf('\nfunction Get-ReceiptStrings', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-hermes-collision-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$profilesRoot = Join-Path $PSScriptRoot 'profiles'
+$profileName = 'wagglee2ecollision'
+$profileHome = Join-Path $profilesRoot $profileName
+$null = New-Item -ItemType Directory -Path $profileHome
+$sentinel = Join-Path $profileHome 'sentinel.txt'
+[IO.File]::WriteAllText($sentinel, 'preserve-me', [Text.UTF8Encoding]::new($false))
+$script:hermesInvocations = @()
+function hermes {
+  $script:hermesInvocations += ($args -join ' ')
+  throw 'Hermes CLI must not run for a profile collision'
+}
+$lease = $null
+$rejected = $false
+try { $lease = New-OwnedHermesProfile -ProfilesRoot $profilesRoot -ProfileName $profileName -OwnedRoot $PSScriptRoot }
+catch { $rejected = $_.Exception.Message -like '*Refusing to overwrite*' }
+finally { if ($null -ne $lease) { Remove-OwnedHermesProfile -Lease $lease } }
+if (-not $rejected) { throw 'Colliding Hermes profile was not rejected' }
+if ($script:hermesInvocations.Count -ne 0) { throw 'Hermes CLI was invoked for a collision' }
+if (-not (Test-Path -LiteralPath $profileHome -PathType Container)) { throw 'Colliding profile was deleted' }
+if ([IO.File]::ReadAllText($sentinel) -cne 'preserve-me') { throw 'Colliding profile sentinel changed' }
+if (@(Get-ChildItem -LiteralPath $profilesRoot -Force).Count -ne 1) { throw 'Unexpected profile artifact was created' }
+`;
+      try {
+        fs.writeFileSync(probePath, `${runner.slice(functionStart, functionEnd)}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'never deletes an unsealed Hermes profile after setup failure',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Assert-NoReparsePointInPath');
+      const functionEnd = runner.indexOf('\nfunction Invoke-NativePreflight', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-hermes-seal-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$profilesRoot = Join-Path $PSScriptRoot 'profiles'
+$profileName = 'wagglee2esealfailure'
+$profileHome = Join-Path $profilesRoot $profileName
+$script:hermesInvocations = @()
+$script:failDuringCreate = $false
+
+function Write-HermesOwnershipMarker {
+  throw 'forced ownership marker failure'
+}
+
+function hermes {
+  $script:hermesInvocations += ($args -join ' ')
+  if ($args[0] -eq 'profile' -and $args[1] -eq 'create') {
+    $null = New-Item -ItemType Directory -Path $profileHome
+    if ($script:failDuringCreate) {
+      [IO.File]::WriteAllText((Join-Path $profileHome 'competing-sentinel.txt'), 'preserve-me')
+      throw 'forced terminating create failure'
+    }
+    $global:LASTEXITCODE = 0
+    return
+  }
+  if ($args[0] -eq 'profile' -and $args[1] -eq 'delete') {
+    Remove-Item -LiteralPath $profileHome -Recurse -Force
+    $global:LASTEXITCODE = 0
+    return
+  }
+  throw 'Unexpected Hermes CLI call'
+}
+
+$rejected = $false
+try {
+  $null = New-OwnedHermesProfile -ProfilesRoot $profilesRoot -ProfileName $profileName -OwnedRoot $PSScriptRoot
+} catch {
+  $rejected = $_.Exception.Message -like '*forced ownership marker failure*'
+}
+if (-not $rejected) { throw 'Hermes ownership seal failure was not preserved' }
+if (-not (Test-Path -LiteralPath $profileHome -PathType Container)) { throw 'Unsealed Hermes profile was deleted' }
+Remove-Item -LiteralPath $profileHome -Recurse -Force
+
+$profileName = 'wagglee2ecreatefailure'
+$profileHome = Join-Path $profilesRoot $profileName
+$script:failDuringCreate = $true
+$createRejected = $false
+try {
+  $null = New-OwnedHermesProfile -ProfilesRoot $profilesRoot -ProfileName $profileName -OwnedRoot $PSScriptRoot
+} catch {
+  $createRejected = $_.Exception.Message -like '*forced terminating create failure*'
+}
+if (-not $createRejected) { throw 'Terminating Hermes create failure was not preserved' }
+if (-not (Test-Path -LiteralPath $profileHome -PathType Container)) { throw 'Competing Hermes profile was deleted' }
+if ([IO.File]::ReadAllText((Join-Path $profileHome 'competing-sentinel.txt')) -cne 'preserve-me') {
+  throw 'Competing Hermes profile sentinel changed'
+}
+if (($script:hermesInvocations -join '|') -cne
+    'profile create wagglee2esealfailure --no-alias --no-skills|profile create wagglee2ecreatefailure --no-alias --no-skills') {
+  throw 'Hermes setup failure invoked an unowned delete'
+}
+`;
+
+      try {
+        fs.writeFileSync(probePath, `${runner.slice(functionStart, functionEnd)}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'checks source auth invariants even when Hermes profile cleanup fails',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Assert-NoReparsePointInPath');
+      const functionEnd = runner.indexOf('\nfunction Get-ReceiptStrings', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-auth-cleanup-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$script:hashChecks = 0
+$ownedRoot = Join-Path $PSScriptRoot 'owned-profile'
+$claudeCopy = Join-Path $ownedRoot '.claude\.credentials.json'
+$codexCopy = Join-Path $ownedRoot '.codex\auth.json'
+$hermesCopy = Join-Path $ownedRoot 'hermes-root\profiles\probe\auth.json'
+$null = New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($claudeCopy)) -Force
+$null = New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($codexCopy)) -Force
+$null = New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($hermesCopy)) -Force
+[IO.File]::WriteAllText($claudeCopy, 'claude-secret-copy')
+[IO.File]::WriteAllText($codexCopy, 'codex-secret-copy')
+[IO.File]::WriteAllText($hermesCopy, 'hermes-secret-copy')
+function Set-ProcessEnvironment { }
+function Restore-ProcessEnvironment { }
+function Remove-OwnedHermesProfile { throw 'forced Hermes cleanup failure' }
+function Get-FileHash {
+  $script:hashChecks += 1
+  return [pscustomobject]@{ Hash = 'expected-hash' }
+}
+
+$failure = $null
+$lease = [pscustomobject]@{ ProfileName = 'probe' }
+$evidence = @(
+  [pscustomobject]@{ Path = 'claude-auth'; Hash = 'expected-hash' },
+  [pscustomobject]@{ Path = 'codex-auth'; Hash = 'expected-hash' },
+  [pscustomobject]@{ Path = 'hermes-auth'; Hash = 'expected-hash' }
+)
+try {
+  Complete-AuthenticatedIsolationCleanup -HermesLease $lease -SourceAuthEvidence $evidence -ProfileVariables @() -IsolatedAuthPaths @($claudeCopy, $codexCopy, $hermesCopy) -OwnedRoot $ownedRoot
+} catch {
+  $failure = $_.Exception.Message
+}
+if (Test-Path -LiteralPath $claudeCopy) { throw 'Claude authentication copy survived explicit cleanup' }
+if (Test-Path -LiteralPath $codexCopy) { throw 'Codex authentication copy survived explicit cleanup' }
+if (Test-Path -LiteralPath $hermesCopy) { throw 'Hermes authentication copy survived explicit cleanup' }
+
+$copySource = Join-Path $PSScriptRoot 'source-auth.json'
+$outsideAuthRoot = Join-Path $PSScriptRoot 'outside-auth-root'
+$redirectedAuthParent = Join-Path $ownedRoot 'redirected-auth'
+[IO.File]::WriteAllText($copySource, 'copy-source')
+$null = New-Item -ItemType Directory -Path $outsideAuthRoot
+$null = New-Item -ItemType Junction -Path $redirectedAuthParent -Target $outsideAuthRoot
+Remove-Item -LiteralPath $outsideAuthRoot -Recurse -Force
+$copyRejected = $false
+try {
+  Copy-IsolatedAuthenticationFile -Source $copySource -Destination (Join-Path $redirectedAuthParent 'auth.json') -OwnedRoot $ownedRoot
+} catch {
+  $copyRejected = $_.Exception.Message -like '*reparse point*'
+}
+if (-not $copyRejected) { throw 'Authentication copy did not reject a dangling reparse ancestor' }
+if ([IO.File]::Exists((Join-Path $outsideAuthRoot 'auth.json'))) { throw 'Authentication copy escaped through a reparse ancestor' }
+
+if ($script:hashChecks -ne 3) { throw 'Source auth hashes were skipped after cleanup failure' }
+if ($failure -notlike '*forced Hermes cleanup failure*') {
+  throw 'Aggregated cleanup failure omitted the Hermes error'
+}
+`;
+
+      try {
+        fs.writeFileSync(probePath, `${runner.slice(functionStart, functionEnd)}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'builds a shell-free Codex auth shim that preserves literal task arguments',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Assert-NoReparsePointInPath');
+      const functionEnd = runner.indexOf('\nfunction New-OwnedHermesProfile', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-codex-shim-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const nodePath = process.execPath.replaceAll("'", "''");
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$fakeNpm = Join-Path $PSScriptRoot 'fake-npm'
+$realEntry = Join-Path $fakeNpm 'node_modules\@openai\codex\bin\codex.js'
+$null = New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($realEntry))
+$realEntrySource = @'
+const fs = require('node:fs');
+fs.writeFileSync(process.env.PROBE_OUTPUT, JSON.stringify({ codexHome: process.env.CODEX_HOME, args: process.argv.slice(2) }));
+'@
+[IO.File]::WriteAllText($realEntry, $realEntrySource, [Text.UTF8Encoding]::new($false))
+$realCmd = @'
+@ECHO off
+SET "_prog=node"
+"%_prog%" "%dp0%\node_modules\@openai\codex\bin\codex.js" %*
+'@
+[IO.File]::WriteAllText((Join-Path $fakeNpm 'codex.cmd'), $realCmd, [Text.ASCIIEncoding]::new())
+$env:PATH = $fakeNpm + [IO.Path]::PathSeparator + $env:PATH
+$resolvedProbeCommand = Get-Command codex.cmd -CommandType Application -ErrorAction Stop |
+  Select-Object -First 1
+$resolvedProbeItem = Get-Item -LiteralPath $resolvedProbeCommand.Source -Force
+if ($resolvedProbeItem.PSIsContainer -or ($resolvedProbeItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+  throw "Fake Codex command was unsafe before helper: $($resolvedProbeCommand.Source) attrs=$($resolvedProbeItem.Attributes) dir=$($resolvedProbeItem.PSIsContainer)"
+}
+$ownedRoot = Join-Path $PSScriptRoot 'owned'
+$codexHome = Join-Path $ownedRoot '.codex'
+$shim = New-IsolatedCodexShim -ShimRoot (Join-Path $ownedRoot 'bin') -CodexHome $codexHome -OwnedRoot $ownedRoot
+$shimText = [IO.File]::ReadAllText($shim.Shim)
+if (-not $shimText.Contains('"%_prog%" "%dp0%\codex-isolated.mjs" %*')) { throw 'Generated shim was not npm-shaped' }
+$env:PROBE_OUTPUT = Join-Path $PSScriptRoot 'result.json'
+$arguments = @('literal%value&still-one', '-C', 'D:\work & data')
+& '${nodePath}' $shim.Launcher @arguments
+if ($LASTEXITCODE -ne 0) { throw 'Isolated Codex launcher failed' }
+$result = [IO.File]::ReadAllText($env:PROBE_OUTPUT) | ConvertFrom-Json
+if (-not $result.codexHome.Equals($codexHome, [StringComparison]::OrdinalIgnoreCase)) { throw 'CODEX_HOME was not isolated' }
+if (($result.args -join '|') -cne ($arguments -join '|')) { throw 'Codex arguments changed during forwarding' }
+`;
+      try {
+        fs.writeFileSync(probePath, `${runner.slice(functionStart, functionEnd)}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'removes owned Windows temp trees containing long Claude session paths',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Remove-VerifiedTempTree');
+      const functionEnd = runner.indexOf('\nfunction Invoke-PlaywrightLane', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-long-cleanup-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$env:TEMP = $PSScriptRoot
+$tempBase = $PSScriptRoot
+function Start-Sleep { param([int]$Milliseconds) }
+function ConvertTo-ExtendedPath([string]$Path) {
+  $full = [IO.Path]::GetFullPath($Path)
+  if ($full.StartsWith('\\')) { return '\\?\UNC\' + $full.Substring(2) }
+  return '\\?\' + $full
+}
+$target = Join-Path $PSScriptRoot 'owned-long-tree'
+$nested = $target
+while ((Join-Path $nested 'session.jsonl').Length -le 265) {
+  $nested = Join-Path $nested ('claude-session-' + ('x' * 40))
+}
+$extendedTarget = ConvertTo-ExtendedPath $target
+$extendedNested = ConvertTo-ExtendedPath $nested
+$extendedFile = ConvertTo-ExtendedPath (Join-Path $nested 'session.jsonl')
+$null = [IO.Directory]::CreateDirectory($extendedNested)
+[IO.File]::WriteAllText($extendedFile, '{}', [Text.UTF8Encoding]::new($false))
+if (-not [IO.File]::Exists($extendedFile)) { throw 'Long-path fixture was not created' }
+Remove-VerifiedTempTree -Target $target
+if ([IO.Directory]::Exists($extendedTarget)) { throw 'Long-path temp tree survived cleanup' }
+`;
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${runner.slice(functionStart, functionEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'accepts successful authentication status emitted on stderr by Windows CLIs',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Invoke-NativePreflight');
+      const functionEnd = runner.indexOf('\nfunction Get-ReceiptStrings', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-auth-status-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const nodePath = process.execPath.replaceAll("'", "''");
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$script:runnerNodePath = '${nodePath}'
+Invoke-NativePreflight -FilePath $script:runnerNodePath -ArgumentList @('-e', "process.stderr.write('Logged in using ChatGPT'); process.exit(0)") -FailureMessage 'status failed'
+$rejected = $false
+try {
+  Invoke-NativePreflight -FilePath $script:runnerNodePath -ArgumentList @('-e', "process.stderr.write('Authentication failed'); process.exit(7)") -FailureMessage 'status failed'
+} catch {
+  $rejected = $_.Exception.Message -ceq 'status failed'
+}
+if (-not $rejected) { throw 'Non-zero authentication status was accepted' }
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${runner.slice(functionStart, functionEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          'powershell.exe',
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'keeps Playwright raw output in the owned temp tree without ReceiptDir',
+    () => {
+      const runner = fs.readFileSync(
+        path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+        'utf-8',
+      ).replace(/\r\n/g, '\n');
+      const functionStart = runner.indexOf('function Invoke-PlaywrightLane');
+      const functionEnd = runner.indexOf('\nfunction Invoke-VitestLane', functionStart);
+      expect(functionStart).toBeGreaterThanOrEqual(0);
+      expect(functionEnd).toBeGreaterThan(functionStart);
+      const functionSource = runner.slice(functionStart, functionEnd);
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-playwright-output-probe-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fakeRunner = path.join(probeRoot, 'fake-node.cmd');
+      const fixtureSource = String.raw`
+$ErrorActionPreference = 'Stop'
+$runRoot = Join-Path $PSScriptRoot 'owned-run'
+$null = New-Item -ItemType Directory -Path $runRoot
+$receiptRoot = $null
+$receiptStagingRoot = $null
+$rawReceiptRoot = Join-Path $runRoot 'raw-receipts'
+$script:runnerNodePath = Join-Path $PSScriptRoot 'fake-node.cmd'
+$script:playwrightCli = 'fake-playwright-cli.js'
+function Get-FreeLoopbackPort { 45678 }
+function Set-ProcessEnvironment([string]$Name, [AllowNull()][string]$Value) {}
+function Publish-SafeReceipt([string]$RawReceiptPath, [string]$SafeReceiptPath) { throw 'Unexpected receipt publisher call' }
+$laneFailed = $false
+try {
+  Invoke-PlaywrightLane -Spec 'fake.spec.ts' -DataDir (Join-Path $runRoot 'data') -ReceiptName 'hooks'
+} catch {
+  $laneFailed = $true
+}
+if (-not $laneFailed) { throw 'Failing fake Playwright runner was accepted' }
+$arguments = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'args.txt'))
+$expectedOutput = Join-Path $runRoot 'playwright-hooks'
+if (-not $arguments.Contains('--output')) { throw 'Playwright output flag was omitted without ReceiptDir' }
+if (-not $arguments.Contains($expectedOutput)) { throw 'Playwright output escaped the owned run root' }
+if ($arguments.Contains('test-results')) { throw 'Playwright default output directory remained reachable' }
+`;
+
+      try {
+        fs.writeFileSync(fakeRunner, '@echo off\r\n> "%~dp0args.txt" echo %*\r\nexit /b 1\r\n', 'utf-8');
+        fs.writeFileSync(probePath, `${functionSource}\n${fixtureSource}`, 'utf-8');
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    40_000,
+  );
+
+  it('gates the authenticated Windows external-agent task seal explicitly', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+      'utf-8',
+    );
+    const liveSpec = fs.readFileSync(
+      path.join(ROOT, 'tests', 'integration', 'external-agent-collaboration.live.test.ts'),
+      'utf-8',
+    );
+
+    expect(script).toContain('[switch]$AuthenticatedTasks');
+    expect(script).toContain(
+      'AuthenticatedTasks requires a fresh ReceiptDir for durable release evidence.',
+    );
+    expect(script).toContain("$authenticatedHostIds = @('claude-code', 'codex', 'hermes')");
+    expect(script).toContain('AuthenticatedTasks requires exactly:');
+    expect(script).toContain("'WAGGLE_LIVE_EXTERNAL_AGENTS'");
+    expect(script).toContain("'WAGGLE_LIVE_HERMES_PROVIDER'");
+    expect(script).toContain("'WAGGLE_LIVE_HERMES_MODEL'");
+    expect(script).toContain("$authenticatedHermesProfile = 'wagglee2e-' + [guid]::NewGuid().ToString('N')");
+    expect(script).toContain('hermes profile create $ProfileName --no-alias --no-skills');
+    expect(script).toContain("$authenticatedHermesRoot = Join-Path $authenticatedProfileRoot 'hermes-root'");
+    expect(script).toContain("$hermesProfilesRoot = Join-Path $authenticatedHermesRoot 'profiles'");
+    expect(script).toContain("Set-ProcessEnvironment -Name 'HERMES_HOME' -Value $authenticatedHermesRoot");
+    expect(script).not.toContain("$nativeHermesRoot = Join-Path $originalEnvironment['LOCALAPPDATA'] 'hermes'");
+    expect(script).toContain("Set-ProcessEnvironment -Name 'HERMES_PROFILE' -Value $null");
+    expect(script).toContain("Set-ProcessEnvironment -Name 'HERMES_HOME' -Value $authenticatedHermesLease.ProfileHome");
+    expect(script).toContain("$isolatedClaudeCredentials = Join-Path $authenticatedProfileRoot '.claude\\.credentials.json'");
+    expect(script).toContain("$isolatedCodexAuth = Join-Path $authenticatedProfileRoot '.codex\\auth.json'");
+    expect(script).toContain("$sourceHermesAuth = Join-Path $sourceHermesHome 'auth.json'");
+    expect(script).toContain('$isolatedHermesAuth = Join-Path (');
+    expect(script).toContain('-Destination $isolatedClaudeCredentials');
+    expect(script).toContain('-Destination $isolatedCodexAuth');
+    expect(script).toContain('-Destination $isolatedHermesAuth');
+    expect(script).toContain("Set-ProcessEnvironment -Name 'USERPROFILE' -Value $authenticatedProfileRoot");
+    expect(script).toContain("Set-ProcessEnvironment -Name 'HOME' -Value $authenticatedProfileRoot");
+    expect(script).toContain('A real external-agent authentication source changed');
+    const clearHermesProviderIndex = script.indexOf(
+      "Set-ProcessEnvironment -Name 'WAGGLE_LIVE_HERMES_PROVIDER' -Value $null",
+    );
+    const clearHermesModelIndex = script.indexOf(
+      "Set-ProcessEnvironment -Name 'WAGGLE_LIVE_HERMES_MODEL' -Value $null",
+    );
+    const authenticatedLaneIndex = script.indexOf(
+      "Invoke-VitestLane -Spec 'tests/integration/external-agent-collaboration.live.test.ts'",
+    );
+    expect(clearHermesProviderIndex).toBeGreaterThan(-1);
+    expect(clearHermesModelIndex).toBeGreaterThan(-1);
+    expect(clearHermesProviderIndex).toBeLessThan(authenticatedLaneIndex);
+    expect(clearHermesModelIndex).toBeLessThan(authenticatedLaneIndex);
+    expect(script).toContain("-HermesProvider 'openai-codex' -HermesModel 'gpt-5.5'");
+    expect(script).toContain("spec = 'tests/integration/external-agent-collaboration.live.test.ts'");
+    expect(script).toContain("hostIds = @($authenticatedHostIds)");
+    expect(script).toContain('hermes profile delete $Lease.ProfileName -y');
+    expect(script).toContain('Hermes authenticated profile cleanup failed');
+    expect(script).toContain('default: gpt-5.5');
+    expect(script).toContain('provider: openai-codex');
+    expect(script).toContain('reasoning_effort: xhigh');
+    expect(script).toContain('for ($attempt = 0; $attempt -lt 40; $attempt += 1)');
+    expect(script).not.toContain("Set-ProcessEnvironment -Name 'TEMP' -Value $authenticatedTemp");
+    expect(script).not.toContain("Set-ProcessEnvironment -Name 'TMP' -Value $authenticatedTemp");
+    expect(script).toContain(
+      "Invoke-VitestLane -Spec 'tests/integration/external-agent-collaboration.live.test.ts'",
+    );
+    expect(script).toContain("-ReceiptName 'authenticated-tasks'");
+    expect(script).toContain("'--retry=0'");
+    expect(script.indexOf("Set-ProcessEnvironment -Name 'HERMES_HOME' -Value $authenticatedHermesLease.ProfileHome"))
+      .toBeLessThan(script.indexOf(
+        "Invoke-VitestLane -Spec 'tests/integration/external-agent-collaboration.live.test.ts'",
+      ));
+    expect(liveSpec).toContain(
+      "const REQUIRED_TOOLS = ['claude-code', 'codex', 'hermes'] as const;",
+    );
+    expect(liveSpec).not.toContain('context.skip(');
+    expect(liveSpec).toContain("{ toolId: 'claude-code', workspaceIds: [sourceWorkspaceId], access: 'read-only' }");
+    expect(liveSpec).toContain("{ toolId: 'codex', workspaceIds: [sourceWorkspaceId], access: 'read-only' }");
+    expect(liveSpec).toContain("{ toolId: 'hermes', workspaceIds: [sourceWorkspaceId], access: 'native' }");
+    expect(liveSpec).toContain("{ toolId: 'hermes', workspaceIds: [synthesisWorkspaceId], access: 'native' }");
+    expect(liveSpec).toContain('workspaceDigest(sourceWorkspaceDir)');
+    expect(liveSpec).toContain('workspaceDigest(synthesisWorkspaceDir)');
+    expect(liveSpec).toContain('summary.trim(), diagnostic).toBe(expectedCanaryLine)');
+    expect(liveSpec).toContain("summary.trim(), diagnostic).toBe('NO_LOCAL_CANARY')");
+    expect(liveSpec).toContain("expect(synthesis?.executor.toolId).toBe('hermes')");
+    expect(liveSpec).not.toContain("'openclaw'");
+    expect(liveSpec).toContain("memoryRefs.status === 'complete'");
+    expect(liveSpec).toContain("new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'))");
+    expect(liveSpec).not.toContain('result: run.result');
   });
 
   it('release workflow builds packages before bundling the desktop sidecar', () => {
