@@ -170,7 +170,8 @@ MOVED (2026-04-30 monorepo migration): the memory substrate `mind/` (db/schema/
   improvement-signals/embedding-provider/*-embedder) and `harvest/` (chatgpt/claude/
   claude-code/gemini/perplexity/pdf/plaintext/markdown/url/universal adapters +
   pipeline.ts + dedup.ts) now live at **packages/hive-mind-core/src/{mind,harvest}/**,
-  NOT under packages/core/. The OSS mirror is generated from there via subtree-split (§7.5).
+  NOT under packages/core/. The OSS mirror is curated from there through a maintainer-reviewed
+  forward-port (§7.5); raw subtree branches are never publish sources.
 ```
 
 For the deep-dive on what the mind/ substrate does, see [`docs/memory-architecture.md`](docs/memory-architecture.md).
@@ -443,7 +444,7 @@ shows tagline + bestFor + wontDo. "Create Custom Persona" inline form POSTs to
 
 ---
 
-## 7.5. Memory Substrate Sync (waggle-os → hive-mind, subtree-split)
+## 7.5. Memory Substrate Sync (waggle-os → hive-mind, curated forward-port)
 
 The memory substrate lives at **`packages/hive-mind-core/src/{mind,harvest}/`** (moved from
 `packages/core/src/` in the 2026-04-30 monorepo migration). The public OSS mirror at
@@ -458,14 +459,14 @@ directly on the OSS mirror.** Parity is NOT automatic — it broke once: the cro
 (`inprocess-reranker.ts` + HybridSearch options) was written directly on `marolinik/hive-mind`
 during the LoCoMo benchmark arc and existed ONLY there, discovered by the W4 recon and
 reverse-ported in W4.2 (`f47ee8f`). Rules:
-1. Substrate changes land in `packages/hive-mind-core/` here FIRST; the mirror is regenerated
-   via subtree-split afterward.
+1. Substrate changes land in `packages/hive-mind-core/` here FIRST; the mirror is updated
+   through a reviewed, maintainer-curated forward-port afterward.
 2. Benchmark/experiment work in a `D:/Projects/hive-mind` checkout is throwaway unless
    reverse-ported here — port it the same arc, don't let it sit.
 3. Run **`scripts/oss-drift-check.sh`** (file-level diff of the mapped src trees) before every
    OSS release push and after any arc that touched a hive-mind checkout.
-4. External PRs on the OSS repo are fine — the maintainer merges them back here via
-   subtree-pull, then re-splits.
+4. External PRs on the OSS repo are fine — the maintainer intentionally ports accepted changes
+   back here first, then prepares the next curated forward-port.
 === END CRITICAL ===
 
 === CORRECTION — how the sync ACTUALLY works (2026-06-12 drift analysis) ===

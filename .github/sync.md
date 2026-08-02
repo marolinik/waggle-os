@@ -1,14 +1,13 @@
 > **⚠️ DEPRECATED (2026-04-30 monorepo migration) — HISTORICAL/AUDIT REFERENCE ONLY.**
-> This manual describes the dual-repo bidirectional-sync mechanism that ran while the
-> substrate lived in BOTH waggle-os (`packages/core/src/{mind,harvest}/`) and an external
-> `marolinik/hive-mind`. After the migration the substrate lives ONLY at
-> **`packages/hive-mind-core/src/{mind,harvest}/`**, and the OSS mirror is **generated** via
-> `git subtree split` — see [`packages/hive-mind-core/CONTRIBUTING.md`](../packages/hive-mind-core/CONTRIBUTING.md)
-> and [`scripts/oss-subtree-split.sh`](../scripts/oss-subtree-split.sh). The
-> `mind-parity-check.yml` / `sync-mind.yml` workflows referenced below are **inert deprecation
-> anchors** (their `packages/core/src/...` trigger paths no longer exist, so they never fire).
-> Everything below is retained for historical context — do NOT treat it as the active process.
-> See CLAUDE.md §7.5 for the current mechanism.
+> This manual describes the retired dual-repo bidirectional-sync mechanism. The canonical
+> substrate now lives only at **`packages/hive-mind-core/src/{mind,harvest}/`**. Its public
+> mirror has a different layout and is updated through a maintainer-curated forward-port that
+> removes excluded files and interleaved `install_audit` logic. A raw subtree split is unsafe
+> and must never be pushed; [`scripts/oss-subtree-split.sh`](../scripts/oss-subtree-split.sh)
+> is inspection-only. The workflows below are inert deprecation anchors because their old
+> `packages/core/src/...` trigger paths no longer exist. Everything after this banner is
+> historical and must not be treated as current instructions. See AGENTS.md §7.5 and
+> [`packages/hive-mind-core/CONTRIBUTING.md`](../packages/hive-mind-core/CONTRIBUTING.md).
 
 ---
 
