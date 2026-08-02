@@ -1,5 +1,10 @@
 # @waggle/hive-mind-hooks-openclaw
 
+> **Roadmap-only in the current Waggle Windows Solo release.** This package is
+> retained for development and future qualification. The production manifest
+> does not expose OpenClaw launch, hook installation, Fleet/task dispatch, or
+> direct agent runs. The implementation notes below do not override that gate.
+
 Silent-capture shim that wires **OpenClaw** (`openclaw/openclaw`) gateway
 lifecycle hooks into [hive-mind](https://github.com/marolinik/hive-mind)
 frames. Every OpenClaw conversation deterministically captures

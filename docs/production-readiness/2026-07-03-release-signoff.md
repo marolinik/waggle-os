@@ -1,5 +1,11 @@
 # Waggle OS — Production Readiness Sign-off (2026-07-03)
 
+> **Historical snapshot — superseded.** This document preserves the 2026-07-03
+> assessment but is not current ship authority. Its “production-ready” and
+> signing-only conclusions no longer apply. Use
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the active
+> Windows Solo gate and its exact-HEAD evidence requirements.
+
 > Engineering-director pass driven by a 10-lane parallel audit, executed as prioritized remediation streams (Opus implementation agents, Fable orchestration/QA). Companion to [`2026-07-03-release-audit.md`](./2026-07-03-release-audit.md).
 
 ## Session commit ledger (17 commits on `main`, from baseline `a1fad4f8`)
