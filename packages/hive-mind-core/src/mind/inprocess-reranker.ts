@@ -77,7 +77,7 @@ export async function createInProcessReranker(
       text_pair: doc,
       padding: true,
       truncation: true,
-      return_tensors: 'pt',
+      return_tensor: true,
     });
     const out = await seqModel(inputs);
     // ms-marco-MiniLM outputs a single logit per pair (1-class regression).
@@ -105,7 +105,7 @@ export async function createInProcessReranker(
         text_pair: docs,
         padding: true,
         truncation: true,
-        return_tensors: 'pt',
+        return_tensor: true,
       });
       const out = await seqModel(inputs);
       const logits = out.logits ?? out[0];
