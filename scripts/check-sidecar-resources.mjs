@@ -29,6 +29,7 @@ const bundledNpmRuntimeDir = path.join(stagedDepsDir, 'waggle-node-runtime');
 const bundledNpmBinDir = path.join(bundledNpmRuntimeDir, 'bin');
 const bundledNpmPackageDir = path.join(bundledNpmRuntimeDir, 'node_modules', 'npm');
 const targetArch = process.env.TARGET_ARCH || process.arch;
+const SIDECAR_PROVENANCE_PREFIX = '// Waggle-Sidecar-Provenance: ';
 const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
 const FIRST_PARTY_RUNTIME_ENTRY_PATTERN = /^(?:dist|package\.json|licen[cs]e(?:\.(?:md|txt))?|notice(?:\.(?:md|txt))?)$/i;
 const MANUAL_FIRST_PARTY_RUNTIME_TARGETS = new Map([
@@ -65,6 +66,119 @@ function resourceRelative(file) {
 
 function sha256File(file) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function parseSidecarProvenance(serviceBuffer) {
+  const newlineIndex = serviceBuffer.indexOf(0x0a);
+  if (newlineIndex < 0) {
+    throw new Error('resources/service.js is missing embedded provenance');
+  }
+  const firstLine = serviceBuffer.subarray(0, newlineIndex).toString('utf8');
+  if (!firstLine.startsWith(SIDECAR_PROVENANCE_PREFIX)) {
+    throw new Error('resources/service.js is missing embedded provenance');
+  }
+  const encoded = firstLine.slice(SIDECAR_PROVENANCE_PREFIX.length);
+  if (
+    encoded.length === 0
+    || encoded.length % 4 !== 0
+    || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)
+  ) {
+    throw new Error('resources/service.js embedded provenance is not canonical base64');
+  }
+  const decoded = Buffer.from(encoded, 'base64');
+  if (decoded.toString('base64') !== encoded) {
+    throw new Error('resources/service.js embedded provenance is not canonical base64');
+  }
+
+  let provenance;
+  try {
+    provenance = JSON.parse(decoded.toString('utf8'));
+  } catch {
+    throw new Error('resources/service.js embedded provenance is not valid JSON');
+  }
+  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) {
+    throw new Error('resources/service.js embedded provenance must be an object');
+  }
+  if (provenance.schemaVersion !== 1) {
+    throw new Error('resources/service.js embedded provenance schemaVersion must be 1');
+  }
+  if (!/^[0-9a-f]{40}$/.test(provenance.sourceRevision)) {
+    throw new Error('resources/service.js embedded provenance sourceRevision is invalid');
+  }
+  if (provenance.entryPoint !== 'packages/server/src/local/service.ts') {
+    throw new Error('resources/service.js embedded provenance entryPoint is invalid');
+  }
+  if (!Array.isArray(provenance.sourceInputs) || provenance.sourceInputs.length === 0) {
+    throw new Error('resources/service.js embedded provenance sourceInputs are missing');
+  }
+
+  const requiredInputs = new Set([
+    'package-lock.json',
+    'package.json',
+    'packages/server/src/local/service.ts',
+    'scripts/build-sidecar.mjs',
+  ]);
+  let previousPath = null;
+  for (const input of provenance.sourceInputs) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('resources/service.js embedded provenance source input is invalid');
+    }
+    const relative = input.path;
+    if (
+      typeof relative !== 'string'
+      || relative.length === 0
+      || relative.includes('\\')
+      || relative.includes('\0')
+      || path.posix.isAbsolute(relative)
+      || relative.split('/').some((part) => part === '' || part === '.' || part === '..')
+      || relative.split('/').includes('node_modules')
+    ) {
+      throw new Error('resources/service.js embedded provenance source input path is unsafe');
+    }
+    if (previousPath !== null && previousPath >= relative) {
+      throw new Error('resources/service.js embedded provenance source inputs are not unique and sorted');
+    }
+    if (!/^[0-9a-f]{64}$/.test(input.sha256)) {
+      throw new Error('resources/service.js embedded provenance source input hash is invalid');
+    }
+    previousPath = relative;
+    requiredInputs.delete(relative);
+  }
+  if (requiredInputs.size > 0) {
+    throw new Error('resources/service.js embedded provenance omits required source inputs');
+  }
+
+  const payload = serviceBuffer.subarray(newlineIndex + 1);
+  if (
+    !provenance.bundlePayload
+    || typeof provenance.bundlePayload !== 'object'
+    || !Number.isSafeInteger(provenance.bundlePayload.sizeBytes)
+    || provenance.bundlePayload.sizeBytes < 1
+    || !/^[0-9a-f]{64}$/.test(provenance.bundlePayload.sha256)
+    || provenance.bundlePayload.sizeBytes !== payload.byteLength
+    || provenance.bundlePayload.sha256 !== createHash('sha256').update(payload).digest('hex')
+  ) {
+    throw new Error('resources/service.js payload does not match embedded provenance');
+  }
+
+  return provenance;
+}
+
+function expectedSourceRevision() {
+  const index = process.argv.indexOf('--expected-source-revision');
+  const supplied = index >= 0 ? process.argv[index + 1] : null;
+  if (index >= 0 && !supplied) {
+    throw new Error('--expected-source-revision requires a 40-character revision');
+  }
+  const revision = supplied ?? execFileSync(
+    'git',
+    ['-C', root, 'rev-parse', 'HEAD'],
+    { encoding: 'utf8', windowsHide: true },
+  ).trim();
+  if (!/^[0-9a-f]{40}$/.test(revision)) {
+    throw new Error('expected source revision must be exactly 40 lowercase hexadecimal characters');
+  }
+  return revision;
 }
 
 function readManifest(packageDir) {
@@ -273,9 +387,38 @@ const servicePath = path.join(resourcesDir, 'service.js');
 if (!fs.existsSync(servicePath)) {
   missing.push('resources/service.js (run: node scripts/build-sidecar.mjs)');
 } else {
-  const service = fs.readFileSync(servicePath, 'utf8');
+  const serviceBuffer = fs.readFileSync(servicePath);
+  const service = serviceBuffer.toString('utf8');
   if (/(?:\/\/|\/\*)[#@]\s*sourceMappingURL\s*=/.test(service)) {
     unsafe.push('resources/service.js contains a sourceMappingURL directive');
+  }
+  try {
+    const provenance = parseSidecarProvenance(serviceBuffer);
+    const expectedRevision = expectedSourceRevision();
+    if (provenance.sourceRevision !== expectedRevision) {
+      throw new Error('resources/service.js source revision does not match expected revision');
+    }
+    for (const input of provenance.sourceInputs) {
+      const absolute = path.join(root, ...input.path.split('/'));
+      let sourceSafe = false;
+      if (fs.existsSync(absolute)) {
+        const stat = fs.lstatSync(absolute);
+        const relative = path.relative(root, absolute);
+        sourceSafe = stat.isFile()
+          && !stat.isSymbolicLink()
+          && relative !== ''
+          && !relative.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relative)
+          && sha256File(absolute) === input.sha256;
+      }
+      if (!sourceSafe) {
+        throw new Error(
+          `resources/service.js source input hash does not match current source: ${input.path}`,
+        );
+      }
+    }
+  } catch (err) {
+    unsafe.push(err instanceof Error ? err.message : String(err));
   }
 }
 

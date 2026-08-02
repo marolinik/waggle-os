@@ -301,7 +301,8 @@ function Assert-ManagedModelAndMemoryEvidence {
 function Assert-ReceiptSourceHashes {
   param(
     [object[]]$Receipts,
-    [System.IO.FileInfo]$Installer
+    [System.IO.FileInfo]$Installer,
+    [string]$SourceRevision
   )
 
   $currentCertifierHash = (
@@ -326,6 +327,62 @@ function Assert-ReceiptSourceHashes {
     Get-FileHash -LiteralPath $generatedInstallerScripts[0].FullName `
       -Algorithm SHA256
   ).Hash
+  $currentSidecarPath = 'app/src-tauri/resources/service.js'
+  if (-not (Test-Path -LiteralPath $currentSidecarPath -PathType Leaf)) {
+    throw 'Current source-bound sidecar bundle is missing during publication'
+  }
+  $currentSidecarBytes = [System.IO.File]::ReadAllBytes(
+    (Get-Item -LiteralPath $currentSidecarPath).FullName
+  )
+  $sidecarNewlineIndex = [Array]::IndexOf($currentSidecarBytes, [byte]10)
+  if ($sidecarNewlineIndex -le 0) {
+    throw 'Current sidecar bundle is missing embedded provenance'
+  }
+  $sidecarFirstLine = [System.Text.Encoding]::UTF8.GetString(
+    $currentSidecarBytes,
+    0,
+    $sidecarNewlineIndex
+  )
+  $sidecarPrefix = '// Waggle-Sidecar-Provenance: '
+  if (-not $sidecarFirstLine.StartsWith($sidecarPrefix, [System.StringComparison]::Ordinal)) {
+    throw 'Current sidecar bundle is missing embedded provenance'
+  }
+  $sidecarEncodedProvenance = $sidecarFirstLine.Substring($sidecarPrefix.Length)
+  try {
+    $sidecarProvenanceBytes = [Convert]::FromBase64String($sidecarEncodedProvenance)
+    if (-not [string]::Equals(
+      [Convert]::ToBase64String($sidecarProvenanceBytes),
+      $sidecarEncodedProvenance,
+      [System.StringComparison]::Ordinal
+    )) {
+      throw 'non-canonical provenance'
+    }
+    $sidecarManifest = [System.Text.Encoding]::UTF8.GetString($sidecarProvenanceBytes) |
+      ConvertFrom-Json
+  } catch {
+    throw 'Current sidecar bundle has invalid embedded provenance'
+  }
+  if (-not [string]::Equals(
+    [string]$sidecarManifest.sourceRevision,
+    $SourceRevision,
+    [System.StringComparison]::Ordinal
+  ) -or @($sidecarManifest.sourceInputs).Count -lt 4) {
+    throw 'Current sidecar provenance does not bind the publication source revision'
+  }
+  $sidecarProvenanceHasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $currentSidecarProvenanceHash = (
+      [System.BitConverter]::ToString(
+        $sidecarProvenanceHasher.ComputeHash($sidecarProvenanceBytes)
+      )
+    ).Replace('-', '')
+  } finally {
+    $sidecarProvenanceHasher.Dispose()
+  }
+  $currentSidecarHash = (
+    Get-FileHash -LiteralPath $currentSidecarPath -Algorithm SHA256
+  ).Hash
+  $currentSidecarSourceInputCount = @($sidecarManifest.sourceInputs).Count
 
   foreach ($certificateData in $Receipts) {
     if (-not [string]::Equals(
@@ -342,7 +399,25 @@ function Assert-ReceiptSourceHashes {
           $currentGeneratedInstallerHash,
           [string]$certificateData.evidence.generatedInstallerScriptSha256,
           [System.StringComparison]::OrdinalIgnoreCase
-        )) {
+        ) -or
+        -not [string]::Equals(
+          $currentSidecarHash,
+          [string]$certificateData.evidence.sidecarBundleSha256,
+          [System.StringComparison]::OrdinalIgnoreCase
+        ) -or
+        -not [string]::Equals(
+          $currentSidecarProvenanceHash,
+          [string]$certificateData.evidence.sidecarProvenanceSha256,
+          [System.StringComparison]::OrdinalIgnoreCase
+        ) -or
+        -not [string]::Equals(
+          $SourceRevision,
+          [string]$certificateData.evidence.sidecarSourceRevision,
+          [System.StringComparison]::Ordinal
+        ) -or
+        [int]$certificateData.evidence.sidecarSourceInputCount -ne
+          $currentSidecarSourceInputCount
+      ) {
       throw 'Lifecycle receipt source hashes do not match the release checkout'
     }
   }
@@ -522,7 +597,8 @@ Assert-ManagedModelAndMemoryEvidence `
   'Clean-install receipt'
 
 $cleanRequiredChecks = @(
-  'sourceRevision', 'sourceFilesClean', 'generatedInstallerInclude',
+  'sourceRevision', 'sourceFilesClean', 'sidecarSourceProvenance',
+  'generatedInstallerInclude',
   'profileDataDeletionAbsent', 'baseAppDataDeletionNeutralized',
   'authenticodeSignature', 'authenticodeSigner', 'authenticodeTimestamp',
   'installedAppAuthenticodeSignature', 'installedAppAuthenticodeSigner',
@@ -670,7 +746,8 @@ if ($Mode -ceq 'bootstrap') {
   }
 
   $upgradeRequiredChecks = @(
-    'sourceRevision', 'sourceFilesClean', 'generatedInstallerInclude',
+    'sourceRevision', 'sourceFilesClean', 'sidecarSourceProvenance',
+    'generatedInstallerInclude',
     'profileDataDeletionAbsent', 'baseAppDataDeletionNeutralized',
     'authenticodeSignature', 'authenticodeSigner', 'authenticodeTimestamp',
     'installedAppAuthenticodeSignature', 'installedAppAuthenticodeSigner',
@@ -719,7 +796,7 @@ if ($nonPassingChecks.Count -gt 0) {
 
 $releaseAssetManifest = @(New-ReleaseAssetManifest $releaseAssets)
 Assert-LocalReleaseAssetsUnchanged $releaseAssetManifest
-Assert-ReceiptSourceHashes $receiptDataSet $installer
+Assert-ReceiptSourceHashes $receiptDataSet $installer $sourceRevision
 Assert-PublicationTagBindings $Mode $tag $sourceRevision
 Assert-ReleaseDoesNotExist $tag
 

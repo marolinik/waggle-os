@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -313,6 +314,116 @@ describe('Tauri Production Configuration', () => {
       'utf-8',
     );
     expect(serverIndex).toContain("path.resolve(__dirname, 'marketplace.db')");
+  });
+
+  it('build-sidecar provenance follows transitive tsconfig inheritance', () => {
+    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-sidecar-tsconfig-'));
+    const writeRelative = (relative: string, content: string | Buffer) => {
+      const target = path.join(fixtureRoot, ...relative.split('/'));
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, content);
+      return target;
+    };
+    const run = (command: string, args: string[]) => {
+      const result = spawnSync(command, args, {
+        cwd: fixtureRoot,
+        env: {
+          ...process.env,
+          TEMP: fixtureRoot,
+          TMP: fixtureRoot,
+          TMPDIR: fixtureRoot,
+        },
+        encoding: 'utf8',
+        timeout: 60_000,
+        windowsHide: true,
+      });
+      expect(result.status, result.stderr || result.stdout).toBe(0);
+      return result;
+    };
+
+    try {
+      fs.mkdirSync(path.join(fixtureRoot, 'scripts'), { recursive: true });
+      fs.copyFileSync(
+        path.join(ROOT, 'scripts', 'build-sidecar.mjs'),
+        path.join(fixtureRoot, 'scripts', 'build-sidecar.mjs'),
+      );
+      const trackedFiles = new Map<string, string>([
+        ['package-lock.json', '{"lockfileVersion":3}\n'],
+        ['package.json', '{"name":"sidecar-tsconfig-fixture","private":true}\n'],
+        ['packages/marketplace/marketplace.db', 'fixture database'],
+        ['packages/server/package.json', '{"name":"@waggle/server"}\n'],
+        ['packages/server/src/local/service.ts', 'export const fixture = true;\n'],
+        ['packages/server/tsconfig.json', '{"extends":"../../tsconfig.base"}\n'],
+        ['tsconfig.base.json', '{"extends":["./tsconfig.shared"]}\n'],
+        ['tsconfig.shared.json', '{"compilerOptions":{"target":"ES2022"}}\n'],
+      ]);
+      for (const [relative, content] of trackedFiles) writeRelative(relative, content);
+      writeRelative(
+        'node_modules/esbuild/package.json',
+        JSON.stringify({ name: 'esbuild', version: '0.0.0', type: 'module', exports: './index.js' }),
+      );
+      writeRelative(
+        'node_modules/esbuild/index.js',
+        [
+          "import fs from 'node:fs';",
+          "import path from 'node:path';",
+          'export async function build(options) {',
+          '  fs.mkdirSync(path.dirname(options.outfile), { recursive: true });',
+          "  fs.writeFileSync(options.outfile, 'fixture bundle\\n');",
+          '  return {',
+          '    errors: [],',
+          '    warnings: [],',
+          "    metafile: { inputs: { 'packages/server/src/local/service.ts': { bytes: 29, imports: [] } } },",
+          '  };',
+          '}',
+          '',
+        ].join('\n'),
+      );
+      writeRelative(
+        'node_modules/typescript/package.json',
+        JSON.stringify({ name: 'typescript', version: '0.0.0', type: 'module', exports: './index.js' }),
+      );
+      writeRelative(
+        'node_modules/typescript/index.js',
+        [
+          'export default {',
+          '  parseConfigFileTextToJson(_file, text) {',
+          '    try { return { config: JSON.parse(text) }; }',
+          '    catch (error) { return { error }; }',
+          '  },',
+          '};',
+          '',
+        ].join('\n'),
+      );
+
+      run('git', ['init']);
+      run('git', ['config', 'user.email', 'sidecar-tsconfig@waggle.invalid']);
+      run('git', ['config', 'user.name', 'Waggle Fixture']);
+      run('git', ['add', '--', 'scripts/build-sidecar.mjs', ...trackedFiles.keys()]);
+      run('git', ['commit', '-m', 'fixture']);
+      run(process.execPath, ['scripts/build-sidecar.mjs']);
+
+      const service = fs.readFileSync(
+        path.join(fixtureRoot, 'app', 'src-tauri', 'resources', 'service.js'),
+      );
+      const lineEnd = service.indexOf(0x0a);
+      const prefix = '// Waggle-Sidecar-Provenance: ';
+      const firstLine = service.subarray(0, lineEnd).toString('utf8');
+      expect(firstLine.startsWith(prefix)).toBe(true);
+      const manifest = JSON.parse(
+        Buffer.from(firstLine.slice(prefix.length), 'base64').toString('utf8'),
+      ) as { sourceInputs: Array<{ path: string }> };
+      const sourcePaths = manifest.sourceInputs.map((input) => input.path);
+      expect(sourcePaths).toEqual(
+        expect.arrayContaining([
+          'packages/server/tsconfig.json',
+          'tsconfig.base.json',
+          'tsconfig.shared.json',
+        ]),
+      );
+    } finally {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it('D12: the bundled sidecar is generated at build time, never tracked', () => {
@@ -685,7 +796,45 @@ describe('Tauri Production Configuration', () => {
         // A hardlink shares the running Vitest executable's Windows image lock,
         // so fixture cleanup cannot delete it until the parent test process exits.
         fs.copyFileSync(process.execPath, fixtureNode);
-        writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
+      const fixtureSourceRevision = 'a'.repeat(40);
+      const fixtureSourceContents = new Map<string, string>([
+        ['package-lock.json', '{"lockfileVersion":3}\n'],
+        ['package.json', '{"name":"waggle-sidecar-fixture"}\n'],
+        ['packages/server/package.json', '{"name":"@waggle/server"}\n'],
+        ['packages/server/src/local/service.ts', 'export const fixture = true;\n'],
+        ['packages/server/tsconfig.json', '{"extends":"../../tsconfig.base.json"}\n'],
+        ['scripts/build-sidecar.mjs', 'export {};\n'],
+        ['tsconfig.base.json', '{"compilerOptions":{"target":"ES2022"}}\n'],
+      ]);
+      for (const [relative, content] of fixtureSourceContents) {
+        writeFixtureFile(fixtureRoot, relative, content);
+      }
+      const fixtureSourceInputs = [...fixtureSourceContents.entries()]
+        .map(([relative, content]) => ({
+          path: relative,
+          sha256: createHash('sha256').update(content).digest('hex'),
+        }))
+        .sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+      const fixtureServicePayload = Buffer.from('console.log("sidecar");\n', 'utf8');
+      const fixtureServiceProvenance = {
+        schemaVersion: 1,
+        sourceRevision: fixtureSourceRevision,
+        entryPoint: 'packages/server/src/local/service.ts',
+        sourceInputs: fixtureSourceInputs,
+        bundlePayload: {
+          sizeBytes: fixtureServicePayload.byteLength,
+          sha256: createHash('sha256').update(fixtureServicePayload).digest('hex'),
+        },
+      };
+      const certifiedFixtureService = Buffer.concat([
+        Buffer.from(
+          `// Waggle-Sidecar-Provenance: ${Buffer.from(JSON.stringify(fixtureServiceProvenance)).toString('base64')}\n`,
+          'utf8',
+        ),
+        fixtureServicePayload,
+      ]);
+      const fixtureServicePath = path.join(fixtureResources, 'service.js');
+      fs.writeFileSync(fixtureServicePath, certifiedFixtureService);
         const fixtureMarketplaceSource = path.join(
           fixtureRoot,
           'packages',
@@ -917,16 +1066,26 @@ describe('Tauri Production Configuration', () => {
         writeCoreManifest('dist/index.js');
 
         const runChecker = (
-          { withImageRuntime = false }: { withImageRuntime?: boolean } = {},
+          {
+            withImageRuntime = false,
+            expectedSourceRevision = fixtureSourceRevision,
+          }: {
+            withImageRuntime?: boolean;
+            expectedSourceRevision?: string;
+          } = {},
         ) => {
           const hiddenBinding = `${stagedSharpBinding}.fixture-disabled`;
           if (!withImageRuntime) fs.renameSync(stagedSharpBinding, hiddenBinding);
           try {
-            const result = spawnSync(process.execPath, [fixtureChecker], {
+            const result = spawnSync(
+              process.execPath,
+              [fixtureChecker, '--expected-source-revision', expectedSourceRevision],
+              {
               encoding: 'utf-8',
               timeout: 60_000,
               windowsHide: true,
-            });
+              },
+            );
             if (result.error) throw result.error;
             return result;
           } finally {
@@ -941,6 +1100,56 @@ describe('Tauri Production Configuration', () => {
           baselineResult.stderr || baselineResult.stdout,
         ).toBe(0);
         expect(fs.readFileSync(fixtureMarketplaceResource)).toEqual(fixtureMarketplaceBeforeProbe);
+
+        fs.appendFileSync(fixtureServicePath, '// stale payload\n');
+        const staleServiceResult = runChecker({ withImageRuntime: true });
+        expect(staleServiceResult.status).toBe(1);
+        expect(staleServiceResult.stderr).toContain(
+          'resources/service.js payload does not match embedded provenance',
+        );
+        fs.writeFileSync(fixtureServicePath, certifiedFixtureService);
+
+        const fixtureEntryPoint = path.join(
+          fixtureRoot,
+          'packages',
+          'server',
+          'src',
+          'local',
+          'service.ts',
+        );
+        fs.appendFileSync(fixtureEntryPoint, '// stale source\n');
+        const staleSourceResult = runChecker({ withImageRuntime: true });
+        expect(staleSourceResult.status).toBe(1);
+        expect(staleSourceResult.stderr).toContain(
+          'resources/service.js source input hash does not match current source',
+        );
+        fs.writeFileSync(
+          fixtureEntryPoint,
+          fixtureSourceContents.get('packages/server/src/local/service.ts')!,
+          'utf8',
+        );
+
+        const fixtureTsconfig = path.join(fixtureRoot, 'packages', 'server', 'tsconfig.json');
+        fs.appendFileSync(fixtureTsconfig, '// stale transform config\n');
+        const staleConfigResult = runChecker({ withImageRuntime: true });
+        expect(staleConfigResult.status).toBe(1);
+        expect(staleConfigResult.stderr).toContain(
+          'resources/service.js source input hash does not match current source',
+        );
+        fs.writeFileSync(
+          fixtureTsconfig,
+          fixtureSourceContents.get('packages/server/tsconfig.json')!,
+          'utf8',
+        );
+
+        const staleRevisionResult = runChecker({
+          withImageRuntime: true,
+          expectedSourceRevision: 'b'.repeat(40),
+        });
+        expect(staleRevisionResult.status).toBe(1);
+        expect(staleRevisionResult.stderr).toContain(
+          'resources/service.js source revision does not match expected revision',
+        );
         for (const target of [
           {
             path: fixtureMarketplaceResource,
@@ -2197,8 +2406,13 @@ Expect-Rejection {
         expect(handoffStep).toContain(
           'run: ./scripts/publish-windows-release.ps1 -Mode upgrade',
         );
-        expect(publisher).toContain('Get-FileHash');
-        expect(publisher).toContain('receiptData.installer.sha256');
+    expect(publisher).toContain('Get-FileHash');
+    expect(publisher).toContain('receiptData.installer.sha256');
+    expect(publisher).toContain('Assert-ReceiptSourceHashes $receiptDataSet $installer $sourceRevision');
+    expect(publisher).toContain('evidence.sidecarBundleSha256');
+    expect(publisher).toContain('evidence.sidecarProvenanceSha256');
+    expect(publisher).toContain('evidence.sidecarSourceRevision');
+    expect([...publisher.matchAll(/'sidecarSourceProvenance'/g)]).toHaveLength(2);
         expect(workflow).not.toContain('workflow_dispatch:');
         expect(windowsSteps).toContain('environment: production-windows-signing');
         expect(windowsSteps).toContain('Validate release tag and app version');
@@ -2588,6 +2802,12 @@ Expect-Rejection {
     expect(script).toContain('RequireAuthenticodeSignature');
     expect(script).toContain('ExpectedSignerThumbprint');
     expect(script).toContain('ExpectedSourceRevision');
+    expect(script).toContain('function Get-SidecarProvenance');
+    expect(script).toContain('Packaged resources/service.js does not match a clean sidecar rebuild.');
+    expect(script).toContain("$receipt.checks['sidecarSourceProvenance']");
+    expect(script).toContain('$receipt.evidence.sidecarBundleSha256');
+    expect(script).toContain('$receipt.evidence.sidecarProvenanceSha256');
+    expect(script).toContain('$receipt.evidence.sidecarSourceInputCount');
     expect(script).toContain('RequireVersionToVersionUpgrade');
     expect(script).toContain('PreviousInstallerPath');
     expect(script).toContain('ExpectedPreviousInstallerSha256');
@@ -4264,6 +4484,275 @@ Expect-Rejection { Assert-PassingWindowsCertificateCheck $missingCheck 'proof' '
         fs.rmSync(probeRoot, { recursive: true, force: true });
       }
     },
+  );
+  it.runIf(process.platform === 'win32')(
+    'executes sidecar source installed-bundle and publication provenance gates',
+    () => {
+      const certifier = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'), 'utf8')
+        .replace(/\r\n/g, '\n');
+      const publisher = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'publish-windows-release.ps1'), 'utf8')
+        .replace(/\r\n/g, '\n');
+      const sliceFunctions = (source: string, start: string, end: string) => {
+        const startIndex = source.indexOf(start);
+        const endIndex = source.indexOf(end, startIndex + start.length);
+        expect(startIndex).toBeGreaterThanOrEqual(0);
+        expect(endIndex).toBeGreaterThan(startIndex);
+        return source.slice(startIndex, endIndex);
+      };
+      const assertTrue = sliceFunctions(
+        certifier,
+        'function Assert-True {',
+        '\nfunction Get-HttpStatusCode {',
+      );
+      const sidecarHelpers = sliceFunctions(
+        certifier,
+        'function Get-SidecarProvenance {',
+        '\nfunction Get-ExternalProfileRootSnapshot {',
+      );
+      const publisherHelper = sliceFunctions(
+        publisher,
+        'function Assert-ReceiptSourceHashes {',
+        '\nfunction Assert-ReleaseDoesNotExist {',
+      );
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-sidecar-binding-'));
+      const sourceContents = new Map<string, string>([
+        ['package-lock.json', '{"lockfileVersion":3}\n'],
+        ['package.json', '{"name":"binding-fixture"}\n'],
+        ['packages/server/package.json', '{"name":"@waggle/server"}\n'],
+        ['packages/server/src/local/service.ts', 'export const fixture = true;\n'],
+        ['packages/server/tsconfig.json', '{"extends":"../../tsconfig.base.json"}\n'],
+        ['scripts/build-sidecar.mjs', 'export {};\n'],
+        ['tsconfig.base.json', '{"compilerOptions":{"target":"ES2022"}}\n'],
+      ]);
+      const writeRelative = (relative: string, content: string | Buffer) => {
+        const target = path.join(fixtureRoot, ...relative.split('/'));
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, content);
+        return target;
+      };
+      const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
+      const inputs = () => [...sourceContents.keys()]
+        .sort((left, right) => left < right ? -1 : left > right ? 1 : 0)
+        .map((relative) => ({
+          path: relative,
+          sha256: hash(fs.readFileSync(path.join(fixtureRoot, ...relative.split('/')))),
+        }));
+      const serviceBytes = (revision: string, payload: string) => {
+        const payloadBytes = Buffer.from(payload, 'utf8');
+        const manifest = {
+          schemaVersion: 1,
+          sourceRevision: revision,
+          entryPoint: 'packages/server/src/local/service.ts',
+          sourceInputs: inputs(),
+          bundlePayload: { sizeBytes: payloadBytes.byteLength, sha256: hash(payloadBytes) },
+        };
+        return Buffer.concat([
+          Buffer.from(
+            `// Waggle-Sidecar-Provenance: ${Buffer.from(JSON.stringify(manifest)).toString('base64')}\n`,
+            'utf8',
+          ),
+          payloadBytes,
+        ]);
+      };
+      const run = (command: string, args: string[], cwd = fixtureRoot) => {
+        const result = spawnSync(command, args, {
+          cwd,
+          encoding: 'utf8',
+          timeout: 60_000,
+          windowsHide: true,
+        });
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+        return result;
+      };
+
+      try {
+        for (const [relative, content] of sourceContents) writeRelative(relative, content);
+        run('git', ['init']);
+        run('git', ['config', 'user.email', 'sidecar-fixture@waggle.invalid']);
+        run('git', ['config', 'user.name', 'Waggle Fixture']);
+        run('git', ['add', '--', ...sourceContents.keys()]);
+        run('git', ['commit', '-m', 'fixture']);
+        const revision = run('git', ['rev-parse', 'HEAD']).stdout.trim();
+        const packagedPath = writeRelative('packaged-service.js', serviceBytes(revision, 'ok\n'));
+        const installedPath = writeRelative('installed-service.js', serviceBytes(revision, 'ok\n'));
+        const changedBundlePath = writeRelative(
+          'changed-bundle.js',
+          serviceBytes(revision, 'changed\n'),
+        );
+        const wrongRevisionPath = writeRelative(
+          'wrong-revision.js',
+          serviceBytes('b'.repeat(40), 'ok\n'),
+        );
+        const tamperedPath = writeRelative(
+          'tampered-service.js',
+          Buffer.concat([serviceBytes(revision, 'ok\n'), Buffer.from('tampered\n')]),
+        );
+        const probePath = writeRelative(
+          'sidecar-probe.ps1',
+          `${String.raw`param(
+  [string]$Mode,
+  [string]$RepositoryRoot,
+  [string]$ExpectedRevision,
+  [string]$PackagedPath,
+  [string]$InstalledPath,
+  [string]$ChangedBundlePath,
+  [string]$WrongRevisionPath,
+  [string]$TamperedPath
+)
+`}${assertTrue}\n${sidecarHelpers}\n${String.raw`
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+$git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+if ($Mode -eq 'clean') {
+  $packaged = Get-SidecarProvenance $PackagedPath
+  $installed = Get-SidecarProvenance $InstalledPath
+  Assert-SidecarBundleBinding -Packaged $packaged -Installed $installed
+  Assert-SidecarSourceBinding -Provenance $packaged -RepositoryRoot $RepositoryRoot -ExpectedRevision $ExpectedRevision -GitExecutable $git
+} elseif ($Mode -eq 'bundle-rejections') {
+  $packaged = Get-SidecarProvenance $PackagedPath
+  $changed = Get-SidecarProvenance $ChangedBundlePath
+  $wrongRevision = Get-SidecarProvenance $WrongRevisionPath
+  Expect-Rejection { Assert-SidecarBundleBinding -Packaged $packaged -Installed $changed } 'Changed bundle'
+  Expect-Rejection { Assert-SidecarBundleBinding -Packaged $packaged -Installed $wrongRevision } 'Changed provenance revision'
+  $wrongCount = Get-SidecarProvenance $InstalledPath
+  $wrongCount.sourceInputCount = [int]$wrongCount.sourceInputCount + 1
+  Expect-Rejection { Assert-SidecarBundleBinding -Packaged $packaged -Installed $wrongCount } 'Changed input count'
+  Expect-Rejection { Get-SidecarProvenance $TamperedPath | Out-Null } 'Tampered payload'
+} elseif ($Mode -eq 'source-rejection') {
+  $provenance = Get-SidecarProvenance $PackagedPath
+  Expect-Rejection { Assert-SidecarSourceBinding -Provenance $provenance -RepositoryRoot $RepositoryRoot -ExpectedRevision $ExpectedRevision -GitExecutable $git } 'Dirty or wrong-revision source'
+} else {
+  throw 'Unknown probe mode'
+}
+`}`,
+          'utf8',
+        );
+        const powershell = powershellProbeExecutable();
+        const probe = (mode: string, sourcePath = packagedPath) => run(
+          powershell,
+          [
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath,
+            '-Mode', mode,
+            '-RepositoryRoot', fixtureRoot,
+            '-ExpectedRevision', revision,
+            '-PackagedPath', sourcePath,
+            '-InstalledPath', installedPath,
+            '-ChangedBundlePath', changedBundlePath,
+            '-WrongRevisionPath', wrongRevisionPath,
+            '-TamperedPath', tamperedPath,
+          ],
+        );
+        probe('clean');
+        probe('bundle-rejections');
+
+        const configRelative = 'packages/server/tsconfig.json';
+        fs.appendFileSync(
+          path.join(fixtureRoot, ...configRelative.split('/')),
+          '// dirty transform config\n',
+        );
+        const dirtyServicePath = writeRelative(
+          'dirty-source-service.js',
+          serviceBytes(revision, 'ok\n'),
+        );
+        probe('source-rejection', dirtyServicePath);
+        probe('source-rejection', wrongRevisionPath);
+
+        const releaseInstaller = writeRelative(
+          'target/release/bundle/nsis/Waggle.exe',
+          'installer',
+        );
+        const generatedInstaller = writeRelative(
+          'target/release/nsis/installer.nsi',
+          'generated installer',
+        );
+        const certifierFixture = writeRelative(
+          'scripts/certify-windows-installer.ps1',
+          'certifier',
+        );
+        const hookFixture = writeRelative('app/src-tauri/nsis/installer.nsi', 'hook');
+        const currentSidecar = writeRelative(
+          'app/src-tauri/resources/service.js',
+          serviceBytes(revision, 'ok\n'),
+        );
+        const firstLine = fs.readFileSync(currentSidecar).subarray(
+          0,
+          fs.readFileSync(currentSidecar).indexOf(0x0a),
+        ).toString('utf8');
+        const provenanceBytes = Buffer.from(
+          firstLine.slice('// Waggle-Sidecar-Provenance: '.length),
+          'base64',
+        );
+        const receiptPath = writeRelative(
+          'receipt.json',
+          JSON.stringify({
+            evidence: {
+              certifierSha256: hash(fs.readFileSync(certifierFixture)),
+              installerHookSha256: hash(fs.readFileSync(hookFixture)),
+              generatedInstallerScriptSha256: hash(fs.readFileSync(generatedInstaller)),
+              sidecarBundleSha256: hash(fs.readFileSync(currentSidecar)),
+              sidecarProvenanceSha256: hash(provenanceBytes),
+              sidecarSourceRevision: revision,
+              sidecarSourceInputCount: inputs().length,
+            },
+          }),
+        );
+        const publisherProbePath = writeRelative(
+          'publisher-probe.ps1',
+          `${String.raw`param([string]$FixtureRoot, [string]$InstallerPath, [string]$ReceiptPath, [string]$SourceRevision)
+`}${publisherHelper}\n${String.raw`
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+Set-Location -LiteralPath $FixtureRoot
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+$installer = Get-Item -LiteralPath $InstallerPath
+$receipt = Get-Content -Raw -LiteralPath $ReceiptPath | ConvertFrom-Json
+Assert-ReceiptSourceHashes @($receipt) $installer $SourceRevision
+foreach ($property in @('sidecarBundleSha256', 'sidecarProvenanceSha256', 'sidecarSourceRevision', 'sidecarSourceInputCount')) {
+  $changed = ($receipt | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+  if ($property -eq 'sidecarSourceInputCount') { $changed.evidence.$property = [int]$changed.evidence.$property + 1 }
+  elseif ($property -eq 'sidecarSourceRevision') { $changed.evidence.$property = ('f' * 40) }
+  else { $changed.evidence.$property = ('0' * 64) }
+  Expect-Rejection { Assert-ReceiptSourceHashes @($changed) $installer $SourceRevision } "Changed $property receipt"
+}
+$sidecarPath = Join-Path $FixtureRoot 'app/src-tauri/resources/service.js'
+$original = [System.IO.File]::ReadAllBytes($sidecarPath)
+[System.IO.File]::AppendAllText($sidecarPath, 'tampered')
+try {
+  Expect-Rejection { Assert-ReceiptSourceHashes @($receipt) $installer $SourceRevision } 'Changed current bundle'
+} finally {
+  [System.IO.File]::WriteAllBytes($sidecarPath, $original)
+}
+`}`,
+          'utf8',
+        );
+        run(
+          powershell,
+          [
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', publisherProbePath,
+            '-FixtureRoot', fixtureRoot,
+            '-InstallerPath', releaseInstaller,
+            '-ReceiptPath', receiptPath,
+            '-SourceRevision', revision,
+          ],
+        );
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+    120_000,
   );
 });
 

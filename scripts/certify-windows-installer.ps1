@@ -655,6 +655,224 @@ function Get-CertificateDataManifestDigest {
   }
 }
 
+function Get-SidecarProvenance {
+  param([Parameter(Mandatory = $true)] [string]$Path)
+
+  Assert-True (Test-Path -LiteralPath $Path -PathType Leaf) `
+    "Sidecar bundle is missing: $Path"
+  $file = Get-Item -LiteralPath $Path
+  Assert-True (($file.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+    "Sidecar bundle must not be a reparse point: $Path"
+  $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+  $newlineIndex = [Array]::IndexOf($bytes, [byte]10)
+  Assert-True ($newlineIndex -gt 0) 'Sidecar bundle is missing embedded provenance.'
+  $firstLine = [System.Text.Encoding]::UTF8.GetString($bytes, 0, $newlineIndex)
+  $prefix = '// Waggle-Sidecar-Provenance: '
+  Assert-True ($firstLine.StartsWith($prefix, [System.StringComparison]::Ordinal)) `
+    'Sidecar bundle is missing embedded provenance.'
+  $encoded = $firstLine.Substring($prefix.Length)
+  Assert-True (
+    $encoded.Length -gt 0 -and
+    ($encoded.Length % 4) -eq 0 -and
+    $encoded -cmatch '^[A-Za-z0-9+/]+={0,2}$'
+  ) 'Sidecar embedded provenance is not canonical base64.'
+  try {
+    $jsonBytes = [Convert]::FromBase64String($encoded)
+  } catch {
+    throw 'Sidecar embedded provenance is not canonical base64.'
+  }
+  Assert-True (
+    [string]::Equals(
+      [Convert]::ToBase64String($jsonBytes),
+      $encoded,
+      [System.StringComparison]::Ordinal
+    )
+  ) 'Sidecar embedded provenance is not canonical base64.'
+  try {
+    $manifest = [System.Text.Encoding]::UTF8.GetString($jsonBytes) |
+      ConvertFrom-Json
+  } catch {
+    throw 'Sidecar embedded provenance is not valid JSON.'
+  }
+  Assert-True ($null -ne $manifest -and [int]$manifest.schemaVersion -eq 1) `
+    'Sidecar embedded provenance schemaVersion must be 1.'
+  Assert-True ([string]$manifest.sourceRevision -cmatch '^[0-9a-f]{40}$') `
+    'Sidecar embedded provenance sourceRevision is invalid.'
+  Assert-True (
+    [string]::Equals(
+      [string]$manifest.entryPoint,
+      'packages/server/src/local/service.ts',
+      [System.StringComparison]::Ordinal
+    )
+  ) 'Sidecar embedded provenance entryPoint is invalid.'
+
+  $sourceInputs = @($manifest.sourceInputs)
+  Assert-True ($sourceInputs.Count -gt 0) 'Sidecar embedded provenance sourceInputs are missing.'
+  $requiredInputs = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal
+  )
+  foreach ($required in @(
+    'package-lock.json',
+    'package.json',
+    'packages/server/src/local/service.ts',
+    'scripts/build-sidecar.mjs'
+  )) {
+    [void]$requiredInputs.Add($required)
+  }
+  $previousPath = $null
+  foreach ($input in $sourceInputs) {
+    $relative = [string]$input.path
+    $parts = @($relative.Split('/'))
+    Assert-True (
+      -not [string]::IsNullOrWhiteSpace($relative) -and
+      -not $relative.Contains('\') -and
+      -not $relative.Contains([char]0) -and
+      -not [System.IO.Path]::IsPathRooted($relative.Replace('/', '\')) -and
+      -not ($parts | Where-Object { $_ -in @('', '.', '..', 'node_modules') })
+    ) 'Sidecar embedded provenance source input path is unsafe.'
+    if ($null -ne $previousPath) {
+      Assert-True ([string]::CompareOrdinal($previousPath, $relative) -lt 0) `
+        'Sidecar embedded provenance source inputs are not unique and sorted.'
+    }
+    Assert-True ([string]$input.sha256 -cmatch '^[0-9a-f]{64}$') `
+      'Sidecar embedded provenance source input hash is invalid.'
+    $previousPath = $relative
+    [void]$requiredInputs.Remove($relative)
+  }
+  Assert-True ($requiredInputs.Count -eq 0) `
+    'Sidecar embedded provenance omits required source inputs.'
+
+  $payloadOffset = $newlineIndex + 1
+  $payloadLength = $bytes.Length - $payloadOffset
+  Assert-True (
+    $null -ne $manifest.bundlePayload -and
+    [long]$manifest.bundlePayload.sizeBytes -eq $payloadLength -and
+    [string]$manifest.bundlePayload.sha256 -cmatch '^[0-9a-f]{64}$'
+  ) 'Sidecar bundle payload does not match embedded provenance.'
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $payloadDigest = $sha256.ComputeHash($bytes, $payloadOffset, $payloadLength)
+  } finally {
+    $sha256.Dispose()
+  }
+  $payloadSha256 = ([System.BitConverter]::ToString($payloadDigest)).Replace('-', '')
+  Assert-True (
+    [string]::Equals(
+      $payloadSha256,
+      [string]$manifest.bundlePayload.sha256,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  ) 'Sidecar bundle payload does not match embedded provenance.'
+
+  $provenanceSha = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $provenanceDigest = $provenanceSha.ComputeHash($jsonBytes)
+  } finally {
+    $provenanceSha.Dispose()
+  }
+  return [ordered]@{
+    manifest = $manifest
+    bundleSha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+    provenanceSha256 = ([System.BitConverter]::ToString($provenanceDigest)).Replace('-', '')
+    payloadSha256 = $payloadSha256
+    sourceInputCount = $sourceInputs.Count
+  }
+}
+
+function Assert-SidecarBundleBinding {
+  param(
+    [Parameter(Mandatory = $true)] [object]$Packaged,
+    [Parameter(Mandatory = $true)] [object]$Installed
+  )
+
+  Assert-True (
+    [string]::Equals(
+      [string]$Installed.bundleSha256,
+      [string]$Packaged.bundleSha256,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  ) 'Installed resources/service.js does not match the source-bound bundle.'
+  Assert-True (
+    [string]::Equals(
+      [string]$Installed.provenanceSha256,
+      [string]$Packaged.provenanceSha256,
+      [System.StringComparison]::OrdinalIgnoreCase
+    ) -and
+    [string]::Equals(
+      [string]$Installed.manifest.sourceRevision,
+      [string]$Packaged.manifest.sourceRevision,
+      [System.StringComparison]::Ordinal
+    ) -and
+    [int]$Installed.sourceInputCount -eq [int]$Packaged.sourceInputCount
+  ) 'Installed resources/service.js provenance does not match the certified source.'
+}
+
+function Assert-SidecarSourceBinding {
+  param(
+    [Parameter(Mandatory = $true)] [object]$Provenance,
+    [Parameter(Mandatory = $true)] [string]$RepositoryRoot,
+    [Parameter(Mandatory = $true)] [string]$ExpectedRevision,
+    [Parameter(Mandatory = $true)] [string]$GitExecutable
+  )
+
+  Assert-True (
+    [string]::Equals(
+      [string]$Provenance.manifest.sourceRevision,
+      $ExpectedRevision,
+      [System.StringComparison]::Ordinal
+    )
+  ) 'Sidecar provenance revision does not match expected source revision.'
+    $repositoryRootItem = Get-Item -LiteralPath $RepositoryRoot -ErrorAction Stop
+    Assert-True $repositoryRootItem.PSIsContainer `
+        "Sidecar provenance repository root is not a directory: $RepositoryRoot"
+    $resolvedRepositoryRoot = $repositoryRootItem.FullName.TrimEnd('\')
+    $repositoryPrefix = $resolvedRepositoryRoot + '\'
+  $sourceInputs = @($Provenance.manifest.sourceInputs)
+  $sourcePaths = @($sourceInputs | ForEach-Object { [string]$_.path })
+  foreach ($input in $sourceInputs) {
+    $relative = [string]$input.path
+    $sourcePath = [System.IO.Path]::GetFullPath(
+            (Join-Path $resolvedRepositoryRoot ($relative.Replace('/', '\')))
+    )
+    Assert-True (
+      $sourcePath.StartsWith($repositoryPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+    ) "Sidecar provenance source path escapes the repository: $relative"
+    Assert-True (Test-Path -LiteralPath $sourcePath -PathType Leaf) `
+      "Sidecar provenance source input is missing: $relative"
+    $sourceFile = Get-Item -LiteralPath $sourcePath
+    Assert-True (($sourceFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) `
+      "Sidecar provenance source input is a reparse point: $relative"
+    Assert-True (
+      [string]::Equals(
+        (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash,
+        [string]$input.sha256,
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+    ) "Sidecar provenance source hash changed: $relative"
+    & $GitExecutable -C $RepositoryRoot ls-files --error-unmatch -- $relative 2>$null |
+      Out-Null
+    Assert-True ($LASTEXITCODE -eq 0) "Sidecar provenance source is not tracked: $relative"
+    & $GitExecutable -C $RepositoryRoot cat-file -e "${ExpectedRevision}:$relative" 2>$null
+    Assert-True ($LASTEXITCODE -eq 0) `
+      "Sidecar provenance source is absent from expected revision: $relative"
+  }
+  for ($offset = 0; $offset -lt $sourcePaths.Count; $offset += 100) {
+    $lastIndex = [Math]::Min($offset + 99, $sourcePaths.Count - 1)
+    $sourceChunk = @($sourcePaths[$offset..$lastIndex])
+    $diffArguments = @(
+      '-C',
+      $RepositoryRoot,
+      'diff',
+      '--quiet',
+      $ExpectedRevision,
+      '--'
+    ) + $sourceChunk
+    & $GitExecutable @diffArguments
+    Assert-True ($LASTEXITCODE -eq 0) `
+      'Sidecar provenance source inputs differ from the expected revision.'
+  }
+}
+
 function Get-ExternalProfileRootSnapshot {
   param(
     [Parameter(Mandatory = $true)] [string]$Name,
@@ -1383,6 +1601,9 @@ $externalProfileRootTargets = @(
 $dataDir = $profileDataDir
 $appExecutable = Join-Path $installDir 'waggle.exe'
 $serviceScript = Join-Path $installDir 'resources\service.js'
+$packagedServiceScript = [System.IO.Path]::GetFullPath(
+  (Join-Path $PSScriptRoot '..\app\src-tauri\resources\service.js')
+)
 $canonicalMarketplaceDb = [System.IO.Path]::GetFullPath(
   (Join-Path $PSScriptRoot '..\packages\marketplace\marketplace.db')
 )
@@ -1482,9 +1703,13 @@ $receipt = [ordered]@{
     workflowRunAttempt = [Environment]::GetEnvironmentVariable('GITHUB_RUN_ATTEMPT', 'Process')
     certifierSha256 = $null
     installerHookSha256 = $null
-    generatedInstallerScriptSha256 = $null
-    generatedInstallerHookPath = $null
-    windowsInboxTools = [ordered]@{}
+      generatedInstallerScriptSha256 = $null
+      generatedInstallerHookPath = $null
+      sidecarSourceRevision = $null
+      sidecarBundleSha256 = $null
+      sidecarProvenanceSha256 = $null
+      sidecarSourceInputCount = 0
+      windowsInboxTools = [ordered]@{}
   }
   scratchRoot = $scratchRoot
   embeddingPayloadReady = $false
@@ -1546,6 +1771,33 @@ try {
   Assert-True (-not (
     $installerHook -match '(?im)^\s*(?:RMDir|Delete)\b[^\r\n]*\$PROFILE[\\/]+\.waggle(?:[\\/"\s]|$)'
   )) 'NSIS hook contains a destructive Waggle-data operation.'
+
+  $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  Assert-True ($null -ne $nodeCommand) 'Node.js is required to reproduce the sidecar bundle.'
+  Assert-True (Test-Path -LiteralPath $packagedServiceScript -PathType Leaf) `
+    'Packaged resources/service.js is missing before certification.'
+  $sidecarHashBeforeRebuild = (
+    Get-FileHash -LiteralPath $packagedServiceScript -Algorithm SHA256
+  ).Hash
+  & $nodeCommand.Source (Join-Path $PSScriptRoot 'build-sidecar.mjs')
+  Assert-True ($LASTEXITCODE -eq 0) 'Could not reproduce packaged resources/service.js.'
+  $sidecarHashAfterRebuild = (
+    Get-FileHash -LiteralPath $packagedServiceScript -Algorithm SHA256
+  ).Hash
+  Assert-True (
+    [string]::Equals(
+      $sidecarHashBeforeRebuild,
+      $sidecarHashAfterRebuild,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+  ) 'Packaged resources/service.js does not match a clean sidecar rebuild.'
+  $packagedSidecarProvenance = Get-SidecarProvenance $packagedServiceScript
+  & $nodeCommand.Source `
+    (Join-Path $PSScriptRoot 'check-sidecar-resources.mjs') `
+    --expected-source-revision `
+    ([string]$packagedSidecarProvenance.manifest.sourceRevision)
+  Assert-True ($LASTEXITCODE -eq 0) 'Packaged sidecar resources failed provenance preflight.'
   if ($RequireAuthenticodeSignature) {
     Assert-True (-not [string]::IsNullOrWhiteSpace($ExpectedSourceRevision)) `
       'Release certification requires the expected source revision.'
@@ -1589,9 +1841,25 @@ try {
     $receipt.evidence.sourceRevision = $repositoryRevision
     $receipt.checks['sourceRevision'] = $true
     $receipt.checks['sourceFilesClean'] = $true
+
+    Assert-SidecarSourceBinding `
+      -Provenance $packagedSidecarProvenance `
+      -RepositoryRoot $repositoryRoot `
+      -ExpectedRevision $repositoryRevision `
+      -GitExecutable $gitCommand.Source
   } else {
     $receipt.evidence.sourceRevision = [Environment]::GetEnvironmentVariable('GITHUB_SHA', 'Process')
   }
+  if ([string]::IsNullOrWhiteSpace([string]$receipt.evidence.sourceRevision)) {
+    $receipt.evidence.sourceRevision = [string]$packagedSidecarProvenance.manifest.sourceRevision
+  }
+  $receipt.evidence.sidecarSourceRevision =
+    [string]$packagedSidecarProvenance.manifest.sourceRevision
+  $receipt.evidence.sidecarBundleSha256 = [string]$packagedSidecarProvenance.bundleSha256
+  $receipt.evidence.sidecarProvenanceSha256 =
+    [string]$packagedSidecarProvenance.provenanceSha256
+  $receipt.evidence.sidecarSourceInputCount =
+    [int]$packagedSidecarProvenance.sourceInputCount
   $receipt.evidence.certifierSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
   $receipt.evidence.installerHookSha256 = (Get-FileHash -LiteralPath $installerHookPath -Algorithm SHA256).Hash
   $releaseDirectory = Split-Path -Parent (Split-Path -Parent $installer.DirectoryName)
@@ -1964,6 +2232,11 @@ try {
   Wait-ForPathState $appExecutable $true
   Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'Installer did not create uninstall.exe'
   Assert-True (Test-Path -LiteralPath $serviceScript -PathType Leaf) 'Installer omitted resources/service.js'
+  $installedSidecarProvenance = Get-SidecarProvenance $serviceScript
+  Assert-SidecarBundleBinding `
+    -Packaged $packagedSidecarProvenance `
+    -Installed $installedSidecarProvenance
+  $receipt.checks['sidecarSourceProvenance'] = $true
   Assert-True (Test-Path -LiteralPath $canonicalMarketplaceDb -PathType Leaf) `
     'The tracked canonical marketplace database is missing.'
   Assert-True (Test-Path -LiteralPath $installedMarketplaceDb -PathType Leaf) `
