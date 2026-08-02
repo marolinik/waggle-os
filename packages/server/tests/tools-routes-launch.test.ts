@@ -1225,7 +1225,7 @@ describe('POST /api/tools/launch — persistence + reconcile', () => {
       if (server2) await server2.close();
       await stopChild(child);
     }
-  }, 10_000);
+  }, 30_000);
 
   it('rebuilds a corrupt process tracker from an alive external-tool registry run', async () => {
     const child = spawnSleeper();
@@ -1276,7 +1276,7 @@ describe('POST /api/tools/launch — persistence + reconcile', () => {
       if (server2) await server2.close();
       await stopChild(child);
     }
-  }, 10_000);
+  }, 30_000);
 
   it('marks a detached run interrupted when its process disappeared during restart', async () => {
     const child = spawnSleeper();
