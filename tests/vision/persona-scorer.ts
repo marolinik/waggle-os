@@ -598,6 +598,10 @@ function hasTimedAgenda(
     .replace(/\r\n?/g, '\n')
     .replace(/[\u2018\u2019]/g, "'");
   const lines = text.split('\n');
+  const agendaParticipantMarkers = text.match(/\b(?:product|engineering|qa|support)\b/gi) ?? [];
+  const agendaParticipantCount = new Set(
+    agendaParticipantMarkers.map(marker => marker.toLowerCase()),
+  ).size;
   type AgendaSection = 'agenda' | 'excluded' | 'other';
   const headingText = (line: string): string | null => {
     const markdownHeading = /^\s*#{1,6}\s+(.+?)\s*$/.exec(line);
@@ -750,10 +754,85 @@ function hasTimedAgenda(
     const clockMatches = [...line.matchAll(
       /\b(\d{1,2}):([0-5]\d)\s*(am|pm)?\s*(?:-|[\u2013\u2014]|\u00e2\u20ac\u201c|to)\s*(\d{1,2}):([0-5]\d)\s*(am|pm)?\b/gi,
     )];
-    const offsetMatches = [...line.matchAll(
+    const allOffsetMatches = [...line.matchAll(
       /\b(\d{1,3})\s*(?:-|[\u2013\u2014]|\u00e2\u20ac\u201c|to)\s*(\d{1,3})\s*(?:mins?|minutes?)\b/gi,
     )];
-    const intervalFreeLine = [...clockMatches, ...offsetMatches]
+    const firstTableCellEnd = /^\s*\|/.test(line) ? line.indexOf('|', line.indexOf('|') + 1) : -1;
+    const primaryTableClock = firstTableCellEnd > 0
+      ? clockMatches.find(match => (match.index ?? line.length) < firstTableCellEnd)
+      : undefined;
+    const primaryTableOffset = firstTableCellEnd > 0
+      ? allOffsetMatches.find(match => (match.index ?? line.length) < firstTableCellEnd)
+      : undefined;
+    let primaryTableDuration: number | null = null;
+    if (primaryTableClock) {
+      const startMeridiem = primaryTableClock[3] || primaryTableClock[6];
+      const endMeridiem = primaryTableClock[6] || primaryTableClock[3];
+      const start = clockMinute(primaryTableClock[1], primaryTableClock[2], startMeridiem);
+      const end = clockMinute(primaryTableClock[4], primaryTableClock[5], endMeridiem);
+      if (start !== null && end !== null) {
+        const elapsed = (end - start + (24 * 60)) % (24 * 60);
+        if (elapsed > 0) primaryTableDuration = elapsed;
+      }
+    } else if (primaryTableOffset) {
+      const elapsed = Number(primaryTableOffset[2]) - Number(primaryTableOffset[1]);
+      if (elapsed > 0) primaryTableDuration = elapsed;
+    }
+    const hasPrimaryTableInterval = primaryTableDuration !== null;
+    const offsetMatches = hasPrimaryTableInterval
+      ? allOffsetMatches.filter((match) => {
+        if ((match.index ?? line.length) < firstTableCellEnd) return true;
+        const suffix = line.slice((match.index ?? 0) + match[0].length);
+        const allocationStart = Number(match[1]);
+        const allocationEnd = Number(match[2]);
+        const allocationContext = line.slice(firstTableCellEnd + 1);
+        const allocationPrefixLength = Math.max(0, (match.index ?? line.length) - firstTableCellEnd - 1);
+        const allocationPrefix = allocationContext.slice(0, allocationPrefixLength);
+        const explicitParticipantMarkers = allocationContext.match(/\b(?:product|engineering|qa|support)\b/gi) ?? [];
+        const explicitParticipantCount = new Set(
+          explicitParticipantMarkers.map(marker => marker.toLowerCase()),
+        ).size;
+        const hasGenericParticipantPlural = /\b(?:participants|attendees|speakers|people|persons|team members|functions)\b/i.test(allocationContext);
+        const perParticipant = /^\s+per\s+(?:participant|attendee|speaker|person|team member|function|role)\b/i.test(suffix);
+        const quantifiedParticipants = /\b(?:all\s+)?(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:participants?|attendees?|speakers?|people|persons?|team members?|functions?|roles?)\b/i.exec(allocationContext);
+        const numberWords = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+        const quantifiedParticipantCount = quantifiedParticipants
+          ? /^\d+$/.test(quantifiedParticipants[1])
+            ? Number(quantifiedParticipants[1])
+            : numberWords.indexOf(quantifiedParticipants[1].toLowerCase())
+          : 0;
+        const namedParticipantList = /([A-Z][a-z]+(?:(?:,\s*|\s+and\s+)[A-Z][a-z]+)+)\s*[\u2013\u2014-]\s*$/.exec(allocationPrefix)?.[1];
+        const namedParticipantCount = namedParticipantList
+          ? namedParticipantList.split(/,\s*|\s+and\s+/i).length
+          : 0;
+        const refersToAllParticipants = /\ball\s+(?:participants|attendees|speakers|people|persons|team members|functions|roles)\b/i.test(allocationContext);
+        const participantCount = quantifiedParticipantCount > 0
+          ? quantifiedParticipantCount
+          : explicitParticipantCount >= 2
+            ? explicitParticipantCount
+            : namedParticipantCount >= 2
+              ? namedParticipantCount
+              : refersToAllParticipants && agendaParticipantCount >= 2
+                ? agendaParticipantCount
+                : hasGenericParticipantPlural
+                  ? 2
+                : perParticipant
+                  ? 1
+                  : 0;
+        const hasNonParticipantReferent = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:options?|requirements?|phases?|blocks?|items?|topics?|tasks?)\b[^|]{0,30}$/i.test(allocationPrefix);
+        const allocationTargetsParticipants = (perParticipant || /^\s+each\b/i.test(suffix))
+          && participantCount > 0
+          && !hasNonParticipantReferent;
+        const declaresAdditionalBlocks = /\b(?:(?:two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:extra\s+|additional\s+)?(?:launch\s+)?blocks?|(?:extra|additional|required)\b[^|]{0,40}\bblocks?)\b/i.test(allocationContext);
+        const isBoundedSubAllocation = allocationEnd >= allocationStart
+          && allocationEnd <= primaryTableDuration
+          && (allocationStart * participantCount) <= primaryTableDuration
+          && allocationTargetsParticipants
+          && !declaresAdditionalBlocks;
+        return !isBoundedSubAllocation;
+      })
+      : allOffsetMatches;
+    const intervalFreeLine = [...clockMatches, ...allOffsetMatches]
       .sort((left, right) => (right.index ?? 0) - (left.index ?? 0))
       .reduce((value, match) => {
         const index = match.index ?? 0;
@@ -1042,6 +1121,88 @@ function hasOnlyBoundedWorkspaceClaims(response: string): boolean {
   ].some(pattern => pattern.test(withoutSafePackageMentions));
 }
 
+const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
+const WRITER_FACT_CONSEQUENCE = /(?:,\s+which|;\s+(?:this|that))\s+(?:may|might|could|would)\s+(?:delay|block|affect|impact|prevent|change|move|push)\b[^.;]*/gi;
+
+function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegExp[]): boolean {
+  if (patterns.length < 3) return false;
+  const clauses = response
+    .replace(/\r\n?/g, '\n')
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map(clause => clause.trim())
+    .filter(Boolean)
+    .map(clause => clause.replace(WRITER_FACT_CONSEQUENCE, ''));
+
+  const hasAffirmedFact = (topic: RegExp, fact: RegExp): boolean => clauses.some(clause => (
+    topic.test(clause)
+    && !NON_AFFIRMATIVE_WRITER_CLAIM.test(clause)
+    && fact.test(clause)
+  ));
+  const hasDeniedFact = (topic: RegExp): boolean => clauses.some(clause => (
+    topic.test(clause) && NON_AFFIRMATIVE_WRITER_CLAIM.test(clause)
+  ));
+  const browserAffirmed = clauses.some(clause => (
+    /\bbrowser test(?:s|ing)?\b/i.test(clause)
+    && /\bWindows\b/i.test(clause)
+    && !NON_AFFIRMATIVE_WRITER_CLAIM.test(clause)
+    && !/\bbrowser test(?:s|ing)?\b[^.;\r\n]{0,60}\bpass(?:ed|ing)?\b/i.test(clause)
+    && patterns[2].test(clause)
+  ));
+
+  return !hasDeniedFact(/\bFriday\b/i)
+    && !hasDeniedFact(/\bAPI tests?\b/i)
+    && !hasDeniedFact(/\bbrowser test(?:s|ing)?\b/i)
+    && hasAffirmedFact(/\bFriday\b/i, patterns[0])
+    && hasAffirmedFact(/\bAPI tests?\b/i, patterns[1])
+    && browserAffirmed;
+}
+
+const NON_AFFIRMATIVE_ACTION_SECTION = /\?|\b(?:quoted|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|questions?|not selected|not approved|not endorsed|old memo)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\brecommend(?:ed|ing)? against\b|\bdecid(?:e[sd]?|ing) against\b|\bavoid (?:these|the|following) actions?\b|\bdo not implement\b|\bnot (?:our )?recommendations?\b|\bfor (?:discussion|reference) only\b/i;
+const NON_AFFIRMATIVE_ACTION_LINE = /\?|\b(?:merely reported|quoted(?: from)?|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|not selected|not approved|not endorsed|old memo|consider only|no longer recommended|not (?:our )?recommendations?|decid(?:e[sd]?|ing) against|do not implement)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\brecommend(?:ed|ing)? against\b|\bavoid (?:these|the|following) actions?\b|\bfor (?:discussion|reference) only\b/i;
+const AFFIRMATIVE_ACTION_SECTION = /\b(?:now\s+)?recommend(?:ed|ing)?\s+(?:these|the|following)?\s*actions?\b|\b(?:approved|selected) actions?\b|\bactions? to improve runway\b/i;
+const RETRACTS_ALL_ACTIONS = /\b(?:(?:both|all|the)\s+(?:recommendations?|actions?)\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|ruled[- ]out|not approved|not endorsed)|(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the)\s+(?:recommendations?|actions?))\b/i;
+
+function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[]): boolean {
+  if (patterns.length === 0) return false;
+  const matched = patterns.map(() => false);
+  let excludedSection = false;
+
+  for (const line of response.replace(/\r\n?/g, '\n').split('\n')) {
+    if (RETRACTS_ALL_ACTIONS.test(line)) {
+      matched.fill(false);
+      excludedSection = true;
+      continue;
+    }
+    const heading = /^\s*#{1,6}\s+(.+?)\s*$/.exec(line)?.[1]
+      ?? /^\s*\*\*([^*]+)\*\*\s*$/.exec(line)?.[1];
+    if (heading !== undefined) {
+      excludedSection = NON_AFFIRMATIVE_ACTION_SECTION.test(heading);
+      continue;
+    }
+    const containsAction = patterns.some(pattern => pattern.test(line));
+    if (!containsAction && NON_AFFIRMATIVE_ACTION_SECTION.test(line)) {
+      excludedSection = true;
+      continue;
+    }
+    if (!containsAction && AFFIRMATIVE_ACTION_SECTION.test(line)) {
+      excludedSection = false;
+      continue;
+    }
+    if (NON_AFFIRMATIVE_ACTION_LINE.test(line)) {
+      patterns.forEach((pattern, index) => {
+        if (pattern.test(line)) matched[index] = false;
+      });
+      continue;
+    }
+    if (excludedSection) continue;
+    patterns.forEach((pattern, index) => {
+      if (!matched[index] && pattern.test(line)) matched[index] = true;
+    });
+  }
+
+  return matched.every(Boolean);
+}
+
 function evaluateResponseRule(
   rule: PersonaResponseRule,
   evidence: PersonaTrialEvidence,
@@ -1057,6 +1218,10 @@ function evaluateResponseRule(
       return hasAffirmedRunwayFormula(evidence.response);
     case 'runwayAssumption':
       return hasAffirmedRunwayAssumption(evidence.response);
+    case 'runwayActions':
+      return hasAffirmedRunwayActions(evidence.response, rule.patterns);
+    case 'writerReleaseFacts':
+      return hasAffirmedWriterReleaseFacts(evidence.response, rule.patterns);
     case 'boundedWorkspaceClaims':
       return hasOnlyBoundedWorkspaceClaims(evidence.response);
     case 'allPatterns':

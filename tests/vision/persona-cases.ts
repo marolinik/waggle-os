@@ -34,6 +34,8 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'timedAgenda'; durationMinutes: number; minimumBlocks: number })
   | (BaseResponseRule & { kind: 'runwayFormula' })
   | (BaseResponseRule & { kind: 'runwayAssumption' })
+  | (BaseResponseRule & { kind: 'runwayActions'; patterns: readonly RegExp[] })
+  | (BaseResponseRule & { kind: 'writerReleaseFacts'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'boundedWorkspaceClaims' })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'notPattern'; pattern: RegExp })
@@ -81,9 +83,10 @@ const primaryResearchDomains = [
 ] as const;
 
 const affirmedFactClause = String.raw`(?<!not true that )(?<!not true that the )(?<!not true that \*\*)(?<!not true that __)(?<!not true that \*)(?<!not true that _)(?<!false that )(?<!false that the )(?<!false that \*\*)(?<!false that __)(?<!false that \*)(?<!false that _)`;
-const affirmedBrowserTests = `${affirmedFactClause}${String.raw`\bbrowser tests?\b`}`;
+const affirmedBrowserTests = `${affirmedFactClause}${String.raw`\bbrowser test(?:s|ing)\b`}`;
 const positiveFailureVerb = String.raw`(?<!not )(?<!cannot )(?<!can't )(?<!don't )(?<!doesn't )(?<!didn't )(?<!aren't )(?<!isn't )(?<!never )(?<!no longer )\b(?:currently\s+show(?:s|ing)?\s+(?:two|2)\s+remaining\s+failures?|(?:(?:still\s+)?(?:show(?:s|ing)?|have|report(?:s|ing)?|return(?:s|ing)?|produce(?:s|ing)?)|remain(?:s|ing)?)\s+(?:two|2)\s+failures?)\b`;
 const windowsBrowserFailuresPattern = new RegExp([
+  `${String.raw`(?<!could )(?<!can )(?<!may )(?<!might )`}${affirmedBrowserTests}${String.raw`(?![^.\r\n]*\?)[ \t]+(?:currently[ \t]+|still[ \t]+)?(?:show(?:s|ing)?|is[ \t]+showing|report(?:s|ing)?|has|found)\s+(?:two|2)\s+(?:unresolved|open)\s+failures?\b(?![^.\r\n]{0,80}\b(?:incorrect|wrong|false|resolved|untrue|not[ \t]+true|disputed)\b)[^.\r\n]{0,60}\bWindows\b`}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,50}`}${positiveFailureVerb}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,60}`}${positiveFailureVerb}${String.raw`[^.\r\n]{0,60}\bWindows\b`}`,
   `${affirmedBrowserTests}${String.raw`[^.\r\n]{0,30}\b(?:two|2)\s+failures?\b[^.\r\n]{0,20}\b(?:remain|persist|exist)\b[^.\r\n]{0,60}\bWindows\b`}`,
@@ -99,8 +102,8 @@ const positiveRunwayPattern = new RegExp([
   String.raw`(?<!not )(?<!isn't )(?<!isn’t )\b4(?:\.0+)?\s+months?\s+(?:of\s+)?runway\b`,
   `${positiveRunwayCalculationPrefix}${positiveRunwayCalculation}${positiveRunwayCalculationSuffix}`,
 ].join('|'), 'i');
-const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:\d+[.)]|[-*])?[ \t]*(?:\*\*)?(?:(?:we|you|the team)[ \t]+should[ \t]+)?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
-const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}\b(?:cannot|can't|do not|don't|must not|should not|never|avoid|impossible|not (?:advisable|feasible|possible|recommended))\b)`;
+const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:(?:\d+[.)]|[-*])[ \t]*|\|[ \t]*\d+[ \t]*\|[ \t]*)?(?:\*\*)?(?:(?:we|you|the team)[ \t]+should[ \t]+)?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
+const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}(?:\?|\b(?:cannot|can't|do not|don't|must not|should not|never|avoid|impossible|merely reported|no longer recommended|not (?:our )?recommendations?|decid(?:e[sd]?|ing) against|not (?:advisable|feasible|possible|recommended))\b))`;
 const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:reduce|cut|lower)\b[^.\r\n]{0,60}(?:costs?|burn)`}${positiveActionSuffix}`, 'im');
 const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise)\b[^.\r\n]{0,80}(?:revenue|customers?|funding|cash inflows?)|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|accelerate|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?))`}${positiveActionSuffix}`, 'im');
 const memoryPriority = String.raw`memory (?:bug|issue)`;
@@ -201,7 +204,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'word-limit', description: 'Stays within 120 words', kind: 'maxWords', maxWords: 120, points: 10 },
-      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'allPatterns', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:are\s+)?pass(?:ed|ing)?\b/i, windowsBrowserFailuresPattern], points: 10 },
+      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:are\s+)?pass(?:ed|ing)?\b/i, windowsBrowserFailuresPattern], points: 10 },
       { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'allPatterns', patterns: [/smart router/i, /not (?:(?:yet|been|fully|thoroughly)\s+)*(?:exercised|tested|validated)/i, /cloud credentials/i], points: 10 },
       { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'pattern', pattern: delayRecommendationPattern, points: 10 },
       { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b)/i, points: 10 },
@@ -254,7 +257,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       { id: 'runway', description: 'Positively calculates four months of runway', kind: 'pattern', pattern: positiveRunwayPattern, points: 10 },
       { id: 'formula', description: 'States cash divided by monthly net burn', kind: 'runwayFormula', points: 10 },
       { id: 'assumption', description: 'Names the constant-burn/no-revenue assumption', kind: 'runwayAssumption', points: 10 },
-      { id: 'two-actions', description: 'Gives positive cost and revenue or cash-inflow actions', kind: 'allPatterns', patterns: [costActionPattern, cashActionPattern], points: 10 },
+      { id: 'two-actions', description: 'Gives positive cost and revenue or cash-inflow actions', kind: 'runwayActions', patterns: [costActionPattern, cashActionPattern], points: 10 },
       { id: 'no-false-impact', description: 'Avoids false dollar-to-month claims and schedule CTAs', kind: 'notPattern', pattern: /(?:each dollar saved.*(?:one|1).*month|\/schedule|calendar event)/i, points: 10 },
     ],
   },

@@ -3247,4 +3247,419 @@ describe('deterministic 100-point persona scorer', () => {
 
     expect(result).toMatchObject({ score: 90, passed: false });
   });
+
+  it('accepts a clock agenda with a per-participant sub-allocation in a later table cell', () => {
+    const executiveAssistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const response = [
+      '## Launch-Readiness Meeting — 30-Minute Agenda',
+      '| Time Block | Duration | Topic | Desired Decision/Outcome |',
+      '|---|---|---|---|',
+      '| 0:00–0:02 | 2 min | Welcome | Confirm goal |',
+      '| 0:02–0:12 | 10 min | Product, Engineering, QA, Support — 2–3 min each | Confirm readiness |',
+      '| 0:12–0:20 | 8 min | Risks | Decide launch blockers |',
+      '| 0:20–0:25 | 5 min | Go/No-Go | Make decision |',
+      '| 0:25–0:28 | 3 min | Actions | Assign owners |',
+      '| 0:28–0:30 | 2 min | Wrap-up | Confirm next checkpoint |',
+      '**Total: 30 minutes**',
+      '## Desired Decisions',
+      '- Approve readiness.',
+      '## Pre-Read Checklist',
+      '- [ ] Product, Engineering, QA, Support status.',
+    ].join('\n');
+    const result = scorePersonaTrial(executiveAssistant, evidence({
+      prompt: executiveAssistant.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: executiveAssistant.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+
+    for (const invalidSubAllocation of [
+      '20–25 min each',
+      '30–40 min per participant',
+      '2–3 min eachwhere',
+    ]) {
+      const invalidResponse = response.replace('2–3 min each', invalidSubAllocation);
+      const invalidResult = scorePersonaTrial(executiveAssistant, evidence({
+        prompt: executiveAssistant.prompt,
+        response: invalidResponse,
+        persistedResponse: invalidResponse,
+        requestPersonaId: executiveAssistant.id,
+      }));
+
+      expect(invalidResult.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    }
+
+    for (const invalidTopic of [
+      'Add four extra launch blocks lasting 8–10 min each',
+      'Required additional blocks run 5–8 min per requirement',
+      'Add two extra blocks lasting 6–9 min per phase',
+      'Product requirements — 2–3 min per requirement',
+      'Four launch blocks for Product — 2–3 min each',
+      'Product, Engineering, QA, Support — 3–4 min each',
+      'Product, Engineering, QA, Support — 8–10 min each',
+      'Product and Engineering — 6–9 min each',
+      'Participants — 8–10 min each',
+      'Product and Engineering review two options — 2–3 min each',
+      'All four participants — 3–4 min each',
+      'All participants — 3–4 min each',
+      'Eight participants — 2–3 min each',
+      'Four roles — 8–10 min per role',
+    ]) {
+      const invalidResponse = response.replace(
+        'Product, Engineering, QA, Support — 2–3 min each',
+        invalidTopic,
+      );
+      const invalidResult = scorePersonaTrial(executiveAssistant, evidence({
+        prompt: executiveAssistant.prompt,
+        response: invalidResponse,
+        persistedResponse: invalidResponse,
+        requestPersonaId: executiveAssistant.id,
+      }));
+
+      expect(invalidResult.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    }
+
+    const namedParticipantResponse = response.replace(
+      'Product, Engineering, QA, Support — 2–3 min each',
+      'Alice, Bob, Carol — 2–3 min each',
+    );
+    const namedParticipantResult = scorePersonaTrial(executiveAssistant, evidence({
+      prompt: executiveAssistant.prompt,
+      response: namedParticipantResponse,
+      persistedResponse: namedParticipantResponse,
+      requestPersonaId: executiveAssistant.id,
+    }));
+
+    expect(namedParticipantResult.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+
+    const conjunctiveParticipantResponse = response.replace(
+      'Product, Engineering, QA, Support — 2–3 min each',
+      'Alice, Bob and Carol — 2–3 min each',
+    );
+    const conjunctiveParticipantResult = scorePersonaTrial(executiveAssistant, evidence({
+      prompt: executiveAssistant.prompt,
+      response: conjunctiveParticipantResponse,
+      persistedResponse: conjunctiveParticipantResponse,
+      requestPersonaId: executiveAssistant.id,
+    }));
+
+    expect(conjunctiveParticipantResult.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+  });
+
+  it('accepts positive runway actions in numbered Markdown table rows', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway = 4.00 months.',
+      'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+      'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+      '| # | Action | Mechanism |',
+      '|---|---|---|',
+      '| 1 | Reduce monthly burn by renegotiating vendors | Lowers the denominator |',
+      '| 2 | Accelerate revenue generation or secure bridge financing | Adds cash inflow |',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+
+    const deniedResponse = response
+      .replace('Reduce monthly burn by renegotiating vendors', 'Do not reduce monthly burn')
+      .replace('Accelerate revenue generation or secure bridge financing', 'Never accelerate revenue generation');
+    const deniedResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: deniedResponse,
+      persistedResponse: deniedResponse,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(deniedResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+
+    const withdrawnRows = [
+      [
+        '| 1 | **Reduce monthly burn** | Merely reported; not our recommendation |',
+        '| 2 | **Accelerate revenue generation** | Merely reported; not our recommendation; cash inflow noted |',
+      ],
+      [
+        '| 1 | Reduce monthly burn | No longer recommended |',
+        '| 2 | Accelerate revenue generation | No longer recommended; adds cash inflow |',
+      ],
+      [
+        '| 1 | Reduce monthly burn | We decided against it |',
+        '| 2 | Accelerate revenue generation | We decided against it; cash inflow |',
+      ],
+      [
+        '| 1 | Reduce monthly burn? | Consider only |',
+        '| 2 | Accelerate revenue generation? | Consider only; cash inflow |',
+      ],
+    ];
+    for (const [costRow, cashRow] of withdrawnRows) {
+      const withdrawnResponse = response
+        .replace('| 1 | Reduce monthly burn by renegotiating vendors | Lowers the denominator |', costRow)
+        .replace('| 2 | Accelerate revenue generation or secure bridge financing | Adds cash inflow |', cashRow);
+      const withdrawnResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: withdrawnResponse,
+        persistedResponse: withdrawnResponse,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(withdrawnResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    }
+
+    for (const [heading, costStatus, cashStatus] of [
+      ['## Rejected options - do not implement', 'Quoted from memo', 'Quoted from memo; cash inflow'],
+      ['## Withdrawn actions', 'Withdrawn', 'Withdrawn; cash inflow'],
+      ['## Rejected actions', 'Rejected', 'Rejected; cash inflow'],
+      ['## Tentative options', 'Tentative', 'Tentative; cash inflow'],
+      ['## Options not selected', 'Not selected', 'Not selected; cash inflow'],
+      ['## Declined actions', 'Not approved', 'Not approved; cash inflow'],
+      ['## Hypothetical actions', 'Recommended against', 'Recommended against; cash inflow'],
+      ['## Actions for discussion', 'For discussion only', 'For discussion only; cash inflow'],
+      ['## Deferred actions', 'Deferred', 'Deferred; cash inflow'],
+      ['## Actions not endorsed', 'Not endorsed', 'Not endorsed; cash inflow'],
+      ['## Ruled-out actions', 'Ruled out', 'Ruled out; cash inflow'],
+    ]) {
+      const excludedResponse = response
+        .replace('| # | Action | Mechanism |', `${heading}\n| # | Action | Status |`)
+        .replace(
+          '| 1 | Reduce monthly burn by renegotiating vendors | Lowers the denominator |',
+          `| 1 | Reduce monthly burn | ${costStatus} |`,
+        )
+        .replace(
+          '| 2 | Accelerate revenue generation or secure bridge financing | Adds cash inflow |',
+          `| 2 | Accelerate revenue generation | ${cashStatus} |`,
+        );
+      const excludedResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: excludedResponse,
+        persistedResponse: excludedResponse,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(excludedResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    }
+
+    for (const excludedIntroduction of [
+      'We decided against the following actions:',
+      'The following actions are quoted from a memo, not our recommendations:',
+      'Questions only, not recommendations:',
+      'Do not implement the following actions:',
+      'Should we do either of these?',
+      'We retracted the recommendation to take the following actions:',
+      'Avoid these actions:',
+      'Do not pursue these actions:',
+      'For reference only:',
+    ]) {
+      const excludedResponse = [
+        'Runway = 4.00 months.',
+        'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+        'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+        excludedIntroduction,
+        '1. Reduce monthly burn.',
+        '2. Accelerate cash inflows.',
+      ].join('\n');
+      const excludedResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: excludedResponse,
+        persistedResponse: excludedResponse,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(excludedResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    }
+
+    for (const excludedResponse of [
+      [
+        'Runway = 4.00 months.',
+        'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+        'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+        'I cannot recommend the action to reduce monthly burn.',
+        'I cannot recommend the action to accelerate cash inflows.',
+      ].join('\n'),
+      [
+        'Runway = 4.00 months.',
+        'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+        'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+        'I do not endorse the recommendation to reduce monthly burn.',
+        'I do not endorse the recommendation to accelerate cash inflows.',
+      ].join('\n'),
+      [
+        'Runway = 4.00 months.',
+        'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+        'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+        'I reject the recommendation to reduce monthly burn.',
+        'I reject the recommendation to accelerate cash inflows.',
+      ].join('\n'),
+      [
+        'Runway = 4.00 months.',
+        'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+        'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+        'I oppose the recommendation to reduce monthly burn.',
+        'I oppose the recommendation to accelerate cash inflows.',
+      ].join('\n'),
+      [
+        'Runway = 4.00 months.',
+        'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+        'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+        'The old memo states: "Actions: reduce monthly burn and accelerate cash inflows."',
+      ].join('\n'),
+    ]) {
+      const excludedResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: excludedResponse,
+        persistedResponse: excludedResponse,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(excludedResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    }
+
+    const resetResponse = [
+      'Runway = 4.00 months.',
+      'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+      'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+      'We decided against the following actions:',
+      '1. Reduce monthly burn.',
+      '2. Accelerate cash inflows.',
+      'We now recommend these actions:',
+      '1. Reduce monthly burn.',
+      '2. Accelerate cash inflows.',
+    ].join('\n');
+    const resetResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: resetResponse,
+      persistedResponse: resetResponse,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(resetResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+
+    const withdrawnAfterRecommendation = [
+      'Runway = 4.00 months.',
+      'Formula: Runway (months) = Cash Balance / Monthly Net Burn.',
+      'Biggest assumption: monthly burn stays constant and revenue remains zero.',
+      '## Recommended actions',
+      '1. Reduce monthly burn.',
+      '2. Accelerate cash inflows.',
+      'Both recommendations are withdrawn.',
+    ].join('\n');
+    const withdrawnAfterRecommendationResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: withdrawnAfterRecommendation,
+      persistedResponse: withdrawnAfterRecommendation,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(withdrawnAfterRecommendationResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+  });
+
+  it('accepts browser-testing wording for an affirmed Windows failure count', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      'Friday ship status: API tests passing.',
+      'Browser testing shows two unresolved failures on Windows.',
+      'The smart router has not been tested without cloud credentials.',
+      'Recommendation: delay release until those gaps are closed.',
+    ].join(' ');
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+
+    const continuousResponse = response.replace(
+      'Browser testing shows two unresolved failures on Windows.',
+      'Browser testing is showing two unresolved failures on Windows.',
+    );
+    const continuousResult = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: continuousResponse,
+      persistedResponse: continuousResponse,
+      requestPersonaId: writer.id,
+    }));
+
+    expect(continuousResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+
+    const consequenceResponse = response.replace(
+      'Browser testing shows two unresolved failures on Windows.',
+      'Browser testing shows two unresolved failures on Windows, which may delay release.',
+    );
+    const consequenceResult = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: consequenceResponse,
+      persistedResponse: consequenceResponse,
+      requestPersonaId: writer.id,
+    }));
+
+    expect(consequenceResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+
+    const semicolonConsequenceResponse = response.replace(
+      'Browser testing shows two unresolved failures on Windows.',
+      'Browser testing shows two unresolved failures on Windows; this may delay release.',
+    );
+    const semicolonConsequenceResult = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: semicolonConsequenceResponse,
+      persistedResponse: semicolonConsequenceResponse,
+      requestPersonaId: writer.id,
+    }));
+
+    expect(semicolonConsequenceResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+
+    const deniedClaims = [
+      'Browser testing does not show two unresolved failures on Windows.',
+      'Browser testing cannot show two unresolved failures on Windows.',
+      "Browser testing can't show two unresolved failures on Windows.",
+      "Browser testing doesn't show two unresolved failures on Windows.",
+      "Browser testing isn't showing two unresolved failures on Windows.",
+      'Could browser testing show two unresolved failures on Windows?',
+      'Browser testing shows two unresolved failures on Windows, but that is not true.',
+      'We cannot confirm that browser testing shows two unresolved failures on Windows.',
+      'It is unclear whether browser testing shows two unresolved failures on Windows.',
+      'Maybe browser testing shows two unresolved failures on Windows.',
+      'Reportedly, browser testing shows two unresolved failures on Windows.',
+      'Browser testing shows two unresolved failures on Windows, but I retract that claim.',
+      'Browser testing shows two unresolved failures on Windows, but that claim has been withdrawn.',
+      'Browser testing shows two unresolved failures on Windows, although all failures were fixed afterward.',
+      'Browser testing shows two unresolved failures on Windows; correction: zero failures remain.',
+      'There is no evidence that browser testing shows two unresolved failures on Windows.',
+      'If browser testing shows two unresolved failures on Windows, delay release.',
+      'I doubt browser testing shows two unresolved failures on Windows.',
+      'An unverified rumor says browser testing shows two unresolved failures on Windows.',
+      'It is not the case that browser testing shows two unresolved failures on Windows.',
+      'Hypothetically, browser testing shows two unresolved failures on Windows.',
+      'Browser testing shows two unresolved failures on Windows, but that claim is unsupported.',
+      'No browser tests on Windows show two failures.',
+      'It has not been confirmed that browser testing shows two unresolved failures on Windows.',
+      'Not Friday. API tests are passing. Browser testing shows two unresolved failures on Windows.',
+      'Friday is not the ship date. API tests are passing. Browser testing shows two unresolved failures on Windows.',
+      'Friday is the ship date. The assertion that API tests are passing is false. Browser testing shows two unresolved failures on Windows.',
+    ];
+    for (const deniedClaim of deniedClaims) {
+      const deniedResponse = response.replace(
+        'Browser testing shows two unresolved failures on Windows.',
+        deniedClaim,
+      );
+      const deniedResult = scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: deniedResponse,
+        persistedResponse: deniedResponse,
+        requestPersonaId: writer.id,
+      }));
+
+      expect(
+        deniedResult.checks.find(check => check.id === 'release-facts')?.passed,
+        deniedClaim,
+      ).toBe(false);
+    }
+  });
 });
