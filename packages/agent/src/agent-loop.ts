@@ -568,7 +568,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     if (currentRequestToolNames.length > 0) {
       body.tools = turnOpenAiTools;
     }
-    if (stream) {
+    // A forced synthesis is the only request in the turn that cannot execute
+    // tools. Make it atomic so an upstream SSE truncation cannot discard an
+    // otherwise complete evidence-backed answer after all tool work finished.
+    const requestUsesStream = stream && !synthesisForced;
+    if (requestUsesStream) {
       body.stream = true;
       body.stream_options = { include_usage: true };
     }
@@ -627,10 +631,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     let turnInputTokens = 0;
     let turnOutputTokens = 0;
     let completionFinishReason: string | null = null;
-    let streamDoneObserved = !stream;
+    let streamDoneObserved = !requestUsesStream;
     let currentTurnStreamedContent = '';
 
-    if (stream) {
+    if (requestUsesStream) {
       let parsed: Awaited<ReturnType<typeof parseChatCompletionStream>>;
       try {
         parsed = await parseChatCompletionStream(response.body!, {
@@ -718,7 +722,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     const incompleteReason = completionFinishReason === 'length'
       ? 'finish_reason=length'
-      : stream && !streamDoneObserved
+      : requestUsesStream && !streamDoneObserved
         ? 'stream ended before data: [DONE]'
         : completionFinishReason === null
           ? 'missing finish_reason'
@@ -755,7 +759,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           ?? (synthesisReserveTokens
             ? 'I gathered evidence but the token budget was exhausted before a reliable final synthesis.'
             : `Token budget exceeded (used ${totalInputTokens + totalOutputTokens} tokens, limit ${maxTokenBudget}).`),
-        Boolean(stream && usableContent),
+        Boolean(requestUsesStream && usableContent),
       );
       if (!stream && onToken && result.content) onToken(result.content);
       return result;
@@ -812,9 +816,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const finalContent = finalized.content;
 
       // In non-streaming mode, emit the full content as a single token
-      if (!stream && onToken && finalContent) {
+      if (!requestUsesStream && onToken && finalContent) {
         onToken(finalContent);
-      } else if (stream && onToken) {
+      } else if (requestUsesStream && onToken) {
         if (gate.contentSuffix) onToken(gate.contentSuffix);
         if (finalized.suffix) onToken(finalized.suffix);
       }
@@ -844,9 +848,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         citationIntent,
         successfullyFetchedCitationUrls,
       );
-      if (!stream && onToken && finalized.content) {
+      if (!requestUsesStream && onToken && finalized.content) {
         onToken(finalized.content);
-      } else if (stream && onToken && finalized.suffix) {
+      } else if (requestUsesStream && onToken && finalized.suffix) {
         onToken(finalized.suffix);
       }
       return {

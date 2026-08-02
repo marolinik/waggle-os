@@ -189,6 +189,67 @@ describe('model-facing tool context', () => {
 });
 
 describe('bounded agent loop synthesis', () => {
+  it('uses an atomic non-streaming request for forced synthesis after streamed evidence collection', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestBodies.push(body);
+      if (body.tools) {
+        return streamResponse([
+          sse({
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  id: 'research_once',
+                  function: { name: 'web_fetch', arguments: '{"url":"https://primary.example/evidence"}' },
+                }],
+              },
+            }],
+          }),
+          sse({
+            choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+            usage: { prompt_tokens: 100, completion_tokens: 20 },
+          }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      if (body.stream === true) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: 'Discarded partial synthesis.' } }] }),
+        ]);
+      }
+      return jsonResponse(
+        { role: 'assistant', content: 'Reliable final synthesis.' },
+        200,
+        50,
+      );
+    }) as unknown as typeof fetch;
+    const webFetch: ToolDefinition = {
+      name: 'web_fetch',
+      description: 'Fetch evidence.',
+      parameters: { type: 'object', properties: { url: { type: 'string' } } },
+      execute: vi.fn(async () => 'Primary evidence'),
+    };
+    const emitted: string[] = [];
+
+    const result = await runAgentLoop({
+      ...researchConfig(fetchFn, webFetch),
+      stream: true,
+      onToken: token => emitted.push(token),
+      maxTurns: 2,
+      maxToolRounds: 1,
+      maxTokenBudget: 100_000,
+      synthesisReserveTokens: 1_000,
+    });
+
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(webFetch.execute).toHaveBeenCalledOnce();
+    expect(requestBodies.map(body => body.stream === true)).toEqual([true, false]);
+    expect(result.content).toBe('Reliable final synthesis.');
+    expect(emitted.join('')).toBe(result.content);
+  });
+
   it('forces a deterministic long research run to synthesize below 60k cumulative input', async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     let modelCall = 0;
