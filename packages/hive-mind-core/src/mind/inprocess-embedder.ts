@@ -2,13 +2,14 @@
  * In-process embedder using @huggingface/transformers (ONNX Runtime).
  * Default provider for ALL desktop users — zero config, works offline.
  * Model: Xenova/all-MiniLM-L6-v2 (384 native dims, normalized to target dims).
- * Downloads ~23MB model on first use, cached in ~/.waggle/models/.
+ * Downloads ~90MB fp32 model on first use, cached in ~/.waggle/models/.
  */
 
 import path from 'node:path';
 import os from 'node:os';
 import type { Embedder } from './embeddings.js';
 import { createCoreLogger } from '../logger.js';
+import { withTransformersModelLoad } from './transformers-model-load.js';
 
 const log = createCoreLogger('inprocess-embedder');
 
@@ -32,13 +33,18 @@ export async function createInProcessEmbedder(config?: Partial<InProcessEmbedder
   const cacheDir = config?.cacheDir ?? path.join(os.homedir(), '.waggle', 'models');
   const targetDims = config?.targetDimensions ?? 1024;
 
-  log.info(`Loading in-process embedding model: ${model} (~23MB first download)`);
+  log.info(`Loading in-process embedding model: ${model} (~90MB fp32 first download)`);
 
-  const { pipeline, env } = await import('@huggingface/transformers');
-  env.cacheDir = cacheDir;
-  env.allowRemoteModels = true;
-
-  const extractor = await pipeline('feature-extraction', model, { dtype: 'fp32' });
+  const { pipeline } = await import('@huggingface/transformers');
+  const extractor = await withTransformersModelLoad({
+    cacheDir,
+    model,
+    load: (canonicalCacheDir) => pipeline('feature-extraction', model, {
+      dtype: 'fp32',
+      cache_dir: canonicalCacheDir,
+    }),
+    onQuarantine: () => log.warn(`Quarantined corrupt embedding model cache: ${model}`),
+  });
   const nativeDims = 384; // all-MiniLM-L6-v2 output dimensions
 
   log.info(`In-process embedder ready (${nativeDims} native dims → ${targetDims} normalized)`);
