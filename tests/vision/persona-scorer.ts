@@ -722,7 +722,7 @@ function hasTimedAgenda(
       !/^(?:option|requirement|phase|block|item|topic|task)\b/i.test(item)
       && /^(?:[A-Z][\p{L}'-]*|[A-Z]{2,})(?:\s+(?:[A-Z][\p{L}'-]*|[A-Z]{2,}))*$/u.test(item)
     ));
-    const adjacentParticipantMatch = /(?:^|[(:])\s*([^()|;:]+?)\s*[\u2013\u2014-]\s*$/u.exec(allocationPrefix);
+    const adjacentParticipantMatch = /(?:^|[(:])\s*([^()|;:]+?)\s*[\u2013\u2014-]\s*[~\u2248]?\s*$/u.exec(allocationPrefix);
     const adjacentParticipantList = adjacentParticipantMatch?.[1];
     const adjacentParticipantItems = adjacentParticipantList
       ? adjacentParticipantList

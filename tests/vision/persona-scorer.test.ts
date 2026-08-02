@@ -3447,6 +3447,14 @@ describe('deterministic 100-point persona scorer', () => {
     ))).toBe(true);
     expect(score(response.replace(
       'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status round-robin (Product, Engineering, QA, Support — ~3 min each)',
+    ))).toBe(true);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status round-robin (Product, Engineering, QA, Support — ~4 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
       'Status (6 min each: Product, Engineering; 6 min each: QA, Support)',
     ))).toBe(false);
     expect(score(response.replace(
