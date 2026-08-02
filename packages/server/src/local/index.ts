@@ -623,7 +623,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   }
   server.decorate('marketplace', marketplaceDb);
 
-  // ── Daily marketplace sync (non-blocking, 15s delay after startup) ──
+  // ── Daily marketplace sync (non-blocking, 60s delay after startup) ──
   const stopMarketplaceBackgroundSync = scheduleMarketplaceBackgroundSync({ marketplaceDb, log });
 
   // ── Agent state (matches CLI initialization) ────────────────────────

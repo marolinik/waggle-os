@@ -14,7 +14,7 @@ export function scheduleMarketplaceBackgroundSync({
   marketplaceDb,
   log,
   env = process.env,
-  delayMs = 15_000,
+  delayMs = 60_000,
   intervalMs = 24 * 60 * 60 * 1000,
   // Default sync uses the SSRF-guarded fetcher — background sync pulls
   // attacker-influenceable registry URLs (user-added sources).

@@ -195,7 +195,7 @@ describe('qualify-smart-router helpers', () => {
     assert.throws(() => qualify({ agentLatencyMs: 6_199 }), /agentLatencyMs.*totalServerLatencyMs/i);
     assert.throws(
       () => qualify({ timeToFirstTokenMs: 15_001, totalServerLatencyMs: 15_002 }),
-      /timeToFirstTokenMs.*15,000/i,
+      /timeToFirstTokenMs.*15,000.*received 15,001/i,
     );
     assert.throws(
       () => qualify({ agentLatencyMs: 60_001, totalServerLatencyMs: 60_002 }),

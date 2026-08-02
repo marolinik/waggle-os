@@ -284,7 +284,7 @@ function assertQualifiedRuntimeMetrics(done: Record<string, unknown>): Qualified
   }
   if (runtimeMetrics.timeToFirstTokenMs > QUALIFIED_MAX_TIME_TO_FIRST_TOKEN_MS) {
     throw new Error(
-      `Qualified chat timeToFirstTokenMs must not exceed ${QUALIFIED_MAX_TIME_TO_FIRST_TOKEN_MS.toLocaleString('en-US')}ms`,
+      `Qualified chat timeToFirstTokenMs must not exceed ${QUALIFIED_MAX_TIME_TO_FIRST_TOKEN_MS.toLocaleString('en-US')}ms; received ${runtimeMetrics.timeToFirstTokenMs.toLocaleString('en-US')}ms`,
     );
   }
   if (runtimeMetrics.agentLatencyMs > QUALIFIED_MAX_AGENT_LATENCY_MS) {
