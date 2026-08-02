@@ -5,6 +5,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+const WATCHDOG_FAILURE_THRESHOLD: u32 = 3;
+const WATCHDOG_INITIAL_STARTUP_GRACE: Duration = Duration::from_secs(600);
+
 pub struct ServiceState {
     pub process: Mutex<Option<Child>>,
     pub port: u16,
@@ -481,6 +484,103 @@ mod tests {
         child.kill().expect("kills service child");
         child.wait().expect("reaps service child");
     }
+
+    #[test]
+    fn watchdog_keeps_a_live_sidecar_during_cold_embedding_startup() {
+        assert!(!watchdog_should_restart(
+            false,
+            true,
+            Duration::from_secs(45),
+            WATCHDOG_FAILURE_THRESHOLD,
+        ));
+        assert!(!watchdog_should_restart(
+            false,
+            true,
+            WATCHDOG_INITIAL_STARTUP_GRACE - Duration::from_secs(1),
+            u32::MAX,
+        ));
+    }
+
+    #[test]
+    fn watchdog_restarts_an_exited_sidecar_during_cold_startup() {
+        assert!(watchdog_should_restart(false, false, Duration::ZERO, 1,));
+    }
+
+    #[test]
+    fn watchdog_restarts_after_startup_grace_or_established_health_loss() {
+        assert!(watchdog_should_restart(
+            false,
+            true,
+            WATCHDOG_INITIAL_STARTUP_GRACE,
+            WATCHDOG_FAILURE_THRESHOLD,
+        ));
+        assert!(!watchdog_should_restart(
+            true,
+            true,
+            Duration::ZERO,
+            WATCHDOG_FAILURE_THRESHOLD - 1,
+        ));
+        assert!(watchdog_should_restart(
+            true,
+            true,
+            Duration::ZERO,
+            WATCHDOG_FAILURE_THRESHOLD,
+        ));
+    }
+
+    #[test]
+    fn watchdog_does_not_spawn_while_a_cold_sidecar_is_alive() {
+        let process = Mutex::new(Some(
+            long_lived_command().spawn().expect("starts cold sidecar"),
+        ));
+        let build_called = std::cell::Cell::new(false);
+
+        let recovery = recover_service_with(
+            &process,
+            false,
+            Duration::from_secs(45),
+            u32::MAX,
+            true,
+            || {
+                build_called.set(true);
+                Ok(long_lived_command())
+            },
+        )
+        .expect("defers cold sidecar recovery");
+
+        assert_eq!(recovery, WatchdogRecovery::Deferred);
+        assert!(!build_called.get());
+        let mut child = process
+            .lock()
+            .expect("locks cold sidecar")
+            .take()
+            .expect("preserves cold sidecar");
+        child.kill().expect("kills cold sidecar");
+        child.wait().expect("reaps cold sidecar");
+    }
+
+    #[test]
+    fn watchdog_restart_holds_the_process_lock_until_registration() {
+        let process = Mutex::new(None);
+
+        let recovery = recover_service_with(&process, false, Duration::ZERO, 1, true, || {
+            assert!(matches!(
+                process.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ));
+            Ok(long_lived_command())
+        })
+        .expect("restarts exited sidecar atomically");
+
+        assert_eq!(recovery, WatchdogRecovery::Restarted);
+        let mut child = process
+            .lock()
+            .expect("locks restarted sidecar")
+            .take()
+            .expect("registers restarted sidecar");
+        child.kill().expect("kills restarted sidecar");
+        child.wait().expect("reaps restarted sidecar");
+    }
 }
 
 fn service_child_is_running(process: &mut Option<Child>) -> Result<bool, String> {
@@ -495,6 +595,62 @@ fn service_child_is_running(process: &mut Option<Child>) -> Result<bool, String>
         }
         Err(error) => Err(format!("Failed to inspect service process: {error}")),
     }
+}
+
+fn watchdog_should_restart(
+    has_ever_been_healthy: bool,
+    child_is_running: bool,
+    initial_startup_elapsed: Duration,
+    consecutive_failures: u32,
+) -> bool {
+    if !child_is_running {
+        return true;
+    }
+
+    consecutive_failures >= WATCHDOG_FAILURE_THRESHOLD
+        && (has_ever_been_healthy || initial_startup_elapsed >= WATCHDOG_INITIAL_STARTUP_GRACE)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum WatchdogRecovery {
+    Deferred,
+    Restarted,
+    RestartLimitReached,
+}
+
+fn recover_service_with(
+    process: &Mutex<Option<Child>>,
+    has_ever_been_healthy: bool,
+    initial_startup_elapsed: Duration,
+    consecutive_failures: u32,
+    restart_allowed: bool,
+    build_command: impl FnOnce() -> Result<Command, String>,
+) -> Result<WatchdogRecovery, String> {
+    let mut proc = process.lock().map_err(|e| e.to_string())?;
+    let child_is_running = service_child_is_running(&mut proc)?;
+    if !watchdog_should_restart(
+        has_ever_been_healthy,
+        child_is_running,
+        initial_startup_elapsed,
+        consecutive_failures,
+    ) {
+        return Ok(WatchdogRecovery::Deferred);
+    }
+    if !restart_allowed {
+        return Ok(WatchdogRecovery::RestartLimitReached);
+    }
+
+    if let Some(mut child) = proc.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    let mut command = build_command()?;
+    let child = command
+        .spawn()
+        .map_err(|error| format!("Failed to restart service: {error}"))?;
+    *proc = Some(child);
+    Ok(WatchdogRecovery::Restarted)
 }
 
 fn spawn_service_with(
@@ -566,6 +722,8 @@ pub fn start_watchdog(app: AppHandle, port: u16) {
     tauri::async_runtime::spawn(async move {
         let health_url = format!("http://127.0.0.1:{}/health", port);
         let mut consecutive_failures: u32 = 0;
+        let mut has_ever_been_healthy = false;
+        let mut initial_startup_started = Instant::now();
         let mut restart_count: u32 = 0;
         let mut restart_window_start = Instant::now();
         const MAX_RESTARTS: u32 = 5;
@@ -579,17 +737,32 @@ pub fn start_watchdog(app: AppHandle, port: u16) {
 
             match reqwest::get(&health_url).await {
                 Ok(resp) if resp.status().is_success() => {
+                    has_ever_been_healthy = true;
                     consecutive_failures = 0;
                 }
                 _ => {
-                    consecutive_failures += 1;
-                    if consecutive_failures >= 3 {
-                        if restart_window_start.elapsed() > RESTART_WINDOW {
-                            restart_count = 0;
-                            restart_window_start = Instant::now();
-                        }
+                    consecutive_failures = consecutive_failures.saturating_add(1);
+                    if restart_window_start.elapsed() > RESTART_WINDOW {
+                        restart_count = 0;
+                        restart_window_start = Instant::now();
+                    }
 
-                        if restart_count >= MAX_RESTARTS {
+                    let recovery = if let Some(state) = app.try_state::<ServiceState>() {
+                        recover_service_with(
+                            &state.process,
+                            has_ever_been_healthy,
+                            initial_startup_started.elapsed(),
+                            consecutive_failures,
+                            restart_count < MAX_RESTARTS,
+                            || build_service_command(port),
+                        )
+                    } else {
+                        Err("Service state is unavailable".to_string())
+                    };
+
+                    match recovery {
+                        Ok(WatchdogRecovery::Deferred) => continue,
+                        Ok(WatchdogRecovery::RestartLimitReached) => {
                             let _ = app.emit(
                                 "waggle://service-status",
                                 serde_json::json!({ "status": "failed" }),
@@ -597,38 +770,35 @@ pub fn start_watchdog(app: AppHandle, port: u16) {
                             eprintln!("[waggle] Watchdog: max restarts exceeded, giving up");
                             break;
                         }
-
-                        let _ = app.emit(
-                            "waggle://service-status",
-                            serde_json::json!({ "status": "restarting" }),
-                        );
-                        eprintln!(
-                            "[waggle] Watchdog: server unresponsive, respawning (attempt {})",
-                            restart_count + 1
-                        );
-
-                        // R7-003: self-heal — reap the dead child (so spawn_service_sync's
-                        // is_some() early-return clears) then respawn the sidecar in place.
-                        if let Some(state) = app.try_state::<ServiceState>() {
-                            {
-                                if let Ok(mut proc) = state.process.lock() {
-                                    if let Some(mut child) = proc.take() {
-                                        let _ = child.kill();
-                                        let _ = child.wait();
-                                    }
-                                }
-                            }
-                            match spawn_service_sync(port, &state.process) {
-                                Ok(()) => eprintln!("[waggle] Watchdog: sidecar respawned"),
-                                Err(e) => eprintln!("[waggle] Watchdog: respawn failed: {}", e),
-                            }
+                        Ok(WatchdogRecovery::Restarted) => {}
+                        Err(error) => {
+                            eprintln!("[waggle] Watchdog: respawn failed: {error}");
+                            let _ = app.emit("waggle://service-restart-needed", ());
+                            restart_count += 1;
+                            consecutive_failures = 0;
+                            has_ever_been_healthy = false;
+                            initial_startup_started = Instant::now();
+                            tokio::time::sleep(Duration::from_secs(10)).await;
+                            continue;
                         }
-                        let _ = app.emit("waggle://service-restart-needed", ());
-
-                        restart_count += 1;
-                        consecutive_failures = 0;
-                        tokio::time::sleep(Duration::from_secs(10)).await;
                     }
+
+                    let _ = app.emit(
+                        "waggle://service-status",
+                        serde_json::json!({ "status": "restarting" }),
+                    );
+                    eprintln!(
+                        "[waggle] Watchdog: server unresponsive, respawning (attempt {})",
+                        restart_count + 1
+                    );
+
+                    let _ = app.emit("waggle://service-restart-needed", ());
+
+                    restart_count += 1;
+                    consecutive_failures = 0;
+                    has_ever_been_healthy = false;
+                    initial_startup_started = Instant::now();
+                    tokio::time::sleep(Duration::from_secs(10)).await;
                 }
             }
         }
