@@ -1,6 +1,6 @@
 # Waggle OS
 
-Workspace-native AI agent platform with persistent memory, model-agnostic orchestration, and skill-extensible capabilities. The current release candidate is a Windows-first Tauri 2.0 desktop app with a Vite-bundled web UI and a bundled Node.js sidecar; macOS certification remains on the roadmap.
+Workspace-native AI agent platform with persistent memory, model-agnostic orchestration, and skill-extensible capabilities. The current desktop release scope is Windows-first: a Tauri 2.0 app with a Vite-bundled web UI and bundled Node.js sidecar; macOS packaging and certification remain roadmap work.
 
 ## Current Release Scope
 
@@ -9,10 +9,10 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 - **Cursor and OpenClaw are roadmap integrations.** They remain registered for detection and future development, but the production launcher, hooks, Fleet/task path, and direct run API do not offer them.
 - Claude Desktop, Codex Desktop, and Hermes Desktop may appear as detected convenience launch surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
 - **ChatGPT/OpenAI is a model and memory-import surface**, not a separate local coding-agent launcher.
-- The Windows Solo desktop bundles its Node sidecar and a no-Python OpenAI-compatible proxy. **Docker, Python, and an external LiteLLM service are not prerequisites** for the desktop app. Docker/LiteLLM deployment files remain available for optional server and team deployments.
-- Ollama is optional. The default embedding path can run in process; a local Ollama model may be selected for offline chat/routing when installed.
+- The Windows Solo launch contract requires an exact-HEAD Windows installer qualification receipt to prove its bundled Node sidecar, no-Python OpenAI-compatible proxy, Waggle-managed local runtime/model, default in-process embedding path, and freedom from developer Node, Docker, Python, an external LiteLLM service, or a separately installed Ollama. A separate exact-HEAD router receipt must prove the smart-router primary, compact-tool-context, budget, and fallback paths. A user-installed Ollama remains optional.
+- Docker/LiteLLM deployment files remain optional server and team deployment choices; they are not desktop prerequisites.
 
-Release approval is evidence-gated. See the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md); historical audit documents are not current ship authority.
+Release status and exact-HEAD receipts are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
 ## Architecture
 
@@ -68,6 +68,10 @@ The monorepo has **28 packages** under `packages/`. They split into two groups.
 > See the "Memory Substrate Sync" section of [`CLAUDE.md`](./CLAUDE.md) before touching `packages/hive-mind-core`.
 
 ## Quick Start
+
+### Windows Solo desktop
+
+Use only the signed Windows installer and SHA-256 identified by a **GO** [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If that recommendation is not GO, no packaged desktop artifact is release-approved; use the source-development instructions below.
 
 ### Self-host in one line (Linux / macOS)
 

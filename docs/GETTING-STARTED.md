@@ -2,19 +2,24 @@
 
 Welcome to Waggle — your AI operating system with persistent memory.
 
-## Quick Start (5 minutes)
+## Quick Start
 
-### 1. Install Waggle
-Download the desktop app for your platform:
-- **Windows**: Download the `.msi` installer
-- **macOS**: Download the `.dmg` installer
+### 1. Install Waggle for Windows
 
-Run the installer and launch Waggle.
+Use only the signed Windows Solo `.exe` installer and SHA-256 identified by a **GO** [launch recommendation](production-readiness/09-LAUNCH_RECOMMENDATION.md). If that recommendation is not GO, no packaged desktop artifact is release-approved; use the source-development instructions in the repository instead. macOS desktop packaging and certification remain roadmap work.
 
-### 2. Set Up Your API Key
-- Open Waggle — the onboarding wizard appears on first launch
-- Get an Anthropic API key at https://console.anthropic.com/settings/keys
-- Paste it in the wizard and click "Validate & save"
+Run the installer and launch Waggle. The Windows Solo release contract does not require developer Node.js, Docker, Python, LiteLLM, administrator access, or a separate Ollama installation.
+
+### 2. Connect a model
+
+The first-launch wizard offers two supported paths:
+
+- **Private local model:** open **Local model**, choose **Install private runtime**, then download and verify the recommended model. Waggle keeps the managed runtime and model in its private data directory; no system Ollama or Docker installation is required.
+- **Cloud provider:** open **API key**, choose a provider, and paste your own provider API key. Waggle validates it live when the provider is reachable, labels any unverified result, and stores it encrypted in Vault.
+
+At least one working local model or cloud provider is needed for chat. You can choose **I'll do this later**, but chat remains unavailable until a model is configured.
+
+External coding-agent authentication is separate from Waggle's model setup. Install each supported client yourself and use its own sign-in flow: Claude Code (`claude auth login --claudeai`), Codex (`codex login`), and Hermes' built-in provider OAuth (`hermes auth add openai-codex --type oauth`). Waggle uses the client's existing user session; do not paste or copy those credentials into Waggle.
 
 ### 3. Create Your First Workspace
 - Choose a template (Sales, Research, Legal, etc.) or start blank
@@ -82,11 +87,11 @@ Once you start chatting, click the **Workspace Overview** toggle above the messa
 
 ## Product Scopes
 
-Waggle works across four product scopes:
-- **Solo** — personal productivity with persistent memory
-- **Teams** — shared workspaces with collaboration
-- **Business** — team management, analytics, and governance
-- **Enterprise** — full KVARK integration, compliance, and audit trails
+Waggle uses four product tiers:
+- **Trial** — 15 days of the Team experience, then Solo
+- **Solo (Free)** — personal productivity with persistent memory
+- **Team** — shared workspaces, WaggleDance, and governance
+- **Enterprise** — sovereign KVARK deployment, compliance, and audit trails
 
 ## Need Help?
 Type `/help` in chat for a full command reference.

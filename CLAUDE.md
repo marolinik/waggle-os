@@ -16,8 +16,8 @@ If you're about to write code, **Section 3** is the most important thing you'll 
 
 ## 1. What Waggle OS Actually Is
 
-**Waggle OS** is a workspace-native AI agent platform with persistent memory. The active release
-candidate is a Windows-first Tauri 2.0 desktop app with a Vite-bundled web UI and a bundled Node.js
+**Waggle OS** is a workspace-native AI agent platform with persistent memory. Its current desktop
+release scope is Windows-first: a Tauri 2.0 app with a Vite-bundled web UI and bundled Node.js
 sidecar. macOS packaging, signing, notarization, and runtime certification are roadmap work.
 
 **Strategic function:** Waggle is the demand-creation and qualification engine for KVARK —
@@ -49,9 +49,17 @@ WaggleDance, governance) is the upgrade trigger.
 - Claude Desktop, Codex Desktop, and Hermes Desktop may remain as detected convenience launch
   surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
 - ChatGPT/OpenAI is a model/provider and memory-import surface, not a separate launcher target.
-- The Windows Solo artifact bundles the Node sidecar and no-Python OpenAI-compatible proxy.
-  Docker, Python, and external LiteLLM are optional deployment choices, not desktop prerequisites.
-- Do not claim release approval until the current launch recommendation's exact-HEAD gates pass.
+- The Windows Solo launch contract requires an exact-HEAD Windows installer qualification receipt to
+  prove its bundled Node sidecar, no-Python OpenAI-compatible proxy, Waggle-managed local runtime/model, default
+  in-process embedding path, and freedom from developer Node, Docker, Python, external LiteLLM, or a
+  separately installed Ollama. A separate exact-HEAD router receipt must prove the smart-router primary,
+  compact-tool-context, budget, and fallback paths. A user-installed Ollama remains optional.
+- Runtime, agent, persona, and security claims are valid only for the exact source revision and
+  installer SHA-256 sealed by the current launch recommendation; older receipts are historical evidence.
+- A GO seal requires 30/30 fresh persona receipts across 10 personas at >=95/100, exact-HEAD Claude
+  Code/Codex/Hermes canaries using official user authentication, and zero unresolved Critical/High findings.
+- Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
+  unless the current launch recommendation says GO for that same release.
 
 ### Key Technology Facts (Verified August 2026)
 
@@ -60,14 +68,14 @@ WaggleDance, governance) is the upgrade trigger.
 | Frontend | React **19** + TypeScript + Vite + Tailwind 4 + base-ui/react |
 | Desktop | Tauri 2.0 (Rust shell) |
 | Backend | Fastify sidecar (Node.js, bundled into Tauri) |
-| LLM routing | Bundled no-Python OpenAI-compatible proxy for Windows Solo; optional LiteLLM deployment config |
+| LLM routing | Windows Solo release contract: bundled no-Python OpenAI-compatible proxy and smart router; optional LiteLLM deployment config |
 | Database | SQLite via @waggle/core (better-sqlite3 + sqlite-vec-windows-x64) |
 | Memory | FrameStore + HybridSearch + KnowledgeGraph + IdentityLayer + AwarenessLayer |
 | Agent runtime | `packages/agent/src/agent-loop.ts` |
 | Billing | Stripe (installed; `stripe@^21.0.1`) |
 | Design | Hive DS — honey #e5a000 / hive-950 #08090c / accent #a78bfa |
 | Tests | Vitest (unit) + Playwright (E2E) |
-| Deploy | Windows Tauri installer; optional Dockerfile + docker-compose.production.yml + render.yaml |
+| Deploy | Windows Tauri installer release contract; optional Dockerfile + docker-compose.production.yml + render.yaml for server/team deployment |
 
 Package manager: npm (root) with `bun.lock` also present. Node >= 20.
 
