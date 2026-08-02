@@ -3348,6 +3348,117 @@ describe('deterministic 100-point persona scorer', () => {
     expect(conjunctiveParticipantResult.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
   });
 
+  it('accepts a bounded single-duration participant split inside a clock agenda row', () => {
+    const executiveAssistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const response = [
+      '# Launch-Readiness Meeting Agenda (30 Minutes)',
+      '| Time | Duration | Segment | Lead |',
+      '|---|---|---|---|',
+      '| 0:00–0:02 | 2 min | Welcome & meeting objective | Product |',
+      '| 0:02–0:14 | 12 min | Go/No-Go status by team (3 min each: Product, Engineering, QA, Support) | All |',
+      '| 0:14–0:21 | 7 min | Open risks & blockers review | All |',
+      '| 0:21–0:26 | 5 min | Go/No-Go decision | Product |',
+      '| 0:26–0:29 | 3 min | Action items & owners | All |',
+      '| 0:29–0:30 | 1 min | Wrap-up & next checkpoint | Product |',
+      '**Total: 30 minutes**',
+      '## Desired Decisions',
+      '- Final launch decision.',
+      '## Pre-Read Checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const score = (candidate: string) => scorePersonaTrial(executiveAssistant, evidence({
+      prompt: executiveAssistant.prompt,
+      response: candidate,
+      persistedResponse: candidate,
+      requestPersonaId: executiveAssistant.id,
+    })).checks.find(check => check.id === 'duration-blocks')?.passed;
+
+    expect(score(response)).toBe(true);
+    expect(score(response.replace(
+      '3 min each: Product, Engineering, QA, Support',
+      '3 min each: product, engineering, QA, support',
+    ))).toBe(true);
+    expect(score(response.replace('3 min each:', '4 min each:'))).toBe(false);
+    expect(score(response.replace('QA, Support)', 'QA, Support, Security)'))).toBe(false);
+    expect(score(response.replace('3 min each:', '3 min eachwhere:'))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Product requirements (3 min per requirement)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Review requirements (3 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Review options (3 min each: option A, option B)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Product requirements (3 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Requirements (3 min each: scope, quality, timing, risk)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Requirements (3 min each: Scope, Quality, Timing, Risk)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status discussion (3 min each: Scope, Quality, Timing, Risk)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status discussion (3 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Product, Engineering, QA, Support review options (3 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status (Scope, Quality, Timing, Risk — 3 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Participants review topics (Scope, Quality, Timing, Risk — 3 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Participants review topics (3 min each: Scope, Quality, Timing, Risk)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status discussion (2–3 min each)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Product, Engineering, QA, Support — 2–3 min each',
+    ))).toBe(true);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status by function (Product, Engineering, QA, Support — 3 min each)',
+    ))).toBe(true);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status by function (product, engineering, QA, support — 3 min each)',
+    ))).toBe(true);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status (6 min each: Product, Engineering; 6 min each: QA, Support)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Status (4 min each: Product, Engineering; 4 min each: QA, Support)',
+    ))).toBe(false);
+    expect(score(response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Add four extra launch blocks (3 min each: Product, Engineering, QA, Support)',
+    ))).toBe(false);
+  });
+
   it('accepts positive runway actions in numbered Markdown table rows', () => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const response = [

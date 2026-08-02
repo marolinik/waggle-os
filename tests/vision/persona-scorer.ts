@@ -666,6 +666,127 @@ function hasTimedAgenda(
     if (hour < 1 || hour > 12) return null;
     return ((hour % 12) + (/^pm$/i.test(meridiem) ? 12 : 0)) * 60 + minute;
   };
+  const isBoundedParticipantAllocation = (
+    line: string,
+    contextStart: number,
+    matchIndex: number,
+    matchLength: number,
+    allocationStart: number,
+    allocationEnd: number,
+    primaryDuration: number,
+    requireKnownParticipantTarget = false,
+  ): boolean => {
+    const localCellStart = Math.max(contextStart, line.lastIndexOf('|', matchIndex) + 1);
+    const nextCellDelimiter = line.indexOf('|', matchIndex + matchLength);
+    const allocationContextStart = requireKnownParticipantTarget ? localCellStart : contextStart;
+    const allocationContextEnd = requireKnownParticipantTarget && nextCellDelimiter >= 0
+      ? nextCellDelimiter
+      : line.length;
+    const allocationContext = line.slice(allocationContextStart, allocationContextEnd);
+    const allocationPrefix = line.slice(allocationContextStart, matchIndex);
+    const suffix = line.slice(matchIndex + matchLength, allocationContextEnd);
+    const explicitParticipantMarkers = allocationContext.match(/\b(?:product|engineering|qa|support)\b/gi) ?? [];
+    const explicitParticipantCount = new Set(
+      explicitParticipantMarkers.map(marker => marker.toLowerCase()),
+    ).size;
+    const hasGenericParticipantPlural = /\b(?:participants|attendees|speakers|people|persons|team members|functions)\b/i.test(allocationContext);
+    const perParticipantLabel = /^\s+per\s+(?:participant|attendee|speaker|person|team member|function|role)\b/i.test(suffix);
+    const allocationTargetsParticipants = /^\s+each\b/i.test(suffix) || perParticipantLabel;
+    const quantifiedParticipants = /\b(?:all\s+)?(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:participants?|attendees?|speakers?|people|persons?|team members?|functions?|roles?)\b/i.exec(allocationContext);
+    const numberWords = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+    const quantifiedParticipantCount = quantifiedParticipants
+      ? /^\d+$/.test(quantifiedParticipants[1])
+        ? Number(quantifiedParticipants[1])
+        : numberWords.indexOf(quantifiedParticipants[1].toLowerCase())
+      : 0;
+    const namedParticipantList = /([A-Z][a-z]+(?:(?:,\s*|\s+and\s+)[A-Z][a-z]+)+)\s*[\u2013\u2014-]\s*$/.exec(allocationPrefix)?.[1];
+    const namedParticipantCount = namedParticipantList
+      ? namedParticipantList.split(/,\s*|\s+and\s+/i).length
+      : 0;
+    const trailingParticipantList = /^\s+(?:each\b|per\s+(?:participant|attendee|speaker|person|team member|function|role)\b)\s*:\s*([^)|;]+)/i.exec(suffix)?.[1];
+    const trailingParticipantItems = trailingParticipantList
+      ? trailingParticipantList
+        .split(/,\s*|\s+and\s+/i)
+        .map(item => item.trim())
+        .filter(Boolean)
+      : [];
+    const hasTrailingParticipantList = trailingParticipantList !== undefined;
+    const trailingListHasKnownRoles = trailingParticipantItems.every(item => (
+      /^(?:product|engineering|qa|support)$/i.test(item)
+    ));
+    const hasParticipantCueAtEnd = (value: string): boolean => (
+      /\b(?:participants|attendees|speakers|people|persons|team members|functions|roles)\b\s*(?:[:(\x5b]|[\u2013\u2014-])?\s*$/i.test(value)
+    );
+    const trailingListHasParticipantCue = hasParticipantCueAtEnd(allocationPrefix);
+    const trailingItemsAreProperNames = trailingParticipantItems.every(item => (
+      !/^(?:option|requirement|phase|block|item|topic|task)\b/i.test(item)
+      && /^(?:[A-Z][\p{L}'-]*|[A-Z]{2,})(?:\s+(?:[A-Z][\p{L}'-]*|[A-Z]{2,}))*$/u.test(item)
+    ));
+    const adjacentParticipantMatch = /(?:^|[(:])\s*([^()|;:]+?)\s*[\u2013\u2014-]\s*$/u.exec(allocationPrefix);
+    const adjacentParticipantList = adjacentParticipantMatch?.[1];
+    const adjacentParticipantItems = adjacentParticipantList
+      ? adjacentParticipantList
+        .split(/,\s*|\s+and\s+/i)
+        .map(item => item.trim())
+        .filter(Boolean)
+      : [];
+    const adjacentListHasKnownRoles = adjacentParticipantItems.every(item => (
+      /^(?:product|engineering|qa|support)$/i.test(item)
+    ));
+    const adjacentItemsAreProperNames = adjacentParticipantItems.every(item => (
+      !/^(?:option|requirement|phase|block|item|topic|task)\b/i.test(item)
+      && /^(?:[A-Z][\p{L}'-]*|[A-Z]{2,})(?:\s+(?:[A-Z][\p{L}'-]*|[A-Z]{2,}))*$/u.test(item)
+    ));
+    const adjacentListHasParticipantCue = adjacentParticipantMatch !== null
+      && hasParticipantCueAtEnd(allocationPrefix.slice(0, adjacentParticipantMatch.index));
+    const adjacentParticipantCount = requireKnownParticipantTarget
+      && adjacentParticipantItems.length >= 2
+      && (adjacentListHasKnownRoles || (adjacentListHasParticipantCue && adjacentItemsAreProperNames))
+      ? adjacentParticipantItems.length
+      : 0;
+    const trailingParticipantCount = requireKnownParticipantTarget
+      && trailingParticipantItems.length >= 2
+      && (trailingListHasKnownRoles || (trailingListHasParticipantCue && trailingItemsAreProperNames))
+      ? trailingParticipantItems.length
+      : 0;
+    const refersToAllParticipants = /\ball\s+(?:participants|attendees|speakers|people|persons|team members|functions|roles)\b/i.test(allocationContext);
+    const fallbackParticipantCount = requireKnownParticipantTarget
+      ? perParticipantLabel && agendaParticipantCount >= 2
+        ? agendaParticipantCount
+        : 0
+      : hasGenericParticipantPlural
+        ? 2
+        : perParticipantLabel
+          ? 1
+          : 0;
+    const strictParticipantCount = hasTrailingParticipantList
+      ? trailingParticipantCount
+      : adjacentParticipantCount >= 2
+        ? adjacentParticipantCount
+        : perParticipantLabel && agendaParticipantCount >= 2
+          ? agendaParticipantCount
+          : 0;
+    const participantCount = requireKnownParticipantTarget
+      ? strictParticipantCount
+      : quantifiedParticipantCount > 0
+        ? quantifiedParticipantCount
+        : explicitParticipantCount >= 2
+          ? explicitParticipantCount
+          : namedParticipantCount >= 2
+            ? namedParticipantCount
+            : refersToAllParticipants && agendaParticipantCount >= 2
+              ? agendaParticipantCount
+              : fallbackParticipantCount;
+    const hasNonParticipantReferent = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:options?|requirements?|phases?|blocks?|items?|topics?|tasks?)\b[^|]{0,30}$/i.test(allocationPrefix);
+    const declaresAdditionalBlocks = /\b(?:(?:two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:extra\s+|additional\s+)?(?:launch\s+)?blocks?|(?:extra|additional|required)\b[^|]{0,40}\bblocks?)\b/i.test(allocationContext);
+    return allocationEnd >= allocationStart
+      && allocationEnd <= primaryDuration
+      && (allocationStart * participantCount) <= primaryDuration
+      && allocationTargetsParticipants
+      && participantCount > 0
+      && !hasNonParticipantReferent
+      && !declaresAdditionalBlocks;
+  };
   const durationPattern = new RegExp(
     String.raw`\b${durationMinutes}\s*-?\s*(?:mins?|minutes?)\b`,
     'gi',
@@ -782,57 +903,38 @@ function hasTimedAgenda(
     const offsetMatches = hasPrimaryTableInterval
       ? allOffsetMatches.filter((match) => {
         if ((match.index ?? line.length) < firstTableCellEnd) return true;
-        const suffix = line.slice((match.index ?? 0) + match[0].length);
         const allocationStart = Number(match[1]);
         const allocationEnd = Number(match[2]);
-        const allocationContext = line.slice(firstTableCellEnd + 1);
-        const allocationPrefixLength = Math.max(0, (match.index ?? line.length) - firstTableCellEnd - 1);
-        const allocationPrefix = allocationContext.slice(0, allocationPrefixLength);
-        const explicitParticipantMarkers = allocationContext.match(/\b(?:product|engineering|qa|support)\b/gi) ?? [];
-        const explicitParticipantCount = new Set(
-          explicitParticipantMarkers.map(marker => marker.toLowerCase()),
-        ).size;
-        const hasGenericParticipantPlural = /\b(?:participants|attendees|speakers|people|persons|team members|functions)\b/i.test(allocationContext);
-        const perParticipant = /^\s+per\s+(?:participant|attendee|speaker|person|team member|function|role)\b/i.test(suffix);
-        const quantifiedParticipants = /\b(?:all\s+)?(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:participants?|attendees?|speakers?|people|persons?|team members?|functions?|roles?)\b/i.exec(allocationContext);
-        const numberWords = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-        const quantifiedParticipantCount = quantifiedParticipants
-          ? /^\d+$/.test(quantifiedParticipants[1])
-            ? Number(quantifiedParticipants[1])
-            : numberWords.indexOf(quantifiedParticipants[1].toLowerCase())
-          : 0;
-        const namedParticipantList = /([A-Z][a-z]+(?:(?:,\s*|\s+and\s+)[A-Z][a-z]+)+)\s*[\u2013\u2014-]\s*$/.exec(allocationPrefix)?.[1];
-        const namedParticipantCount = namedParticipantList
-          ? namedParticipantList.split(/,\s*|\s+and\s+/i).length
-          : 0;
-        const refersToAllParticipants = /\ball\s+(?:participants|attendees|speakers|people|persons|team members|functions|roles)\b/i.test(allocationContext);
-        const participantCount = quantifiedParticipantCount > 0
-          ? quantifiedParticipantCount
-          : explicitParticipantCount >= 2
-            ? explicitParticipantCount
-            : namedParticipantCount >= 2
-              ? namedParticipantCount
-              : refersToAllParticipants && agendaParticipantCount >= 2
-                ? agendaParticipantCount
-                : hasGenericParticipantPlural
-                  ? 2
-                : perParticipant
-                  ? 1
-                  : 0;
-        const hasNonParticipantReferent = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:options?|requirements?|phases?|blocks?|items?|topics?|tasks?)\b[^|]{0,30}$/i.test(allocationPrefix);
-        const allocationTargetsParticipants = (perParticipant || /^\s+each\b/i.test(suffix))
-          && participantCount > 0
-          && !hasNonParticipantReferent;
-        const declaresAdditionalBlocks = /\b(?:(?:two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:extra\s+|additional\s+)?(?:launch\s+)?blocks?|(?:extra|additional|required)\b[^|]{0,40}\bblocks?)\b/i.test(allocationContext);
-        const isBoundedSubAllocation = allocationEnd >= allocationStart
-          && allocationEnd <= primaryTableDuration
-          && (allocationStart * participantCount) <= primaryTableDuration
-          && allocationTargetsParticipants
-          && !declaresAdditionalBlocks;
-        return !isBoundedSubAllocation;
+        return !isBoundedParticipantAllocation(
+          line,
+          firstTableCellEnd + 1,
+          match.index ?? line.length,
+          match[0].length,
+          allocationStart,
+          allocationEnd,
+          primaryTableDuration,
+        );
       })
       : allOffsetMatches;
-    const intervalFreeLine = [...clockMatches, ...allOffsetMatches]
+    const boundedSingleDurationCandidates = hasPrimaryTableInterval
+      ? [...line.matchAll(/\b(\d{1,3})\s*-?\s*(?:mins?|minutes?)\b/gi)].filter(match => (
+        (match.index ?? line.length) >= firstTableCellEnd
+        && isBoundedParticipantAllocation(
+          line,
+          firstTableCellEnd + 1,
+          match.index ?? line.length,
+          match[0].length,
+          Number(match[1]),
+          Number(match[1]),
+          primaryTableDuration,
+          true,
+        )
+      ))
+      : [];
+    const boundedSingleDurationMatches = boundedSingleDurationCandidates.length === 1
+      ? boundedSingleDurationCandidates
+      : [];
+    const intervalFreeLine = [...clockMatches, ...allOffsetMatches, ...boundedSingleDurationMatches]
       .sort((left, right) => (right.index ?? 0) - (left.index ?? 0))
       .reduce((value, match) => {
         const index = match.index ?? 0;
