@@ -347,6 +347,7 @@ try {
   ).all(marker);
   const belongsToSession = (content) =>
     content.startsWith(`[hm session:${sessionId} `) && content.includes(` src:${source} event:`);
+  const matchingSession = rows.filter((row) => belongsToSession(row.content));
   const prompts = rows.filter((row) =>
     belongsToSession(row.content)
     && row.content.includes(` src:${source} event:user-prompt-submit] `)
@@ -359,15 +360,22 @@ try {
     && (row.importance === 'important' || row.importance === 'critical')
     && row.source === 'system'
   );
-  if (rows.length !== 2 || prompts.length !== 1 || responses.length !== 1) process.exit(2);
   const hash = (value) => crypto.createHash('sha256').update(value, 'utf8').digest('hex');
   process.stdout.write(JSON.stringify({
     markerFrames: rows.length,
+    matchingSessionFrames: matchingSession.length,
     promptFrames: prompts.length,
     responseFrames: responses.length,
-    promptContentSha256: hash(prompts[0].content),
-    responseContentSha256: hash(responses[0].content),
+    systemSourceFrames: rows.filter((row) => row.source === 'system').length,
+    temporaryFrames: rows.filter((row) => row.importance === 'temporary').length,
+    importantOrCriticalFrames: rows.filter((row) =>
+      row.importance === 'important' || row.importance === 'critical'
+    ).length,
+    promptContentSha256: prompts[0] ? hash(prompts[0].content) : null,
+    responseContentSha256: responses[0] ? hash(responses[0].content) : null,
   }));
+  if (rows.length !== 2 || matchingSession.length !== 2 ||
+      prompts.length !== 1 || responses.length !== 1) process.exitCode = 2;
 } finally {
   db.close();
 }
@@ -376,15 +384,20 @@ try {
     '-e', $inspectionSource, '--', $BetterSqliteEntry, $MindPath, $Marker, $Source, $SessionId
   ) -WorkingDirectory $WorkingDirectory -EnvironmentOverrides $EnvironmentOverrides `
     -BlankEnvironmentNames $BlankEnvironmentNames -TimeoutSeconds 30
-  Assert-ProcessPassed -Result $inspection -Label "$Source marker capture inspection"
   try { $evidence = $inspection.Stdout | ConvertFrom-Json -Depth 10 } catch {
     throw "$Source marker capture inspection did not return valid JSON."
   }
-  if ([int]$evidence.markerFrames -ne 2 -or [int]$evidence.promptFrames -ne 1 -or
+  if ($inspection.TimedOut -or $inspection.ExitCode -ne 0 -or
+    [int]$evidence.markerFrames -ne 2 -or [int]$evidence.matchingSessionFrames -ne 2 -or
+    [int]$evidence.promptFrames -ne 1 -or
     [int]$evidence.responseFrames -ne 1 -or
     [string]$evidence.promptContentSha256 -notmatch '^[0-9a-f]{64}$' -or
     [string]$evidence.responseContentSha256 -notmatch '^[0-9a-f]{64}$') {
-    throw "$Source marker capture evidence did not satisfy the two-frame contract."
+    throw "$Source marker capture evidence did not satisfy the two-frame contract " +
+      "(exit=$($inspection.ExitCode), timeout=$($inspection.TimedOut), marker=$($evidence.markerFrames), " +
+      "session=$($evidence.matchingSessionFrames), prompt=$($evidence.promptFrames), " +
+      "response=$($evidence.responseFrames), system=$($evidence.systemSourceFrames), " +
+      "temporary=$($evidence.temporaryFrames), important=$($evidence.importantOrCriticalFrames))."
   }
   return [pscustomobject]@{
     MindSha256 = $mindSha256
