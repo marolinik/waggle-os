@@ -3623,6 +3623,81 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 90, passed: false });
   });
 
+  it('accepts the captured clock agenda with a fractional per-participant sub-allocation', () => {
+    const executiveAssistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const response = [
+      '# Launch-Readiness Meeting — 30-Minute Agenda',
+      '**Participants:** Product, Engineering, QA, Support',
+      '## Time-Blocked Agenda',
+      '| Time Block | Duration | Topic | Desired Decision / Outcome |',
+      '|---|---|---|---|',
+      '| 0:00–0:03 | 3 min | Welcome & objective | Confirm meeting goal |',
+      '| 0:03–0:10 | 7 min | Team status round-robin (Product, Eng, QA, Support — ~1.5 min each) | Shared readiness state |',
+      '| 0:10–0:18 | 8 min | Risk & open-blocker review | Agree on launch blockers |',
+      '| 0:18–0:25 | 7 min | Go/No-Go decision discussion | Make the launch decision |',
+      '| 0:25–0:29 | 4 min | Action items & owners | Assign owners and due dates |',
+      '| 0:29–0:30 | 1 min | Close | Confirm next checkpoint |',
+      '**Total: 30 minutes**',
+      '## Pre-Read Checklist',
+      '- [ ] Product, Engineering, QA, and Support status.',
+    ].join('\n');
+    const score = (candidate: string) => scorePersonaTrial(executiveAssistant, evidence({
+      prompt: executiveAssistant.prompt,
+      response: candidate,
+      persistedResponse: candidate,
+      requestPersonaId: executiveAssistant.id,
+    }));
+
+    expect(score(response)).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace('~1.5 min each', '~1.75 min each'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    expect(score(response.replace('~1.5 min each', '~1.8 min each'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    expect(score(response.replace('~1.5 min each', '~2 min each'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    expect(score(response.replace('~1.5 min each', '~1.5 min eachwhere'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    expect(score(response.replace(
+      'Product, Eng, QA, Support — ~1.5 min each',
+      'Product requirements — ~1.5 min each',
+    )).checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    expect(score(response.replace('| 7 min | Team status', '| 7.5 min | Team status'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    const withoutDurationCell = response.replace('| 7 min | Team status', '| | Team status');
+    expect(score(withoutDurationCell.replace('~1.5 min each', '~1.75 min each'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    expect(score(withoutDurationCell.replace('~1.5 min each', '~2.7 min each'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    const unparenthesized = response.replace(
+      'Team status round-robin (Product, Eng, QA, Support — ~1.5 min each)',
+      'Team status round-robin: Product, Eng, QA, Support — ~1.5 min each',
+    );
+    expect(score(unparenthesized)
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    expect(score(unparenthesized.replace(
+      'Product, Eng, QA, Support — ~1.5 min each',
+      'Review the 5-minute demo',
+    )).checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    expect(score(unparenthesized.replace('~1.5 min each', '~1.8 min each'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    expect(score(unparenthesized
+      .replace('| 7 min | Team status', '| | Team status')
+      .replace('~1.5 min each', '~2.7 min each'))
+      .checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    for (const invalidAllocation of [
+      'Product requirements — ~1.5 min each',
+      'Product requirements — ~1.5 min per requirement',
+      'Four extra blocks — ~1.5 min each',
+      'Product, Eng, QA, Support, Security — ~1.5 min each',
+      'Product, Eng, QA, Support — ~1.5 min eachwhere',
+    ]) {
+      expect(score(unparenthesized.replace(
+        'Product, Eng, QA, Support — ~1.5 min each',
+        invalidAllocation,
+      )).checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+    }
+  });
+
   it('accepts a clock agenda with a per-participant sub-allocation in a later table cell', () => {
     const executiveAssistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
     const response = [

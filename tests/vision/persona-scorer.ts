@@ -688,9 +688,12 @@ function hasTimedAgenda(
     .replace(/\r\n?/g, '\n')
     .replace(/[\u2018\u2019]/g, "'");
   const lines = text.split('\n');
-  const agendaParticipantMarkers = text.match(/\b(?:product|engineering|qa|support)\b/gi) ?? [];
+  const agendaParticipantMarkers = text.match(/\b(?:product|eng(?:ineering)?|qa|support)\b/gi) ?? [];
   const agendaParticipantCount = new Set(
-    agendaParticipantMarkers.map(marker => marker.toLowerCase()),
+    agendaParticipantMarkers.map((marker) => {
+      const normalized = marker.toLowerCase();
+      return normalized === 'eng' ? 'engineering' : normalized;
+    }),
   ).size;
   type AgendaSection = 'agenda' | 'excluded' | 'other';
   const headingText = (line: string): string | null => {
@@ -725,7 +728,7 @@ function hasTimedAgenda(
   };
   const rangeAnnotationValues = (line: string): number[] => {
     const values: number[] = [];
-    for (const match of line.matchAll(/\b(\d{1,3})\s*-?\s*(?:mins?|minutes?)\b/gi)) {
+    for (const match of line.matchAll(/\b(\d{1,3}(?:\.\d+)?)\s*-?\s*(?:mins?|minutes?)\b/gi)) {
       if (match.index === undefined) continue;
       const prefix = line.slice(0, match.index);
       const suffix = line.slice(match.index + match[0].length);
@@ -775,9 +778,12 @@ function hasTimedAgenda(
     const allocationContext = line.slice(allocationContextStart, allocationContextEnd);
     const allocationPrefix = line.slice(allocationContextStart, matchIndex);
     const suffix = line.slice(matchIndex + matchLength, allocationContextEnd);
-    const explicitParticipantMarkers = allocationContext.match(/\b(?:product|engineering|qa|support)\b/gi) ?? [];
+    const explicitParticipantMarkers = allocationContext.match(/\b(?:product|eng(?:ineering)?|qa|support)\b/gi) ?? [];
     const explicitParticipantCount = new Set(
-      explicitParticipantMarkers.map(marker => marker.toLowerCase()),
+      explicitParticipantMarkers.map((marker) => {
+        const normalized = marker.toLowerCase();
+        return normalized === 'eng' ? 'engineering' : normalized;
+      }),
     ).size;
     const hasGenericParticipantPlural = /\b(?:participants|attendees|speakers|people|persons|team members|functions)\b/i.test(allocationContext);
     const perParticipantLabel = /^\s+per\s+(?:participant|attendee|speaker|person|team member|function|role)\b/i.test(suffix);
@@ -802,7 +808,7 @@ function hasTimedAgenda(
       : [];
     const hasTrailingParticipantList = trailingParticipantList !== undefined;
     const trailingListHasKnownRoles = trailingParticipantItems.every(item => (
-      /^(?:product|engineering|qa|support)$/i.test(item)
+      /^(?:product|eng(?:ineering)?|qa|support)$/i.test(item)
     ));
     const hasParticipantCueAtEnd = (value: string): boolean => (
       /\b(?:participants|attendees|speakers|people|persons|team members|functions|roles)\b\s*(?:[:(\x5b]|[\u2013\u2014-])?\s*$/i.test(value)
@@ -821,7 +827,7 @@ function hasTimedAgenda(
         .filter(Boolean)
       : [];
     const adjacentListHasKnownRoles = adjacentParticipantItems.every(item => (
-      /^(?:product|engineering|qa|support)$/i.test(item)
+      /^(?:product|eng(?:ineering)?|qa|support)$/i.test(item)
     ));
     const adjacentItemsAreProperNames = adjacentParticipantItems.every(item => (
       !/^(?:option|requirement|phase|block|item|topic|task)\b/i.test(item)
@@ -1006,10 +1012,24 @@ function hasTimedAgenda(
         );
       })
       : allOffsetMatches;
-    const boundedSingleDurationCandidates = hasPrimaryTableInterval
-      ? [...line.matchAll(/\b(\d{1,3})\s*-?\s*(?:mins?|minutes?)\b/gi)].filter(match => (
-        (match.index ?? line.length) >= firstTableCellEnd
-        && isBoundedParticipantAllocation(
+    const singleDurationCandidates = hasPrimaryTableInterval
+      ? [...line.matchAll(/\b(\d{1,3}(?:\.\d+)?)\s*-?\s*(?:mins?|minutes?)\b/gi)].filter((match) => {
+        const matchStart = match.index ?? line.length;
+        return matchStart >= firstTableCellEnd
+          && !allOffsetMatches.some((offsetMatch) => {
+            const offsetStart = offsetMatch.index ?? line.length;
+            return matchStart >= offsetStart && matchStart < offsetStart + offsetMatch[0].length;
+          });
+      })
+      : [];
+    const singleDurationAllocationCandidates = singleDurationCandidates.filter((match) => {
+      const matchEnd = (match.index ?? line.length) + match[0].length;
+      const nextCellDelimiter = line.indexOf('|', matchEnd);
+      const suffix = line.slice(matchEnd, nextCellDelimiter >= 0 ? nextCellDelimiter : line.length);
+      return /^\s+(?:each|per\s+[\p{L}-]+)/iu.test(suffix);
+    });
+    const boundedSingleDurationCandidates = singleDurationAllocationCandidates.filter(match => (
+      isBoundedParticipantAllocation(
           line,
           firstTableCellEnd + 1,
           match.index ?? line.length,
@@ -1019,11 +1039,13 @@ function hasTimedAgenda(
           primaryTableDuration,
           true,
         )
-      ))
-      : [];
+    ));
     const boundedSingleDurationMatches = boundedSingleDurationCandidates.length === 1
       ? boundedSingleDurationCandidates
       : [];
+    const hasInvalidSingleDurationAllocation = singleDurationAllocationCandidates.length > 0
+      && (singleDurationAllocationCandidates.length !== 1
+        || boundedSingleDurationCandidates.length !== 1);
     const intervalFreeLine = [...clockMatches, ...allOffsetMatches, ...boundedSingleDurationMatches]
       .sort((left, right) => (right.index ?? 0) - (left.index ?? 0))
       .reduce((value, match) => {
@@ -1034,6 +1056,10 @@ function hasTimedAgenda(
     const intervalCount = clockMatches.length + offsetMatches.length;
     const isAlternativeBlock = /(?:^|\|)\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:option|alternative|choice|scenario)\s+[a-z0-9]+\b/i.test(line);
     if (isAlternativeBlock && (intervalCount > 0 || durationAnnotations.length > 0)) {
+      invalidAgendaBlock = true;
+      continue;
+    }
+    if (hasInvalidSingleDurationAllocation) {
       invalidAgendaBlock = true;
       continue;
     }
