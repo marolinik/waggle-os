@@ -31,9 +31,10 @@ pub async fn recall_memory(
     limit: Option<u32>,
     workspace_id: Option<String>,
 ) -> Result<Value, String> {
+    let port = state.verified_port()?;
     let mut url = format!(
         "{}?q={}",
-        sidecar_url(state.port, "/api/memory/search"),
+        sidecar_url(port, "/api/memory/search"),
         urlencoding::encode(&query)
     );
     if let Some(s) = scope {
@@ -61,6 +62,7 @@ pub async fn save_memory(
     importance: Option<String>,
     source: Option<String>,
 ) -> Result<Value, String> {
+    let port = state.verified_port()?;
     let mut body = json!({ "content": content });
     if let Some(ws) = workspace_id {
         body["workspace"] = json!(ws);
@@ -72,7 +74,7 @@ pub async fn save_memory(
         body["source"] = json!(src);
     }
 
-    let url = sidecar_url(state.port, "/api/memory/frames");
+    let url = sidecar_url(port, "/api/memory/frames");
     let resp = http_post(&url, &body).await?;
     parse_json(resp).await
 }
@@ -85,7 +87,8 @@ pub async fn search_entities(
     workspace_id: Option<String>,
     scope: Option<String>,
 ) -> Result<Value, String> {
-    let mut url = sidecar_url(state.port, "/api/memory/graph").to_string();
+    let port = state.verified_port()?;
+    let mut url = sidecar_url(port, "/api/memory/graph").to_string();
     let mut params: Vec<String> = Vec::new();
     if let Some(ws) = workspace_id {
         params.push(format!("workspace={}", urlencoding::encode(&ws)));
@@ -111,7 +114,7 @@ pub async fn search_entities(
 /// pre-A1.1 placeholders and now only fire on hard sidecar outages.
 #[tauri::command]
 pub async fn get_identity(state: State<'_, ServiceState>) -> Result<Value, String> {
-    let url = sidecar_url(state.port, "/api/identity");
+    let url = sidecar_url(state.verified_port()?, "/api/identity");
     match http_get(&url).await {
         Ok(resp) if resp.status().as_u16() == 404 => Ok(identity_placeholder(
             "sidecar route 404 (unexpected post-A1.1)",

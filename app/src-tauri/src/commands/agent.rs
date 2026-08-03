@@ -42,7 +42,7 @@ pub async fn run_agent_query(
     session: Option<String>,
 ) -> Result<String, String> {
     let request_id = format!("agent-{}", Uuid::new_v4());
-    let port = state.port;
+    let port = state.verified_port()?;
     let app_clone = app.clone();
     let req_id_clone = request_id.clone();
 

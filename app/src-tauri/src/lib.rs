@@ -90,18 +90,17 @@ pub fn run() {
                 );
             }
 
-            // Auto-start the sidecar service before the webview loads so the
-            // React app finds it already healthy on localhost:3333.
+            // Auto-start an owned sidecar launch before the webview loads.
+            // Its verified endpoint may differ from the preferred port.
             let service_state = app.state::<ServiceState>();
-            let port = service_state.port;
-            match service::spawn_service_sync(port, &service_state.process) {
-                Ok(()) => eprintln!("[waggle] Sidecar spawn initiated on port {}", port),
+            match service::spawn_service_sync(&service_state) {
+                Ok(()) => eprintln!("[waggle] Owned sidecar spawn initiated"),
                 Err(e) => eprintln!("[waggle] Failed to auto-start sidecar: {}", e),
             }
 
             // Start service watchdog
             let app_handle_watchdog = app.handle().clone();
-            service::start_watchdog(app_handle_watchdog, port);
+            service::start_watchdog(app_handle_watchdog);
 
             Ok(())
         })
@@ -115,15 +114,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            // R7-002: kill the sidecar on app exit so it doesn't orphan and hold port 3333.
+            // R7-002: kill only the owned sidecar launch on app exit.
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = app_handle.try_state::<ServiceState>() {
-                    if let Ok(mut proc) = state.process.lock() {
-                        if let Some(mut child) = proc.take() {
-                            let _ = child.kill();
-                            let _ = child.wait();
-                        }
-                    }
+                    let _ = service::stop_service_sync(&state);
                 }
             }
         });
