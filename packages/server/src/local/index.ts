@@ -199,6 +199,8 @@ export interface LocalConfig {
   host: string;
   dataDir: string;       // ~/.waggle
   litellmUrl: string;    // http://localhost:4000
+  /** Immutable desktop-launch identity used to prove sidecar ownership. */
+  instanceId?: string;
   /** Governed CLI execution — allowlist of program names the agent may run. */
   cli?: { allowlist?: string[] };
   /** Active subscription tier, when known (drives session/feature caps). */
@@ -424,6 +426,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     dataDir: config.dataDir ?? process.env.WAGGLE_DATA_DIR ?? '',
     litellmUrl: config.litellmUrl ?? 'http://localhost:4000',
     ...config,
+    instanceId: config.instanceId ?? process.env.WAGGLE_INSTANCE_ID,
   };
   const resolvedTier = parseTier(String(fullConfig.tier ?? '')) ?? readTierFromDataDir(fullConfig.dataDir);
   fullConfig.tier = resolvedTier;
@@ -3053,6 +3056,10 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // Health check — truthful, not optimistic
   server.get('/health', async () => {
     const llm = { ...server.agentState.llmProvider };
+    const listeningAddress = server.server.address();
+    const servicePort = typeof listeningAddress === 'object' && listeningAddress
+      ? listeningAddress.port
+      : server.localConfig.port;
 
     // P0-3: If provider is anthropic-proxy and claims healthy, validate the key actually works
     if (
@@ -3140,6 +3147,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     return {
       status: overallStatus,
       mode: 'local',
+      instanceId: server.localConfig.instanceId ?? null,
+      port: servicePort,
       timestamp: new Date().toISOString(),
       llm: {
         provider: llm.provider,

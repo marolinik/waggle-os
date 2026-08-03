@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -16,7 +16,11 @@ describe('Health Endpoint', () => {
     const mind = new MindDB(personalPath);
     mind.close();
 
-    server = await buildLocalServer({ dataDir: tmpDir });
+    server = await buildLocalServer({
+      dataDir: tmpDir,
+      port: 38123,
+      instanceId: 'desktop-instance-test',
+    });
   });
 
   afterAll(async () => {
@@ -42,6 +46,20 @@ describe('Health Endpoint', () => {
     // Database section
     expect(body.database).toBeDefined();
     expect(body.database.healthy).toBe(true);
+  });
+
+  it('reports the desktop launch identity used for sidecar ownership checks', async () => {
+    vi.stubEnv('WAGGLE_INSTANCE_ID', 'mutated-after-launch');
+    try {
+      const res = await server.inject({ method: 'GET', url: '/health' });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.payload)).toMatchObject({
+        instanceId: 'desktop-instance-test',
+        port: 38123,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('overall status reflects LLM health', async () => {
