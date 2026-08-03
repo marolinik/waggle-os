@@ -325,6 +325,28 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 
+  it('accepts the captured finance formula that expands net monthly burn', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway is 4.00 months.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) = $40,000 ÷ ($10,000 − $0) = 4.00 months.',
+      'Biggest assumption: monthly burn remains constant and revenue remains zero.',
+      'Two actions: reduce monthly burn and generate revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'formula')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it('accepts a live plain-language runway formula using cash on hand and the division glyph', () => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const completeResponse = (formula: string) => [
@@ -355,6 +377,12 @@ describe('deterministic 100-point persona scorer', () => {
       pointsAwarded: 10,
     });
     for (const validClarification of [
+      'Formula: Runway (months) = Cash on hand divided by (monthly burn - revenue).',
+      'Formula: Runway (months) = Cash on Hand / (Monthly Burn - Monthly Revenue).',
+      'Formula: Runway (months) = Cash divided by (burn minus revenue).',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) — financing can extend the cash balance.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) – revenue is already netted out.',
+      'Formula: Runway (months) = Cash on Hand / Net Monthly Burn — revenue is already included in net burn.',
       'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate—not gross monthly burn.',
       'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate; revenue is not included.',
       'Revenue is not included, so the formula is Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
@@ -385,6 +413,24 @@ describe('deterministic 100-point persona scorer', () => {
     }
     for (const invalidFormula of [
       'Formula: Runway (months) = Net Monthly Burn Rate ÷ Cash on Hand.',
+      'Formula: Runway (months) = Cash / Monthly Burn - Monthly Revenue.',
+      'Formula: Runway (months) = Cash ÷ Monthly Burn − Monthly Revenue.',
+      'Formula: Runway (months) = Cash / Monthly Burn + Monthly Revenue.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Revenue − Monthly Burn).',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn + Monthly Revenue).',
+      'Formula: Runway (months) = (Monthly Burn - Monthly Revenue) / Cash.',
+      'Do not use this formula: Cash ÷ (Monthly Burn − Monthly Revenue).',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) is wrong.',
+      'Formula: Runway (months) = Cash / Net Monthly Burn is not the formula.',
+      'Formula: Runway (months) = Cash / Net Monthly Burn. This is not the formula.',
+      'Formula: Runway (months) = Cash / Net Monthly Burn. It is not the formula.',
+      'Formula: Runway (months) = Cash / Net Monthly Burn, which is not the formula.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) * 12.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) × 12.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) + financing.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) − revenue.',
+      'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue)?',
+      'Could the formula be Cash ÷ (Monthly Burn − Monthly Revenue)?',
       'This is not the formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
       'Formula: do not use Cash on Hand ÷ Net Monthly Burn Rate.',
       'Formula: don’t use Cash on Hand ÷ Net Monthly Burn Rate.',
