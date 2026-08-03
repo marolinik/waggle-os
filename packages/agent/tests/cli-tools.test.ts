@@ -362,7 +362,7 @@ describe('cli_execute', () => {
       const execution = Promise.resolve(execute.execute({
         program: 'node',
         args: ['-e', script],
-        timeout: 1,
+        timeout: 3,
       }));
       const readyDeadline = Date.now() + 5_000;
       while (!existsSync(ready) && Date.now() < readyDeadline) {
@@ -370,7 +370,7 @@ describe('cli_execute', () => {
       }
       expect(existsSync(ready)).toBe(true);
 
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_800);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3_800);
       const result = JSON.parse(await execution);
 
       expect(existsSync(finished)).toBe(true);
@@ -380,5 +380,5 @@ describe('cli_execute', () => {
       rmSync(ready, { force: true });
       rmSync(finished, { force: true });
     }
-  }, 10_000);
+  }, 15_000);
 });

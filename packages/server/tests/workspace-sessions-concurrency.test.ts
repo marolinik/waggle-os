@@ -11,7 +11,7 @@
  * corrupt each other. This test would fail on the pre-A.1 codebase.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
@@ -19,7 +19,10 @@ import fs from 'node:fs';
 
 import { MindDB, type Embedder } from '@waggle/core';
 import { Orchestrator } from '@waggle/agent';
+import { buildLocalServer } from '../src/local/index.js';
+import { chatSessionStateKey } from '../src/local/routes/chat-persistence.js';
 import { WorkspaceSessionManager } from '../src/local/workspace-sessions.js';
+import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
 // ── Deterministic fake embedder ──────────────────────────────────────
 // Produces a fixed-dimension zero vector so sqlite-vec stays happy but
@@ -306,4 +309,286 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
     expect(statsA.frameCount).toBeGreaterThanOrEqual(1);
     expect(statsB.frameCount).toBeGreaterThanOrEqual(1);
   });
+
+  it('composes the FREE cap, same-workspace chat isolation, bounded cache, and cleanup', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-solo-session-composition-'));
+    const server = await buildLocalServer({ dataDir, tier: 'FREE' });
+    const workspaceId = server.agentState.activeWorkspaceId;
+    expect(workspaceId).toBeTruthy();
+
+    const sessionA = 'solo-concurrent-a';
+    const sessionB = 'solo-concurrent-b';
+    const markerA = 'SOLO_SESSION_A';
+    const markerB = 'SOLO_SESSION_B';
+    const previousOllamaHost = process.env.OLLAMA_HOST;
+    const previousReranker = process.env.WAGGLE_RERANKER;
+    const releaseSpy = vi.spyOn(server.mindCache, 'release');
+    const createdWorkspaceIds: string[] = [workspaceId!];
+
+    const deferred = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((done) => { resolve = done; });
+      return { promise, resolve };
+    };
+    const aSecondArrived = deferred();
+    const bSecondArrived = deferred();
+    const aThirdArrived = deferred();
+    const bCompleted = deferred();
+    const providerBodies = new Map<'A' | 'B', Array<{
+      messages?: Array<{ role?: string; content?: string }>;
+    }>>([['A', []], ['B', []]]);
+    let requestA: Promise<Awaited<ReturnType<typeof injectWithAuth>>> | undefined;
+    let requestB: Promise<Awaited<ReturnType<typeof injectWithAuth>>> | undefined;
+
+    const streamResponse = (chunks: unknown[]) => new Response(
+      `${chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+    );
+    const toolResponse = (id: string, name: string, args: Record<string, unknown>) => streamResponse([
+      {
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              id,
+              type: 'function',
+              function: { name, arguments: JSON.stringify(args) },
+            }],
+          },
+        }],
+      },
+      {
+        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      },
+    ]);
+    const finalResponse = (content: string) => streamResponse([
+      { choices: [{ delta: { content } }] },
+      {
+        choices: [{ delta: {}, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      },
+    ]);
+
+    server.agentState.llmProvider = {
+      provider: 'ollama',
+      health: 'healthy',
+      detail: 'Deterministic Solo concurrency fixture',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = 'ollama/solo-local';
+    server.localConfig.litellmUrl = 'http://proxy.test/v1';
+    process.env.OLLAMA_HOST = 'http://ollama.test';
+    process.env.WAGGLE_RERANKER = '0';
+    resetRateLimiter(server);
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'solo-local' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (!url.endsWith('/chat/completions')) return new Response('', { status: 503 });
+
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        messages?: Array<{ role?: string; content?: string }>;
+      };
+      const contents = (body.messages ?? []).map(message => message.content ?? '').join('\n');
+      const logicalSession = contents.includes(markerA)
+        ? 'A'
+        : contents.includes(markerB) ? 'B' : null;
+      if (!logicalSession) throw new Error('Provider request did not contain a Solo session marker');
+      const bodies = providerBodies.get(logicalSession)!;
+      bodies.push(body);
+      const call = bodies.length;
+
+      if (logicalSession === 'A' && call === 1) {
+        return toolResponse('solo-a-create', 'create_plan', { title: 'Plan A' });
+      }
+      if (logicalSession === 'A' && call === 2) {
+        aSecondArrived.resolve();
+        await bSecondArrived.promise;
+        return toolResponse('solo-a-add', 'add_plan_step', { title: 'A_ONLY' });
+      }
+      if (logicalSession === 'A' && call === 3) {
+        aThirdArrived.resolve();
+        await bCompleted.promise;
+        return finalResponse(`${markerA} complete`);
+      }
+      if (logicalSession === 'B' && call === 1) {
+        await aSecondArrived.promise;
+        return toolResponse('solo-b-create', 'create_plan', { title: 'Plan B' });
+      }
+      if (logicalSession === 'B' && call === 2) {
+        bSecondArrived.resolve();
+        await aThirdArrived.promise;
+        return toolResponse('solo-b-show', 'show_plan', {});
+      }
+      if (logicalSession === 'B' && call === 3) {
+        return finalResponse(`${markerB} complete`);
+      }
+      throw new Error(`Unexpected provider call ${logicalSession}#${call}`);
+    });
+
+    try {
+      expect(server.localConfig.tier).toBe('FREE');
+      expect(server.sessionManager.getMaxSessions()).toBe(10);
+      expect(server.sessionManager.size).toBe(0);
+      expect(server.mindCache.keys()).toEqual([workspaceId]);
+
+      requestA = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: workspaceId,
+          session: sessionA,
+          persona: 'project-manager',
+          model: 'ollama/solo-local',
+          autonomy: { level: 'yolo' },
+          message: `${markerA}: use create_plan, then add_plan_step with A_ONLY.`,
+        },
+      });
+      requestB = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          workspace: workspaceId,
+          session: sessionB,
+          persona: 'project-manager',
+          model: 'ollama/solo-local',
+          autonomy: { level: 'yolo' },
+          message: `${markerB}: execute create_plan for Plan B, then execute show_plan immediately.`,
+        },
+      }).then(response => {
+        bCompleted.resolve();
+        return response;
+      });
+
+      const [responseA, responseB] = await Promise.all([requestA, requestB]);
+      expect(responseA.statusCode).toBe(200);
+      expect(responseB.statusCode).toBe(200);
+      expect(responseA.body).toContain(`${markerA} complete`);
+      expect(responseB.body).toContain(`${markerB} complete`);
+      expect(server.sessionManager.size).toBe(1);
+      expect(server.mindCache.size).toBe(1);
+
+      const bShowResult = providerBodies.get('B')![2]?.messages
+        ?.filter(message => message.role === 'tool')
+        .at(-1)?.content;
+      expect(bShowResult).toContain('Plan has no steps.');
+      expect(bShowResult).not.toContain('A_ONLY');
+      expect(server.agentState.sessionHistories.get(chatSessionStateKey(workspaceId!, sessionA)))
+        .toEqual([
+          { role: 'user', content: `${markerA}: use create_plan, then add_plan_step with A_ONLY.` },
+          expect.objectContaining({ role: 'assistant', content: `${markerA} complete` }),
+        ]);
+      expect(server.agentState.sessionHistories.get(chatSessionStateKey(workspaceId!, sessionB)))
+        .toEqual([
+          { role: 'user', content: `${markerB}: execute create_plan for Plan B, then execute show_plan immediately.` },
+          expect.objectContaining({ role: 'assistant', content: `${markerB} complete` }),
+        ]);
+
+      for (let index = 1; index < 10; index += 1) {
+        const workspace = server.workspaceManager.create({
+          name: `Solo cap ${index}`,
+          group: 'Test',
+        });
+        createdWorkspaceIds.push(workspace.id);
+        const workspacePath = path.join(dataDir, 'workspaces', workspace.id, 'files');
+        server.sessionManager.getOrCreate(
+          workspace.id,
+          () => server.mindCache.acquire(workspace.id),
+          mind => server.agentState.createSessionOrchestrator(mind),
+          (_mind, orchestrator) => server.agentState.buildToolsForSession(
+            orchestrator,
+            workspacePath,
+            workspace.id,
+          ),
+          undefined,
+          () => server.mindCache.release(workspace.id),
+        );
+        expect(server.mindCache.size).toBeLessThanOrEqual(10);
+      }
+
+      expect(server.sessionManager.size).toBe(10);
+      expect(server.mindCache.size).toBe(10);
+      expect(new Set(server.mindCache.keys())).toEqual(new Set(createdWorkspaceIds));
+      const fleet = await injectWithAuth(server, { method: 'GET', url: '/api/fleet' });
+      expect(fleet.statusCode).toBe(200);
+      expect(fleet.json()).toMatchObject({ count: 10, maxSessions: 10 });
+
+      const anchor = server.sessionManager.get(workspaceId!)!;
+      expect(() => server.sessionManager.create(
+        'solo-overflow',
+        anchor.mind,
+        anchor.orchestrator,
+        anchor.tools,
+      )).toThrow('Max concurrent sessions reached (10)');
+      expect(server.sessionManager.size).toBe(10);
+      expect(server.mindCache.size).toBe(10);
+
+      for (const sessionId of [sessionA, sessionB]) {
+        const cleared = await injectWithAuth(server, {
+          method: 'DELETE',
+          url: `/api/chat/history?workspace=${workspaceId}&session=${sessionId}`,
+        });
+        expect(cleared.statusCode).toBe(200);
+        expect(server.agentState.sessionHistories.has(
+          chatSessionStateKey(workspaceId!, sessionId),
+        )).toBe(false);
+        expect(fs.existsSync(path.join(
+          dataDir,
+          'workspaces',
+          workspaceId!,
+          'sessions',
+          `${sessionId}.jsonl`,
+        ))).toBe(false);
+      }
+
+      const turnReleases = releaseSpy.mock.calls
+        .filter(([releasedWorkspaceId]) => releasedWorkspaceId === workspaceId);
+      expect(turnReleases).toHaveLength(2);
+      const killed = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/fleet/${workspaceId}/kill`,
+      });
+      expect(killed.statusCode).toBe(200);
+      expect(killed.json()).toEqual({ killed: true, workspaceId });
+      expect(server.sessionManager.has(workspaceId!)).toBe(false);
+      expect(releaseSpy.mock.calls
+        .filter(([releasedWorkspaceId]) => releasedWorkspaceId === workspaceId)).toHaveLength(3);
+
+      for (const id of createdWorkspaceIds) {
+        const deleted = await injectWithAuth(server, {
+          method: 'DELETE',
+          url: `/api/workspaces/${id}`,
+        });
+        expect(deleted.statusCode).toBe(204);
+        expect(server.mindCache.has(id)).toBe(false);
+      }
+      expect(server.sessionManager.size).toBe(0);
+      expect(server.mindCache.size).toBe(0);
+      for (const id of createdWorkspaceIds.slice(1)) {
+        expect(releaseSpy.mock.calls
+          .filter(([releasedWorkspaceId]) => releasedWorkspaceId === id)).toHaveLength(1);
+      }
+    } finally {
+      aSecondArrived.resolve();
+      bSecondArrived.resolve();
+      aThirdArrived.resolve();
+      bCompleted.resolve();
+      await Promise.allSettled([requestA, requestB].filter(Boolean) as Promise<unknown>[]);
+      fetchSpy.mockRestore();
+      releaseSpy.mockRestore();
+      await server.close();
+      if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+      else process.env.OLLAMA_HOST = previousOllamaHost;
+      if (previousReranker === undefined) delete process.env.WAGGLE_RERANKER;
+      else process.env.WAGGLE_RERANKER = previousReranker;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

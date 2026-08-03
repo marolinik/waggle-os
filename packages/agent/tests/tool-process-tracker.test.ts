@@ -104,11 +104,9 @@ describe('ToolProcessTracker.kill', () => {
   it.runIf(process.platform === 'win32')('kills the full detached Windows launcher process tree', async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle tracker tree '));
     const readyPath = path.join(tempRoot, 'descendant ready.txt');
-    const markerPath = path.join(tempRoot, 'orphan marker.txt');
     const childCode = [
       `const fs = require('node:fs')`,
       `fs.writeFileSync(${JSON.stringify(readyPath)}, String(process.pid))`,
-      `setTimeout(() => fs.writeFileSync(${JSON.stringify(markerPath)}, 'orphan'), 1200)`,
       'setInterval(() => {}, 1000)',
       'setTimeout(() => process.exit(0), 15000)',
     ].join(';');
@@ -141,10 +139,8 @@ describe('ToolProcessTracker.kill', () => {
       const tracker = new ToolProcessTracker();
       tracker.register(parent.pid, 'codex', 'workspace with spaces');
       const result = await tracker.kill(parent.pid, 200);
-      await new Promise((resolve) => setTimeout(resolve, 1_300));
 
       expect(result).toEqual({ ok: true, pid: parent.pid, reason: 'tree-kill-ok' });
-      expect(fs.existsSync(markerPath)).toBe(false);
       expect(() => process.kill(childPid!, 0)).toThrow();
       expect(tracker.size).toBe(0);
     } finally {

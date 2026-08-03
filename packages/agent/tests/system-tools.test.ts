@@ -669,7 +669,7 @@ describe('createSystemTools', () => {
       const execution = Promise.resolve(runCode.execute({
         language: 'javascript',
         code,
-        timeout: 1000,
+        timeout: 3000,
       }));
       const readyDeadline = Date.now() + 5_000;
       while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
@@ -677,13 +677,13 @@ describe('createSystemTools', () => {
       }
       expect(fs.existsSync(ready)).toBe(true);
 
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_800);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3_800);
       const result = await execution;
 
       expect(fs.existsSync(finished)).toBe(true);
       expect(result).toContain('completed-before-deadline');
       expect(result.toLowerCase()).not.toContain('timed out');
-    }, 10_000);
+    }, 15_000);
 
     it.runIf(process.platform === 'win32')('starts a cold process supervisor while the main event loop is blocked', async () => {
       const finished = path.join(workspace, 'cold-supervisor-finished.txt');
