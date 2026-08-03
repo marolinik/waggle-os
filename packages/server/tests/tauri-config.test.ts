@@ -523,7 +523,8 @@ describe('Tauri Production Configuration', () => {
   it('pins patched transitive dependency versions used by desktop builds', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8')) as {
       engines?: { node?: string };
-      overrides?: Record<string, string>;
+      overrides?: Record<string, string | Record<string, string>>;
+      dependencies?: Record<string, string>;
     };
     const lockfile = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf-8'),
@@ -539,11 +540,16 @@ describe('Tauri Production Configuration', () => {
       'ip-address': '10.4.0',
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.0',
-      sharp: '0.35.3',
+      '@huggingface/transformers': { sharp: '0.35.3' },
+      next: '16.3.0',
     };
 
     expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
     expect(manifest.overrides).toMatchObject(expectedOverrides);
+    expect(manifest.dependencies).toMatchObject({
+      '@huggingface/transformers': '3.8.1',
+      sharp: '0.35.3',
+    });
 
     const fastifyStaticRanges = ['launcher', 'server'].map((workspace) => {
       const workspaceManifest = JSON.parse(fs.readFileSync(
