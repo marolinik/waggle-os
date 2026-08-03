@@ -96,7 +96,7 @@ export default defineConfig({
     command: `npm run build:all && ${e2eNodeCommand} node_modules/tsx/dist/cli.mjs packages/server/src/local/start.ts${e2eSkipLiteLLM ? ' --skip-litellm' : ''}`,
     url: new URL('/health', e2eBaseURL).toString(),
     reuseExistingServer: e2eReuseExistingServer,
-    timeout: 300_000, // Full workspace build + cold tsx sidecar import can exceed 3 min on Windows
+    timeout: 600_000, // Cold Windows build + scanning + tsx sidecar import can exceed 5 min
     stdout: 'pipe',
     stderr: 'pipe',
     // D1: the e2e suite drives /api/* routes directly (no token bootstrap), so

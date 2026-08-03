@@ -4780,6 +4780,8 @@ describe('Playwright Visual Regression Setup', () => {
         .find((key) => key.toLowerCase() === 'path');
       console.log(JSON.stringify({
         command: webServer.command,
+        reuseExistingServer: webServer.reuseExistingServer,
+        timeout: webServer.timeout,
         nodeValue: webServer.env.WAGGLE_E2E_NODE_EXEC,
         pathValue: webServer.env[pathKey],
         secretValue: webServer.env.WAGGLE_PROBE_AMBIENT_API_KEY,
@@ -4808,6 +4810,7 @@ describe('Playwright Visual Regression Setup', () => {
         env: {
           ...process.env,
           WAGGLE_E2E_SKIP_LITELLM: '1',
+          WAGGLE_E2E_REUSE_EXISTING_SERVER: '0',
           WAGGLE_PROBE_NODE_EXEC: nodePath,
           WAGGLE_PROBE_AMBIENT_API_KEY: 'must-not-enter-playwright-config',
         },
@@ -4820,6 +4823,8 @@ describe('Playwright Visual Regression Setup', () => {
     const output = result.stdout.trim().split(/\r?\n/).at(-1);
     const webServer = JSON.parse(output ?? '{}') as {
       command?: string;
+      reuseExistingServer?: boolean;
+      timeout?: number;
       nodeValue?: string;
       pathValue?: string;
       secretValue?: string;
@@ -4832,6 +4837,8 @@ describe('Playwright Visual Regression Setup', () => {
       + 'node_modules/tsx/dist/cli.mjs packages/server/src/local/start.ts --skip-litellm',
     );
     expect(webServer.command).not.toContain(nodePath);
+    expect(webServer.reuseExistingServer).toBe(false);
+    expect(webServer.timeout).toBe(600_000);
     expect(webServer.nodeValue).toBe(nodePath);
     expect(webServer.pathValue).toBeUndefined();
     expect(webServer.secretValue).toBeUndefined();
