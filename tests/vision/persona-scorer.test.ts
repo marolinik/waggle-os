@@ -1514,14 +1514,25 @@ describe('deterministic 100-point persona scorer', () => {
   it.each([
     ['Create near-term cash inflow', true],
     ['Add near-term revenue', true],
+    ['Start generating revenue', true],
     ['Do not create near-term cash inflow', false],
     ['Never add near-term revenue', false],
+    ['Do not start generating revenue', false],
     ['Create near-term cash inflow is not recommended', false],
     ['Add near-term revenue is impossible', false],
+    ['Start generating revenue is not recommended', false],
+    ['Start generating revenue, but this is not a recommendation', false],
+    ["Start generating revenue, but this isn't a recommendation", false],
+    ['Start generating revenue, but this isn’t a recommendation', false],
+    ["Start generating revenue, but this isn't my recommendation", false],
+    ["Start generating revenue, but this wasn't my recommendation", false],
+    ["Start generating revenue, but these aren't our recommendations", false],
     ['Add near-term revenue - never recommended', false],
     ['Create near-term cash inflow never works', false],
     ['The memo mentions "create near-term cash inflow"', false],
+    ['The memo mentions "start generating revenue"', false],
     ['We discussed whether to add near-term revenue', false],
+    ['We discussed whether to start generating revenue', false],
   ])('classifies the finance cash action %j', (cashAction, expected) => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const response = [
@@ -3994,6 +4005,26 @@ describe('deterministic 100-point persona scorer', () => {
     }));
 
     expect(withdrawnAfterRecommendationResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+  });
+
+  it('accepts the captured finance action wording that starts generating revenue', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway = 4.00 months.',
+      'Formula: Runway (months) = Cash on hand ÷ Net monthly burn.',
+      'Biggest assumption: monthly burn stays constant and no revenue materializes.',
+      '## Two Actions to Improve Runway',
+      '1. **Cut monthly burn** — trim discretionary costs to lower the baseline.',
+      '2. **Start generating revenue** — even modest recurring revenue reduces net burn.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
   });
 
   it('accepts browser-testing wording for an affirmed Windows failure count', () => {
