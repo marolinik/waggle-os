@@ -529,6 +529,7 @@ describe('Tauri Production Configuration', () => {
       packages: Record<string, { version?: string }>;
     };
     const expectedOverrides = {
+      '@fastify/static': '>=10.1.2 <11',
       'brace-expansion@1': '1.1.18',
       'brace-expansion@2': '2.1.4',
       'brace-expansion@5': '5.0.9',
@@ -540,6 +541,15 @@ describe('Tauri Production Configuration', () => {
 
     expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
     expect(manifest.overrides).toMatchObject(expectedOverrides);
+
+    const fastifyStaticRanges = ['launcher', 'server'].map((workspace) => {
+      const workspaceManifest = JSON.parse(fs.readFileSync(
+        path.join(ROOT, 'packages', workspace, 'package.json'),
+        'utf-8',
+      )) as { dependencies?: Record<string, string> };
+      return workspaceManifest.dependencies?.['@fastify/static'];
+    });
+    expect(new Set(fastifyStaticRanges)).toEqual(new Set(['^10.1.2']));
 
     const betterSqliteRanges = [
       'core',
@@ -566,6 +576,7 @@ describe('Tauri Production Configuration', () => {
       return new Set(matching.map(([, metadata]) => metadata.version!));
     };
 
+    expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.2']));
     expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.4']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));

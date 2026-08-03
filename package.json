@@ -53,7 +53,7 @@
     "lodash": ">=4.17.24 <5",
     "tmp": ">=0.2.6 <0.3",
     "fastify": ">5.8.4 <6",
-    "@fastify/static": ">9.1.0 <10",
+    "@fastify/static": ">=10.1.2 <11",
     "@clerk/fastify": ">=3.1.16 <4",
     "@xmldom/xmldom": "0.8.13",
     "brace-expansion@1": "1.1.18",
