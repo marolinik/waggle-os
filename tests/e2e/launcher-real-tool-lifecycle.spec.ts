@@ -248,8 +248,7 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
     ).toEqual(SUPPORTED_TOOLS);
 
     await page.goto(routeWithSkip('/launcher?watch=1'), { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.waggle-sidebar, [role="navigation"], main', { timeout: 15_000 });
-    await expect(page.getByText('Tool Launcher')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Tool Launcher', { exact: true })).toBeVisible({ timeout: 15_000 });
     for (const tool of detection.tools) {
       await expect(page.getByText(tool.displayName, { exact: true }).first()).toBeVisible({ timeout: 10_000 });
     }
