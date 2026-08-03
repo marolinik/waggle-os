@@ -601,6 +601,177 @@ describe('deterministic 100-point persona scorer', () => {
       requestPersonaId: writer.id,
     }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
 
+    const crossTopicQualifierResponse = [
+      '**Memo: Release Status Update**',
+      'We had planned to ship on Friday. API tests are passing. Browser tests still show two failures on Windows. The smart router has not been exercised without cloud credentials.',
+      '**Recommendation:** Delay the release until these gaps—the Windows browser test failures and the unverified smart router behavior without cloud credentials—are closed.',
+    ].join('\n\n');
+    expect(scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: crossTopicQualifierResponse,
+      persistedResponse: crossTopicQualifierResponse,
+      tokenStreamResponse: crossTopicQualifierResponse,
+      renderedAssistantResponse: crossTopicQualifierResponse,
+      requestPersonaId: writer.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const crossTopicQualifierVariants = [
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is unverified, while browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing, but smart router functionality remains unverified.',
+        'Browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Browser tests still show two failures on Windows; smart router operation is unverified.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Unverified smart router behavior remains a separate gap; browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior has not been verified; browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is unverified, and browser tests are still showing two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is unverified, and browser tests also show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is unverified, and browser tests are also showing two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is unverified, and browser tests are too slow despite showing two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior remains unconfirmed, while browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is uncertain; browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is not verified; browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Smart router behavior is unverified, and it is also being investigated while browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Browser tests and unverified smart router behavior are separate gaps. Browser tests still show two failures on Windows.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        'Browser tests still show two failures on Windows; the unverified smart router remains a separate gap.',
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+      [
+        'We planned to ship Friday. API tests are passing.',
+        "Smart router behavior isn't verified while browser tests still show two failures on Windows.",
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' '),
+    ];
+    for (const validResponse of crossTopicQualifierVariants) {
+      expect(scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: validResponse,
+        persistedResponse: validResponse,
+        tokenStreamResponse: validResponse,
+        renderedAssistantResponse: validResponse,
+        requestPersonaId: writer.id,
+      })), validResponse).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    }
+
+    const unverifiedBrowserClaims = [
+      'Browser tests still show two failures on Windows, but that claim is unverified.',
+      'Unverified reports say browser tests still show two failures on Windows.',
+      'It is unclear whether browser tests still show two failures on Windows.',
+      'Browser tests may show two failures on Windows.',
+      'Browser tests still show two failures on Windows; unverified smart router behavior and browser count remain.',
+      'Browser tests still show two failures on Windows; smart router behavior is unverified and browser count is too.',
+      'Browser tests still show two failures on Windows; smart router behavior is unverified, as is the browser count.',
+      'Browser tests still show two failures on Windows; unverified smart router behavior, and browser count remain.',
+      'Browser tests still show two failures on Windows; unverified smart router behavior — and browser count remain.',
+      'Browser tests still show two failures on Windows; unverified smart router behavior – and browser count remain.',
+      'Browser tests still show two failures on Windows; unverified smart router behavior as well as browser count.',
+      'Browser tests still show two failures on Windows; unverified smart router behavior without cloud credentials—and browser count remain.',
+      'Browser tests still show two failures on Windows; smart router behavior has not been verified; neither has the browser count.',
+      'Browser tests and smart router behavior are unverified, although two failures were reported on Windows.',
+      'Browser tests still show two failures on Windows; Friday and smart router behavior remain unverified.',
+      'Browser tests still show two failures on Windows; API tests and smart router behavior are unverified.',
+      'Browser tests still show two failures on Windows; smart router behavior is unverified, and so is the browser count.',
+      'Browser tests still show two failures on Windows; smart router behavior is unverified, and it is too.',
+      'Browser tests still show two failures on Windows; smart router behavior is unverified, and the latter remains unverified.',
+      'Browser tests still show two failures on Windows; unverified smart router behavior and the same remain.',
+      'Browser tests still show two failures on Windows according to an unverified smart router report.',
+      'Browser tests still show two failures on Windows according to an unverified smart router behavior report.',
+      'Smart router behavior is unverified; so is the browser failure count.',
+      'Smart router behavior has not been verified; nor has the browser failure count.',
+      'Browser tests still show two failures on Windows according to an unverified smart router operation log.',
+    ];
+    for (const browserClaim of unverifiedBrowserClaims) {
+      const invalidResponse = [
+        'We planned to ship Friday. API tests are passing.',
+        browserClaim,
+        'The smart router has not been exercised without cloud credentials.',
+        'Recommendation: delay release until those gaps are closed.',
+      ].join(' ');
+      const invalidResult = scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: invalidResponse,
+        persistedResponse: invalidResponse,
+        tokenStreamResponse: invalidResponse,
+        renderedAssistantResponse: invalidResponse,
+        requestPersonaId: writer.id,
+      }));
+      expect(
+        invalidResult.checks.find(check => check.id === 'release-facts')?.passed,
+        browserClaim,
+      ).toBe(false);
+    }
+
     const inventedRiskResponse = `${boldLabelResponse} Shipping before these gaps are closed carries unverified risk to release stability.`;
     const inventedRiskResult = scorePersonaTrial(writer, evidence({
       prompt: writer.prompt,

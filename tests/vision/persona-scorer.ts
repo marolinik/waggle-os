@@ -1225,6 +1225,91 @@ function hasOnlyBoundedWorkspaceClaims(response: string): boolean {
 
 const NON_AFFIRMATIVE_WRITER_CLAIM = /\?|\b(?:if|unless|whether|hypothetical(?:ly)?|maybe|perhaps|possibly|reportedly|alleged(?:ly)?|unclear|uncertain|unconfirmed|unverified|unsupported|disputed|incorrect|wrong|false|untrue|withdrawn|correction|could|may|might|cannot|can't|couldn't|doesn't|isn't|aren't|didn't|won't|wouldn't|shouldn't|never)\b|\b(?:suppos(?:e|ing)|doubt(?:s|ed|ing)?|rumou?rs?)\b|\bretract(?:s|ed|ing)?\b|\b(?:do|does|did)\s+not\b|\b(?:is|are|was|were)\s+not\b|\b(?:has|have|had)\s+not\s+been\s+(?:confirmed|verified|validated|established|shown|demonstrated)\b|\bFriday\s+not\b|\bnot\s+Friday\b|\bno\s+(?:longer|evidence|proof|basis|API tests?|browser test(?:s|ing)?)\b|\bnot\s+(?:true|the case)\b|\bzero\s+failures?\b|\b(?:all|both|the)\s+failures?\s+(?:were|are|have been)\s+(?:fixed|resolved|closed)\b/i;
 const WRITER_FACT_CONSEQUENCE = /(?:,\s+which|;\s+(?:this|that))\s+(?:may|might|could|would)\s+(?:delay|block|affect|impact|prevent|change|move|push)\b[^.;]*/gi;
+const WRITER_ROUTER_PRE_QUALIFIER = /\b(?:unverified|unconfirmed|uncertain)\s+smart router(?:\s+(?:behaviou?r|functionality|operation))?\b(?=\s*(?:$|[,.;:!?*(){}[\]–—-]|(?:and|or|nor|&|as|along|together|without|while|but|is|are|was|were|remain(?:s|ed)?|has|have|had)\b))/gi;
+const WRITER_ROUTER_POST_QUALIFIER = /(\bsmart router(?:\s+(?:behaviou?r|functionality|operation))?)(\s+(?:(?:is|remains?|was)\s+)?)(?:unverified|unconfirmed|uncertain)\b/gi;
+const WRITER_ROUTER_UNVERIFIED_PREDICATE = /(\bsmart router(?:\s+(?:behaviou?r|functionality|operation))?)\s+(?:(?:has|have|had)(?:\s+not|n['’]t)(?:\s+yet)?\s+been|(?:is|are|was|were|remains?)(?:\s+not|n['’]t)(?:\s+yet)?)\s+(?:confirmed|verified)\b/gi;
+type WriterRouterQualifierForm = 'pre' | 'post' | 'predicate';
+
+function writerRouterQualifierSharesTopic(
+  clause: string,
+  offset: number,
+  length: number,
+  topic: RegExp,
+  form: WriterRouterQualifierForm,
+): boolean {
+  const left = clause.slice(Math.max(0, offset - 120), offset);
+  const right = clause.slice(offset + length, offset + length + 140);
+  const topicSource = topic.source;
+  const coordinator = String.raw`(?:and|or|nor|&|as\s+well\s+as|along\s+with|together\s+with)`;
+  const explicitReference = String.raw`(?:(?:the\s+)?${topicSource}|(?:the\s+)?(?:same|latter))`;
+  const anaphoricReference = String.raw`(?:it|that|this|they|those)`;
+  const reference = String.raw`(?:${explicitReference}|${anaphoricReference})`;
+  const rightPrefix = String.raw`^\s*(?:without\s+cloud\s+credentials\s*)?(?:[,;:–—-]\s*)?`;
+
+  if (form !== 'pre' && new RegExp(
+    String.raw`${topicSource}\s*(?:,\s*)?${coordinator}\s+(?:the\s+)?$`,
+    'i',
+  ).test(left)) return true;
+
+  if (new RegExp(
+    String.raw`${rightPrefix}(?:and\s+)?(?:as|so|neither|nor)\s+(?:is|are|was|were|has|have|had)\s+${reference}`,
+    'i',
+  ).test(right)) return true;
+
+  if (new RegExp(
+    String.raw`${rightPrefix}(?:as\s+well\s+as|along\s+with|together\s+with)\s+${explicitReference}`,
+    'i',
+  ).test(right)) return true;
+
+  const terminalToo = String.raw`too(?=\s*(?:$|[,.;:–—-]))`;
+  const sharedState = String.raw`(?:(?:is|are|was|were)\s+(?:${terminalToo}|unverified|unconfirmed|uncertain|not\s+(?:confirmed|verified)|also\s+(?:unverified|unconfirmed|uncertain))|(?:has|have|had)\s+(?:${terminalToo}|not\s+been\s+(?:confirmed|verified)|also\s+not\s+been\s+(?:confirmed|verified))|remains?\s+(?:${terminalToo}|unverified|unconfirmed|uncertain|also\s+(?:unverified|unconfirmed|uncertain)))`;
+  if (new RegExp(
+    String.raw`${rightPrefix}(?:and|or|nor|&)\s+${explicitReference}\s+${sharedState}`,
+    'i',
+  ).test(right)) return true;
+
+  const anaphoricSharedState = String.raw`(?:(?:is|are|was|were)\s+(?:${terminalToo}|unverified|unconfirmed|uncertain|not\s+(?:confirmed|verified)|also\s+(?:unverified|unconfirmed|uncertain))|remains?\s+(?:${terminalToo}|unverified|unconfirmed|uncertain))`;
+  if (new RegExp(
+    String.raw`${rightPrefix}(?:and|or|nor|&)\s+${anaphoricReference}\s+${anaphoricSharedState}`,
+    'i',
+  ).test(right)) return true;
+
+  return form === 'pre' && new RegExp(
+    String.raw`${rightPrefix}(?:and|or|nor|&)\s+${explicitReference}\s+remain(?:s|ed)?\b`,
+    'i',
+  ).test(right);
+}
+
+function writerClauseForReleaseTopic(
+  clause: string,
+  topic: RegExp,
+  sharedTopic: RegExp = topic,
+): string {
+  if (clause.search(sharedTopic) < 0) return clause;
+
+  let scopedClause = clause;
+  scopedClause = scopedClause.replace(WRITER_ROUTER_PRE_QUALIFIER, (qualifier, offset: number) => (
+    writerRouterQualifierSharesTopic(scopedClause, offset, qualifier.length, sharedTopic, 'pre')
+      ? qualifier
+      : qualifier.replace(/^(?:unverified|unconfirmed|uncertain)/i, 'router-unchecked')
+  ));
+  scopedClause = scopedClause.replace(
+    WRITER_ROUTER_POST_QUALIFIER,
+    (qualifier, routerSubject: string, predicate: string, offset: number) => (
+      writerRouterQualifierSharesTopic(scopedClause, offset, qualifier.length, sharedTopic, 'post')
+        ? qualifier
+        : `${routerSubject}${predicate}router-unchecked`
+    ),
+  );
+  return scopedClause.replace(
+    WRITER_ROUTER_UNVERIFIED_PREDICATE,
+    (qualifier, routerSubject: string, offset: number) => (
+      writerRouterQualifierSharesTopic(scopedClause, offset, qualifier.length, sharedTopic, 'predicate')
+        ? qualifier
+        : `${routerSubject} awaits verification`
+    ),
+  );
+}
 
 function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegExp[]): boolean {
   if (patterns.length < 3) return false;
@@ -1235,21 +1320,32 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     .filter(Boolean)
     .map(clause => clause.replace(WRITER_FACT_CONSEQUENCE, ''));
 
-  const hasAffirmedFact = (topic: RegExp, fact: RegExp): boolean => clauses.some(clause => (
-    topic.test(clause)
-    && !NON_AFFIRMATIVE_WRITER_CLAIM.test(clause)
-    && fact.test(clause)
-  ));
-  const hasDeniedFact = (topic: RegExp): boolean => clauses.some(clause => (
-    topic.test(clause) && NON_AFFIRMATIVE_WRITER_CLAIM.test(clause)
-  ));
-  const browserAffirmed = clauses.some(clause => (
-    /\bbrowser test(?:s|ing)?\b/i.test(clause)
-    && /\bWindows\b/i.test(clause)
-    && !NON_AFFIRMATIVE_WRITER_CLAIM.test(clause)
-    && !/\bbrowser test(?:s|ing)?\b[^.;\r\n]{0,60}\bpass(?:ed|ing)?\b/i.test(clause)
-    && patterns[2].test(clause)
-  ));
+  const hasAffirmedFact = (topic: RegExp, fact: RegExp): boolean => clauses.some((clause) => {
+    const scopedClause = writerClauseForReleaseTopic(clause, topic);
+    return topic.test(scopedClause)
+      && !NON_AFFIRMATIVE_WRITER_CLAIM.test(scopedClause)
+      && fact.test(scopedClause);
+  });
+  const hasDeniedFact = (topic: RegExp): boolean => clauses.some((clause) => {
+    const sharedTopic = /browser/i.test(topic.source)
+      ? /\b(?:browser test(?:s|ing)?|browser (?:failure )?count)\b/i
+      : topic;
+    const scopedClause = writerClauseForReleaseTopic(clause, topic, sharedTopic);
+    return sharedTopic.test(scopedClause) && NON_AFFIRMATIVE_WRITER_CLAIM.test(scopedClause);
+  });
+  const browserTopic = /\bbrowser test(?:s|ing)?\b/i;
+  const browserAffirmed = clauses.some((clause) => {
+    const scopedClause = writerClauseForReleaseTopic(
+      clause,
+      browserTopic,
+      /\b(?:browser test(?:s|ing)?|browser (?:failure )?count)\b/i,
+    );
+    return browserTopic.test(scopedClause)
+      && /\bWindows\b/i.test(scopedClause)
+      && !NON_AFFIRMATIVE_WRITER_CLAIM.test(scopedClause)
+      && !/\bbrowser test(?:s|ing)?\b[^.;\r\n]{0,60}\bpass(?:ed|ing)?\b/i.test(scopedClause)
+      && patterns[2].test(scopedClause);
+  });
 
   return !hasDeniedFact(/\bFriday\b/i)
     && !hasDeniedFact(/\bAPI tests?\b/i)
