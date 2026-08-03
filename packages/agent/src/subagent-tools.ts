@@ -261,7 +261,7 @@ export const ROLE_TOOL_PRESETS: Record<string, string[]> = {
 };
 
 export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
-  const { availableTools, runLoop, litellmUrl, litellmApiKey, defaultModel } = deps;
+  const { availableTools, runLoop, litellmApiKey, defaultModel } = deps;
 
   return [
     // 1. spawn_agent — Create and run a specialist sub-agent
@@ -412,7 +412,7 @@ ${task}
         try {
           const bufferedTokens: string[] = [];
           const result = await runLoop({
-            litellmUrl,
+            litellmUrl: deps.litellmUrl,
             litellmApiKey,
             model,
             systemPrompt,

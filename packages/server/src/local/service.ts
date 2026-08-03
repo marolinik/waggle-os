@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
@@ -50,6 +51,46 @@ export interface ServiceResult {
 }
 
 const DEFAULT_PORT = 3333;
+
+interface DesktopReadyRecord {
+  schemaVersion: 1;
+  instanceId: string;
+  pid: number;
+  host: '127.0.0.1';
+  preferredPort: number;
+  port: number;
+  startedAt: string;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
+}
+
+function publishDesktopReadyFile(filePath: string, record: DesktopReadyRecord): void {
+  const directory = path.dirname(filePath);
+  fs.mkdirSync(directory, { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600,
+    });
+    fs.renameSync(temporaryPath, filePath);
+  } catch (error) {
+    try { fs.unlinkSync(temporaryPath); } catch { /* best effort */ }
+    throw error;
+  }
+}
+
+function removeOwnedDesktopReadyFile(filePath: string, instanceId: string): void {
+  try {
+    const record = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { instanceId?: unknown };
+    if (record.instanceId === instanceId) fs.unlinkSync(filePath);
+  } catch { /* missing, malformed, or owned by a newer launch */ }
+}
 
 /**
  * Resolve the service data directory: explicit option > WAGGLE_DATA_DIR env >
@@ -148,6 +189,16 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   const litellmPort = options?.litellmPort ?? 4000;
   const skipLiteLLM = options?.skipLiteLLM ?? false;
   const emit = options?.onProgress ?? (() => {});
+  const allowDesktopPortFallback = process.env.WAGGLE_DESKTOP_PORT_FALLBACK === '1';
+  const desktopInstanceId = process.env.WAGGLE_INSTANCE_ID?.trim();
+  const desktopReadyFile = process.env.WAGGLE_READY_FILE?.trim();
+  const desktopStartedAt = new Date().toISOString();
+
+  if (allowDesktopPortFallback && (!desktopInstanceId || !desktopReadyFile || !path.isAbsolute(desktopReadyFile))) {
+    throw new Error(
+      'Managed desktop port fallback requires WAGGLE_INSTANCE_ID and an absolute WAGGLE_READY_FILE',
+    );
+  }
 
   // 1. Ensure dataDir exists
   emit({ phase: 'init', message: 'Initializing Waggle service...', progress: 0.05 });
@@ -223,7 +274,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   }
 
   const managedLiteLLMUrl = `http://localhost:${litellmPort}`;
-  const selfProxyUrl = `http://127.0.0.1:${port}/v1`;
+  let selfProxyUrl = `http://127.0.0.1:${port}/v1`;
   let litellmReachable = false;
   if (!skipLiteLLM) {
     try {
@@ -234,20 +285,15 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     } catch { /* not reachable */ }
   }
 
-  // 5. Check port availability before building server
-  emit({ phase: 'server', message: 'Checking port availability...', progress: 0.7 });
-  const portFree = await checkPortAvailable(port);
-  if (!portFree) {
-    const msg = `Port ${port} is already in use. Another Waggle instance may be running.\nTo fix: close the other instance, or set WAGGLE_PORT=<port> to use a different port.`;
-    emit({ phase: 'server', message: msg, progress: 0.7 });
-    throw new Error(msg);
-  }
-
-  // 6. Build and start local server
+  // 5. Build and atomically bind the local server. Managed desktop launches
+  // may retry the same Fastify instance on an OS-assigned port when the
+  // preferred port is occupied; CLI/browser launches preserve fail-closed
+  // EADDRINUSE behavior.
   emit({ phase: 'server', message: 'Starting local server...', progress: 0.75 });
   const server = await buildLocalServer({
     dataDir,
     port,
+    instanceId: allowDesktopPortFallback ? desktopInstanceId : undefined,
     litellmUrl: litellmReachable ? managedLiteLLMUrl : selfProxyUrl,
     manageLiteLLM: !skipLiteLLM,
     managedLiteLLMPort: litellmPort,
@@ -268,16 +314,59 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   server.addHook('onClose', async () => {
     process.off('SIGTERM', shutdown);
     process.off('SIGINT', shutdown);
-    // Remove PID file on close
-    try { fs.unlinkSync(path.join(dataDir, 'server.pid')); } catch { /* ok */ }
+    if (allowDesktopPortFallback && desktopReadyFile && desktopInstanceId) {
+      removeOwnedDesktopReadyFile(desktopReadyFile, desktopInstanceId);
+    } else {
+      // Legacy CLI/browser lifecycle keeps the shared PID file contract.
+      try { fs.unlinkSync(path.join(dataDir, 'server.pid')); } catch { /* ok */ }
+    }
   });
 
-  await server.listen({ port, host: resolveBindHost() });
+  const bindHost = allowDesktopPortFallback ? '127.0.0.1' : resolveBindHost();
+  const cleanupListenFailure = async (): Promise<void> => {
+    try { await server.close(); } catch { /* preserve the listen error */ }
+    if (!skipLiteLLM) await stopLiteLLM().catch(() => undefined);
+  };
+  try {
+    await server.listen({ port, host: bindHost });
+  } catch (error) {
+    if (allowDesktopPortFallback && errorCode(error) === 'EADDRINUSE') {
+      try {
+        await server.listen({ port: 0, host: bindHost });
+      } catch (fallbackError) {
+        await cleanupListenFailure();
+        throw fallbackError;
+      }
+    } else {
+      await cleanupListenFailure();
+      if (errorCode(error) === 'EADDRINUSE') {
+        const message = `Port ${port} is already in use. Another Waggle instance may be running.\nTo fix: close the other instance, or set WAGGLE_PORT=<port> to use a different port.`;
+        emit({ phase: 'server', message, progress: 0.7 });
+        throw new Error(message, { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  const listeningAddress = server.server.address();
+  if (!listeningAddress || typeof listeningAddress === 'string') {
+    await server.close();
+    if (!skipLiteLLM) await stopLiteLLM().catch(() => undefined);
+    throw new Error('Unable to resolve the Waggle service listen port');
+  }
+  const actualPort = listeningAddress.port;
+  server.localConfig.port = actualPort;
+  if (!litellmReachable) {
+    selfProxyUrl = `http://127.0.0.1:${actualPort}/v1`;
+    server.localConfig.litellmUrl = selfProxyUrl;
+  }
 
   // Write PID file for stale-process detection
-  try {
-    fs.writeFileSync(path.join(dataDir, 'server.pid'), String(process.pid));
-  } catch { /* non-blocking */ }
+  if (!allowDesktopPortFallback) {
+    try {
+      fs.writeFileSync(path.join(dataDir, 'server.pid'), String(process.pid));
+    } catch { /* non-blocking */ }
+  }
 
   // 8. Determine LLM provider — truthful, not optimistic
   let providerName: 'litellm' | 'anthropic-proxy' | 'ollama' = 'anthropic-proxy';
@@ -334,6 +423,23 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
 
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+
+  if (allowDesktopPortFallback && desktopReadyFile && desktopInstanceId) {
+    try {
+      publishDesktopReadyFile(desktopReadyFile, {
+        schemaVersion: 1,
+        instanceId: desktopInstanceId,
+        pid: process.pid,
+        host: '127.0.0.1',
+        preferredPort: port,
+        port: actualPort,
+        startedAt: desktopStartedAt,
+      });
+    } catch (error) {
+      await shutdown();
+      throw new Error(`Unable to publish desktop service readiness: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   emit({ phase: 'ready', message: 'Waggle service is ready!', progress: 1 });
 

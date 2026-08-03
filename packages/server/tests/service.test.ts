@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import { MindDB } from '@waggle/core';
@@ -14,6 +15,20 @@ function makeTmpDir(): string {
 
 function randomPort(): number {
   return 3333 + Math.floor(Math.random() * 1000);
+}
+
+function occupyLoopbackPort(server: net.Server): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        reject(new Error('Unable to resolve occupied test port'));
+        return;
+      }
+      resolve(address.port);
+    });
+  });
 }
 
 function clearProviderEnv(): void {
@@ -239,6 +254,88 @@ describe('Agent Service', () => {
       url: `http://127.0.0.1:${port}/v1/chat/completions`,
       authorization: `Bearer ${server.agentState.wsSessionToken}`,
     }]);
+  });
+
+  it('atomically falls back from an occupied desktop port and routes spawned agents to it', async () => {
+    const base = makeTmpDir();
+    tmpDirs.push(base);
+    const dataDir = path.join(base, 'data');
+    const readyFile = path.join(base, 'desktop-ready.json');
+    const blocker = net.createServer();
+    const preferredPort = await occupyLoopbackPort(blocker);
+    cleanups.push(() => new Promise<void>((resolve) => blocker.close(() => resolve())));
+
+    vi.stubEnv('WAGGLE_DESKTOP_PORT_FALLBACK', '1');
+    vi.stubEnv('WAGGLE_INSTANCE_ID', 'desktop-fallback-test');
+    vi.stubEnv('WAGGLE_READY_FILE', readyFile);
+    vi.stubEnv('WAGGLE_BIND_ALL', '1');
+    clearProviderEnv();
+    vi.stubEnv('OPENAI_API_KEY', 'openai-solo-test-key');
+
+    const workerRequests: Array<{ url: string; authorization: string | null }> = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/health/liveliness') || url.endsWith('/api/tags')) {
+        return new Response('{}', { status: 503 });
+      }
+      if (url.endsWith('/v1/chat/completions')) {
+        workerRequests.push({
+          url,
+          authorization: new Headers(init?.headers).get('authorization'),
+        });
+        return new Response(JSON.stringify({
+          choices: [{
+            message: { role: 'assistant', content: 'Fallback sub-agent response.' },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 7, completion_tokens: 4 },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 503 });
+    });
+
+    const { server } = await startService({ dataDir, port: preferredPort, skipLiteLLM: true });
+    const address = server.server.address();
+    expect(address && typeof address === 'object').toBe(true);
+    const actualPort = address && typeof address === 'object' ? address.port : 0;
+    expect(address && typeof address === 'object' ? address.address : '').toBe('127.0.0.1');
+    expect(actualPort).toBeGreaterThan(0);
+    expect(actualPort).not.toBe(preferredPort);
+    expect(server.localConfig.port).toBe(actualPort);
+    expect(server.localConfig.litellmUrl).toBe(`http://127.0.0.1:${actualPort}/v1`);
+
+    expect(JSON.parse(fs.readFileSync(readyFile, 'utf8'))).toMatchObject({
+      schemaVersion: 1,
+      instanceId: 'desktop-fallback-test',
+      pid: process.pid,
+      preferredPort,
+      port: actualPort,
+    });
+    expect((await server.inject({ method: 'GET', url: '/health' })).json()).toMatchObject({
+      instanceId: 'desktop-fallback-test',
+      port: actualPort,
+    });
+
+    const spawn = server.agentState.allTools.find(tool => tool.name === 'spawn_agent');
+    expect(spawn).toBeDefined();
+    expect(await spawn!.execute({
+      name: 'Fallback verifier',
+      role: 'custom',
+      task: 'Confirm the fallback provider route.',
+      tools: [],
+      model: 'openrouter/openai/gpt-5.3-codex',
+      max_turns: 1,
+    })).toContain('Fallback sub-agent response.');
+    expect(workerRequests).toEqual([{
+      url: `http://127.0.0.1:${actualPort}/v1/chat/completions`,
+      authorization: `Bearer ${server.agentState.wsSessionToken}`,
+    }]);
+
+    await server.close();
+    expect(fs.existsSync(readyFile)).toBe(false);
   });
 
   it('server gracefully shuts down on close', async () => {

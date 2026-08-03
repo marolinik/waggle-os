@@ -634,7 +634,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const litellmApiKey = fullConfig.useBuiltInProxy
     ? wsSessionToken
     : process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
-  const litellmUrl = fullConfig.litellmUrl;
 
   // Build embedding config from WaggleConfig + Vault keys
   const waggleConfig = new WaggleConfig(fullConfig.dataDir || undefined);
@@ -861,7 +860,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const subAgentTools = createSubAgentTools({
     availableTools: baseTools,
     runLoop: runAgentLoop,
-    litellmUrl: fullConfig.litellmUrl,
+    get litellmUrl() { return fullConfig.litellmUrl; },
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
     onSubAgentStatus: (event) => {
@@ -916,7 +915,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const workflowTools = createWorkflowTools({
     availableTools: baseTools,
     runLoop: runAgentLoop,
-    litellmUrl: fullConfig.litellmUrl,
+    get litellmUrl() { return fullConfig.litellmUrl; },
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
     onWorkerStatus: (event) => {
@@ -1103,7 +1102,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     const workspaceSubAgentTools = createSubAgentTools({
       availableTools: workerTools,
       runLoop,
-      litellmUrl: fullConfig.litellmUrl,
+      get litellmUrl() { return fullConfig.litellmUrl; },
       litellmApiKey,
       defaultModel,
       onSubAgentStatus: (event) => {
@@ -1122,7 +1121,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     const workspaceWorkflowTools = createWorkflowTools({
       availableTools: workerTools,
       runLoop,
-      litellmUrl: fullConfig.litellmUrl,
+      get litellmUrl() { return fullConfig.litellmUrl; },
       litellmApiKey,
       defaultModel,
       signal,
