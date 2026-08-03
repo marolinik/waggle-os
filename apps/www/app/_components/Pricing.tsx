@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
 import { useTranslations } from 'next-intl';
 import DownloadCTA from './DownloadCTA';
 import { emit, events } from '../_lib/event-taxonomy';
@@ -59,15 +59,19 @@ const STRIPE_ENDPOINT =
 
 const KVARK_URL = 'https://www.kvark.ai';
 
+const subscribeToLocation = () => () => {};
+const getCheckoutCancelled = () =>
+  new URLSearchParams(window.location.search).get('checkout') === 'cancelled';
+const getServerCheckoutCancelled = () => false;
+
 export default function Pricing() {
   const t = useTranslations('landing.pricing');
   const [billing, setBilling] = useState<BillingPeriod>('monthly');
-  const [checkoutCancelled, setCheckoutCancelled] = useState(false);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setCheckoutCancelled(params.get('checkout') === 'cancelled');
-  }, []);
+  const checkoutCancelled = useSyncExternalStore(
+    subscribeToLocation,
+    getCheckoutCancelled,
+    getServerCheckoutCancelled,
+  );
 
   const handleBillingChange = useCallback((mode: BillingPeriod) => {
     setBilling(mode);
