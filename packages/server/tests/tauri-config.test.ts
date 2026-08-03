@@ -4,12 +4,12 @@
  * Validates tauri.conf.json, Cargo.toml, lib.rs, and build scripts
  * are properly configured for production desktop builds.
  */
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
 
@@ -33,16 +33,25 @@ const FIRST_PARTY_RUNTIME_ENTRIES = new Set([
 ]);
 const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
 
+beforeEach(async () => {
+  // Let Vitest acknowledge the previous task update before the next test enters
+  // a synchronous Windows child-process probe that can occupy the worker thread.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+});
+
 function powershellProbeExecutable() {
   const configuredPwsh = process.env.WAGGLE_PWSH7_PATH;
-  const requirePowerShell7 = (executable: string) => {
+  const powerShellMajor = (executable: string) => {
     const result = spawnSync(
       executable,
       ['-NoLogo', '-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'],
       { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
     );
-    const major = Number.parseInt(result.stdout.trim(), 10);
-    if (result.status !== 0 || !Number.isInteger(major) || major < 7) {
+    const major = Number.parseInt(result.stdout?.trim() ?? '', 10);
+    return result.status === 0 && Number.isInteger(major) ? major : undefined;
+  };
+  const requirePowerShell7 = (executable: string) => {
+    if ((powerShellMajor(executable) ?? 0) < 7) {
       throw new Error('PowerShell 7 required Windows release-workflow probes');
     }
     return executable;
@@ -53,16 +62,21 @@ function powershellProbeExecutable() {
     }
     return requirePowerShell7(configuredPwsh);
   }
-  const pwsh = path.join(
-    process.env.ProgramFiles ?? 'C:\\Program Files',
-    'PowerShell',
-    '7',
-    'pwsh.exe',
-  );
-  if (fs.existsSync(pwsh)) {
-    return process.env.WAGGLE_REQUIRE_PWSH7 === '1'
-      ? requirePowerShell7(pwsh)
-      : pwsh;
+  const pwshCandidates = [
+    path.join(
+      process.env.ProgramFiles ?? 'C:\\Program Files',
+      'PowerShell',
+      '7',
+      'pwsh.exe',
+    ),
+    process.env.LOCALAPPDATA
+      ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'pwsh.exe')
+      : undefined,
+  ];
+  for (const pwsh of pwshCandidates) {
+    // Windows Store app execution aliases report false through fs.existsSync,
+    // so probe the executable rather than treating metadata access as authority.
+    if (pwsh && (powerShellMajor(pwsh) ?? 0) >= 7) return pwsh;
   }
   if (process.env.WAGGLE_REQUIRE_PWSH7 === '1') {
     throw new Error('PowerShell 7 is required for Windows release-workflow probes');
@@ -752,7 +766,7 @@ describe('Tauri Production Configuration', () => {
 
   it.runIf(process.platform === 'win32')(
     'sidecar resource preflight rejects missing Windows runtimes and sidecar source artifacts',
-    () => {
+    async () => {
       const fixtureRoot = fs.mkdtempSync(
         path.join(os.tmpdir(), 'waggle-sidecar-preflight-'),
       );
@@ -1065,36 +1079,80 @@ describe('Tauri Production Configuration', () => {
         };
         writeCoreManifest('dist/index.js');
 
-        const runChecker = (
+        const runChecker = async (
           {
-            withImageRuntime = false,
+            runtimeProbe = 'none',
             expectedSourceRevision = fixtureSourceRevision,
           }: {
-            withImageRuntime?: boolean;
+            runtimeProbe?: 'none' | 'all' | 'marketplace' | 'native' | 'image';
             expectedSourceRevision?: string;
           } = {},
         ) => {
-          const hiddenBinding = `${stagedSharpBinding}.fixture-disabled`;
-          if (!withImageRuntime) fs.renameSync(stagedSharpBinding, hiddenBinding);
+          const hiddenFiles: Array<{ hidden: string; target: string }> = [];
+          const hideFixtureFile = (target: string) => {
+            const hidden = `${target}.fixture-disabled`;
+            fs.renameSync(target, hidden);
+            hiddenFiles.push({ hidden, target });
+          };
           try {
-            const result = spawnSync(
-              process.execPath,
-              [fixtureChecker, '--expected-source-revision', expectedSourceRevision],
-              {
-              encoding: 'utf-8',
-              timeout: 60_000,
-              windowsHide: true,
-              },
-            );
+            // Structural rejection cases should not repeat unrelated native, npm,
+            // marketplace, and image probes. Probe-specific cases keep the bundled
+            // runtime but hide inputs for every other expensive probe.
+            if (runtimeProbe === 'none') {
+              hideFixtureFile(fixtureNode);
+            } else if (runtimeProbe !== 'all') {
+              hideFixtureFile(path.join(
+                fixtureResources,
+                ...`${fixtureNpmRuntimeRoot}/package.json`.split('/'),
+              ));
+              if (runtimeProbe !== 'marketplace') hideFixtureFile(fixtureMarketplaceResource);
+              if (runtimeProbe !== 'native') {
+                hideFixtureFile(path.join(fixtureOnnx, 'package.json'));
+              }
+              if (runtimeProbe !== 'image') hideFixtureFile(stagedSharpBinding);
+            }
+            const result = await new Promise<{
+              status: number | null;
+              stdout: string;
+              stderr: string;
+              error?: Error;
+            }>((resolve) => {
+              execFile(
+                process.execPath,
+                [fixtureChecker, '--expected-source-revision', expectedSourceRevision],
+                {
+                  encoding: 'utf-8',
+                  timeout: 60_000,
+                  windowsHide: true,
+                },
+                (error, stdout, stderr) => {
+                  if (!error) {
+                    resolve({ status: 0, stdout, stderr });
+                    return;
+                  }
+                  if (
+                    typeof error.code === 'number'
+                    && !error.killed
+                    && (error.signal === null || error.signal === undefined)
+                  ) {
+                    resolve({ status: error.code, stdout, stderr });
+                    return;
+                  }
+                  resolve({ status: null, stdout, stderr, error });
+                },
+              );
+            });
             if (result.error) throw result.error;
             return result;
           } finally {
-            if (!withImageRuntime) fs.renameSync(hiddenBinding, stagedSharpBinding);
+            for (const file of hiddenFiles.reverse()) {
+              fs.renameSync(file.hidden, file.target);
+            }
           }
         };
 
         const fixtureMarketplaceBeforeProbe = fs.readFileSync(fixtureMarketplaceResource);
-        const baselineResult = runChecker({ withImageRuntime: true });
+        const baselineResult = await runChecker({ runtimeProbe: 'all' });
         expect(
           baselineResult.status,
           baselineResult.stderr || baselineResult.stdout,
@@ -1102,7 +1160,7 @@ describe('Tauri Production Configuration', () => {
         expect(fs.readFileSync(fixtureMarketplaceResource)).toEqual(fixtureMarketplaceBeforeProbe);
 
         fs.appendFileSync(fixtureServicePath, '// stale payload\n');
-        const staleServiceResult = runChecker({ withImageRuntime: true });
+        const staleServiceResult = await runChecker();
         expect(staleServiceResult.status).toBe(1);
         expect(staleServiceResult.stderr).toContain(
           'resources/service.js payload does not match embedded provenance',
@@ -1118,7 +1176,7 @@ describe('Tauri Production Configuration', () => {
           'service.ts',
         );
         fs.appendFileSync(fixtureEntryPoint, '// stale source\n');
-        const staleSourceResult = runChecker({ withImageRuntime: true });
+        const staleSourceResult = await runChecker();
         expect(staleSourceResult.status).toBe(1);
         expect(staleSourceResult.stderr).toContain(
           'resources/service.js source input hash does not match current source',
@@ -1131,7 +1189,7 @@ describe('Tauri Production Configuration', () => {
 
         const fixtureTsconfig = path.join(fixtureRoot, 'packages', 'server', 'tsconfig.json');
         fs.appendFileSync(fixtureTsconfig, '// stale transform config\n');
-        const staleConfigResult = runChecker({ withImageRuntime: true });
+        const staleConfigResult = await runChecker();
         expect(staleConfigResult.status).toBe(1);
         expect(staleConfigResult.stderr).toContain(
           'resources/service.js source input hash does not match current source',
@@ -1142,14 +1200,19 @@ describe('Tauri Production Configuration', () => {
           'utf8',
         );
 
-        const staleRevisionResult = runChecker({
-          withImageRuntime: true,
+        const staleRevisionResult = await runChecker({
           expectedSourceRevision: 'b'.repeat(40),
         });
         expect(staleRevisionResult.status).toBe(1);
         expect(staleRevisionResult.stderr).toContain(
           'resources/service.js source revision does not match expected revision',
         );
+        const staleSidecars: Array<{
+          path: string;
+          label: string;
+          diagnostic: string;
+          suffix: string;
+        }> = [];
         for (const target of [
           {
             path: fixtureMarketplaceResource,
@@ -1165,24 +1228,27 @@ describe('Tauri Production Configuration', () => {
           for (const suffix of ['-wal', '-shm', '-journal']) {
             expect(fs.existsSync(`${target.path}${suffix}`)).toBe(false);
             fs.writeFileSync(`${target.path}${suffix}`, 'stale SQLite sidecar');
-            const staleSidecarResult = runChecker();
-            expect(staleSidecarResult.status).toBe(1);
-            expect(staleSidecarResult.stderr).toContain(
-              `${target.label}${suffix} ${target.diagnostic}`,
-            );
-            fs.rmSync(`${target.path}${suffix}`);
+            staleSidecars.push({ ...target, suffix });
           }
+        }
+        const staleSidecarResult = await runChecker();
+        expect(staleSidecarResult.status).toBe(1);
+        for (const target of staleSidecars) {
+          expect(staleSidecarResult.stderr).toContain(
+            `${target.label}${target.suffix} ${target.diagnostic}`,
+          );
+          fs.rmSync(`${target.path}${target.suffix}`);
         }
 
         const fixtureMarketplaceContent = fs.readFileSync(fixtureMarketplaceResource);
         fs.rmSync(fixtureMarketplaceResource);
-        const missingMarketplaceResult = runChecker();
+        const missingMarketplaceResult = await runChecker();
         expect(missingMarketplaceResult.status).toBe(1);
         expect(missingMarketplaceResult.stderr).toContain('resources/marketplace.db');
         fs.writeFileSync(fixtureMarketplaceResource, fixtureMarketplaceContent);
 
         fs.appendFileSync(fixtureMarketplaceResource, 'tampered');
-        const mismatchedMarketplaceResult = runChecker();
+        const mismatchedMarketplaceResult = await runChecker();
         expect(mismatchedMarketplaceResult.status).toBe(1);
         expect(mismatchedMarketplaceResult.stderr).toContain(
           'resources/marketplace.db does not match the canonical marketplace database',
@@ -1192,7 +1258,7 @@ describe('Tauri Production Configuration', () => {
         const fixtureMarketplaceSourceContent = fs.readFileSync(fixtureMarketplaceSource);
         fs.writeFileSync(fixtureMarketplaceSource, 'not a SQLite database');
         fs.writeFileSync(fixtureMarketplaceResource, 'not a SQLite database');
-        const invalidMarketplaceResult = runChecker();
+        const invalidMarketplaceResult = await runChecker({ runtimeProbe: 'marketplace' });
         expect(invalidMarketplaceResult.status).toBe(1);
         expect(invalidMarketplaceResult.stderr).toContain(
           'resources/marketplace.db failed its SQLite integrity/schema probe',
@@ -1206,7 +1272,7 @@ describe('Tauri Production Configuration', () => {
         );
         const fixtureNpmRuntimeManifestContent = fs.readFileSync(fixtureNpmRuntimeManifest);
         fs.rmSync(fixtureNpmRuntimeManifest);
-        const missingNpmRuntimeResult = runChecker();
+        const missingNpmRuntimeResult = await runChecker();
         expect(missingNpmRuntimeResult.status).toBe(1);
         expect(missingNpmRuntimeResult.stderr).toContain(
           'resources/node_modules/waggle-node-runtime/package.json',
@@ -1224,19 +1290,19 @@ describe('Tauri Production Configuration', () => {
         for (const target of [stagedBinding, stagedOnnxBinding, fixtureVec]) {
           const original = fs.readFileSync(target);
           fs.writeFileSync(target, 'not a native payload');
-          const invalidRuntimeResult = runChecker();
+          const invalidRuntimeResult = await runChecker({ runtimeProbe: 'native' });
           expect(invalidRuntimeResult.status).toBe(1);
           expect(invalidRuntimeResult.stderr).toContain('resources native runtime probe failed');
           fs.writeFileSync(target, original);
         }
         const stagedSharpBindingContent = fs.readFileSync(stagedSharpBinding);
         fs.writeFileSync(stagedSharpBinding, 'not a native payload');
-        const invalidImageRuntimeResult = runChecker({ withImageRuntime: true });
+        const invalidImageRuntimeResult = await runChecker({ runtimeProbe: 'image' });
         expect(invalidImageRuntimeResult.status).toBe(1);
         expect(invalidImageRuntimeResult.stderr).toContain('resources image runtime probe failed');
         fs.writeFileSync(stagedSharpBinding, stagedSharpBindingContent);
 
-        for (const target of [
+        const imageDependencyTargets = [
           {
             manifest: path.join(fixtureResources, 'node_modules', 'sharp', 'package.json'),
             diagnostic: 'resources/node_modules/sharp',
@@ -1245,76 +1311,66 @@ describe('Tauri Production Configuration', () => {
             manifest: path.join(fixtureTransformers, 'package.json'),
             diagnostic: 'resources/node_modules/@huggingface/transformers',
           },
-        ]) {
-          const content = fs.readFileSync(target.manifest);
+        ].map((target) => ({
+          ...target,
+          content: fs.readFileSync(target.manifest),
+        }));
+        for (const target of imageDependencyTargets) {
           fs.rmSync(target.manifest);
-          const missingImageDependencyResult = runChecker();
-          expect(missingImageDependencyResult.status).toBe(1);
+        }
+        const missingImageDependencyResult = await runChecker();
+        expect(missingImageDependencyResult.status).toBe(1);
+        for (const target of imageDependencyTargets) {
           expect(missingImageDependencyResult.stderr).toContain(target.diagnostic);
-          fs.writeFileSync(target.manifest, content);
+          fs.writeFileSync(target.manifest, target.content);
         }
 
-        for (const entry of requiredNativeFiles) {
+        const missingNativeTargets = requiredNativeFiles.map((entry) => {
           const target = path.join(
             fixtureResources,
             'native',
             ...entry.split('/'),
           );
-          const original = fs.readFileSync(target);
-          fs.rmSync(target);
-
-          const result = runChecker();
-          expect(result.status).toBe(1);
-          expect(result.stderr).toContain(`resources/native/${entry}`);
-
-          fs.writeFileSync(target, original);
+          return { entry, target, original: fs.readFileSync(target) };
+        });
+        for (const target of missingNativeTargets) {
+          fs.rmSync(target.target);
+        }
+        const missingNativeResult = await runChecker();
+        expect(missingNativeResult.status).toBe(1);
+        for (const target of missingNativeTargets) {
+          expect(missingNativeResult.stderr).toContain(`resources/native/${target.entry}`);
+          fs.writeFileSync(target.target, target.original);
         }
 
-        writeFixtureFile(
+        const serviceMapPath = writeFixtureFile(
           fixtureResources,
           'service.js.map',
           JSON.stringify({ sourcesContent: ['private TypeScript source'] }),
         );
-        const mapResult = runChecker();
-        expect(mapResult.status).toBe(1);
-        expect(mapResult.stderr).toContain('resources/service.js.map must not be packaged');
-        fs.rmSync(path.join(fixtureResources, 'service.js.map'));
-
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           '@waggle/hive-mind-core/src/evolution-runs.ts',
           'export const proprietary = true;\n',
         );
-        const nestedSourceResult = runChecker();
-        expect(nestedSourceResult.status).toBe(1);
-        expect(nestedSourceResult.stderr).toContain(
-          'resources/node_modules/@waggle/hive-mind-core/src/evolution-runs.ts must not be packaged',
-        );
-        fs.rmSync(path.join(
+        const hiveSourceDir = path.join(
           fixtureResources,
           'node_modules',
           '@waggle',
           'hive-mind-core',
           'src',
-        ), { recursive: true });
-
+        );
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           'waggle-test-runtime/src/private.ts',
           'export const privateSource = true;\n',
         );
-        const unscopedSourceResult = runChecker();
-        expect(unscopedSourceResult.status).toBe(1);
-        expect(unscopedSourceResult.stderr).toContain(
-          'resources/node_modules/waggle-test-runtime/src/private.ts must not be packaged',
-        );
-        fs.rmSync(path.join(
+        const unscopedSourceDir = path.join(
           fixtureResources,
           'node_modules',
           'waggle-test-runtime',
           'src',
-        ), { recursive: true });
-
+        );
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           'vendor/node_modules/@waggle/shared/package.json',
@@ -1325,71 +1381,68 @@ describe('Tauri Production Configuration', () => {
           'vendor/node_modules/@waggle/shared/src/private.ts',
           'export const privateSource = true;\n',
         );
-        const nestedPackageResult = runChecker();
-        expect(nestedPackageResult.status).toBe(1);
-        expect(nestedPackageResult.stderr).toContain(
-          'resources/node_modules/vendor/node_modules/@waggle/shared/src/private.ts must not be packaged',
-        );
-        fs.rmSync(path.join(
+        const nestedVendorDir = path.join(
           fixtureResources,
           'node_modules',
           'vendor',
-        ), { recursive: true });
-
-        writeFixtureFile(
+        );
+        const firstPartyReadme = writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           '@waggle/hive-mind-core/README.md',
           'internal package documentation\n',
         );
-        const firstPartyPayloadResult = runChecker();
-        expect(firstPartyPayloadResult.status).toBe(1);
-        expect(firstPartyPayloadResult.stderr).toContain(
+        const disallowedPayloadResult = await runChecker();
+        expect(disallowedPayloadResult.status).toBe(1);
+        for (const diagnostic of [
+          'resources/service.js.map must not be packaged',
+          'resources/node_modules/@waggle/hive-mind-core/src/evolution-runs.ts must not be packaged',
+          'resources/node_modules/waggle-test-runtime/src/private.ts must not be packaged',
+          'resources/node_modules/vendor/node_modules/@waggle/shared/src/private.ts must not be packaged',
           'resources/node_modules/@waggle/hive-mind-core/README.md is not a runtime package entry',
-        );
-        fs.rmSync(path.join(
-          fixtureResources,
-          'node_modules',
-          '@waggle',
-          'hive-mind-core',
-          'README.md',
-        ));
+        ]) {
+          expect(disallowedPayloadResult.stderr).toContain(diagnostic);
+        }
+        fs.rmSync(serviceMapPath);
+        fs.rmSync(hiveSourceDir, { recursive: true });
+        fs.rmSync(unscopedSourceDir, { recursive: true });
+        fs.rmSync(nestedVendorDir, { recursive: true });
+        fs.rmSync(firstPartyReadme);
 
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           '@waggle/missing-manifest/dist/index.js',
           'export {};\n',
         );
-        const missingManifestResult = runChecker();
-        expect(missingManifestResult.status).toBe(1);
-        expect(missingManifestResult.stderr).toContain(
-          'resources/node_modules/@waggle/missing-manifest/package.json is missing or invalid',
-        );
-        fs.rmSync(path.join(
+        const missingManifestDir = path.join(
           fixtureResources,
           'node_modules',
           '@waggle',
           'missing-manifest',
-        ), { recursive: true });
-
+        );
         writeFixtureFile(
           path.join(fixtureResources, 'node_modules'),
           '@waggle/malformed-manifest/package.json',
           '{',
         );
-        const malformedManifestResult = runChecker();
-        expect(malformedManifestResult.status).toBe(1);
-        expect(malformedManifestResult.stderr).toContain(
-          'resources/node_modules/@waggle/malformed-manifest/package.json is missing or invalid',
-        );
-        fs.rmSync(path.join(
+        const malformedManifestDir = path.join(
           fixtureResources,
           'node_modules',
           '@waggle',
           'malformed-manifest',
-        ), { recursive: true });
+        );
+        const invalidManifestResult = await runChecker();
+        expect(invalidManifestResult.status).toBe(1);
+        expect(invalidManifestResult.stderr).toContain(
+          'resources/node_modules/@waggle/missing-manifest/package.json is missing or invalid',
+        );
+        expect(invalidManifestResult.stderr).toContain(
+          'resources/node_modules/@waggle/malformed-manifest/package.json is missing or invalid',
+        );
+        fs.rmSync(missingManifestDir, { recursive: true });
+        fs.rmSync(malformedManifestDir, { recursive: true });
 
         writeCoreManifest('dist/../package.json');
-        const traversalTargetResult = runChecker();
+        const traversalTargetResult = await runChecker();
         expect(traversalTargetResult.status).toBe(1);
         expect(traversalTargetResult.stderr).toContain(
           'has an invalid or missing runtime target: dist/../package.json',
@@ -1405,7 +1458,7 @@ describe('Tauri Production Configuration', () => {
         );
         fs.mkdirSync(runtimeDirectory, { recursive: true });
         writeCoreManifest('dist/runtime-directory');
-        const directoryTargetResult = runChecker();
+        const directoryTargetResult = await runChecker();
         expect(directoryTargetResult.status).toBe(1);
         expect(directoryTargetResult.stderr).toContain(
           'has an invalid or missing runtime target: dist/runtime-directory',
@@ -1418,7 +1471,7 @@ describe('Tauri Production Configuration', () => {
         fs.rmSync(coreDistDir, { recursive: true });
         fs.symlinkSync(outsideDistDir, coreDistDir, 'junction');
         writeCoreManifest('dist/index.js');
-        const junctionTargetResult = runChecker();
+        const junctionTargetResult = await runChecker();
         expect(junctionTargetResult.status).toBe(1);
         expect(junctionTargetResult.stderr).toContain(
           'has an invalid or missing runtime target: dist/index.js',
@@ -1433,27 +1486,23 @@ describe('Tauri Production Configuration', () => {
             import: './dist/index.js',
           },
         });
-        expect(runChecker({ withImageRuntime: true }).status).toBe(0);
+        expect((await runChecker({ runtimeProbe: 'all' })).status).toBe(0);
 
         fs.writeFileSync(
           coreDistEntry,
           'export {};\n//# sourceMappingURL=index.js.map\n',
           'utf-8',
         );
-        const nestedInlineMapResult = runChecker();
-        expect(nestedInlineMapResult.status).toBe(1);
-        expect(nestedInlineMapResult.stderr).toContain(
-          'resources/node_modules/@waggle/hive-mind-core/dist/index.js contains a sourceMappingURL directive',
-        );
-        fs.writeFileSync(coreDistEntry, 'export {};\n', 'utf-8');
-
         fs.writeFileSync(
           path.join(fixtureResources, 'service.js'),
           'console.log("sidecar");\n//# sourceMappingURL=data:application/json;base64,e30=\n',
           'utf-8',
         );
-        const inlineMapResult = runChecker();
+        const inlineMapResult = await runChecker();
         expect(inlineMapResult.status).toBe(1);
+        expect(inlineMapResult.stderr).toContain(
+          'resources/node_modules/@waggle/hive-mind-core/dist/index.js contains a sourceMappingURL directive',
+        );
         expect(inlineMapResult.stderr).toContain(
           'resources/service.js contains a sourceMappingURL directive',
         );

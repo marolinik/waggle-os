@@ -7,8 +7,8 @@
  * cover the store CRUD and the exact populate function local/index.ts calls.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { McpRuntime } from '@waggle/agent';
@@ -61,8 +61,17 @@ describe('mcp-config store', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  function configTempFiles(): string[] {
+    return fs.readdirSync(tmpDir).filter((name) => name.endsWith('.tmp'));
+  }
+
+  function filesystemError(code: string): NodeJS.ErrnoException {
+    return Object.assign(new Error(`filesystem error: ${code}`), { code });
+  }
 
   it('returns an empty config when the file is missing', () => {
     expect(loadMcpConfig(tmpDir)).toEqual({ mcpServers: {} });
@@ -128,6 +137,48 @@ describe('mcp-config store', () => {
     expect(removeMcpServerEntry(tmpDir, 'custom-filesystem')).toBe(true);
     expect(removeMcpServerEntry(tmpDir, 'custom-filesystem')).toBe(false);
     expect(Object.keys(loadMcpConfig(tmpDir).mcpServers)).toEqual(['custom-db']);
+  });
+
+  it.each(['EPERM', 'EACCES', 'EBUSY'] as const)(
+    'retries a transient Windows %s rename lock without losing the config update',
+    (code) => {
+      const renameSync = fs.renameSync.bind(fs);
+      const rename = vi.spyOn(fs, 'renameSync')
+        .mockImplementationOnce(() => { throw filesystemError(code); })
+        .mockImplementation(renameSync);
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      saveMcpServerEntry(tmpDir, 'custom-safe', { command: 'node', args: ['safe.js'] });
+
+      expect(rename).toHaveBeenCalledTimes(2);
+      expect(wait).toHaveBeenCalledOnce();
+      expect(loadMcpConfig(tmpDir).mcpServers['custom-safe']).toEqual({
+        command: 'node',
+        args: ['safe.js'],
+      });
+      expect(configTempFiles()).toEqual([]);
+    },
+  );
+
+  it('bounds a persistent Windows rename lock and preserves the prior config', () => {
+    saveMcpServerEntry(tmpDir, 'custom-safe', { command: 'node', args: ['v1.js'] });
+    const error = filesystemError('EPERM');
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => { throw error; });
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+    expect(() => saveMcpServerEntry(
+      tmpDir,
+      'custom-safe',
+      { command: 'node', args: ['v2.js'] },
+    )).toThrow(error);
+
+    expect(rename).toHaveBeenCalledTimes(4);
+    expect(wait).toHaveBeenCalledTimes(3);
+    expect(loadMcpConfig(tmpDir).mcpServers['custom-safe']).toEqual({
+      command: 'node',
+      args: ['v1.js'],
+    });
+    expect(configTempFiles()).toEqual([]);
   });
 
   it('round-trips a canonical marketplace provenance receipt without exposing env values', () => {

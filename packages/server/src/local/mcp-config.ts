@@ -25,7 +25,7 @@
  * the same local dataDir trust boundary, never in the active configuration.
  */
 
-import * as fs from 'node:fs';
+import fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
@@ -324,13 +324,22 @@ function writeMcpConfig(dataDir: string, config: McpConfigFile): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmpPath = `${file}.${process.pid}.${randomUUID()}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8');
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
   try {
-    fs.renameSync(tmpPath, file);
-  } catch (err) {
-    // Windows AV/file-lock on the target is a real occurrence — don't orphan
-    // the temp file when the swap fails; surface the original error.
-    try { fs.unlinkSync(tmpPath); } catch { /* already gone */ }
-    throw err;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        fs.renameSync(tmpPath, file);
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 4) throw error;
+        // Windows antivirus and indexers can briefly hold an exclusive handle.
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmpPath, { force: true }); } catch { /* best-effort cleanup */ }
   }
 }
 

@@ -226,6 +226,7 @@ describe('OfflineManager', () => {
 
 describe('Offline REST routes', () => {
   let server: FastifyInstance;
+  let serverBuild: Promise<FastifyInstance> | undefined;
   let tmpDir: string;
 
   beforeAll(async () => {
@@ -240,14 +241,26 @@ describe('Offline REST routes', () => {
     frames.createIFrame(s1.gop_id, 'Test frame', 'normal');
     mind.close();
 
-    server = await buildLocalServer({ dataDir: tmpDir });
-    server.offlineManager.stop();
-  });
+    serverBuild = buildLocalServer({ dataDir: tmpDir }).then((builtServer) => {
+      builtServer.offlineManager.stop();
+      return builtServer;
+    });
+    server = await serverBuild;
+  }, 30_000);
 
   afterAll(async () => {
-    await server.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
+    let builtServer: FastifyInstance | undefined;
+    try {
+      builtServer = serverBuild ? await serverBuild : undefined;
+    } catch {
+      // The setup hook reports build failures; teardown still owns fixture cleanup.
+    }
+    try {
+      if (builtServer) await builtServer.close();
+    } finally {
+      if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it('uses built-in proxy completion readiness over stale provider health', async () => {
     const originalFetch = globalThis.fetch;
