@@ -1,12 +1,9 @@
-// Next.js 15.5.15 convention: middleware.ts
-// Per Clerk skill version note + Next.js ≤15 docs, middleware.ts is the runtime-supported filename.
-// Future Next.js 16+ canary will support proxy.ts as successor naming convention.
-// Re-verify framework convention before any Next.js major version upgrade.
+// Next.js 16 convention: proxy.ts replaces the deprecated middleware.ts name.
 
 import { clerkMiddleware } from '@clerk/nextjs/server';
 
 /**
- * Clerk auth middleware.
+ * Clerk auth proxy.
  *
  * Default behavior: all routes are PUBLIC. Per-route protection is enforced
  * with `await auth.protect()` inside Server Components / Route Handlers.
