@@ -36,6 +36,27 @@ describe('W4.2 — recallMemory reranker wiring', () => {
     };
   }
 
+  it('skips embedding and lazy reranker startup when both minds are empty', async () => {
+    vi.stubEnv('WAGGLE_RERANKER', '1');
+    const embedder = new MockEmbedder();
+    const embedSpy = vi.spyOn(embedder, 'embed');
+    const embedBatchSpy = vi.spyOn(embedder, 'embedBatch');
+    const workspaceDb = new MindDB(':memory:');
+    const orchestrator = new Orchestrator({ db, embedder });
+    orchestrator.setWorkspaceMind(workspaceDb);
+
+    try {
+      const result = await orchestrator.recallMemory('weekly report');
+
+      expect(result).toEqual({ text: '', count: 0, recalled: [], recalledFrames: [] });
+      expect(createInProcessReranker).not.toHaveBeenCalled();
+      expect(embedSpy).not.toHaveBeenCalled();
+      expect(embedBatchSpy).not.toHaveBeenCalled();
+    } finally {
+      workspaceDb.close();
+    }
+  });
+
   it('uses an injected reranker to order recall results', async () => {
     const calls = { n: 0 };
     const orchestrator = new Orchestrator({

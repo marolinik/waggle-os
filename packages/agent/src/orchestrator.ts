@@ -512,6 +512,24 @@ export class Orchestrator {
     const scoreFloor = opts?.scoreFloor;
     logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.enter', queryChars: query.length, limit, profile });
     try {
+      const personalHasFrames = this.db.getDatabase()
+        .prepare('SELECT 1 FROM memory_frames LIMIT 1')
+        .get() !== undefined;
+      const workspaceHasFrames = this.workspaceLayers
+        ? this.workspaceLayers.db.getDatabase()
+            .prepare('SELECT 1 FROM memory_frames LIMIT 1')
+            .get() !== undefined
+        : false;
+      if (!personalHasFrames && !workspaceHasFrames) {
+        logTurnEvent(opts?.turnId, {
+          stage: 'orchestrator.recallMemory.exit',
+          totalCount: 0,
+          blocked: false,
+          emptyMindFastPath: true,
+        });
+        return { text: '', count: 0, recalled: [], recalledFrames: [] };
+      }
+
       // Detect catch-up intent — these queries need importance-based recall, not literal text matching
       const catchUpPatterns = [
         /\bcatch me up\b/i, /\bwhere (?:are|were) we\b/i, /\bwhat matters\b/i,
