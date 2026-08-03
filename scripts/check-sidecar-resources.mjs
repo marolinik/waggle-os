@@ -38,7 +38,7 @@ const MANUAL_FIRST_PARTY_RUNTIME_TARGETS = new Map([
 const REQUIRED_SHARP_VERSION = '0.35.3';
 const REQUIRED_BETTER_SQLITE_RANGE = '>=12.6.2 <13';
 const STAGED_DEPENDENCY_VERSION_ALLOWLISTS = new Map([
-  ['brace-expansion', new Set(['1.1.16', '2.1.2', '5.0.7'])],
+  ['brace-expansion', new Set(['1.1.18', '2.1.4', '5.0.9'])],
   ['fast-uri', new Set(['3.1.4'])],
 ]);
 const STAGED_DEPENDENCY_DENYLIST = new Set(['js-yaml']);
@@ -277,10 +277,10 @@ function stagedDependencyVersionFailures(nodeModulesDir, packageManifests) {
     'brace-expansion',
   );
   const bundledBraceVersion = readManifest(bundledBraceDir).version;
-  if (bundledBraceVersion !== '2.1.2') {
+  if (bundledBraceVersion !== '2.1.4') {
     failures.push(
       `node_modules/waggle-node-runtime/node_modules/npm/node_modules/brace-expansion `
-      + `must be exactly 2.1.2; found ${bundledBraceVersion ?? 'missing'}`,
+      + `must be exactly 2.1.4; found ${bundledBraceVersion ?? 'missing'}`,
     );
   }
 

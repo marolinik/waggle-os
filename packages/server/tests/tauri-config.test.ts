@@ -529,9 +529,9 @@ describe('Tauri Production Configuration', () => {
       packages: Record<string, { version?: string }>;
     };
     const expectedOverrides = {
-      'brace-expansion@1': '1.1.16',
-      'brace-expansion@2': '2.1.2',
-      'brace-expansion@5': '5.0.7',
+      'brace-expansion@1': '1.1.18',
+      'brace-expansion@2': '2.1.4',
+      'brace-expansion@5': '5.0.9',
       'fast-uri': '3.1.4',
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.0',
@@ -566,7 +566,7 @@ describe('Tauri Production Configuration', () => {
       return new Set(matching.map(([, metadata]) => metadata.version!));
     };
 
-    expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.16', '2.1.2', '5.0.7']));
+    expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.4']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.0']));
@@ -609,11 +609,11 @@ describe('Tauri Production Configuration', () => {
     ].join('/');
 
     try {
-      writeManifest('brace-expansion', 'brace-expansion', '5.0.7');
+      writeManifest('brace-expansion', 'brace-expansion', '5.0.9');
       writeManifest('fast-uri', 'fast-uri', '3.1.4');
       writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
       writeManifest('sharp', 'sharp', '0.35.3');
-      writeManifest(bundledBrace, 'brace-expansion', '2.1.2');
+      writeManifest(bundledBrace, 'brace-expansion', '2.1.4');
       expect(run().status).toBe(0);
       writeManifest('better-sqlite3', 'better-sqlite3', '12.6.2');
       expect(run().status).toBe(0);
@@ -666,11 +666,17 @@ describe('Tauri Production Configuration', () => {
       fs.rmSync(path.join(fixture, 'vendor'), { recursive: true, force: true });
       writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
 
-      writeManifest(bundledBrace, 'brace-expansion', '2.0.1');
+      writeManifest(bundledBrace, 'brace-expansion', '2.1.2');
       const vulnerableNpm = run();
       expect(vulnerableNpm.status).toBe(1);
-      expect(vulnerableNpm.stderr).toContain('must be exactly 2.1.2');
-      writeManifest(bundledBrace, 'brace-expansion', '2.1.2');
+      expect(vulnerableNpm.stderr).toContain('must be exactly 2.1.4');
+      writeManifest(bundledBrace, 'brace-expansion', '2.1.4');
+
+      writeManifest('brace-expansion', 'brace-expansion', '5.0.7');
+      const vulnerableStagedBrace = run();
+      expect(vulnerableStagedBrace.status).toBe(1);
+      expect(vulnerableStagedBrace.stderr).toContain('brace-expansion@5.0.7');
+      writeManifest('brace-expansion', 'brace-expansion', '5.0.9');
 
       writeManifest('fast-uri', 'fast-uri', '3.1.2');
       const vulnerableFastUri = run();
@@ -898,7 +904,7 @@ describe('Tauri Production Configuration', () => {
         writeFixtureFile(
           fixtureResources,
           `${fixtureNpmRuntimeRoot}/node_modules/npm/node_modules/brace-expansion/package.json`,
-          JSON.stringify({ name: 'brace-expansion', version: '2.1.2' }),
+          JSON.stringify({ name: 'brace-expansion', version: '2.1.4' }),
         );
         writeFixtureFile(
           fixtureResources,

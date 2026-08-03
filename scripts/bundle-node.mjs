@@ -25,7 +25,7 @@ const stagedRuntimeDir = path.join(
   'node_modules',
   'waggle-node-runtime',
 );
-const SAFE_NPM_BRACE_EXPANSION_VERSION = '2.1.2';
+const SAFE_NPM_BRACE_EXPANSION_VERSION = '2.1.4';
 const safeNpmBraceExpansionSource = path.join(
   root,
   'node_modules',
