@@ -457,6 +457,8 @@ describe('Tauri Production Configuration', () => {
     const script = fs.readFileSync(path.join(ROOT, 'scripts', 'bundle-node.mjs'), 'utf-8');
     expect(script).toContain("const DESKTOP_NODE_VERSION = '22.23.2'");
     expect(script).toContain('const NODE_VERSION = DESKTOP_NODE_VERSION');
+    expect(script).toContain("const SAFE_NPM_IP_ADDRESS_VERSION = '10.4.0'");
+    expect(script).toContain('Hardened bundled npm with ip-address');
     expect(script).not.toContain('process.versions.node;');
 
     for (const workflowPath of [
@@ -534,6 +536,7 @@ describe('Tauri Production Configuration', () => {
       'brace-expansion@2': '2.1.4',
       'brace-expansion@5': '5.0.9',
       'fast-uri': '3.1.5',
+      'ip-address': '10.4.0',
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.0',
       sharp: '0.35.3',
@@ -579,6 +582,7 @@ describe('Tauri Production Configuration', () => {
     expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.2']));
     expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.5']));
+    expect(versionsFor('ip-address')).toEqual(new Set(['10.4.0']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.0']));
     expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
@@ -622,6 +626,7 @@ describe('Tauri Production Configuration', () => {
     try {
       writeManifest('brace-expansion', 'brace-expansion', '5.0.9');
       writeManifest('fast-uri', 'fast-uri', '3.1.5');
+      writeManifest('ip-address', 'ip-address', '10.4.0');
       writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
       writeManifest('sharp', 'sharp', '0.35.3');
       writeManifest(bundledBrace, 'brace-expansion', '2.1.4');
@@ -694,6 +699,12 @@ describe('Tauri Production Configuration', () => {
       expect(vulnerableFastUri.status).toBe(1);
       expect(vulnerableFastUri.stderr).toContain('fast-uri@3.1.4');
       writeManifest('fast-uri', 'fast-uri', '3.1.5');
+
+      writeManifest('ip-address', 'ip-address', '10.2.0');
+      const vulnerableIpAddress = run();
+      expect(vulnerableIpAddress.status).toBe(1);
+      expect(vulnerableIpAddress.stderr).toContain('ip-address@10.2.0');
+      writeManifest('ip-address', 'ip-address', '10.4.0');
 
       writeManifest('sharp', 'sharp', '0.34.5');
       const vulnerableSharp = run();

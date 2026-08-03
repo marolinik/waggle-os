@@ -33,6 +33,8 @@ const safeNpmBraceExpansionSource = path.join(
   'node_modules',
   'brace-expansion',
 );
+const SAFE_NPM_IP_ADDRESS_VERSION = '10.4.0';
+const safeNpmIpAddressSource = path.join(root, 'node_modules', 'ip-address');
 
 const DESKTOP_NODE_VERSION = '22.23.2';
 const NODE_VERSION = DESKTOP_NODE_VERSION;
@@ -313,6 +315,43 @@ if (stagedNpmBraceExpansionVersion !== SAFE_NPM_BRACE_EXPANSION_VERSION) {
 console.log(
   `[bundle-node] Hardened bundled npm with brace-expansion `
   + `${SAFE_NPM_BRACE_EXPANSION_VERSION}`,
+);
+const safeNpmIpAddressManifest = path.join(safeNpmIpAddressSource, 'package.json');
+if (!fs.existsSync(safeNpmIpAddressManifest)) {
+  fail('lock-installed ip-address hardening source is missing');
+}
+const safeNpmIpAddress = JSON.parse(
+  fs.readFileSync(safeNpmIpAddressManifest, 'utf8'),
+);
+if (safeNpmIpAddress.version !== SAFE_NPM_IP_ADDRESS_VERSION) {
+  fail(
+    `lock-installed ip-address is ${safeNpmIpAddress.version}; `
+    + `expected ${SAFE_NPM_IP_ADDRESS_VERSION}`,
+  );
+}
+const stagedNpmIpAddress = path.join(
+  stagedRuntimeDir,
+  'node_modules',
+  'npm',
+  'node_modules',
+  'ip-address',
+);
+fs.rmSync(stagedNpmIpAddress, { recursive: true, force: true });
+fs.cpSync(safeNpmIpAddressSource, stagedNpmIpAddress, {
+  recursive: true,
+  dereference: true,
+});
+const stagedNpmIpAddressVersion = JSON.parse(
+  fs.readFileSync(path.join(stagedNpmIpAddress, 'package.json'), 'utf8'),
+).version;
+if (stagedNpmIpAddressVersion !== SAFE_NPM_IP_ADDRESS_VERSION) {
+  fail(
+    `staged npm ip-address is ${stagedNpmIpAddressVersion}; `
+    + `expected ${SAFE_NPM_IP_ADDRESS_VERSION}`,
+  );
+}
+console.log(
+  `[bundle-node] Hardened bundled npm with ip-address ${SAFE_NPM_IP_ADDRESS_VERSION}`,
 );
 fs.writeFileSync(
   path.join(stagedRuntimeDir, 'package.json'),

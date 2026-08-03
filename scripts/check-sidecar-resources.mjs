@@ -40,6 +40,7 @@ const REQUIRED_BETTER_SQLITE_RANGE = '>=12.6.2 <13';
 const STAGED_DEPENDENCY_VERSION_ALLOWLISTS = new Map([
   ['brace-expansion', new Set(['1.1.18', '2.1.4', '5.0.9'])],
   ['fast-uri', new Set(['3.1.5'])],
+  ['ip-address', new Set(['10.4.0'])],
 ]);
 const STAGED_DEPENDENCY_DENYLIST = new Set(['js-yaml']);
 
