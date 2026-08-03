@@ -542,6 +542,11 @@ describe('VaultStore', () => {
         '$hasFull = @($current | Where-Object { ($_.FileSystemRights -band $full) -eq $full }).Count -eq 1',
         'if (-not $acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or -not $hasFull) { throw "Vault ACL is not exclusive" }',
       ].join('; ');
+      const verifierEnv: NodeJS.ProcessEnv = { SystemRoot: systemRoot, WINDIR: systemRoot };
+      for (const name of ['TEMP', 'TMP', 'ComSpec', 'SystemDrive', 'PROCESSOR_ARCHITECTURE']) {
+        const value = process.env[name];
+        if (value) verifierEnv[name] = value;
+      }
       expect(() => actual.execFileSync(
         powershellPath,
         [
@@ -551,7 +556,7 @@ describe('VaultStore', () => {
           '-EncodedCommand',
           Buffer.from(verifier, 'utf16le').toString('base64'),
         ],
-        { stdio: 'ignore' },
+        { stdio: ['ignore', 'ignore', 'pipe'], env: verifierEnv },
       )).not.toThrow();
     },
   );

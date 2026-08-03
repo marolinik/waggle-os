@@ -15,8 +15,9 @@
  * ⇒ empty index (every skill defaults to UNVERIFIED — the badge is earned by a
  * clean passing grade, never assumed; fail-safe).
  */
-import * as fs from 'node:fs';
+import fs from 'node:fs';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export interface SkillAuditBadge {
   /** Crossed the verify threshold on a cleanly-parsed grade. */
@@ -68,9 +69,26 @@ export function loadSkillAudit(waggleHome: string): SkillAuditIndex {
 export function saveSkillAudit(waggleHome: string, index: SkillAuditIndex): void {
   if (!fs.existsSync(waggleHome)) fs.mkdirSync(waggleHome, { recursive: true });
   const filePath = getSkillAuditPath(waggleHome);
-  const tmpPath = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(index, null, 2), 'utf-8');
-  fs.renameSync(tmpPath, filePath);
+  const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(index, null, 2), 'utf-8');
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      try {
+        fs.renameSync(tmpPath, filePath);
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 10) throw error;
+        // Windows antivirus and indexers can briefly hold an exclusive handle.
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmpPath, { force: true }); } catch { /* best-effort cleanup */ }
+  }
 }
 
 /** Upsert one badge, stamping auditedAt. Returns the stored entry. */
