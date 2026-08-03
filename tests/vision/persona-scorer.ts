@@ -103,6 +103,19 @@ const RAW_TOOL_CALL_SENTINEL = /\[\/?TOOL_CALL\]/i;
 const FABRICATED_EVIDENCE_CLAIM = /\b(?:I|we)(?:'ve| have)?\s+(?:successfully\s+)?(?:verified|confirmed|inspected|checked|tested|searched|opened|read|ran|executed)\b/i;
 const MEMORY_CLAIM = /\b(?:I remember you (?:said|told)|I recall you (?:said|told)|according to (?:my|the) memory|from (?:our|a) previous (?:session|conversation)|your saved (?:memory|preference))\b/i;
 const NAMED_TOOL_CLAIM = /\b(?:used|called|invoked)\s+(?:the\s+)?[`'"]?([a-z][a-z0-9_-]{2,})[`'"]?\s+tool\b/gi;
+const EMPTY_WORKSPACE_TOOL = /^(?:search_files|list_workspace_files)$/i;
+const EMPTY_WORKSPACE_CONTRADICTION_TOOL = /^read_file$/i;
+const EMPTY_WORKSPACE_TOOL_RESULT = /^\s*(?:no files?(?:\s+(?:were\s+)?found)?\.?|\[\]\s*)$/i;
+const READ_FILE_FAILURE_RESULT = /^(?:error(?::|\s)|file not found\b|no such file\b|enoent\b|permission denied\b|access denied\b|unable to read\b|could not read\b)/i;
+const EXHAUSTIVE_WORKSPACE_GLOB = /^\s*\*\*\/\*\s*$/;
+const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:current|fresh|virtual) workspace (?:is|was) empty\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
+const NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE = /\b(?:if|unless|whether|maybe|perhaps|possibly|may|might|could|cannot|can['’]t|doubt(?:ful)?|unclear|uncertain|unsure|unverified|unconfirmed|hypothetical(?:ly)?|suppose|assuming|failed|failure|unauthorized|unable)\b|\b(?:could|can|did|does|am|is|are|was|were|has|have|had)\s+not\b|\b(?:could|did|does|is|are|was|were|has|have|had)n['’]t\b|\bnot\s+(?:sure|certain|confirmed|verified)\b|\b(?:permission|access) denied\b/i;
+const CONTRADICTED_EMPTY_WORKSPACE_CLAIM = /\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:found|discovered)\b\s+(?![*_`]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{1,80}|\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:exists?|present|contains?|includes?)\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\bexcept\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b/i;
+const WORKSPACE_FILE_REFERENCE = String.raw`(?:README(?:\.md)?|(?:[\w.-]+[\\/])+[\w.-]+|[\w-]+\.(?:md|txt|json|ya?ml|toml|tsx?|jsx?|mjs|cjs|py|rs|go|java|cs|cpp|c|h|html|css|scss|sh|ps1|lock))`;
+const DIRECT_NONEMPTY_WORKSPACE_CLAIM = new RegExp(
+  String.raw`(?:^|[.!?]\s+|\r?\n)\s*(?:(?:[-+*]|\d+[.)])\s+)?(?!(?:no|not|if|unless|maybe|perhaps|possibly|hypothetically|suppose|assuming)\b)(?:(?:(?:the|a|an)\s+)?[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*\s+(?:exists?|is\s+(?:present|located)|was\s+(?:found|discovered|located))\b|(?:(?:I|we)\s+(?:found|discovered|read|opened)|(?:(?:the\s+)?(?:workspace\s+)?search|(?:the\s+)?tool)\s+(?:found|discovered|returned))\b\s+(?![*_\x60]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{0,80}[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*|(?:the\s+)?workspace\s+(?:contains?|includes?|has|holds?)\b\s+(?![*_\x60]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{0,80}[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)`,
+  'i',
+);
 
 export function containsFailureCopy(response: string): boolean {
   return FAILURE_BANNER.test(response)
@@ -132,6 +145,81 @@ function successfulToolNames(events: readonly CapturedSseEvent[]): Set<string> {
     names.add(name);
   }
   return names;
+}
+
+function hasExhaustiveEmptyWorkspaceToolResult(events: readonly CapturedSseEvent[]): boolean {
+  const pendingRequests = new Map<string, boolean[]>();
+  const ambiguousPendingRequests = new Set<string>();
+  let sawEmptyResult = false;
+  let sawNonEmptyResult = false;
+  for (const event of events) {
+    const data = recordData(event);
+    const name = typeof data?.name === 'string' ? data.name.toLowerCase() : '';
+    if (!EMPTY_WORKSPACE_TOOL.test(name) && !EMPTY_WORKSPACE_CONTRADICTION_TOOL.test(name)) continue;
+
+    if (event.event === 'tool') {
+      const input = data?.input && typeof data.input === 'object'
+        ? data.input as Record<string, unknown>
+        : null;
+      const exhaustive = name === 'list_workspace_files'
+        || (name === 'search_files'
+          && typeof input?.pattern === 'string'
+          && EXHAUSTIVE_WORKSPACE_GLOB.test(input.pattern));
+      const queue = pendingRequests.get(name) ?? [];
+      if (queue.length > 0) ambiguousPendingRequests.add(name);
+      queue.push(exhaustive);
+      pendingRequests.set(name, queue);
+      continue;
+    }
+
+    if (event.event !== 'tool_result' && event.event !== 'tool_end') continue;
+    const queue = pendingRequests.get(name);
+    const exhaustive = queue?.shift();
+    const ambiguous = ambiguousPendingRequests.has(name);
+    if (queue?.length === 0) ambiguousPendingRequests.delete(name);
+    const result = typeof data?.result === 'string' ? data.result : '';
+    if (exhaustive === undefined || data?.isError === true) continue;
+    if (EMPTY_WORKSPACE_CONTRADICTION_TOOL.test(name)) {
+      if (!READ_FILE_FAILURE_RESULT.test(result.trim())) sawNonEmptyResult = true;
+      continue;
+    }
+    if (isFailedToolResult(result)) continue;
+    if (EMPTY_WORKSPACE_TOOL_RESULT.test(result)) {
+      if (exhaustive && !ambiguous) sawEmptyResult = true;
+    } else {
+      sawNonEmptyResult = true;
+    }
+  }
+  return sawEmptyResult && !sawNonEmptyResult;
+}
+
+function hasAffirmedEmptyWorkspaceResult(evidence: PersonaTrialEvidence): boolean {
+  const emptyToolResult = hasExhaustiveEmptyWorkspaceToolResult(evidence.sseEvents);
+  if (!emptyToolResult
+    || CONTRADICTED_EMPTY_WORKSPACE_CLAIM.test(evidence.response)
+    || DIRECT_NONEMPTY_WORKSPACE_CLAIM.test(evidence.response)) return false;
+
+  AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM.lastIndex = 0;
+  for (const match of evidence.response.matchAll(AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM)) {
+    const matchStart = match.index;
+    const matchEnd = matchStart + match[0].length;
+    const before = evidence.response.slice(0, matchStart);
+    const after = evidence.response.slice(matchEnd);
+    const clauseStart = Math.max(
+      before.lastIndexOf('.'),
+      before.lastIndexOf('!'),
+      before.lastIndexOf('?'),
+      before.lastIndexOf('\n'),
+    ) + 1;
+    const boundaryOffsets = [after.indexOf('.'), after.indexOf('!'), after.indexOf('?'), after.indexOf('\n')]
+      .filter(offset => offset >= 0);
+    const clauseEnd = boundaryOffsets.length > 0
+      ? matchEnd + Math.min(...boundaryOffsets)
+      : evidence.response.length;
+    const clause = evidence.response.slice(clauseStart, clauseEnd);
+    if (!NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(clause)) return true;
+  }
+  return false;
 }
 
 function requestedApprovalTools(events: readonly CapturedSseEvent[]): Set<string> {
@@ -1420,6 +1508,8 @@ function evaluateResponseRule(
       return hasAffirmedRunwayActions(evidence.response, rule.patterns);
     case 'writerReleaseFacts':
       return hasAffirmedWriterReleaseFacts(evidence.response, rule.patterns);
+    case 'emptyWorkspaceResult':
+      return hasAffirmedEmptyWorkspaceResult(evidence);
     case 'boundedWorkspaceClaims':
       return hasOnlyBoundedWorkspaceClaims(evidence.response);
     case 'allPatterns':

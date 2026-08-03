@@ -2371,12 +2371,37 @@ describe('deterministic 100-point persona scorer', () => {
       passed: false,
       pointsAwarded: 0,
     });
+
+    const failedToolResponse = [
+      'No files were found in the current workspace.',
+      'Recommended next engineering step: confirm the intended stack.',
+    ].join('\n');
+    const failedToolResult = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response: failedToolResponse,
+      persistedResponse: failedToolResponse,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'Search failed: permission denied', isError: false } },
+        { event: 'done', data: { content: failedToolResponse, toolsUsed: ['search_files'] } },
+      ],
+    }));
+    expect(failedToolResult.checks.find(check => check.id === 'empty-result')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
   });
 
   it.each([
     ['captured affirmative workspace-directory wording', 'This workspace directory is empty.', true],
     ['captured affirmative search-return wording', 'I ran an exhaustive glob search and it returned **no files**.', true],
+    ['captured paid tool-subject search wording', 'I ran an exhaustive glob search (`**/*`) against the workspace root, and the tool returned **no files**.', true],
     ['captured affirmative workspace-search wording', 'The workspace search returned no files.', true],
+    ['specific-file absence agrees with emptiness', 'This workspace directory is empty. I found no README.md.', true],
+    ['container absence agrees with emptiness', 'This workspace directory is empty. The workspace contains no README.md.', true],
+    ['search-specific absence agrees with emptiness', 'This workspace directory is empty. The workspace search found no README.md.', true],
     ['uncertain workspace-directory wording', 'I could not confirm whether this workspace directory is empty.', false],
     ['multiline uncertain workspace-directory wording', 'I could not confirm whether\nthis workspace directory is empty.', false],
     ['hedged workspace-directory wording', 'This workspace directory may be empty.', false],
@@ -2384,6 +2409,22 @@ describe('deterministic 100-point persona scorer', () => {
     ['uncertain search-return wording', 'I could not confirm whether the search ran and it returned **no files**.', false],
     ['hedged search-return wording', 'I may have run the search and it returned **no files**.', false],
     ['negated search-return wording', 'I ran the search and it did not return **no files**.', false],
+    ['uncertain tool-subject search wording', 'I could not confirm whether the search ran, and the tool returned **no files**.', false],
+    ['hedged tool-subject search wording', 'I may have run the search, and the tool returned **no files**.', false],
+    ['negated tool-subject search wording', 'I ran the search, and the tool did not return **no files**.', false],
+    ['authorization failure after tool-subject wording', 'I ran the search, and the tool returned no files because it was not authorized to read the workspace.', false],
+    ['search failure after tool-subject wording', 'I ran the search, and the tool returned no files because the search failed.', false],
+    ['later non-empty correction', 'I ran the search, and the tool returned no files, but a second search found README.md.', false],
+    ['later arbitrary-path correction', 'I ran the search, and the tool returned no files, but a second search found `src/index.ts`.', false],
+    ['direct file-present contradiction', 'This workspace directory is empty. README.md is present.', false],
+    ['Markdown-list file-present contradiction', 'This workspace directory is empty.\n- `README.md` is present.', false],
+    ['direct search-found contradiction', 'This workspace directory is empty. The workspace search found README.md.', false],
+    ['unverified generic empty-result wording', 'I could not verify whether no files were found.', false],
+    ['cannot-confirm generic empty-result wording', 'I cannot confirm that no files were found.', false],
+    ['not-sure generic empty-result wording', 'I am not sure that no files were found.', false],
+    ['curly-contraction generic empty-result wording', 'I can’t confirm that no files were found.', false],
+    ['doubtful generic empty-result wording', 'I doubt that no files were found.', false],
+    ['unsure generic empty-result wording', 'I am unsure that no files were found.', false],
     ['uncertain workspace-search wording', 'I could not confirm whether the workspace search returned no files.', false],
     ['hedged workspace-search wording', 'The workspace search may have returned no files.', false],
     ['negated workspace-search wording', 'The workspace search returned files, not no files.', false],
@@ -2404,6 +2445,112 @@ describe('deterministic 100-point persona scorer', () => {
     }));
 
     expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(expected);
+  });
+
+  it('does not treat an empty extension-only search as proof that the workspace is empty', () => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const response = 'This workspace directory is empty.\n\nRecommended next engineering step: confirm the intended stack.';
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '*.md' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
+
+  it('rejects an empty-workspace claim when a later exhaustive search finds a file', () => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const response = 'This workspace directory is empty.\n\nRecommended next engineering step: confirm the intended stack.';
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: '["README.md"]', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
+
+  it('rejects an empty-workspace claim when a narrower search finds a file', () => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const response = 'This workspace directory is empty.\n\nRecommended next engineering step: confirm the intended stack.';
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '*.md' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: '["README.md"]', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
+
+  it('does not misattribute an out-of-order narrow result to a concurrent exhaustive search', () => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const response = 'This workspace directory is empty.\n\nRecommended next engineering step: confirm the intended stack.';
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '*.md' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'Search failed: request aborted', isError: true } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+  });
+
+  it.each([
+    ['non-empty file', '# Project'],
+    ['empty file', ''],
+  ])('rejects an empty-workspace claim when reading a later %s succeeds', (_label, fileContent) => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const response = 'This workspace directory is empty.\n\nRecommended next engineering step: confirm the intended stack.';
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: ['search_files', 'read_file'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'tool', data: { name: 'read_file', input: { path: 'README.md' } } },
+        { event: 'tool_result', data: { name: 'read_file', result: fileContent, isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files', 'read_file'] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
   });
 
   it.each([
