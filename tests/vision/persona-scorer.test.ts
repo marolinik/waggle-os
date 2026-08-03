@@ -550,6 +550,109 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 
+  it('accepts the exact paid writer release wording', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      '**MEMO: Release Status Update**',
+      'Release was originally planned for Friday. API tests have passed. Browser tests currently show two failures on Windows. Additionally, the smart router has not been tested without cloud credentials.',
+      '**Recommendation:** Delay the release until these gaps are closed.',
+    ].join('\n\n');
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: writer.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(result.criticalFailures).toEqual([]);
+
+    for (const validResponse of [
+      response.replace(
+        'API tests have passed. Browser tests currently show two failures on Windows.',
+        'API tests have passed, while browser tests are failing and still show two failures on Windows.',
+      ),
+      response.replace(
+        'API tests have passed. Browser tests currently show two failures on Windows.',
+        'API tests have passed. Browser tests failed earlier and still show two failures on Windows.',
+      ),
+      response.replace(
+        'API tests have passed. Browser tests currently show two failures on Windows.',
+        'API tests have passed, while browser tests have not passed and still show two failures on Windows.',
+      ),
+      response.replace(
+        'Browser tests currently show two failures on Windows.',
+        'Browser tests currently show two failures on Windows, while API tests remain green.',
+      ),
+      response.replace(
+        'API tests have passed. Browser tests currently show two failures on Windows.',
+        'Browser tests on Windows have two failures, but API tests passed.',
+      ),
+      response.replace(
+        'API tests have passed. Browser tests currently show two failures on Windows.',
+        'Browser tests on Windows have two failures, but API tests are passing.',
+      ),
+      response.replace(
+        'API tests have passed. Browser tests currently show two failures on Windows.',
+        'Browser tests show two failures on Windows, and API tests pass.',
+      ),
+    ]) {
+      const validResult = scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: validResponse,
+        persistedResponse: validResponse,
+        requestPersonaId: writer.id,
+      }));
+      expect(
+        validResult.checks.find(check => check.id === 'release-facts')?.passed,
+        validResponse,
+      ).toBe(true);
+      expect(validResult).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    }
+
+    for (const invalidResponse of [
+      response.replace('API tests have passed', 'API tests have not passed'),
+      `${response} API tests have not passed.`,
+      `${response} API tests haven't passed.`,
+      `${response} The API test has not passed.`,
+      `${response} API tests have still not passed.`,
+      `${response} API tests have not yet passed.`,
+      `${response} API tests haven't yet passed.`,
+      `${response} API tests have not quite passed.`,
+      `${response} API tests haven't fully passed.`,
+      `${response} API tests have not completely passed.`,
+      `${response} API tests have yet to pass.`,
+      response.replace('Release was originally planned for Friday', 'There was no Friday plan'),
+      response.replace('Release was originally planned for Friday', 'No Friday release was planned'),
+      `${response} Friday has no release plan.`,
+      `${response} The Friday plan was canceled.`,
+      response.replace('Browser tests currently show two failures', 'Browser tests do not currently show two failures'),
+      response.replace('Browser tests currently show two failures', 'Browser tests currently show three failures'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS, not Windows'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS, not on Windows'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS, not in Windows'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS rather than Windows'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS rather than on Windows'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS, while Windows is clean'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS, while Windows is unaffected'),
+      response.replace('Browser tests currently show two failures on Windows', 'Browser tests currently show two failures on macOS, while Windows shows no failures'),
+    ]) {
+      const invalidResult = scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: invalidResponse,
+        persistedResponse: invalidResponse,
+        requestPersonaId: writer.id,
+      }));
+      expect(
+        invalidResult.checks.find(check => check.id === 'release-facts')?.passed,
+        invalidResponse,
+      ).toBe(false);
+    }
+  });
+
   it('accepts the valid live writer wording without weakening fact preservation', () => {
     const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
     const response = [

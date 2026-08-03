@@ -205,7 +205,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'word-limit', description: 'Stays within 120 words', kind: 'maxWords', maxWords: 120, points: 10 },
-      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:are\s+)?pass(?:ed|ing)?\b/i, windowsBrowserFailuresPattern], points: 10 },
+      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:are\s+)?pass(?:ed|ing)?|have\s+passed)\b/i, windowsBrowserFailuresPattern], points: 10 },
       { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'allPatterns', patterns: [/smart router/i, /not (?:(?:yet|been|fully|thoroughly)\s+)*(?:exercised|tested|validated)/i, /cloud credentials/i], points: 10 },
       { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'pattern', pattern: delayRecommendationPattern, points: 10 },
       { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b)/i, points: 10 },
