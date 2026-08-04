@@ -132,6 +132,21 @@ describe('managed desktop service bindings', () => {
     expect(unlisteners[0]).toHaveBeenCalledOnce();
     expect(unlisteners[1]).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    'waggle://service-status',
+    'waggle://service-restart-needed',
+  ] as const)('disposes the surviving listener when %s registration fails', async (failedEvent) => {
+    const registrationError = new Error(`${failedEvent} registration failed`);
+    const survivingUnlisten = vi.fn();
+    mockedListen.mockImplementation(async (eventName) => {
+      if (eventName === failedEvent) throw registrationError;
+      return survivingUnlisten;
+    });
+
+    await expect(listenDesktopServiceLifecycle(vi.fn())).rejects.toBe(registrationError);
+    expect(survivingUnlisten).toHaveBeenCalledOnce();
+  });
 });
 
 describe('desktop shell event bindings', () => {
@@ -214,6 +229,20 @@ describe('desktop shell event bindings', () => {
     for (const unlisten of unlisteners) {
       expect(unlisten).toHaveBeenCalled();
     }
+  });
+
+  it('disposes fulfilled listeners when a sibling shell registration rejects', async () => {
+    const firstUnlisten = vi.fn();
+    const thirdUnlisten = vi.fn();
+    const registrationError = new Error('shell listener registration failed');
+    mockedListen
+      .mockResolvedValueOnce(firstUnlisten)
+      .mockRejectedValueOnce(registrationError)
+      .mockResolvedValueOnce(thirdUnlisten);
+
+    await expect(listenDesktopShellEvents(vi.fn())).rejects.toBe(registrationError);
+    expect(firstUnlisten).toHaveBeenCalledOnce();
+    expect(thirdUnlisten).toHaveBeenCalledOnce();
   });
 });
 

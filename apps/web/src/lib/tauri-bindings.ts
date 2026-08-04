@@ -372,10 +372,13 @@ export async function listenDesktopServiceLifecycle(
     statusListener,
     restartListener,
   ]);
-  if (statusResult.status === 'rejected' || restartResult.status === 'rejected') {
-    if (statusResult.status === 'fulfilled') statusResult.value();
+  if (statusResult.status === 'rejected') {
     if (restartResult.status === 'fulfilled') restartResult.value();
-    throw statusResult.status === 'rejected' ? statusResult.reason : restartResult.reason;
+    throw statusResult.reason;
+  }
+  if (restartResult.status === 'rejected') {
+    statusResult.value();
+    throw restartResult.reason;
   }
   return () => {
     statusResult.value();
@@ -472,7 +475,7 @@ export function describeDesktopShellNotice(
 export async function listenDesktopShellEvents(
   onNotice: (notice: DesktopShellNotice) => void,
 ): Promise<UnlistenFn> {
-  const unlisteners = await Promise.all(
+  const listenerResults = await Promise.allSettled(
     DESKTOP_SHELL_EVENTS.map((eventName) =>
       listen<unknown>(eventName, (event) => {
         const notice = describeDesktopShellNotice(eventName, event.payload);
@@ -482,6 +485,21 @@ export async function listenDesktopShellEvents(
       }),
     ),
   );
+  const unlisteners: UnlistenFn[] = [];
+  let registrationError: PromiseRejectedResult | undefined;
+  for (const result of listenerResults) {
+    if (result.status === 'fulfilled') {
+      unlisteners.push(result.value);
+    } else if (!registrationError) {
+      registrationError = result;
+    }
+  }
+  if (registrationError) {
+    for (const unlisten of unlisteners) {
+      unlisten();
+    }
+    throw registrationError.reason;
+  }
 
   return () => {
     for (const unlisten of unlisteners) {
