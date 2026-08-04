@@ -216,6 +216,31 @@ function expectNoSourceRuntimePaths(contents: string, label: string): void {
   }
 }
 
+describe('hook runtime clean-build contract', () => {
+  it('orders workspace declaration prerequisites before packaged runtimes', () => {
+    const buildScript = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'build-hook-runtime.mjs'),
+      'utf8',
+    );
+    const projectOrder = Array.from(
+      buildScript.matchAll(/['"](packages\/[^'"]+\/tsconfig\.json)['"]/g),
+      (match) => match[1],
+    );
+
+    const requiredOrder = [
+      'packages/shared/tsconfig.json',
+      'packages/hive-mind-core/tsconfig.json',
+      'packages/core/tsconfig.json',
+      'packages/wiki-compiler/tsconfig.json',
+      'packages/memory-mcp/tsconfig.json',
+    ];
+
+    expect(projectOrder.filter((project) => requiredOrder.includes(project))).toEqual(
+      requiredOrder,
+    );
+  });
+});
+
 describe('hook package installed lifecycle UX', () => {
   it('runs the packaged CLI and hook lifecycles through Node with npm and npx absent', async () => {
     const tempRoot = makeTempRoot();

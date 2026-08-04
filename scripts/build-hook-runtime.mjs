@@ -10,6 +10,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tsc = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 
 const projects = [
+  'packages/shared/tsconfig.json',
+  'packages/hive-mind-core/tsconfig.json',
+  'packages/core/tsconfig.json',
+  'packages/wiki-compiler/tsconfig.json',
   'packages/hive-mind-cli/tsconfig.json',
   'packages/hive-mind-hooks-claude-code/tsconfig.json',
   'packages/hive-mind-hooks-claude-desktop/tsconfig.json',
