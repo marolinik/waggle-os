@@ -1,6 +1,6 @@
 # Launch Recommendation — Windows Solo
 
-Updated: 2026-08-02
+Updated: 2026-08-04
 
 ## Current Verdict: NOT YET RELEASE-APPROVED
 
@@ -15,8 +15,9 @@ are historical evidence only.
 
 | Gate | Evidence | Boundary |
 |---|---|---|
-| Persona acceptance | 30/30 receipts across 10 personas × 3 fresh runs; all scored 100/100; accepted-run estimate $1.413981 | Sealed at source revision `56c6791053a0`; it proves the persona target at that revision, not final release approval |
-| Smart router and compact tool context | Runtime qualification passed at `626786ab497c`; Docker was not invoked; 14 of 79 tools were transmitted in the tool-context case | Must be preserved by the final exact-HEAD regression gate |
+| Persona acceptance | 30/30 receipts across 10 personas × 3 fresh runs; all scored 100/100; accepted-run estimate $1.446936 | Sealed at source revision `03b464aa01e3`; intervening agent/server/router changes require a fresh final-HEAD reseal |
+| Smart router and compact tool context | Runtime qualification passed at `dd9eab4dff10`; Docker was neither required nor invoked; 14 of 79 tools were transmitted and primary/budget/fallback paths passed | Must be preserved by the final exact-HEAD regression gate |
+| Installer build pipeline | Pilot-signed MSI and NSIS bundles were produced from `c28dd5ea3528`; sidecar provenance matched 565 tracked inputs and the expected source revision | This proves the clean build/signing pipeline, not the final exact-HEAD lifecycle certificate or public trust chain |
 | Hermes installed-host memory path | Cold-to-warm causal proof passed at `56c6791053a0`, with launch surface ready and no paid provider calls in the configured loopback scope | Final release HEAD rerun remains required |
 | Cursor/OpenClaw deferral | Production manifests, registry, launcher UI, hook controls, Fleet/task helpers, and `/api/tools/run` fail closed | Verified in commits `f5519bfc`, `42a769b8`, and `4374c94b` |
 | Regression verification for scope change | Shared/agent/server suites: 6,841 passed, 2 skipped; web suite and build passed; affected typechecks and lint passed | One high-parallel server run had an unrelated transient test failure; its isolated test and lower-concurrency full rerun passed |
@@ -26,19 +27,18 @@ does **not** by itself establish that the final installer is production-ready.
 
 Release-local receipts:
 
-- Persona seal: `output/playwright/seals/persona-acceptance-20260802T075249Z-56c67910/report.md`
-- Smart router: `output/smart-router-runtime-qualification-626786ab.json`
+- Persona seal: `output/playwright/seals/persona-acceptance-schema7-20260803T040330Z-03b464aa/report.md`
+- Smart router: `output/smart-router-runtime-qualification-dd9eab4d-built-first.json`
+- Historical installer pipeline preflight: `D:/Projects/waggle-os-installer-8afc5310/output/windows-installer-preflight-c28dd5ea.json` (expected disposable-profile guard; not a passing lifecycle receipt). Preserve this worktree until the receipt is copied into the final evidence archive.
 - Hermes installed-host proof: `output/hermes-host-canary-56c67910/installed-run-20260802T102316Z/report.json`
 
 ## Remaining Release Gates
 
 All of the following must pass against the final frozen commit:
 
-1. **Persona-seal final-HEAD attestation** — prove the final commit descends
-   from `56c6791053a0` and review every intervening diff for impact on persona,
-   chat, scoring, provider, memory, or routing behavior. If any such behavior
-   changed, rerun and reseal all 10 personas × 3 fresh runs; otherwise preserve
-   a machine-readable no-impact attestation tied to the final commit.
+1. **Persona-seal final-HEAD reseal** — the final commit descends from
+   `03b464aa01e3`, but intervening agent/server/router behavior changed. Rerun
+   and reseal all 10 personas × 3 fresh runs against the final frozen commit.
 2. **Exact-HEAD regression and router qualification** — rerun the affected
    package suites, typechecks, lint, web build, and the Docker-free primary /
    budget / fallback smart-router receipt with the compact tool-context case.
@@ -89,6 +89,21 @@ policy, reverse-sync workflow, and package allowlists/private flags must be
 reconciled. That work does not silently expand the Windows Solo launch cohort,
 but broad claims such as “entire repository publish-ready” remain prohibited
 until it is complete.
+
+The 2026-08-04 drift audit compared monorepo `e376c0b52d86` with clean OSS
+`c5ae6569768b` and reported 1 `ONLY-IN-OSS`, 10 `ONLY-IN-MONO`, and 54 `DIFFERS`.
+Most differences are intentional curation/exclusion noise, but real forward-port
+work remains for URL-egress hardening, ingress/hooks, punctuation-safe FTS,
+local-model concurrency, released-mind cache eviction, and `supersede.ts`.
+This is not a Windows runtime blocker; it is mandatory before another public
+Hive Mind release or a broad entire-repository publish-ready claim.
+
+Repository cleanup remains a post-evidence-gate, pre-merge integration task;
+it is separate from the Windows runtime GO decision. Preserve evidence worktrees,
+including `D:/Projects/waggle-os-installer-8afc5310`, until their receipts are
+copied into the final archive. Reconcile the non-equivalent
+`codex/persona-paid-gate-fix-2026-07-18` branch, then remove only branches proven
+patch-equivalent after the readiness integration is verified.
 
 ## Approval Rule
 

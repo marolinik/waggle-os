@@ -1,7 +1,8 @@
 // @waggle/hive-mind-core — substrate package barrel.
 //
-// Distribution: Apache 2.0 OSS via `git subtree split` from waggle-os monorepo
-// to marolinik/hive-mind. Apps/web + Waggle agent harness stay proprietary in monorepo.
+// Distribution: Apache 2.0 OSS via a maintainer-curated forward-port from the
+// waggle-os monorepo to marolinik/hive-mind. Raw subtree-split branches are
+// inspection inputs only and must not be pushed as the public mirror.
 //
 // Contents: mind/ (substrate), harvest/ (ingestion pipeline), prompt-injection
 // scanner, structured logger.

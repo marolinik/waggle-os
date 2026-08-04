@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-02)
+### Current Release Qualification Contract (2026-08-04)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -49,8 +49,13 @@ WaggleDance, governance) is the upgrade trigger.
 - Claude Desktop, Codex Desktop, and Hermes Desktop may remain as detected convenience launch
   surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
 - ChatGPT/OpenAI is a model/provider and memory-import surface, not a separate launcher target.
-- The Windows Solo artifact bundles the Node sidecar and no-Python OpenAI-compatible proxy.
-  Docker, Python, and external LiteLLM are optional deployment choices, not desktop prerequisites.
+- The Windows Solo qualification receipt must prove the bundled Node sidecar, no-Python
+  OpenAI-compatible proxy, Waggle-managed local runtime/model, default in-process embedding path,
+  and freedom from developer Node, Docker, Python, external LiteLLM, or a separately installed
+  Ollama. A separate exact-HEAD receipt must prove smart-router primary, compact-tool-context,
+  budget, and fallback paths; user-installed Ollama remains optional.
+- Persona release evidence requires a valid 10-persona x 3-run seal plus a final-HEAD no-impact
+  attestation, or a fresh 30/30 rerun when intervening behavior changed.
 - Do not claim release approval until the current launch recommendation's exact-HEAD gates pass.
 
 ### Key Technology Facts (Verified August 2026)
@@ -69,7 +74,8 @@ WaggleDance, governance) is the upgrade trigger.
 | Tests | Vitest (unit) + Playwright (E2E) |
 | Deploy | Windows Tauri installer; optional Dockerfile + docker-compose.production.yml + render.yaml |
 
-Package manager: npm (root) with `bun.lock` also present. Node >= 20.
+Package manager: npm (root) with `bun.lock` also present. Source development requires Node
+`^20.19.0 || >=22.12.0`; the packaged Windows desktop runtime is pinned to Node `22.23.2`.
 
 ---
 
@@ -235,6 +241,39 @@ npm run lint
 > run the `packages/server` tsc above. (A real type error slipped through this
 > way on 2026-05-28; see `docs/addictiveness-audit-2026-05-28/REDUNDANCY-AUDIT.md`.)
 
+### Windows Solo release commands (PowerShell 7; final frozen clean checkout)
+
+```powershell
+# Local build-host preparation (the installed desktop has none of these prerequisites).
+npm ci
+npm ci --prefix app --ignore-scripts
+npm run build:packages
+
+# Local unsigned smoke build only; this is not a releasable artifact.
+npm --prefix app run tauri:build:win
+
+# Signed release build, only after release.yml imports and validates exactly one
+# approved production certificate and writes app/src-tauri/.thumbprint.txt.
+node app/scripts/apply-signing-config.mjs
+Push-Location app
+node node_modules/@tauri-apps/cli/tauri.js build --bundles nsis --config src-tauri/tauri.build-override.conf.json
+Pop-Location
+
+# Certify that signed NSIS artifact under a disposable Windows user.
+pwsh -NoProfile -File scripts/certify-windows-installer.ps1 `
+  -InstallerPath "<absolute-path-to-Waggle-setup.exe>" `
+  -ExpectedSourceRevision "<40-character-final-HEAD>" `
+  -ExpectedSignerThumbprint "<production-signer-thumbprint>" `
+  -RequireAuthenticodeSignature `
+  -VerifyManagedModel
+```
+
+`.github/workflows/release.yml` is authoritative for certificate import,
+thumbprint validation, staged hook verification, signing, certification,
+attestation, and publication. Never treat the local smoke command as signed.
+The certified installed desktop must not depend on developer Node.js, Python,
+Docker, external LiteLLM, or a separately installed Ollama.
+
 ---
 
 ## 3. Behavioral Rules — How You Must Work
@@ -395,7 +434,7 @@ interface AgentPersona {
   // guardrails + picker metadata (all optional, all shipped)
   disallowedTools?: string[]      // denylist — overrides tools[] on conflict
   failurePatterns?: string[]      // documented failure modes — shown in hover tooltip
-  isReadOnly?: boolean            // true = no write tools ever (enforced in assembleToolPool)
+  isReadOnly?: boolean            // true = no write tools after applyPersonaToolFilter/filterMcpToolsForPersona
   tagline?: string                // one sentence for picker hover
   bestFor?: string[]              // 3 example tasks in user-facing language
   wontDo?: string                 // hard boundary statement
@@ -497,8 +536,9 @@ The prior text here claimed the mirror is produced by `scripts/oss-subtree-split
 **To work on the substrate or publish the OSS mirror:** see
 [`packages/hive-mind-core/CONTRIBUTING.md`](./packages/hive-mind-core/CONTRIBUTING.md),
 [`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh) (inspection/guard only), and
-[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh) (run before every release; note its
-~50 "DIFFERS" are mostly OSS-adaptation noise — layout + import rewrites — not true drift).
+[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh) (run before every release; its
+snapshot-dependent `ONLY-IN-*`/`DIFFERS` results include expected layout, import, logger, and
+branding adaptations, but every entry must still be classified before an OSS release).
 
 **Deprecated (do not rely on; do not delete):** the old dual-repo bidirectional-sync workflows
 `.github/workflows/{mind-parity-check,sync-mind}.yml` and the `.github/sync.md` manual are **preserved
@@ -639,11 +679,11 @@ For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-
 | BEHAVIORAL_SPEC | Core agent rules (`packages/agent/src/behavioral-spec.ts`) |
 | Sidecar | Node.js Fastify server bundled into Tauri (`/sidecar`) |
 | KVARK | Egzakta sovereign enterprise AI — top of the Waggle funnel |
-| LiteLLM | LLM routing layer (`litellm-config.yaml`) |
+| LiteLLM | Optional server/team deployment proxy config (`litellm-config.yaml`); Windows Solo uses the bundled no-Python proxy and smart router |
 | WaggleDance | Multi-agent coordination package (`packages/waggle-dance`) |
-| Weaver | `packages/weaver` — (check source for current role) |
+| Weaver | Memory consolidation and session-skill extraction engine (`packages/weaver`) |
 | Evolution | Self-improvement subsystem (`evolution-*.ts`, `judge.ts`, `iterative-optimizer.ts`) |
-| assembleToolPool | Per-persona tool filtering from allowlist + denylist (to implement) |
+| applyPersonaToolFilter / filterMcpToolsForPersona | Enforced local and MCP per-persona allowlist/denylist filtering (`packages/server/src/local/persona-tool-filter.ts`) |
 
 ---
 

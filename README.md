@@ -90,7 +90,7 @@ Manage the running server with the installed wrapper: `scripts/waggle-server.sh 
 ### Run from source (development)
 
 ```bash
-# Prerequisites: Node.js >= 20, npm
+# Prerequisites: Node.js ^20.19.0 or >=22.12.0, npm
 npm install
 
 # (Optional) copy the env template. Provider API keys are normally set in-app
@@ -106,6 +106,10 @@ npm run dev:web
 
 # Open http://localhost:8080
 ```
+
+The source tree follows the root `package.json` Node engine above. The packaged
+Windows Solo desktop carries its own pinned Node.js 22.23.2 runtime, so an
+installed user does not need a separate Node.js installation.
 
 `npm run dev:server` runs the Fastify sidecar via `tsx` (equivalent to
 `cd packages/server && npx tsx src/local/start.ts`). `npm run dev:web` runs the
