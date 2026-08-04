@@ -46,10 +46,23 @@ describe('build warning hygiene', () => {
     }
   });
 
-  it('keeps cloud analytics out of the startup bundle', () => {
+  it('arms the desktop gate before loading the app graph and keeps analytics lazy', () => {
     const mainSource = readFileSync(join(sourceRoot, 'main.tsx'), 'utf8');
+    const appEntrySource = readFileSync(join(sourceRoot, 'app-entry.tsx'), 'utf8');
 
-    expect(mainSource).not.toContain('from "@/lib/posthog"');
-    expect(mainSource).toContain('import("@/lib/posthog")');
+    const armIndex = mainSource.indexOf('armBootConnection()');
+    const appImportIndex = mainSource.indexOf("import('./app-entry')");
+    expect(armIndex).toBeGreaterThanOrEqual(0);
+    expect(appImportIndex).toBeGreaterThan(armIndex);
+    expect(mainSource).toMatch(
+      /^import\s+\{\s*armBootConnection\s*\}\s+from\s+['"]\.\/boot-connect['"];\s*armBootConnection\(\);\s*void\s+import\(['"]\.\/app-entry['"]\)/,
+    );
+    expect(mainSource).not.toMatch(/from ['"].*App(?:\.tsx)?['"]/);
+    expect(mainSource).not.toMatch(/from ['"]\.\/app-entry['"]/);
+    expect(mainSource).not.toMatch(/posthog/i);
+    expect(mainSource).not.toMatch(/\bawait\b/);
+
+    expect(appEntrySource).not.toMatch(/^\s*import(?!\s*\()[^;\n]*['"]@\/lib\/posthog['"]/m);
+    expect(appEntrySource).toMatch(/import\(\s*['"]@\/lib\/posthog['"]\s*\)/);
   });
 });

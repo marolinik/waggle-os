@@ -31,6 +31,8 @@ import {
   isFirstLaunch,
   markFirstLaunchComplete,
   resetFirstLaunch,
+  ensureDesktopService,
+  listenDesktopServiceLifecycle,
 } from './tauri-bindings';
 
 const mockedInvoke = vi.mocked(invoke);
@@ -48,6 +50,87 @@ describe('isTauri() runtime detection', () => {
   it('returns true when __TAURI_INTERNALS__ is present on window', () => {
     (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {};
     expect(isTauri()).toBe(true);
+  });
+});
+
+describe('managed desktop service bindings', () => {
+  beforeEach(() => {
+    mockedInvoke.mockReset();
+    mockedListen.mockReset();
+    (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {};
+  });
+
+  afterEach(() => {
+    delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  });
+
+  it('returns the exact validated endpoint from ensure_service', async () => {
+    mockedInvoke.mockResolvedValue({ port: 49151, instanceId: 'desktop-instance-a' });
+
+    await expect(ensureDesktopService()).resolves.toEqual({
+      port: 49151,
+      instanceId: 'desktop-instance-a',
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith('ensure_service');
+  });
+
+  it.each([
+    [{ port: 0, instanceId: 'desktop-instance-a' }],
+    [{ port: 65536, instanceId: 'desktop-instance-a' }],
+    [{ port: 49151.5, instanceId: 'desktop-instance-a' }],
+    [{ port: 49151, instanceId: '   ' }],
+    [{ port: 49151 }],
+  ])('rejects malformed ensure_service endpoint %#', async (endpoint) => {
+    mockedInvoke.mockResolvedValue(endpoint);
+    await expect(ensureDesktopService()).rejects.toThrow(/invalid desktop service endpoint/);
+  });
+
+  it('deduplicates paired restart signals, resets on ready, rejects malformed ready, and disposes both listeners', async () => {
+    const handlers = new Map<string, (event: { payload: unknown }) => void>();
+    const unlisteners = [vi.fn(), vi.fn()];
+    mockedListen.mockImplementation(async (eventName, eventHandler) => {
+      handlers.set(String(eventName), eventHandler as (event: { payload: unknown }) => void);
+      return unlisteners[handlers.size - 1];
+    });
+    const onEvent = vi.fn();
+
+    const dispose = await listenDesktopServiceLifecycle(onEvent);
+    expect([...handlers.keys()]).toEqual([
+      'waggle://service-status',
+      'waggle://service-restart-needed',
+    ]);
+
+    handlers.get('waggle://service-restart-needed')?.({ payload: undefined });
+    handlers.get('waggle://service-status')?.({ payload: { status: 'restarting' } });
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    expect(onEvent).toHaveBeenLastCalledWith({ status: 'restarting' });
+
+    handlers.get('waggle://service-status')?.({
+      payload: {
+        status: 'ready',
+        endpoint: { port: 49151, instanceId: 'desktop-instance-a' },
+      },
+    });
+    expect(onEvent).toHaveBeenLastCalledWith({
+      status: 'ready',
+      endpoint: { port: 49151, instanceId: 'desktop-instance-a' },
+    });
+
+    handlers.get('waggle://service-restart-needed')?.({ payload: undefined });
+    expect(onEvent).toHaveBeenLastCalledWith({ status: 'restarting' });
+    expect(onEvent).toHaveBeenCalledTimes(3);
+
+    handlers.get('waggle://service-status')?.({
+      payload: { status: 'ready', endpoint: { port: 0, instanceId: '' } },
+    });
+    expect(onEvent).toHaveBeenLastCalledWith({
+      status: 'failed',
+      error: 'Tauri emitted an invalid desktop service endpoint',
+    });
+
+    dispose();
+    expect(unlisteners[0]).toHaveBeenCalledOnce();
+    expect(unlisteners[1]).toHaveBeenCalledOnce();
   });
 });
 

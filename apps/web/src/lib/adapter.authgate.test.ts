@@ -26,6 +26,38 @@ const jsonRes = (body: unknown, status = 200) =>
 
 const HEALTH = { status: 'ok', mode: 'local' };
 const TOKEN_PATH = '/api/auth/session-token';
+const DESKTOP_A = { port: 49151, instanceId: 'desktop-instance-a' };
+const DESKTOP_B = { port: 49152, instanceId: 'desktop-instance-b' };
+
+const desktopHealth = (endpoint = DESKTOP_A) => ({
+  ...HEALTH,
+  port: endpoint.port,
+  instanceId: endpoint.instanceId,
+});
+
+const enableTauri = () => {
+  (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {};
+};
+
+const flush = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  readonly url: string;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onopen: (() => void) | null = null;
+  closed = false;
+
+  constructor(url: string) {
+    this.url = url;
+    FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(): void { /* listeners are irrelevant to the identity gate */ }
+  close(): void { this.closed = true; }
+  fireError(): void { this.onerror?.(); }
+}
 
 /** Route-style fetch mock: dispatch on URL substring, in registration order. */
 function routeMock(fetchSpy: ReturnType<typeof vi.spyOn>, routes: Array<[string, () => Response | Promise<Response>]>) {
@@ -50,6 +82,8 @@ describe('P1b auth gate', () => {
   });
 
   afterEach(() => {
+    delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    vi.unstubAllGlobals();
     fetchSpy.mockRestore();
     vi.useRealTimers();
   });
@@ -203,6 +237,408 @@ describe('P1b auth gate', () => {
     const h = await a.getSystemHealth();
     expect(h.status).toBe('ok');
     expect(callsTo(fetchSpy, TOKEN_PATH)).toHaveLength(0);
+  });
+
+  // ── Rust-owned desktop endpoint gate ─────────────────────────────────────
+
+  it('managed desktop stays network-cold and hides default/stored URLs until Rust binds an endpoint', async () => {
+    enableTauri();
+    localStorage.setItem('waggle:server-url', 'http://stale-or-hostile:9999');
+    const a = new LocalAdapter('http://constructor-override:8888');
+    const gateId = a.armDesktopServiceGate();
+    const request = a.getWorkspaces();
+    const healthRequest = a.getSystemHealth();
+    const rejected = expect(request).rejects.toThrow('desktop boot stopped');
+    const healthRejected = expect(healthRequest).rejects.toThrow('desktop boot stopped');
+
+    await Promise.resolve();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+
+    a.failDesktopServiceGate(new Error('desktop boot stopped'), gateId);
+    await Promise.all([rejected, healthRejected]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem('waggle:server-url')).toBe('http://stale-or-hostile:9999');
+  });
+
+  it('managed desktop uses only the matching Rust-owned endpoint and never persists it', async () => {
+    enableTauri();
+    localStorage.setItem('waggle:server-url', 'http://stale-or-hostile:9999');
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(desktopHealth(DESKTOP_A))],
+      [TOKEN_PATH, () => jsonRes({ token: 'desktop-token-a' })],
+      ['/api/workspaces', () => jsonRes([])],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    await a.connectDesktopService(DESKTOP_A, gateId);
+    await a.getWorkspaces();
+
+    expect(a.getServerUrl()).toBe(`http://127.0.0.1:${DESKTOP_A.port}`);
+    expect(localStorage.getItem('waggle:server-url')).toBe('http://stale-or-hostile:9999');
+    expect(callsTo(fetchSpy, '/health')).toHaveLength(2);
+    const [workspaceUrl, workspaceInit] = callsTo(fetchSpy, '/api/workspaces')[0];
+    expect(workspaceUrl).toBe(`http://127.0.0.1:${DESKTOP_A.port}/api/workspaces`);
+    expect((workspaceInit.headers as Record<string, string>).Authorization)
+      .toBe('Bearer desktop-token-a');
+  });
+
+  it('managed 401 recovery revalidates identity before retrying on the same port', async () => {
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    let health = desktopHealth(DESKTOP_A);
+    let token = 'desktop-token-a';
+    let workspaceCalls = 0;
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(health)],
+      [TOKEN_PATH, () => jsonRes({ token })],
+      ['/api/workspaces', () => {
+        workspaceCalls++;
+        return jsonRes({ error: 'Unauthorized' }, 401);
+      }],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    await a.connectDesktopService(DESKTOP_A, gateId);
+    health = { ...desktopHealth(DESKTOP_B), port: DESKTOP_A.port };
+    token = 'desktop-token-b';
+
+    await expect(a.getWorkspaces()).rejects.toThrow(/identity/);
+    expect(workspaceCalls).toBe(1);
+    expect(callsTo(fetchSpy, TOKEN_PATH)).toHaveLength(2);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+  });
+
+  it('a post-ready managed health failure closes the verified desktop gate', async () => {
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(desktopHealth(DESKTOP_A))],
+      [TOKEN_PATH, () => jsonRes({ token: 'desktop-token-a' })],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    await a.connectDesktopService(DESKTOP_A, gateId);
+    fetchSpy.mockRejectedValue(new TypeError('managed sidecar disappeared'));
+
+    await expect(a.getSystemHealth()).rejects.toThrow();
+    expect(a.isConnected).toBe(false);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+  });
+
+  it('wrong desktop identity rejects the binding, shared connect, and queued request without token leakage', async () => {
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(desktopHealth(DESKTOP_B))],
+      [TOKEN_PATH, () => jsonRes({ token: 'must-not-be-fetched' })],
+      ['/api/workspaces', () => jsonRes([])],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    const binding = a.connectDesktopService(DESKTOP_A, gateId);
+    const sharedConnect = a.connect();
+    const queuedRequest = a.getWorkspaces();
+
+    await Promise.all([
+      expect(binding).rejects.toThrow(/identity/),
+      expect(sharedConnect).rejects.toThrow(/identity/),
+      expect(queuedRequest).rejects.toThrow(/identity/),
+    ]);
+    expect(callsTo(fetchSpy, TOKEN_PATH)).toHaveLength(0);
+    expect(callsTo(fetchSpy, '/api/workspaces')).toHaveLength(0);
+    expect(a.isConnected).toBe(false);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+  });
+
+  it('failing the desktop gate while token bootstrap is pending cannot be reopened by its late completion', async () => {
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    let releaseToken!: (response: Response) => void;
+    const tokenGate = new Promise<Response>(resolve => { releaseToken = resolve; });
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(desktopHealth(DESKTOP_A))],
+      [TOKEN_PATH, () => tokenGate],
+      ['/api/workspaces', () => jsonRes([])],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    const binding = a.connectDesktopService(DESKTOP_A, gateId);
+    const sharedConnect = a.connect();
+    const queuedRequest = a.getWorkspaces();
+    await vi.waitFor(() => expect(callsTo(fetchSpy, TOKEN_PATH)).toHaveLength(1));
+
+    const bindingRejected = expect(binding).rejects.toThrow(/shell stopped|generation changed/);
+    const sharedRejected = expect(sharedConnect).rejects.toThrow(/superseded|generation changed/);
+    const queuedRejected = expect(queuedRequest).rejects.toThrow('shell stopped');
+    a.failDesktopServiceGate(new Error('shell stopped'), gateId);
+    releaseToken(jsonRes({ token: 'late-token' }));
+
+    await Promise.all([bindingRejected, sharedRejected, queuedRejected]);
+    expect(a.isConnected).toBe(false);
+    expect(callsTo(fetchSpy, '/api/workspaces')).toHaveLength(0);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+  });
+
+  it('superseding a token-pending launch rejects stale consumers and releases work only on the newer endpoint', async () => {
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    let releaseOldToken!: (response: Response) => void;
+    const oldTokenGate = new Promise<Response>(resolve => { releaseOldToken = resolve; });
+    fetchSpy.mockImplementation(async (url: unknown) => {
+      const value = String(url);
+      if (value === `http://127.0.0.1:${DESKTOP_A.port}/health`) {
+        return jsonRes(desktopHealth(DESKTOP_A));
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_A.port}${TOKEN_PATH}`) return oldTokenGate;
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}/health`) {
+        return jsonRes(desktopHealth(DESKTOP_B));
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}${TOKEN_PATH}`) {
+        return jsonRes({ token: 'desktop-token-b' });
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}/api/workspaces`) return jsonRes([]);
+      throw new Error(`unmocked fetch: ${value}`);
+    });
+
+    const firstGate = a.armDesktopServiceGate();
+    const staleBinding = a.connectDesktopService(DESKTOP_A, firstGate);
+    const staleConsumer = a.connect();
+    await vi.waitFor(() => expect(
+      callsTo(fetchSpy, `:${DESKTOP_A.port}${TOKEN_PATH}`),
+    ).toHaveLength(1));
+
+    const staleBindingRejected = expect(staleBinding).rejects.toThrow(/superseded|changed/);
+    const staleConsumerRejected = expect(staleConsumer).rejects.toThrow(/superseded|changed/);
+    const secondGate = a.armDesktopServiceGate();
+    const queuedRequest = a.getWorkspaces();
+    await a.connectDesktopService(DESKTOP_B, secondGate);
+    await queuedRequest;
+    releaseOldToken(jsonRes({ token: 'stale-token-a' }));
+    await Promise.all([staleBindingRejected, staleConsumerRejected]);
+
+    expect(a.getServerUrl()).toBe(`http://127.0.0.1:${DESKTOP_B.port}`);
+    expect(a.isConnected).toBe(true);
+    expect(callsTo(fetchSpy, '/api/workspaces')).toHaveLength(1);
+  });
+
+  it('same-gate competing bindings let only the newest endpoint commit or fail the gate', async () => {
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    let releaseOldHealth!: (response: Response) => void;
+    const oldHealthGate = new Promise<Response>(resolve => { releaseOldHealth = resolve; });
+    fetchSpy.mockImplementation(async (url: unknown) => {
+      const value = String(url);
+      if (value === `http://127.0.0.1:${DESKTOP_A.port}/health`) return oldHealthGate;
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}/health`) {
+        return jsonRes(desktopHealth(DESKTOP_B));
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}${TOKEN_PATH}`) {
+        return jsonRes({ token: 'desktop-token-b' });
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}/api/workspaces`) return jsonRes([]);
+      throw new Error(`unmocked fetch: ${value}`);
+    });
+
+    const gateId = a.armDesktopServiceGate();
+    const staleBinding = a.connectDesktopService(DESKTOP_A, gateId);
+    const staleRejected = expect(staleBinding).rejects.toThrow(/identity|superseded|changed/);
+    await vi.waitFor(() => expect(callsTo(fetchSpy, `:${DESKTOP_A.port}/health`)).toHaveLength(1));
+
+    await a.connectDesktopService(DESKTOP_B, gateId);
+    await a.getWorkspaces();
+    releaseOldHealth(jsonRes(desktopHealth(DESKTOP_A)));
+    await staleRejected;
+
+    expect(a.getServerUrl()).toBe(`http://127.0.0.1:${DESKTOP_B.port}`);
+    expect(a.isConnected).toBe(true);
+    expect(callsTo(fetchSpy, '/api/workspaces')).toHaveLength(1);
+  });
+
+  it('a current managed health deadline fails closed instead of releasing queued work', async () => {
+    vi.useFakeTimers();
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    fetchSpy.mockImplementation(() => new Promise<Response>(() => { /* never */ }));
+
+    const gateId = a.armDesktopServiceGate();
+    const binding = a.connectDesktopService(DESKTOP_A, gateId);
+    const queuedRequest = a.getWorkspaces();
+    const bindingRejected = expect(binding).rejects.toThrow(/timed out/);
+    const queuedRejected = expect(queuedRequest).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(16000);
+    await Promise.all([bindingRejected, queuedRejected]);
+
+    expect(a.isConnected).toBe(false);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+  });
+
+  it('the outer connect watchdog fails closed when token bootstrap body stalls after healthy identity', async () => {
+    vi.useFakeTimers();
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    const hangingTokenBody = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => new Promise(() => { /* never */ }),
+      clone() { return this; },
+    } as unknown as Response;
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(desktopHealth(DESKTOP_A))],
+      [TOKEN_PATH, () => hangingTokenBody],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    const binding = a.connectDesktopService(DESKTOP_A, gateId);
+    const queuedRequest = a.getWorkspaces();
+    const bindingRejected = expect(binding).rejects.toThrow(/timed out/);
+    const queuedRejected = expect(queuedRequest).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(16000);
+    await Promise.all([bindingRejected, queuedRejected]);
+
+    expect(callsTo(fetchSpy, '/health')).toHaveLength(1);
+    expect(callsTo(fetchSpy, TOKEN_PATH)).toHaveLength(1);
+    expect(a.isConnected).toBe(false);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+  });
+
+  it('managed 401 token-body timeout rejects once and closes the verified gate', async () => {
+    vi.useFakeTimers();
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    let tokenCalls = 0;
+    let workspaceCalls = 0;
+    const hangingTokenBody = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => new Promise(() => { /* never */ }),
+      clone() { return this; },
+    } as unknown as Response;
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(desktopHealth(DESKTOP_A))],
+      [TOKEN_PATH, () => (++tokenCalls === 1
+        ? jsonRes({ token: 'desktop-token-a' })
+        : hangingTokenBody)],
+      ['/api/workspaces', () => {
+        workspaceCalls++;
+        return jsonRes({ error: 'Unauthorized' }, 401);
+      }],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    await a.connectDesktopService(DESKTOP_A, gateId);
+    const request = a.getWorkspaces();
+    const rejected = expect(request).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(16000);
+    await rejected;
+
+    expect(tokenCalls).toBe(2);
+    expect(workspaceCalls).toBe(1);
+    expect(a.isConnected).toBe(false);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+  });
+
+  it('a stale managed deadline cannot poison a newer verified generation', async () => {
+    vi.useFakeTimers();
+    enableTauri();
+    const a = new LocalAdapter(BASE);
+    fetchSpy.mockImplementation(async (url: unknown) => {
+      const value = String(url);
+      if (value === `http://127.0.0.1:${DESKTOP_A.port}/health`) {
+        return new Promise<Response>(() => { /* never */ });
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}/health`) {
+        return jsonRes(desktopHealth(DESKTOP_B));
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}${TOKEN_PATH}`) {
+        return jsonRes({ token: 'desktop-token-b' });
+      }
+      if (value === `http://127.0.0.1:${DESKTOP_B.port}/api/workspaces`) return jsonRes([]);
+      throw new Error(`unmocked fetch: ${value}`);
+    });
+
+    const firstGate = a.armDesktopServiceGate();
+    const staleBinding = a.connectDesktopService(DESKTOP_A, firstGate);
+    const staleRejected = expect(staleBinding).rejects.toThrow(/timed out/);
+    await Promise.resolve();
+    expect(callsTo(fetchSpy, `:${DESKTOP_A.port}/health`)).toHaveLength(1);
+
+    const secondGate = a.armDesktopServiceGate();
+    await a.connectDesktopService(DESKTOP_B, secondGate);
+    await a.getWorkspaces();
+    await vi.advanceTimersByTimeAsync(16000);
+    await staleRejected;
+
+    expect(a.getServerUrl()).toBe(`http://127.0.0.1:${DESKTOP_B.port}`);
+    expect(a.isConnected).toBe(true);
+  });
+
+  it('desktop gate APIs are inert in the browser and cannot change browser routing', async () => {
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [['/api/workspaces', () => jsonRes([])]]);
+
+    expect(a.armDesktopServiceGate()).toBe(0);
+    a.failDesktopServiceGate(new Error('ignored'), 0);
+    await a.getWorkspaces();
+    await expect(a.connectDesktopService(DESKTOP_A, 0)).rejects.toThrow(/only available inside Tauri/);
+
+    expect(a.getServerUrl()).toBe(BASE);
+    expect(callsTo(fetchSpy, '/api/workspaces')).toHaveLength(1);
+  });
+
+  it('managed SSE initial open revalidates identity and never opens on a same-port replacement', async () => {
+    enableTauri();
+    FakeEventSource.instances = [];
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const a = new LocalAdapter(BASE);
+    let health = desktopHealth(DESKTOP_A);
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(health)],
+      [TOKEN_PATH, () => jsonRes({ token: 'desktop-token-a' })],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    await a.connectDesktopService(DESKTOP_A, gateId);
+    health = { ...desktopHealth(DESKTOP_B), port: DESKTOP_A.port };
+    const unsubscribe = a.subscribeNotifications(() => {});
+    await flush();
+
+    expect(FakeEventSource.instances).toHaveLength(0);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+    unsubscribe();
+  });
+
+  it('managed SSE retry revalidates identity after token refresh and refuses an unverified replacement', async () => {
+    vi.useFakeTimers();
+    enableTauri();
+    FakeEventSource.instances = [];
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const a = new LocalAdapter(BASE);
+    let health = desktopHealth(DESKTOP_A);
+    let token = 'desktop-token-a';
+    routeMock(fetchSpy, [
+      ['/health', () => jsonRes(health)],
+      [TOKEN_PATH, () => jsonRes({ token })],
+    ]);
+
+    const gateId = a.armDesktopServiceGate();
+    await a.connectDesktopService(DESKTOP_A, gateId);
+    const unsubscribe = a.subscribeNotifications(() => {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    health = { ...desktopHealth(DESKTOP_B), port: DESKTOP_A.port };
+    token = 'desktop-token-b';
+    FakeEventSource.instances[0].fireError();
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(FakeEventSource.instances[0].closed).toBe(true);
+    expect(() => a.getServerUrl()).toThrow(/not ready/);
+    unsubscribe();
   });
 
   // ── setServerUrl epoch guard ─────────────────────────────────────────────
