@@ -18,6 +18,7 @@ import {
   conversationalToolPolicyPrompt,
   filterGatedToolsForConversationalTurn,
   filterPluginToolsForConversationalTurn,
+  hasRegulatedDisclaimer,
   isExplicitGatedToolRequest,
   shouldPackageSystemPromptForTurn,
 } from '../../src/local/routes/chat.js';
@@ -131,6 +132,43 @@ describe('chat prompt packaging', () => {
     expect(compact).toMatch(/regulated topics/i);
     expect(compact).toContain('unless the user specified a response syntax or shape that does not permit it');
     expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
+  });
+
+  it.each([
+    ['finance-owner', 'This is not financial advice.'],
+    ['finance-owner', 'This is not investment advice.'],
+    ['legal-professional', 'This is not legal advice.'],
+    ['finance-owner', 'Verify with your accountant or financial advisor.'],
+    ['hr-manager', 'Consult your legal team before acting.'],
+    ['finance-owner', 'You should consult a financial advisor before acting.'],
+    ['finance-owner', 'Please consult a licensed financial advisor before acting.'],
+  ])('recognizes an existing %s disclaimer: %s', (personaId, content) => {
+    expect(hasRegulatedDisclaimer(content, personaId)).toBe(true);
+  });
+
+  it.each([
+    ['legal-professional', 'This is not financial advice.'],
+    ['hr-manager', 'This is not investment advice.'],
+    ['finance-owner', 'This is not legal advice.'],
+    ['finance-owner', 'Consult your legal team before acting.'],
+    ['legal-professional', 'Verify with your financial advisor before acting.'],
+  ])('does not let a %s response use a cross-domain disclaimer: %s', (personaId, content) => {
+    expect(hasRegulatedDisclaimer(content, personaId)).toBe(false);
+  });
+
+  it.each([
+    ['finance-owner', 'Revenue is zero and runway is four months.'],
+    ['finance-owner', 'A financial advisor charges 1% annually.'],
+    ['hr-manager', 'Your legal team approved this policy.'],
+    ['legal-professional', 'Attorney-client privilege may apply to these records.'],
+    ['finance-owner', "Review the financial advisor's fee schedule."],
+    ['finance-owner', 'The review says the financial advisor charges 1%.'],
+    ['hr-manager', 'Check whether the legal team approved this policy.'],
+    ['hr-manager', 'I did consult the legal team yesterday.'],
+    ['finance-owner', 'They consult the financial advisor about every trade.'],
+    ['hr-manager', 'They check with the legal team every Friday.'],
+  ])('does not treat ordinary %s wording as a disclaimer: %s', (personaId, content) => {
+    expect(hasRegulatedDisclaimer(content, personaId)).toBe(false);
   });
 
   it('bounds the canonical compact advisory in the terminal contract', () => {

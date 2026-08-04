@@ -110,6 +110,19 @@ interface IntentBundle {
 
 const ACTION_PATTERN = /\b(create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
 const CONTINUATION_PATTERN = /\b(continue|proceed|do it|go ahead|yes,? please|next step|same again|retry|try again|carry on)\b/i;
+const NEGATED_TOOL_VERB_SOURCE = String.raw`(?:use|using|call|calling|invoke|invoking|create|creating|write|writing|edit|editing|read|reading|browse|browsing|search|searching|schedule|scheduling|send|sending|post|posting|commit|committing|push|pushing|delete|deleting|remove|removing|run|running|execute|executing)`;
+const NEGATED_TOOL_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|scripts?)`;
+const POSITIVE_TOOL_CLAUSE_RESUME_SOURCE = String.raw`(?:\b(?:but|however|instead|then)\b|\band\s+(?=(?:please\s+)?${ACTION_PATTERN.source}))`;
+const NEGATED_TOOL_CLAUSE_PATTERN = new RegExp(
+  String.raw`\b(?:(?:(?:do\s+not|don't|don’t|never)\s+|without\s+)${NEGATED_TOOL_VERB_SOURCE}\b|without\s+(?:(?:the\s+)?use\s+of\s+)?(?:(?:an?|the|any)\s+)?${NEGATED_TOOL_NOUN_SOURCE}\b)(?:(?!${POSITIVE_TOOL_CLAUSE_RESUME_SOURCE})[^.;!?\r\n])*`,
+  'giu',
+);
+const DIRECT_CALCULATION_PATTERN = /\b(?:calculate|compute)\b/i;
+const CALCULATION_RELATION_PATTERN = /\b(?:divided by|multiplied by|plus|minus|times|sum of|difference between|ratio of|percent(?:age)? of)\b/i;
+const RESEARCH_INTENT_PATTERN = /\b(research|investigate|find information|source|sources|citation|cite|current|latest|docs?|documentation|web|internet|online|benchmark)\b/i;
+const EXPLICIT_CALCULATION_CAPABILITY_PATTERN = /\b(?:create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|transform|query|design|implement|compile|lint|refactor|summarize|check|use|call|invoke|file|spreadsheet|workbook|xlsx|calculator|python|code|script|memory|database|web|internet|slack|email|calendar|connector|plugin|mcp)\b/i;
+const EXPLICIT_CALCULATION_TOOL_PATTERN = /\b(?:file|spreadsheet|workbook|xlsx|calculator|python|code|script)\b/i;
+const IMPLICIT_CALCULATION_TOOL_NAMES = new Set(['calculator', 'run_code', 'generate_xlsx']);
 
 const INTENT_BUNDLES: readonly IntentBundle[] = [
   {
@@ -121,7 +134,7 @@ const INTENT_BUNDLES: readonly IntentBundle[] = [
     ],
   },
   {
-    pattern: /\b(research|investigate|find information|source|sources|citation|cite|current|latest|docs?|documentation|web|internet|online|benchmark)\b/i,
+    pattern: RESEARCH_INTENT_PATTERN,
     tools: [
       'search_memory', 'perplexity_search', 'tavily_search', 'brave_search',
       'web_search', 'web_fetch', 'read_file', 'query_knowledge',
@@ -193,6 +206,28 @@ function overlapCount(left: ReadonlySet<string>, right: ReadonlySet<string>): nu
     if (right.has(token)) count += 1;
   }
   return count;
+}
+
+function positiveIntentText(value: string): string {
+  return value.replace(NEGATED_TOOL_CLAUSE_PATTERN, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function hasInlineCalculationOperands(value: string): boolean {
+  if (!DIRECT_CALCULATION_PATTERN.test(value)) return false;
+  const operands = Array.from(
+    value.matchAll(/(?:^|[^\p{L}\p{N}])([-+]?\d[\d,.]*)/gu),
+    match => match[1].replace(/[,.]+$/, '').replace(/,/g, ''),
+  );
+  if (operands.length < 2) return false;
+  if (CALCULATION_RELATION_PATTERN.test(value)) return true;
+  return operands.some(operand => !/^(?:18|19|20|21)\d{2}$/.test(operand));
+}
+
+function isSelfContainedCalculation(value: string): boolean {
+  if (!hasInlineCalculationOperands(value)) return false;
+  if (RESEARCH_INTENT_PATTERN.test(value)) return false;
+  if (EXPLICIT_CALCULATION_CAPABILITY_PATTERN.test(value)) return false;
+  return true;
 }
 
 function toOpenAiTool(tool: ToolDefinition): {
@@ -281,7 +316,7 @@ export function selectToolsForTurn(
     deduplicated.push({ tool: candidate, index });
   }
 
-  const message = options.message.toLowerCase();
+  const message = positiveIntentText(options.message.toLowerCase());
   const messageTokens = tokensOf(message);
   const isContinuation = CONTINUATION_PATTERN.test(message);
   const isAction = ACTION_PATTERN.test(message) || isContinuation;
@@ -293,12 +328,28 @@ export function selectToolsForTurn(
   const external = new Set(options.externalToolNames ?? []);
   const retrieved = new Set(options.retrievedToolNames ?? []);
   const recent = new Set(Array.from(new Set(options.recentToolNames ?? [])).slice(-4));
+  const suppressImplicitCalculationTools = hasInlineCalculationOperands(message)
+    && !EXPLICIT_CALCULATION_TOOL_PATTERN.test(message);
+
+  if (mandatory.size === 0 && isSelfContainedCalculation(message)) {
+    return {
+      tools: [],
+      schemaChars: 2,
+      omittedCount: deduplicated.length,
+    };
+  }
+
   const historyTokens = tokensOf(
     (options.recentMessages ?? []).slice(-4).map(entry => entry.content).join(' '),
   );
 
   const ranked: Array<{ tool: ToolDefinition; index: number; score: number }> = [];
   for (const { tool, index } of deduplicated) {
+    if (suppressImplicitCalculationTools
+      && IMPLICIT_CALCULATION_TOOL_NAMES.has(tool.name)
+      && !mandatory.has(tool.name)) {
+      continue;
+    }
     const { normalizedName, nameTokens, metadataTokens } = selectionMetadata(tool);
     const exactName = message.includes(normalizedName);
     const currentNameOverlap = isAction ? overlapCount(messageTokens, nameTokens) : 0;
@@ -365,6 +416,11 @@ export function selectToolsForTurn(
   if (ranked.length === 0 && options.fallbackToEligible) {
     for (const { tool, index } of deduplicated) {
       if (external.has(tool.name)) continue;
+      if (suppressImplicitCalculationTools
+        && IMPLICIT_CALCULATION_TOOL_NAMES.has(tool.name)
+        && !mandatory.has(tool.name)) {
+        continue;
+      }
       ranked.push({ tool, index, score: preferred.has(tool.name) ? 1 : 0 });
     }
   }

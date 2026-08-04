@@ -295,6 +295,124 @@ describe('selectToolsForTurn - bounded per-turn model context', () => {
     expect(selected.schemaChars).toBe(2);
   });
 
+  it('keeps a self-contained finance calculation tool-free', () => {
+    const financeTools = [
+      selectorTool('generate_xlsx', 'Create a runway spreadsheet and financial model'),
+      selectorTool('read_file', 'Read files containing financial inputs'),
+      selectorTool('search_memory', 'Search saved financial data'),
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('create_schedule', 'Create schedules and recurring reminders'),
+    ];
+    const selected = selectToolsForTurn(financeTools, {
+      message: 'Cash is 40000 dollars, monthly burn is 10000 dollars, and revenue is zero. Calculate runway in months, state the formula, name the biggest assumption, and give two actions that improve runway. Do not create files or schedules.',
+      preferredToolNames: getPersona('finance-owner')?.tools ?? [],
+    });
+
+    expect(selected.tools).toEqual([]);
+    expect(selected.schemaChars).toBe(2);
+  });
+
+  it('keeps positive capabilities while excluding a negated calculation capability', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('calculator', 'Calculate a numeric result'),
+      selectorTool('generate_xlsx', 'Create a runway spreadsheet and financial model'),
+      selectorTool('create_schedule', 'Create schedules and recurring reminders'),
+    ], {
+      message: 'Calculate 40000 divided by 10000. Do not use code or a calculator, but create a schedule with the result.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toEqual(['create_schedule']);
+  });
+
+  it('resumes a positive capability after an and-conjoined negation', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('calculator', 'Calculate a numeric result'),
+      selectorTool('create_schedule', 'Create schedules and recurring reminders'),
+    ], {
+      message: 'Calculate 40000 divided by 10000. Do not use code or a calculator, and create a schedule with the result.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toEqual(['create_schedule']);
+  });
+
+  it('does not restore implicit calculation tools through delegated fallback', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('calculator', 'Calculate a numeric result'),
+      selectorTool('generate_xlsx', 'Create a runway spreadsheet and financial model'),
+    ], {
+      message: 'Calculate 40000 divided by 10000 and check the result.',
+      fallbackToEligible: true,
+    });
+
+    expect(selected.tools).toEqual([]);
+    expect(selected.schemaChars).toBe(2);
+  });
+
+  it.each([
+    'Calculate 40000 divided by 10000 without code or a calculator.',
+    'Calculate 40000 divided by 10000 without the use of code.',
+    'Calculate 40000 divided by 10000 without any tools.',
+  ])('keeps noun-form without clauses from requesting calculation tools: %s', (message) => {
+    const selected = selectToolsForTurn([
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('calculator', 'Calculate a numeric result'),
+    ], {
+      message,
+    });
+
+    expect(selected.tools).toEqual([]);
+    expect(selected.schemaChars).toBe(2);
+  });
+
+  it('does not treat reference years as supplied current-data values', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('web_search', 'Search the web for current information'),
+      selectorTool('calculator', 'Calculate a numeric result'),
+    ], {
+      message: 'Calculate current inflation change between 2025 and 2026.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('web_search');
+  });
+
+  it('retains an explicitly requested calculation tool', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('calculator', 'Calculate a numeric result'),
+    ], {
+      message: 'Use code to calculate 40000 divided by 10000.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('run_code');
+  });
+
+  it('never drops an already-authorized mandatory calculation tool', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('run_code', 'Calculate financial values with code'),
+      selectorTool('calculator', 'Calculate a numeric result'),
+    ], {
+      message: 'Calculate 40000 divided by 10000.',
+      mandatoryToolNames: ['run_code'],
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('run_code');
+  });
+
+  it('keeps an explicit external send capability attached to a calculation', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('plugin_slack_send_message', 'Send a Slack message'),
+      selectorTool('run_code', 'Calculate financial values with code'),
+    ], {
+      message: 'Calculate 40000 divided by 10000 and send the result to Slack.',
+      externalToolNames: ['plugin_slack_send_message'],
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('plugin_slack_send_message');
+  });
+
   it('selects an explicitly relevant external tool without exposing unrelated externals', () => {
     const candidates = [
       selectorTool('plugin_slack_send_message', 'Send a Slack message'),

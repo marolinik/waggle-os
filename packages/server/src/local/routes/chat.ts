@@ -209,6 +209,26 @@ export function shouldPackageSystemPromptForTurn(
   return !hasCustomRunner || contextScope !== 'default' || closedWorldRewrite;
 }
 
+export function hasRegulatedDisclaimer(content: string, personaId: string): boolean {
+  const normalized = content.toLowerCase();
+  const recommendationLead = '(?:^|[.!?;\\r\\n]\\s*|,\\s*|[-*]\\s+)(?:(?:please|you should|you may want to|(?:i|we) recommend (?:that )?you)\\s+)?';
+  const hasAdvisorReferral = (advisor: string): boolean => (
+    new RegExp(`${recommendationLead}consult\\s+(?:(?:with\\s+)?(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
+    || new RegExp(`${recommendationLead}(?:verify|check|confirm|review|discuss)(?:\\s+(?:this|it|these|those|the (?:figures?|analysis|advice|decision|matter|plan)))?\\s+with\\s+(?:(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
+  );
+
+  if (personaId === 'finance-owner') {
+    return /\bnot (?:financial(?: or investment)?|investment(?: or financial)?) advice\b/.test(normalized)
+      || hasAdvisorReferral('(?:licensed\\s+)?(?:accountant|financial advisor)');
+  }
+  if (personaId === 'hr-manager' || personaId === 'legal-professional') {
+    return normalized.includes('not legal advice')
+      || /\b(?:does not|will not|not intended to) create (?:an? )?attorney-client relationship\b/.test(normalized)
+      || hasAdvisorReferral('(?:(?:licensed\\s+)?attorney|legal team)');
+  }
+  return false;
+}
+
 const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
 const AMBIGUOUS_GATED_ACTION_VERB_SOURCE = String.raw`(?:message|share|post|update)`;
 const NEGATABLE_CAPABILITY_VERB_SOURCE = String.raw`(?:${EXPLICIT_GATED_ACTION_VERB_SOURCE}|${AMBIGUOUS_GATED_ACTION_VERB_SOURCE}|use|call|invoke|search|research|investigate)`;
@@ -3294,12 +3314,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && REGULATED_DISCLAIMER_MAP[activePersonaId]
           && finalContent) {
           if (isRegulatedContent(finalContent, activePersonaId)) {
-            const hasDisclaimer = finalContent.toLowerCase().includes('not legal advice') ||
-              finalContent.toLowerCase().includes('attorney-client') ||
-              finalContent.toLowerCase().includes('verify with your accountant') ||
-              finalContent.toLowerCase().includes('financial advisor') ||
-              finalContent.toLowerCase().includes('legal team');
-            if (!hasDisclaimer) {
+            if (!hasRegulatedDisclaimer(finalContent, activePersonaId)) {
               finalContent += REGULATED_DISCLAIMER_MAP[activePersonaId];
             }
           }
