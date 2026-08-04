@@ -14,6 +14,7 @@ import {
   type FrameImportance,
   type FrameSource,
   type IdentityResponse,
+  type DesktopServiceEndpoint,
 } from './tauri-bindings';
 import type {
   Workspace, WorkspaceContext, ChatMessage, MemoryFrame, Memory,
@@ -274,6 +275,18 @@ export interface EmbeddingRoutingStatus {
 
 class LocalAdapter {
   private baseUrl: string;
+  private readonly managedDesktop: boolean;
+  private desktopEndpoint: DesktopServiceEndpoint | null = null;
+  private desktopEndpointReady = false;
+  private desktopGateId = 0;
+  private desktopGate: {
+    id: number;
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (error: Error) => void;
+    status: 'pending' | 'ready' | 'failed';
+    error: Error | null;
+  } | null = null;
   private authToken: string | null = null;
   private ws: WebSocket | null = null;
   /** P1b-SSE: one ref-counted reconnecting stream per (path, eventName). */
@@ -298,13 +311,19 @@ class LocalAdapter {
   private _epoch = 0;
 
   constructor(serverUrl?: string) {
-    this.baseUrl = serverUrl || localStorage.getItem('waggle:server-url') || resolveDefaultServerUrl();
+    this.managedDesktop = isTauri();
+    this.baseUrl = this.managedDesktop
+      ? resolveDefaultServerUrl()
+      : serverUrl || localStorage.getItem('waggle:server-url') || resolveDefaultServerUrl();
   }
 
   get isConnected() { return this._connected; }
   get hasAttemptedConnect() { return this._connectAttempted; }
 
   setServerUrl(url: string) {
+    if (this.managedDesktop) {
+      throw new Error('The desktop service endpoint is managed by Waggle');
+    }
     this._epoch++;
     this.baseUrl = url;
     localStorage.setItem('waggle:server-url', url);
@@ -321,7 +340,141 @@ class LocalAdapter {
   }
 
   getServerUrl() {
+    if (this.managedDesktop && (!this.desktopEndpoint || !this.desktopEndpointReady)) {
+      throw new Error('The managed desktop service endpoint is not ready');
+    }
     return this.baseUrl;
+  }
+
+  armDesktopServiceGate(): number {
+    if (!this.managedDesktop) return 0;
+    if (this.desktopGate?.status === 'pending') {
+      const superseded = new Error('The managed desktop service launch was superseded');
+      this.desktopGate.status = 'failed';
+      this.desktopGate.error = superseded;
+      this.desktopGate.reject(superseded);
+    }
+    this._epoch++;
+    this.desktopEndpoint = null;
+    this.desktopEndpointReady = false;
+    this.authToken = null;
+    this._connected = false;
+    this._connectAttempted = false;
+    this._connectPromise = null;
+    this._healthProbePromise = null;
+    this._refreshPromise = null;
+    const id = ++this.desktopGateId;
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<void>((resolveGate, rejectGate) => {
+      resolve = resolveGate;
+      reject = rejectGate;
+    });
+    void promise.catch(() => { /* future requests observe the same failure */ });
+    this.desktopGate = {
+      id,
+      promise,
+      resolve,
+      reject,
+      status: 'pending',
+      error: null,
+    };
+    return id;
+  }
+
+  async connectDesktopService(
+    endpoint: DesktopServiceEndpoint,
+    gateId: number,
+  ): Promise<SystemHealth> {
+    if (!this.managedDesktop) {
+      throw new Error('Desktop service binding is only available inside Tauri');
+    }
+    if (!Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535
+      || typeof endpoint.instanceId !== 'string' || endpoint.instanceId.trim().length === 0) {
+      throw new Error('Tauri returned an invalid desktop service endpoint');
+    }
+    if (!this.desktopGate || this.desktopGate.id !== gateId
+      || this.desktopGate.status !== 'pending') {
+      throw new Error('Ignoring a stale desktop service endpoint');
+    }
+
+    const bindEpoch = ++this._epoch;
+    this.baseUrl = `http://127.0.0.1:${endpoint.port}`;
+    this.desktopEndpoint = { port: endpoint.port, instanceId: endpoint.instanceId };
+    this.desktopEndpointReady = false;
+    this.authToken = null;
+    this._connected = false;
+    this._connectAttempted = false;
+    this._connectPromise = null;
+    this._healthProbePromise = null;
+    this._refreshPromise = null;
+
+    try {
+      const health = await this.connect();
+      const record = health as SystemHealth & { instanceId?: unknown; port?: unknown };
+      if (record.instanceId !== endpoint.instanceId || record.port !== endpoint.port) {
+        throw new Error('Desktop service health identity does not match the Tauri endpoint');
+      }
+      if (!this.desktopGate || this.desktopGate.id !== gateId
+        || bindEpoch !== this._epoch
+        || this.desktopGate.status !== 'pending'
+        || this.desktopEndpoint?.port !== endpoint.port
+        || this.desktopEndpoint?.instanceId !== endpoint.instanceId) {
+        throw new Error('Desktop service launch changed during connection');
+      }
+      this.desktopGate.status = 'ready';
+      this.desktopGate.error = null;
+      this.desktopEndpointReady = true;
+      this.desktopGate.resolve();
+      return health;
+    } catch (error) {
+      this.failCurrentDesktopGeneration(error, bindEpoch);
+      throw error;
+    }
+  }
+
+  failDesktopServiceGate(error: unknown, gateId: number): void {
+    if (!this.managedDesktop || !this.desktopGate || this.desktopGate.id !== gateId) return;
+    if (this.desktopGate.status === 'failed') return;
+    const failure = error instanceof Error ? error : new Error(String(error));
+    this._epoch++;
+    this.desktopEndpoint = null;
+    this.desktopEndpointReady = false;
+    this.authToken = null;
+    this._connected = false;
+    this._connectPromise = null;
+    this._healthProbePromise = null;
+    this._refreshPromise = null;
+    this.desktopGate.status = 'failed';
+    this.desktopGate.error = failure;
+    this.desktopGate.reject(failure);
+  }
+
+  private failCurrentDesktopGeneration(error: unknown, epoch: number): void {
+    if (!this.managedDesktop || epoch !== this._epoch) return;
+    const gateId = this.desktopGate?.id;
+    if (gateId !== undefined) this.failDesktopServiceGate(error, gateId);
+  }
+
+  private async awaitDesktopServiceGate(): Promise<void> {
+    if (!this.managedDesktop) return;
+    while (true) {
+      const gate = this.desktopGate;
+      if (!gate) {
+        throw new Error('The managed desktop service gate was not armed');
+      }
+      try {
+        await gate.promise;
+      } catch (error) {
+        if (this.desktopGate !== gate) continue;
+        throw error;
+      }
+      if (this.desktopGate !== gate) continue;
+      if (gate.status === 'failed') {
+        throw gate.error ?? new Error('The managed desktop service failed');
+      }
+      if (gate.status === 'ready') return;
+    }
   }
 
   /**
@@ -346,10 +499,15 @@ class LocalAdapter {
    * gated request via ensureReady's re-arm) starts a fresh attempt.
    */
   connect(): Promise<SystemHealth> {
+    if (this.managedDesktop && !this.desktopEndpoint) {
+      return this.awaitDesktopServiceGate().then(() => this.connect());
+    }
     if (this._connectPromise) return this._connectPromise;
-    const p = this.doConnect(this._epoch);
+    const epoch = this._epoch;
+    const p = this.doConnect(epoch);
     this._connectPromise = p;
-    p.catch(() => {
+    p.catch((error) => {
+      this.failCurrentDesktopGeneration(error, epoch);
       if (this._connectPromise === p) this._connectPromise = null;
     });
     return p;
@@ -370,18 +528,27 @@ class LocalAdapter {
     try {
       const data = await Promise.race([
         (async () => {
-          const health = await this.healthProbe(epoch);
+          let health = await this.healthProbe(epoch);
+          if (this.managedDesktop && epoch !== this._epoch) {
+            throw new Error('Connection attempt was superseded by a newer desktop generation');
+          }
           // D1: the sidecar requires a bearer token even on loopback. Fetch it
           // from the auth-exempt, same-origin-gated bootstrap. (R1-001: it is
           // NOT served by the unauthenticated /health.) Best-effort — if the
           // bootstrap is unreachable we proceed token-less; the 401-refresh
           // retry leg recovers as soon as the endpoint is reachable.
           await this.fetchSessionToken(epoch);
+          if (this.managedDesktop) {
+            health = await this.revalidateDesktopEndpoint(epoch);
+          }
           return health;
         })(),
         deadline,
       ]);
-      if (epoch === this._epoch) this._connected = true;
+      if (epoch !== this._epoch) {
+        throw new Error('Connection attempt was superseded by a newer desktop generation');
+      }
+      this._connected = true;
       return data;
     } catch (e) {
       if (epoch === this._epoch) this._connected = false;
@@ -392,8 +559,8 @@ class LocalAdapter {
   }
 
   /**
-   * P1b D3: the deferral gate awaited by every non-exempt request.
-   * Four states:
+   * P1b D3: the connection gate awaited by every non-exempt request.
+   * Browser mode retains four states:
    *  - never attempted  → pass through (keeps the adapter unit-test files,
    *    which construct LocalAdapter and call methods directly, gate-free;
    *    production arms the gate via boot-connect.ts, main.tsx's first import)
@@ -403,10 +570,13 @@ class LocalAdapter {
    *    onto it. This makes the gate self-healing on the default desktop path
    *    (webview up before the sidecar listens: the boot kickoff fails fast
    *    with ECONNREFUSED and must not permanently disarm the gate).
-   * A FAILED attempt always releases the gate — the request proceeds and
-   * fails loudly with its own cause rather than hanging.
+   * A failed browser attempt releases the gate so the request fails with its
+   * own cause rather than hanging. Managed desktop mode first awaits the
+   * separate Rust-owned endpoint gate; a failed identity handshake stays
+   * closed until a newer lifecycle generation rearms it.
    */
   private async ensureReady(): Promise<void> {
+    await this.awaitDesktopServiceGate();
     if (!this._connectAttempted) return;
     const gate = this._connectPromise ?? this.connect();
     try { await gate; } catch { /* released — request fails with its own cause */ }
@@ -417,7 +587,7 @@ class LocalAdapter {
    *  null. The 401-refresh leg (refreshSessionToken) is the LOUD variant. */
   private async fetchSessionToken(epoch: number): Promise<void> {
     try {
-      const res = await this.request('/api/auth/session-token');
+      const res = await this.request('/api/auth/session-token', undefined, undefined, false, true);
       if (res.ok) {
         const body = (await res.json()) as { token?: string };
         if (epoch === this._epoch) this.authToken = body.token ?? null;
@@ -450,6 +620,9 @@ class LocalAdapter {
       if (epoch === this._epoch) this.authToken = body.token;
     })(), CONNECT_DEADLINE_MS, 'session-token refresh');
     this._refreshPromise = p;
+    if (this.managedDesktop) {
+      void p.catch((error) => this.failCurrentDesktopGeneration(error, epoch));
+    }
     p.finally(() => {
       if (this._refreshPromise === p) this._refreshPromise = null;
     }).catch(() => { /* settled via callers */ });
@@ -482,18 +655,53 @@ class LocalAdapter {
     if (this._healthProbePromise) return this._healthProbePromise;
     const p = deadlined(this.doHealthProbe(epoch), CONNECT_DEADLINE_MS, 'health probe');
     this._healthProbePromise = p;
+    void p.catch((error) => this.failCurrentDesktopGeneration(error, epoch));
     p.finally(() => {
       if (this._healthProbePromise === p) this._healthProbePromise = null;
     }).catch(() => { /* settled via callers */ });
     return p;
   }
 
+  /**
+   * A managed token is process-scoped. Always perform a fresh, non-memoized
+   * identity probe after obtaining one so a same-port sidecar replacement
+   * cannot inherit the previous Rust-verified generation's trust.
+   */
+  private async revalidateDesktopEndpoint(epoch: number): Promise<SystemHealth> {
+    if (epoch !== this._epoch) {
+      throw new Error('Desktop service generation changed before revalidation');
+    }
+    try {
+      const health = await deadlined(
+        this.doHealthProbe(epoch),
+        CONNECT_DEADLINE_MS,
+        'desktop health revalidation',
+      );
+      if (epoch !== this._epoch) {
+        throw new Error('Desktop service generation changed during revalidation');
+      }
+      return health;
+    } catch (error) {
+      this.failCurrentDesktopGeneration(error, epoch);
+      throw error;
+    }
+  }
+
   private async doHealthProbe(epoch: number): Promise<SystemHealth> {
     try {
-      const res = await this.request('/health');
+      const res = await this.request('/health', undefined, undefined, false, true);
       if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
-      return await res.json();
+      const data = await res.json() as SystemHealth & { instanceId?: unknown; port?: unknown };
+      if (this.managedDesktop && (
+        !this.desktopEndpoint
+        || data.instanceId !== this.desktopEndpoint.instanceId
+        || data.port !== this.desktopEndpoint.port
+      )) {
+        throw new Error('Desktop service health identity does not match the Tauri endpoint');
+      }
+      return data;
     } catch (firstErr) {
+      if (this.managedDesktop) throw firstErr;
       const fallbackServer = resolveDefaultServerUrl();
       if (this.baseUrl === fallbackServer) throw firstErr;
       try {
@@ -541,10 +749,21 @@ class LocalAdapter {
 
   /** Shared request core: deferral gate → headers/token → fetch → 403 tier
    *  dispatch → 401 refresh-retry (token-versioned, once per request). */
-  private async request(path: string, init?: RequestInit, timeoutMs?: number, isRetry = false): Promise<Response> {
+  private async request(
+    path: string,
+    init?: RequestInit,
+    timeoutMs?: number,
+    isRetry = false,
+    bypassDesktopGate = false,
+  ): Promise<Response> {
     const purePath = path.split('?')[0];
     const exempt = AUTH_EXEMPT_PATHS.has(purePath);
+    if (!bypassDesktopGate) await this.awaitDesktopServiceGate();
     if (!exempt) await this.ensureReady();
+    // A restart can rearm the desktop gate while ensureReady() is awaiting an
+    // older connect attempt. Recheck immediately before the synchronous fetch
+    // call so that attempt cannot release a request onto the superseded port.
+    if (!bypassDesktopGate) await this.awaitDesktopServiceGate();
 
     const issuedToken = this.authToken;
     const headers: Record<string, string> = {
@@ -588,7 +807,11 @@ class LocalAdapter {
       if (this.authToken === issuedToken) {
         await this.refreshSessionToken();
       }
-      return this.request(path, init, timeoutMs, true);
+      if (this.managedDesktop) {
+        await this.awaitDesktopServiceGate();
+        await this.revalidateDesktopEndpoint(this._epoch);
+      }
+      return this.request(path, init, timeoutMs, true, bypassDesktopGate);
     }
     return res;
   }
@@ -2544,6 +2767,7 @@ class LocalAdapter {
 
   // --- Health ---
   async getSystemHealth(): Promise<SystemHealth> {
+    if (this.managedDesktop) await this.awaitDesktopServiceGate();
     // Use the same auto-discovery fallback as connect() so the offline pill
     // converges on the working URL even if useOfflineStatus polls before
     // ServiceProvider's connect() effect runs (FR #10).
@@ -3261,22 +3485,50 @@ class LocalAdapter {
       es.onerror = () => {
         es?.close();
         if (cancelled) return;
-        const delay = Math.min(30000, 1000 * 2 ** attempt++);
-        retryTimer = setTimeout(() => {
-          // Sidecar restart rotates the token; the URL-baked one is then
-          // permanently stale. Best-effort refresh before each reopen —
-          // single-flighted, and a failure just means the next backoff round.
-          void this.refreshSessionToken().catch(() => { /* server still down */ })
-            .then(() => { if (!cancelled) open(); });
-        }, delay);
+        scheduleRetry();
       };
+    };
+
+    const scheduleRetry = () => {
+      if (cancelled) return;
+      const delay = Math.min(30000, 1000 * 2 ** attempt++);
+      retryTimer = setTimeout(() => {
+        // Sidecar restart rotates the token; wait for the current desktop gate
+        // and a fresh token before constructing a URL for the replacement
+        // generation. Failed refreshes stay closed and back off again.
+        void this.refreshSessionToken()
+          .then(() => this.awaitDesktopServiceGate())
+          .then(async () => {
+            if (this.managedDesktop) {
+              await this.revalidateDesktopEndpoint(this._epoch);
+            }
+          })
+          .then(() => { if (!cancelled) open(); })
+          .catch(() => {
+            if (cancelled) return;
+            if (this.managedDesktop) scheduleRetry();
+            else open();
+          });
+      }, delay);
     };
 
     // Lazy-open: wait for the connect attempt to settle so the token exists.
     // Never-attempted (unit tests) passes through immediately; a FAILED
     // connect also releases — the stream 401s and enters the retry loop,
     // which doubles as the recovery path.
-    void this.ensureReady().then(() => { if (!cancelled) open(); });
+    void this.ensureReady()
+      .then(() => this.awaitDesktopServiceGate())
+      .then(async () => {
+        if (this.managedDesktop) {
+          await this.revalidateDesktopEndpoint(this._epoch);
+        }
+      })
+      .then(() => { if (!cancelled) open(); })
+      .catch(() => {
+        if (cancelled) return;
+        if (this.managedDesktop) scheduleRetry();
+        else open();
+      });
 
     return () => {
       cancelled = true;
@@ -3729,6 +3981,9 @@ class LocalAdapter {
 
   // --- WebSocket ---
   connectWebSocket(onMessage: (data: unknown) => void): () => void {
+    if (this.managedDesktop && (!this.desktopEndpoint || !this.desktopEndpointReady)) {
+      throw new Error('The managed desktop service endpoint is not ready');
+    }
     const wsUrl = this.baseUrl.replace('http', 'ws') + `/ws?token=${this.authToken}`;
     this.ws = new WebSocket(wsUrl);
     this.ws.onmessage = (e) => {

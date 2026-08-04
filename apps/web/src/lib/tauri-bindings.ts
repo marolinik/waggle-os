@@ -313,6 +313,76 @@ export function resetFirstLaunch(): Promise<void> {
 
 // Desktop shell events
 
+export interface DesktopServiceEndpoint {
+  port: number;
+  instanceId: string;
+}
+
+export type DesktopServiceLifecycleEvent =
+  | { status: 'restarting' }
+  | { status: 'ready'; endpoint: DesktopServiceEndpoint }
+  | { status: 'failed'; error?: string };
+
+function parseDesktopServiceEndpoint(value: unknown): DesktopServiceEndpoint | null {
+  const record = recordPayload(value);
+  const port = record?.port;
+  const instanceId = record?.instanceId;
+  return Number.isInteger(port) && (port as number) > 0 && (port as number) <= 65535
+    && typeof instanceId === 'string' && instanceId.trim().length > 0
+    ? { port: port as number, instanceId }
+    : null;
+}
+
+export async function ensureDesktopService(): Promise<DesktopServiceEndpoint> {
+  if (!isTauri()) throw new Error('Desktop service IPC is unavailable outside Tauri');
+  const endpoint = parseDesktopServiceEndpoint(await invoke<unknown>('ensure_service'));
+  if (!endpoint) throw new Error('Tauri returned an invalid desktop service endpoint');
+  return endpoint;
+}
+
+export async function listenDesktopServiceLifecycle(
+  onEvent: (event: DesktopServiceLifecycleEvent) => void,
+): Promise<UnlistenFn> {
+  let restartPending = false;
+  const emitRestarting = () => {
+    if (restartPending) return;
+    restartPending = true;
+    onEvent({ status: 'restarting' });
+  };
+  const statusListener = listen<unknown>('waggle://service-status', (event) => {
+    const payload = recordPayload(event.payload);
+    if (payload?.status === 'restarting') {
+      emitRestarting();
+    } else if (payload?.status === 'failed') {
+      restartPending = false;
+      onEvent({ status: 'failed' });
+    } else if (payload?.status === 'ready') {
+      restartPending = false;
+      const endpoint = parseDesktopServiceEndpoint(payload.endpoint);
+      onEvent(endpoint
+        ? { status: 'ready', endpoint }
+        : { status: 'failed', error: 'Tauri emitted an invalid desktop service endpoint' });
+    }
+  });
+  const restartListener = listen<unknown>('waggle://service-restart-needed', () => {
+    emitRestarting();
+  });
+
+  const [statusResult, restartResult] = await Promise.allSettled([
+    statusListener,
+    restartListener,
+  ]);
+  if (statusResult.status === 'rejected' || restartResult.status === 'rejected') {
+    if (statusResult.status === 'fulfilled') statusResult.value();
+    if (restartResult.status === 'fulfilled') restartResult.value();
+    throw statusResult.status === 'rejected' ? statusResult.reason : restartResult.reason;
+  }
+  return () => {
+    statusResult.value();
+    restartResult.value();
+  };
+}
+
 export type DesktopNavigationPath = '/settings';
 
 const DESKTOP_NAVIGATION_PATHS = new Set<DesktopNavigationPath>(['/settings']);
