@@ -28,6 +28,7 @@ export default defineConfig({
       'packages/*/tests/**/*.test.tsx',
       'packages/*/src/**/*.test.ts',
       'tests/**/*.test.ts',
+      'scripts/**/*.test.ts',
       'app/scripts/**/*.test.ts',
       'app/tests/**/*.test.ts',
       'benchmarks/*/tests/**/*.test.ts',
