@@ -25,7 +25,7 @@
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",
     "glob": "^13.0.6",
-    "pdfmake": "^0.3.7",
+    "pdfmake": "^0.3.11",
     "pptxgenjs": "^4.0.1"
   },
   "license": "MIT",
