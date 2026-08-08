@@ -480,7 +480,7 @@ describe('Waggle CLI Launcher', () => {
       }
     }, 240_000);
 
-    it('starts the installed launcher long enough to serve health', async () => {
+    it('starts the installed launcher, isolates concurrent histories, and reloads them after restart', async () => {
       const home = makeHome();
       const {
         server: blocker,
@@ -524,6 +524,26 @@ describe('Waggle CLI Launcher', () => {
 
         const dataDir = path.join(home, 'data');
         const readyFile = path.join(home, 'desktop-ready.json');
+        const restartReadyFile = path.join(home, 'desktop-ready-restart.json');
+        const unreachableOllamaPort = await freePort();
+        const unreachableVllmPort = await freePort();
+        const providerFreeEnv = {
+          ANTHROPIC_API_KEY: '',
+          OPENAI_API_KEY: '',
+          GEMINI_API_KEY: '',
+          GOOGLE_API_KEY: '',
+          XAI_API_KEY: '',
+          DEEPSEEK_API_KEY: '',
+          MISTRAL_API_KEY: '',
+          DASHSCOPE_API_KEY: '',
+          MINIMAX_API_KEY: '',
+          ZHIPU_API_KEY: '',
+          MOONSHOT_API_KEY: '',
+          PERPLEXITY_API_KEY: '',
+          OPENROUTER_API_KEY: '',
+          OLLAMA_HOST: `http://127.0.0.1:${unreachableOllamaPort}`,
+          VLLM_HOST: `http://127.0.0.1:${unreachableVllmPort}`,
+        };
         let stdout = '';
         let stderr = '';
         child = spawnInCwd(
@@ -536,6 +556,7 @@ describe('Waggle CLI Launcher', () => {
             WAGGLE_DESKTOP_PORT_FALLBACK: '1',
             WAGGLE_INSTANCE_ID: 'launcher-fallback-health',
             WAGGLE_READY_FILE: readyFile,
+            ...providerFreeEnv,
           },
         );
         child.stdout.setEncoding('utf8');
@@ -550,7 +571,8 @@ describe('Waggle CLI Launcher', () => {
         };
         expect(ready.preferredPort).toBe(preferredPort);
         expect(ready.port).not.toBe(preferredPort);
-        const health = await waitForHealth(`http://127.0.0.1:${ready.port}/health`, 30_000);
+        const baseUrl = `http://127.0.0.1:${ready.port}`;
+        const health = await waitForHealth(`${baseUrl}/health`, 30_000);
         await waitFor(() => stdout.includes('Press Ctrl+C to stop'), 10_000);
 
         expect(health.database).toMatchObject({ healthy: true });
@@ -559,6 +581,138 @@ describe('Waggle CLI Launcher', () => {
         expect(stdout).toContain(`Open manually: http://localhost:${ready.port}`);
         expect(stderr).not.toContain('Failed to start Waggle');
         expect(fs.existsSync(path.join(dataDir, 'personal.mind'))).toBe(true);
+        expect(bearerRequestCount()).toBe(0);
+        expect(requestCount()).toBe(0);
+
+        const tokenResponse = await fetch(`${baseUrl}/api/auth/session-token`);
+        expect(tokenResponse.status).toBe(200);
+        const token = (await tokenResponse.json() as { token?: string }).token;
+        if (!token) throw new Error('Installed launcher returned no session token');
+        const headers = {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        };
+
+        const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name: 'Packed launcher concurrent history', group: 'Test' }),
+        });
+        expect(workspaceResponse.status).toBe(201);
+        const workspaceId = (await workspaceResponse.json() as { id?: string }).id;
+        if (!workspaceId) throw new Error('Installed launcher returned no workspace id');
+
+        const sessionA = 'packed-concurrent-a';
+        const sessionB = 'packed-concurrent-b';
+        const markerA = 'PACKED_CONCURRENT_SESSION_A';
+        const markerB = 'PACKED_CONCURRENT_SESSION_B';
+        const [chatA, chatB] = await Promise.all([
+          fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ message: markerA, workspace: workspaceId, session: sessionA }),
+          }),
+          fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ message: markerB, workspace: workspaceId, session: sessionB }),
+          }),
+        ]);
+        const [chatBodyA, chatBodyB] = await Promise.all([chatA.text(), chatB.text()]);
+        for (const [response, body] of [[chatA, chatBodyA], [chatB, chatBodyB]] as const) {
+          expect(response.status).toBe(200);
+          expect(response.headers.get('content-type')).toMatch(/^text\/event-stream/);
+          expect(body.match(/^event:\s*done\s*$/gm)).toHaveLength(1);
+          expect(body.match(/^event:\s*error\s*$/gm) ?? []).toHaveLength(0);
+          expect(body).toContain('No AI model is ready');
+        }
+
+        for (const sessionId of [sessionA, sessionB]) {
+          expect(fs.existsSync(path.join(
+            dataDir,
+            'workspaces',
+            workspaceId,
+            'sessions',
+            `${sessionId}.jsonl`,
+          ))).toBe(true);
+        }
+
+        await stopProcess(child);
+        child = undefined;
+
+        let restartStdout = '';
+        let restartStderr = '';
+        child = spawnInCwd(
+          bin('npx'),
+          ['waggle', '--port', String(preferredPort), '--skip-litellm', '--no-open'],
+          projectDir,
+          home,
+          {
+            WAGGLE_DATA_DIR: dataDir,
+            WAGGLE_DESKTOP_PORT_FALLBACK: '1',
+            WAGGLE_INSTANCE_ID: 'launcher-fallback-history-restart',
+            WAGGLE_READY_FILE: restartReadyFile,
+            ...providerFreeEnv,
+          },
+        );
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', (chunk) => { restartStdout += chunk; });
+        child.stderr.on('data', (chunk) => { restartStderr += chunk; });
+
+        await waitFor(() => fs.existsSync(restartReadyFile), 30_000);
+        const restartReady = JSON.parse(fs.readFileSync(restartReadyFile, 'utf8')) as {
+          preferredPort: number;
+          port: number;
+        };
+        expect(restartReady.preferredPort).toBe(preferredPort);
+        expect(restartReady.port).not.toBe(preferredPort);
+        const restartBaseUrl = `http://127.0.0.1:${restartReady.port}`;
+        const restartHealth = await waitForHealth(`${restartBaseUrl}/health`, 30_000);
+        await waitFor(() => restartStdout.includes('Press Ctrl+C to stop'), 10_000);
+        expect(restartHealth.database).toMatchObject({ healthy: true });
+        expect(restartStderr).not.toContain('Failed to start Waggle');
+
+        const restartTokenResponse = await fetch(`${restartBaseUrl}/api/auth/session-token`);
+        expect(restartTokenResponse.status).toBe(200);
+        const restartToken = (await restartTokenResponse.json() as { token?: string }).token;
+        if (!restartToken) throw new Error('Restarted launcher returned no session token');
+        const restartHeaders = { authorization: `Bearer ${restartToken}` };
+        const [historyResponseA, historyResponseB] = await Promise.all([
+          fetch(
+            `${restartBaseUrl}/api/history?workspace=${encodeURIComponent(workspaceId)}&session=${encodeURIComponent(sessionA)}`,
+            { headers: restartHeaders },
+          ),
+          fetch(
+            `${restartBaseUrl}/api/history?workspace=${encodeURIComponent(workspaceId)}&session=${encodeURIComponent(sessionB)}`,
+            { headers: restartHeaders },
+          ),
+        ]);
+        expect(historyResponseA.status).toBe(200);
+        expect(historyResponseB.status).toBe(200);
+        const [historyA, historyB] = await Promise.all([
+          historyResponseA.json(),
+          historyResponseB.json(),
+        ]) as Array<{
+          sessionId: string;
+          count: number;
+          messages: Array<{ role: string; content: string }>;
+        }>;
+
+        expect(historyA.sessionId).toBe(sessionA);
+        expect(historyB.sessionId).toBe(sessionB);
+        expect(historyA.count).toBe(2);
+        expect(historyB.count).toBe(2);
+        expect(historyA.messages).toEqual([
+          expect.objectContaining({ role: 'user', content: markerA }),
+          expect.objectContaining({ role: 'assistant', content: expect.stringContaining('No AI model is ready') }),
+        ]);
+        expect(historyB.messages).toEqual([
+          expect.objectContaining({ role: 'user', content: markerB }),
+          expect.objectContaining({ role: 'assistant', content: expect.stringContaining('No AI model is ready') }),
+        ]);
+        expect(historyA.messages.some(({ content }) => content.includes(markerB))).toBe(false);
+        expect(historyB.messages.some(({ content }) => content.includes(markerA))).toBe(false);
         expect(bearerRequestCount()).toBe(0);
         expect(requestCount()).toBe(0);
       } finally {
