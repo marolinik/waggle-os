@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   allowsAutomaticRecall,
+  allowsConversationHistory,
   allowsPostResponseDecoration,
   buildTurnMessageWindow,
   canUseBudgetModelWithoutCloudEgress,
@@ -17,17 +18,22 @@ import {
   isExplicitToolFreeAdvisoryRequest,
   isRegulatedContent,
   isRetryableError,
+  primeMemoryDirectiveClassifier,
+  resolveExplicitMemoryReadDirective,
   resolveTurnPersistencePermissions,
   selectAdvisoryMaxOutputTokens,
   shouldSuggestSchedule,
   describeToolUse,
   type TurnMutationPolicy,
 } from '../../src/local/routes/chat-helpers.js';
+import { isExplicitMemoryRecallRequest } from '../../src/local/routes/chat.js';
 import { summarizeDroppedContext } from '../../src/local/routes/chat-context.js';
 import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
 
 const DEFAULT_TURN_POLICY: TurnMutationPolicy = {
   denyAllMutations: false,
+  denyMemoryRead: false,
+  denyConversationHistory: false,
   denyMemoryPersistence: false,
   denyFileWrites: false,
   denyCodeExecution: false,
@@ -282,12 +288,629 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       .toEqual(expectedPolicy({ denyMemoryPersistence: true }));
   });
 
+  it('prohibits persisted-memory reads without disabling unrelated requested actions', () => {
+    for (const [message, expected] of [
+      ['Do not search memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true })],
+      ['Without searching memory, tell me what we discussed.', expectedPolicy({ denyMemoryRead: true })],
+      ['Explain what we decided without using memory.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Do not use memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Do not use our previous decisions; create a fresh plan.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not search or recall persistent memory; keep this chat context.', expectedPolicy({ denyMemoryRead: true })],
+      ['Without consulting my saved memories, continue from this conversation.', expectedPolicy({ denyMemoryRead: true })],
+      ['Use no memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Ignore our previous decisions and create a fresh plan.', expectedPolicy({ denyMemoryRead: true })],
+      ['Disregard prior context and start from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Avoid using memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Refrain from using saved memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['You must not use memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['You cannot use memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Memory access is forbidden. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Memory search is not allowed. Explain what we decided.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not look at memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not query the memory store.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not read the memory database.', expectedPolicy({ denyMemoryRead: true })],
+      ['Answer without memory.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Answer without any memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Continue with no memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['No memory access for this turn.', expectedPolicy({ denyMemoryRead: true })],
+      ["You mustn't use memory.", expectedPolicy({ denyMemoryRead: true })],
+      ["You shouldn't use memory.", expectedPolicy({ denyMemoryRead: true })],
+      ['You can not use memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory must not be used.', expectedPolicy({ denyMemoryRead: true })],
+      ['Saved memory should not be accessed.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not inspect memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not browse memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not load memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not reference memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not refer to previous conversations.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not pull from memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not fetch from memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Under no circumstances should you use my saved memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['You are not permitted to search memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['You are not allowed to access memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['I do not consent to memory access.', expectedPolicy({ denyMemoryRead: true })],
+      ['I do not consent to you searching memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['I do not want you to use memory for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['I would prefer that you not consult previous conversations.', expectedPolicy({ denyMemoryRead: true })],
+      ['I revoke permission to use my saved memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['I deny permission to use memory.', expectedPolicy({ denyMemoryRead: true })],
+      ["I don't give you permission to use saved memory.", expectedPolicy({ denyMemoryRead: true })],
+      ['I refuse consent to memory access.', expectedPolicy({ denyMemoryRead: true })],
+      ['/marketplace installed - do not use memory', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['/marketplace installed -- do not use memory', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['You lack permission to search memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory access is denied for this turn.', expectedPolicy({ denyMemoryRead: true })],
+      ['Access to memory is denied.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory access is not permitted.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory store access is denied.', expectedPolicy({ denyMemoryRead: true })],
+      ['It is prohibited to search memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory is not to be used for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['Please answer as if you had no saved memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not use anything you remember about me for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['Answer without relying on anything you remember about me.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not use anything from previous chats.', expectedPolicy({ denyMemoryRead: true })],
+      ['Forget everything you know about me for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: "Do not search memory." Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: «Do not search memory.» Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ["Follow this constraint exactly: 'Do not search memory.' Answer from scratch.", expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: ‘Do not search memory.’ Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: `Do not search memory.` Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: ‹Do not search memory.› Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not use working memory from prior sessions.', expectedPolicy({ denyMemoryRead: true })],
+    ] as const) {
+      const policy = classifyExplicitTurnMutationPolicy(message);
+      expect(policy, message).toEqual(expected);
+      expect(allowsAutomaticRecall(policy), message).toBe(false);
+      expect(allowsConversationHistory(policy), message).toBe(true);
+      expect(filterToolsByTurnMutationPolicy(
+        ['search_memory', 'save_memory', 'read_file'].map(name => ({ name })),
+        policy,
+      ).map(tool => tool.name), message).toEqual(['read_file']);
+    }
+  });
+
+  it('fails closed for opaque external tools while retaining non-memory local reads', () => {
+    const policy = classifyExplicitTurnMutationPolicy(
+      'Do not use saved memory. Inspect the current workspace and search the web.',
+    );
+    const tools = [
+      'search_memory', 'search_all_workspaces', 'query_knowledge', 'get_identity',
+      'get_awareness', 'read_other_workspace', 'save_memory', 'add_task',
+      'correct_knowledge', 'read_file', 'web_search', 'mcp_external_read',
+      'agent_insights',
+    ].map(name => ({ name }));
+    const filtered = filterToolsByTurnMutationPolicy(
+      tools,
+      policy,
+      new Set(['mcp_external_read']),
+    ).map(tool => tool.name);
+
+    expect(filtered).toEqual(['read_file', 'web_search']);
+    expect(resolveTurnPersistencePermissions({
+      policy,
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+  });
+
+  it('lets a later explicit persisted-memory read override an earlier read prohibition', () => {
+    const message = 'Do not search memory; instead, search memory for our approved launch decision.';
+    const policy = classifyExplicitTurnMutationPolicy(message);
+    expect(policy).toEqual(expectedPolicy());
+    expect(allowsAutomaticRecall(policy)).toBe(true);
+  });
+
+  it('resolves ordered memory-read directives and ignores quoted or code examples', () => {
+    expect(resolveExplicitMemoryReadDirective(
+      'Search my memory, but do not use memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not use memory, but search my saved memory for launch notes.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory, but please search my saved memory for launch notes.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web, use my saved memory instead.',
+    )).toBe('allow');
+    expect(isExplicitMemoryRecallRequest(
+      'Do not search the web, use my saved memory instead.',
+    )).toBe(true);
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web, and do not use my saved memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web, do not use my saved memory.',
+    )).toBe('deny');
+    expect(isExplicitMemoryRecallRequest(
+      'Do not search the web, do not use my saved memory.',
+    )).toBe(false);
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web — use my saved memory instead.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web–use my saved memory instead.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web—do not use my saved memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Use, when helpful, my saved memory.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory, but explain why someone might search memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory, but explain how to search memory safely.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory; search memory only after I explicitly approve.',
+    )).toBe('deny');
+    for (const deferredOverride of [
+      'Do not search memory, but search memory, only if I approve.',
+      'Do not search memory, but search memory (only if I approve).',
+      'Do not search memory, but search memory unless I approve.',
+      'Do not search memory, but search memory later.',
+      'Do not use memory, but use memory provided that I ask later.',
+      'Do not use memory, but use memory as soon as I explicitly ask later.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(deferredOverride), deferredOverride).toBe('deny');
+    }
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory; search memory is the action you must avoid.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory.\n~~~text\nbut search memory for launch notes\n~~~',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory. Explain ``but search memory for launch notes``.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory.\n    but search memory for launch notes',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory.\n> ~~~text\n> but search memory for launch notes\n> ~~~',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory. Explain «but search memory for launch notes».',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Explain "Do not use memory." and `search my memory`.',
+    )).toBe('unspecified');
+    expect(resolveExplicitMemoryReadDirective(
+      'Explain this example:\n```text\nDo not search memory.\n```',
+    )).toBe('unspecified');
+    for (const technicalConstraint of [
+      'Do not use memory-intensive algorithms.',
+      'Do not use an in-memory database.',
+      'Explain the memory usage and memory leak.',
+      'Do not use shared memory; use message passing.',
+      'Do not read memory pressure metrics.',
+      'Do not use memory foam in this prototype.',
+      'Do not use virtual memory for this benchmark.',
+      'Avoid memory bandwidth bottlenecks.',
+      'Benchmark the memory database architecture.',
+      'Compare memory store benchmarks.',
+      'Search prior history of SQLite.',
+      'Use current primary sources to compare SQLite vector search with PostgreSQL plus pgvector for a single-user desktop AI memory store.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(technicalConstraint), technicalConstraint)
+        .toBe('unspecified');
+      expect(classifyExplicitTurnMutationPolicy(technicalConstraint), technicalConstraint)
+        .toEqual(expectedPolicy());
+    }
+  });
+
   it('does not broaden unrelated object-scoped or quoted constraints', () => {
     for (const message of [
       'Do not create a calendar event; remember this preference.',
       'Explain why the phrase "do not create or edit anything" is ambiguous.',
+      'Explain "Do not search memory." Then explain what we decided.',
+      'Explain `Do not search memory.` Then explain what we decided.',
+      'Do not hesitate to use my saved memory.',
+      'Do not search the web, use my saved memory instead.',
+      'The documentation says:\n> Do not use saved history.\nNow answer normally.',
+      'Compare agents with and without conversation history.',
+      'Write a design for a chatbot without conversation history.',
+      'Write a design for a chatbot without using conversation history.',
+      'Compare agents that ignore conversation history by design.',
+      'Do not use browser history in this session; inspect the page DOM only.',
+      'Do not use Git history in this conversation; inspect the working tree only.',
+      'Do not use SQL history in this chat; inspect the current query only.',
+      'Do not use PowerShell command-line history in this session.',
+      'Do not use database migration history in this session.',
+      'Do not use deployment history in this conversation.',
+      'Do not use test execution history in this session.',
+      'Do not use package installation history in this conversation.',
+      'Do not use API request history in this session.',
+      'Does the policy mean you must not use conversation history?',
+      'Explain why the policy says agents must not use conversation history.',
+      'Explain whether access to conversation history is denied.',
+      'Tell me whether conversation history is not to be used by default.',
+      'Explain what it means when conversation history access is forbidden.',
+      'Does saying I withdraw consent to use conversation history revoke it?',
+      'Draft a sentence saying I withdraw consent to use conversation history.',
+      'Explain what it means to withhold consent to use conversation history.',
+      'Explain why authorization to use conversation history is denied.',
+      'Explain what it means not to give consent for use of conversation history.',
+      '/research Explain why agents must not use conversation history.',
+      '/research Explain the phrase do not use conversation history.',
+      '/research Explain why users do not use conversation history.',
+      'Do not use user login history in this session.',
+      'Do not use billing transaction history in this conversation.',
+      'Do not use document revision history in this session.',
+      'Do not use agent run history in this conversation.',
+      'Conversation history must not be used. However, use conversation history now.',
+      'Do not use conversation history. However, use it now.',
+      'Do not use conversation history. Actually, use it now.',
+      'Follow this constraint exactly: «Do not use conversation history.» Then use it.',
+      'Do not use conversation history. Yet use it now.',
+      'Do not use conversation history. I changed my mind: use it now.',
+      'Do not use conversation history. No, use it now.',
+      'Do not use conversation history. Wait, use it now.',
+      'Do not use conversation history. Hold on, use it now.',
+      'Do not use conversation history. Never mind, use it now.',
+      'Do not use conversation history. Strike that, use it now.',
+      'Do not use conversation history. Change of plan: use it now.',
+      'Do not use conversation history. New rule: «Use it.»',
+      'Do not use conversation history. Treat this as an instruction: «Use it.»',
+      'Do not use conversation history. Apply this rule: «Use it.»',
+      'Apply this rule: «Do not use conversation history.» Then apply this rule: «Use it.»',
+      'Do not use conversation history. I take that back; use it now.',
+      'Do not use conversation history. Rather, use it now.',
+      'Do not use conversation history. Forget that; use it.',
+      'Do not use conversation history—actually, use it now.',
+      'Do not use conversation history. Correction: use it now.',
+      'Do not use conversation history. Use conversation history now.',
+      'This is the new rule we are discussing: «Do not use conversation history.»',
+      'Compare the new rule: «Do not use conversation history.» with the old one.',
+      '/research explain why users say do not use conversation history',
+      '/research draft wording: do not use conversation history',
+      'Discuss the sentence: do not use conversation history.',
+      'The phrase do not use conversation history is ambiguous.',
+      'Translate: «Do not use conversation history.»',
+      'Translate into French: do not use conversation history.',
+      'Explain why we should follow this rule: «Do not use conversation history.»',
+      'Explain the policy: conversation history must be excluded.',
+      'Explain the rule: do not use conversation history.',
+      'Example: do not use conversation history.',
     ]) {
       expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy());
+    }
+  });
+
+  it('does not promote descriptive memory-policy text into an explicit recall request', () => {
+    for (const message of [
+      '/research Explain the phrase do not use conversation history.',
+      '/research Explain why users do not use conversation history.',
+      'ONYX Explain the phrase do not use conversation history.',
+      'Explain why users should not use conversation history.',
+      'Draft this sentence: I never gave consent to use conversation history.',
+      'Draft this sentence: There is no consent to use conversation history.',
+      'Quote this statement: You lack my consent to use conversation history.',
+      'This is the new rule we are discussing: «Do not use conversation history.»',
+      'Compare the new rule: «Do not use conversation history.» with the old one.',
+      '/research explain why users say do not use conversation history',
+      '/research draft wording: do not use conversation history',
+      'Discuss the sentence: do not use conversation history.',
+      'The phrase do not use conversation history is ambiguous.',
+      'Translate: «Do not use conversation history.»',
+      'Translate into French: do not use conversation history.',
+      'Explain why we should follow this rule: «Do not use conversation history.»',
+      'Explain the policy: conversation history must be excluded.',
+      'Explain the rule: do not use conversation history.',
+      'Example: do not use conversation history.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('unspecified');
+      expect(isExplicitMemoryRecallRequest(message), message).toBe(false);
+    }
+  });
+
+  it('does not treat attributed unquoted policy text as the user\'s own directive', () => {
+    for (const message of [
+      'Alice said: do not use conversation history. Explain her statement.',
+      'Alice said: do not use saved memory. Explain her statement.',
+      'The report states: memory access is denied. Summarize the report.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('unspecified');
+      expect(isExplicitMemoryRecallRequest(message), message).toBe(false);
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy());
+    }
+    expect(resolveExplicitMemoryReadDirective(
+      'I said: do not use saved memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'The policy: do not use conversation history.',
+    )).toBe('deny');
+  });
+
+  it('preserves a direct user denial after an attributed unquoted clause', () => {
+    for (const message of [
+      'Alice said: do not use conversation history, but I say: do not use saved memory.',
+      'Alice said: do not use conversation history, but I insist: do not use saved memory.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('deny');
+    }
+
+    for (const message of [
+      'The report states: memory access is denied, but my instruction is: do not use conversation history.',
+      'The report states: memory access is denied, but my explicit instruction is: do not use conversation history.',
+    ]) {
+      expect(classifyExplicitTurnMutationPolicy(message).denyConversationHistory, message).toBe(true);
+    }
+  });
+
+  it('treats explicit double-negations as persisted-memory read permission', () => {
+    for (const message of [
+      'Do not ignore memory.',
+      'Do not disregard previous decisions.',
+      'Never ignore my saved memory.',
+      'Do not ever ignore my saved memory.',
+      'Do not ignore conversation history.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('allow');
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy());
+    }
+  });
+
+  it('keeps persisted-memory and conversation-history directives independent in both orders', () => {
+    const memoryDeniedHistoryAllowed = classifyExplicitTurnMutationPolicy(
+      'Do not use my saved memory; use conversation history.',
+    );
+    expect(memoryDeniedHistoryAllowed).toEqual(expectedPolicy({
+      denyMemoryRead: true,
+      denyMemoryPersistence: true,
+    }));
+    expect(allowsConversationHistory(memoryDeniedHistoryAllowed)).toBe(true);
+
+    const historyDeniedMemoryAllowed = classifyExplicitTurnMutationPolicy(
+      'Do not use conversation history; use my saved memory.',
+    );
+    expect(historyDeniedMemoryAllowed).toEqual(expectedPolicy({
+      denyConversationHistory: true,
+      denyMemoryPersistence: true,
+    }));
+    expect(allowsAutomaticRecall(historyDeniedMemoryAllowed)).toBe(true);
+    expect(allowsConversationHistory(historyDeniedMemoryAllowed)).toBe(false);
+
+    expect(classifyExplicitTurnMutationPolicy(
+      'Use my saved memory. Actually, do not.',
+    )).toEqual(expectedPolicy({
+      denyMemoryRead: true,
+    }));
+    expect(classifyExplicitTurnMutationPolicy(
+      'Use conversation history. Actually, do not.',
+    )).toEqual(expectedPolicy({
+      denyConversationHistory: true,
+      denyMemoryPersistence: true,
+    }));
+  });
+
+  it('keeps saved session history out only when that history is explicitly denied', () => {
+    const genericMemoryOptOut = classifyExplicitTurnMutationPolicy(
+      'Continue from this conversation without consulting my saved memories.',
+    );
+    expect(allowsConversationHistory(genericMemoryOptOut)).toBe(true);
+
+    const savedHistoryOptOut = classifyExplicitTurnMutationPolicy(
+      'Do not use saved history. Answer from scratch.',
+    );
+    expect(savedHistoryOptOut.denyMemoryRead).toBe(false);
+    expect(allowsConversationHistory(savedHistoryOptOut)).toBe(false);
+
+    for (const priorChatOptOut of [
+      'Do not use prior history of this chat.',
+      'Do not use previous history of this conversation.',
+      'Do not use earlier history of the session.',
+      "Do not use this chat's prior history.",
+      "Do not use this conversation's previous history.",
+      "Do not use the session's earlier history.",
+      'Do not use the prior history from this chat.',
+      'Do not use prior chat history.',
+      'Do not use history from earlier in this chat.',
+      'Do not use the history in this conversation.',
+      'Do not use anything said earlier in this chat.',
+      'Answer without the conversation so far.',
+      'Start fresh without prior messages in this chat.',
+      'Ignore the conversation so far and answer fresh.',
+      'Disregard anything said earlier in this chat.',
+      'Do not rely on the conversation so far.',
+      'Never search prior messages in this chat.',
+      'Do not draw from anything said earlier in this chat.',
+      'Access to conversation history is denied for this turn.',
+      'Conversation history must not be used for this answer.',
+      'Policy: do not use conversation history.',
+      'Rule: do not use conversation history.',
+      'I revoke permission to use conversation history.',
+      'I deny permission to use prior messages in this chat.',
+      'I refuse consent to using conversation history.',
+      'I do not consent to using conversation history.',
+      'Conversation history access is forbidden for this turn.',
+      'It is forbidden to use conversation history for this answer.',
+      'Avoid using conversation history for this answer.',
+      'Refrain from using conversation history for this answer.',
+      'Use no conversation history for this answer.',
+      'I do not want you to use conversation history for this answer.',
+      'I would prefer that you not consult prior messages in this chat.',
+      'With no conversation history, answer from scratch.',
+      'No conversation history access for this turn.',
+      'Answer as if you had no conversation history.',
+      'Use conversation history. However, conversation history must not be used.',
+      'I withdraw consent to use conversation history.',
+      'Consent to use conversation history is withdrawn.',
+      'Permission to use conversation history is revoked.',
+      'You do not have permission to use conversation history.',
+      'No access to conversation history for this turn.',
+      'Conversation history cannot be used for this answer.',
+      'Do not take previous messages in this chat into account.',
+      'Answer independently of previous turns.',
+      'Use conversation history. However, do not use it.',
+      'Use conversation history. Actually, do not use it.',
+      'Use conversation history. On second thought, do not use it.',
+      'TOPAZ Do not use saved history.',
+      'I withdraw my consent for you to use conversation history.',
+      'I no longer consent to use conversation history.',
+      'I withdraw authorization to use conversation history.',
+      'I revoke authorization to use conversation history.',
+      'I decline consent to use conversation history.',
+      'I opt out of using conversation history.',
+      'Consent to use conversation history has been revoked.',
+      'Permission to use conversation history has been withdrawn.',
+      'You are no longer authorized to use conversation history.',
+      'I do not authorize you to use conversation history.',
+      'I do not permit you to use conversation history.',
+      'You do not have my consent to use conversation history.',
+      'I have not authorized you to use conversation history.',
+      'I cancel my consent to use conversation history.',
+      'I remove permission to use conversation history.',
+      'I disallow use of conversation history.',
+      'I prohibit you from using conversation history.',
+      'I forbid you to use conversation history.',
+      'Do not use prior context from this chat.',
+      'Do not use the transcript of this conversation.',
+      'Do not use what we covered earlier in this chat.',
+      'I hereby withdraw consent for use of conversation history.',
+      'I withdraw consent to your use of conversation history.',
+      'I withhold consent to use conversation history.',
+      'I withhold authorization to use conversation history.',
+      'I deny consent to use conversation history.',
+      'I object to the use of conversation history.',
+      'I refuse permission to use conversation history.',
+      'I refuse authorization to use conversation history.',
+      'Authorization to use conversation history is denied.',
+      'I withdraw consent for access to conversation history.',
+      'I no longer authorize you to use conversation history.',
+      'I no longer permit you to use conversation history.',
+      'You have no permission to use conversation history.',
+      'You have no authorization to use conversation history.',
+      'Do not use the chat transcript so far.',
+      'Do not use the conversation transcript so far.',
+      'Do not use transcripts from this conversation.',
+      'Do not use the preceding messages in this chat.',
+      'Do not use the preceding turns in this session.',
+      'Do not use the preceding exchanges in this conversation.',
+      'Do not use the messages earlier in this chat.',
+      'Do not use turns from earlier in this session.',
+      'Do not use the exchanges before in this conversation.',
+      'Do not use the chat log.',
+      "Do not use this conversation's transcript.",
+      'Do not use our discussion so far.',
+      'Do not use this thread so far.',
+      'Do not use what we mentioned earlier in this chat.',
+      'Do not use what we talked about earlier in this chat.',
+      'Do not use above messages.',
+      'Use conversation history. Yet do not use it.',
+      'Use conversation history. Nevertheless, do not use it.',
+      'Use conversation history. Correction: do not use it.',
+      'Use conversation history. Scratch that; do not use it.',
+      'AB Do not use conversation history.',
+      'Use conversation history. Follow this constraint exactly: «Do not use it.»',
+      'Follow this constraint exactly: "Do not use conversation history." Answer from scratch.',
+      'Follow this rule: "Do not use conversation history."',
+      'Follow this policy: "Do not use conversation history."',
+      'Obey this rule: "Do not use conversation history."',
+      'Apply this rule: "Do not use conversation history."',
+      'Enforce this policy: "Do not use conversation history."',
+      'Obey this instruction: `Do not use saved history.` Then answer.',
+      '/research ATLAS Do not use saved history.',
+      'Exclude conversation history from this answer.',
+      'Keep conversation history out of this answer.',
+      'Omit prior messages from this chat.',
+      'Do not consider prior messages in this chat.',
+      'Use conversation history; however exclude it from this answer.',
+      'Use conversation history, except do not use it for this answer.',
+      'Use conversation history, but ignore it for this response.',
+      'Leave prior chat messages out of the answer.',
+      'I do not give consent for use of conversation history.',
+      'I never gave you consent to use conversation history.',
+      'Set aside the conversation so far.',
+      'Do not take earlier turns into consideration.',
+      'Do not factor in previous messages.',
+      'Use conversation history. No, do not use it.',
+      'Use conversation history. Wait, do not use it.',
+      'Use conversation history. Ignore that; do not use it.',
+      'Use conversation history. Change of plan: do not use it.',
+      'I did not give you consent to use conversation history.',
+      "I haven't given you permission to access conversation history.",
+      'Consent to use conversation history was never given.',
+      'No consent was granted to use conversation history.',
+      'Authorization to use conversation history was never granted.',
+      'You were never authorized to use conversation history.',
+      'I have never consented to use conversation history.',
+      'There is no consent to use conversation history.',
+      'Consent for using conversation history has never been provided.',
+      'You lack my consent to use conversation history.',
+      'Put aside the conversation so far.',
+      "Don't base your answer on previous messages.",
+      'Do not use the messages above.',
+      'Use conversation history. Hold on, do not use it.',
+      'Use conversation history. Never mind, do not use it.',
+      'Use conversation history. Strike that, do not use it.',
+      'Use conversation history. Scratch that. Answer without it.',
+      'Use conversation history. New rule: «Do not use it.»',
+      'Use conversation history. Treat this as an instruction: «Do not use it.»',
+      '/research ATLAS please do not use saved history',
+      '/research --mode deep ATLAS Do not use saved history',
+      '/research ATLAS Keep prior messages out of this answer',
+      'Authorization to access conversation history was withheld.',
+      'The prior messages are to be excluded from this answer.',
+      'Previous turns must be omitted from this answer.',
+      'Prior messages should be kept out of this answer.',
+      'For this answer, do not use conversation history.',
+      'For now, do not use conversation history.',
+      'On this turn, do not use conversation history.',
+      'If possible, do not use conversation history.',
+      'Unless I explicitly approve it, do not use conversation history.',
+      'Until I explicitly approve, do not use conversation history.',
+      'Use conversation history only if I explicitly approve.',
+      'Only use conversation history after I approve.',
+      'Use conversation history. I take that back; do not use it.',
+      'Use conversation history. Disregard that; do not use it.',
+      'Use conversation history. Rather, do not use it.',
+      '/research quantum computing please do not use saved history',
+      '/research quantum computing -- do not use saved history',
+      '/investigate AI safety do not use conversation history',
+      '/draft executive memo please do not use saved history',
+      'At this time, do not use conversation history.',
+      'For this task, do not use conversation history.',
+      'In this response, do not consult saved history.',
+      'Use conversation history provided I explicitly approve it.',
+      'Unless and until I approve, do not use conversation history.',
+      'Use conversation history only upon my explicit approval.',
+      'Only use conversation history with my explicit approval.',
+      'Conversation history is to remain excluded from this answer.',
+      'Previous turns shall be omitted from this answer.',
+      'Prior messages are excluded from this answer.',
+      'Keep previous turns outside this answer.',
+      'I have not provided consent for you to use conversation history.',
+      'No authorization exists for access to conversation history.',
+      'Permission to access conversation history is absent.',
+      'You are without my authorization to access conversation history.',
+      'Use conversation history. Cancel that request and answer without it.',
+      'Use conversation history; correction—do not use it.',
+      '/research write a report and please do not use conversation history',
+      '/research draft an outline please do not use saved history',
+      '/research compare options but do not use conversation history',
+      '/research quote sources but do not use conversation history',
+      '/investigate describe the issue but do not use prior messages',
+      'Answer without reference to prior messages.',
+      'Please do not use prior conversation context.',
+      'Do not carry context forward from earlier turns.',
+      'Do not incorporate anything from previous messages.',
+      'For this answer do not use conversation history.',
+      'Please, do not use conversation history.',
+      'Can you please not use conversation history.',
+      '/research Explain quantum computing please do not use saved history',
+      'I never authorized you to use conversation history.',
+      'Use conversation history. I retract that; do not use it.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(priorChatOptOut), priorChatOptOut).toBe('deny');
+      expect(classifyExplicitTurnMutationPolicy(priorChatOptOut), priorChatOptOut).toEqual(
+        expectedPolicy({ denyConversationHistory: true, denyMemoryPersistence: true }),
+      );
     }
   });
 
@@ -892,6 +1515,24 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       allowMemoryPersistence: true,
       allowDerivedPersistence: true,
     });
+  });
+
+  it('keeps maximum-size directive classification within a bounded latency', () => {
+    const filler = 'x'.repeat(49_800);
+    const messages = [
+      `${filler}\nDo not use conversation history.`,
+      `${filler}\nApply this rule: «Do not use saved memory.»`,
+      `${filler}\nDo not use conversation history — actually, use it.`,
+    ];
+    primeMemoryDirectiveClassifier();
+    const startedAt = performance.now();
+    const policies = messages.map(message => classifyExplicitTurnMutationPolicy(message));
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(policies[0]?.denyConversationHistory).toBe(true);
+    expect(policies[1]?.denyMemoryRead).toBe(true);
+    expect(policies[2]?.denyConversationHistory).toBe(false);
+    expect(elapsedMs).toBeLessThan(1_000);
   });
 });
 

@@ -19,6 +19,8 @@ import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
 import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, isClosedWorldRewriteRequest, type AssembledPrompt } from '@waggle/agent';
 
+const NON_RETAINED_TURN_CONTENT = '[Not retained: memory disabled for this turn]';
+
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
  * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
@@ -37,7 +39,7 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { allowsAutomaticRecall, allowsConversationHistory, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   isChatSessionStateKeyForWorkspace,
@@ -318,6 +320,8 @@ function isExplicitPlanAuthoringRequest(message: string): boolean {
 }
 
 export function isExplicitMemoryRecallRequest(message: string): boolean {
+  if (!allowsPersistedMemoryRead(classifyExplicitTurnMutationPolicy(message))) return false;
+  if (resolveExplicitPersistedMemoryReadDirective(message) === 'allow') return true;
   const directRecall = /\b(?:what do you know about me|what have you saved|what memor(?:y|ies) have you saved(?: about me)?|what do you remember about (?:me|us|my|our))\b/i.test(message)
     || /\bwhat do you remember\s*[?.!,;:]?\s*$/i.test(message)
     || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(message);
@@ -394,6 +398,7 @@ export function filterPluginToolsForConversationalTurn(
   mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): PluginToolProvider {
   if (!mutationPolicy.denyAllMutations
+    && !mutationPolicy.denyMemoryRead
     && !mutationPolicy.denyMemoryPersistence
     && !mutationPolicy.denyFileWrites
     && !mutationPolicy.denyCodeExecution
@@ -541,6 +546,7 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
 }
 
 export const chatRoutes: FastifyPluginAsync = async (server) => {
+  primeMemoryDirectiveClassifier();
   // ── Use shared agent state from server ──────────────────────────────
   const {
     orchestrator,
@@ -813,6 +819,8 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
     selectedModel?: string,
     cacheWorkspaceId = workspaceId ?? 'default',
     toolFreeAdvisory = false,
+    includePersistedMemory = true,
+    includeConversationDerivedWorkspaceState = true,
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
@@ -853,7 +861,7 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
       cacheWorkspaceId,
       sessionId ?? 'default',
     );
-    if (!assembled) {
+    if (!assembled && includePersistedMemory) {
       const cached = systemPromptCache.get(cacheKey);
       if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode && cached.model === selectedModel) {
         return cached.prompt;
@@ -877,43 +885,48 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
     // behavioral, and correction context is layered below.
     // AI-OS #6 — supply the durable "why" (project ← workspace name) before the
     // orchestrator renders its system prompt. Empty ancestry self-suppresses.
-    orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
-    prompt += assembled?.system ?? orch.buildSystemPrompt(selectedModel);
+    if (includePersistedMemory) {
+      orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
+    }
+    prompt += assembled?.system
+      ?? (includePersistedMemory ? orch.buildSystemPrompt(selectedModel) : '');
 
     // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
-    try {
-      const profileData = loadProfile(server.localConfig.dataDir) as Record<string, unknown> & {
-        name?: string; role?: string; company?: string; industry?: string;
-        communicationStyle?: string; interests?: string[]; language?: string;
-        writingStyle?: { analyzed?: boolean; tone?: string; sentenceLength?: string; vocabulary?: string; structure?: string };
-        brand?: { analyzed?: boolean; primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string };
-      } | null;
-      if (profileData) {
-        if (profileData.name || profileData.role || profileData.company) {
-          prompt += `\n\n# About the User\n`;
-          if (profileData.name) prompt += `- Name: ${profileData.name}\n`;
-          if (profileData.role) prompt += `- Role: ${profileData.role}\n`;
-          if (profileData.company) prompt += `- Company: ${profileData.company}\n`;
-          if (profileData.industry) prompt += `- Industry: ${profileData.industry}\n`;
-          if (profileData.communicationStyle) prompt += `- Prefers ${profileData.communicationStyle} responses\n`;
-          if (profileData.interests?.length) prompt += `- Interests: ${profileData.interests.join(', ')}\n`;
-          const ws = profileData.writingStyle;
-          if (ws?.analyzed) {
-            prompt += `- Writing style: ${ws.tone} tone, ${ws.sentenceLength} sentences, ${ws.vocabulary} vocabulary, ${ws.structure} structure\n`;
-            prompt += `- When drafting content for this user, match their writing style.\n`;
-          }
-          const b = profileData.brand;
-          if (b && (b.analyzed || b.primaryColor !== '#D4A84B')) {
-            prompt += `- Brand colors: primary ${b.primaryColor}, secondary ${b.secondaryColor}, accent ${b.accentColor}\n`;
-            if (b.fontHeading) prompt += `- Brand fonts: ${b.fontHeading} (headings), ${b.fontBody} (body)\n`;
-            prompt += `- When generating documents (docx, pptx, pdf, xlsx), apply these brand styles.\n`;
-          }
-          if (profileData.language && profileData.language !== 'en') {
-            prompt += `- Preferred language: ${profileData.language}\n`;
+    if (includePersistedMemory) {
+      try {
+        const profileData = loadProfile(server.localConfig.dataDir) as Record<string, unknown> & {
+          name?: string; role?: string; company?: string; industry?: string;
+          communicationStyle?: string; interests?: string[]; language?: string;
+          writingStyle?: { analyzed?: boolean; tone?: string; sentenceLength?: string; vocabulary?: string; structure?: string };
+          brand?: { analyzed?: boolean; primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string };
+        } | null;
+        if (profileData) {
+          if (profileData.name || profileData.role || profileData.company) {
+            prompt += `\n\n# About the User\n`;
+            if (profileData.name) prompt += `- Name: ${profileData.name}\n`;
+            if (profileData.role) prompt += `- Role: ${profileData.role}\n`;
+            if (profileData.company) prompt += `- Company: ${profileData.company}\n`;
+            if (profileData.industry) prompt += `- Industry: ${profileData.industry}\n`;
+            if (profileData.communicationStyle) prompt += `- Prefers ${profileData.communicationStyle} responses\n`;
+            if (profileData.interests?.length) prompt += `- Interests: ${profileData.interests.join(', ')}\n`;
+            const ws = profileData.writingStyle;
+            if (ws?.analyzed) {
+              prompt += `- Writing style: ${ws.tone} tone, ${ws.sentenceLength} sentences, ${ws.vocabulary} vocabulary, ${ws.structure} structure\n`;
+              prompt += `- When drafting content for this user, match their writing style.\n`;
+            }
+            const b = profileData.brand;
+            if (b && (b.analyzed || b.primaryColor !== '#D4A84B')) {
+              prompt += `- Brand colors: primary ${b.primaryColor}, secondary ${b.secondaryColor}, accent ${b.accentColor}\n`;
+              if (b.fontHeading) prompt += `- Brand fonts: ${b.fontHeading} (headings), ${b.fontBody} (body)\n`;
+              prompt += `- When generating documents (docx, pptx, pdf, xlsx), apply these brand styles.\n`;
+            }
+            if (profileData.language && profileData.language !== 'en') {
+              prompt += `- Preferred language: ${profileData.language}\n`;
+            }
           }
         }
-      }
-    } catch { /* profile shape unexpected — continue without */ }
+      } catch { /* profile shape unexpected — continue without */ }
+    }
 
     if (packageMode === 'compact') {
       prompt += `
@@ -926,17 +939,20 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 ${sessionId ? `- Session: ${sessionId}` : ''}
 ${historyLength && historyLength > 0 ? `- Continuing conversation: ${historyLength} previous messages are in context.` : '- New conversation.'}
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId}` : ''}
+${includePersistedMemory ? '' : '- Persisted memory: disabled by the user for this turn.'}
 `;
     } else {
       prompt += `
 
 # Who You Are
 
-You are Waggle — a personal AI orchestrator with persistent memory, knowledge graph, and real-world tools.
+You are Waggle — a personal AI orchestrator with knowledge-work and real-world tools.
 You are NOT a chatbot. You are an autonomous agent that thinks, plans, acts, and learns.
 
 You are one orchestrator among many — each user has their own Waggle, fine-tuned to them.
-You remember everything important. You build knowledge over time. You get better with every interaction.
+${includePersistedMemory
+  ? 'You remember important context, build knowledge over time, and improve with every interaction.'
+  : 'Persisted memory is disabled by the user for this turn. Use only the current conversation and permitted tools; do not infer or claim stored context.'}
 
 ## Your Runtime (you already know this — do NOT call bash for date/time)
 - Date: ${dateStr}
@@ -948,10 +964,16 @@ ${workspacePath
   ? (workspacePath.includes('/files') || workspacePath.includes('\\files')
     ? `- Workspace files: managed storage (${workspacePath})\n- Generated files will appear in managed workspace storage.`
     : `- Workspace linked to: ${workspacePath} (all file operations are relative to this directory)\n- Generated files will appear in: ${workspacePath}`)
-  : `- No workspace directory set. Use save_memory to store information instead of files.`}
+  : includePersistedMemory
+    ? `- No workspace directory set. Use save_memory to store information instead of files.`
+    : `- No workspace directory set. Persisted memory is disabled for this turn.`}
 ${process.platform === 'win32' ? '- Windows note: use `date /t` and `time /t` (not bare `date` which prompts for input). Use `dir` instead of `ls`.' : ''}
 ${sessionId ? `- Session: ${sessionId}` : ''}
-${historyLength && historyLength > 0 ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.` : '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'}
+${historyLength && historyLength > 0
+  ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.`
+  : includePersistedMemory
+    ? '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'
+    : '- This is a new conversation with persisted memory disabled for this turn.'}
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailor responses to this domain.` : ''}
 `;
     }
@@ -974,12 +996,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Dead code removed — the old 250-line inline spec lived here
 
     // Append loaded skills with active integration instructions
-    if (packageMode === 'full') {
+    if (packageMode === 'full' && includePersistedMemory) {
       prompt += buildSkillPromptSection(skills);
     }
 
     // Workspace Now — inject structured context so the agent is grounded on first turn
-    if (workspaceId) {
+    if (includePersistedMemory && includeConversationDerivedWorkspaceState && workspaceId) {
       try {
         const nowBlock = buildWorkspaceNowBlock({
           dataDir: server.localConfig.dataDir,
@@ -1002,22 +1024,25 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
 
     // W3.3: Inject actionable correction signals — user corrections from prior sessions
-    try {
-      const signalStore = orch.getImprovementSignals();
-      if (signalStore) {
-        const actionable = signalStore.getActionable();
-        if (actionable.length > 0) {
-          prompt += '\n\n# User Corrections (from prior sessions — follow these)\n';
-          for (const signal of actionable) {
-            prompt += `- ${signal.detail} (observed ${signal.count}x)\n`;
+    if (includePersistedMemory) {
+      try {
+        const signalStore = orch.getImprovementSignals();
+        if (signalStore) {
+          const actionable = signalStore.getActionable();
+          if (actionable.length > 0) {
+            prompt += '\n\n# User Corrections (from prior sessions — follow these)\n';
+            for (const signal of actionable) {
+              prompt += `- ${signal.detail} (observed ${signal.count}x)\n`;
+            }
           }
         }
-      }
-    } catch { /* non-blocking */ }
+      } catch { /* non-blocking */ }
+    }
 
     // W1.3/W7.3: add persona only on the legacy path; assembler-owned persona
-    // content stays singular. DOCX and workspace-tone guidance always applies.
-    const workspaceTone = wsConfig?.tone;
+    // content stays singular. DOCX guidance always applies; persisted workspace
+    // tone is withheld when the user disables memory reads for this turn.
+    const workspaceTone = includePersistedMemory ? wsConfig?.tone : undefined;
     const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
     prompt = composeChatPromptTail(prompt, {
       persona: activePersona,
@@ -1027,7 +1052,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // C3: Cache the built prompt — only when there's no per-turn assembler
     // input. Caching an assembled prompt would replay stale memory recall.
-    if (!assembled) {
+    if (!assembled && includePersistedMemory) {
       systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength, packageMode, model: selectedModel });
     }
 
@@ -1247,6 +1272,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
     }
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+    const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
     const toolFreeAdvisoryCandidate = autonomyLevel === 'normal'
       && !isAutomatedTurn
       && !isExplicitMemoryRecallRequest(message)
@@ -1267,6 +1293,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     });
     let allowMemoryPersistence = turnPersistence.allowMemoryPersistence;
     let allowDerivedPersistence = turnPersistence.allowDerivedPersistence;
+    const retainedTurnText = (value: string): string => (
+      allowDerivedPersistence ? value : NON_RETAINED_TURN_CONTENT
+    );
+    const retainedTurnJson = (value: unknown): string => (
+      allowDerivedPersistence
+        ? JSON.stringify(value) ?? 'null'
+        : JSON.stringify({ redacted: NON_RETAINED_TURN_CONTENT })
+    );
     const turnAllowsResponseDecoration = allowsPostResponseDecoration(
       turnMutationPolicy,
       requestClosedWorldRewrite,
@@ -1590,20 +1624,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
       // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
 
-      // Get or create session history — load from disk if not in RAM
-      if (!sessionHistories.has(sessionStateKey)) {
+      // A conversation-history denial is a read boundary, not only a prompt-
+      // packaging choice. Do not read or cache the saved transcript for this turn.
+      if (!turnMutationPolicy.denyConversationHistory && !sessionHistories.has(sessionStateKey)) {
         const saved = loadSessionMessages(
           sessionPersistenceDataDir, activeWorkspaceId, sessionId
         );
         sessionHistories.set(sessionStateKey, saved);
       }
-      const history = sessionHistories.get(sessionStateKey)!;
-      activeHistory = history;
+      const history = turnMutationPolicy.denyConversationHistory
+        ? []
+        : sessionHistories.get(sessionStateKey)!;
+      activeHistory = turnMutationPolicy.denyConversationHistory ? undefined : history;
 
       // F4 retry-dedup: a retried turn re-issues the failed user message. Drop
       // the previously persisted failed user+assistant pair (RAM + disk) so a
       // reload doesn't render it duplicated alongside the fresh turn.
-      if (retryTurn) {
+      if (retryTurn && !turnMutationPolicy.denyConversationHistory) {
         const n = history.length;
         if (n >= 2
           && history[n - 1].role === 'assistant'
@@ -1623,9 +1660,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       allowDerivedPersistence = !toolFreeAdvisory && turnPersistence.allowDerivedPersistence;
       allowResponseDecoration = !toolFreeAdvisory && turnAllowsResponseDecoration;
 
-      // Add user message to history and persist to disk
-      history.push({ role: 'user', content: message });
-      persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
+      // A saved-history opt-out is both a read and retention boundary for this turn.
+      if (!turnMutationPolicy.denyConversationHistory) {
+        history.push({ role: 'user', content: message });
+        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
+      }
 
       // Check whether the configured LLM path can serve a completion. Process
       // liveness is insufficient for the built-in proxy because it also runs
@@ -1676,6 +1715,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
           sessionId,
           searchMemory: async (query: string): Promise<string> => {
+            if (!persistedMemoryReadAllowed) return 'Persisted memory access is disabled for this turn.';
             try {
               const recall = await sessionOrch.recallMemory(query);
               if (recall.count === 0) return 'No relevant memories found.';
@@ -1686,6 +1726,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
           },
           getWorkspaceState: async (): Promise<string> => {
+            if (!persistedMemoryReadAllowed) return 'Persisted workspace state is disabled for this turn.';
+            if (!allowsConversationHistory(turnMutationPolicy)) {
+              return 'Conversation-derived workspace state is disabled for this turn.';
+            }
             if (!effectiveWorkspace) return 'No workspace state available.';
             const block = buildWorkspaceNowBlock({
               dataDir: server.localConfig.dataDir,
@@ -1698,10 +1742,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             return formatWorkspaceNowPrompt(block);
           },
           listSkills: (): string[] => {
-            return server.agentState.skills.map(s => s.name);
+            return persistedMemoryReadAllowed
+              ? server.agentState.skills.map(s => s.name)
+              : [];
           },
         };
-        const cmdResult = await commandRegistry.execute(message, cmdContext);
+        const marketplaceSubcommand = message.trim().match(
+          /^\/(?:marketplace|mp|market)\s+(installed|install|sync)\b/i,
+        )?.[1]?.toLowerCase();
+        const blocksMarketplaceRead = marketplaceSubcommand === 'installed'
+          && !persistedMemoryReadAllowed;
+        const blocksMarketplaceMutation = (marketplaceSubcommand === 'install'
+          || marketplaceSubcommand === 'sync')
+          && (!persistedMemoryReadAllowed || !allowDerivedPersistence);
+        const cmdResult = blocksMarketplaceRead || blocksMarketplaceMutation
+          ? 'Persisted marketplace state is disabled for this turn.'
+          : await commandRegistry.execute(message, cmdContext);
 
         // B1-B7: Check if the command wants to be re-processed through the agent loop
         if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && litellmAvailable) {
@@ -1723,8 +1779,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             await new Promise((r) => setTimeout(r, 10));
           }
           if (turnSignal.aborted) return;
-          history.push({ role: 'assistant', content: friendlyError });
-          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: friendlyError });
+          if (!turnMutationPolicy.denyConversationHistory) {
+            history.push({ role: 'assistant', content: friendlyError });
+            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: friendlyError });
+          }
           sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
@@ -1738,8 +1796,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           if (turnSignal.aborted) return;
           // Persist command result
-          history.push({ role: 'assistant', content: cmdResult });
-          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: cmdResult });
+          if (!turnMutationPolicy.denyConversationHistory) {
+            history.push({ role: 'assistant', content: cmdResult });
+            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: cmdResult });
+          }
           sendEvent('done', {
             content: cmdResult,
             usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -1766,8 +1826,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
         if (turnSignal.aborted) return;
         // Persist echo response so session continuity is maintained
-        history.push({ role: 'assistant', content: echoResponse });
-        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: echoResponse });
+        if (!turnMutationPolicy.denyConversationHistory) {
+          history.push({ role: 'assistant', content: echoResponse });
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: echoResponse });
+        }
         sendEvent('done', {
           content: echoResponse,
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -1782,7 +1844,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           || isClosedWorldRewriteRequest(agentMessage);
 
         // Waggle Dance: emit agent start signal
-      emitWaggleSignal({ type: 'agent:started', workspaceId: executionScopeId, content: agentMessage.slice(0, 200) });
+      emitWaggleSignal({ type: 'agent:started', workspaceId: executionScopeId, content: retainedTurnText(agentMessage).slice(0, 200) });
 
       // ── Budget check — warn if workspace is over budget ──
       if (!hasCustomRunner && effectiveWorkspace) {
@@ -1879,6 +1941,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && isFirstUserMessage
           && !closedWorldRewrite
           && !toolFreeAdvisory
+          && allowDerivedPersistence
           && turnMutationPolicy.contextScope === 'default') {
           try {
             const optimizer = await getOptimizerService(server);
@@ -1950,10 +2013,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let assembled: AssembledPrompt | null = null;
         if (!hasCustomRunner
           && turnMutationPolicy.contextScope === 'default'
+          && persistedMemoryReadAllowed
           && !toolFreeAdvisory
           && isEnabled('PROMPT_ASSEMBLER')) {
           try {
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler, model: resolvedModel });
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
+              taskShape: turnTaskShape,
+              turnId,
+              recalledText: recallTextForAssembler,
+              model: resolvedModel,
+            });
             throwIfTurnAborted();
             log.info(
               `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
@@ -2010,7 +2079,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 workspaceId: executionScopeId,
                 eventType: 'approval_auto',
                 toolName: ctx.toolName,
-                input: JSON.stringify({ args, _autonomy: autonomyLevel }),
+                input: retainedTurnJson({ args, _autonomy: autonomyLevel }),
                 sessionId,
                 approved: true,
               });
@@ -2026,6 +2095,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // NOT let a headless reviewer write a skill to disk. The trust boundary:
           // the reviewer can never persist a skill without explicit human approval.
           if (proposeHeldTurn) {
+            if (!allowDerivedPersistence) {
+              sendEvent('step', { content: 'Tool proposal denied because memory is disabled for this turn.' });
+              return { cancel: true, reason: 'Cannot retain an approval while memory is disabled' };
+            }
             const heldSource = sessionId.startsWith('channel-')
               ? `channel:${sessionId}`
               : `session-reviewer:${sessionId}`;
@@ -2137,7 +2210,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               workspaceId: executionScopeId,
               eventType: 'approval_requested',
               toolName,
-              input: JSON.stringify(input),
+              input: retainedTurnJson(input),
               sessionId,
             });
 
@@ -2160,21 +2233,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             heldAction: {
               workspaceId: effectiveWorkspace || null,
               toolName,
-              argsJson: JSON.stringify(input),
-              summary,
+              argsJson: retainedTurnJson(input),
+              summary: retainedTurnText(summary),
               riskLevel,
               approvalClass,
             },
             heldEvent: {
               requestId,
               toolName,
-              input,
+              input: allowDerivedPersistence ? input : { redacted: NON_RETAINED_TURN_CONTENT },
               sourceWorkspaceId: effectiveWorkspace || null,
               held: true,
               message: 'Moved to Approvals inbox',
               ...trustMeta,
             },
-            policy: approvalTimeoutPolicy,
+            policy: allowDerivedPersistence
+              ? approvalTimeoutPolicy
+              : { ...approvalTimeoutPolicy, action: 'deny' },
             sendEvent,
             signal: turnSignal,
             onHeld: (expiresAt) => {
@@ -2183,7 +2258,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 workspaceId: executionScopeId,
                 eventType: 'approval_held',
                 toolName,
-                input: JSON.stringify(input),
+                input: retainedTurnJson(input),
                 sessionId,
               });
               sendEvent('step', { content: `\u23f8 ${toolName} moved to Approvals inbox`, expiresAt });
@@ -2283,7 +2358,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // accumulated top-k. Persona denylist / read-only rails still apply.
           // Evidence-bounded turns use only built-in, workspace-rooted reads;
           // do not spend retrieval work or expose ambient external metadata.
-          const runningMcpTools = turnMutationPolicy.contextScope === 'default'
+          const runningMcpTools = persistedMemoryReadAllowed
             ? server.agentState.mcpRuntime.getToolsForWorkspace(executionScopeId)
             : [];
           for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
@@ -2312,7 +2387,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // same unknown-external persona rails as MCP, and keep native names
           // first so a plugin cannot shadow a built-in implementation.
           spawnAvailableTools = effectiveTools;
-          let materializedPlugins: ToolDefinition[] = turnMutationPolicy.contextScope === 'default'
+          let materializedPlugins: ToolDefinition[] = persistedMemoryReadAllowed
             ? server.agentState.pluginRuntimeManager.getAllTools()
             : [];
           for (const tool of materializedPlugins) catalogToolNames.add(tool.name);
@@ -2334,7 +2409,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // B1-B7: If this is a rerouted slash command, replace the last user message
         // with the enriched agent prompt so the LLM gets better instructions
-        if (reroutedMessage) {
+        if (reroutedMessage && !turnMutationPolicy.denyConversationHistory) {
           // The original slash command is already persisted to disk at line 724.
           // For the agent loop, swap in the rerouted message so the LLM sees the
           // enhanced prompt (e.g., "Draft the following. Search memory first...")
@@ -2476,6 +2551,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             effectiveTools = effectiveTools.filter(tool => !blockedTools.has(tool.name));
             spawnAvailableTools = spawnAvailableTools.filter(tool => !blockedTools.has(tool.name));
           }
+          effectiveTools = filterToolsByTurnMutationPolicy(
+            effectiveTools,
+            turnMutationPolicy,
+            externalToolNames,
+          );
+          spawnAvailableTools = filterToolsByTurnMutationPolicy(
+            spawnAvailableTools,
+            turnMutationPolicy,
+            externalToolNames,
+          );
           spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
 
           const beforeNarrowing = effectiveTools.length;
@@ -2516,6 +2601,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   externalToolNames,
                 )
               : undefined,
+            allowDerivedPersistence,
             securityContext: {
               hooks: requestHookRegistry,
               blockedTools: governancePolicies?.blockedTools,
@@ -2553,11 +2639,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             recentMessages,
             recentToolNames: previousToolSequence,
             preferredToolNames: activePersona?.tools ?? [],
-            mandatoryToolNames: isExplicitGatedToolRequest(agentMessage)
-              && !turnMutationPolicy.denyAllMutations
-              && !activePersona?.isReadOnly
-              ? ['search_skills', 'create_skill']
-              : [],
+            mandatoryToolNames: [
+              ...(isExplicitMemoryRecallRequest(agentMessage) ? ['search_memory'] : []),
+              ...(isExplicitGatedToolRequest(agentMessage)
+                && !turnMutationPolicy.denyAllMutations
+                && !activePersona?.isReadOnly
+                ? ['search_skills', 'create_skill']
+                : []),
+            ],
             externalToolNames: [...externalToolNames],
             retrievedToolNames: [...retrievedToolNames],
           });
@@ -2652,6 +2741,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               logicalModel,
               activeSessionStateWorkspaceId,
               toolFreeAdvisory,
+              persistedMemoryReadAllowed,
+              allowsConversationHistory(turnMutationPolicy),
             );
             return turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite || toolFreeAdvisory
               ? packagedSystemPrompt
@@ -2669,6 +2760,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Build routing suggestions from the exact executable/serialized set.
         const capabilityRouter = hasCustomRunner
           || toolFreeAdvisory
+          || !persistedMemoryReadAllowed
           || !allowsConversationHistory(turnMutationPolicy)
           ? undefined
           : new CapabilityRouter({
@@ -2764,7 +2856,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             sendEvent('step', { content: stepText });
             sendEvent('tool', { name, input });
             // Waggle Dance: emit tool call signal
-          emitWaggleSignal({ type: 'tool:called', workspaceId: executionScopeId, content: `${name}(${JSON.stringify(input).slice(0, 100)})` });
+          emitWaggleSignal({ type: 'tool:called', workspaceId: executionScopeId, content: `${name}(${retainedTurnJson(input).slice(0, 100)})` });
             // Track start time for duration calculation
             toolStartTimes.set(name + ':' + toolStartCounter++, Date.now());
           // F2: Audit trail — log tool call
@@ -2772,7 +2864,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             workspaceId: executionScopeId,
               eventType: 'tool_call',
               toolName: name,
-              input: JSON.stringify(input),
+              input: retainedTurnJson(input),
               sessionId,
               model: resolvedModel,
             });
@@ -2797,7 +2889,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             workspaceId: executionScopeId,
               eventType: 'tool_result',
               toolName: name,
-              output: result.length > 2000 ? result.slice(0, 2000) + '...[truncated]' : result,
+              output: retainedTurnText(result).length > 2000
+                ? retainedTurnText(result).slice(0, 2000) + '...[truncated]'
+                : retainedTurnText(result),
               sessionId,
             });
 
@@ -2814,7 +2908,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
 
           // TeamSync push — after save_memory in team workspace (fire-and-forget)
-          if (name === 'save_memory' && !result.startsWith('Error')) {
+          if (allowMemoryPersistence && name === 'save_memory' && !result.startsWith('Error')) {
             const pushWsConfig = activeExecutionWorkspaceId
               ? server.workspaceManager?.get(activeExecutionWorkspaceId)
               : undefined;
@@ -2879,7 +2973,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               personaId: activePersonaId,
               workspaceId: effectiveWorkspace ?? null,
               model: resolvedModel,
-              input: message,
+              input: retainedTurnText(message),
             })
           : null;
 
@@ -2895,7 +2989,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...agentConfig,
           ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
-          ...(traceRecorder && traceHandle
+          ...(allowDerivedPersistence && traceRecorder && traceHandle
             ? { traceRecording: { recorder: traceRecorder, handle: traceHandle } }
             : {}),
           // AI-OS Phase 3 — skill diffusion. When the D1 closed
@@ -3121,7 +3215,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           try {
             traceRecorder.finalize(traceHandle, {
               outcome: 'success',
-              output: result.content ?? '',
+              output: retainedTurnText(result.content ?? ''),
               model: activeAttemptModel ?? resolvedModel,
               tokens: {
                 input: result.usage.inputTokens,
@@ -3366,10 +3460,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
         bufferedAgentTokens = [];
 
-        // Add assistant response to history (maintains context for next turn) and persist
+        // Add assistant response to history (maintains context for next turn) and persist.
         const assistantMessage = { role: 'assistant', content: finalContent, model: resolvedModel };
-        history.push(assistantMessage);
-        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, assistantMessage);
+        if (!turnMutationPolicy.denyConversationHistory) {
+          history.push(assistantMessage);
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, assistantMessage);
+        }
 
         // Send the done event with full response + model info + per-message cost
         const messageCost = result.usage
@@ -3479,7 +3575,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             } : undefined,
             costUsd: failureCostUsd,
             ...(!turnSignal.aborted && {
-              correctionFeedback: errMsg.slice(0, 500),
+              correctionFeedback: retainedTurnText(errMsg).slice(0, 500),
             }),
           });
           traceFinalized = true;
@@ -3589,7 +3685,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         try {
           traceRecorder.finalize(traceHandle, {
             outcome: 'abandoned',
-            output: '',
+            output: retainedTurnText(''),
             model: activeAttemptModel ?? undefined,
           });
           traceFinalized = true;
