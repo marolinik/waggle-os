@@ -12,10 +12,14 @@ param(
   [ValidateRange(0.01, 1.00)]
   [decimal]$ClaudeMaxUsd = [decimal]0.05,
 
+  [string]$CodexModel = 'gpt-5.5',
+
   [ValidateSet('openai-codex')]
   [string]$HermesProvider = 'openai-codex',
 
   [string]$HermesModel = 'gpt-5.5',
+
+  [switch]$CodexProofValidatorSelfTest,
 
   [switch]$StaticPreflightOnly,
 
@@ -25,7 +29,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$executionAcknowledgement = 'I_ACKNOWLEDGE_2_OFFICIAL_AUTH_CALLS'
+$executionAcknowledgement = 'I_ACKNOWLEDGE_3_OFFICIAL_AUTH_CALLS'
 $evidenceRoot = [IO.Path]::GetFullPath('C:\tmp\waggle-readiness-evidence')
 $profileEnvironmentNames = @(
   'USERPROFILE',
@@ -56,6 +60,13 @@ $claudeAlternativeAuthNames = @(
   'GOOGLE_API_KEY',
   'GOOGLE_APPLICATION_CREDENTIALS',
   'CLOUDSDK_CONFIG'
+)
+$codexAlternativeAuthNames = @(
+  'OPENAI_API_KEY',
+  'OPENAI_ACCESS_TOKEN',
+  'CODEX_ACCESS_TOKEN',
+  'OPENAI_BASE_URL',
+  'OPENAI_API_BASE'
 )
 $hermesAlternativeAuthNames = @(
   'OPENAI_API_KEY',
@@ -118,6 +129,335 @@ function Resolve-ReceiptLayout([string]$RequestedPath) {
 function Get-Sha256Text([string]$Value) {
   $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
   return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+
+function Assert-JsonBoolean([object]$Value, [bool]$Expected, [string]$Label) {
+  if (-not ($Value -is [bool]) -or $Value -ne $Expected) {
+    throw "$Label must be the JSON boolean $($Expected.ToString().ToLowerInvariant())."
+  }
+}
+
+function Assert-JsonInteger([object]$Value, [long]$Expected, [string]$Label) {
+  if ((-not ($Value -is [int])) -and (-not ($Value -is [long]))) {
+    throw "$Label must be a JSON integer."
+  }
+  if ([long]$Value -ne $Expected) { throw "$Label must equal $Expected." }
+}
+
+function Assert-Sha256([object]$Value, [string]$Label) {
+  if (-not ($Value -is [string]) -or [string]$Value -cnotmatch '^[0-9a-f]{64}$') {
+    throw "$Label must be a lowercase SHA-256 value."
+  }
+}
+
+function Assert-CodexToolDenialProof(
+  [object]$Proof,
+  [string]$ExpectedExecutableSha256,
+  [string]$ExpectedHelperSha256,
+  [string]$ExpectedHead,
+  [string]$ExpectedHiveMindCliSha256,
+  [string]$ExpectedMarkerSha256,
+  [string]$ExpectedPowerShellSha256,
+  [string]$ExpectedSessionIdSha256
+) {
+  Assert-JsonInteger -Value $Proof.schemaVersion -Expected 1 -Label 'Codex proof schemaVersion'
+  if (-not ($Proof.kind -is [string]) -or [string]$Proof.kind -cne 'codex-tool-denial-and-official-auth') {
+    throw 'Codex proof kind is invalid.'
+  }
+  Assert-JsonBoolean -Value $Proof.pass -Expected $true -Label 'Codex proof pass'
+  Assert-JsonInteger -Value $Proof.paidCalls -Expected 1 -Label 'Codex proof paidCalls'
+  Assert-JsonBoolean -Value $Proof.proof.pass -Expected $true -Label 'Codex proof-only pass'
+  Assert-JsonInteger -Value $Proof.proof.paidCalls -Expected 0 -Label 'Codex proof-only paidCalls'
+
+  if (-not ($Proof.source.expectedHead -is [string]) -or [string]$Proof.source.expectedHead -cne $ExpectedHead) {
+    throw 'Codex proof expected HEAD did not match the outer harness.'
+  }
+  if (-not ($Proof.source.observedHead -is [string]) -or [string]$Proof.source.observedHead -cne $ExpectedHead) {
+    throw 'Codex proof observed HEAD did not match the outer harness.'
+  }
+  foreach ($entry in @(
+    [pscustomobject]@{ Value = $Proof.source.tree; Label = 'Codex proof source tree' }
+    [pscustomobject]@{ Value = $Proof.source.scriptBlob; Label = 'Codex proof helper blob' }
+  )) {
+    if (-not ($entry.Value -is [string]) -or [string]$entry.Value -cnotmatch '^[0-9a-f]{40}$') {
+      throw "$($entry.Label) must be a lowercase 40-character Git object id."
+    }
+  }
+  Assert-JsonBoolean -Value $Proof.source.trackedClean -Expected $true -Label 'Codex proof trackedClean'
+  Assert-JsonBoolean -Value $Proof.source.unchanged -Expected $true -Label 'Codex proof source unchanged'
+
+  Assert-Sha256 -Value $Proof.executable.sha256 -Label 'Codex executable hash'
+  if ([string]$Proof.executable.sha256 -cne $ExpectedExecutableSha256) {
+    throw 'Codex executable did not match tool-denial proof.'
+  }
+  Assert-JsonBoolean -Value $Proof.executable.unchanged -Expected $true -Label 'Codex executable unchanged'
+
+  foreach ($entry in @(
+    [pscustomobject]@{ Value = $Proof.modelCatalog.sealedSha256; Label = 'Codex sealed model catalog hash' }
+    [pscustomobject]@{ Value = $Proof.modelCatalog.controlSha256; Label = 'Codex control model catalog hash' }
+    [pscustomobject]@{ Value = $Proof.invocation.argumentsSha256; Label = 'Codex invocation arguments hash' }
+    [pscustomobject]@{ Value = $Proof.invocation.configSha256; Label = 'Codex invocation config hash' }
+    [pscustomobject]@{ Value = $Proof.invocation.threadParamsSha256; Label = 'Codex thread parameters hash' }
+    [pscustomobject]@{ Value = $Proof.invocation.turnParamsSha256; Label = 'Codex turn parameters hash' }
+    [pscustomobject]@{ Value = $Proof.invocation.mcpServerNamesSha256; Label = 'Codex MCP server-name inventory hash' }
+    [pscustomobject]@{ Value = $Proof.hooks.graphSha256; Label = 'Codex hook graph hash' }
+    [pscustomobject]@{ Value = $Proof.hooks.denyHookSha256; Label = 'Codex deny-hook hash' }
+    [pscustomobject]@{ Value = $Proof.hooks.artifactsSha256; Label = 'Codex packaged hook artifact hash' }
+    [pscustomobject]@{ Value = $Proof.hooks.cliSha256; Label = 'Codex hive-mind CLI hash' }
+    [pscustomobject]@{ Value = $Proof.green.denialReasonSha256; Label = 'Codex denial reason hash' }
+    [pscustomobject]@{ Value = $Proof.paidInvocation.argumentsSha256; Label = 'Codex paid invocation hash' }
+    [pscustomobject]@{ Value = $Proof.paidInvocation.modelCatalogSha256; Label = 'Codex paid model catalog hash' }
+    [pscustomobject]@{ Value = $Proof.paidInvocation.hookGraphSha256; Label = 'Codex paid hook graph hash' }
+    [pscustomobject]@{ Value = $Proof.paidInvocation.markerSha256; Label = 'Codex paid marker hash' }
+    [pscustomobject]@{ Value = $Proof.paidInvocation.sessionIdSha256; Label = 'Codex paid session hash' }
+    [pscustomobject]@{ Value = $Proof.paidInvocation.threadParamsSha256; Label = 'Codex paid thread parameters hash' }
+    [pscustomobject]@{ Value = $Proof.paidInvocation.turnParamsSha256; Label = 'Codex paid turn parameters hash' }
+    [pscustomobject]@{ Value = $Proof.mcpBoundary.namesSha256; Label = 'Codex MCP boundary server-name hash' }
+    [pscustomobject]@{ Value = $Proof.mcpBoundary.initialSha256; Label = 'Codex initial MCP boundary hash' }
+    [pscustomobject]@{ Value = $Proof.mcpBoundary.prePaidSha256; Label = 'Codex pre-paid MCP boundary hash' }
+    [pscustomobject]@{ Value = $Proof.mcpBoundary.postPaidSha256; Label = 'Codex post-paid MCP boundary hash' }
+    [pscustomobject]@{ Value = $Proof.mcpBoundary.initialConfigSha256; Label = 'Codex initial config hash' }
+    [pscustomobject]@{ Value = $Proof.mcpBoundary.prePaidConfigSha256; Label = 'Codex pre-paid config hash' }
+    [pscustomobject]@{ Value = $Proof.mcpBoundary.postPaidConfigSha256; Label = 'Codex post-paid config hash' }
+    [pscustomobject]@{ Value = $Proof.artifacts.scriptSha256; Label = 'Codex helper script hash' }
+    [pscustomobject]@{ Value = $Proof.artifacts.windowsPowerShellSha256; Label = 'Codex Windows PowerShell hash' }
+    [pscustomobject]@{ Value = $Proof.artifacts.windowsSystemDirectorySha256; Label = 'Codex Windows system-directory hash' }
+  )) {
+    Assert-Sha256 -Value $entry.Value -Label ([string]$entry.Label)
+  }
+  if ((-not ($Proof.invocation.mcpServerCount -is [int])) -and (-not ($Proof.invocation.mcpServerCount -is [long]))) {
+    throw 'Codex MCP server count must be a JSON integer.'
+  }
+  if ([long]$Proof.invocation.mcpServerCount -lt 0) {
+    throw 'Codex MCP server count must not be negative.'
+  }
+  if ((-not ($Proof.mcpBoundary.count -is [int])) -and (-not ($Proof.mcpBoundary.count -is [long]))) {
+    throw 'Codex MCP boundary count must be a JSON integer.'
+  }
+  if ([long]$Proof.mcpBoundary.count -ne [long]$Proof.invocation.mcpServerCount -or
+    [string]$Proof.mcpBoundary.namesSha256 -cne [string]$Proof.invocation.mcpServerNamesSha256) {
+    throw 'Codex MCP boundary inventory did not match the invocation inventory.'
+  }
+  if ([string]$Proof.mcpBoundary.prePaidSha256 -cne [string]$Proof.mcpBoundary.initialSha256 -or
+    [string]$Proof.mcpBoundary.postPaidSha256 -cne [string]$Proof.mcpBoundary.initialSha256 -or
+    [string]$Proof.mcpBoundary.prePaidConfigSha256 -cne [string]$Proof.mcpBoundary.initialConfigSha256 -or
+    [string]$Proof.mcpBoundary.postPaidConfigSha256 -cne [string]$Proof.mcpBoundary.initialConfigSha256) {
+    throw 'Codex MCP/config boundary changed around the paid turn.'
+  }
+  Assert-JsonBoolean -Value $Proof.mcpBoundary.unchanged -Expected $true -Label 'Codex MCP boundary unchanged'
+
+  Assert-JsonInteger -Value $Proof.hooks.expectedCount -Expected 5 -Label 'Codex hook expectedCount'
+  Assert-JsonInteger -Value $Proof.hooks.extraCount -Expected 0 -Label 'Codex hook extraCount'
+  Assert-JsonInteger -Value $Proof.hooks.warnings -Expected 0 -Label 'Codex hook warnings'
+  Assert-JsonInteger -Value $Proof.hooks.errors -Expected 0 -Label 'Codex hook errors'
+  Assert-JsonBoolean -Value $Proof.hooks.allTrusted -Expected $true -Label 'Codex hooks allTrusted'
+  Assert-JsonBoolean -Value $Proof.hooks.unchangedAfterPin -Expected $true -Label 'Codex hooks unchangedAfterPin'
+  Assert-JsonBoolean -Value $Proof.hooks.artifactsUnchanged -Expected $true -Label 'Codex hook artifacts unchanged'
+  Assert-JsonBoolean -Value $Proof.artifacts.scriptUnchanged -Expected $true -Label 'Codex helper script unchanged'
+  if ([string]$Proof.artifacts.scriptSha256 -cne $ExpectedHelperSha256) {
+    throw 'Codex tool-denial helper did not match the outer harness artifact.'
+  }
+  if ([string]$Proof.hooks.cliSha256 -cne $ExpectedHiveMindCliSha256) {
+    throw 'Codex hive-mind CLI did not match the packaged artifact.'
+  }
+  if ([string]$Proof.artifacts.windowsPowerShellSha256 -cne $ExpectedPowerShellSha256) {
+    throw 'Codex deny-hook PowerShell did not match the OS executable.'
+  }
+
+  Assert-JsonInteger -Value $Proof.sealed.topLevelToolCount -Expected 0 -Label 'Codex sealed topLevelToolCount'
+  Assert-JsonInteger -Value $Proof.sealed.additionalToolCount -Expected 0 -Label 'Codex sealed additionalToolCount'
+  Assert-JsonBoolean -Value $Proof.sealed.emptySchema -Expected $true -Label 'Codex sealed emptySchema'
+  Assert-JsonBoolean -Value $Proof.sealed.normalTextCompleted -Expected $true -Label 'Codex sealed normalTextCompleted'
+
+  $redTools = @($Proof.red.toolNames)
+  if ($redTools.Count -ne 1 -or -not ($redTools[0] -is [string]) -or [string]$redTools[0] -cne 'view_image') {
+    throw 'Codex RED control did not expose exactly view_image.'
+  }
+  Assert-JsonBoolean -Value $Proof.red.readObserved -Expected $true -Label 'Codex RED readObserved'
+  Assert-JsonBoolean -Value $Proof.red.sensitiveDataObserved -Expected $true -Label 'Codex RED sensitiveDataObserved'
+  Assert-JsonBoolean -Value $Proof.green.deniedBeforeRead -Expected $true -Label 'Codex GREEN deniedBeforeRead'
+  Assert-JsonBoolean -Value $Proof.green.sensitiveDataObserved -Expected $false -Label 'Codex GREEN sensitiveDataObserved'
+  Assert-JsonBoolean -Value $Proof.green.normalTextCompleted -Expected $true -Label 'Codex GREEN normalTextCompleted'
+
+  Assert-JsonBoolean -Value $Proof.paidInvocation.attempted -Expected $true -Label 'Codex paid attempted'
+  Assert-JsonBoolean -Value $Proof.paidInvocation.executed -Expected $true -Label 'Codex paid executed'
+  Assert-JsonBoolean -Value $Proof.paidInvocation.normalTextCompleted -Expected $true -Label 'Codex paid normalTextCompleted'
+  Assert-JsonInteger -Value $Proof.paidInvocation.toolEventsObserved -Expected 0 -Label 'Codex paid toolEventsObserved'
+  Assert-JsonInteger -Value $Proof.paidInvocation.unknownEventsObserved -Expected 0 -Label 'Codex paid unknownEventsObserved'
+  if ([string]$Proof.paidInvocation.hookGraphSha256 -cne [string]$Proof.hooks.graphSha256) {
+    throw 'Codex paid hook graph did not match the pinned proof.'
+  }
+  if ([string]$Proof.paidInvocation.modelCatalogSha256 -cne [string]$Proof.modelCatalog.sealedSha256) {
+    throw 'Codex paid model catalog did not match the sealed proof.'
+  }
+  if ([string]$Proof.paidInvocation.threadParamsSha256 -cne [string]$Proof.invocation.threadParamsSha256 -or
+    [string]$Proof.paidInvocation.turnParamsSha256 -cne [string]$Proof.invocation.turnParamsSha256) {
+    throw 'Codex paid turn parameters did not match the sealed proof.'
+  }
+  if ([string]$Proof.paidInvocation.markerSha256 -cne $ExpectedMarkerSha256) {
+    throw 'Codex paid marker hash did not match.'
+  }
+  if ([string]$Proof.paidInvocation.sessionIdSha256 -cne $ExpectedSessionIdSha256) {
+    throw 'Codex paid session identifier hash did not match.'
+  }
+}
+
+function Invoke-CodexProofValidatorSelfTest {
+  $executableHash = 'a' * 64
+  $cliHash = 'b' * 64
+  $powerShellHash = 'c' * 64
+  $markerHash = 'd' * 64
+  $sessionHash = 'e' * 64
+  $graphHash = 'f' * 64
+  $catalogHash = '1' * 64
+  $otherHash = '2' * 64
+  $helperHash = '3' * 64
+  $expectedHead = '0' * 40
+  $gitObject = 'a' * 40
+  $validValue = [ordered]@{
+    schemaVersion = 1
+    kind = 'codex-tool-denial-and-official-auth'
+    pass = $true
+    paidCalls = 1
+    proof = [ordered]@{ pass = $true; paidCalls = 0 }
+    source = [ordered]@{
+      expectedHead = $expectedHead
+      observedHead = $expectedHead
+      tree = $gitObject
+      scriptBlob = $gitObject
+      trackedClean = $true
+      unchanged = $true
+    }
+    executable = [ordered]@{ sha256 = $executableHash; unchanged = $true }
+    modelCatalog = [ordered]@{ sealedSha256 = $catalogHash; controlSha256 = $otherHash }
+    invocation = [ordered]@{
+      argumentsSha256 = $otherHash
+      configSha256 = $otherHash
+      threadParamsSha256 = $otherHash
+      turnParamsSha256 = $otherHash
+      mcpServerCount = 4
+      mcpServerNamesSha256 = $otherHash
+    }
+    hooks = [ordered]@{
+      expectedCount = 5
+      extraCount = 0
+      warnings = 0
+      errors = 0
+      allTrusted = $true
+      unchangedAfterPin = $true
+      artifactsUnchanged = $true
+      graphSha256 = $graphHash
+      denyHookSha256 = $otherHash
+      artifactsSha256 = $otherHash
+      cliSha256 = $cliHash
+    }
+    mcpBoundary = [ordered]@{
+      count = 4
+      namesSha256 = $otherHash
+      initialSha256 = $otherHash
+      prePaidSha256 = $otherHash
+      postPaidSha256 = $otherHash
+      initialConfigSha256 = $otherHash
+      prePaidConfigSha256 = $otherHash
+      postPaidConfigSha256 = $otherHash
+      unchanged = $true
+    }
+    sealed = [ordered]@{
+      topLevelToolCount = 0
+      additionalToolCount = 0
+      emptySchema = $true
+      normalTextCompleted = $true
+    }
+    red = [ordered]@{
+      toolNames = @('view_image')
+      readObserved = $true
+      sensitiveDataObserved = $true
+    }
+    green = [ordered]@{
+      deniedBeforeRead = $true
+      sensitiveDataObserved = $false
+      normalTextCompleted = $true
+      denialReasonSha256 = $otherHash
+    }
+    paidInvocation = [ordered]@{
+      attempted = $true
+      executed = $true
+      normalTextCompleted = $true
+      toolEventsObserved = 0
+      unknownEventsObserved = 0
+      argumentsSha256 = $otherHash
+      modelCatalogSha256 = $catalogHash
+      hookGraphSha256 = $graphHash
+      markerSha256 = $markerHash
+      sessionIdSha256 = $sessionHash
+      threadParamsSha256 = $otherHash
+      turnParamsSha256 = $otherHash
+    }
+    artifacts = [ordered]@{
+      scriptSha256 = $helperHash
+      scriptUnchanged = $true
+      windowsPowerShellSha256 = $powerShellHash
+      windowsSystemDirectorySha256 = $otherHash
+    }
+  }
+  $copy = {
+    param($Value)
+    return ($Value | ConvertTo-Json -Depth 50 | ConvertFrom-Json -Depth 50)
+  }
+  $validate = {
+    param($Value)
+    Assert-CodexToolDenialProof -Proof $Value `
+      -ExpectedExecutableSha256 $executableHash `
+      -ExpectedHelperSha256 $helperHash `
+      -ExpectedHead $expectedHead `
+      -ExpectedHiveMindCliSha256 $cliHash `
+      -ExpectedMarkerSha256 $markerHash `
+      -ExpectedPowerShellSha256 $powerShellHash `
+      -ExpectedSessionIdSha256 $sessionHash
+  }
+  $valid = & $copy $validValue
+  & $validate $valid
+  $cases = 1
+  $reject = {
+    param($Fixture, [string]$Label)
+    $accepted = $true
+    try { & $validate $Fixture } catch { $accepted = $false }
+    if ($accepted) { throw "Codex proof validator accepted invalid fixture: $Label" }
+    $script:codexProofSelfTestCases += 1
+  }
+  $script:codexProofSelfTestCases = $cases
+
+  $fixture = & $copy $validValue; $fixture.kind = 'wrong'; & $reject $fixture 'kind'
+  $fixture = & $copy $validValue; $fixture.schemaVersion = '1'; & $reject $fixture 'string schemaVersion'
+  $fixture = & $copy $validValue; $fixture.pass = 1; & $reject $fixture 'numeric pass'
+  $fixture = & $copy $validValue; $fixture.paidCalls = '1'; & $reject $fixture 'string paidCalls'
+  $fixture = & $copy $validValue; $fixture.invocation.mcpServerCount = '4'; & $reject $fixture 'string MCP server count'
+  $fixture = & $copy $validValue; $fixture.invocation.mcpServerNamesSha256 = 'bad'; & $reject $fixture 'MCP server inventory hash'
+  $fixture = & $copy $validValue; $fixture.hooks.extraCount = 1; & $reject $fixture 'extra hook'
+  $fixture = & $copy $validValue; $fixture.hooks.warnings = 1; & $reject $fixture 'hook warning'
+  $fixture = & $copy $validValue; $fixture.hooks.allTrusted = 1; & $reject $fixture 'numeric hook trust'
+  $fixture = & $copy $validValue; $fixture.sealed.topLevelToolCount = 1; & $reject $fixture 'non-empty tools'
+  $fixture = & $copy $validValue; $fixture.green.sensitiveDataObserved = $true; & $reject $fixture 'GREEN data leak'
+  $fixture = & $copy $validValue; $fixture.paidInvocation.toolEventsObserved = 1; & $reject $fixture 'paid tool event'
+  $fixture = & $copy $validValue; $fixture.paidInvocation.unknownEventsObserved = 1; & $reject $fixture 'unknown event'
+  $fixture = & $copy $validValue; $fixture.executable.sha256 = $otherHash; & $reject $fixture 'executable mismatch'
+  $fixture = & $copy $validValue; $fixture.hooks.cliSha256 = $otherHash; & $reject $fixture 'CLI mismatch'
+  $fixture = & $copy $validValue; $fixture.artifacts.windowsPowerShellSha256 = $otherHash; & $reject $fixture 'PowerShell mismatch'
+  $fixture = & $copy $validValue; $fixture.paidInvocation.modelCatalogSha256 = $otherHash; & $reject $fixture 'catalog mismatch'
+  $fixture = & $copy $validValue; $fixture.paidInvocation.hookGraphSha256 = $otherHash; & $reject $fixture 'graph mismatch'
+  $fixture = & $copy $validValue; $fixture.paidInvocation.markerSha256 = $otherHash; & $reject $fixture 'marker mismatch'
+  $fixture = & $copy $validValue; $fixture.paidInvocation.sessionIdSha256 = $otherHash; & $reject $fixture 'session mismatch'
+  $fixture = & $copy $validValue; $fixture.source.expectedHead = 'f' * 40; & $reject $fixture 'source HEAD mismatch'
+  $fixture = & $copy $validValue; $fixture.artifacts.scriptSha256 = $otherHash; & $reject $fixture 'helper hash mismatch'
+  $fixture = & $copy $validValue; $fixture.hooks.artifactsUnchanged = $false; & $reject $fixture 'hook artifact drift'
+  $fixture = & $copy $validValue; $fixture.paidInvocation.threadParamsSha256 = $graphHash; & $reject $fixture 'paid thread mismatch'
+  $fixture = & $copy $validValue; $fixture.mcpBoundary.prePaidSha256 = $graphHash; & $reject $fixture 'pre-paid MCP drift'
+
+  return [pscustomobject]@{
+    pass = $true
+    paidCalls = 0
+    cases = $script:codexProofSelfTestCases
+  }
 }
 
 function Get-Utf8ByteCount([string]$Value) {
@@ -411,6 +751,10 @@ try {
 
 if ($env:OS -ne 'Windows_NT') { throw 'Official-auth canaries are Windows-only.' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Official-auth canaries require PowerShell 7 or newer.' }
+if ($CodexProofValidatorSelfTest) {
+  Invoke-CodexProofValidatorSelfTest | ConvertTo-Json -Compress
+  return
+}
 if ([bool]$StaticPreflightOnly -eq [bool]$Execute) {
   throw 'Choose exactly one mode: -StaticPreflightOnly or -Execute.'
 }
@@ -418,6 +762,7 @@ if ($Execute -and $PaidRunAck -cne $executionAcknowledgement) {
   throw "-Execute requires -PaidRunAck $executionAcknowledgement."
 }
 Assert-PlainIdentifier -Value $ClaudeModel -Name 'ClaudeModel'
+Assert-PlainIdentifier -Value $CodexModel -Name 'CodexModel'
 Assert-PlainIdentifier -Value $HermesProvider -Name 'HermesProvider'
 Assert-PlainIdentifier -Value $HermesModel -Name 'HermesModel'
 
@@ -427,14 +772,25 @@ $initialGit = Get-GitState -RepositoryRoot $repoRoot
 Assert-ExpectedGitState -State $initialGit
 $scriptProvenance = Get-ScriptProvenance -RepositoryRoot $repoRoot -ScriptPath $PSCommandPath
 $claudeExe = Resolve-Application -Name 'claude'
+$codexExe = Resolve-Application -Name 'codex.exe'
 $hermesExe = Resolve-Application -Name 'hermes'
 $nodeExe = Resolve-Application -Name 'node'
+$windowsPowerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+$null = Get-RegularFileHash -Path $windowsPowerShell -Label 'OS Windows PowerShell'
 $scriptSha256 = Get-RegularFileHash -Path $PSCommandPath -Label 'official-auth canary script'
+$codexExecutableSha256 = Get-RegularFileHash -Path $codexExe -Label 'Codex executable'
 $artifactPaths = [ordered]@{
   claudeInstaller = Join-Path $repoRoot 'packages\hive-mind-hooks-claude-code\dist\bin\claude-code-hooks-cli.js'
   claudeSessionStart = Join-Path $repoRoot 'packages\hive-mind-hooks-claude-code\dist\hooks\session-start.js'
   claudeUserPromptSubmit = Join-Path $repoRoot 'packages\hive-mind-hooks-claude-code\dist\hooks\user-prompt-submit.js'
   claudeStop = Join-Path $repoRoot 'packages\hive-mind-hooks-claude-code\dist\hooks\stop.js'
+  codexInstaller = Join-Path $repoRoot 'packages\hive-mind-hooks-codex\dist\bin\codex-hooks.js'
+  codexSessionStart = Join-Path $repoRoot 'packages\hive-mind-hooks-codex\dist\hooks\session-start.js'
+  codexUserPromptSubmit = Join-Path $repoRoot 'packages\hive-mind-hooks-codex\dist\hooks\user-prompt-submit.js'
+  codexStop = Join-Path $repoRoot 'packages\hive-mind-hooks-codex\dist\hooks\stop.js'
+  codexPreCompact = Join-Path $repoRoot 'packages\hive-mind-hooks-codex\dist\hooks\pre-compact.js'
+  codexToolDenial = Join-Path $repoRoot 'scripts\verify-codex-tool-denial.mjs'
+  hiveMindCli = Join-Path $repoRoot 'packages\hive-mind-cli\dist\index.js'
   hermesInstaller = Join-Path $repoRoot 'packages\hive-mind-hooks-hermes\dist\bin\hermes-hooks.js'
   hermesSessionStart = Join-Path $repoRoot 'packages\hive-mind-hooks-hermes\dist\hooks\session-start.js'
   hermesUserPromptSubmit = Join-Path $repoRoot 'packages\hive-mind-hooks-hermes\dist\hooks\user-prompt-submit.js'
@@ -445,6 +801,7 @@ $artifactHashes = [ordered]@{}
 foreach ($entry in $artifactPaths.GetEnumerator()) {
   $artifactHashes[$entry.Key] = Get-RegularFileHash -Path $entry.Value -Label $entry.Key
 }
+$codexHelperProvenance = Get-ScriptProvenance -RepositoryRoot $repoRoot -ScriptPath $artifactPaths.codexToolDenial
 
 if ($StaticPreflightOnly) {
   [pscustomobject]@{
@@ -456,13 +813,17 @@ if ($StaticPreflightOnly) {
       trackedClean = $initialGit.TrackedClean
       scriptSha256 = $scriptSha256
       scriptBlob = $scriptProvenance.Blob
+      codexHelperSha256 = $artifactHashes.codexToolDenial
+      codexHelperBlob = $codexHelperProvenance.Blob
     }
     receipt = [ordered]@{ freshAllowedPath = $true; created = $false }
     clients = [ordered]@{
       claudeResolved = $true
+      codexResolved = $true
       hermesResolved = $true
       nodeResolved = $true
       claudeExecutableSha256 = Get-RegularFileHash -Path $claudeExe -Label 'Claude executable'
+      codexExecutableSha256 = $codexExecutableSha256
       hermesExecutableSha256 = Get-RegularFileHash -Path $hermesExe -Label 'Hermes executable'
     }
     artifacts = $artifactHashes
@@ -484,16 +845,20 @@ try {
   $null = [IO.Directory]::CreateDirectory($tempRoot)
   $tempOwned = $true
   $claudeWorkspace = Join-Path $tempRoot 'claude-workspace'
+  $codexWorkspace = Join-Path $tempRoot 'codex-workspace'
   $hermesWorkspace = Join-Path $tempRoot 'hermes-workspace'
   $mindRoot = Join-Path $tempRoot 'mind'
   $processTemp = Join-Path $tempRoot 'process-temp'
   $null = [IO.Directory]::CreateDirectory($claudeWorkspace)
+  $null = [IO.Directory]::CreateDirectory($codexWorkspace)
   $null = [IO.Directory]::CreateDirectory($hermesWorkspace)
   $null = [IO.Directory]::CreateDirectory($mindRoot)
   $null = [IO.Directory]::CreateDirectory($processTemp)
   $claudeWorkspaceId = "official-auth-claude-$([guid]::NewGuid().ToString('N'))"
+  $codexWorkspaceId = "official-auth-codex-$([guid]::NewGuid().ToString('N'))"
   $hermesWorkspaceId = "official-auth-hermes-$([guid]::NewGuid().ToString('N'))"
   $claudeMindPath = Initialize-IsolatedMindWorkspace -MindRoot $mindRoot -WorkspaceId $claudeWorkspaceId
+  $codexMindPath = Initialize-IsolatedMindWorkspace -MindRoot $mindRoot -WorkspaceId $codexWorkspaceId
   $hermesMindPath = Initialize-IsolatedMindWorkspace -MindRoot $mindRoot -WorkspaceId $hermesWorkspaceId
   $commonEnvironment = @{
     HIVE_MIND_DATA_DIR = $mindRoot
@@ -506,6 +871,8 @@ try {
   }
   $claudeEnvironment = $commonEnvironment.Clone()
   $claudeEnvironment.WAGGLE_WORKSPACE_ID = $claudeWorkspaceId
+  $codexEnvironment = $commonEnvironment.Clone()
+  $codexEnvironment.WAGGLE_WORKSPACE_ID = $codexWorkspaceId
   $hermesEnvironment = $commonEnvironment.Clone()
   $hermesEnvironment.WAGGLE_WORKSPACE_ID = $hermesWorkspaceId
 
@@ -516,6 +883,16 @@ try {
   $claudeVersion = ($claudeVersionRaw.Stdout -split '\r?\n' | Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
   if ($claudeVersion -notmatch '^2\.') { throw 'Claude version preflight returned an unexpected version.' }
 
+  $codexVersionRaw = Invoke-CapturedProcess -FilePath $codexExe -ArgumentList @('--version') `
+    -WorkingDirectory $codexWorkspace -EnvironmentOverrides $codexEnvironment `
+    -BlankEnvironmentNames $codexAlternativeAuthNames -TimeoutSeconds 30
+  Assert-ProcessPassed -Result $codexVersionRaw -Label 'Codex version preflight'
+  $codexVersion = (($codexVersionRaw.Stdout + "`n" + $codexVersionRaw.Stderr) -split '\r?\n' |
+    Where-Object { $_.Trim() } | Select-Object -First 1).Trim()
+  if ($codexVersion -notmatch '^codex(?:-cli)?\s') {
+    throw 'Codex version preflight returned an unexpected version.'
+  }
+
   $hermesVersionRaw = Invoke-CapturedProcess -FilePath $hermesExe -ArgumentList @('--version') `
     -WorkingDirectory $hermesWorkspace -EnvironmentOverrides $hermesEnvironment `
     -BlankEnvironmentNames $hermesAlternativeAuthNames -TimeoutSeconds 30
@@ -523,7 +900,10 @@ try {
   $hermesVersion = ($hermesVersionRaw.Stdout -split '\r?\n' | Where-Object { $_ -match '^Hermes Agent v' } | Select-Object -First 1).Trim()
   if ([string]::IsNullOrWhiteSpace($hermesVersion)) { throw 'Hermes version preflight returned an unexpected version.' }
 
-  $hookBlankNames = @($claudeAlternativeAuthNames + $hermesAlternativeAuthNames | Select-Object -Unique)
+  $hookBlankNames = @(
+    $claudeAlternativeAuthNames + $codexAlternativeAuthNames + $hermesAlternativeAuthNames |
+    Select-Object -Unique
+  )
   $claudeHookVerify = Invoke-CapturedProcess -FilePath $nodeExe `
     -ArgumentList @($artifactPaths.claudeInstaller, 'verify') -WorkingDirectory $repoRoot `
     -EnvironmentOverrides $commonEnvironment -BlankEnvironmentNames $hookBlankNames -TimeoutSeconds 60
@@ -531,6 +911,15 @@ try {
   $claudeHookPasses = [regex]::Matches($claudeHookVerify.Stdout, '(?m)^\s*\[PASS\]').Count
   if ($claudeHookPasses -lt 11 -or $claudeHookVerify.Stdout -notmatch 'All checks passed\.') {
     throw 'Claude hook verification did not satisfy the 11-check contract.'
+  }
+
+  $codexHookVerify = Invoke-CapturedProcess -FilePath $nodeExe `
+    -ArgumentList @($artifactPaths.codexInstaller, 'verify') -WorkingDirectory $repoRoot `
+    -EnvironmentOverrides $commonEnvironment -BlankEnvironmentNames $hookBlankNames -TimeoutSeconds 60
+  Assert-ProcessPassed -Result $codexHookVerify -Label 'Codex hook verification'
+  $codexHookPasses = [regex]::Matches($codexHookVerify.Stdout, '(?m)^\s*\[PASS\]').Count
+  if ($codexHookPasses -lt 9 -or $codexHookVerify.Stdout -notmatch 'All checks passed\.') {
+    throw 'Codex hook verification did not satisfy the 9-check contract.'
   }
 
   $hermesHookVerify = Invoke-CapturedProcess -FilePath $nodeExe `
@@ -552,6 +941,15 @@ try {
   if ($claudeAuthJson.loggedIn -ne $true -or $claudeAuthJson.authMethod -cne 'claude.ai' -or
     $claudeAuthJson.apiProvider -cne 'firstParty') {
     throw 'Claude is not authenticated through the required first-party claude.ai client session.'
+  }
+
+  $codexAuthRaw = Invoke-CapturedProcess -FilePath $codexExe -ArgumentList @('login', 'status') `
+    -WorkingDirectory $codexWorkspace -EnvironmentOverrides $codexEnvironment `
+    -BlankEnvironmentNames $codexAlternativeAuthNames -TimeoutSeconds 30
+  Assert-ProcessPassed -Result $codexAuthRaw -Label 'Codex official-auth preflight'
+  $codexAuthText = "$($codexAuthRaw.Stdout)`n$($codexAuthRaw.Stderr)"
+  if ($codexAuthText -notmatch '(?m)^\s*Logged in using ChatGPT\s*$') {
+    throw 'Codex is not authenticated through the required first-party ChatGPT client session.'
   }
 
   $hermesAuthRaw = Invoke-CapturedProcess -FilePath $hermesExe `
@@ -615,6 +1013,62 @@ try {
     -WorkingDirectory $repoRoot -EnvironmentOverrides $claudeEnvironment `
     -BlankEnvironmentNames $hookBlankNames
 
+  $codexMarker = "WAGGLE_CODEX_OFFICIAL_AUTH_$([Security.Cryptography.RandomNumberGenerator]::GetHexString(24).ToLowerInvariant())"
+  $codexProofDir = Join-Path $tempRoot 'codex-tool-denial'
+  $codexRaw = Invoke-CapturedProcess -FilePath $nodeExe -ArgumentList @(
+    $artifactPaths.codexToolDenial,
+    '--codex-exe', $codexExe,
+    '--hive-mind-cli', $artifactPaths.hiveMindCli,
+    '--receipt-dir', $codexProofDir,
+    '--expected-head', $ExpectedHead,
+    '--model', $CodexModel,
+    '--windows-powershell', $windowsPowerShell,
+    '--workspace', $codexWorkspace,
+    '--execute-paid',
+    '--marker', $codexMarker,
+    '--ack', 'I_ACKNOWLEDGE_1_CODEX_OFFICIAL_AUTH_CALL'
+  ) -WorkingDirectory $codexWorkspace -EnvironmentOverrides $codexEnvironment `
+    -BlankEnvironmentNames $codexAlternativeAuthNames -TimeoutSeconds 300
+  Assert-ProcessPassed -Result $codexRaw -Label 'Codex zero-cost tool-denial proof and official-auth canary'
+  try { $codexSummary = $codexRaw.Stdout | ConvertFrom-Json -Depth 30 } catch {
+    throw 'Codex zero-cost tool-denial proof did not return valid JSON.'
+  }
+  Assert-JsonBoolean -Value $codexSummary.pass -Expected $true -Label 'Codex summary pass'
+  Assert-JsonInteger -Value $codexSummary.paidCalls -Expected 1 -Label 'Codex summary paidCalls'
+  Assert-JsonBoolean -Value $codexSummary.markerMatched -Expected $true -Label 'Codex summary markerMatched'
+  Assert-Sha256 -Value $codexSummary.reportSha256 -Label 'Codex summary report hash'
+  if (-not ($codexSummary.reportPath -is [string])) { throw 'Codex summary reportPath must be a string.' }
+  if (-not ($codexSummary.sessionId -is [string])) { throw 'Codex summary sessionId must be a string.' }
+  $codexSessionId = [string]$codexSummary.sessionId
+  Assert-PlainIdentifier -Value $codexSessionId -Name 'Codex sessionId'
+  $expectedCodexReportPath = [IO.Path]::GetFullPath((Join-Path $codexProofDir 'report.json'))
+  $codexReportPath = [IO.Path]::GetFullPath([string]$codexSummary.reportPath)
+  if ($codexReportPath -cne $expectedCodexReportPath -or
+    -not (Test-Path -LiteralPath $codexReportPath -PathType Leaf)) {
+    throw 'Codex proof report path was missing or escaped the owned directory.'
+  }
+  $codexReportSha256 = Get-RegularFileHash -Path $codexReportPath -Label 'Codex tool-denial proof report'
+  if ($codexReportSha256 -cne [string]$codexSummary.reportSha256) {
+    throw 'Codex proof report hash did not match the process summary.'
+  }
+  $codexReportBytes = [IO.File]::ReadAllBytes($codexReportPath)
+  try { $codexDenialProof = [Text.Encoding]::UTF8.GetString($codexReportBytes) | ConvertFrom-Json -Depth 50 } catch {
+    throw 'Codex tool-denial proof report was not valid JSON.'
+  }
+  Assert-CodexToolDenialProof -Proof $codexDenialProof `
+    -ExpectedExecutableSha256 $codexExecutableSha256 `
+    -ExpectedHelperSha256 $artifactHashes.codexToolDenial `
+    -ExpectedHead $ExpectedHead `
+    -ExpectedHiveMindCliSha256 $artifactHashes.hiveMindCli `
+    -ExpectedMarkerSha256 (Get-Sha256Text $codexMarker) `
+    -ExpectedPowerShellSha256 (Get-RegularFileHash -Path $windowsPowerShell -Label 'OS Windows PowerShell') `
+    -ExpectedSessionIdSha256 (Get-Sha256Text $codexSessionId)
+  $codexCapture = Get-MarkerCaptureEvidence -NodeExe $nodeExe `
+    -BetterSqliteEntry $artifactPaths.betterSqlite3Entry -MindPath $codexMindPath `
+    -Marker $codexMarker -Source 'codex' -SessionId $codexSessionId `
+    -WorkingDirectory $repoRoot -EnvironmentOverrides $codexEnvironment `
+    -BlankEnvironmentNames $hookBlankNames
+
   $hermesMarker = "WAGGLE_HERMES_OFFICIAL_AUTH_$([Security.Cryptography.RandomNumberGenerator]::GetHexString(24).ToLowerInvariant())"
   $hermesPrompt = "Return exactly $hermesMarker and nothing else. Do not call tools."
   $hermesUsagePath = Join-Path $tempRoot 'hermes-usage.json'
@@ -660,6 +1114,16 @@ try {
   if ($finalScriptProvenance.Blob -cne $scriptProvenance.Blob) {
     throw 'Official-auth canary script provenance changed during execution.'
   }
+  $finalCodexHelperProvenance = Get-ScriptProvenance -RepositoryRoot $repoRoot -ScriptPath $artifactPaths.codexToolDenial
+  if ($finalCodexHelperProvenance.Blob -cne $codexHelperProvenance.Blob) {
+    throw 'Codex tool-denial helper provenance changed during execution.'
+  }
+  foreach ($entry in $artifactPaths.GetEnumerator()) {
+    $finalArtifactHash = Get-RegularFileHash -Path $entry.Value -Label $entry.Key
+    if ($finalArtifactHash -cne [string]$artifactHashes[$entry.Key]) {
+      throw "$($entry.Key) changed during official-auth canaries."
+    }
+  }
 
   Remove-OwnedDirectory -Path $tempRoot -RequiredParent $tempParent
   $tempOwned = $false
@@ -682,11 +1146,13 @@ try {
       unchangedDuringRun = $finalGit.Head -ceq $initialGit.Head -and $finalGit.Tree -ceq $initialGit.Tree
       scriptSha256 = $scriptSha256
       scriptBlob = $scriptProvenance.Blob
+      codexHelperSha256 = $artifactHashes.codexToolDenial
+      codexHelperBlob = $codexHelperProvenance.Blob
     }
     execution = [ordered]@{
       serialLanes = $true
-      modelCalls = 2
-      authStatusCalls = 2
+      modelCalls = 3
+      authStatusCalls = 3
       freshTemporaryWorkspace = $true
       distinctIsolatedMindWorkspaces = $true
       captureInspectionReadOnly = $true
@@ -703,6 +1169,7 @@ try {
       profileEnvironmentPreserved = $true
       ambientApiTokenEnvironmentNamesBlankedByPattern = $true
       claudeAlternativeEnvironmentNamesBlanked = @($claudeAlternativeAuthNames)
+      codexAlternativeEnvironmentNamesBlanked = @($codexAlternativeAuthNames)
       hermesAlternativeEnvironmentNamesBlanked = @($hermesAlternativeAuthNames)
     }
     clients = [ordered]@{
@@ -739,6 +1206,88 @@ try {
         stdoutSha256 = $claudeRaw.StdoutSha256
         stderrBytes = $claudeRaw.StderrBytes
         stderrSha256 = $claudeRaw.StderrSha256
+      }
+      codex = [ordered]@{
+        version = $codexVersion
+        executableSha256 = $codexExecutableSha256
+        auth = [ordered]@{
+          loggedIn = $true
+          method = 'chatgpt'
+          stdoutBytes = $codexAuthRaw.StdoutBytes
+          stdoutSha256 = $codexAuthRaw.StdoutSha256
+          stderrBytes = $codexAuthRaw.StderrBytes
+          stderrSha256 = $codexAuthRaw.StderrSha256
+        }
+        model = $CodexModel
+        exitCode = $codexRaw.ExitCode
+        durationMs = $codexRaw.DurationMs
+        markerSha256 = Get-Sha256Text $codexMarker
+        markerMatched = $true
+        sessionIdSha256 = Get-Sha256Text $codexSessionId
+        containment = [ordered]@{
+          oneShot = $true
+          timeoutSeconds = 300
+          exactMarkerRequired = $true
+          harnessProcessInvocationsRequired = 1
+          paidModelCallsRequired = 1
+          usageReceiptRequired = $false
+          preCallCostCapAvailable = $false
+          emptyToolSchemaRequired = $true
+          wildcardPreToolUseBackstopRequired = $true
+          threadEnvironmentsEmpty = $true
+          turnEnvironmentsEmpty = $true
+          dynamicToolsEmpty = $true
+          selectedCapabilityRootsEmpty = $true
+        }
+        toolDenialProof = [ordered]@{
+          schemaVersion = [int]$codexDenialProof.schemaVersion
+          proofPaidCalls = [int]$codexDenialProof.proof.paidCalls
+          reportSha256 = $codexReportSha256
+          executableSha256 = [string]$codexDenialProof.executable.sha256
+          modelCatalogSha256 = [string]$codexDenialProof.paidInvocation.modelCatalogSha256
+          invocationArgumentsSha256 = [string]$codexDenialProof.invocation.argumentsSha256
+          configSha256 = [string]$codexDenialProof.invocation.configSha256
+          threadParamsSha256 = [string]$codexDenialProof.invocation.threadParamsSha256
+          turnParamsSha256 = [string]$codexDenialProof.invocation.turnParamsSha256
+          paidThreadParamsSha256 = [string]$codexDenialProof.paidInvocation.threadParamsSha256
+          paidTurnParamsSha256 = [string]$codexDenialProof.paidInvocation.turnParamsSha256
+          mcpServerCount = [int]$codexDenialProof.invocation.mcpServerCount
+          mcpServerNamesSha256 = [string]$codexDenialProof.invocation.mcpServerNamesSha256
+          mcpBoundarySha256 = [string]$codexDenialProof.mcpBoundary.postPaidSha256
+          mcpConfigSha256 = [string]$codexDenialProof.mcpBoundary.postPaidConfigSha256
+          hookGraphSha256 = [string]$codexDenialProof.hooks.graphSha256
+          denyHookSha256 = [string]$codexDenialProof.hooks.denyHookSha256
+          packagedHookArtifactsSha256 = [string]$codexDenialProof.hooks.artifactsSha256
+          hiveMindCliSha256 = [string]$codexDenialProof.hooks.cliSha256
+          windowsPowerShellSha256 = [string]$codexDenialProof.artifacts.windowsPowerShellSha256
+          windowsSystemDirectorySha256 = [string]$codexDenialProof.artifacts.windowsSystemDirectorySha256
+          exactHookCount = [int]$codexDenialProof.hooks.expectedCount
+          extraHookCount = [int]$codexDenialProof.hooks.extraCount
+          allHooksTrusted = [bool]$codexDenialProof.hooks.allTrusted
+          hookGraphUnchanged = [bool]$codexDenialProof.hooks.unchangedAfterPin
+          packagedArtifactsUnchanged = [bool]$codexDenialProof.hooks.artifactsUnchanged
+          helperScriptSha256 = [string]$codexDenialProof.artifacts.scriptSha256
+          helperScriptBlob = [string]$codexDenialProof.source.scriptBlob
+          helperScriptUnchanged = [bool]$codexDenialProof.artifacts.scriptUnchanged
+          emptySchema = [bool]$codexDenialProof.sealed.emptySchema
+          guardedToolDeniedBeforeExecution = [bool]$codexDenialProof.green.deniedBeforeRead
+          sensitiveDataObservedAfterDenial = [bool]$codexDenialProof.green.sensitiveDataObserved
+          normalTextSucceeded = [bool]$codexDenialProof.green.normalTextCompleted
+          toolEventsObserved = [int]$codexDenialProof.paidInvocation.toolEventsObserved
+          unknownEventsObserved = [int]$codexDenialProof.paidInvocation.unknownEventsObserved
+        }
+        capture = [ordered]@{
+          markerFrames = $codexCapture.MarkerFrames
+          promptFrames = $codexCapture.PromptFrames
+          responseFrames = $codexCapture.ResponseFrames
+          promptContentSha256 = $codexCapture.PromptContentSha256
+          responseContentSha256 = $codexCapture.ResponseContentSha256
+          mindSha256 = $codexCapture.MindSha256
+        }
+        stdoutBytes = $codexRaw.StdoutBytes
+        stdoutSha256 = $codexRaw.StdoutSha256
+        stderrBytes = $codexRaw.StderrBytes
+        stderrSha256 = $codexRaw.StderrSha256
       }
       hermes = [ordered]@{
         version = $hermesVersion
@@ -797,6 +1346,12 @@ try {
         minimumChecks = 11
         stdoutSha256 = $claudeHookVerify.StdoutSha256
         stderrSha256 = $claudeHookVerify.StderrSha256
+      }
+      codex = [ordered]@{
+        passedChecks = $codexHookPasses
+        minimumChecks = 9
+        stdoutSha256 = $codexHookVerify.StdoutSha256
+        stderrSha256 = $codexHookVerify.StderrSha256
       }
       hermes = [ordered]@{
         passedChecks = $hermesHookPasses

@@ -4401,6 +4401,220 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(liveSpec).not.toContain('result: run.result');
   });
 
+  it('pins standalone Codex in the no-copy official-auth canary contract', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'test-windows-official-auth-canaries.ps1'),
+      'utf-8',
+    ).replace(/\r\n/g, '\n');
+    const denialProof = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'verify-codex-tool-denial.mjs'),
+      'utf-8',
+    ).replace(/\r\n/g, '\n');
+
+    expect(script).toContain("[string]$CodexModel = 'gpt-5.5'");
+    expect(script).toContain("$executionAcknowledgement = 'I_ACKNOWLEDGE_3_OFFICIAL_AUTH_CALLS'");
+    expect(script).toContain("$codexExe = Resolve-Application -Name 'codex.exe'");
+    expect(script).toContain('codexResolved = $true');
+    expect(script).toContain("codexInstaller = Join-Path $repoRoot 'packages\\hive-mind-hooks-codex\\dist\\bin\\codex-hooks.js'");
+    expect(script).toContain("codexSessionStart = Join-Path $repoRoot 'packages\\hive-mind-hooks-codex\\dist\\hooks\\session-start.js'");
+    expect(script).toContain("codexUserPromptSubmit = Join-Path $repoRoot 'packages\\hive-mind-hooks-codex\\dist\\hooks\\user-prompt-submit.js'");
+    expect(script).toContain("codexStop = Join-Path $repoRoot 'packages\\hive-mind-hooks-codex\\dist\\hooks\\stop.js'");
+    expect(script).toContain("codexPreCompact = Join-Path $repoRoot 'packages\\hive-mind-hooks-codex\\dist\\hooks\\pre-compact.js'");
+    expect(script).toContain("codexToolDenial = Join-Path $repoRoot 'scripts\\verify-codex-tool-denial.mjs'");
+
+    expect(script).toContain("-ArgumentList @($artifactPaths.codexInstaller, 'verify')");
+    expect(script).toContain('$codexHookPasses -lt 9');
+    expect(script).toContain('Codex hook verification did not satisfy the 9-check contract.');
+
+    expect(script).toContain("-ArgumentList @('login', 'status')");
+    expect(script).toContain('Logged in using ChatGPT');
+    expect(script).toContain(
+      'Codex is not authenticated through the required first-party ChatGPT client session.',
+    );
+
+    expect(script).toContain("'--codex-exe', $codexExe");
+    expect(script).toContain("'--hive-mind-cli', $artifactPaths.hiveMindCli");
+    expect(script).toContain("'--receipt-dir', $codexProofDir");
+    expect(script).toContain("'--expected-head', $ExpectedHead");
+    expect(script).toContain("'--model', $CodexModel");
+    expect(script).toContain("'--windows-powershell', $windowsPowerShell");
+    expect(script).toContain("'--workspace', $codexWorkspace");
+    expect(script).toContain("'--execute-paid'");
+    expect(script).toContain("'--marker', $codexMarker");
+    expect(script).toContain("'--ack', 'I_ACKNOWLEDGE_1_CODEX_OFFICIAL_AUTH_CALL'");
+    expect(script).toContain('Codex zero-cost tool-denial proof and official-auth canary');
+    expect(script).toContain('function Assert-JsonBoolean');
+    expect(script).toContain('function Assert-JsonInteger');
+    expect(script).toContain('function Assert-CodexToolDenialProof');
+    expect(script).toContain('Assert-CodexToolDenialProof -Proof $codexDenialProof');
+    expect(script).toContain('Invoke-CodexProofValidatorSelfTest');
+    expect(script).toContain("$fixture.schemaVersion = '1'");
+    expect(script).toContain('$fixture.pass = 1');
+    expect(script).toContain('$fixture.hooks.extraCount = 1');
+    expect(script).toContain('$fixture.green.sensitiveDataObserved = $true');
+    expect(script).toContain('$fixture.paidInvocation.toolEventsObserved = 1');
+    expect(script).toContain("-Marker $codexMarker -Source 'codex' -SessionId $codexSessionId");
+
+    expect(script).toContain('modelCalls = 3');
+    expect(script).toContain('authStatusCalls = 3');
+    expect(script).toContain('authFilesReadByHarness = 0');
+    expect(script).toContain('authFilesCopied = 0');
+    expect(script).toContain('authContentsSerialized = $false');
+    expect(script).toContain(
+      'codexAlternativeEnvironmentNamesBlanked = @($codexAlternativeAuthNames)',
+    );
+    expect(script).toContain('method = \'chatgpt\'');
+    expect(script).toContain('paidModelCallsRequired = 1');
+    expect(script).toContain('usageReceiptRequired = $false');
+    expect(script).toContain('preCallCostCapAvailable = $false');
+    expect(script).toContain('markerSha256 = Get-Sha256Text $codexMarker');
+    expect(script).toContain('sessionIdSha256 = Get-Sha256Text $codexSessionId');
+    expect(script).toContain('stdoutBytes = $codexRaw.StdoutBytes');
+    expect(script).toContain('stdoutSha256 = $codexRaw.StdoutSha256');
+    expect(script).toContain('stderrBytes = $codexRaw.StderrBytes');
+    expect(script).toContain('stderrSha256 = $codexRaw.StderrSha256');
+    expect(script).toContain('reportSha256 = $codexReportSha256');
+    expect(script).toContain('invocationArgumentsSha256 = [string]$codexDenialProof.invocation.argumentsSha256');
+    expect(script).toContain('hookGraphSha256 = [string]$codexDenialProof.hooks.graphSha256');
+    expect(script).toContain('modelCatalogSha256 = [string]$codexDenialProof.paidInvocation.modelCatalogSha256');
+    expect(script).toContain('paidThreadParamsSha256 = [string]$codexDenialProof.paidInvocation.threadParamsSha256');
+    expect(script).toContain('paidTurnParamsSha256 = [string]$codexDenialProof.paidInvocation.turnParamsSha256');
+    expect(script).toContain('mcpBoundarySha256 = [string]$codexDenialProof.mcpBoundary.postPaidSha256');
+    expect(script).toContain('packagedHookArtifactsSha256 = [string]$codexDenialProof.hooks.artifactsSha256');
+    expect(script).toContain('windowsPowerShellSha256 = [string]$codexDenialProof.artifacts.windowsPowerShellSha256');
+
+    for (const feature of [
+      'shell_tool',
+      'unified_exec',
+      'apps',
+      'browser_use',
+      'browser_use_external',
+      'browser_use_full_cdp_access',
+      'computer_use',
+      'image_generation',
+      'in_app_browser',
+      'multi_agent',
+      'multi_agent_v2',
+      'goals',
+      'skill_search',
+      'tool_suggest',
+      'workspace_dependencies',
+      'skill_mcp_dependency_install',
+      'plugins',
+      'plugin_sharing',
+      'remote_plugin',
+      'mentions_v2',
+    ]) {
+      expect(denialProof).toContain(`'${feature}'`);
+    }
+    expect(denialProof).toContain("args.push('--disable', feature)");
+    expect(denialProof).toContain("'web_search=\"disabled\"'");
+    expect(denialProof).toContain("'tools.update_plan.enabled=false'");
+    expect(denialProof).toContain("'tools.experimental_request_user_input.enabled=false'");
+    expect(denialProof).toContain("'orchestrator.skills.enabled=false'");
+    expect(denialProof).toContain("'orchestrator.mcp.enabled=false'");
+    expect(denialProof).toContain('apply_patch_tool_type = null');
+    expect(denialProof).toContain('use_responses_lite = false');
+    expect(denialProof).toContain('dynamicTools: []');
+    expect(denialProof).toContain('environments: []');
+    expect(denialProof).toContain('allowProviderModelFallback: false');
+    expect(denialProof).toContain(
+      '...(options.useDefaultEnvironmentForControl ? {} : { environments: [] })',
+    );
+    expect(denialProof).toContain('useDefaultEnvironmentForControl: true');
+    expect(denialProof).toContain("const controlModel = `waggle-control-${sha256(model).slice(0, 16)}`");
+    expect(denialProof).toContain('selectedCapabilityRoots: []');
+    expect(denialProof).toContain("matcher='*'");
+    expect(denialProof).toContain("permissionDecision: 'deny'");
+    expect(denialProof).toContain('permissionDecisionReason: DENIAL_REASON');
+    expect(denialProof).toContain("hook.eventName === 'preToolUse'");
+    expect(denialProof).toContain("JSON.stringify(redTools) === JSON.stringify(['view_image'])");
+    expect(denialProof).toContain('sealedRequest.additionalToolCount === 0');
+    expect(denialProof).toContain('sealedRequest.topLevelToolsIsArray');
+    expect(denialProof).toContain('assertExactHookGraph');
+    expect(denialProof).toContain('buildExpectedWaggleHooks');
+    expect(denialProof).toContain('hook.commandSha256 === expectedWaggleCommands.get(hook.eventName)');
+    expect(denialProof).toContain("hookStateEntries.push(`'${key}'={enabled=false}`)");
+    expect(denialProof).toContain("hookStateEntries.push(`'${key}'={enabled=true,trusted_hash='${currentHash}'}`)");
+    expect(denialProof).toContain("`hooks.state={${hookStateEntries.join(',')}}`");
+    expect(denialProof).toContain('hooks.state=<sha256:');
+    expect(denialProof).not.toContain("hooks.state.'${key}'");
+    expect(denialProof).toContain('readConfiguredMcpServerNames');
+    expect(denialProof).toContain('captureMcpBoundary');
+    expect(denialProof).toContain('assertSameMcpBoundary');
+    expect(denialProof).toContain('verifySourceSnapshot');
+    expect(denialProof).toContain('await options.beforeTurn()');
+    expect(denialProof).toContain('artifactsUnchanged: false');
+    expect(denialProof).toContain('function buildMcpInventoryArguments()');
+    expect(denialProof).toContain(
+      'runChecked(codexExecutable, buildMcpInventoryArguments(), {',
+    );
+    expect(denialProof).toContain("`mcp_servers={${mcpServerEntries.join(',')}}`");
+    expect(denialProof).toContain('mcp_servers=<sha256:');
+    expect(script).toContain('mcpServerCount = [int]$codexDenialProof.invocation.mcpServerCount');
+    expect(script).toContain('mcpServerNamesSha256 = [string]$codexDenialProof.invocation.mcpServerNamesSha256');
+    expect(denialProof).toContain('extras.every((hook) => !hook.enabled)');
+    expect(denialProof).toContain('verifyWindowsPowerShell');
+    expect(denialProof).toContain('model_providers.waggle_chatgpt.request_max_retries=0');
+    expect(denialProof).toContain('model_providers.waggle_chatgpt.stream_max_retries=0');
+    expect(denialProof).toContain('model_providers.waggle_chatgpt.requires_openai_auth=true');
+    expect(denialProof).not.toContain("'model/rerouted'");
+    expect(denialProof).toContain('sensitiveDataObserved: false');
+    expect(denialProof).toContain('paidCalls: 0');
+    expect(denialProof).not.toContain('dangerously-bypass-hook-trust');
+
+    const receiptSource = script.slice(script.indexOf('$receipt = [ordered]@{'));
+    expect(receiptSource).not.toContain('$codexAuthText');
+    expect(receiptSource).not.toContain('marker = $codexMarker');
+    expect(receiptSource).not.toContain('sessionId = $codexSessionId');
+    expect(script).not.toContain('$sourceCodexAuth');
+    expect(script).not.toContain('$isolatedCodexAuth');
+    expect(script).not.toContain("Join-Path $env:CODEX_HOME 'auth.json'");
+    expect(script).not.toContain('Copy-Item');
+    expect(script).not.toContain('rawStdout = $codexRaw.Stdout');
+    expect(script).not.toContain('rawStderr = $codexRaw.Stderr');
+    expect(script).not.toContain('rawAuthOutput =');
+    expect(script).not.toContain('$codexPrompt');
+    expect(script).not.toContain('$invalidCodexLines');
+
+    const helperSelfTest = spawnSync(
+      process.execPath,
+      [path.join(ROOT, 'scripts', 'verify-codex-tool-denial.mjs'), '--self-test'],
+      { cwd: ROOT, encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+    );
+    expect(helperSelfTest.status, helperSelfTest.stderr).toBe(0);
+    expect(JSON.parse(helperSelfTest.stdout)).toMatchObject({
+      pass: true,
+      paidCalls: 0,
+      cases: 22,
+    });
+
+    if (process.platform === 'win32') {
+      const validatorSelfTest = spawnSync(
+        powershellProbeExecutable(),
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-File',
+          path.join(ROOT, 'scripts', 'test-windows-official-auth-canaries.ps1'),
+          '-ExpectedHead',
+          '0000000000000000000000000000000000000000',
+          '-ReceiptDir',
+          path.join(os.tmpdir(), 'unused-waggle-codex-proof-validator-self-test'),
+          '-CodexProofValidatorSelfTest',
+        ],
+        { cwd: ROOT, encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+      );
+      expect(validatorSelfTest.status, validatorSelfTest.stderr).toBe(0);
+      expect(JSON.parse(validatorSelfTest.stdout)).toMatchObject({
+        pass: true,
+        paidCalls: 0,
+        cases: 26,
+      });
+    }
+  });
+
   it('release workflow builds packages before bundling the desktop sidecar', () => {
     // Release builds must follow the same package -> sidecar ordering as the
     // PR Tauri verification lane, otherwise tag artifacts can ship stale or
