@@ -7,7 +7,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
-import net from 'node:net';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
@@ -94,15 +94,32 @@ function spawnInCwd(
   });
 }
 
-async function occupyPort(): Promise<{ server: net.Server; port: number }> {
-  const server = net.createServer();
+async function occupyPort(): Promise<{
+  server: http.Server;
+  port: number;
+  requestCount: () => number;
+  bearerRequestCount: () => number;
+}> {
+  let requests = 0;
+  let bearerRequests = 0;
+  const server = http.createServer((request, response) => {
+    requests += 1;
+    if (request.headers.authorization?.startsWith('Bearer ')) bearerRequests += 1;
+    response.writeHead(503, { 'content-type': 'application/json' });
+    response.end('{}');
+  });
   const port = await new Promise<number>((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address();
       resolve(typeof addr === 'object' && addr ? addr.port : 0);
     });
   });
-  return { server, port };
+  return {
+    server,
+    port,
+    requestCount: () => requests,
+    bearerRequestCount: () => bearerRequests,
+  };
 }
 
 async function freePort(): Promise<number> {
@@ -332,7 +349,7 @@ describe('Waggle CLI Launcher', () => {
 
     it('reports occupied ports with a working --port recovery command', async () => {
       const home = makeHome();
-      const { server: blocker, port } = await occupyPort();
+      const { server: blocker, port, requestCount, bearerRequestCount } = await occupyPort();
       try {
         const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
@@ -353,6 +370,8 @@ describe('Waggle CLI Launcher', () => {
         expect(result.status).toBe(1);
         expect(result.stderr).toContain(`Port ${port} is already in use`);
         expect(result.stderr).toContain(`npx waggle --port ${port + 1}`);
+        expect(bearerRequestCount()).toBe(0);
+        expect(requestCount()).toBe(0);
       } finally {
         await new Promise<void>((resolve) => blocker.close(() => resolve()));
         fs.rmSync(home, { recursive: true, force: true });
@@ -400,7 +419,7 @@ describe('Waggle CLI Launcher', () => {
 
     it('installs the packed launcher and runs npx help plus startup recovery', async () => {
       const home = makeHome();
-      const { server: blocker, port } = await occupyPort();
+      const { server: blocker, port, requestCount, bearerRequestCount } = await occupyPort();
       try {
         const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
@@ -453,6 +472,8 @@ describe('Waggle CLI Launcher', () => {
         expect(startup.stderr).toContain(`Port ${port} is already in use`);
         expect(startup.stderr).toContain(`npx waggle --port ${port + 1}`);
         expect(fs.existsSync(path.join(home, '.waggle'))).toBe(false);
+        expect(bearerRequestCount()).toBe(0);
+        expect(requestCount()).toBe(0);
       } finally {
         await new Promise<void>((resolve) => blocker.close(() => resolve()));
         fs.rmSync(home, { recursive: true, force: true });
@@ -461,6 +482,12 @@ describe('Waggle CLI Launcher', () => {
 
     it('starts the installed launcher long enough to serve health', async () => {
       const home = makeHome();
+      const {
+        server: blocker,
+        port: preferredPort,
+        requestCount,
+        bearerRequestCount,
+      } = await occupyPort();
       let child: ChildProcessWithoutNullStreams | undefined;
       try {
         const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
@@ -495,33 +522,48 @@ describe('Waggle CLI Launcher', () => {
         );
         expect(install.status).toBe(0);
 
-        const port = await freePort();
         const dataDir = path.join(home, 'data');
+        const readyFile = path.join(home, 'desktop-ready.json');
         let stdout = '';
         let stderr = '';
         child = spawnInCwd(
           bin('npx'),
-          ['waggle', '--port', String(port), '--skip-litellm', '--no-open'],
+          ['waggle', '--port', String(preferredPort), '--skip-litellm', '--no-open'],
           projectDir,
           home,
-          { WAGGLE_DATA_DIR: dataDir },
+          {
+            WAGGLE_DATA_DIR: dataDir,
+            WAGGLE_DESKTOP_PORT_FALLBACK: '1',
+            WAGGLE_INSTANCE_ID: 'launcher-fallback-health',
+            WAGGLE_READY_FILE: readyFile,
+          },
         );
         child.stdout.setEncoding('utf8');
         child.stderr.setEncoding('utf8');
         child.stdout.on('data', (chunk) => { stdout += chunk; });
         child.stderr.on('data', (chunk) => { stderr += chunk; });
 
-        const health = await waitForHealth(`http://127.0.0.1:${port}/health`, 30_000);
+        await waitFor(() => fs.existsSync(readyFile), 30_000);
+        const ready = JSON.parse(fs.readFileSync(readyFile, 'utf8')) as {
+          preferredPort: number;
+          port: number;
+        };
+        expect(ready.preferredPort).toBe(preferredPort);
+        expect(ready.port).not.toBe(preferredPort);
+        const health = await waitForHealth(`http://127.0.0.1:${ready.port}/health`, 30_000);
         await waitFor(() => stdout.includes('Press Ctrl+C to stop'), 10_000);
 
         expect(health.database).toMatchObject({ healthy: true });
-        expect(stdout).toContain(`Server:  http://localhost:${port}`);
+        expect(stdout).toContain(`Server:  http://localhost:${ready.port}`);
         expect(stdout).toContain('Browser: not opened (--no-open)');
-        expect(stdout).toContain(`Open manually: http://localhost:${port}`);
+        expect(stdout).toContain(`Open manually: http://localhost:${ready.port}`);
         expect(stderr).not.toContain('Failed to start Waggle');
         expect(fs.existsSync(path.join(dataDir, 'personal.mind'))).toBe(true);
+        expect(bearerRequestCount()).toBe(0);
+        expect(requestCount()).toBe(0);
       } finally {
         if (child) await stopProcess(child);
+        await new Promise<void>((resolve) => blocker.close(() => resolve()));
         // Windows can release SQLite WAL/SHM handles a few milliseconds after
         // taskkill reports success; retry the isolated temp-home cleanup.
         fs.rmSync(home, {

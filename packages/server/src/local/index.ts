@@ -2505,9 +2505,16 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   }, 24 * 60 * 60 * 1000); // once per day
 
   // PM-6: Offline manager — periodic LLM health checks
+  const resolveOfflineManagerEndpoint = (): string => {
+    if (!fullConfig.useBuiltInProxy) return fullConfig.litellmUrl;
+    const address = server.server.address();
+    return address && typeof address === 'object'
+      ? `http://127.0.0.1:${address.port}/v1`
+      : fullConfig.litellmUrl;
+  };
   const offlineManager = new OfflineManager({
     dataDir: fullConfig.dataDir,
-    getLlmEndpoint: () => fullConfig.litellmUrl,
+    getLlmEndpoint: resolveOfflineManagerEndpoint,
     getLlmApiKey: () => server.agentState?.litellmApiKey ?? '',
     checkLlmReadiness: async () => {
       const selectedModel = server.agentState.currentModel.trim();
@@ -2521,7 +2528,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           : localModels.length > 0;
       }
 
-      const endpoint = fullConfig.litellmUrl.replace(/\/+$/, '');
+      const endpoint = resolveOfflineManagerEndpoint().replace(/\/+$/, '');
       const apiKey = server.agentState.litellmApiKey;
       const headers: Record<string, string> = {};
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -2552,7 +2559,9 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     eventBus,
     checkIntervalMs: 30_000,
   });
-  offlineManager.start();
+  server.addHook('onListen', async () => {
+    offlineManager.start();
+  });
   server.decorate('offlineManager', offlineManager);
 
   // Plugins
