@@ -97,9 +97,6 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
         const deduped = Array.from(new Set(fromProviders));
         if (deduped.length > 0) modelList = deduped;
       }
-      if (modelList.length === 0 && providers.providers.some((p) => p.hasKey)) {
-        setModelsError('Model list unavailable right now — retry, or check provider keys in Settings.');
-      }
       setModels(modelList);
       setPricing(p);
       setProvidersWithKeys(countProvidersWithKeys(providers.providers));
