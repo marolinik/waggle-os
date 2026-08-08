@@ -1,38 +1,12 @@
 /**
- * Phase 8 — Visual Regression Baselines (9G-4)
+ * Phase 8 structural smoke coverage for the current Waggle views.
  *
- * Captures screenshot baselines for all 7 Waggle views in both dark and light
- * modes. This completes the 9G-4 gap identified in CONTINUE-PHASE9.md.
- *
- * Each view × theme = 1 baseline PNG. Total: 14 baselines.
- *
- * Baseline storage:  tests/visual/baselines/
- * Snapshot template: {snapshotDir}/{testName}/{arg}{ext}  (from playwright.config.ts)
- *
- * Usage:
- *   # Create / update baselines (first run or after intentional UI changes)
- *   npx playwright test tests/e2e/phase8-visual.spec.ts --update-snapshots
- *
- *   # Verify no regressions (CI)
- *   npx playwright test tests/e2e/phase8-visual.spec.ts
- *
- * Prerequisites:
- *   - Server running at localhost:3333  (playwright.config.ts webServer auto-starts it)
- *   - app/dist built (npm run build in app/)
- *   - No onboarding wizard state (fresh ~/.waggle or pre-seeded with config)
- *
- * Diff threshold: 0.3% pixel ratio (configured in playwright.config.ts)
- *
- * Notes:
- *   - Tests skip gracefully when onboarding wizard is active (first-run state).
- *   - MissionControl view is tested for presence only (may be gated by Phase 8D).
- *   - Animations are disabled via playwright config to prevent flaky snapshots.
+ * Deterministic pixel regression coverage lives in tests/visual/views.spec.ts.
  */
 
 import { test, expect, type Page } from '@playwright/test';
 
 const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
-const RUN_PIXEL_BASELINES = process.env.WAGGLE_E2E_VISUAL === '1' || !process.env.CI;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -152,129 +126,6 @@ async function navigateTo(page: Page, viewName: string): Promise<void> {
   if (!route) throw new Error(`No current navigation target configured for "${viewName}"`);
   await page.goto(routeWithSkip(route), { waitUntil: 'domcontentloaded' });
   await waitForApp(page);
-}
-
-/**
- * Set theme by clicking the sidebar theme toggle until the correct mode is active.
- * Returns the final theme ('dark' | 'light').
- */
-async function setTheme(page: Page, target: 'dark' | 'light'): Promise<void> {
-  // Theme toggle is in the sidebar — ensure it's expanded
-  await page.evaluate((mode) => {
-    localStorage.setItem('waggle-theme', mode);
-    if (mode === 'light') document.documentElement.setAttribute('data-theme', 'light');
-    else document.documentElement.removeAttribute('data-theme');
-  }, target);
-  await page.waitForTimeout(100);
-}
-
-/**
- * Capture a stable screenshot — waits for network idle and hides dynamic elements
- * (timestamps, cost counters, status bar tokens) that would cause diff failures.
- */
-async function stableScreenshot(page: Page): Promise<Buffer> {
-  // Hide elements whose content changes between runs
-  await page.evaluate(() => {
-    const selectors = [
-      '[data-testid="status-bar-tokens"]',
-      '[data-testid="status-bar-cost"]',
-      '[class*="timestamp"]',
-      '[class*="Timestamp"]',
-      '.status-bar__cost',
-      '.waggle-status-bar__tokens',
-    ];
-    for (const sel of selectors) {
-      document.querySelectorAll(sel).forEach((el) => {
-        (el as HTMLElement).style.visibility = 'hidden';
-      });
-    }
-    const dynamicText = [
-      /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s/i,
-      /^\d{1,2}:\d{2}$/,
-      /^Last active:/i,
-    ];
-    document.querySelectorAll('body *').forEach((el) => {
-      if (el.children.length > 0) return;
-      const text = el.textContent?.trim() ?? '';
-      if (dynamicText.some((pattern) => pattern.test(text))) {
-        (el as HTMLElement).style.visibility = 'hidden';
-      }
-    });
-    document.querySelectorAll('button[aria-label="Notifications"]').forEach((el) => {
-      (el as HTMLElement).style.visibility = 'hidden';
-    });
-  });
-
-  await page.waitForTimeout(200);
-
-  return page.screenshot({ fullPage: false });
-}
-
-// ── View definitions ──────────────────────────────────────────────────────────
-
-const VIEWS = [
-  { name: 'Chat',            sidebar: 'Chat' },
-  { name: 'Memory',          sidebar: 'Memory' },
-  { name: 'Events',          sidebar: 'Events' },
-  { name: 'Capabilities',    sidebar: 'Skills Hub' },
-  { name: 'Cockpit',         sidebar: 'Cockpit' },
-  { name: 'MissionControl',  sidebar: 'Mission Control' },
-  { name: 'Settings',        sidebar: 'Settings' },
-] as const;
-
-const THEMES = ['light', 'dark'] as const;
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Visual Baseline Tests (7 views × 2 themes = 14 baselines)
-// ═════════════════════════════════════════════════════════════════════════════
-
-for (const theme of THEMES) {
-  test.describe(`Visual baselines — ${theme} mode`, () => {
-    test.skip(!RUN_PIXEL_BASELINES, 'Pixel baselines run with WAGGLE_E2E_VISUAL=1; structural smoke tests still run in CI.');
-
-    // Visual tests need more time: beforeEach (goto + waitForApp + setTheme) ~10-20s
-    // + navigateTo ~5s + waitForFunction + networkidle + screenshot ~10s = up to 35s
-    test.describe.configure({ timeout: 90_000 });
-
-    test.beforeEach(async ({ page }) => {
-      // CRITICAL: register addInitScript BEFORE first goto so localStorage
-      // is set BEFORE React mounts and reads onboarding state.
-      await page.addInitScript((targetTheme) => {
-        localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
-        localStorage.setItem('waggle:first-run', 'done');
-        localStorage.setItem('waggle-theme', targetTheme);
-        if (targetTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
-        else document.documentElement.removeAttribute('data-theme');
-      }, theme);
-      // Server-side: PATCH /api/settings (belt and suspenders)
-      await page.request.patch(`${BASE}/api/settings`, {
-        data: { onboardingCompleted: true },
-        headers: { 'Content-Type': 'application/json' },
-      }).catch(() => {});
-      // NOW navigate — initScript fires before React, no onboarding shown
-      await page.goto(routeWithSkip('/home'));
-      await waitForApp(page);
-      await setTheme(page, theme);
-    });
-
-    for (const view of VIEWS) {
-      test(`${view.name} view — ${theme}`, async ({ page }) => {
-        // No skip conditions — if onboarding blocks navigation, test fails with clear error
-        // navigateTo will throw if sidebar button not found within 5s
-        await navigateTo(page, view.sidebar);
-
-        // Wait for view content — not a fixed timer
-        await page.waitForFunction(() =>
-          (document.body.textContent?.length ?? 0) > 100,
-          { timeout: 8000 }
-        ).catch(() => {});
-        await page.waitForTimeout(400); // short final settle for animations
-
-        const screenshot = await stableScreenshot(page);
-        expect(screenshot).toMatchSnapshot(`${view.name}-${theme}.png`);
-      });
-    }
-  });
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
