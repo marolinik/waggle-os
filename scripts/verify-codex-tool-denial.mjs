@@ -91,6 +91,28 @@ const CANARY_STAGES = new Set([
   'app-server-close',
   'post-turn-invariants',
 ]);
+const EVENT_AUDIT_FAILURE_INVARIANTS = new Set([
+  'failure-notification',
+  'wrong-scope',
+  'model-reroute',
+  'unknown-notification-method',
+  'unknown-item-type',
+  'forbidden-tool-item',
+  'agent-message-cardinality',
+]);
+const EVENT_AUDIT_FAILURE_KEYS = [
+  'invariant',
+  'notificationCount',
+  'failureEventsObserved',
+  'wrongScopeEventsObserved',
+  'rerouteEventsObserved',
+  'unknownNotificationEventsObserved',
+  'unknownItemEventsObserved',
+  'toolEventsObserved',
+  'notificationGraphSha256',
+  'rejectedMethodSha256',
+  'rejectedItemTypeSha256',
+];
 const FAILURE_NOTIFICATION_METHODS = new Set([
   'error',
   'warning',
@@ -253,6 +275,69 @@ function sanitizeProtocolCode(value) {
 
 function sanitizeCanaryStage(value) {
   return CANARY_STAGES.has(value) ? value : null;
+}
+
+function groupSha256(values) {
+  const counts = new Map();
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const digest = sha256(value);
+    counts.set(digest, (counts.get(digest) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([digest, count]) => ({ sha256: digest, count }))
+    .sort((left, right) => left.sha256.localeCompare(right.sha256));
+}
+
+function sanitizeSha256Counts(value) {
+  if (!Array.isArray(value) || value.length > 256) return null;
+  let previous = null;
+  const sanitized = [];
+  for (const entry of value) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    if (Object.keys(entry).sort().join(',') !== 'count,sha256') return null;
+    if (!/^[0-9a-f]{64}$/.test(entry.sha256)) return null;
+    if (!Number.isInteger(entry.count) || entry.count < 1 || entry.count > 2_147_483_647) return null;
+    if (previous !== null && previous >= entry.sha256) return null;
+    previous = entry.sha256;
+    sanitized.push({ sha256: entry.sha256, count: entry.count });
+  }
+  return sanitized;
+}
+
+function sanitizeEventAuditFailure(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (Object.keys(value).sort().join(',') !== [...EVENT_AUDIT_FAILURE_KEYS].sort().join(',')) return null;
+  if (!EVENT_AUDIT_FAILURE_INVARIANTS.has(value.invariant)) return null;
+  const countKeys = [
+    'notificationCount',
+    'failureEventsObserved',
+    'wrongScopeEventsObserved',
+    'rerouteEventsObserved',
+    'unknownNotificationEventsObserved',
+    'unknownItemEventsObserved',
+    'toolEventsObserved',
+  ];
+  for (const key of countKeys) {
+    if (!Number.isInteger(value[key]) || value[key] < 0 || value[key] > 2_147_483_647) return null;
+  }
+  if (!/^[0-9a-f]{64}$/.test(value.notificationGraphSha256)) return null;
+  const rejectedMethodSha256 = sanitizeSha256Counts(value.rejectedMethodSha256);
+  const rejectedItemTypeSha256 = sanitizeSha256Counts(value.rejectedItemTypeSha256);
+  if (rejectedMethodSha256 === null || rejectedItemTypeSha256 === null) return null;
+  return {
+    invariant: value.invariant,
+    notificationCount: value.notificationCount,
+    failureEventsObserved: value.failureEventsObserved,
+    wrongScopeEventsObserved: value.wrongScopeEventsObserved,
+    rerouteEventsObserved: value.rerouteEventsObserved,
+    unknownNotificationEventsObserved: value.unknownNotificationEventsObserved,
+    unknownItemEventsObserved: value.unknownItemEventsObserved,
+    toolEventsObserved: value.toolEventsObserved,
+    notificationGraphSha256: value.notificationGraphSha256,
+    rejectedMethodSha256,
+    rejectedItemTypeSha256,
+  };
 }
 
 function selectLifecycleFailure(primaryError, closeError) {
@@ -1162,7 +1247,6 @@ function notificationScope(notification) {
 }
 
 function collectEventAudit(notifications, expectedAcknowledgement, threadId, turnId) {
-  const notificationMethods = notifications.map((entry) => entry.message?.method ?? null);
   const failureNotifications = notifications.filter((entry) => (
     FAILURE_NOTIFICATION_METHODS.has(entry.message?.method)
   ));
@@ -1212,7 +1296,17 @@ function collectEventAudit(notifications, expectedAcknowledgement, threadId, tur
       'websearch',
     ].some((family) => type.includes(family));
   });
+  const notificationGraph = notifications.map((entry, index) => {
+    const method = entry.message?.method;
+    const type = itemType(entry);
+    return {
+      ordinal: index + 1,
+      methodSha256: typeof method === 'string' ? sha256(method) : null,
+      itemTypeSha256: typeof type === 'string' ? sha256(type) : null,
+    };
+  });
   return {
+    notificationCount: notifications.length,
     exactMessageCount: exactMessages.length,
     normalTextCompleted: completedMessages.length === 1 && exactMessages.length === 1,
     imageItemCount: imageItems.length,
@@ -1221,23 +1315,73 @@ function collectEventAudit(notifications, expectedAcknowledgement, threadId, tur
     firstDenySequence: denyHooks[0]?.sequence ?? null,
     toolEventsObserved: forbiddenToolItems.length,
     unknownEventsObserved: unknownNotifications.length + unknownItems.length,
+    unknownNotificationEventsObserved: unknownNotifications.length,
+    unknownItemEventsObserved: unknownItems.length,
     failureEventsObserved: failureNotifications.length,
     wrongScopeEventsObserved: wrongScopeNotifications.length,
     rerouteEventsObserved: rerouteNotifications.length,
-    notificationGraphSha256: sha256(stableJson(notificationMethods)),
+    notificationGraphSha256: sha256(stableJson(notificationGraph)),
+    rejectionEvidence: {
+      failureMethodSha256: groupSha256(failureNotifications.map((entry) => entry.message?.method)),
+      wrongScopeMethodSha256: groupSha256(wrongScopeNotifications.map((entry) => entry.message?.method)),
+      rerouteMethodSha256: groupSha256(rerouteNotifications.map((entry) => entry.message?.method)),
+      unknownMethodSha256: groupSha256(unknownNotifications.map((entry) => entry.message?.method)),
+      unknownItemTypeSha256: groupSha256(unknownItems.map((entry) => itemType(entry))),
+      toolMethodSha256: groupSha256(forbiddenToolItems.map((entry) => entry.message?.method)),
+      toolItemTypeSha256: groupSha256(forbiddenToolItems.map((entry) => itemType(entry))),
+      agentMessageMethodSha256: groupSha256(completedMessages.map((entry) => entry.message?.method)),
+      agentMessageItemTypeSha256: groupSha256(completedMessages.map((entry) => itemType(entry))),
+    },
   };
 }
 
+function throwEventAuditFailure(invariant, audit) {
+  const evidence = audit.rejectionEvidence;
+  let rejectedMethodSha256 = [];
+  let rejectedItemTypeSha256 = [];
+  if (invariant === 'failure-notification') rejectedMethodSha256 = evidence.failureMethodSha256;
+  if (invariant === 'wrong-scope') rejectedMethodSha256 = evidence.wrongScopeMethodSha256;
+  if (invariant === 'model-reroute') rejectedMethodSha256 = evidence.rerouteMethodSha256;
+  if (invariant === 'unknown-notification-method') rejectedMethodSha256 = evidence.unknownMethodSha256;
+  if (invariant === 'unknown-item-type') rejectedItemTypeSha256 = evidence.unknownItemTypeSha256;
+  if (invariant === 'forbidden-tool-item') {
+    rejectedMethodSha256 = evidence.toolMethodSha256;
+    rejectedItemTypeSha256 = evidence.toolItemTypeSha256;
+  }
+  if (invariant === 'agent-message-cardinality') {
+    rejectedMethodSha256 = evidence.agentMessageMethodSha256;
+    rejectedItemTypeSha256 = evidence.agentMessageItemTypeSha256;
+  }
+  const error = new Error('Codex event audit rejected a sanitized invariant');
+  error.eventAuditFailure = sanitizeEventAuditFailure({
+    invariant,
+    notificationCount: audit.notificationCount,
+    failureEventsObserved: audit.failureEventsObserved,
+    wrongScopeEventsObserved: audit.wrongScopeEventsObserved,
+    rerouteEventsObserved: audit.rerouteEventsObserved,
+    unknownNotificationEventsObserved: audit.unknownNotificationEventsObserved,
+    unknownItemEventsObserved: audit.unknownItemEventsObserved,
+    toolEventsObserved: audit.toolEventsObserved,
+    notificationGraphSha256: audit.notificationGraphSha256,
+    rejectedMethodSha256,
+    rejectedItemTypeSha256,
+  });
+  throw error;
+}
+
 function assertEventAudit(audit, strictAllowlist, requireAcknowledgement = true) {
-  assert(audit.failureEventsObserved === 0, 'Codex emitted a failure notification');
-  assert(audit.wrongScopeEventsObserved === 0, 'Codex emitted an event for another thread or turn');
-  assert(audit.rerouteEventsObserved === 0, 'Codex rerouted the requested model');
+  if (audit.failureEventsObserved !== 0) throwEventAuditFailure('failure-notification', audit);
+  if (audit.wrongScopeEventsObserved !== 0) throwEventAuditFailure('wrong-scope', audit);
+  if (audit.rerouteEventsObserved !== 0) throwEventAuditFailure('model-reroute', audit);
   if (strictAllowlist) {
-    assert(audit.unknownEventsObserved === 0, 'strict lane emitted an unapproved event');
-    assert(audit.toolEventsObserved === 0, 'strict lane emitted a tool item');
+    if (audit.unknownNotificationEventsObserved !== 0) {
+      throwEventAuditFailure('unknown-notification-method', audit);
+    }
+    if (audit.unknownItemEventsObserved !== 0) throwEventAuditFailure('unknown-item-type', audit);
+    if (audit.toolEventsObserved !== 0) throwEventAuditFailure('forbidden-tool-item', audit);
   }
   if (requireAcknowledgement) {
-    assert(audit.normalTextCompleted, 'Codex did not emit exactly one expected agent message');
+    if (!audit.normalTextCompleted) throwEventAuditFailure('agent-message-cardinality', audit);
   }
 }
 
@@ -1430,6 +1574,7 @@ async function runTurn(options) {
       primaryError === null ? 'app-server-close' : failureStage,
     ) ?? 'app-server-spawn'}`);
     wrapped.turnFailure = lifecycleFailure?.turnFailure ?? null;
+    wrapped.eventAuditFailure = sanitizeEventAuditFailure(lifecycleFailure?.eventAuditFailure);
     wrapped.canaryDiagnostic = {
       failureStage: sanitizeCanaryStage(primaryError === null ? 'app-server-close' : failureStage),
       protocolCode: sanitizeProtocolCode(lifecycleFailure?.protocolCode),
@@ -1473,6 +1618,16 @@ async function runValidationSelfTest() {
     try { run(); } catch { threw = true; }
     assert(threw, `negative fixture was accepted: ${label}`);
     cases += 1;
+  };
+  const captureEventAuditFailure = (run, label) => {
+    try {
+      run();
+    } catch (error) {
+      const diagnostic = sanitizeEventAuditFailure(error?.eventAuditFailure);
+      assert(diagnostic !== null, `event-audit fixture omitted sanitized diagnostics: ${label}`);
+      return diagnostic;
+    }
+    throw new Error(`event-audit fixture was accepted: ${label}`);
   };
   try {
     assert(
@@ -1646,6 +1801,76 @@ async function runValidationSelfTest() {
       () => eventAudit([safeNotification, failureNotification], acknowledgement, true),
       'failure notification',
     );
+    const unknownDiagnostic = captureEventAuditFailure(
+      () => eventAudit([safeNotification, unknownNotification], acknowledgement, true),
+      'unknown diagnostic',
+    );
+    assert(
+      unknownDiagnostic.invariant === 'unknown-notification-method'
+        && unknownDiagnostic.notificationCount === 2
+        && unknownDiagnostic.unknownNotificationEventsObserved === 1
+        && stableJson(unknownDiagnostic.rejectedMethodSha256) === stableJson([
+          { sha256: sha256('future/tool/event'), count: 1 },
+        ])
+        && Object.keys(unknownDiagnostic).join(',') === EVENT_AUDIT_FAILURE_KEYS.join(',')
+        && !stableJson(unknownDiagnostic).includes('future/tool/event'),
+      'unknown notification diagnostic was not fixed, hashed, and path-free',
+    );
+    cases += 1;
+    const secretVariant = {
+      sequence: 2,
+      message: {
+        method: 'future/tool/event',
+        params: { text: 'sk-private-value', path: 'C:\\private\\auth.json', sessionId: 'sess-private' },
+      },
+    };
+    const secretDiagnostic = captureEventAuditFailure(
+      () => eventAudit([safeNotification, secretVariant], acknowledgement, true),
+      'secret-independent diagnostic',
+    );
+    assert(
+      stableJson(secretDiagnostic) === stableJson(unknownDiagnostic),
+      'event-audit diagnostic changed when only untrusted params changed',
+    );
+    cases += 1;
+    const precedenceDiagnostic = captureEventAuditFailure(
+      () => eventAudit([safeNotification, unknownNotification, failureNotification], acknowledgement, true),
+      'failure precedence',
+    );
+    assert(
+      precedenceDiagnostic.invariant === 'failure-notification'
+        && stableJson(precedenceDiagnostic.rejectedMethodSha256) === stableJson([
+          { sha256: sha256('warning'), count: 1 },
+        ]),
+      'failure notification did not retain precedence and hashed evidence',
+    );
+    cases += 1;
+    const unknownItem = {
+      sequence: 2,
+      message: { method: 'item/completed', params: { item: { type: 'futureItem' } } },
+    };
+    const unknownItemDiagnostic = captureEventAuditFailure(
+      () => eventAudit([safeNotification, unknownItem], acknowledgement, true),
+      'unknown item type',
+    );
+    assert(
+      unknownItemDiagnostic.invariant === 'unknown-item-type'
+        && stableJson(unknownItemDiagnostic.rejectedItemTypeSha256) === stableJson([
+          { sha256: sha256('futureItem'), count: 1 },
+        ]),
+      'unknown item diagnostic did not retain only hashed type evidence',
+    );
+    cases += 1;
+    assert(
+      sanitizeEventAuditFailure({ ...unknownDiagnostic, notificationCount: '2' }) === null,
+      'event-audit diagnostic accepted a non-integer count',
+    );
+    cases += 1;
+    assert(
+      sanitizeEventAuditFailure({ ...unknownDiagnostic, params: { text: 'private' } }) === null,
+      'event-audit diagnostic accepted an unexpected raw property',
+    );
+    cases += 1;
     const benignNotifications = [
       'account/updated',
       'mcpServer/startupStatus/updated',
@@ -1827,7 +2052,7 @@ async function runValidationSelfTest() {
       'official provider arguments redefined the reserved built-in OpenAI provider',
     );
     cases += 1;
-    assert(cases === 43, `expected exactly 43 self-test cases, observed ${cases}`);
+    assert(cases === 49, `expected exactly 49 self-test cases, observed ${cases}`);
     return { pass: true, paidCalls: 0, cases };
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -1945,6 +2170,7 @@ const report = {
     closeClean: false,
   },
   turnFailure: null,
+  eventAuditFailure: null,
   error: null,
 };
 
@@ -2430,6 +2656,7 @@ try {
     && report.source.unchanged
     && report.artifacts.scriptUnchanged
     && report.hooks.artifactsUnchanged
+    && report.eventAuditFailure === null
     && (!setupOnly || (
       report.diagnostic.failureStage === null
       && report.diagnostic.protocolCode === null
@@ -2448,6 +2675,7 @@ try {
     ));
 } catch (error) {
   report.turnFailure = error?.turnFailure ?? null;
+  report.eventAuditFailure = sanitizeEventAuditFailure(error?.eventAuditFailure);
   if (error?.canaryDiagnostic) {
     report.diagnostic = {
       failureStage: sanitizeCanaryStage(error.canaryDiagnostic.failureStage),

@@ -4537,6 +4537,50 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     );
     expect(allowedNotificationPolicy).not.toContain("'model/rerouted'");
     expect(denialProof).toContain("entry.message?.method === 'model/rerouted'");
+    const auditFailureInvariantStart = denialProof.indexOf(
+      'const EVENT_AUDIT_FAILURE_INVARIANTS = new Set([',
+    );
+    const auditFailureInvariants = denialProof.slice(
+      auditFailureInvariantStart,
+      denialProof.indexOf(']);', auditFailureInvariantStart) + 3,
+    );
+    for (const invariant of [
+      'failure-notification',
+      'wrong-scope',
+      'model-reroute',
+      'unknown-notification-method',
+      'unknown-item-type',
+      'forbidden-tool-item',
+      'agent-message-cardinality',
+    ]) {
+      expect(auditFailureInvariants).toContain(`'${invariant}'`);
+    }
+    const auditFailureKeysStart = denialProof.indexOf(
+      'const EVENT_AUDIT_FAILURE_KEYS = [',
+    );
+    const auditFailureKeys = denialProof.slice(
+      auditFailureKeysStart,
+      denialProof.indexOf('];', auditFailureKeysStart) + 2,
+    );
+    for (const key of [
+      'invariant',
+      'notificationCount',
+      'failureEventsObserved',
+      'wrongScopeEventsObserved',
+      'rerouteEventsObserved',
+      'unknownNotificationEventsObserved',
+      'unknownItemEventsObserved',
+      'toolEventsObserved',
+      'notificationGraphSha256',
+      'rejectedMethodSha256',
+      'rejectedItemTypeSha256',
+    ]) {
+      expect(auditFailureKeys).toContain(`'${key}'`);
+    }
+    expect(denialProof).toContain('eventAuditFailure: null');
+    expect(denialProof).toContain(
+      'report.eventAuditFailure = sanitizeEventAuditFailure(error?.eventAuditFailure);',
+    );
     expect(denialProof).toContain('sensitiveDataObserved: false');
     expect(denialProof).toContain('paidCalls: 0');
     expect(denialProof).not.toContain('dangerously-bypass-hook-trust');
@@ -4564,7 +4608,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(JSON.parse(helperSelfTest.stdout)).toMatchObject({
       pass: true,
       paidCalls: 0,
-      cases: 43,
+      cases: 49,
     });
 
     if (process.platform === 'win32') {
