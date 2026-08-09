@@ -243,6 +243,10 @@ describe('WorkspaceTurnCoordinator', () => {
     expect(classifyWorkspaceTurnAccess([
       { name: 'search_memory' }, { name: 'web_fetch' }, { name: 'create_skill' },
     ])).toBe('none');
+    expect(classifyWorkspaceTurnAccess([
+      { name: 'create_plan' }, { name: 'add_plan_step' }, { name: 'execute_step' },
+      { name: 'show_plan' }, { name: 'add_task' }, { name: 'compose_workflow' },
+    ])).toBe('none');
     expect(classifyWorkspaceTurnAccess([{ name: 'read_file' }, { name: 'git_status' }])).toBe('read');
     expect(classifyWorkspaceTurnAccess([{ name: 'read_file' }, { name: 'edit_file' }])).toBe('write');
     expect(classifyWorkspaceTurnAccess([{ name: 'unclassified_connector_action' }])).toBe('write');

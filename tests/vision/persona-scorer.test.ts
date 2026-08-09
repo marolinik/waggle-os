@@ -150,6 +150,32 @@ describe('deterministic 100-point persona scorer', () => {
     );
   });
 
+  it('scores global response and required-tool patterns repeatably', () => {
+    const globalPatternCase: PersonaAcceptanceCase = {
+      ...syntheticCase,
+      requiredToolPatterns: [/web_search/g],
+      responseRules: syntheticCase.responseRules.map((rule, index) => (
+        index === 0 && rule.kind === 'pattern'
+          ? { ...rule, pattern: /alpha/g }
+          : rule
+      )),
+    };
+    const trial = evidence({
+      toolsUsed: ['web_search'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'web_search', input: { query: 'primary sources' } } },
+        { event: 'tool_result', data: { name: 'web_search', result: 'sources', isError: false } },
+        { event: 'done', data: { content: 'alpha beta gamma delta epsilon', toolsUsed: ['web_search'] } },
+      ],
+    });
+
+    const first = scorePersonaTrial(globalPatternCase, trial);
+    const second = scorePersonaTrial(globalPatternCase, trial);
+
+    expect(first).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(second).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it.each([
     [
       'fabricated_evidence',
@@ -202,6 +228,20 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result.criticalFailures.map(failure => failure.code)).toContain(code);
   });
 
+  it('binds the actual submitted prompt to both the canonical case and persisted history', () => {
+    const canonicalPrompt = syntheticCase.prompt;
+    const actualPrompt = 'Return only four markers.';
+    const persistedPrompt = canonicalPrompt;
+    const result = scorePersonaTrial(syntheticCase, evidence({
+      prompt: actualPrompt,
+      persistedPrompt,
+    }));
+
+    expect(result.criticalFailures.map(failure => failure.code)).toContain('persistence_mismatch');
+    expect(result.checks.find(check => check.id === 'conversation-persisted')?.passed).toBe(false);
+    expect(result).toMatchObject({ score: 0, passed: false });
+  });
+
   it('accepts a grounded action claim when the matching tool succeeded', () => {
     const response = 'alpha beta gamma delta epsilon. I used the `web_search` tool.';
     const result = scorePersonaTrial(syntheticCase, evidence({
@@ -217,6 +257,27 @@ describe('deterministic 100-point persona scorer', () => {
 
     expect(result.criticalFailures).toEqual([]);
     expect(result.score).toBe(100);
+  });
+
+  it('rejects an orphaned tool result as evidence of required tool use', () => {
+    const requiredToolCase: PersonaAcceptanceCase = {
+      ...syntheticCase,
+      requiredToolPatterns: [/web_search/i],
+    };
+    const response = 'alpha beta gamma delta epsilon. I used the `web_search` tool.';
+    const result = scorePersonaTrial(requiredToolCase, evidence({
+      response,
+      persistedResponse: response,
+      toolsUsed: [],
+      sseEvents: [
+        { event: 'tool_result', data: { name: 'web_search', result: 'sources', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: [] } },
+      ],
+    }));
+
+    expect(result.criticalFailures.map(failure => failure.code)).toContain('false_tool_claim');
+    expect(result.checks.find(check => check.id === 'required-tools')?.passed).toBe(false);
+    expect(result).toMatchObject({ score: 0, passed: false });
   });
 
   it('treats canonical and legacy approval events as critical on read-only turns', () => {
@@ -332,6 +393,28 @@ describe('deterministic 100-point persona scorer', () => {
       'Formula: Runway (months) = Cash ÷ (Monthly Burn − Monthly Revenue) = $40,000 ÷ ($10,000 − $0) = 4.00 months.',
       'Biggest assumption: monthly burn remains constant and revenue remains zero.',
       'Two actions: reduce monthly burn and generate revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'formula')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('accepts the exact Unicode division formula returned by the paid finance trial', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway is 4 months.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Biggest assumption: net burn stays constant and no new revenue arrives.',
+      'Two actions: reduce monthly burn and increase monthly revenue.',
     ].join('\n');
     const result = scorePersonaTrial(finance, evidence({
       prompt: finance.prompt,
@@ -500,6 +583,8 @@ describe('deterministic 100-point persona scorer', () => {
       'Two actions: reduce monthly burn and increase monthly revenue.',
     ].join('\n');
     const numericFormulas = [
+      'Formula: Runway = $40,000 ÷ $10,000.',
+      'Formula: Runway = $40,000.00 ÷ $10,000.00.',
       String.raw`\frac{40{,}000}{10{,}000} = 4`,
       String.raw`\frac{40{,}000.00}{10{,}000.00} = 4`,
       String.raw`\frac{40\,000{.}0}{10\,000{.}00} = 4`,
@@ -529,6 +614,7 @@ describe('deterministic 100-point persona scorer', () => {
     const neverCalculateSemanticTex = completeResponse(
       String.raw`Runway context. Never calculate \frac{\text{cash balance}}{\text{monthly net burn}}.`,
     );
+    const substringMatch = completeResponse('Formula: Runway = 140000 ÷ 10000.');
     const score = (response: string) => scorePersonaTrial(finance, evidence({
       prompt: finance.prompt,
       response,
@@ -542,7 +628,7 @@ describe('deterministic 100-point persona scorer', () => {
         pointsAwarded: 10,
       });
     }
-    for (const response of [bare, reversed, deniedAsWrong, deniedForUse, deniedBareTex, deniedSemanticTex, rejectedSemanticTex, neverCalculateSemanticTex]) {
+    for (const response of [bare, reversed, deniedAsWrong, deniedForUse, deniedBareTex, deniedSemanticTex, rejectedSemanticTex, neverCalculateSemanticTex, substringMatch]) {
       expect(score(response).checks.find(check => check.id === 'formula')).toMatchObject({
         passed: false,
         pointsAwarded: 0,
@@ -1661,6 +1747,360 @@ describe('deterministic 100-point persona scorer', () => {
   });
 
   it.each([
+    [
+      'current result plus hypothetical sensitivity',
+      'Current runway is 4 months. If burn doubles, runway would be 2 months.',
+      true,
+      100,
+    ],
+    [
+      'semantic coverage alias',
+      'Cash on hand covers four months of burn.',
+      true,
+      100,
+    ],
+    [
+      'scenario-only result',
+      'If burn falls, runway would be 4 months.',
+      false,
+      90,
+    ],
+    [
+      'scenario-only result with scenario co-reference',
+      'If burn falls, runway is 4 months. It is 4 months under that scenario.',
+      false,
+      90,
+    ],
+    [
+      'scenario result followed by unrelated co-reference',
+      'If burn falls, runway is 3 months. It is 4 months until launch.',
+      false,
+      90,
+    ],
+    [
+      'leading scenario overrides current wording',
+      'If burn falls, current runway is 4 months.',
+      false,
+      90,
+    ],
+    [
+      'current result plus hypothetical current inputs',
+      'Current runway is 4 months. If funding arrives, current cash is $60,000 and runway is 6 months.',
+      true,
+      100,
+    ],
+    [
+      'current result survives a trailing hypothetical co-reference',
+      'Current runway is 4 months. It is 6 months under that scenario.',
+      true,
+      100,
+    ],
+    [
+      'current result survives a separate scenario equation',
+      'Current runway is 4 months. Scenario: funding arrives. Calculation: $60,000 / $10,000 = 6 months.',
+      true,
+      100,
+    ],
+    [
+      'current result survives a directly conditional scenario equation',
+      'Current runway is 4 months. Calculation: $60,000 / $10,000 = 6 months if funding arrives.',
+      true,
+      100,
+    ],
+    [
+      'current result survives trailing conditional cash',
+      'Current runway is 4 months. Current cash is $60,000 if funding arrives.',
+      true,
+      100,
+    ],
+    [
+      'current result survives a separate hypothetical cash input',
+      'Current runway is 4 months. Hypothetical: funding arrives. Current cash is $60,000.',
+      true,
+      100,
+    ],
+    [
+      'unrelated trailing condition cannot hide wrong current cash',
+      'Current runway is 4 months. Current cash is $20,000, and we will raise funds if sales stall.',
+      false,
+      90,
+    ],
+    [
+      'unrelated trailing condition cannot hide a wrong current equation',
+      'Current runway is 4 months. Calculation: $10,000 / $2,500 = 4 months, and we will raise funds if sales stall.',
+      false,
+      90,
+    ],
+    [
+      'coordinated trailing condition cannot hide wrong current cash',
+      'Current runway is 4 months. Current cash is $20,000, and if sales stall, we will cut costs.',
+      false,
+      90,
+    ],
+    [
+      'coordinated trailing condition cannot hide a wrong current equation',
+      'Current runway is 4 months. Calculation: $10,000 / $2,500 = 4 months, and if sales stall, we will cut costs.',
+      false,
+      90,
+    ],
+    [
+      'bare Markdown scenario heading scopes the following equation',
+      'Current runway is 4 months.\n## Scenario\nCalculation: $60,000 / $10,000 = 6 months.',
+      true,
+      100,
+    ],
+    [
+      'bare Markdown baseline heading restores current scope',
+      'Scenario: funding arrives.\nCurrent cash is $60,000.\n## Baseline\nCurrent runway is 4 months.',
+      true,
+      100,
+    ],
+    [
+      'current-estimate Markdown heading restores current scope',
+      '## Scenario\nCalculation: $60,000 / $10,000 = 6 months.\n## Current estimate\nCurrent runway is 4 months.',
+      true,
+      100,
+    ],
+    [
+      'leaving a Markdown scenario section restores current scope',
+      '## Scenario\nCalculation: $60,000 / $10,000 = 6 months.\n## Conclusion\nCurrent runway is 4 months.',
+      true,
+      100,
+    ],
+    [
+      'nested Markdown heading remains inside the scenario section',
+      'Current runway is 4 months.\n## Scenario\n### Calculation\nCalculation: $60,000 / $10,000 = 6 months.',
+      true,
+      100,
+    ],
+    [
+      'explicit action heading restores recommendations after a sensitivity',
+      'Current runway is 4 months.\nHypothetical sensitivity:\nIf burn doubles, runway is 2 months.\nTwo actions:\n1. Cut monthly burn.\n2. Generate revenue.',
+      true,
+      100,
+    ],
+    [
+      'unrelated duration cannot establish the current result',
+      'Runway is not 3 months. It is 4 months until launch.',
+      false,
+      90,
+    ],
+    [
+      'target-only result',
+      'Target runway is 4 months.',
+      false,
+      90,
+    ],
+    [
+      'superseded current result',
+      'Current runway is 4 months. Correction: current runway is 3 months.',
+      false,
+      90,
+    ],
+    [
+      'wrong current cash input',
+      'Current cash is $20,000 and current monthly burn is $10,000. Current runway is 4 months.',
+      false,
+      90,
+    ],
+    [
+      'wrong-input equation supporting the claimed result',
+      'Current runway is 4 months. Calculation: $10,000 / $2,500 = 4 months.',
+      false,
+      90,
+    ],
+  ])('classifies the current finance runway: %s', (_label, runwayStatement, expected, rawScore) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      runwayStatement,
+      'Formula: Runway = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Biggest assumption: burn stays constant and revenue remains zero.',
+      '## Two actions\n1. Cut monthly burn. 2. Generate revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(expected);
+    expect(result).toMatchObject({ rawScore, score: rawScore, passed: rawScore === 100 });
+  });
+
+  it('does not let a generic action heading override an explicit action exclusion', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Current runway is 4 months.',
+      'Formula: Runway = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Biggest assumption: burn stays constant and revenue remains zero.',
+      'Do not implement:',
+      'Two actions:',
+      '1. Cut monthly burn.',
+      '2. Generate revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    expect(result).toMatchObject({ rawScore: 90, score: 90, passed: false });
+  });
+
+  it('does not let a generic Markdown action heading override a hard exclusion', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Current runway is 4 months.',
+      'Formula: Runway = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Biggest assumption: burn stays constant and revenue remains zero.',
+      'For reference only:',
+      '## Two actions',
+      '1. Cut monthly burn.',
+      '2. Generate revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    expect(result).toMatchObject({ rawScore: 90, score: 90, passed: false });
+  });
+
+  it.each([
+    [
+      'nested Markdown action heading remains scenario-only',
+      ['## Scenario', '### Two actions'],
+      false,
+      90,
+    ],
+    [
+      'same-level Markdown action heading exits scenario scope',
+      ['## Scenario', '## Two actions'],
+      true,
+      100,
+    ],
+    [
+      'plain scenario label keeps direct actions hypothetical',
+      ['Scenario:'],
+      false,
+      90,
+    ],
+    [
+      'plain sensitivity label keeps direct actions hypothetical',
+      ['Sensitivity:'],
+      false,
+      90,
+    ],
+    [
+      'plain generic action heading exits scenario scope',
+      ['Scenario:', 'Two actions:'],
+      true,
+      100,
+    ],
+    [
+      'scenario headings cannot launder a hard action exclusion',
+      ['## Do not implement', '## Scenario', '## Two actions'],
+      false,
+      90,
+    ],
+    [
+      'plain no-longer-recommended introduction remains excluded',
+      ['We no longer recommend these actions:', 'Two actions:'],
+      false,
+      90,
+    ],
+    [
+      'no-longer-recommending cannot clear a hard exclusion',
+      ['## Do not implement', 'We are no longer recommending these actions:', 'Two actions:'],
+      false,
+      90,
+    ],
+    [
+      'Markdown no-longer-recommended heading remains excluded',
+      ['## Actions no longer recommended'],
+      false,
+      90,
+    ],
+  ])('classifies finance action section boundaries: %s', (
+    _label,
+    sectionLines,
+    expected,
+    rawScore,
+  ) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Current runway is 4 months.',
+      'Formula: Runway = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Biggest assumption: burn stays constant and revenue remains zero.',
+      ...sectionLines,
+      '1. Cut monthly burn.',
+      '2. Generate revenue.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(expected);
+    expect(result).toMatchObject({ rawScore, score: rawScore, passed: rawScore === 100 });
+  });
+
+  it.each([
+    [
+      'action-bearing gerund retractions remain excluded',
+      [
+        '1. Cut monthly burn; we are no longer recommending this action.',
+        '2. Generate revenue; we are no longer recommending this action.',
+      ],
+    ],
+    [
+      'a later gerund retraction clears previously matched actions',
+      [
+        '1. Cut monthly burn.',
+        '2. Generate revenue.',
+        'We are no longer recommending these actions.',
+      ],
+    ],
+  ])('rejects finance action gerund retractions: %s', (_label, actionLines) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Current runway is 4 months.',
+      'Formula: Runway = Cash on Hand ÷ Net Monthly Burn Rate.',
+      'Biggest assumption: burn stays constant and revenue remains zero.',
+      ...actionLines,
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    expect(result).toMatchObject({ rawScore: 90, score: 90, passed: false });
+  });
+
+  it.each([
     ['Create near-term cash inflow', true],
     ['Add near-term revenue', true],
     ['Start generating revenue', true],
@@ -2523,6 +2963,7 @@ describe('deterministic 100-point persona scorer', () => {
       requestPersonaId: coder.id,
       toolsUsed: [toolName],
       sseEvents: [
+        { event: 'tool', data: { name: toolName, input: {} } },
         { event: 'tool_result', data: { name: toolName, result: 'Unavailable', isError: false } },
         { event: 'done', data: { content: vagueResponse, toolsUsed: [toolName] } },
       ],
@@ -3718,6 +4159,7 @@ describe('deterministic 100-point persona scorer', () => {
       durationMs: 10_000,
       inputTokens: 5_000,
       sseEvents: [
+        { event: 'tool', data: { name: 'web_search', input: { query: 'SQLite pgvector primary sources' } } },
         { event: 'tool_result', data: { name: 'web_search', result: 'untrusted results', isError: false } },
         { event: 'done', data: { content: response, toolsUsed: ['web_search'] } },
       ],

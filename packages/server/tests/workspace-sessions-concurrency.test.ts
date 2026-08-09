@@ -310,7 +310,7 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
     expect(statsB.frameCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('composes the FREE cap, same-workspace chat isolation, bounded cache, and cleanup', async () => {
+  it('composes the FREE cap, concurrent same-workspace planning isolation, bounded cache, and cleanup', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-solo-session-composition-'));
     const server = await buildLocalServer({ dataDir, tier: 'FREE' });
     const workspaceId = server.agentState.activeWorkspaceId;
@@ -330,15 +330,17 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       const promise = new Promise<void>((done) => { resolve = done; });
       return { promise, resolve };
     };
-    const aSecondArrived = deferred();
-    const bSecondArrived = deferred();
-    const aThirdArrived = deferred();
-    const bCompleted = deferred();
+    const aFirstProviderArrived = deferred();
+    const releaseAFirstProvider = deferred();
+    const providerOrder: string[] = [];
     const providerBodies = new Map<'A' | 'B', Array<{
       messages?: Array<{ role?: string; content?: string }>;
     }>>([['A', []], ['B', []]]);
     let requestA: Promise<Awaited<ReturnType<typeof injectWithAuth>>> | undefined;
     let requestB: Promise<Awaited<ReturnType<typeof injectWithAuth>>> | undefined;
+
+    const coordinator = server.agentState.workspaceTurnCoordinator;
+    const acquireSpy = vi.spyOn(coordinator, 'acquire');
 
     const streamResponse = (chunks: unknown[]) => new Response(
       `${chunks.map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
@@ -369,6 +371,15 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
         usage: { prompt_tokens: 10, completion_tokens: 2 },
       },
     ]);
+    const stepPhases = (body: string): string[] => body
+      .split(/\n\n/)
+      .filter(block => block.split('\n').includes('event: step'))
+      .flatMap(block => {
+        const dataLine = block.split('\n').find(line => line.startsWith('data: '));
+        if (!dataLine) return [];
+        const event = JSON.parse(dataLine.slice(6)) as { phase?: unknown };
+        return typeof event.phase === 'string' ? [event.phase] : [];
+      });
 
     server.agentState.llmProvider = {
       provider: 'ollama',
@@ -403,27 +414,23 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       const bodies = providerBodies.get(logicalSession)!;
       bodies.push(body);
       const call = bodies.length;
+      providerOrder.push(`${logicalSession}#${call}`);
 
       if (logicalSession === 'A' && call === 1) {
+        aFirstProviderArrived.resolve();
+        await releaseAFirstProvider.promise;
         return toolResponse('solo-a-create', 'create_plan', { title: 'Plan A' });
       }
       if (logicalSession === 'A' && call === 2) {
-        aSecondArrived.resolve();
-        await bSecondArrived.promise;
         return toolResponse('solo-a-add', 'add_plan_step', { title: 'A_ONLY' });
       }
       if (logicalSession === 'A' && call === 3) {
-        aThirdArrived.resolve();
-        await bCompleted.promise;
         return finalResponse(`${markerA} complete`);
       }
       if (logicalSession === 'B' && call === 1) {
-        await aSecondArrived.promise;
         return toolResponse('solo-b-create', 'create_plan', { title: 'Plan B' });
       }
       if (logicalSession === 'B' && call === 2) {
-        bSecondArrived.resolve();
-        await aThirdArrived.promise;
         return toolResponse('solo-b-show', 'show_plan', {});
       }
       if (logicalSession === 'B' && call === 3) {
@@ -450,6 +457,11 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
           message: `${markerA}: use create_plan, then add_plan_step with A_ONLY.`,
         },
       });
+      await Promise.race([
+        aFirstProviderArrived.promise,
+        requestA.then(() => { throw new Error('Session A completed before reaching the provider'); }),
+      ]);
+
       requestB = injectWithAuth(server, {
         method: 'POST',
         url: '/api/chat',
@@ -461,16 +473,35 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
           autonomy: { level: 'yolo' },
           message: `${markerB}: execute create_plan for Plan B, then execute show_plan immediately.`,
         },
-      }).then(response => {
-        bCompleted.resolve();
-        return response;
       });
-
-      const [responseA, responseB] = await Promise.all([requestA, requestB]);
-      expect(responseA.statusCode).toBe(200);
+      let bCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
+      const responseB = await Promise.race([
+        requestB,
+        new Promise<never>((_, reject) => {
+          bCompletionTimeout = setTimeout(
+            () => reject(new Error('Independent Session B did not complete concurrently')),
+            5_000,
+          );
+        }),
+      ]).finally(() => {
+        if (bCompletionTimeout) clearTimeout(bCompletionTimeout);
+      });
       expect(responseB.statusCode).toBe(200);
-      expect(responseA.body).toContain(`${markerA} complete`);
       expect(responseB.body).toContain(`${markerB} complete`);
+      expect(providerBodies.get('B')).toHaveLength(3);
+      expect(providerOrder).toEqual(['A#1', 'B#1', 'B#2', 'B#3']);
+      expect(acquireSpy).not.toHaveBeenCalled();
+      releaseAFirstProvider.resolve();
+
+      const responseA = await requestA;
+      expect(responseA.statusCode).toBe(200);
+      expect(responseA.body).toContain(`${markerA} complete`);
+      expect(providerOrder).toEqual(['A#1', 'B#1', 'B#2', 'B#3', 'A#2', 'A#3']);
+      const aPhases = stepPhases(responseA.body);
+      const bPhases = stepPhases(responseB.body);
+      expect(aPhases).not.toContain('workspace_queue');
+      expect(bPhases).not.toContain('workspace_queue');
+      expect(bPhases).not.toContain('workspace_acquired');
       expect(server.sessionManager.size).toBe(1);
       expect(server.mindCache.size).toBe(1);
 
@@ -575,12 +606,11 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
           .filter(([releasedWorkspaceId]) => releasedWorkspaceId === id)).toHaveLength(1);
       }
     } finally {
-      aSecondArrived.resolve();
-      bSecondArrived.resolve();
-      aThirdArrived.resolve();
-      bCompleted.resolve();
+      aFirstProviderArrived.resolve();
+      releaseAFirstProvider.resolve();
       await Promise.allSettled([requestA, requestB].filter(Boolean) as Promise<unknown>[]);
       fetchSpy.mockRestore();
+      acquireSpy.mockRestore();
       releaseSpy.mockRestore();
       await server.close();
       if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;

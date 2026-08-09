@@ -136,6 +136,7 @@ describe('chat prompt packaging', () => {
 
   it.each([
     ['finance-owner', 'This is not financial advice.'],
+    ['finance-owner', 'This is not financial or investment advice.'],
     ['finance-owner', 'This is not investment advice.'],
     ['legal-professional', 'This is not legal advice.'],
     ['finance-owner', 'Verify with your accountant or financial advisor.'],
@@ -331,6 +332,117 @@ describe('chat prompt packaging', () => {
     ]) {
       expect(isExplicitGatedToolRequest(externalActionRequest), externalActionRequest).toBe(true);
     }
+  });
+
+  it('keeps a self-contained supplied calculation tool-free and compact', () => {
+    const message = 'Cash is 40000 dollars, monthly burn is 10000 dollars, and revenue is zero. Calculate runway in months, state the formula, name the biggest assumption, and give two actions that improve runway. Do not create files or schedules.';
+    const tools = [
+      { name: 'run_code' },
+      { name: 'generate_xlsx' },
+      { name: 'search_skills' },
+      { name: 'create_skill' },
+    ];
+
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    const eligible = filterGatedToolsForConversationalTurn(tools, message, 'normal');
+    expect(eligible).toEqual([]);
+    const selected = selectToolsForTurn(eligible, {
+      message,
+      mandatoryToolNames: isExplicitGatedToolRequest(message)
+        ? ['search_skills', 'create_skill']
+        : [],
+    });
+    expect(selected.tools).toEqual([]);
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message,
+      selectedToolCount: selected.tools.length,
+      explicitCapabilityRequest: isExplicitGatedToolRequest(message),
+    })).toBe('compact');
+  });
+
+  it.each([
+    'Calculate 40000 divided by 10000 without using code or a calculator.',
+    'Calculate 40000 divided by 10000. Do not use a calculator or code.',
+  ])('honors a negated calculation capability: %s', (message) => {
+    const tools = [
+      { name: 'run_code' },
+      { name: 'calculator' },
+      { name: 'search_skills' },
+      { name: 'create_skill' },
+    ];
+
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    const eligible = filterGatedToolsForConversationalTurn(tools, message, 'normal');
+    expect(eligible).toEqual([]);
+    expect(selectToolsForTurn(eligible, {
+      message,
+      mandatoryToolNames: isExplicitGatedToolRequest(message)
+        ? ['search_skills', 'create_skill']
+        : [],
+    }).tools).toEqual([]);
+  });
+
+  it.each([
+    'Use Python to divide 40000 by 10000.',
+    'Use code to divide 40000 by 10000.',
+  ])('retains a positive code calculation request: %s', (message) => {
+    const tools = [
+      {
+        name: 'run_code',
+        description: 'Run Python code to calculate a numeric result.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => '4',
+      },
+      {
+        name: 'search_skills',
+        description: 'Search available skills.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => '[]',
+      },
+      {
+        name: 'create_skill',
+        description: 'Create a reusable skill.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => 'created',
+      },
+    ];
+
+    expect(isExplicitGatedToolRequest(message)).toBe(true);
+    const eligible = filterGatedToolsForConversationalTurn(tools, message, 'normal');
+    expect(eligible.map(tool => tool.name)).toContain('run_code');
+    expect(selectToolsForTurn(eligible, {
+      message,
+      mandatoryToolNames: ['search_skills', 'create_skill'],
+    }).tools.map(tool => tool.name)).toContain('run_code');
+  });
+
+  it('preserves a positive capability after a negated code clause', () => {
+    const message = 'Calculate 40000 divided by 10000. Do not use code or a calculator, but create a schedule with the result.';
+    const tool = (name: string, description: string) => ({
+      name,
+      description,
+      parameters: { type: 'object', properties: {} },
+      execute: async () => 'ok',
+    });
+    const tools = [
+      tool('run_code', 'Run Python code to calculate a numeric result.'),
+      tool('calculator', 'Calculate a numeric result.'),
+      tool('create_schedule', 'Create a schedule or reminder.'),
+      tool('search_skills', 'Search available skills.'),
+      tool('create_skill', 'Create a reusable skill.'),
+    ];
+
+    expect(isExplicitGatedToolRequest(message)).toBe(true);
+    const eligible = filterGatedToolsForConversationalTurn(tools, message, 'normal');
+    const selected = selectToolsForTurn(eligible, {
+      message,
+      mandatoryToolNames: ['search_skills', 'create_skill'],
+    }).tools.map(candidate => candidate.name);
+
+    expect(selected).toContain('create_schedule');
+    expect(selected).not.toContain('run_code');
+    expect(selected).not.toContain('calculator');
   });
 
   it('keeps a supplied-only exclusive verifier contract tool-free', () => {

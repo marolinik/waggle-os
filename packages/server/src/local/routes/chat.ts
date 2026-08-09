@@ -280,6 +280,7 @@ function hasExplicitGatedToolIntent(message: string): boolean {
   return EXPLICIT_GATED_ACTION_PATTERN.test(message)
     || AMBIGUOUS_GATED_ACTION_PATTERN.test(message)
     || /\b(file|docx|document|artifact|workbook|spreadsheet|xlsx|terminal|shell|bash|command|calculator|cross-workspace|other workspace)\b/i.test(message)
+    || /\b(?:use|using|call|invoke|run)\s+(?:(?:the|a|an)\s+)?(?:calculator|python|code|spreadsheet|workbook|xlsx)\b/i.test(message)
     || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
     || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)

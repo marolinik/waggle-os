@@ -32,6 +32,7 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'pattern'; pattern: RegExp })
   | (BaseResponseRule & { kind: 'dependencyMap' })
   | (BaseResponseRule & { kind: 'timedAgenda'; durationMinutes: number; minimumBlocks: number })
+  | (BaseResponseRule & { kind: 'runwayResult' })
   | (BaseResponseRule & { kind: 'runwayFormula' })
   | (BaseResponseRule & { kind: 'runwayAssumption' })
   | (BaseResponseRule & { kind: 'runwayActions'; patterns: readonly RegExp[] })
@@ -95,16 +96,8 @@ const windowsBrowserFailuresPattern = new RegExp([
 ].join('|'), 'i');
 const positiveRecommendationLead = String.raw`(?:(?<!cannot )(?<!can't )(?<!not )\b(?:recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[\s\S]){0,80}|(?:^|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:\*\*)?|(?:^|[.!?]\s+|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:we|you|the team)[ \t]+should[ \t]+)`;
 const delayRecommendationPattern = new RegExp(`${positiveRecommendationLead}${String.raw`\bdelay(?:ing)?\s+(?:the\s+)?release\b[\s\S]{0,240}\b(?:until|once)\b[\s\S]{0,180}(?:gaps?|failures?|smart router|cloud credentials)`}`, 'im');
-const positiveRunwayCalculationPrefix = String.raw`(?:^|[.!?\r\n])(?:(?!\b(?:do\s+not|don't|not|never|avoid|cannot|can't|distrust|reject|false|incorrect|wrong)\b)[^.\r\n]){0,120}\bcalculation\b(?:(?!\b(?:do\s+not|don't|not|never|avoid|cannot|can't|distrust|reject|false|incorrect|wrong)\b)[^.\r\n]){0,160}`;
-const positiveRunwayCalculation = String.raw`\$?\s*40[,.]?000(?:\.0{1,2})?\s*(?:\/|\u00f7|divided by)\s*\$?\s*10[,.]?000(?:\.0{1,2})?\s*=\s*(?:\*\*)?4(?:\.0+)?\s+months?(?:\*\*)?`;
-const positiveRunwayCalculationSuffix = String.raw`(?![^.\r\n]{0,80}\b(?:incorrect|wrong|false|(?:is\s+)?not(?:\s+actually)?\s+(?:(?:the\s+)?runway|correct|accurate|valid)|cannot\s+be\s+trusted)\b)`;
-const positiveRunwayPattern = new RegExp([
-  String.raw`\brunway\b(?:(?!\b(?:not|never|cannot|can't|incorrect|wrong|isn't|isn’t|no\s+longer)\b)[^.\r\n]){0,50}\b4(?:\.0+)?\s+months?\b`,
-  String.raw`(?<!not )(?<!isn't )(?<!isn’t )\b4(?:\.0+)?\s+months?\s+(?:of\s+)?runway\b`,
-  `${positiveRunwayCalculationPrefix}${positiveRunwayCalculation}${positiveRunwayCalculationSuffix}`,
-].join('|'), 'i');
 const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:(?:\d+[.)]|[-*])[ \t]*|\|[ \t]*\d+[ \t]*\|[ \t]*)?(?:\*\*)?(?:(?:we|you|the team)[ \t]+should[ \t]+)?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
-const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}(?:\?|\b(?:cannot|can't|do not|don't|must not|should not|never|avoid|impossible|merely reported|no longer recommended|(?:not|(?:is|are|was|were)n['’]t)[ \t]+(?:(?:an?|the|this|that|my|your|our|their|his|her|its)[ \t]+)?recommendations?|decid(?:e[sd]?|ing) against|not (?:advisable|feasible|possible|recommended))\b))`;
+const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}(?:\?|\b(?:cannot|can't|do not|don't|must not|should not|never|avoid|impossible|merely reported|no longer recommend(?:ed|ing)?|(?:not|(?:is|are|was|were)n['’]t)[ \t]+(?:(?:an?|the|this|that|my|your|our|their|his|her|its)[ \t]+)?recommendations?|decid(?:e[sd]?|ing) against|not (?:advisable|feasible|possible|recommended))\b))`;
 const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:reduce|cut|lower)\b[^.\r\n]{0,60}(?:costs?|burn)`}${positiveActionSuffix}`, 'im');
 const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise|start[ \t]+generating)\b[^.\r\n]{0,80}(?:revenue|customers?|funding|cash inflows?)|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|accelerate|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?))`}${positiveActionSuffix}`, 'im');
 const memoryPriority = String.raw`memory (?:bug|issue)`;
@@ -255,7 +248,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 2_000,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'runway', description: 'Positively calculates four months of runway', kind: 'pattern', pattern: positiveRunwayPattern, points: 10 },
+      { id: 'runway', description: 'Positively calculates four months of runway', kind: 'runwayResult', points: 10 },
       { id: 'formula', description: 'States cash divided by monthly net burn', kind: 'runwayFormula', points: 10 },
       { id: 'assumption', description: 'Names the constant-burn/no-revenue assumption', kind: 'runwayAssumption', points: 10 },
       { id: 'two-actions', description: 'Gives positive cost and revenue or cash-inflow actions', kind: 'runwayActions', patterns: [costActionPattern, cashActionPattern], points: 10 },

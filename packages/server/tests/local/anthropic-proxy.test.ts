@@ -913,6 +913,48 @@ describe('Anthropic Proxy Routes', () => {
     });
   });
 
+  describe('POST /v1/chat/completions (streaming)', () => {
+    it('counts and preserves Anthropic cache tokens in the final usage chunk', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-stream-cache-usage';
+      server = createTestServer();
+      const anthropicStream = [
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":100,"cache_creation_input_tokens":2000,"cache_read_input_tokens":5000}}}',
+        'data: {"type":"message_delta","usage":{"output_tokens":20}}',
+        'data: {"type":"message_stop"}',
+      ].join('\n\n') + '\n\n';
+      globalThis.fetch = vi.fn(async () => new Response(anthropicStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Stream cached context' }],
+          stream: true,
+          stream_options: { include_usage: true },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const usageChunk = res.body
+        .split('\n')
+        .filter(line => line.startsWith('data: {'))
+        .map(line => JSON.parse(line.slice(6)))
+        .find(chunk => chunk.usage);
+      expect(usageChunk?.usage).toEqual({
+        prompt_tokens: 7_100,
+        completion_tokens: 20,
+        total_tokens: 7_120,
+        prompt_tokens_details: { cached_tokens: 5_000 },
+        cache_creation_input_tokens: 2_000,
+        cache_read_input_tokens: 5_000,
+      });
+    });
+  });
+
   // B3 cleanup regression guard per decisions/2026-04-22-model-route-naming-locked.md §4
   describe('invalid snapshot regression guard (B3 cleanup 2026-04-22)', () => {
     it('does NOT inject -20250514 snapshot for any Claude 4.6 family floating alias', async () => {

@@ -108,7 +108,7 @@ interface IntentBundle {
   tools: readonly string[];
 }
 
-const ACTION_PATTERN = /\b(create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
+const ACTION_PATTERN = /\b(use|using|call|invoke|create|build|draft|write|read|edit|modify|make|generate|export|download|analy[sz]e|research|investigate|find|search|look up|run|execute|fix|debug|test|validate|verify|inspect|review|prepare|plan|schedule|remind|send|post|commit|push|pull|merge|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|remember|recall|save|calculate|model|transform|query|design|implement|compile|lint|refactor|summarize|check)\b/i;
 const CONTINUATION_PATTERN = /\b(continue|proceed|do it|go ahead|yes,? please|next step|same again|retry|try again|carry on)\b/i;
 const NEGATED_TOOL_VERB_SOURCE = String.raw`(?:use|using|call|calling|invoke|invoking|create|creating|write|writing|edit|editing|read|reading|browse|browsing|search|searching|schedule|scheduling|send|sending|post|posting|commit|committing|push|pushing|delete|deleting|remove|removing|run|running|execute|executing)`;
 const NEGATED_TOOL_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|scripts?)`;
@@ -210,6 +210,16 @@ function overlapCount(left: ReadonlySet<string>, right: ReadonlySet<string>): nu
 
 function positiveIntentText(value: string): string {
   return value.replace(NEGATED_TOOL_CLAUSE_PATTERN, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function isNegatedExecutionTool(tool: ToolDefinition, negatedClauses: readonly string[]): boolean {
+  const name = tool.name.toLowerCase();
+  return negatedClauses.some(clause => {
+    const codeExecution = /\b(?:code|python|script)\b/i.test(clause)
+      && /^(?:run_code|bash|cli_execute)$/.test(name);
+    const calculator = /\bcalculator\b/i.test(clause) && /calculator/.test(name);
+    return codeExecution || calculator;
+  });
 }
 
 function hasInlineCalculationOperands(value: string): boolean {
@@ -316,7 +326,9 @@ export function selectToolsForTurn(
     deduplicated.push({ tool: candidate, index });
   }
 
-  const message = positiveIntentText(options.message.toLowerCase());
+  const rawMessage = options.message.toLowerCase();
+  const negatedClauses = [...rawMessage.matchAll(NEGATED_TOOL_CLAUSE_PATTERN)].map(match => match[0]);
+  const message = positiveIntentText(rawMessage);
   const messageTokens = tokensOf(message);
   const isContinuation = CONTINUATION_PATTERN.test(message);
   const isAction = ACTION_PATTERN.test(message) || isContinuation;
@@ -345,6 +357,7 @@ export function selectToolsForTurn(
 
   const ranked: Array<{ tool: ToolDefinition; index: number; score: number }> = [];
   for (const { tool, index } of deduplicated) {
+    if (!mandatory.has(tool.name) && isNegatedExecutionTool(tool, negatedClauses)) continue;
     if (suppressImplicitCalculationTools
       && IMPLICIT_CALCULATION_TOOL_NAMES.has(tool.name)
       && !mandatory.has(tool.name)) {

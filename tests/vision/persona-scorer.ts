@@ -134,14 +134,28 @@ function isFailedToolResult(result: string): boolean {
   return !normalized || /^(?:error(?::|\s)|fetch (?:failed|error)|search (?:failed|error|rate limit exceeded)|no (?:search results|relevant memories) found|page fetched but no text content found|\[security\] tool output flagged|\[blocked\]|tool "[^"]+" (?:not found|is blocked))/i.test(normalized);
 }
 
+function testPattern(pattern: RegExp, value: string): boolean {
+  return new RegExp(pattern.source, pattern.flags).test(value);
+}
+
 function successfulToolNames(events: readonly CapturedSseEvent[]): Set<string> {
   const names = new Set<string>();
+  const pendingByName = new Map<string, number>();
   for (const event of events) {
-    if (event.event !== 'tool_result' && event.event !== 'tool_end') continue;
     const data = recordData(event);
     const name = typeof data?.name === 'string' ? data.name : '';
+    const key = name.toLowerCase();
+    if (event.event === 'tool' || event.event === 'tool_start') {
+      if (key) pendingByName.set(key, (pendingByName.get(key) ?? 0) + 1);
+      continue;
+    }
+    if (event.event !== 'tool_result' && event.event !== 'tool_end') continue;
+    const pending = pendingByName.get(key) ?? 0;
+    if (!key || pending === 0) continue;
+    if (pending === 1) pendingByName.delete(key);
+    else pendingByName.set(key, pending - 1);
     const result = typeof data?.result === 'string' ? data.result : '';
-    if (!name || data?.isError === true || isFailedToolResult(result)) continue;
+    if (data?.isError === true || isFailedToolResult(result)) continue;
     names.add(name);
   }
   return names;
@@ -323,6 +337,284 @@ function successfulPrimaryFetchIdentities(
     if (identity) successful.add(identity);
   }
   return successful;
+}
+
+const FINANCE_NUMBER = /(?:\d+(?:\.\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)/.source;
+const FINANCE_AMOUNT = /\(?\s*\$?\s*(\d[\d,]*(?:\.\d+)?(?:\s*(?:k|m|bn|thousand|million|billion))?)\s*\)?/.source;
+const FINANCE_CURRENT_CASH = new RegExp(
+  /\b(?:current\s+cash|cash\s+(?:balance|on\s+hand))\s*(?:is|=|:)\s*/.source
+    + FINANCE_AMOUNT
+    + /\b/.source,
+  'gi',
+);
+const FINANCE_CURRENT_BURN = new RegExp(
+  /\b(?:current\s+)?(?:net\s+)?monthly\s+burn(?:\s+rate)?\s*(?:is|=|:)\s*/.source
+    + FINANCE_AMOUNT
+    + /\b/.source,
+  'gi',
+);
+const FINANCE_RUNWAY_AFTER = new RegExp(
+  /\b(?:(?:actual|current)\s+){0,2}runway(?:\s*\(months\))?\s*/.source
+    + /(is\s+not|isn't|isn’t|cannot\s+be|can't\s+be|is|of|=|:|\||equals?|comes\s+to|totals?|works\s+out\s+to|should\s+be)/.source
+    + /\s*(?:approximately|about|around|roughly)?\s*/.source
+    + '(' + FINANCE_NUMBER + ')'
+    + /\s*months?\b/.source,
+  'gi',
+);
+const FINANCE_RUNWAY_BEFORE = new RegExp(
+  '\\b(' + FINANCE_NUMBER + ')'
+    + /(?:\s+|-)months?\s+(?:of\s+)?runway\b/.source,
+  'gi',
+);
+const FINANCE_CASH_DURATION = new RegExp(
+  /\bcash(?:\s+(?:on\s+hand|balance))?\s+(?:covers|funds|lasts(?:\s+for)?)\s+/.source
+    + '(' + FINANCE_NUMBER + ')'
+    + /\s*months?\b/.source,
+  'gi',
+);
+const FINANCE_RUNWAY_EQUATION = new RegExp(
+  FINANCE_AMOUNT
+    + /\s*(?:\/|÷|divided by)\s*/.source
+    + FINANCE_AMOUNT
+    + /\s*(?:=|equals?|gives?|yields?|produces?|works\s+out\s+to)\s*/.source
+    + '(' + FINANCE_NUMBER + ')'
+    + /(?:\s*months?)?\b/.source,
+  'gi',
+);
+const FINANCE_COREFERENCE_ASSERTION = new RegExp(
+  /\b(?:correction|actually|instead|it|(?:that|this|the)\s+(?:figure|result|answer|calculation))\s*(?:is\s+not|isn't|isn’t|is|=|:|equals?)?\s*/.source
+    + '(' + FINANCE_NUMBER + ')'
+    + /\s*months?\b/.source,
+  'gi',
+);
+const FINANCE_SCENARIO_PREFIX = /\b(?:if|hypothetical|alternative|scenario|sensitivity|were\s+to|under\s+(?:changed|different|higher|lower|double|doubled)|at\s+(?:a|the)\s+(?:different|higher|lower))\b/i;
+const FINANCE_SCENARIO_HEADING = /^\s*(?:scenario|hypothetical|alternative|sensitivity)(?:\s+(?:case|analysis))?(?:\s*:|\s*$)/i;
+const FINANCE_SCENARIO_MARKDOWN_HEADING = /^\s*(?:scenario|hypothetical|alternative|sensitivity)\b/i;
+const FINANCE_CURRENT_SCOPE_HEADING = /^\s*(?:baseline|base\s+case|actual|current(?:\s+(?:case|estimate))?)(?:\s*:|\s*$)/i;
+const FINANCE_SCENARIO_SUFFIX = /^\s*(?:,\s*)?(?:if|when|assuming|provided|under\s+(?:(?:that|this|the|a|an)\s+)?(?:scenario|case)|in\s+(?:(?:that|this|the|a|an)\s+)?(?:scenario|case))\b/i;
+const FINANCE_NONCURRENT_PREFIX = /\b(?:target|goal|best[- ]case|(?:need|want|require)(?:\s+at\s+least)?)\s*$/i;
+const FINANCE_RESULT_INVALIDATION = /\b(?:(?:that|this|the)\s+(?:figure|result|answer|calculation)\s+(?:(?:is|was|seems?)\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable)|does\s+not\s+apply)|do\s+not\s+trust\s+(?:that|this|the)\s+(?:figure|result|answer|calculation))\b/i;
+const FINANCE_DENIAL_PREFIX = /\b(?:never|no\s+longer|do\s+not\s+say|don't\s+say|it\s+(?:would|is)\s+be\s+misleading\s+to\s+say|(?:we|I)\s+(?:cannot|can't)\s+(?:conclude|determine|establish)(?:\s+that)?|(?:reject(?:ed|s|ing)?|dispute(?:d|s|ing)?|deny|denied|denies|denying)(?:\s+the)?\s+(?:claim|statement)(?:\s+of|\s+that)?|(?:incorrectly|wrongly)\s+(?:reported|claimed|stated)|it\s+is\s+(?:false|not\s+true)\s+that)\s*$/i;
+const FINANCE_DENIAL_SUFFIX = /^\s*["'”]?\s*(?:,?\s*(?:(?:which|and\s+that|but\s+this)\s+is\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable|(?:the\s+)?runway)|an?\s+example\b|cannot\s+be\s+correct|can't\s+be\s+correct)|(?:cannot|can't)\s+be\s+correct|does\s+not\s+apply|is\s+an?\s+example|is\s+a\s+mistake|is\s+incorrect|is\s+not\s+(?:correct|(?:the\s+)?runway)|is\s+false)/i;
+
+const FINANCE_WORD_VALUES: Readonly<Record<string, number>> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+};
+
+function financeNumber(value: string): number {
+  const normalized = value.trim().toLowerCase();
+  return FINANCE_WORD_VALUES[normalized] ?? Number(normalized);
+}
+
+function financeAmount(value: string): number {
+  const normalized = value.replace(/,/g, '').replace(/\s+/g, '').toLowerCase();
+  const number = Number(normalized.match(/^\d+(?:\.\d+)?/)?.[0]);
+  const suffix = normalized.match(/(?:bn|billion|million|thousand|k|m)$/)?.[0];
+  const multiplier = suffix === 'k' || suffix === 'thousand'
+    ? 1_000
+    : suffix === 'm' || suffix === 'million'
+      ? 1_000_000
+      : suffix === 'bn' || suffix === 'billion'
+        ? 1_000_000_000
+        : 1;
+  return number * multiplier;
+}
+
+function financeAssertionDenied(
+  clause: string,
+  start: number,
+  end: number,
+  connector = '',
+): boolean {
+  if (/\?\s*$/.test(clause)) return true;
+  if (FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start))) return true;
+  if (/\b(?:is\s+not|isn't|isn’t|cannot\s+be|can't\s+be)\b/i.test(connector)) return true;
+  return FINANCE_DENIAL_PREFIX.test(clause.slice(0, start))
+    || /^\s*,?\s*but\s+that\s+(?:cannot|can't)\s+be\s+right\b/i.test(clause.slice(end))
+    || FINANCE_DENIAL_SUFFIX.test(clause.slice(end));
+}
+
+function financeAssertionInScenario(
+  clause: string,
+  start: number,
+  assertion: string,
+  inheritedScenario: boolean,
+): boolean {
+  return inheritedScenario
+    || FINANCE_SCENARIO_PREFIX.test(clause.slice(0, start))
+    || FINANCE_SCENARIO_SUFFIX.test(clause.slice(start + assertion.length));
+}
+
+function hasAffirmedCurrentRunway(response: string): boolean {
+  const closeTo = (actual: number, expected: number): boolean => Math.abs(actual - expected) <= 0.005;
+  const clauses = response
+    .split(/(?:\r?\n)+|(?<=[.!?])\s+|;\s*/)
+    .map((rawClause) => {
+      const markdownHeading = /^\s{0,3}(#{1,6})(?:[ \t]+|$)/.exec(rawClause);
+      return {
+        clause: rawClause.replace(/[*_#>\x60]/g, ' ').replace(/\s+/g, ' ').trim(),
+        headingLevel: markdownHeading?.[1].length ?? null,
+      };
+    })
+    .filter(({ clause }) => Boolean(clause));
+  let positiveCurrentResult = false;
+  let previousClauseHasCurrentRunwayContext = false;
+  let scenarioScopeActive = false;
+  let scenarioScopeHeadingLevel: number | null = null;
+
+  for (const { clause, headingLevel } of clauses) {
+    if (FINANCE_CURRENT_SCOPE_HEADING.test(clause)) {
+      scenarioScopeActive = false;
+      scenarioScopeHeadingLevel = null;
+    } else if (headingLevel !== null && FINANCE_SCENARIO_MARKDOWN_HEADING.test(clause)) {
+      scenarioScopeActive = true;
+      scenarioScopeHeadingLevel = headingLevel;
+    } else if (
+      headingLevel !== null
+      && scenarioScopeActive
+      && (scenarioScopeHeadingLevel === null || headingLevel <= scenarioScopeHeadingLevel)
+    ) {
+      scenarioScopeActive = false;
+      scenarioScopeHeadingLevel = null;
+    } else if (headingLevel === null && FINANCE_SCENARIO_HEADING.test(clause)) {
+      scenarioScopeActive = true;
+      scenarioScopeHeadingLevel = null;
+    }
+    const clauseScenarioScope = scenarioScopeActive;
+    let clauseHasRunwayContext = false;
+    let clauseHasCurrentRunwayContext = false;
+    for (const match of clause.matchAll(FINANCE_CURRENT_CASH)) {
+      const start = match.index ?? 0;
+      if (FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start))
+        || financeAssertionInScenario(clause, start, match[0], clauseScenarioScope)) continue;
+      if (!closeTo(financeAmount(match[1]), 40_000)) return false;
+    }
+    for (const match of clause.matchAll(FINANCE_CURRENT_BURN)) {
+      const start = match.index ?? 0;
+      if (FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start))
+        || financeAssertionInScenario(clause, start, match[0], clauseScenarioScope)) continue;
+      if (!closeTo(financeAmount(match[1]), 10_000)) return false;
+    }
+
+    for (const match of clause.matchAll(FINANCE_RUNWAY_AFTER)) {
+      const start = match.index ?? 0;
+      const value = financeNumber(match[2]);
+      const scenario = financeAssertionInScenario(clause, start, match[0], clauseScenarioScope);
+      const nonCurrent = FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start));
+      clauseHasRunwayContext = true;
+      if (scenario || nonCurrent) continue;
+      clauseHasCurrentRunwayContext = true;
+      const denied = financeAssertionDenied(clause, start, start + match[0].length, match[1]);
+      if (denied) {
+        if (closeTo(value, 4)) return false;
+      } else {
+        if (!closeTo(value, 4)) return false;
+        positiveCurrentResult = true;
+      }
+    }
+
+    for (const match of clause.matchAll(FINANCE_RUNWAY_BEFORE)) {
+      const start = match.index ?? 0;
+      const value = financeNumber(match[1]);
+      const scenario = financeAssertionInScenario(clause, start, match[0], clauseScenarioScope);
+      const nonCurrent = FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start));
+      clauseHasRunwayContext = true;
+      if (scenario || nonCurrent) continue;
+      clauseHasCurrentRunwayContext = true;
+      const denied = financeAssertionDenied(clause, start, start + match[0].length);
+      if (denied) {
+        if (closeTo(value, 4)) return false;
+      } else {
+        if (!closeTo(value, 4)) return false;
+        positiveCurrentResult = true;
+      }
+    }
+
+    for (const match of clause.matchAll(FINANCE_CASH_DURATION)) {
+      const start = match.index ?? 0;
+      const value = financeNumber(match[1]);
+      const scenario = financeAssertionInScenario(clause, start, match[0], clauseScenarioScope);
+      const nonCurrent = FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start));
+      clauseHasRunwayContext = true;
+      if (scenario || nonCurrent) continue;
+      clauseHasCurrentRunwayContext = true;
+      const denied = financeAssertionDenied(clause, start, start + match[0].length);
+      if (denied) {
+        if (closeTo(value, 4)) return false;
+      } else {
+        if (!closeTo(value, 4)) return false;
+        positiveCurrentResult = true;
+      }
+    }
+
+    for (const match of clause.matchAll(FINANCE_RUNWAY_EQUATION)) {
+      const start = match.index ?? 0;
+      const hasRunwayEquationContext = /\brunway\b/i.test(clause)
+        || /^\s*(?:calculation|result)\s*:/i.test(clause);
+      if (!hasRunwayEquationContext) continue;
+      const scenario = financeAssertionInScenario(clause, start, match[0], clauseScenarioScope);
+      const nonCurrent = FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start));
+      clauseHasRunwayContext = true;
+      if (scenario || nonCurrent) continue;
+      clauseHasCurrentRunwayContext = true;
+      const equation = {
+        numerator: financeAmount(match[1]),
+        denominator: financeAmount(match[2]),
+        result: financeNumber(match[3]),
+      };
+      const mathematicallyValid = equation.denominator !== 0
+        && closeTo(equation.numerator / equation.denominator, equation.result);
+      if (!mathematicallyValid) return false;
+      const matchesSuppliedInputs = closeTo(equation.numerator, 40_000)
+        && closeTo(equation.denominator, 10_000)
+        && closeTo(equation.result, 4);
+      const denied = financeAssertionDenied(clause, start, start + match[0].length);
+      if (denied) return false;
+      if (!matchesSuppliedInputs) return false;
+      positiveCurrentResult = true;
+    }
+
+    const canUseCurrentRunwayCoreference = !clauseScenarioScope
+      && (clauseHasCurrentRunwayContext
+        || (!clauseHasRunwayContext && previousClauseHasCurrentRunwayContext));
+    let clauseCarriesCurrentRunwayContext = clauseHasCurrentRunwayContext;
+    if (canUseCurrentRunwayCoreference) {
+      for (const match of clause.matchAll(FINANCE_COREFERENCE_ASSERTION)) {
+        const start = match.index ?? 0;
+        const end = start + match[0].length;
+        const lead = clause.slice(0, start).trim();
+        if (lead && !/^(?:but|however|instead|actually|correction)[,:]?$/i.test(lead)) continue;
+        if (!/^[\s,.;:!?]*$/.test(clause.slice(end))) continue;
+        clauseCarriesCurrentRunwayContext = true;
+        const value = financeNumber(match[1]);
+        const denied = financeAssertionDenied(clause, start, end, match[0]);
+        if (denied) {
+          if (closeTo(value, 4)) return false;
+        } else if (!closeTo(value, 4)) {
+          return false;
+        } else {
+          positiveCurrentResult = true;
+        }
+      }
+
+      if (FINANCE_RESULT_INVALIDATION.test(clause)) return false;
+    }
+    previousClauseHasCurrentRunwayContext = clauseCarriesCurrentRunwayContext;
+  }
+
+  return positiveCurrentResult;
 }
 
 const RUNWAY_FORMULA_CORES = [
@@ -1454,7 +1746,7 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     const scopedClause = writerClauseForReleaseTopic(clause, topic);
     return topic.test(scopedClause)
       && !isNonAffirmative(scopedClause, topic)
-      && fact.test(scopedClause);
+      && testPattern(fact, scopedClause);
   });
   const hasDeniedFact = (topic: RegExp): boolean => clauses.some((clause) => {
     const sharedTopic = /browser/i.test(topic.source)
@@ -1473,7 +1765,7 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     return browserTopic.test(scopedClause)
       && /\bWindows\b/i.test(scopedClause)
       && !isNonAffirmative(scopedClause, browserTopic)
-      && patterns[2].test(scopedClause);
+      && testPattern(patterns[2], scopedClause);
   });
 
   return !hasDeniedFact(/\bFriday\b/i)
@@ -1484,46 +1776,107 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     && browserAffirmed;
 }
 
-const NON_AFFIRMATIVE_ACTION_SECTION = /\?|\b(?:quoted|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|questions?|not selected|not approved|not endorsed|old memo)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\brecommend(?:ed|ing)? against\b|\bdecid(?:e[sd]?|ing) against\b|\bavoid (?:these|the|following) actions?\b|\bdo not implement\b|\b(?:not|(?:is|are|was|were)n['’]t) (?:(?:an?|the|this|that|my|your|our|their|his|her|its) )?recommendations?\b|\bfor (?:discussion|reference) only\b/i;
-const NON_AFFIRMATIVE_ACTION_LINE = /\?|\b(?:merely reported|quoted(?: from)?|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|not selected|not approved|not endorsed|old memo|consider only|no longer recommended|(?:not|(?:is|are|was|were)n['’]t) (?:(?:an?|the|this|that|my|your|our|their|his|her|its) )?recommendations?|decid(?:e[sd]?|ing) against|do not implement)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\brecommend(?:ed|ing)? against\b|\bavoid (?:these|the|following) actions?\b|\bfor (?:discussion|reference) only\b/i;
-const AFFIRMATIVE_ACTION_SECTION = /\b(?:now\s+)?recommend(?:ed|ing)?\s+(?:these|the|following)?\s*actions?\b|\b(?:approved|selected) actions?\b|\bactions? to improve runway\b/i;
-const RETRACTS_ALL_ACTIONS = /\b(?:(?:both|all|the)\s+(?:recommendations?|actions?)\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|ruled[- ]out|not approved|not endorsed)|(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the)\s+(?:recommendations?|actions?))\b/i;
+const NON_AFFIRMATIVE_ACTION_SECTION = /\?|\b(?:quoted|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|questions?|not selected|not approved|not endorsed|old memo)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\bno longer recommend(?:ed|ing)?\b|\brecommend(?:ed|ing)? against\b|\bdecid(?:e[sd]?|ing) against\b|\bavoid (?:these|the|following) actions?\b|\bdo not implement\b|\b(?:not|(?:is|are|was|were)n['’]t) (?:(?:an?|the|this|that|my|your|our|their|his|her|its) )?recommendations?\b|\bfor (?:discussion|reference) only\b/i;
+const NON_AFFIRMATIVE_ACTION_LINE = /\?|\b(?:merely reported|quoted(?: from)?|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|not selected|not approved|not endorsed|old memo|consider only|no longer recommend(?:ed|ing)?|(?:not|(?:is|are|was|were)n['’]t) (?:(?:an?|the|this|that|my|your|our|their|his|her|its) )?recommendations?|decid(?:e[sd]?|ing) against|do not implement)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\brecommend(?:ed|ing)? against\b|\bavoid (?:these|the|following) actions?\b|\bfor (?:discussion|reference) only\b/i;
+const EXPLICIT_AFFIRMATIVE_ACTION_SECTION = /\b(?:now\s+)?recommend(?:ed|ing)?\s+(?:these|the|following)?\s*actions?\b|\b(?:approved|selected) actions?\b|\bactions? to improve runway\b/i;
+const GENERIC_ACTION_SECTION = /^\s*(?:two|2)\s+actions?\s*:?\s*$/i;
+const RESETTABLE_SCENARIO_ACTION_SECTION = /^\s*(?:(?:hypothetical|alternative)\s+)?(?:scenario|sensitivity)(?:\s+analysis)?\s*:?\s*$|^\s*hypothetical\s*:?\s*$/i;
+const RETRACTS_ALL_ACTIONS = /\b(?:(?:both|all|the|these)\s+(?:recommendations?|actions?)\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|ruled[- ]out|not approved|not endorsed|no longer recommended)|(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the|these)\s+(?:recommendations?|actions?)|no longer recommend(?:ed|ing)?\s+(?:both|all|the|these)\s+(?:recommendations?|actions?))\b/i;
+
+type ActionSectionState = 'active' | 'scenario' | 'hard';
+
+function transitionActionSection(
+  state: ActionSectionState,
+  label: string,
+  headingLevel: number | null = null,
+  scenarioHeadingLevel: number | null = null,
+): ActionSectionState {
+  if (RESETTABLE_SCENARIO_ACTION_SECTION.test(label)) {
+    return state === 'hard' ? 'hard' : 'scenario';
+  }
+  if (NON_AFFIRMATIVE_ACTION_SECTION.test(label)) {
+    return 'hard';
+  }
+  if (EXPLICIT_AFFIRMATIVE_ACTION_SECTION.test(label)) return 'active';
+  if (GENERIC_ACTION_SECTION.test(label)) {
+    if (state !== 'scenario') return state;
+    if (
+      headingLevel !== null
+      && scenarioHeadingLevel !== null
+      && headingLevel > scenarioHeadingLevel
+    ) {
+      return 'scenario';
+    }
+    return 'active';
+  }
+  return state;
+}
 
 function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[]): boolean {
   if (patterns.length === 0) return false;
   const matched = patterns.map(() => false);
-  let excludedSection = false;
+  let sectionState: ActionSectionState = 'active';
+  let scenarioHeadingLevel: number | null = null;
 
   for (const line of response.replace(/\r\n?/g, '\n').split('\n')) {
     if (RETRACTS_ALL_ACTIONS.test(line)) {
       matched.fill(false);
-      excludedSection = true;
+      sectionState = 'hard';
       continue;
     }
-    const heading = /^\s*#{1,6}\s+(.+?)\s*$/.exec(line)?.[1]
+    const markdownHeading = /^\s*(#{1,6})\s+(.+?)\s*$/.exec(line);
+    const heading = markdownHeading?.[2]
       ?? /^\s*\*\*([^*]+)\*\*\s*$/.exec(line)?.[1];
     if (heading !== undefined) {
-      excludedSection = NON_AFFIRMATIVE_ACTION_SECTION.test(heading);
+      const headingLevel = markdownHeading?.[1].length ?? null;
+      const nextState = transitionActionSection(
+        sectionState,
+        heading,
+        headingLevel,
+        scenarioHeadingLevel,
+      );
+      if (nextState === 'scenario') {
+        if (
+          sectionState !== 'scenario'
+          || (
+            headingLevel !== null
+            && (scenarioHeadingLevel === null || headingLevel <= scenarioHeadingLevel)
+          )
+        ) {
+          scenarioHeadingLevel = headingLevel;
+        }
+      } else {
+        scenarioHeadingLevel = null;
+      }
+      sectionState = nextState;
       continue;
     }
-    const containsAction = patterns.some(pattern => pattern.test(line));
-    if (!containsAction && NON_AFFIRMATIVE_ACTION_SECTION.test(line)) {
-      excludedSection = true;
+    const containsAction = patterns.some(pattern => testPattern(pattern, line));
+    const introducesActionSection = /[:?]\s*$/.test(line)
+      || /\b(?:actions?|recommendations?|options?)\b/i.test(line);
+    if (!containsAction && introducesActionSection && (
+      NON_AFFIRMATIVE_ACTION_SECTION.test(line)
+      || RESETTABLE_SCENARIO_ACTION_SECTION.test(line)
+    )) {
+      sectionState = transitionActionSection(sectionState, line);
       continue;
     }
-    if (!containsAction && AFFIRMATIVE_ACTION_SECTION.test(line)) {
-      excludedSection = false;
+    if (!containsAction && (
+      EXPLICIT_AFFIRMATIVE_ACTION_SECTION.test(line)
+      || GENERIC_ACTION_SECTION.test(line)
+    )) {
+      sectionState = transitionActionSection(sectionState, line);
       continue;
     }
     if (NON_AFFIRMATIVE_ACTION_LINE.test(line)) {
       patterns.forEach((pattern, index) => {
-        if (pattern.test(line)) matched[index] = false;
+        if (testPattern(pattern, line)) matched[index] = false;
       });
       continue;
     }
-    if (excludedSection) continue;
+    if (sectionState !== 'active') continue;
     patterns.forEach((pattern, index) => {
-      if (!matched[index] && pattern.test(line)) matched[index] = true;
+      if (!matched[index] && testPattern(pattern, line)) matched[index] = true;
     });
   }
 
@@ -1536,11 +1889,13 @@ function evaluateResponseRule(
 ): boolean {
   switch (rule.kind) {
     case 'pattern':
-      return rule.pattern.test(evidence.response);
+      return testPattern(rule.pattern, evidence.response);
     case 'dependencyMap':
       return hasMilestoneDependencyMap(evidence.response);
     case 'timedAgenda':
       return hasTimedAgenda(evidence.response, rule.durationMinutes, rule.minimumBlocks);
+    case 'runwayResult':
+      return hasAffirmedCurrentRunway(evidence.response);
     case 'runwayFormula':
       return hasAffirmedRunwayFormula(evidence.response);
     case 'runwayAssumption':
@@ -1554,9 +1909,9 @@ function evaluateResponseRule(
     case 'boundedWorkspaceClaims':
       return hasOnlyBoundedWorkspaceClaims(evidence.response);
     case 'allPatterns':
-      return rule.patterns.every(pattern => pattern.test(evidence.response));
+      return rule.patterns.every(pattern => testPattern(pattern, evidence.response));
     case 'notPattern':
-      return !rule.pattern.test(evidence.response);
+      return !testPattern(rule.pattern, evidence.response);
     case 'verifierContract':
       return evaluateVerifierContract(evidence.response).passed;
     case 'maxWords':
@@ -1650,6 +2005,8 @@ function criticalFailures(
 
   if (
     evidence.persistedMessageCount !== 2
+    || normalizeResponse(evidence.prompt) !== normalizeResponse(persona.prompt)
+    || normalizeResponse(evidence.persistedPrompt) !== normalizeResponse(evidence.prompt)
     || normalizeResponse(evidence.persistedPrompt) !== normalizeResponse(persona.prompt)
     || normalizeResponse(evidence.persistedResponse) !== normalizeResponse(evidence.response)
   ) {
@@ -1753,7 +2110,7 @@ export function scorePersonaTrial(
   check(checks, 'groundingSafety', 'mutation-free', 'No mutation tool executed', mutationFree, 10);
 
   const requiredToolsObserved = persona.requiredToolPatterns.every(pattern =>
-    [...successfulTools].some(name => pattern.test(name)),
+    [...successfulTools].some(name => testPattern(pattern, name)),
   );
   check(
     checks,
@@ -1788,6 +2145,8 @@ export function scorePersonaTrial(
     'conversation-persisted',
     'Fresh session persisted exactly one user prompt and one assistant response',
     evidence.persistedMessageCount === 2
+      && normalizeResponse(evidence.prompt) === normalizeResponse(persona.prompt)
+      && normalizeResponse(evidence.persistedPrompt) === normalizeResponse(evidence.prompt)
       && normalizeResponse(evidence.persistedPrompt) === normalizeResponse(persona.prompt)
       && normalizeResponse(evidence.persistedResponse) === normalizeResponse(evidence.response),
     5,

@@ -401,6 +401,17 @@ describe('selectToolsForTurn - bounded per-turn model context', () => {
     expect(selected.tools.map(tool => tool.name)).toContain('run_code');
   });
 
+  it('keeps an explicit positive capability attached to a calculation', () => {
+    const selected = selectToolsForTurn([
+      selectorTool('create_schedule', 'Create schedules and recurring reminders'),
+      selectorTool('run_code', 'Calculate financial values with code'),
+    ], {
+      message: 'Calculate 40000 divided by 10000 and create a schedule with the result.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('create_schedule');
+  });
+
   it('keeps an explicit external send capability attached to a calculation', () => {
     const selected = selectToolsForTurn([
       selectorTool('plugin_slack_send_message', 'Send a Slack message'),
