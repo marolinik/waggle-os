@@ -4538,7 +4538,15 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
       'model_providers.openai.base_url="https://chatgpt.com/backend-api/"',
     );
     expect(denialProof).not.toContain('waggle_chatgpt');
-    expect(denialProof).not.toContain("'model/rerouted'");
+    const allowedNotificationPolicyStart = denialProof.indexOf(
+      'const ALLOWED_NOTIFICATION_METHODS = new Set([',
+    );
+    const allowedNotificationPolicy = denialProof.slice(
+      allowedNotificationPolicyStart,
+      denialProof.indexOf(']);', allowedNotificationPolicyStart) + 3,
+    );
+    expect(allowedNotificationPolicy).not.toContain("'model/rerouted'");
+    expect(denialProof).toContain("entry.message?.method === 'model/rerouted'");
     expect(denialProof).toContain('sensitiveDataObserved: false');
     expect(denialProof).toContain('paidCalls: 0');
     expect(denialProof).not.toContain('dangerously-bypass-hook-trust');
@@ -4566,7 +4574,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(JSON.parse(helperSelfTest.stdout)).toMatchObject({
       pass: true,
       paidCalls: 0,
-      cases: 30,
+      cases: 42,
     });
 
     if (process.platform === 'win32') {
@@ -4590,9 +4598,122 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
       expect(JSON.parse(validatorSelfTest.stdout)).toMatchObject({
         pass: true,
         paidCalls: 0,
-        cases: 34,
+        cases: 48,
       });
     }
+  });
+
+  it('stages Codex official setup before any model invocation', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'test-windows-official-auth-canaries.ps1'),
+      'utf-8',
+    ).replace(/\r\n/g, '\n');
+    const denialProof = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'verify-codex-tool-denial.mjs'),
+      'utf-8',
+    ).replace(/\r\n/g, '\n');
+
+    expect(denialProof).toContain('const CANARY_STAGES = new Set([');
+    for (const stage of [
+      'app-server-spawn',
+      'initialize',
+      'hooks-list',
+      'pre-turn-boundary',
+      'thread-start',
+      'turn-start',
+      'turn-completed',
+      'event-audit',
+      'app-server-close',
+      'post-turn-invariants',
+    ]) {
+      expect(denialProof).toContain(`'${stage}'`);
+    }
+    expect(denialProof).toContain('function sanitizeProtocolCode(value)');
+    expect(denialProof).toContain('value >= -2_147_483_648');
+    expect(denialProof).toContain('value <= 2_147_483_647');
+    expect(denialProof).toContain('const FAILURE_NOTIFICATION_METHODS = new Set([');
+    for (const method of [
+      'error',
+      'warning',
+      'guardianWarning',
+      'configWarning',
+      'deprecationNotice',
+    ]) {
+      expect(denialProof).toContain(`'${method}'`);
+    }
+    for (const method of [
+      'account/updated',
+      'mcpServer/startupStatus/updated',
+      'model/safetyBuffering/updated',
+      'model/verification',
+      'thread/name/updated',
+      'thread/settings/updated',
+      'turn/moderationMetadata',
+    ]) {
+      expect(denialProof).toContain(`'${method}'`);
+    }
+    expect(denialProof).not.toContain("'rawResponse/completed'");
+    expect(denialProof).not.toContain("'rawResponseItem/completed'");
+    expect(denialProof).toContain("const setupOnly = flags['setup-only'] === true;");
+    expect(denialProof).toContain('if (options.setupOnly) {');
+    expect(denialProof).toContain('modelCalls: 0');
+    expect(denialProof).toContain('turnStartCalls: 0');
+    expect(denialProof).toContain("completedStage: 'thread-start'");
+    expect(denialProof).toContain('failureStage: report.diagnostic.failureStage');
+    expect(denialProof).toContain('protocolCode: report.diagnostic.protocolCode');
+
+    const setupBranchStart = denialProof.indexOf('if (options.setupOnly) {');
+    const paidTurnStart = denialProof.indexOf("client.send({ method: 'turn/start'", setupBranchStart);
+    expect(setupBranchStart).toBeGreaterThan(-1);
+    expect(paidTurnStart).toBeGreaterThan(setupBranchStart);
+    expect(denialProof.slice(setupBranchStart, paidTurnStart)).not.toContain("method: 'turn/start'");
+
+    const closeCall = denialProof.indexOf('await client.close();', setupBranchStart);
+    const finalAudit = denialProof.indexOf('const finalEvents = eventAudit(', closeCall);
+    const finalProtocolCheck = denialProof.indexOf(
+      "'Codex app-server protocol failed after close'",
+      finalAudit,
+    );
+    expect(closeCall).toBeGreaterThan(setupBranchStart);
+    expect(finalAudit).toBeGreaterThan(closeCall);
+    expect(finalProtocolCheck).toBeGreaterThan(finalAudit);
+
+    expect(denialProof).toContain(
+      'proof: { executed: false, paidCalls: 0, pass: null }',
+    );
+    expect(denialProof).toContain(
+      'report.proof = { executed: true, paidCalls: 0, pass: true };',
+    );
+    expect(denialProof).toContain('proofStateSatisfied(report.proof, setupOnly)');
+
+    expect(script).toContain('function Assert-CodexSetupPreflight');
+    expect(script).toContain('function Assert-CodexFailureStage');
+    expect(script).toContain('function Assert-NullableProtocolCode');
+    expect(script).toContain("'--setup-only'");
+    expect(script).toContain('$codexSetupRaw = Invoke-CapturedProcess');
+    expect(script).toContain('Assert-CodexSetupPreflight');
+    expect(script).toContain('stage = $failureStage');
+    expect(script).toContain('protocolCode = $protocolCode');
+    expect(script).toContain(
+      "Assert-JsonBoolean -Value $Report.proof.executed -Expected $false `",
+    );
+    expect(script).toContain("if ($null -ne $Report.proof.pass) {");
+    expect(script).not.toContain("-Label 'Codex setup offline proof pass'");
+
+    const codexAuth = script.indexOf('$codexAuthRaw = Invoke-CapturedProcess');
+    const hermesAuth = script.indexOf('$hermesAuthRaw = Invoke-CapturedProcess');
+    const codexSetup = script.indexOf('$codexSetupRaw = Invoke-CapturedProcess');
+    const claudeMarker = script.indexOf('$claudeMarker =');
+    const claudeRun = script.indexOf('$claudeRaw = Invoke-CapturedProcess');
+    const codexRun = script.indexOf('$codexRaw = Invoke-CapturedProcess');
+    const hermesRun = script.indexOf('$hermesRaw = Invoke-CapturedProcess');
+    expect(codexAuth).toBeGreaterThan(-1);
+    expect(hermesAuth).toBeGreaterThan(codexAuth);
+    expect(codexSetup).toBeGreaterThan(hermesAuth);
+    expect(claudeMarker).toBeGreaterThan(codexSetup);
+    expect(claudeRun).toBeGreaterThan(claudeMarker);
+    expect(codexRun).toBeGreaterThan(claudeRun);
+    expect(hermesRun).toBeGreaterThan(codexRun);
   });
 
   it('preserves only a whitelisted Codex diagnostic after a non-zero child', () => {

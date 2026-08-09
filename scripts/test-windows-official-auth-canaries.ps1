@@ -166,6 +166,14 @@ function Assert-CodexToolDenialProof(
   }
   Assert-JsonBoolean -Value $Proof.pass -Expected $true -Label 'Codex proof pass'
   Assert-JsonInteger -Value $Proof.paidCalls -Expected 1 -Label 'Codex proof paidCalls'
+  Assert-JsonInteger -Value $Proof.diagnostic.modelCalls -Expected 1 -Label 'Codex proof modelCalls'
+  Assert-JsonInteger -Value $Proof.diagnostic.turnStartCalls -Expected 1 -Label 'Codex proof turnStartCalls'
+  Assert-JsonBoolean -Value $Proof.diagnostic.closeClean -Expected $true -Label 'Codex proof closeClean'
+  if ($null -ne $Proof.diagnostic.failureStage -or $null -ne $Proof.diagnostic.protocolCode -or
+    [string]$Proof.diagnostic.completedStage -cne 'post-turn-invariants') {
+    throw 'Codex proof did not complete all paid-turn invariants cleanly.'
+  }
+  Assert-JsonBoolean -Value $Proof.proof.executed -Expected $true -Label 'Codex proof-only executed'
   Assert-JsonBoolean -Value $Proof.proof.pass -Expected $true -Label 'Codex proof-only pass'
   Assert-JsonInteger -Value $Proof.proof.paidCalls -Expected 0 -Label 'Codex proof-only paidCalls'
 
@@ -361,8 +369,156 @@ function Assert-SanitizedCodexTurnFailure([object]$Failure) {
   }
 }
 
+function Assert-CodexFailureStage([object]$Value, [bool]$AllowNull = $false) {
+  if ($null -eq $Value) {
+    if ($AllowNull) { return $null }
+    throw 'Codex failure stage must not be null.'
+  }
+  $stages = @(
+    'app-server-spawn',
+    'initialize',
+    'hooks-list',
+    'pre-turn-boundary',
+    'thread-start',
+    'turn-start',
+    'turn-completed',
+    'event-audit',
+    'app-server-close',
+    'post-turn-invariants'
+  )
+  if (-not ($Value -is [string]) -or [string]$Value -cnotin $stages) {
+    throw 'Codex failure stage is invalid.'
+  }
+  return [string]$Value
+}
+
+function Assert-NullableProtocolCode([object]$Value) {
+  if ($null -eq $Value) { return $null }
+  if ((-not ($Value -is [int])) -and (-not ($Value -is [long]))) {
+    throw 'Codex protocol code must be a JSON integer or null.'
+  }
+  $code = [long]$Value
+  if ($code -lt [int]::MinValue -or $code -gt [int]::MaxValue) {
+    throw 'Codex protocol code must fit in a signed 32-bit integer.'
+  }
+  return [int]$code
+}
+
+function Assert-SanitizedCodexFailureProjection([object]$Failure) {
+  $expectedProperties = @('class', 'lane', 'protocolCode', 'stage', 'turn')
+  $actualProperties = @($Failure.PSObject.Properties.Name | Sort-Object)
+  if ([string]::Join(',', $actualProperties) -cne [string]::Join(',', $expectedProperties)) {
+    throw 'Sanitized Codex failure contains unexpected or missing properties.'
+  }
+  if (-not ($Failure.class -is [string]) -or [string]$Failure.class -cnotin @(
+      'codex-paid-turn-incomplete',
+      'codex-post-turn-invariant-failed',
+      'codex-proof-incomplete'
+    )) {
+    throw 'Sanitized Codex failure class is invalid.'
+  }
+  if (-not ($Failure.lane -is [string]) -or [string]$Failure.lane -cne 'codex') {
+    throw 'Sanitized Codex failure lane is invalid.'
+  }
+  $null = Assert-CodexFailureStage -Value $Failure.stage
+  $null = Assert-NullableProtocolCode -Value $Failure.protocolCode
+  $null = Assert-SanitizedCodexTurnFailure -Failure $Failure.turn
+}
+
+function Assert-CodexSetupPreflight(
+  [object]$Summary,
+  [object]$Report,
+  [string]$ExpectedHead,
+  [string]$ExpectedTree,
+  [string]$ExpectedHelperBlob,
+  [string]$ExpectedHelperSha256,
+  [string]$ExpectedExecutableSha256,
+  [string]$ExpectedReportPath,
+  [string]$ExpectedReportSha256
+) {
+  $expectedSummaryProperties = @(
+    'closeClean',
+    'completedStage',
+    'failureStage',
+    'markerMatched',
+    'modelCalls',
+    'paidCalls',
+    'pass',
+    'protocolCode',
+    'reportPath',
+    'reportSha256',
+    'sessionId',
+    'turnFailure',
+    'turnStartCalls'
+  )
+  $actualSummaryProperties = @($Summary.PSObject.Properties.Name | Sort-Object)
+  if ([string]::Join(',', $actualSummaryProperties) -cne
+    [string]::Join(',', $expectedSummaryProperties)) {
+    throw 'Codex setup summary contains unexpected or missing properties.'
+  }
+  Assert-JsonBoolean -Value $Summary.pass -Expected $true -Label 'Codex setup summary pass'
+  Assert-JsonInteger -Value $Summary.paidCalls -Expected 0 -Label 'Codex setup summary paidCalls'
+  Assert-JsonInteger -Value $Summary.modelCalls -Expected 0 -Label 'Codex setup summary modelCalls'
+  Assert-JsonInteger -Value $Summary.turnStartCalls -Expected 0 -Label 'Codex setup summary turnStartCalls'
+  Assert-JsonBoolean -Value $Summary.closeClean -Expected $true -Label 'Codex setup summary closeClean'
+  if (-not ($Summary.markerMatched -is [bool])) {
+    throw 'Codex setup summary markerMatched must be a JSON boolean.'
+  }
+  if ($null -ne $Summary.sessionId -or $null -ne $Summary.turnFailure) {
+    throw 'Codex setup summary must not contain a session identifier or turn failure.'
+  }
+  $null = Assert-CodexFailureStage -Value $Summary.failureStage -AllowNull $true
+  $null = Assert-NullableProtocolCode -Value $Summary.protocolCode
+  if ($null -ne $Summary.failureStage -or $null -ne $Summary.protocolCode -or
+    -not ($Summary.completedStage -is [string]) -or
+    [string]$Summary.completedStage -cne 'thread-start') {
+    throw 'Codex setup summary did not stop cleanly at thread-start.'
+  }
+  Assert-Sha256 -Value $Summary.reportSha256 -Label 'Codex setup summary report hash'
+  if (-not ($Summary.reportPath -is [string]) -or
+    [IO.Path]::GetFullPath([string]$Summary.reportPath) -cne $ExpectedReportPath -or
+    [string]$Summary.reportSha256 -cne $ExpectedReportSha256) {
+    throw 'Codex setup summary report binding is invalid.'
+  }
+
+  Assert-JsonBoolean -Value $Report.pass -Expected $true -Label 'Codex setup report pass'
+  Assert-JsonInteger -Value $Report.schemaVersion -Expected 1 -Label 'Codex setup report schemaVersion'
+  if (-not ($Report.kind -is [string]) -or
+    [string]$Report.kind -cne 'codex-tool-denial-and-official-auth') {
+    throw 'Codex setup report kind is invalid.'
+  }
+  Assert-JsonInteger -Value $Report.paidCalls -Expected 0 -Label 'Codex setup report paidCalls'
+  Assert-JsonInteger -Value $Report.diagnostic.modelCalls -Expected 0 -Label 'Codex setup report modelCalls'
+  Assert-JsonInteger -Value $Report.diagnostic.turnStartCalls -Expected 0 -Label 'Codex setup report turnStartCalls'
+  Assert-JsonBoolean -Value $Report.diagnostic.closeClean -Expected $true -Label 'Codex setup report closeClean'
+  Assert-JsonBoolean -Value $Report.proof.executed -Expected $false `
+    -Label 'Codex setup offline proof executed'
+  if ($null -ne $Report.proof.pass) {
+    throw 'Codex setup report must record the skipped offline proof as null.'
+  }
+  Assert-JsonInteger -Value $Report.proof.paidCalls -Expected 0 -Label 'Codex setup offline proof paidCalls'
+  if ($null -ne $Report.diagnostic.failureStage -or $null -ne $Report.diagnostic.protocolCode -or
+    [string]$Report.diagnostic.completedStage -cne 'thread-start') {
+    throw 'Codex setup report did not stop cleanly at thread-start.'
+  }
+  if ([string]$Report.source.expectedHead -cne $ExpectedHead -or
+    [string]$Report.source.observedHead -cne $ExpectedHead -or
+    [string]$Report.source.tree -cne $ExpectedTree -or
+    [string]$Report.source.scriptBlob -cne $ExpectedHelperBlob) {
+    throw 'Codex setup report source did not match the sealed revision.'
+  }
+  Assert-JsonBoolean -Value $Report.source.trackedClean -Expected $true `
+    -Label 'Codex setup report trackedClean'
+  if ([string]$Report.executable.sha256 -cne $ExpectedExecutableSha256 -or
+    [string]$Report.artifacts.scriptSha256 -cne $ExpectedHelperSha256) {
+    throw 'Codex setup report did not match the sealed executable or helper.'
+  }
+}
+
 function New-SanitizedCodexFailureReceipt(
   [object]$TurnFailure,
+  [object]$FailureStage,
+  [object]$ProtocolCode,
   [object]$ChildResult,
   [object]$GitState,
   [string]$ExpectedHead,
@@ -376,6 +532,8 @@ function New-SanitizedCodexFailureReceipt(
   [bool]$TemporaryRootRemoved
 ) {
   $turnFailure = Assert-SanitizedCodexTurnFailure -Failure $TurnFailure
+  $failureStage = Assert-CodexFailureStage -Value $FailureStage
+  $protocolCode = Assert-NullableProtocolCode -Value $ProtocolCode
   foreach ($entry in @(
     [pscustomobject]@{ Value = $ScriptSha256; Label = 'failure receipt script hash' }
     [pscustomobject]@{ Value = $HelperSha256; Label = 'failure receipt helper hash' }
@@ -403,6 +561,14 @@ function New-SanitizedCodexFailureReceipt(
   } else {
     'codex-proof-incomplete'
   }
+  $failureProjection = [ordered]@{
+    class = $failureClass
+    lane = 'codex'
+    protocolCode = $protocolCode
+    stage = $failureStage
+    turn = if ($null -eq $turnFailure) { $null } else { [pscustomobject]$turnFailure }
+  }
+  Assert-SanitizedCodexFailureProjection -Failure ([pscustomobject]$failureProjection)
   return [ordered]@{
     schemaVersion = 1
     kind = 'windows-official-auth-codex-failure'
@@ -428,11 +594,7 @@ function New-SanitizedCodexFailureReceipt(
       stderrSha256 = [string]$ChildResult.StderrSha256
       reportSha256 = $ReportSha256
     }
-    failure = [ordered]@{
-      lane = 'codex'
-      class = $failureClass
-      turn = $turnFailure
-    }
+    failure = $failureProjection
     proof = [ordered]@{
       pass = [bool]$ProofSummary.pass
       paidCalls = [long]$ProofSummary.paidCalls
@@ -470,7 +632,15 @@ function Invoke-CodexProofValidatorSelfTest {
     kind = 'codex-tool-denial-and-official-auth'
     pass = $true
     paidCalls = 1
-    proof = [ordered]@{ pass = $true; paidCalls = 0 }
+    diagnostic = [ordered]@{
+      modelCalls = 1
+      turnStartCalls = 1
+      failureStage = $null
+      protocolCode = $null
+      completedStage = 'post-turn-invariants'
+      closeClean = $true
+    }
+    proof = [ordered]@{ executed = $true; pass = $true; paidCalls = 0 }
     source = [ordered]@{
       expectedHead = $expectedHead
       observedHead = $expectedHead
@@ -639,7 +809,8 @@ function Invoke-CodexProofValidatorSelfTest {
     mcpBoundaryUnchanged = $false
   }
   $failureReceipt = New-SanitizedCodexFailureReceipt `
-    -TurnFailure $validFailure -ChildResult $validChild -GitState $validGit `
+    -TurnFailure $validFailure -FailureStage 'thread-start' -ProtocolCode ([int]-32603) `
+    -ChildResult $validChild -GitState $validGit `
     -ExpectedHead $expectedHead -ScriptSha256 $helperHash -ScriptBlob $gitObject `
     -HelperSha256 $helperHash -HelperBlob $gitObject -ExecutableSha256 $executableHash `
     -ReportSha256 $otherHash -ProofSummary $validProofSummary -TemporaryRootRemoved $true
@@ -663,6 +834,120 @@ function Invoke-CodexProofValidatorSelfTest {
   $fixture = & $copy $validFailure; $fixture | Add-Member -NotePropertyName message -NotePropertyValue 'C:\secret\auth.json sk-fixture'; & $failureReject $fixture 'message property'
   $fixture = & $copy $validFailure; $fixture | Add-Member -NotePropertyName additionalDetails -NotePropertyValue 'file:///private/detail'; & $failureReject $fixture 'additional details property'
   $fixture = & $copy $validFailure; $fixture.httpStatusCode = 401; & $failureReject $fixture 'HTTP status on simple code'
+
+  if ([string]$failureReceipt.failure.stage -cne 'thread-start' -or
+    [int]$failureReceipt.failure.protocolCode -ne -32603 -or
+    [string]::Join(',', @($failureReceipt.failure.Keys | Sort-Object)) -cne
+      'class,lane,protocolCode,stage,turn') {
+    throw 'Valid staged Codex failure receipt did not retain the safe fixed diagnostics.'
+  }
+  $script:codexProofSelfTestCases += 1
+
+  $stageReject = {
+    param($Value, [string]$Label)
+    $accepted = $true
+    try { $null = Assert-CodexFailureStage -Value $Value } catch { $accepted = $false }
+    if ($accepted) { throw "Codex stage validator accepted invalid fixture: $Label" }
+    $script:codexProofSelfTestCases += 1
+  }
+  & $stageReject 'future-stage' 'unknown stage'
+
+  $protocolReject = {
+    param($Value, [string]$Label)
+    $accepted = $true
+    try { $null = Assert-NullableProtocolCode -Value $Value } catch { $accepted = $false }
+    if ($accepted) { throw "Codex protocol-code validator accepted invalid fixture: $Label" }
+    $script:codexProofSelfTestCases += 1
+  }
+  & $protocolReject '-32603' 'string code'
+  & $protocolReject ([double]-32603.5) 'fractional code'
+  & $protocolReject ([long][int]::MinValue - 1) 'low overflow'
+  & $protocolReject ([long][int]::MaxValue + 1) 'high overflow'
+
+  $projectionReject = {
+    param($Fixture, [string]$Label)
+    $accepted = $true
+    try { Assert-SanitizedCodexFailureProjection -Failure $Fixture } catch { $accepted = $false }
+    if ($accepted) { throw "Codex failure projection accepted invalid fixture: $Label" }
+    $script:codexProofSelfTestCases += 1
+  }
+  $fixture = & $copy $failureReceipt.failure
+  $fixture | Add-Member -NotePropertyName message -NotePropertyValue 'C:\secret\auth.json'
+  & $projectionReject $fixture 'vendor message'
+  $fixture = & $copy $failureReceipt.failure
+  $fixture | Add-Member -NotePropertyName data -NotePropertyValue 'file:///private/detail'
+  & $projectionReject $fixture 'vendor data'
+
+  $setupReportPath = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) 'codex-setup-selftest\report.json'))
+  $validSetupSummary = [pscustomobject][ordered]@{
+    pass = $true
+    paidCalls = 0
+    markerMatched = $false
+    reportPath = $setupReportPath
+    reportSha256 = $otherHash
+    sessionId = $null
+    turnFailure = $null
+    failureStage = $null
+    protocolCode = $null
+    completedStage = 'thread-start'
+    modelCalls = 0
+    turnStartCalls = 0
+    closeClean = $true
+  }
+  $validSetupReport = [pscustomobject][ordered]@{
+    schemaVersion = 1
+    kind = 'codex-tool-denial-and-official-auth'
+    pass = $true
+    paidCalls = 0
+    diagnostic = [pscustomobject][ordered]@{
+      modelCalls = 0
+      turnStartCalls = 0
+      failureStage = $null
+      protocolCode = $null
+      completedStage = 'thread-start'
+      closeClean = $true
+    }
+    proof = [pscustomobject][ordered]@{ executed = $false; pass = $null; paidCalls = 0 }
+    source = [pscustomobject][ordered]@{
+      expectedHead = $expectedHead
+      observedHead = $expectedHead
+      tree = $gitObject
+      scriptBlob = $gitObject
+      trackedClean = $true
+    }
+    executable = [pscustomobject][ordered]@{ sha256 = $executableHash }
+    artifacts = [pscustomobject][ordered]@{ scriptSha256 = $helperHash }
+  }
+  $validateSetup = {
+    param($Summary, $Report)
+    Assert-CodexSetupPreflight -Summary $Summary -Report $Report `
+      -ExpectedHead $expectedHead -ExpectedTree $gitObject -ExpectedHelperBlob $gitObject `
+      -ExpectedHelperSha256 $helperHash -ExpectedExecutableSha256 $executableHash `
+      -ExpectedReportPath $setupReportPath -ExpectedReportSha256 $otherHash
+  }
+  & $validateSetup (& $copy $validSetupSummary) (& $copy $validSetupReport)
+  $script:codexProofSelfTestCases += 1
+  $setupReject = {
+    param($Summary, [string]$Label)
+    $accepted = $true
+    try { & $validateSetup $Summary (& $copy $validSetupReport) } catch { $accepted = $false }
+    if ($accepted) { throw "Codex setup validator accepted invalid fixture: $Label" }
+    $script:codexProofSelfTestCases += 1
+  }
+  $fixture = & $copy $validSetupSummary; $fixture.paidCalls = 1; & $setupReject $fixture 'paid call'
+  $fixture = & $copy $validSetupSummary; $fixture.modelCalls = 1; & $setupReject $fixture 'model call'
+  $fixture = & $copy $validSetupSummary; $fixture.turnStartCalls = 1; & $setupReject $fixture 'turn start call'
+  $setupReportReject = {
+    param($Report, [string]$Label)
+    $accepted = $true
+    try { & $validateSetup (& $copy $validSetupSummary) $Report } catch { $accepted = $false }
+    if ($accepted) { throw "Codex setup validator accepted invalid report fixture: $Label" }
+    $script:codexProofSelfTestCases += 1
+  }
+  $fixture = & $copy $validSetupReport; $fixture.proof.executed = $true
+  & $setupReportReject $fixture 'offline proof executed'
+  $fixture = & $copy $validSetupReport; $fixture.proof.pass = $true
+  & $setupReportReject $fixture 'offline proof pass'
 
   return [pscustomobject]@{
     pass = $true
@@ -1172,6 +1457,51 @@ try {
     throw 'Hermes is not logged in to the required provider.'
   }
 
+  $codexSetupDir = Join-Path $tempRoot 'codex-setup-preflight'
+  $codexSetupRaw = Invoke-CapturedProcess -FilePath $nodeExe -ArgumentList @(
+    $artifactPaths.codexToolDenial,
+    '--codex-exe', $codexExe,
+    '--hive-mind-cli', $artifactPaths.hiveMindCli,
+    '--receipt-dir', $codexSetupDir,
+    '--expected-head', $ExpectedHead,
+    '--model', $CodexModel,
+    '--windows-powershell', $windowsPowerShell,
+    '--workspace', $codexWorkspace,
+    '--setup-only'
+  ) -WorkingDirectory $codexWorkspace -EnvironmentOverrides $codexEnvironment `
+    -BlankEnvironmentNames $codexAlternativeAuthNames -TimeoutSeconds 120
+  Assert-ProcessPassed -Result $codexSetupRaw -Label 'Codex zero-inference setup preflight'
+  try { $codexSetupSummary = $codexSetupRaw.Stdout | ConvertFrom-Json -Depth 30 } catch {
+    throw 'Codex zero-inference setup preflight did not return valid JSON.'
+  }
+  $expectedCodexSetupReportPath = [IO.Path]::GetFullPath((Join-Path $codexSetupDir 'report.json'))
+  if (-not ($codexSetupSummary.reportPath -is [string]) -or
+    [IO.Path]::GetFullPath([string]$codexSetupSummary.reportPath) -cne $expectedCodexSetupReportPath -or
+    -not (Test-Path -LiteralPath $expectedCodexSetupReportPath -PathType Leaf)) {
+    throw 'Codex setup report path was missing or escaped the owned directory.'
+  }
+  $codexSetupReportItem = Get-Item -LiteralPath $expectedCodexSetupReportPath -Force
+  if (($codexSetupReportItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+    $codexSetupReportItem.Length -gt 2MB) {
+    throw 'Codex setup report is unsafe or too large.'
+  }
+  $codexSetupReportSha256 = Get-RegularFileHash `
+    -Path $expectedCodexSetupReportPath -Label 'Codex setup report'
+  $codexSetupReportBytes = [IO.File]::ReadAllBytes($expectedCodexSetupReportPath)
+  try {
+    $codexSetupReport = [Text.Encoding]::UTF8.GetString($codexSetupReportBytes) |
+      ConvertFrom-Json -Depth 50
+  } catch {
+    throw 'Codex zero-inference setup report was not valid JSON.'
+  }
+  Assert-CodexSetupPreflight -Summary $codexSetupSummary -Report $codexSetupReport `
+    -ExpectedHead $ExpectedHead -ExpectedTree $initialGit.Tree `
+    -ExpectedHelperBlob $codexHelperProvenance.Blob `
+    -ExpectedHelperSha256 $artifactHashes.codexToolDenial `
+    -ExpectedExecutableSha256 $codexExecutableSha256 `
+    -ExpectedReportPath $expectedCodexSetupReportPath `
+    -ExpectedReportSha256 $codexSetupReportSha256
+
   $claudeMarker = "WAGGLE_CLAUDE_OFFICIAL_AUTH_$([Security.Cryptography.RandomNumberGenerator]::GetHexString(24).ToLowerInvariant())"
   $claudePrompt = "Return exactly $claudeMarker and nothing else. Do not call tools."
   $claudeBudget = $ClaudeMaxUsd.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture)
@@ -1246,13 +1576,19 @@ try {
     }
     $summaryProperties = @($codexFailureSummary.PSObject.Properties.Name | Sort-Object)
     $expectedSummaryProperties = @(
+      'closeClean',
+      'completedStage',
+      'failureStage',
       'markerMatched',
+      'modelCalls',
       'paidCalls',
       'pass',
+      'protocolCode',
       'reportPath',
       'reportSha256',
       'sessionId',
-      'turnFailure'
+      'turnFailure',
+      'turnStartCalls'
     )
     if ([string]::Join(',', $summaryProperties) -cne [string]::Join(',', $expectedSummaryProperties)) {
       throw 'Failed Codex child summary contains unexpected or missing properties.'
@@ -1267,6 +1603,22 @@ try {
     }
     if (-not ($codexFailureSummary.markerMatched -is [bool])) {
       throw 'Failed Codex summary markerMatched must be a JSON boolean.'
+    }
+    $summaryFailureStage = Assert-CodexFailureStage -Value $codexFailureSummary.failureStage
+    $summaryProtocolCode = Assert-NullableProtocolCode -Value $codexFailureSummary.protocolCode
+    $summaryCompletedStage = Assert-CodexFailureStage `
+      -Value $codexFailureSummary.completedStage -AllowNull $true
+    foreach ($entry in @(
+      [pscustomobject]@{ Value = $codexFailureSummary.modelCalls; Label = 'modelCalls' }
+      [pscustomobject]@{ Value = $codexFailureSummary.turnStartCalls; Label = 'turnStartCalls' }
+    )) {
+      if ((-not ($entry.Value -is [int])) -and (-not ($entry.Value -is [long])) -or
+        [long]$entry.Value -lt 0 -or [long]$entry.Value -gt 1) {
+        throw "Failed Codex summary $($entry.Label) must be a JSON integer from zero to one."
+      }
+    }
+    if (-not ($codexFailureSummary.closeClean -is [bool])) {
+      throw 'Failed Codex summary closeClean must be a JSON boolean.'
     }
     Assert-Sha256 -Value $codexFailureSummary.reportSha256 -Label 'failed Codex report hash'
     if (-not ($codexFailureSummary.reportPath -is [string])) {
@@ -1322,6 +1674,23 @@ try {
       ($reportTurnFailure | ConvertTo-Json -Compress)) {
       throw 'Failed Codex child summary and report disagree on the terminal status.'
     }
+    $reportFailureStage = Assert-CodexFailureStage -Value $codexFailureReport.diagnostic.failureStage
+    $reportProtocolCode = Assert-NullableProtocolCode -Value $codexFailureReport.diagnostic.protocolCode
+    $reportCompletedStage = Assert-CodexFailureStage `
+      -Value $codexFailureReport.diagnostic.completedStage -AllowNull $true
+    if ([string]$reportFailureStage -cne [string]$summaryFailureStage -or
+      $reportProtocolCode -ne $summaryProtocolCode -or
+      [string]$reportCompletedStage -cne [string]$summaryCompletedStage) {
+      throw 'Failed Codex child summary and report disagree on lifecycle diagnostics.'
+    }
+    Assert-JsonInteger -Value $codexFailureReport.diagnostic.modelCalls `
+      -Expected ([long]$codexFailureSummary.modelCalls) -Label 'failed Codex report modelCalls'
+    Assert-JsonInteger -Value $codexFailureReport.diagnostic.turnStartCalls `
+      -Expected ([long]$codexFailureSummary.turnStartCalls) -Label 'failed Codex report turnStartCalls'
+    Assert-JsonBoolean -Value $codexFailureReport.diagnostic.closeClean `
+      -Expected ([bool]$codexFailureSummary.closeClean) -Label 'failed Codex report closeClean'
+    Assert-JsonBoolean -Value $codexFailureReport.proof.executed -Expected $true `
+      -Label 'failed Codex offline proof executed'
     Assert-JsonBoolean -Value $codexFailureReport.proof.pass -Expected $true `
       -Label 'failed Codex offline proof pass'
     Assert-JsonInteger -Value $codexFailureReport.proof.paidCalls -Expected 0 `
@@ -1384,7 +1753,8 @@ try {
     }
 
     $failureReceipt = New-SanitizedCodexFailureReceipt `
-      -TurnFailure $summaryTurnFailure -ChildResult $codexRaw -GitState $failureGit `
+      -TurnFailure $summaryTurnFailure -FailureStage $summaryFailureStage `
+      -ProtocolCode $summaryProtocolCode -ChildResult $codexRaw -GitState $failureGit `
       -ExpectedHead $ExpectedHead -ScriptSha256 $scriptSha256 -ScriptBlob $scriptProvenance.Blob `
       -HelperSha256 $artifactHashes.codexToolDenial -HelperBlob $codexHelperProvenance.Blob `
       -ExecutableSha256 $codexExecutableSha256 -ReportSha256 $codexFailureReportSha256 `
@@ -1420,8 +1790,36 @@ try {
   try { $codexSummary = $codexRaw.Stdout | ConvertFrom-Json -Depth 30 } catch {
     throw 'Codex zero-cost tool-denial proof did not return valid JSON.'
   }
+  $codexSummaryProperties = @($codexSummary.PSObject.Properties.Name | Sort-Object)
+  $expectedCodexSummaryProperties = @(
+    'closeClean',
+    'completedStage',
+    'failureStage',
+    'markerMatched',
+    'modelCalls',
+    'paidCalls',
+    'pass',
+    'protocolCode',
+    'reportPath',
+    'reportSha256',
+    'sessionId',
+    'turnFailure',
+    'turnStartCalls'
+  )
+  if ([string]::Join(',', $codexSummaryProperties) -cne
+    [string]::Join(',', $expectedCodexSummaryProperties)) {
+    throw 'Codex success summary contains unexpected or missing properties.'
+  }
   Assert-JsonBoolean -Value $codexSummary.pass -Expected $true -Label 'Codex summary pass'
   Assert-JsonInteger -Value $codexSummary.paidCalls -Expected 1 -Label 'Codex summary paidCalls'
+  Assert-JsonInteger -Value $codexSummary.modelCalls -Expected 1 -Label 'Codex summary modelCalls'
+  Assert-JsonInteger -Value $codexSummary.turnStartCalls -Expected 1 -Label 'Codex summary turnStartCalls'
+  Assert-JsonBoolean -Value $codexSummary.closeClean -Expected $true -Label 'Codex summary closeClean'
+  if ($null -ne $codexSummary.failureStage -or $null -ne $codexSummary.protocolCode -or
+    $null -ne $codexSummary.turnFailure -or
+    [string]$codexSummary.completedStage -cne 'post-turn-invariants') {
+    throw 'Codex success summary did not complete all paid-turn invariants cleanly.'
+  }
   Assert-JsonBoolean -Value $codexSummary.markerMatched -Expected $true -Label 'Codex summary markerMatched'
   Assert-Sha256 -Value $codexSummary.reportSha256 -Label 'Codex summary report hash'
   if (-not ($codexSummary.reportPath -is [string])) { throw 'Codex summary reportPath must be a string.' }

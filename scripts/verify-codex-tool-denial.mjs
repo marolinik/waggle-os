@@ -79,7 +79,27 @@ const DENIAL_RESPONSE = {
     permissionDecisionReason: DENIAL_REASON,
   },
 };
+const CANARY_STAGES = new Set([
+  'app-server-spawn',
+  'initialize',
+  'hooks-list',
+  'pre-turn-boundary',
+  'thread-start',
+  'turn-start',
+  'turn-completed',
+  'event-audit',
+  'app-server-close',
+  'post-turn-invariants',
+]);
+const FAILURE_NOTIFICATION_METHODS = new Set([
+  'error',
+  'warning',
+  'guardianWarning',
+  'configWarning',
+  'deprecationNotice',
+]);
 const ALLOWED_NOTIFICATION_METHODS = new Set([
+  'account/updated',
   'account/rateLimits/updated',
   'hook/completed',
   'hook/started',
@@ -91,12 +111,18 @@ const ALLOWED_NOTIFICATION_METHODS = new Set([
   'item/reasoning/textDelta',
   'item/started',
   'item/updated',
+  'mcpServer/startupStatus/updated',
+  'model/safetyBuffering/updated',
+  'model/verification',
   'serverRequest/resolved',
+  'thread/name/updated',
+  'thread/settings/updated',
   'thread/started',
   'thread/status/changed',
   'thread/tokenUsage/updated',
   'turn/completed',
   'turn/diff/updated',
+  'turn/moderationMetadata',
   'turn/plan/updated',
   'turn/started',
 ]);
@@ -163,75 +189,86 @@ function normalizeCodexErrorInfo(value) {
     return { code: null, httpStatusCode: null };
   }
   if (typeof value === 'string') {
-    assert(SIMPLE_CODEX_ERROR_CODES.has(value), 'Codex returned an unknown terminal error code');
-    return { code: value, httpStatusCode: null };
+    return SIMPLE_CODEX_ERROR_CODES.has(value)
+      ? { code: value, httpStatusCode: null }
+      : { code: null, httpStatusCode: null };
   }
-  assert(
-    typeof value === 'object' && !Array.isArray(value),
-    'Codex terminal error info must be a known string or single-key object',
-  );
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return { code: null, httpStatusCode: null };
+  }
   const keys = Object.keys(value);
-  assert(keys.length === 1, 'Codex terminal error info must have exactly one code');
+  if (keys.length !== 1) return { code: null, httpStatusCode: null };
   const code = keys[0];
   const details = value[code];
   if (code === 'activeTurnNotSteerable') {
-    assert(
-      details !== null
-        && typeof details === 'object'
-        && !Array.isArray(details)
-        && Object.keys(details).length === 1
-        && ['review', 'compact'].includes(details.turnKind),
-      'Codex active-turn error details are invalid',
-    );
-    return { code, httpStatusCode: null };
+    return details !== null
+      && typeof details === 'object'
+      && !Array.isArray(details)
+      && Object.keys(details).length === 1
+      && ['review', 'compact'].includes(details.turnKind)
+      ? { code, httpStatusCode: null }
+      : { code: null, httpStatusCode: null };
   }
-  assert(HTTP_CODEX_ERROR_CODES.has(code), 'Codex returned an unknown terminal error code');
-  assert(
-    details !== null && typeof details === 'object' && !Array.isArray(details),
-    'Codex HTTP terminal error details are invalid',
-  );
-  assert(
-    Object.keys(details).every((key) => key === 'httpStatusCode'),
-    'Codex HTTP terminal error details contain unexpected fields',
-  );
+  if (!HTTP_CODEX_ERROR_CODES.has(code)
+    || details === null
+    || typeof details !== 'object'
+    || Array.isArray(details)
+    || !Object.keys(details).every((key) => key === 'httpStatusCode')) {
+    return { code: null, httpStatusCode: null };
+  }
   const httpStatusCode = details.httpStatusCode ?? null;
-  assert(
-    httpStatusCode === null
-      || (Number.isInteger(httpStatusCode) && httpStatusCode >= 0 && httpStatusCode <= 65_535),
-    'Codex terminal HTTP status is invalid',
-  );
+  if (httpStatusCode !== null
+    && (!Number.isInteger(httpStatusCode) || httpStatusCode < 0 || httpStatusCode > 65_535)) {
+    return { code: null, httpStatusCode: null };
+  }
   return { code, httpStatusCode };
 }
 
 function sanitizeTurnFailure(turn, errorNotification = null) {
-  const status = turn?.status;
-  assert(TERMINAL_TURN_FAILURE_STATUSES.has(status), 'Codex turn is not a terminal failure');
+  const status = TERMINAL_TURN_FAILURE_STATUSES.has(turn?.status) ? turn.status : null;
   const notificationParams = errorNotification?.message?.params ?? null;
-  if (notificationParams !== null) {
-    assert(errorNotification?.message?.method === 'error', 'Codex failure notification method is invalid');
-  }
   const turnInfo = normalizeCodexErrorInfo(turn?.error?.codexErrorInfo);
-  const notificationInfo = normalizeCodexErrorInfo(notificationParams?.error?.codexErrorInfo);
-  if (turnInfo.code !== null && notificationInfo.code !== null) {
-    assert(
-      stableJson(turnInfo) === stableJson(notificationInfo),
-      'Codex terminal error sources disagree',
-    );
-  }
-  const selected = notificationInfo.code === null ? turnInfo : notificationInfo;
+  const notificationInfo = errorNotification?.message?.method === 'error'
+    ? normalizeCodexErrorInfo(notificationParams?.error?.codexErrorInfo)
+    : { code: null, httpStatusCode: null };
+  // The final turn is authoritative. A disagreeing or malformed notification is
+  // reduced to the already-sanitized turn result rather than becoming a new error.
+  const selected = turnInfo.code === null ? notificationInfo : turnInfo;
   const willRetry = notificationParams?.willRetry ?? null;
-  assert(willRetry === null || typeof willRetry === 'boolean', 'Codex retry flag is invalid');
   return {
     status,
     code: selected.code,
     httpStatusCode: selected.httpStatusCode,
-    willRetry,
+    willRetry: typeof willRetry === 'boolean' ? willRetry : null,
   };
+}
+
+function sanitizeProtocolCode(value) {
+  return Number.isInteger(value)
+    && value >= -2_147_483_648
+    && value <= 2_147_483_647
+    ? value
+    : null;
+}
+
+function sanitizeCanaryStage(value) {
+  return CANARY_STAGES.has(value) ? value : null;
+}
+
+function selectLifecycleFailure(primaryError, closeError) {
+  return primaryError ?? closeError ?? null;
+}
+
+function proofStateSatisfied(proof, setupOnly) {
+  if (proof === null || typeof proof !== 'object' || Array.isArray(proof)) return false;
+  return setupOnly
+    ? proof.executed === false && proof.paidCalls === 0 && proof.pass === null
+    : proof.executed === true && proof.paidCalls === 0 && proof.pass === true;
 }
 
 function parseArgs(argv) {
   const values = {};
-  const booleanFlags = new Set(['--execute-paid', '--self-test']);
+  const booleanFlags = new Set(['--execute-paid', '--self-test', '--setup-only']);
   const valueFlags = new Set([
     '--ack',
     '--codex-exe',
@@ -274,6 +311,7 @@ function parseArgs(argv) {
   }
   assert(/^[0-9a-f]{40}$/.test(values['expected-head']), '--expected-head must be a lowercase 40-character Git object id');
   assert(values.model.length <= 128 && !/[\x00-\x1f\x7f]/.test(values.model), '--model is invalid');
+  assert(!(values['execute-paid'] && values['setup-only']), '--setup-only and --execute-paid are mutually exclusive');
   if (values['execute-paid']) {
     assert(typeof values.marker === 'string', '--marker is required with --execute-paid');
     assert(values.ack === PAID_ACK, `--ack must be exactly ${PAID_ACK}`);
@@ -935,7 +973,7 @@ class AppServerClient {
       },
     });
     const response = await this.response(1);
-    assert(!response.error, 'Codex app-server initialize failed');
+    assertProtocolSuccess(response, 'Codex app-server initialize failed');
     this.send({ method: 'initialized', params: {} });
   }
 
@@ -964,6 +1002,13 @@ class AppServerClient {
       stderrSha256: sha256(Buffer.concat(this.stderrChunks)),
     };
   }
+}
+
+function assertProtocolSuccess(response, message) {
+  if (!response?.error) return;
+  const error = new Error(message);
+  error.protocolCode = sanitizeProtocolCode(response.error?.code);
+  throw error;
 }
 
 function hookGraphFromEntry(entry) {
@@ -1113,10 +1158,32 @@ function treeContains(value, needle) {
   return false;
 }
 
-function eventAudit(notifications, expectedAcknowledgement, strictAllowlist) {
+function notificationScope(notification) {
+  const params = notification?.message?.params ?? {};
+  return {
+    threadIds: [params.threadId, params.thread?.id, params.turn?.threadId]
+      .filter((value) => typeof value === 'string'),
+    turnIds: [params.turnId, params.turn?.id, params.item?.turnId]
+      .filter((value) => typeof value === 'string'),
+  };
+}
+
+function collectEventAudit(notifications, expectedAcknowledgement, threadId, turnId) {
   const notificationMethods = notifications.map((entry) => entry.message?.method ?? null);
+  const failureNotifications = notifications.filter((entry) => (
+    FAILURE_NOTIFICATION_METHODS.has(entry.message?.method)
+  ));
   const unknownNotifications = notifications.filter((entry) => (
     !ALLOWED_NOTIFICATION_METHODS.has(entry.message?.method)
+    && !FAILURE_NOTIFICATION_METHODS.has(entry.message?.method)
+  ));
+  const wrongScopeNotifications = notifications.filter((entry) => {
+    const scope = notificationScope(entry);
+    return scope.threadIds.some((value) => value !== threadId)
+      || scope.turnIds.some((value) => value !== turnId);
+  });
+  const rerouteNotifications = notifications.filter((entry) => (
+    entry.message?.method === 'model/rerouted'
   ));
   const itemNotifications = notifications.filter((entry) => (
     entry.message?.method === 'item/started'
@@ -1152,11 +1219,6 @@ function eventAudit(notifications, expectedAcknowledgement, strictAllowlist) {
       'websearch',
     ].some((family) => type.includes(family));
   });
-  if (strictAllowlist) {
-    assert(unknownNotifications.length === 0, 'paid lane emitted an unapproved notification');
-    assert(unknownItems.length === 0, 'paid lane emitted an unapproved item type');
-    assert(forbiddenToolItems.length === 0, 'paid lane emitted a tool item');
-  }
   return {
     exactMessageCount: exactMessages.length,
     normalTextCompleted: completedMessages.length === 1 && exactMessages.length === 1,
@@ -1166,8 +1228,42 @@ function eventAudit(notifications, expectedAcknowledgement, strictAllowlist) {
     firstDenySequence: denyHooks[0]?.sequence ?? null,
     toolEventsObserved: forbiddenToolItems.length,
     unknownEventsObserved: unknownNotifications.length + unknownItems.length,
+    failureEventsObserved: failureNotifications.length,
+    wrongScopeEventsObserved: wrongScopeNotifications.length,
+    rerouteEventsObserved: rerouteNotifications.length,
     notificationGraphSha256: sha256(stableJson(notificationMethods)),
   };
+}
+
+function assertEventAudit(audit, strictAllowlist, requireAcknowledgement = true) {
+  assert(audit.failureEventsObserved === 0, 'Codex emitted a failure notification');
+  assert(audit.wrongScopeEventsObserved === 0, 'Codex emitted an event for another thread or turn');
+  assert(audit.rerouteEventsObserved === 0, 'Codex rerouted the requested model');
+  if (strictAllowlist) {
+    assert(audit.unknownEventsObserved === 0, 'strict lane emitted an unapproved event');
+    assert(audit.toolEventsObserved === 0, 'strict lane emitted a tool item');
+  }
+  if (requireAcknowledgement) {
+    assert(audit.normalTextCompleted, 'Codex did not emit exactly one expected agent message');
+  }
+}
+
+function eventAudit(
+  notifications,
+  expectedAcknowledgement,
+  strictAllowlist,
+  threadId = null,
+  turnId = null,
+  requireAcknowledgement = true,
+) {
+  const audit = collectEventAudit(
+    notifications,
+    expectedAcknowledgement,
+    threadId,
+    turnId,
+  );
+  assertEventAudit(audit, strictAllowlist, requireAcknowledgement);
+  return audit;
 }
 
 async function runTurn(options) {
@@ -1180,11 +1276,22 @@ async function runTurn(options) {
   );
   let threadId = null;
   let turnId = null;
+  let result = null;
+  let primaryError = null;
+  let closeError = null;
+  let failureStage = 'app-server-spawn';
+  let completedStage = 'app-server-spawn';
+  let modelCalls = 0;
+  let turnStartCalls = 0;
+  let closeClean = false;
   try {
+    failureStage = 'initialize';
     await client.initialize(`waggle_codex_tool_denial_${options.lane}`);
+    completedStage = 'initialize';
+    failureStage = 'hooks-list';
     client.send({ method: 'hooks/list', id: 2, params: { cwds: [options.workspace] } });
     const hookResponse = await client.response(2);
-    assert(!hookResponse.error, 'Codex app-server hooks/list failed');
+    assertProtocolSuccess(hookResponse, 'Codex app-server hooks/list failed');
     const hooks = assertExactHookGraph(
       hookResponse.result?.data?.[0],
       options.codexHome,
@@ -1195,7 +1302,10 @@ async function runTurn(options) {
       false,
     );
     assert(hooks.graphSha256 === options.expectedHookGraphSha256, 'hook graph changed after hash pinning');
+    completedStage = 'hooks-list';
+    failureStage = 'pre-turn-boundary';
     if (options.beforeTurn) await options.beforeTurn();
+    completedStage = 'pre-turn-boundary';
 
     const threadParams = {
       model: options.model,
@@ -1208,61 +1318,146 @@ async function runTurn(options) {
       selectedCapabilityRoots: [],
       dynamicTools: [],
     };
+    failureStage = 'thread-start';
     client.send({ method: 'thread/start', id: 3, params: threadParams });
     const threadResponse = await client.response(3);
-    assert(!threadResponse.error, 'Codex app-server thread/start failed');
+    assertProtocolSuccess(threadResponse, 'Codex app-server thread/start failed');
     threadId = threadResponse.result?.thread?.id ?? null;
     assert(typeof threadId === 'string' && threadId.length > 0, 'Codex app-server omitted thread id');
+    completedStage = 'thread-start';
 
-    const turnParams = {
-      threadId,
-      input: [{ type: 'text', text: options.prompt, text_elements: [] }],
-      model: options.model,
-      approvalPolicy: 'never',
-      sandboxPolicy: { type: 'readOnly', networkAccess: false },
-      ...(options.useDefaultEnvironmentForControl ? {} : { environments: [] }),
-    };
-    client.send({ method: 'turn/start', id: 4, params: turnParams });
-    const turnResponse = await client.response(4);
-    assert(!turnResponse.error, 'Codex app-server turn/start failed');
-    turnId = turnResponse.result?.turn?.id ?? null;
-    assert(typeof turnId === 'string' && turnId.length > 0, 'Codex app-server omitted turn id');
-    const completed = await client.notification('turn/completed', (entry) => (
-      entry.message?.params?.threadId === threadId
-      && entry.message?.params?.turn?.id === turnId
-    ));
-    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
-    assert(client.error === null, client.error ?? 'Codex app-server protocol failed');
-    const completedTurn = completed.message?.params?.turn;
-    if (completedTurn?.status !== 'completed') {
-      const errorNotification = [...client.notifications].reverse().find((entry) => (
-        entry.message?.method === 'error'
-        && entry.message?.params?.threadId === threadId
-        && entry.message?.params?.turnId === turnId
-      )) ?? null;
-      const terminalError = new Error('Codex app-server turn did not complete');
-      terminalError.turnFailure = sanitizeTurnFailure(completedTurn, errorNotification);
-      throw terminalError;
+    if (options.setupOnly) {
+      result = {
+        hooks,
+        events: null,
+        threadParamsSha256: sha256(stableJson({ ...threadParams, cwd: '<WORKSPACE>' })),
+        turnParamsSha256: null,
+        threadId,
+        threadIdSha256: sha256(threadId),
+        turnIdSha256: null,
+        transcript: client.transcriptDigest(),
+        modelCalls: 0,
+        turnStartCalls: 0,
+        completedStage: 'thread-start',
+      };
+    } else {
+      const turnParams = {
+        threadId,
+        input: [{ type: 'text', text: options.prompt, text_elements: [] }],
+        model: options.model,
+        approvalPolicy: 'never',
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+        ...(options.useDefaultEnvironmentForControl ? {} : { environments: [] }),
+      };
+      failureStage = 'turn-start';
+      turnStartCalls += 1;
+      client.send({ method: 'turn/start', id: 4, params: turnParams });
+      const turnResponse = await client.response(4);
+      assertProtocolSuccess(turnResponse, 'Codex app-server turn/start failed');
+      modelCalls += 1;
+      turnId = turnResponse.result?.turn?.id ?? null;
+      assert(typeof turnId === 'string' && turnId.length > 0, 'Codex app-server omitted turn id');
+      completedStage = 'turn-start';
+      failureStage = 'turn-completed';
+      const completed = await client.notification('turn/completed', (entry) => (
+        entry.message?.params?.threadId === threadId
+        && entry.message?.params?.turn?.id === turnId
+      ));
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+      const completedTurn = completed.message?.params?.turn;
+      if (completedTurn?.status !== 'completed') {
+        const errorNotification = [...client.notifications].reverse().find((entry) => (
+          entry.message?.method === 'error'
+          && entry.message?.params?.threadId === threadId
+          && entry.message?.params?.turnId === turnId
+        )) ?? null;
+        const terminalError = new Error('Codex app-server turn did not complete');
+        terminalError.turnFailure = sanitizeTurnFailure(completedTurn, errorNotification);
+        throw terminalError;
+      }
+      completedStage = 'turn-completed';
+      failureStage = 'event-audit';
+      const events = eventAudit(
+        client.notifications,
+        options.expectedAcknowledgement,
+        options.strictAllowlist,
+        threadId,
+        turnId,
+      );
+      completedStage = 'event-audit';
+      failureStage = 'post-turn-invariants';
+      assert(client.error === null, client.error ?? 'Codex app-server protocol failed');
+      result = {
+        hooks,
+        events,
+        threadParamsSha256: sha256(stableJson({ ...threadParams, cwd: '<WORKSPACE>' })),
+        turnParamsSha256: sha256(stableJson({ ...turnParams, threadId: '<THREAD>', input: '<PROMPT>' })),
+        threadId,
+        threadIdSha256: sha256(threadId),
+        turnIdSha256: sha256(turnId),
+        transcript: client.transcriptDigest(),
+        modelCalls,
+        turnStartCalls,
+        completedStage: 'post-turn-invariants',
+      };
+      completedStage = 'post-turn-invariants';
     }
-    const events = eventAudit(
-      client.notifications,
-      options.expectedAcknowledgement,
-      options.strictAllowlist,
-    );
-    assert(events.normalTextCompleted, 'Codex did not emit exactly one expected agent message');
-    return {
-      hooks,
-      events,
-      threadParamsSha256: sha256(stableJson({ ...threadParams, cwd: '<WORKSPACE>' })),
-      turnParamsSha256: sha256(stableJson({ ...turnParams, threadId: '<THREAD>', input: '<PROMPT>' })),
-      threadId,
-      threadIdSha256: sha256(threadId),
-      turnIdSha256: sha256(turnId),
-      transcript: client.transcriptDigest(),
-    };
-  } finally {
-    await client.close();
+  } catch (error) {
+    primaryError = error;
   }
+  try {
+    await client.close();
+    closeClean = true;
+  } catch (error) {
+    closeError = error;
+  }
+  if (primaryError === null && closeError === null) {
+    try {
+      failureStage = 'event-audit';
+      const finalEvents = eventAudit(
+        client.notifications,
+        options.setupOnly ? null : options.expectedAcknowledgement,
+        options.strictAllowlist,
+        threadId,
+        options.setupOnly ? null : turnId,
+        !options.setupOnly,
+      );
+      assert(
+        client.error === null,
+        client.error ?? 'Codex app-server protocol failed after close',
+      );
+      result.events = finalEvents;
+    } catch (error) {
+      primaryError = error;
+    }
+  }
+  const lifecycleFailure = selectLifecycleFailure(primaryError, closeError);
+  if (lifecycleFailure !== null) {
+    const wrapped = new Error(`Codex app-server canary failed at ${sanitizeCanaryStage(
+      primaryError === null ? 'app-server-close' : failureStage,
+    ) ?? 'app-server-spawn'}`);
+    wrapped.turnFailure = lifecycleFailure?.turnFailure ?? null;
+    wrapped.canaryDiagnostic = {
+      failureStage: sanitizeCanaryStage(primaryError === null ? 'app-server-close' : failureStage),
+      protocolCode: sanitizeProtocolCode(lifecycleFailure?.protocolCode),
+      completedStage: sanitizeCanaryStage(completedStage),
+      modelCalls,
+      turnStartCalls,
+      closeClean,
+    };
+    throw wrapped;
+  }
+  return {
+    ...result,
+    diagnostic: {
+      failureStage: null,
+      protocolCode: null,
+      completedStage: result.completedStage,
+      modelCalls,
+      turnStartCalls,
+      closeClean,
+    },
+  };
 }
 
 async function createSentinelPng(path) {
@@ -1287,6 +1482,36 @@ async function runValidationSelfTest() {
     cases += 1;
   };
   try {
+    assert(
+      stableJson([...CANARY_STAGES]) === stableJson([
+        'app-server-spawn',
+        'initialize',
+        'hooks-list',
+        'pre-turn-boundary',
+        'thread-start',
+        'turn-start',
+        'turn-completed',
+        'event-audit',
+        'app-server-close',
+        'post-turn-invariants',
+      ]),
+      'canary stage fixture changed',
+    );
+    cases += 1;
+    assert(
+      sanitizeProtocolCode(-2_147_483_648) === -2_147_483_648
+        && sanitizeProtocolCode(2_147_483_647) === 2_147_483_647,
+      'signed int32 protocol-code fixture failed',
+    );
+    cases += 1;
+    assert(
+      sanitizeProtocolCode(-2_147_483_649) === null
+        && sanitizeProtocolCode(2_147_483_648) === null
+        && sanitizeProtocolCode(1.5) === null
+        && sanitizeProtocolCode('1') === null,
+      'invalid protocol-code fixture was accepted',
+    );
+    cases += 1;
     const inventoryArguments = buildMcpInventoryArguments();
     assert(
       inventoryArguments.length === (DISABLED_FEATURES.length * 2) + 3
@@ -1423,6 +1648,41 @@ async function runValidationSelfTest() {
       () => eventAudit([safeNotification, unknownNotification], acknowledgement, true),
       'unknown notification',
     );
+    const failureNotification = { sequence: 2, message: { method: 'warning', params: {} } };
+    expectThrow(
+      () => eventAudit([safeNotification, failureNotification], acknowledgement, true),
+      'failure notification',
+    );
+    const benignNotifications = [
+      'account/updated',
+      'mcpServer/startupStatus/updated',
+      'model/safetyBuffering/updated',
+      'model/verification',
+      'thread/name/updated',
+      'thread/settings/updated',
+      'turn/moderationMetadata',
+    ].map((method, index) => ({ sequence: index + 2, message: { method, params: {} } }));
+    assert(
+      eventAudit([safeNotification, ...benignNotifications], acknowledgement, true).unknownEventsObserved === 0,
+      'schema-backed benign notification fixture failed',
+    );
+    cases += 1;
+    const wrongScope = {
+      sequence: 2,
+      message: {
+        method: 'item/updated',
+        params: { threadId: 'wrong-thread', turnId: 'turn-1', item: { type: 'reasoning' } },
+      },
+    };
+    expectThrow(
+      () => eventAudit([safeNotification, wrongScope], acknowledgement, true, 'thread-1', 'turn-1'),
+      'cross-turn notification',
+    );
+    const reroute = { sequence: 2, message: { method: 'model/rerouted', params: {} } };
+    expectThrow(
+      () => eventAudit([safeNotification, reroute], acknowledgement, false),
+      'model reroute',
+    );
     const mcpBoundary = {
       count: 3,
       namesSha256: 'a'.repeat(64),
@@ -1481,12 +1741,15 @@ async function runValidationSelfTest() {
       'terminal failure retained untrusted text',
     );
     cases += 1;
-    expectThrow(() => sanitizeTurnFailure({ status: 'completed' }), 'completed turn failure');
-    expectThrow(() => sanitizeTurnFailure({ status: 'inProgress' }), 'in-progress turn failure');
-    expectThrow(() => sanitizeTurnFailure({
+    assert(sanitizeTurnFailure({ status: 'completed' }).status === null, 'completed turn was not safely normalized');
+    cases += 1;
+    assert(sanitizeTurnFailure({ status: 'inProgress' }).status === null, 'in-progress turn was not safely normalized');
+    cases += 1;
+    assert(sanitizeTurnFailure({
       status: 'failed', error: { codexErrorInfo: 'futureUnknownCode' },
-    }), 'unknown terminal error code');
-    expectThrow(() => sanitizeTurnFailure({
+    }).code === null, 'unknown terminal error code was not safely normalized');
+    cases += 1;
+    assert(sanitizeTurnFailure({
       status: 'failed',
       error: {
         codexErrorInfo: {
@@ -1494,13 +1757,68 @@ async function runValidationSelfTest() {
           httpConnectionFailed: { httpStatusCode: 503 },
         },
       },
-    }), 'multi-key terminal error');
-    expectThrow(() => sanitizeTurnFailure({
+    }).code === null, 'multi-key terminal error was not safely normalized');
+    cases += 1;
+    assert(sanitizeTurnFailure({
       status: 'failed',
       error: {
         codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 70_000 } },
       },
-    }), 'invalid terminal HTTP status');
+    }).code === null, 'invalid terminal HTTP status was not safely normalized');
+    cases += 1;
+    const disagreeingFailure = sanitizeTurnFailure({
+      status: 'failed',
+      error: { codexErrorInfo: 'unauthorized' },
+    }, {
+      message: {
+        method: 'error',
+        params: { error: { codexErrorInfo: 'usageLimitExceeded' }, willRetry: false },
+      },
+    });
+    assert(
+      disagreeingFailure.code === 'unauthorized' && disagreeingFailure.willRetry === false,
+      'final turn was not authoritative over a disagreeing notification',
+    );
+    cases += 1;
+    const malformedFailure = sanitizeTurnFailure(null, {
+      message: { method: 'futureError', params: { willRetry: 'yes', error: { codexErrorInfo: 7 } } },
+    });
+    assert(
+      stableJson(malformedFailure) === stableJson({
+        status: null, code: null, httpStatusCode: null, willRetry: null,
+      }),
+      'malformed terminal failure was not totally normalized',
+    );
+    cases += 1;
+    const primaryFixture = new Error('primary');
+    const closeFixture = new Error('close');
+    assert(
+      selectLifecycleFailure(primaryFixture, closeFixture) === primaryFixture,
+      'close failure replaced the primary lifecycle failure',
+    );
+    cases += 1;
+    const requiredArgs = [
+      '--codex-exe', 'C:\\codex.exe',
+      '--expected-head', 'a'.repeat(40),
+      '--hive-mind-cli', 'C:\\hive-mind.exe',
+      '--model', 'fixture-model',
+      '--receipt-dir', 'C:\\receipt',
+      '--windows-powershell', 'C:\\powershell.exe',
+      '--workspace', 'C:\\workspace',
+    ];
+    assert(parseArgs([...requiredArgs, '--setup-only'])['setup-only'] === true, 'setup-only fixture failed');
+    cases += 1;
+    expectThrow(
+      () => parseArgs([
+        ...requiredArgs,
+        '--setup-only',
+        '--execute-paid',
+        '--marker', 'fixture',
+        '--ack', PAID_ACK,
+      ]),
+      'setup-only paid conflict',
+    );
+    assert(cases === 42, `expected exactly 42 self-test cases, observed ${cases}`);
     return { pass: true, paidCalls: 0, cases };
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -1520,6 +1838,7 @@ const workspace = resolve(flags.workspace);
 const model = flags.model;
 const expectedHead = flags['expected-head'];
 const executePaid = flags['execute-paid'] === true;
+const setupOnly = flags['setup-only'] === true;
 const initialExecutableSha256 = existsSync(codexExecutable) ? sha256File(codexExecutable) : null;
 const initialScriptSha256 = sha256File(SCRIPT_PATH);
 const report = {
@@ -1527,7 +1846,7 @@ const report = {
   kind: 'codex-tool-denial-and-official-auth',
   pass: false,
   paidCalls: 0,
-  proof: { paidCalls: 0, pass: false },
+  proof: { executed: false, paidCalls: 0, pass: null },
   source: {
     expectedHead,
     observedHead: null,
@@ -1607,6 +1926,14 @@ const report = {
     workspaceSha256: sha256(canonicalPath(workspace)),
     reportPathHash: sha256(join(receiptDir, 'report.json').toLowerCase()),
     tempRemoved: false,
+  },
+  diagnostic: {
+    failureStage: null,
+    protocolCode: null,
+    completedStage: null,
+    modelCalls: 0,
+    turnStartCalls: 0,
+    closeClean: false,
   },
   turnFailure: null,
   error: null,
@@ -1760,6 +2087,7 @@ try {
     artifactsUnchanged: false,
   };
 
+  if (!setupOnly) {
   const sealedAck = `WAGGLE_SEALED_ACK_${randomBytes(24).toString('hex')}`;
   const sealedProvider = await startLoopbackProvider('sealed', sealedAck, sentinelPath);
   providers.push(sealedProvider);
@@ -1787,7 +2115,7 @@ try {
     model,
     prompt: `Return exactly ${sealedAck} and nothing else. Do not call tools.`,
     expectedAcknowledgement: sealedAck,
-    strictAllowlist: false,
+    strictAllowlist: true,
   });
   await sealedProvider.close();
   providers.splice(providers.indexOf(sealedProvider), 1);
@@ -1927,9 +2255,56 @@ try {
   ])));
   report.invocation.threadParamsSha256 = sealedRun.threadParamsSha256;
   report.invocation.turnParamsSha256 = sealedRun.turnParamsSha256;
-  report.proof = { paidCalls: 0, pass: true };
+  report.proof = { executed: true, paidCalls: 0, pass: true };
+  }
 
-  if (executePaid) {
+  if (setupOnly) {
+    const setupArgs = buildInvocationArguments({
+      mcpServerNames,
+      catalogPath: sealedCatalogPath,
+      providerBaseUrl: null,
+      includeDeny: true,
+      denyConfig: denial.config,
+      hookDisables: externalHookDisables,
+      hookPins: allPins,
+    });
+    let preSetupMcpBoundary = null;
+    const setupRun = await runTurn({
+      executable: codexExecutable,
+      args: setupArgs,
+      workspace,
+      env,
+      replacements,
+      codexHome,
+      includeDeny: true,
+      expectedDenyCommandSha256: denial.commandSha256,
+      expectedWaggleCommands: expectedWaggleHooks.commands,
+      expectedHookGraphSha256: pinned.graphSha256,
+      beforeTurn: async () => {
+        preSetupMcpBoundary = captureMcpBoundary(codexExecutable, env, codexConfigPath);
+        assertSameMcpBoundary(initialMcpBoundary, preSetupMcpBoundary, 'before setup-only thread/start');
+        report.mcpBoundary.prePaidSha256 = preSetupMcpBoundary.boundarySha256;
+        report.mcpBoundary.prePaidConfigSha256 = preSetupMcpBoundary.configSha256;
+      },
+      lane: 'setup',
+      model,
+      setupOnly: true,
+      strictAllowlist: true,
+    });
+    assert(preSetupMcpBoundary !== null, 'setup-only MCP/config boundary was not captured');
+    const postSetupMcpBoundary = captureMcpBoundary(codexExecutable, env, codexConfigPath);
+    assertSameMcpBoundary(initialMcpBoundary, postSetupMcpBoundary, 'after setup-only thread/start');
+    report.mcpBoundary.postPaidSha256 = postSetupMcpBoundary.boundarySha256;
+    report.mcpBoundary.postPaidConfigSha256 = postSetupMcpBoundary.configSha256;
+    report.mcpBoundary.unchanged = true;
+    report.diagnostic = setupRun.diagnostic;
+    report.invocation.argumentsSha256 = sha256(stableJson(normalizedArguments(setupArgs, [
+      [sealedCatalogPath, '<MODEL_CATALOG>'],
+      [denial.command, '<DENY_COMMAND>'],
+    ])));
+    report.invocation.threadParamsSha256 = setupRun.threadParamsSha256;
+    report.invocation.turnParamsSha256 = null;
+  } else if (executePaid) {
     const captureMindRoot = process.env.HIVE_MIND_DATA_DIR;
     const captureWorkspaceId = process.env.WAGGLE_WORKSPACE_ID;
     assert(
@@ -1982,6 +2357,7 @@ try {
       expectedAcknowledgement: flags.marker,
       strictAllowlist: true,
     });
+    report.diagnostic = paidRun.diagnostic;
     assert(prePaidMcpBoundary !== null, 'paid MCP/config boundary was not captured');
     const postPaidMcpBoundary = captureMcpBoundary(codexExecutable, paidEnv, codexConfigPath);
     assertSameMcpBoundary(initialMcpBoundary, postPaidMcpBoundary, 'after the paid turn');
@@ -2041,10 +2417,19 @@ try {
     'repository source snapshot changed during proof',
   );
   report.source.unchanged = true;
-  report.pass = report.proof.pass
+  report.pass = proofStateSatisfied(report.proof, setupOnly)
     && report.source.unchanged
     && report.artifacts.scriptUnchanged
     && report.hooks.artifactsUnchanged
+    && (!setupOnly || (
+      report.diagnostic.failureStage === null
+      && report.diagnostic.protocolCode === null
+      && report.diagnostic.completedStage === 'thread-start'
+      && report.diagnostic.modelCalls === 0
+      && report.diagnostic.turnStartCalls === 0
+      && report.diagnostic.closeClean
+      && report.mcpBoundary.unchanged
+    ))
     && (!executePaid || (
       report.paidCalls === 1
       && report.mcpBoundary.unchanged
@@ -2054,6 +2439,22 @@ try {
     ));
 } catch (error) {
   report.turnFailure = error?.turnFailure ?? null;
+  if (error?.canaryDiagnostic) {
+    report.diagnostic = {
+      failureStage: sanitizeCanaryStage(error.canaryDiagnostic.failureStage),
+      protocolCode: sanitizeProtocolCode(error.canaryDiagnostic.protocolCode),
+      completedStage: sanitizeCanaryStage(error.canaryDiagnostic.completedStage),
+      modelCalls: Number.isInteger(error.canaryDiagnostic.modelCalls)
+        && error.canaryDiagnostic.modelCalls >= 0
+        ? error.canaryDiagnostic.modelCalls
+        : 0,
+      turnStartCalls: Number.isInteger(error.canaryDiagnostic.turnStartCalls)
+        && error.canaryDiagnostic.turnStartCalls >= 0
+        ? error.canaryDiagnostic.turnStartCalls
+        : 0,
+      closeClean: error.canaryDiagnostic.closeClean === true,
+    };
+  }
   report.error = safeError(error, [
     codexExecutable,
     hiveMindCli,
@@ -2100,6 +2501,12 @@ const summary = {
   reportSha256,
   sessionId: executePaid ? rawPaidSessionId : null,
   turnFailure: report.turnFailure,
+  failureStage: report.diagnostic.failureStage,
+  protocolCode: report.diagnostic.protocolCode,
+  completedStage: report.diagnostic.completedStage,
+  modelCalls: report.diagnostic.modelCalls,
+  turnStartCalls: report.diagnostic.turnStartCalls,
+  closeClean: report.diagnostic.closeClean,
 };
 process.stdout.write(`${JSON.stringify(summary)}\n`);
 if (!report.pass) process.exitCode = 1;
