@@ -4526,17 +4526,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(denialProof).toContain('extras.every((hook) => !hook.enabled)');
     expect(denialProof).toContain('verifyWindowsPowerShell');
     expect(denialProof).toContain('model_provider="openai"');
-    expect(denialProof).toContain('model_providers.openai.name="OpenAI"');
-    expect(denialProof).toContain('model_providers.openai.request_max_retries=0');
-    expect(denialProof).toContain('model_providers.openai.stream_max_retries=0');
-    expect(denialProof).toContain('model_providers.openai.requires_openai_auth=true');
-    expect(denialProof).toContain('model_providers.openai.supports_websockets=false');
-    expect(denialProof).toContain(
-      'model_providers.openai.base_url="https://chatgpt.com/backend-api/codex"',
-    );
-    expect(denialProof).not.toContain(
-      'model_providers.openai.base_url="https://chatgpt.com/backend-api/"',
-    );
+    expect(denialProof).not.toContain('model_providers.openai.');
     expect(denialProof).not.toContain('waggle_chatgpt');
     const allowedNotificationPolicyStart = denialProof.indexOf(
       'const ALLOWED_NOTIFICATION_METHODS = new Set([',
@@ -4574,7 +4564,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(JSON.parse(helperSelfTest.stdout)).toMatchObject({
       pass: true,
       paidCalls: 0,
-      cases: 42,
+      cases: 43,
     });
 
     if (process.platform === 'win32') {

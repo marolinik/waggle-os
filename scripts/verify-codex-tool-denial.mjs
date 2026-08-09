@@ -855,13 +855,6 @@ function buildInvocationArguments(options) {
       'model_providers.waggle_loopback.supports_websockets=false',
     ] : [
       'model_provider="openai"',
-      'model_providers.openai.name="OpenAI"',
-      'model_providers.openai.base_url="https://chatgpt.com/backend-api/codex"',
-      'model_providers.openai.wire_api="responses"',
-      'model_providers.openai.request_max_retries=0',
-      'model_providers.openai.stream_max_retries=0',
-      'model_providers.openai.requires_openai_auth=true',
-      'model_providers.openai.supports_websockets=false',
     ]),
     ...(options.includeDeny ? [options.denyConfig] : []),
     ...(hookStateEntries.length > 0 ? [`hooks.state={${hookStateEntries.join(',')}}`] : []),
@@ -1818,7 +1811,23 @@ async function runValidationSelfTest() {
       ]),
       'setup-only paid conflict',
     );
-    assert(cases === 42, `expected exactly 42 self-test cases, observed ${cases}`);
+    const officialProviderArguments = buildInvocationArguments({
+      mcpServerNames: [],
+      catalogPath: 'C:\\models.json',
+      providerBaseUrl: null,
+      includeDeny: false,
+      hookDisables: [],
+      hookPins: [],
+    });
+    const officialProviderOverrides = officialProviderArguments.filter((argument) => (
+      argument.startsWith('model_provider=') || argument.startsWith('model_providers.')
+    ));
+    assert(
+      stableJson(officialProviderOverrides) === stableJson(['model_provider="openai"']),
+      'official provider arguments redefined the reserved built-in OpenAI provider',
+    );
+    cases += 1;
+    assert(cases === 43, `expected exactly 43 self-test cases, observed ${cases}`);
     return { pass: true, paidCalls: 0, cases };
   } finally {
     await rm(root, { recursive: true, force: true });
