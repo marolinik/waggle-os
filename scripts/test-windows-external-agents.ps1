@@ -11,6 +11,10 @@ if ($env:OS -ne 'Windows_NT') {
   throw 'This guarded real-agent runner is Windows-only.'
 }
 
+if ($AuthenticatedTasks) {
+  throw 'AuthenticatedTasks is disabled; use scripts/test-windows-official-auth-canaries.ps1 for no-copy user-auth evidence.'
+}
+
 function Resolve-ReceiptLayout([string]$RequestedReceiptDir) {
   if ([string]::IsNullOrWhiteSpace($RequestedReceiptDir)) { return $null }
   $fullPath = [IO.Path]::GetFullPath($RequestedReceiptDir)

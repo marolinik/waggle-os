@@ -727,7 +727,7 @@ function buildInvocationArguments(options) {
     ] : [
       'model_provider="waggle_chatgpt"',
       'model_providers.waggle_chatgpt.name="Waggle ChatGPT official auth"',
-      'model_providers.waggle_chatgpt.base_url="https://chatgpt.com/backend-api/"',
+      'model_providers.waggle_chatgpt.base_url="https://chatgpt.com/backend-api/codex"',
       'model_providers.waggle_chatgpt.wire_api="responses"',
       'model_providers.waggle_chatgpt.request_max_retries=0',
       'model_providers.waggle_chatgpt.stream_max_retries=0',

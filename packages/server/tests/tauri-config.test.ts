@@ -4312,76 +4312,46 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     40_000,
   );
 
-  it('gates the authenticated Windows external-agent task seal explicitly', () => {
+  it('hard-disables the legacy authenticated Windows external-agent task seal before any auth or temp work', () => {
     const script = fs.readFileSync(
       path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
       'utf-8',
+    ).replace(/\r\n/g, '\n');
+
+    expect(script).toContain('[switch]$AuthenticatedTasks');
+    const guard = [
+      'if ($AuthenticatedTasks) {',
+      "  throw 'AuthenticatedTasks is disabled; use scripts/test-windows-official-auth-canaries.ps1 for no-copy user-auth evidence.'",
+      '}',
+    ].join('\n');
+    const guardIndex = script.indexOf(guard);
+    expect(guardIndex).toBeGreaterThan(-1);
+    for (const protectedMarker of [
+      "$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path",
+      '$runRoot = Join-Path $tempBase',
+      '$sourceClaudeCredentials =',
+      'Copy-IsolatedAuthenticationFile',
+      "Set-ProcessEnvironment -Name 'USERPROFILE' -Value $authenticatedProfileRoot",
+      "Invoke-VitestLane -Spec 'tests/integration/external-agent-collaboration.live.test.ts'",
+    ]) {
+      const protectedIndex = script.indexOf(protectedMarker);
+      expect(protectedIndex, protectedMarker).toBeGreaterThan(-1);
+      expect(guardIndex, protectedMarker).toBeLessThan(protectedIndex);
+    }
+    expect(script).toContain(
+      "Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-hook-lifecycle.spec.ts'",
     );
+    expect(script).toContain(
+      "Invoke-PlaywrightLane -Spec 'tests/e2e/launcher-real-tool-lifecycle.spec.ts'",
+    );
+  });
+
+  it('keeps the three-agent live collaboration contract regression-locked', () => {
     const liveSpec = fs.readFileSync(
       path.join(ROOT, 'tests', 'integration', 'external-agent-collaboration.live.test.ts'),
       'utf-8',
     );
 
-    expect(script).toContain('[switch]$AuthenticatedTasks');
-    expect(script).toContain(
-      'AuthenticatedTasks requires a fresh ReceiptDir for durable release evidence.',
-    );
-    expect(script).toContain("$authenticatedHostIds = @('claude-code', 'codex', 'hermes')");
-    expect(script).toContain('AuthenticatedTasks requires exactly:');
-    expect(script).toContain("'WAGGLE_LIVE_EXTERNAL_AGENTS'");
-    expect(script).toContain("'WAGGLE_LIVE_HERMES_PROVIDER'");
-    expect(script).toContain("'WAGGLE_LIVE_HERMES_MODEL'");
-    expect(script).toContain("$authenticatedHermesProfile = 'wagglee2e-' + [guid]::NewGuid().ToString('N')");
-    expect(script).toContain('hermes profile create $ProfileName --no-alias --no-skills');
-    expect(script).toContain("$authenticatedHermesRoot = Join-Path $authenticatedProfileRoot 'hermes-root'");
-    expect(script).toContain("$hermesProfilesRoot = Join-Path $authenticatedHermesRoot 'profiles'");
-    expect(script).toContain("Set-ProcessEnvironment -Name 'HERMES_HOME' -Value $authenticatedHermesRoot");
-    expect(script).not.toContain("$nativeHermesRoot = Join-Path $originalEnvironment['LOCALAPPDATA'] 'hermes'");
-    expect(script).toContain("Set-ProcessEnvironment -Name 'HERMES_PROFILE' -Value $null");
-    expect(script).toContain("Set-ProcessEnvironment -Name 'HERMES_HOME' -Value $authenticatedHermesLease.ProfileHome");
-    expect(script).toContain("$isolatedClaudeCredentials = Join-Path $authenticatedProfileRoot '.claude\\.credentials.json'");
-    expect(script).toContain("$isolatedCodexAuth = Join-Path $authenticatedProfileRoot '.codex\\auth.json'");
-    expect(script).toContain("$sourceHermesAuth = Join-Path $sourceHermesHome 'auth.json'");
-    expect(script).toContain('$isolatedHermesAuth = Join-Path (');
-    expect(script).toContain('-Destination $isolatedClaudeCredentials');
-    expect(script).toContain('-Destination $isolatedCodexAuth');
-    expect(script).toContain('-Destination $isolatedHermesAuth');
-    expect(script).toContain("Set-ProcessEnvironment -Name 'USERPROFILE' -Value $authenticatedProfileRoot");
-    expect(script).toContain("Set-ProcessEnvironment -Name 'HOME' -Value $authenticatedProfileRoot");
-    expect(script).toContain('A real external-agent authentication source changed');
-    const clearHermesProviderIndex = script.indexOf(
-      "Set-ProcessEnvironment -Name 'WAGGLE_LIVE_HERMES_PROVIDER' -Value $null",
-    );
-    const clearHermesModelIndex = script.indexOf(
-      "Set-ProcessEnvironment -Name 'WAGGLE_LIVE_HERMES_MODEL' -Value $null",
-    );
-    const authenticatedLaneIndex = script.indexOf(
-      "Invoke-VitestLane -Spec 'tests/integration/external-agent-collaboration.live.test.ts'",
-    );
-    expect(clearHermesProviderIndex).toBeGreaterThan(-1);
-    expect(clearHermesModelIndex).toBeGreaterThan(-1);
-    expect(clearHermesProviderIndex).toBeLessThan(authenticatedLaneIndex);
-    expect(clearHermesModelIndex).toBeLessThan(authenticatedLaneIndex);
-    expect(script).toContain("-HermesProvider 'openai-codex' -HermesModel 'gpt-5.5'");
-    expect(script).toContain("spec = 'tests/integration/external-agent-collaboration.live.test.ts'");
-    expect(script).toContain("hostIds = @($authenticatedHostIds)");
-    expect(script).toContain('hermes profile delete $Lease.ProfileName -y');
-    expect(script).toContain('Hermes authenticated profile cleanup failed');
-    expect(script).toContain('default: gpt-5.5');
-    expect(script).toContain('provider: openai-codex');
-    expect(script).toContain('reasoning_effort: xhigh');
-    expect(script).toContain('for ($attempt = 0; $attempt -lt 40; $attempt += 1)');
-    expect(script).not.toContain("Set-ProcessEnvironment -Name 'TEMP' -Value $authenticatedTemp");
-    expect(script).not.toContain("Set-ProcessEnvironment -Name 'TMP' -Value $authenticatedTemp");
-    expect(script).toContain(
-      "Invoke-VitestLane -Spec 'tests/integration/external-agent-collaboration.live.test.ts'",
-    );
-    expect(script).toContain("-ReceiptName 'authenticated-tasks'");
-    expect(script).toContain("'--retry=0'");
-    expect(script.indexOf("Set-ProcessEnvironment -Name 'HERMES_HOME' -Value $authenticatedHermesLease.ProfileHome"))
-      .toBeLessThan(script.indexOf(
-        "Invoke-VitestLane -Spec 'tests/integration/external-agent-collaboration.live.test.ts'",
-      ));
     expect(liveSpec).toContain(
       "const REQUIRED_TOOLS = ['claude-code', 'codex', 'hermes'] as const;",
     );
@@ -4558,6 +4528,12 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(denialProof).toContain('model_providers.waggle_chatgpt.request_max_retries=0');
     expect(denialProof).toContain('model_providers.waggle_chatgpt.stream_max_retries=0');
     expect(denialProof).toContain('model_providers.waggle_chatgpt.requires_openai_auth=true');
+    expect(denialProof).toContain(
+      'model_providers.waggle_chatgpt.base_url="https://chatgpt.com/backend-api/codex"',
+    );
+    expect(denialProof).not.toContain(
+      'model_providers.waggle_chatgpt.base_url="https://chatgpt.com/backend-api/"',
+    );
     expect(denialProof).not.toContain("'model/rerouted'");
     expect(denialProof).toContain('sensitiveDataObserved: false');
     expect(denialProof).toContain('paidCalls: 0');
