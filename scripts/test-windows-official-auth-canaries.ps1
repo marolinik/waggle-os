@@ -302,6 +302,157 @@ function Assert-CodexToolDenialProof(
   }
 }
 
+function Assert-SanitizedCodexTurnFailure([object]$Failure) {
+  if ($null -eq $Failure) { return $null }
+  $expectedProperties = @('code', 'httpStatusCode', 'status', 'willRetry')
+  $actualProperties = @($Failure.PSObject.Properties.Name | Sort-Object)
+  if ([string]::Join(',', $actualProperties) -cne [string]::Join(',', $expectedProperties)) {
+    throw 'Codex turn failure contains unexpected or missing properties.'
+  }
+  if (-not ($Failure.status -is [string]) -or
+    [string]$Failure.status -cnotin @('failed', 'interrupted')) {
+    throw 'Codex turn failure status is invalid.'
+  }
+  $simpleCodes = @(
+    'badRequest',
+    'contextWindowExceeded',
+    'cyberPolicy',
+    'internalServerError',
+    'other',
+    'sandboxError',
+    'serverOverloaded',
+    'sessionBudgetExceeded',
+    'threadRollbackFailed',
+    'unauthorized',
+    'usageLimitExceeded'
+  )
+  $httpCodes = @(
+    'httpConnectionFailed',
+    'responseStreamConnectionFailed',
+    'responseStreamDisconnected',
+    'responseTooManyFailedAttempts'
+  )
+  $code = $Failure.code
+  if ($null -ne $code -and (-not ($code -is [string]) -or
+    ([string]$code -cnotin $simpleCodes -and [string]$code -cnotin $httpCodes -and
+      [string]$code -cne 'activeTurnNotSteerable'))) {
+    throw 'Codex turn failure code is invalid.'
+  }
+  $httpStatusCode = $Failure.httpStatusCode
+  if ($null -ne $httpStatusCode -and
+    ((-not ($httpStatusCode -is [int])) -and (-not ($httpStatusCode -is [long])))) {
+    throw 'Codex turn failure HTTP status must be a JSON integer or null.'
+  }
+  if ($null -ne $httpStatusCode -and
+    ([long]$httpStatusCode -lt 0 -or [long]$httpStatusCode -gt 65535)) {
+    throw 'Codex turn failure HTTP status is out of range.'
+  }
+  if ($null -ne $httpStatusCode -and [string]$code -cnotin $httpCodes) {
+    throw 'Only Codex HTTP failure codes may carry an HTTP status.'
+  }
+  if ($null -ne $Failure.willRetry -and -not ($Failure.willRetry -is [bool])) {
+    throw 'Codex turn failure retry flag must be a JSON boolean or null.'
+  }
+  return [ordered]@{
+    status = [string]$Failure.status
+    code = if ($null -eq $code) { $null } else { [string]$code }
+    httpStatusCode = if ($null -eq $httpStatusCode) { $null } else { [long]$httpStatusCode }
+    willRetry = if ($null -eq $Failure.willRetry) { $null } else { [bool]$Failure.willRetry }
+  }
+}
+
+function New-SanitizedCodexFailureReceipt(
+  [object]$TurnFailure,
+  [object]$ChildResult,
+  [object]$GitState,
+  [string]$ExpectedHead,
+  [string]$ScriptSha256,
+  [string]$ScriptBlob,
+  [string]$HelperSha256,
+  [string]$HelperBlob,
+  [string]$ExecutableSha256,
+  [string]$ReportSha256,
+  [object]$ProofSummary,
+  [bool]$TemporaryRootRemoved
+) {
+  $turnFailure = Assert-SanitizedCodexTurnFailure -Failure $TurnFailure
+  foreach ($entry in @(
+    [pscustomobject]@{ Value = $ScriptSha256; Label = 'failure receipt script hash' }
+    [pscustomobject]@{ Value = $HelperSha256; Label = 'failure receipt helper hash' }
+    [pscustomobject]@{ Value = $ExecutableSha256; Label = 'failure receipt executable hash' }
+    [pscustomobject]@{ Value = $ReportSha256; Label = 'failure receipt child report hash' }
+    [pscustomobject]@{ Value = $ChildResult.StdoutSha256; Label = 'failure receipt stdout hash' }
+    [pscustomobject]@{ Value = $ChildResult.StderrSha256; Label = 'failure receipt stderr hash' }
+  )) {
+    Assert-Sha256 -Value $entry.Value -Label ([string]$entry.Label)
+  }
+  foreach ($entry in @(
+    [pscustomobject]@{ Value = $ScriptBlob; Label = 'failure receipt script blob' }
+    [pscustomobject]@{ Value = $HelperBlob; Label = 'failure receipt helper blob' }
+    [pscustomobject]@{ Value = $GitState.Tree; Label = 'failure receipt source tree' }
+  )) {
+    if (-not ($entry.Value -is [string]) -or [string]$entry.Value -cnotmatch '^[0-9a-f]{40}$') {
+      throw "$($entry.Label) must be a lowercase 40-character Git object id."
+    }
+  }
+  if (-not $TemporaryRootRemoved) { throw 'Codex failure receipt requires completed temporary cleanup.' }
+  $failureClass = if ($null -ne $turnFailure) {
+    'codex-paid-turn-incomplete'
+  } elseif ($ProofSummary.executed -eq $true) {
+    'codex-post-turn-invariant-failed'
+  } else {
+    'codex-proof-incomplete'
+  }
+  return [ordered]@{
+    schemaVersion = 1
+    kind = 'windows-official-auth-codex-failure'
+    pass = $false
+    source = [ordered]@{
+      expectedHead = $ExpectedHead
+      observedHead = [string]$GitState.Head
+      tree = [string]$GitState.Tree
+      trackedClean = [bool]$GitState.TrackedClean
+      scriptSha256 = $ScriptSha256
+      scriptBlob = $ScriptBlob
+      codexHelperSha256 = $HelperSha256
+      codexHelperBlob = $HelperBlob
+      codexExecutableSha256 = $ExecutableSha256
+    }
+    child = [ordered]@{
+      exitCode = $ChildResult.ExitCode
+      timedOut = [bool]$ChildResult.TimedOut
+      durationMs = [long]$ChildResult.DurationMs
+      stdoutBytes = [long]$ChildResult.StdoutBytes
+      stdoutSha256 = [string]$ChildResult.StdoutSha256
+      stderrBytes = [long]$ChildResult.StderrBytes
+      stderrSha256 = [string]$ChildResult.StderrSha256
+      reportSha256 = $ReportSha256
+    }
+    failure = [ordered]@{
+      lane = 'codex'
+      class = $failureClass
+      turn = $turnFailure
+    }
+    proof = [ordered]@{
+      pass = [bool]$ProofSummary.pass
+      paidCalls = [long]$ProofSummary.paidCalls
+      offlinePass = [bool]$ProofSummary.offlinePass
+      offlinePaidCalls = [long]$ProofSummary.offlinePaidCalls
+      attempted = [bool]$ProofSummary.attempted
+      executed = [bool]$ProofSummary.executed
+      normalTextCompleted = [bool]$ProofSummary.normalTextCompleted
+      toolEventsObserved = [long]$ProofSummary.toolEventsObserved
+      unknownEventsObserved = [long]$ProofSummary.unknownEventsObserved
+      mcpBoundaryUnchanged = [bool]$ProofSummary.mcpBoundaryUnchanged
+    }
+    cleanup = [ordered]@{
+      temporaryRootRemoved = $true
+      rawOutputsPersisted = $false
+      childReportPersisted = $false
+    }
+  }
+}
+
 function Invoke-CodexProofValidatorSelfTest {
   $executableHash = 'a' * 64
   $cliHash = 'b' * 64
@@ -452,6 +603,66 @@ function Invoke-CodexProofValidatorSelfTest {
   $fixture = & $copy $validValue; $fixture.hooks.artifactsUnchanged = $false; & $reject $fixture 'hook artifact drift'
   $fixture = & $copy $validValue; $fixture.paidInvocation.threadParamsSha256 = $graphHash; & $reject $fixture 'paid thread mismatch'
   $fixture = & $copy $validValue; $fixture.mcpBoundary.prePaidSha256 = $graphHash; & $reject $fixture 'pre-paid MCP drift'
+
+  $validFailure = [pscustomobject][ordered]@{
+    status = 'failed'
+    code = 'unauthorized'
+    httpStatusCode = $null
+    willRetry = $false
+  }
+  $validChild = [pscustomobject]@{
+    ExitCode = 1
+    TimedOut = $false
+    DurationMs = 123
+    Stdout = 'C:\secret\auth.json sk-self-test'
+    Stderr = 'file:///private/detail sess-self-test'
+    StdoutBytes = 40
+    StderrBytes = 40
+    StdoutSha256 = $otherHash
+    StderrSha256 = $catalogHash
+  }
+  $validGit = [pscustomobject]@{
+    Head = $expectedHead
+    Tree = $gitObject
+    TrackedClean = $true
+  }
+  $validProofSummary = [pscustomobject]@{
+    pass = $false
+    paidCalls = 1
+    offlinePass = $true
+    offlinePaidCalls = 0
+    attempted = $true
+    executed = $false
+    normalTextCompleted = $false
+    toolEventsObserved = 0
+    unknownEventsObserved = 0
+    mcpBoundaryUnchanged = $false
+  }
+  $failureReceipt = New-SanitizedCodexFailureReceipt `
+    -TurnFailure $validFailure -ChildResult $validChild -GitState $validGit `
+    -ExpectedHead $expectedHead -ScriptSha256 $helperHash -ScriptBlob $gitObject `
+    -HelperSha256 $helperHash -HelperBlob $gitObject -ExecutableSha256 $executableHash `
+    -ReportSha256 $otherHash -ProofSummary $validProofSummary -TemporaryRootRemoved $true
+  $failureReceiptJson = $failureReceipt | ConvertTo-Json -Depth 20 -Compress
+  if ($failureReceipt.kind -cne 'windows-official-auth-codex-failure' -or
+    $failureReceipt.pass -ne $false -or $failureReceiptJson -match '(?i)(?:auth\.json|file:///|sk-|sess-)') {
+    throw 'Sanitized Codex failure receipt retained untrusted diagnostic text.'
+  }
+  $script:codexProofSelfTestCases += 1
+  $failureReject = {
+    param($Fixture, [string]$Label)
+    $accepted = $true
+    try { $null = Assert-SanitizedCodexTurnFailure -Failure $Fixture } catch { $accepted = $false }
+    if ($accepted) { throw "Codex turn-failure validator accepted invalid fixture: $Label" }
+    $script:codexProofSelfTestCases += 1
+  }
+  $fixture = & $copy $validFailure; $fixture.status = 'completed'; & $failureReject $fixture 'completed status'
+  $fixture = & $copy $validFailure; $fixture.code = 'futureCode'; & $failureReject $fixture 'unknown code'
+  $fixture = & $copy $validFailure; $fixture.code = 'httpConnectionFailed'; $fixture.httpStatusCode = 70000; & $failureReject $fixture 'HTTP status range'
+  $fixture = & $copy $validFailure; $fixture.willRetry = 'false'; & $failureReject $fixture 'string retry flag'
+  $fixture = & $copy $validFailure; $fixture | Add-Member -NotePropertyName message -NotePropertyValue 'C:\secret\auth.json sk-fixture'; & $failureReject $fixture 'message property'
+  $fixture = & $copy $validFailure; $fixture | Add-Member -NotePropertyName additionalDetails -NotePropertyValue 'file:///private/detail'; & $failureReject $fixture 'additional details property'
+  $fixture = & $copy $validFailure; $fixture.httpStatusCode = 401; & $failureReject $fixture 'HTTP status on simple code'
 
   return [pscustomobject]@{
     pass = $true
@@ -1029,6 +1240,182 @@ try {
     '--ack', 'I_ACKNOWLEDGE_1_CODEX_OFFICIAL_AUTH_CALL'
   ) -WorkingDirectory $codexWorkspace -EnvironmentOverrides $codexEnvironment `
     -BlankEnvironmentNames $codexAlternativeAuthNames -TimeoutSeconds 300
+  if ($codexRaw.TimedOut -or $codexRaw.ExitCode -ne 0) {
+    try { $codexFailureSummary = $codexRaw.Stdout | ConvertFrom-Json -Depth 30 } catch {
+      throw 'Failed Codex child did not return a valid JSON summary.'
+    }
+    $summaryProperties = @($codexFailureSummary.PSObject.Properties.Name | Sort-Object)
+    $expectedSummaryProperties = @(
+      'markerMatched',
+      'paidCalls',
+      'pass',
+      'reportPath',
+      'reportSha256',
+      'sessionId',
+      'turnFailure'
+    )
+    if ([string]::Join(',', $summaryProperties) -cne [string]::Join(',', $expectedSummaryProperties)) {
+      throw 'Failed Codex child summary contains unexpected or missing properties.'
+    }
+    Assert-JsonBoolean -Value $codexFailureSummary.pass -Expected $false -Label 'failed Codex summary pass'
+    if ((-not ($codexFailureSummary.paidCalls -is [int])) -and
+      (-not ($codexFailureSummary.paidCalls -is [long]))) {
+      throw 'Failed Codex summary paidCalls must be a JSON integer.'
+    }
+    if ([long]$codexFailureSummary.paidCalls -lt 0 -or [long]$codexFailureSummary.paidCalls -gt 1) {
+      throw 'Failed Codex summary paidCalls is out of range.'
+    }
+    if (-not ($codexFailureSummary.markerMatched -is [bool])) {
+      throw 'Failed Codex summary markerMatched must be a JSON boolean.'
+    }
+    Assert-Sha256 -Value $codexFailureSummary.reportSha256 -Label 'failed Codex report hash'
+    if (-not ($codexFailureSummary.reportPath -is [string])) {
+      throw 'Failed Codex summary reportPath must be a string.'
+    }
+    $expectedCodexFailureReportPath = [IO.Path]::GetFullPath((Join-Path $codexProofDir 'report.json'))
+    $codexFailureReportPath = [IO.Path]::GetFullPath([string]$codexFailureSummary.reportPath)
+    if ($codexFailureReportPath -cne $expectedCodexFailureReportPath -or
+      -not (Test-Path -LiteralPath $codexFailureReportPath -PathType Leaf)) {
+      throw 'Failed Codex child report path was missing or escaped the owned directory.'
+    }
+    $codexFailureReportItem = Get-Item -LiteralPath $codexFailureReportPath -Force
+    if (($codexFailureReportItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+      $codexFailureReportItem.Length -gt 2MB) {
+      throw 'Failed Codex child report is unsafe or too large.'
+    }
+    $codexFailureReportSha256 = Get-RegularFileHash `
+      -Path $codexFailureReportPath -Label 'failed Codex child report'
+    if ($codexFailureReportSha256 -cne [string]$codexFailureSummary.reportSha256) {
+      throw 'Failed Codex child report hash did not match its summary.'
+    }
+    $codexFailureReportBytes = [IO.File]::ReadAllBytes($codexFailureReportPath)
+    try {
+      $codexFailureReport = [Text.Encoding]::UTF8.GetString($codexFailureReportBytes) |
+        ConvertFrom-Json -Depth 50
+    } catch {
+      throw 'Failed Codex child report was not valid JSON.'
+    }
+    Assert-JsonInteger -Value $codexFailureReport.schemaVersion -Expected 1 `
+      -Label 'failed Codex report schemaVersion'
+    if (-not ($codexFailureReport.kind -is [string]) -or
+      [string]$codexFailureReport.kind -cne 'codex-tool-denial-and-official-auth') {
+      throw 'Failed Codex child report kind is invalid.'
+    }
+    Assert-JsonBoolean -Value $codexFailureReport.pass -Expected $false -Label 'failed Codex report pass'
+    Assert-JsonInteger -Value $codexFailureReport.paidCalls `
+      -Expected ([long]$codexFailureSummary.paidCalls) -Label 'failed Codex report paidCalls'
+    if ([string]$codexFailureReport.source.expectedHead -cne $ExpectedHead -or
+      [string]$codexFailureReport.source.observedHead -cne $ExpectedHead -or
+      [string]$codexFailureReport.source.tree -cne $initialGit.Tree -or
+      [string]$codexFailureReport.source.scriptBlob -cne $codexHelperProvenance.Blob) {
+      throw 'Failed Codex child report source did not match the sealed revision.'
+    }
+    Assert-JsonBoolean -Value $codexFailureReport.source.trackedClean -Expected $true `
+      -Label 'failed Codex report trackedClean'
+    if ([string]$codexFailureReport.executable.sha256 -cne $codexExecutableSha256 -or
+      [string]$codexFailureReport.artifacts.scriptSha256 -cne $artifactHashes.codexToolDenial) {
+      throw 'Failed Codex child report did not match the sealed executable or helper.'
+    }
+    $summaryTurnFailure = Assert-SanitizedCodexTurnFailure -Failure $codexFailureSummary.turnFailure
+    $reportTurnFailure = Assert-SanitizedCodexTurnFailure -Failure $codexFailureReport.turnFailure
+    if (($summaryTurnFailure | ConvertTo-Json -Compress) -cne
+      ($reportTurnFailure | ConvertTo-Json -Compress)) {
+      throw 'Failed Codex child summary and report disagree on the terminal status.'
+    }
+    Assert-JsonBoolean -Value $codexFailureReport.proof.pass -Expected $true `
+      -Label 'failed Codex offline proof pass'
+    Assert-JsonInteger -Value $codexFailureReport.proof.paidCalls -Expected 0 `
+      -Label 'failed Codex offline proof paidCalls'
+    Assert-JsonBoolean -Value $codexFailureReport.paidInvocation.attempted -Expected $true `
+      -Label 'failed Codex paid attempted'
+    foreach ($entry in @(
+      [pscustomobject]@{ Value = $codexFailureReport.paidInvocation.executed; Label = 'executed' }
+      [pscustomobject]@{ Value = $codexFailureReport.paidInvocation.normalTextCompleted; Label = 'normalTextCompleted' }
+      [pscustomobject]@{ Value = $codexFailureReport.mcpBoundary.unchanged; Label = 'MCP boundary unchanged' }
+    )) {
+      if (-not ($entry.Value -is [bool])) {
+        throw "Failed Codex report $($entry.Label) must be a JSON boolean."
+      }
+    }
+    foreach ($entry in @(
+      [pscustomobject]@{ Value = $codexFailureReport.paidInvocation.toolEventsObserved; Label = 'tool events' }
+      [pscustomobject]@{ Value = $codexFailureReport.paidInvocation.unknownEventsObserved; Label = 'unknown events' }
+    )) {
+      if ((-not ($entry.Value -is [int])) -and (-not ($entry.Value -is [long])) -or
+        [long]$entry.Value -lt 0) {
+        throw "Failed Codex report $($entry.Label) must be a non-negative JSON integer."
+      }
+    }
+    $failureGit = Get-GitState -RepositoryRoot $repoRoot
+    Assert-ExpectedGitState -State $failureGit
+    if ($failureGit.Tree -cne $initialGit.Tree) {
+      throw 'Repository tree changed during the failed Codex canary.'
+    }
+    $failureScriptProvenance = Get-ScriptProvenance -RepositoryRoot $repoRoot -ScriptPath $PSCommandPath
+    $failureHelperProvenance = Get-ScriptProvenance `
+      -RepositoryRoot $repoRoot -ScriptPath $artifactPaths.codexToolDenial
+    if ($failureScriptProvenance.Blob -cne $scriptProvenance.Blob -or
+      $failureHelperProvenance.Blob -cne $codexHelperProvenance.Blob) {
+      throw 'Official-auth source provenance changed during the failed Codex canary.'
+    }
+    foreach ($entry in $artifactPaths.GetEnumerator()) {
+      if ((Get-RegularFileHash -Path $entry.Value -Label $entry.Key) -cne
+        [string]$artifactHashes[$entry.Key]) {
+        throw "$($entry.Key) changed during the failed Codex canary."
+      }
+    }
+    $failureProofSummary = [pscustomobject]@{
+      pass = $false
+      paidCalls = [long]$codexFailureReport.paidCalls
+      offlinePass = $true
+      offlinePaidCalls = 0
+      attempted = [bool]$codexFailureReport.paidInvocation.attempted
+      executed = [bool]$codexFailureReport.paidInvocation.executed
+      normalTextCompleted = [bool]$codexFailureReport.paidInvocation.normalTextCompleted
+      toolEventsObserved = [long]$codexFailureReport.paidInvocation.toolEventsObserved
+      unknownEventsObserved = [long]$codexFailureReport.paidInvocation.unknownEventsObserved
+      mcpBoundaryUnchanged = [bool]$codexFailureReport.mcpBoundary.unchanged
+    }
+
+    Remove-OwnedDirectory -Path $tempRoot -RequiredParent $tempParent
+    $tempOwned = $false
+    if (Test-Path -LiteralPath $tempRoot) {
+      throw 'Official-auth temporary root survived failed Codex cleanup.'
+    }
+
+    $failureReceipt = New-SanitizedCodexFailureReceipt `
+      -TurnFailure $summaryTurnFailure -ChildResult $codexRaw -GitState $failureGit `
+      -ExpectedHead $ExpectedHead -ScriptSha256 $scriptSha256 -ScriptBlob $scriptProvenance.Blob `
+      -HelperSha256 $artifactHashes.codexToolDenial -HelperBlob $codexHelperProvenance.Blob `
+      -ExecutableSha256 $codexExecutableSha256 -ReportSha256 $codexFailureReportSha256 `
+      -ProofSummary $failureProofSummary -TemporaryRootRemoved $true
+    $null = [IO.Directory]::CreateDirectory($evidenceRoot)
+    Assert-NoExistingReparsePoint -Path $evidenceRoot -FailureMessage 'Evidence root is a reparse point'
+    $null = [IO.Directory]::CreateDirectory($receiptLayout.Staging)
+    $stagingOwned = $true
+    $failureReceiptPath = Join-Path $receiptLayout.Staging 'official-auth-failure.json'
+    Write-JsonCreateNew -Path $failureReceiptPath -Value $failureReceipt
+    $failureReceiptText = [IO.File]::ReadAllText($failureReceiptPath)
+    if ($failureReceiptText -match '(?i)(?:[A-Z]:[\\/]|file:///|\\\\[^\\/\s]+[\\/]|WAGGLE_(?:CLAUDE|CODEX|HERMES)_OFFICIAL_AUTH_|(?:sk|sess)-[A-Za-z0-9_-]+)') {
+      throw 'Sanitized failure receipt contains a forbidden path, marker, session, or credential token.'
+    }
+    if ($failureReceiptText -match '(?i)"(?:message|additionalDetails|reportPath|arguments|model|marker|sessionId|error|rawStdout|rawStderr)"\s*:') {
+      throw 'Sanitized failure receipt contains a forbidden property.'
+    }
+    foreach ($rawOutput in @($codexRaw.Stdout, $codexRaw.Stderr)) {
+      if (-not [string]::IsNullOrWhiteSpace([string]$rawOutput) -and
+        $failureReceiptText.Contains([string]$rawOutput, [StringComparison]::Ordinal)) {
+        throw 'Sanitized failure receipt retained raw child output.'
+      }
+    }
+    if (Test-Path -LiteralPath $receiptLayout.Root) {
+      throw 'Receipt destination became occupied.'
+    }
+    [IO.Directory]::Move($receiptLayout.Staging, $receiptLayout.Root)
+    $stagingOwned = $false
+    $published = $true
+    Assert-ProcessPassed -Result $codexRaw -Label 'Codex zero-cost tool-denial proof and official-auth canary'
+  }
   Assert-ProcessPassed -Result $codexRaw -Label 'Codex zero-cost tool-denial proof and official-auth canary'
   try { $codexSummary = $codexRaw.Stdout | ConvertFrom-Json -Depth 30 } catch {
     throw 'Codex zero-cost tool-denial proof did not return valid JSON.'

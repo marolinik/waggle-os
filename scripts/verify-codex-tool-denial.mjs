@@ -105,6 +105,26 @@ const ALLOWED_ITEM_TYPES = new Set([
   'reasoning',
   'userMessage',
 ]);
+const TERMINAL_TURN_FAILURE_STATUSES = new Set(['failed', 'interrupted']);
+const SIMPLE_CODEX_ERROR_CODES = new Set([
+  'badRequest',
+  'contextWindowExceeded',
+  'cyberPolicy',
+  'internalServerError',
+  'other',
+  'sandboxError',
+  'serverOverloaded',
+  'sessionBudgetExceeded',
+  'threadRollbackFailed',
+  'unauthorized',
+  'usageLimitExceeded',
+]);
+const HTTP_CODEX_ERROR_CODES = new Set([
+  'httpConnectionFailed',
+  'responseStreamConnectionFailed',
+  'responseStreamDisconnected',
+  'responseTooManyFailedAttempts',
+]);
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -136,6 +156,77 @@ function stableValue(value) {
 
 function stableJson(value) {
   return JSON.stringify(stableValue(value));
+}
+
+function normalizeCodexErrorInfo(value) {
+  if (value === null || value === undefined) {
+    return { code: null, httpStatusCode: null };
+  }
+  if (typeof value === 'string') {
+    assert(SIMPLE_CODEX_ERROR_CODES.has(value), 'Codex returned an unknown terminal error code');
+    return { code: value, httpStatusCode: null };
+  }
+  assert(
+    typeof value === 'object' && !Array.isArray(value),
+    'Codex terminal error info must be a known string or single-key object',
+  );
+  const keys = Object.keys(value);
+  assert(keys.length === 1, 'Codex terminal error info must have exactly one code');
+  const code = keys[0];
+  const details = value[code];
+  if (code === 'activeTurnNotSteerable') {
+    assert(
+      details !== null
+        && typeof details === 'object'
+        && !Array.isArray(details)
+        && Object.keys(details).length === 1
+        && ['review', 'compact'].includes(details.turnKind),
+      'Codex active-turn error details are invalid',
+    );
+    return { code, httpStatusCode: null };
+  }
+  assert(HTTP_CODEX_ERROR_CODES.has(code), 'Codex returned an unknown terminal error code');
+  assert(
+    details !== null && typeof details === 'object' && !Array.isArray(details),
+    'Codex HTTP terminal error details are invalid',
+  );
+  assert(
+    Object.keys(details).every((key) => key === 'httpStatusCode'),
+    'Codex HTTP terminal error details contain unexpected fields',
+  );
+  const httpStatusCode = details.httpStatusCode ?? null;
+  assert(
+    httpStatusCode === null
+      || (Number.isInteger(httpStatusCode) && httpStatusCode >= 0 && httpStatusCode <= 65_535),
+    'Codex terminal HTTP status is invalid',
+  );
+  return { code, httpStatusCode };
+}
+
+function sanitizeTurnFailure(turn, errorNotification = null) {
+  const status = turn?.status;
+  assert(TERMINAL_TURN_FAILURE_STATUSES.has(status), 'Codex turn is not a terminal failure');
+  const notificationParams = errorNotification?.message?.params ?? null;
+  if (notificationParams !== null) {
+    assert(errorNotification?.message?.method === 'error', 'Codex failure notification method is invalid');
+  }
+  const turnInfo = normalizeCodexErrorInfo(turn?.error?.codexErrorInfo);
+  const notificationInfo = normalizeCodexErrorInfo(notificationParams?.error?.codexErrorInfo);
+  if (turnInfo.code !== null && notificationInfo.code !== null) {
+    assert(
+      stableJson(turnInfo) === stableJson(notificationInfo),
+      'Codex terminal error sources disagree',
+    );
+  }
+  const selected = notificationInfo.code === null ? turnInfo : notificationInfo;
+  const willRetry = notificationParams?.willRetry ?? null;
+  assert(willRetry === null || typeof willRetry === 'boolean', 'Codex retry flag is invalid');
+  return {
+    status,
+    code: selected.code,
+    httpStatusCode: selected.httpStatusCode,
+    willRetry,
+  };
 }
 
 function parseArgs(argv) {
@@ -725,14 +816,14 @@ function buildInvocationArguments(options) {
       'model_providers.waggle_loopback.requires_openai_auth=false',
       'model_providers.waggle_loopback.supports_websockets=false',
     ] : [
-      'model_provider="waggle_chatgpt"',
-      'model_providers.waggle_chatgpt.name="Waggle ChatGPT official auth"',
-      'model_providers.waggle_chatgpt.base_url="https://chatgpt.com/backend-api/codex"',
-      'model_providers.waggle_chatgpt.wire_api="responses"',
-      'model_providers.waggle_chatgpt.request_max_retries=0',
-      'model_providers.waggle_chatgpt.stream_max_retries=0',
-      'model_providers.waggle_chatgpt.requires_openai_auth=true',
-      'model_providers.waggle_chatgpt.supports_websockets=false',
+      'model_provider="openai"',
+      'model_providers.openai.name="OpenAI"',
+      'model_providers.openai.base_url="https://chatgpt.com/backend-api/codex"',
+      'model_providers.openai.wire_api="responses"',
+      'model_providers.openai.request_max_retries=0',
+      'model_providers.openai.stream_max_retries=0',
+      'model_providers.openai.requires_openai_auth=true',
+      'model_providers.openai.supports_websockets=false',
     ]),
     ...(options.includeDeny ? [options.denyConfig] : []),
     ...(hookStateEntries.length > 0 ? [`hooks.state={${hookStateEntries.join(',')}}`] : []),
@@ -824,9 +915,11 @@ class AppServerClient {
     );
   }
 
-  notification(method, timeoutMs = TURN_TIMEOUT_MS) {
+  notification(method, predicate = () => true, timeoutMs = TURN_TIMEOUT_MS) {
     return waitForValue(
-      () => this.notifications.find((entry) => entry.message?.method === method),
+      () => this.notifications.find((entry) => (
+        entry.message?.method === method && predicate(entry)
+      )),
       timeoutMs,
       `Codex app-server notification ${method}`,
     );
@@ -1134,10 +1227,23 @@ async function runTurn(options) {
     assert(!turnResponse.error, 'Codex app-server turn/start failed');
     turnId = turnResponse.result?.turn?.id ?? null;
     assert(typeof turnId === 'string' && turnId.length > 0, 'Codex app-server omitted turn id');
-    const completed = await client.notification('turn/completed');
-    assert(completed.message?.params?.turn?.status === 'completed', 'Codex app-server turn did not complete');
+    const completed = await client.notification('turn/completed', (entry) => (
+      entry.message?.params?.threadId === threadId
+      && entry.message?.params?.turn?.id === turnId
+    ));
     await new Promise((resolveWait) => setTimeout(resolveWait, 100));
     assert(client.error === null, client.error ?? 'Codex app-server protocol failed');
+    const completedTurn = completed.message?.params?.turn;
+    if (completedTurn?.status !== 'completed') {
+      const errorNotification = [...client.notifications].reverse().find((entry) => (
+        entry.message?.method === 'error'
+        && entry.message?.params?.threadId === threadId
+        && entry.message?.params?.turnId === turnId
+      )) ?? null;
+      const terminalError = new Error('Codex app-server turn did not complete');
+      terminalError.turnFailure = sanitizeTurnFailure(completedTurn, errorNotification);
+      throw terminalError;
+    }
     const events = eventAudit(
       client.notifications,
       options.expectedAcknowledgement,
@@ -1329,6 +1435,72 @@ async function runValidationSelfTest() {
       () => assertSameMcpBoundary(mcpBoundary, { ...mcpBoundary, configSha256: 'd'.repeat(64) }, 'self-test'),
       'MCP boundary drift',
     );
+    const simpleFailure = sanitizeTurnFailure({
+      status: 'failed',
+      error: { codexErrorInfo: 'unauthorized' },
+    });
+    assert(
+      stableJson(simpleFailure) === stableJson({
+        status: 'failed', code: 'unauthorized', httpStatusCode: null, willRetry: null,
+      }),
+      'simple terminal failure was not normalized',
+    );
+    cases += 1;
+    const httpFailure = sanitizeTurnFailure({ status: 'interrupted' }, {
+      message: {
+        method: 'error',
+        params: {
+          willRetry: false,
+          error: {
+            codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 429 } },
+          },
+        },
+      },
+    });
+    assert(
+      stableJson(httpFailure) === stableJson({
+        status: 'interrupted',
+        code: 'responseStreamDisconnected',
+        httpStatusCode: 429,
+        willRetry: false,
+      }),
+      'HTTP terminal failure was not normalized',
+    );
+    cases += 1;
+    const maliciousFailure = sanitizeTurnFailure({
+      status: 'failed',
+      error: {
+        message: 'C:\\secret\\auth.json sk-fixture',
+        additionalDetails: 'file:///private/detail',
+        codexErrorInfo: { activeTurnNotSteerable: { turnKind: 'review' } },
+      },
+    });
+    assert(
+      Object.keys(maliciousFailure).sort().join(',') === 'code,httpStatusCode,status,willRetry'
+        && !JSON.stringify(maliciousFailure).includes('secret'),
+      'terminal failure retained untrusted text',
+    );
+    cases += 1;
+    expectThrow(() => sanitizeTurnFailure({ status: 'completed' }), 'completed turn failure');
+    expectThrow(() => sanitizeTurnFailure({ status: 'inProgress' }), 'in-progress turn failure');
+    expectThrow(() => sanitizeTurnFailure({
+      status: 'failed', error: { codexErrorInfo: 'futureUnknownCode' },
+    }), 'unknown terminal error code');
+    expectThrow(() => sanitizeTurnFailure({
+      status: 'failed',
+      error: {
+        codexErrorInfo: {
+          responseStreamDisconnected: { httpStatusCode: 429 },
+          httpConnectionFailed: { httpStatusCode: 503 },
+        },
+      },
+    }), 'multi-key terminal error');
+    expectThrow(() => sanitizeTurnFailure({
+      status: 'failed',
+      error: {
+        codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 70_000 } },
+      },
+    }), 'invalid terminal HTTP status');
     return { pass: true, paidCalls: 0, cases };
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -1436,6 +1608,7 @@ const report = {
     reportPathHash: sha256(join(receiptDir, 'report.json').toLowerCase()),
     tempRemoved: false,
   },
+  turnFailure: null,
   error: null,
 };
 
@@ -1880,6 +2053,7 @@ try {
       && report.paidInvocation.unknownEventsObserved === 0
     ));
 } catch (error) {
+  report.turnFailure = error?.turnFailure ?? null;
   report.error = safeError(error, [
     codexExecutable,
     hiveMindCli,
@@ -1925,6 +2099,7 @@ const summary = {
   reportPath,
   reportSha256,
   sessionId: executePaid ? rawPaidSessionId : null,
+  turnFailure: report.turnFailure,
 };
 process.stdout.write(`${JSON.stringify(summary)}\n`);
 if (!report.pass) process.exitCode = 1;

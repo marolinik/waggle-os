@@ -4525,15 +4525,19 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(script).toContain('mcpServerNamesSha256 = [string]$codexDenialProof.invocation.mcpServerNamesSha256');
     expect(denialProof).toContain('extras.every((hook) => !hook.enabled)');
     expect(denialProof).toContain('verifyWindowsPowerShell');
-    expect(denialProof).toContain('model_providers.waggle_chatgpt.request_max_retries=0');
-    expect(denialProof).toContain('model_providers.waggle_chatgpt.stream_max_retries=0');
-    expect(denialProof).toContain('model_providers.waggle_chatgpt.requires_openai_auth=true');
+    expect(denialProof).toContain('model_provider="openai"');
+    expect(denialProof).toContain('model_providers.openai.name="OpenAI"');
+    expect(denialProof).toContain('model_providers.openai.request_max_retries=0');
+    expect(denialProof).toContain('model_providers.openai.stream_max_retries=0');
+    expect(denialProof).toContain('model_providers.openai.requires_openai_auth=true');
+    expect(denialProof).toContain('model_providers.openai.supports_websockets=false');
     expect(denialProof).toContain(
-      'model_providers.waggle_chatgpt.base_url="https://chatgpt.com/backend-api/codex"',
+      'model_providers.openai.base_url="https://chatgpt.com/backend-api/codex"',
     );
     expect(denialProof).not.toContain(
-      'model_providers.waggle_chatgpt.base_url="https://chatgpt.com/backend-api/"',
+      'model_providers.openai.base_url="https://chatgpt.com/backend-api/"',
     );
+    expect(denialProof).not.toContain('waggle_chatgpt');
     expect(denialProof).not.toContain("'model/rerouted'");
     expect(denialProof).toContain('sensitiveDataObserved: false');
     expect(denialProof).toContain('paidCalls: 0');
@@ -4562,7 +4566,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(JSON.parse(helperSelfTest.stdout)).toMatchObject({
       pass: true,
       paidCalls: 0,
-      cases: 22,
+      cases: 30,
     });
 
     if (process.platform === 'win32') {
@@ -4586,9 +4590,54 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
       expect(JSON.parse(validatorSelfTest.stdout)).toMatchObject({
         pass: true,
         paidCalls: 0,
-        cases: 26,
+        cases: 34,
       });
     }
+  });
+
+  it('preserves only a whitelisted Codex diagnostic after a non-zero child', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'test-windows-official-auth-canaries.ps1'),
+      'utf-8',
+    ).replace(/\r\n/g, '\n');
+    const denialProof = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'verify-codex-tool-denial.mjs'),
+      'utf-8',
+    ).replace(/\r\n/g, '\n');
+
+    expect(denialProof).toContain('function sanitizeTurnFailure');
+    expect(denialProof).toContain('turnFailure: null');
+    expect(denialProof).toContain('report.turnFailure = error?.turnFailure ?? null');
+    expect(denialProof).toContain("client.notification('turn/completed', (entry) => (");
+    expect(denialProof).toContain('entry.message?.params?.threadId === threadId');
+    expect(denialProof).toContain('entry.message?.params?.turn?.id === turnId');
+    expect(denialProof).toContain('turnFailure: report.turnFailure');
+
+    expect(script).toContain('function Assert-SanitizedCodexTurnFailure');
+    expect(script).toContain('function New-SanitizedCodexFailureReceipt');
+    expect(script).toContain("kind = 'windows-official-auth-codex-failure'");
+    expect(script).toContain("Join-Path $receiptLayout.Staging 'official-auth-failure.json'");
+    expect(script).toContain('turnFailure = Assert-SanitizedCodexTurnFailure');
+    expect(script).not.toContain('failureReceipt.rawStdout');
+    expect(script).not.toContain('failureReceipt.rawStderr');
+    expect(script).not.toContain('failureReceipt.message');
+    expect(script).not.toContain('failureReceipt.additionalDetails');
+
+    const codexRun = script.indexOf('$codexRaw = Invoke-CapturedProcess');
+    const failureBranch = script.indexOf(
+      'if ($codexRaw.TimedOut -or $codexRaw.ExitCode -ne 0)',
+      codexRun,
+    );
+    const cleanup = script.indexOf('Remove-OwnedDirectory -Path $tempRoot', failureBranch);
+    const failureWrite = script.indexOf("'official-auth-failure.json'", cleanup);
+    const publish = script.indexOf('$published = $true', failureWrite);
+    const nonZero = script.indexOf('Assert-ProcessPassed -Result $codexRaw', publish);
+    expect(codexRun).toBeGreaterThan(-1);
+    expect(failureBranch).toBeGreaterThan(codexRun);
+    expect(cleanup).toBeGreaterThan(failureBranch);
+    expect(failureWrite).toBeGreaterThan(cleanup);
+    expect(publish).toBeGreaterThan(failureWrite);
+    expect(nonZero).toBeGreaterThan(publish);
   });
 
   it('release workflow builds packages before bundling the desktop sidecar', () => {
