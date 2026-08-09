@@ -113,6 +113,8 @@ const EVENT_AUDIT_FAILURE_KEYS = [
   'rejectedMethodSha256',
   'rejectedItemTypeSha256',
 ];
+const FAIL_CLOSED_PROJECT_TRUST_WARNING =
+  'Project-local config, hooks, and exec policies are disabled in the following folders until the project is trusted, but skills still load.';
 const FAILURE_NOTIFICATION_METHODS = new Set([
   'error',
   'warning',
@@ -136,6 +138,7 @@ const ALLOWED_NOTIFICATION_METHODS = new Set([
   'mcpServer/startupStatus/updated',
   'model/safetyBuffering/updated',
   'model/verification',
+  'remoteControl/status/changed',
   'serverRequest/resolved',
   'thread/name/updated',
   'thread/settings/updated',
@@ -1246,9 +1249,42 @@ function notificationScope(notification) {
   };
 }
 
+function isFailClosedProjectTrustWarning(notification) {
+  if (notification?.message?.method !== 'configWarning') return false;
+  const params = notification.message?.params;
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return false;
+  const allowedKeys = new Set(['details', 'path', 'range', 'summary']);
+  const keys = Object.keys(params);
+  if (!keys.includes('summary')) return false;
+  if (!keys.every((key) => allowedKeys.has(key))) return false;
+  if (keys.includes('details') && params.details !== null) return false;
+  if (keys.includes('path') && params.path !== null) return false;
+  if (keys.includes('range') && params.range !== null) return false;
+  if (typeof params.summary !== 'string') return false;
+  const lines = params.summary.split('\n');
+  if (lines.at(-1) !== '') return false;
+  if (lines[0] !== FAIL_CLOSED_PROJECT_TRUST_WARNING) return false;
+  const warningLines = lines.slice(1, -1);
+  if (warningLines.length < 2 || warningLines.length % 2 !== 0) return false;
+  const folderPattern = /^    ([1-9][0-9]*)\. ([A-Za-z]:[\\/].+[\\/]\.codex)$/;
+  const instructionPattern = /^       To load project-local config, hooks, and exec policies, add ([A-Za-z]:[\\/].+) as a trusted project in ([A-Za-z]:[\\/].+[\\/]\.codex[\\/]config\.toml)\.$/;
+  const normalizePath = (value) => value.replaceAll('/', '\\').replace(/\\+$/, '').toLowerCase();
+  for (let index = 0; index < warningLines.length; index += 2) {
+    const folderMatch = folderPattern.exec(warningLines[index]);
+    const instructionMatch = instructionPattern.exec(warningLines[index + 1]);
+    if (!folderMatch || !instructionMatch) return false;
+    if (Number(folderMatch[1]) !== (index / 2) + 1) return false;
+    if (normalizePath(folderMatch[2]) !== `${normalizePath(instructionMatch[1])}\\.codex`) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function collectEventAudit(notifications, expectedAcknowledgement, threadId, turnId) {
   const failureNotifications = notifications.filter((entry) => (
     FAILURE_NOTIFICATION_METHODS.has(entry.message?.method)
+    && !isFailClosedProjectTrustWarning(entry)
   ));
   const unknownNotifications = notifications.filter((entry) => (
     !ALLOWED_NOTIFICATION_METHODS.has(entry.message?.method)
@@ -1801,6 +1837,96 @@ async function runValidationSelfTest() {
       () => eventAudit([safeNotification, failureNotification], acknowledgement, true),
       'failure notification',
     );
+    const projectTrustWarning = {
+      sequence: 2,
+      message: {
+        method: 'configWarning',
+        params: {
+          summary: `${FAIL_CLOSED_PROJECT_TRUST_WARNING}\n`
+            + '    1. C:\\fixture\\.codex\n'
+            + '       To load project-local config, hooks, and exec policies, add c:\\fixture as a trusted project in C:\\Users\\fixture\\.codex\\config.toml.\n',
+          details: null,
+          path: null,
+          range: null,
+        },
+      },
+    };
+    const remoteControlStatus = {
+      sequence: 3,
+      message: { method: 'remoteControl/status/changed', params: { status: 'disconnected' } },
+    };
+    const failClosedTrustAudit = eventAudit(
+      [safeNotification, projectTrustWarning, remoteControlStatus],
+      acknowledgement,
+      true,
+    );
+    assert(
+      failClosedTrustAudit.failureEventsObserved === 0
+        && failClosedTrustAudit.unknownEventsObserved === 0,
+      'fail-closed project trust warning or schema-backed remote-control status was rejected',
+    );
+    cases += 1;
+    const unsafeTrustWarning = {
+      ...projectTrustWarning,
+      message: {
+        ...projectTrustWarning.message,
+        params: { ...projectTrustWarning.message.params, details: 'unexpected detail' },
+      },
+    };
+    const unsafeTrustDiagnostic = captureEventAuditFailure(
+      () => eventAudit([safeNotification, unsafeTrustWarning], acknowledgement, true),
+      'unsafe project trust warning',
+    );
+    assert(
+      unsafeTrustDiagnostic.invariant === 'failure-notification'
+        && stableJson(unsafeTrustDiagnostic.rejectedMethodSha256) === stableJson([
+          { sha256: sha256('configWarning'), count: 1 },
+        ]),
+      'non-canonical project trust warning was not rejected',
+    );
+    cases += 1;
+    const appendedTrustWarning = {
+      ...projectTrustWarning,
+      message: {
+        ...projectTrustWarning.message,
+        params: {
+          ...projectTrustWarning.message.params,
+          summary: `${projectTrustWarning.message.params.summary}unexpected suffix\n`,
+        },
+      },
+    };
+    expectThrow(
+      () => eventAudit([safeNotification, appendedTrustWarning], acknowledgement, true),
+      'appended project trust warning',
+    );
+    const extraParamTrustWarning = {
+      ...projectTrustWarning,
+      message: {
+        ...projectTrustWarning.message,
+        params: { ...projectTrustWarning.message.params, extra: null },
+      },
+    };
+    expectThrow(
+      () => eventAudit([safeNotification, extraParamTrustWarning], acknowledgement, true),
+      'extra-param project trust warning',
+    );
+    const nearMatchTrustWarning = {
+      ...projectTrustWarning,
+      message: {
+        ...projectTrustWarning.message,
+        params: {
+          ...projectTrustWarning.message.params,
+          summary: projectTrustWarning.message.params.summary.replace(
+            FAIL_CLOSED_PROJECT_TRUST_WARNING,
+            `${FAIL_CLOSED_PROJECT_TRUST_WARNING} Additional guidance follows.`,
+          ),
+        },
+      },
+    };
+    expectThrow(
+      () => eventAudit([safeNotification, nearMatchTrustWarning], acknowledgement, true),
+      'near-match project trust warning',
+    );
     const unknownDiagnostic = captureEventAuditFailure(
       () => eventAudit([safeNotification, unknownNotification], acknowledgement, true),
       'unknown diagnostic',
@@ -2052,7 +2178,7 @@ async function runValidationSelfTest() {
       'official provider arguments redefined the reserved built-in OpenAI provider',
     );
     cases += 1;
-    assert(cases === 49, `expected exactly 49 self-test cases, observed ${cases}`);
+    assert(cases === 54, `expected exactly 54 self-test cases, observed ${cases}`);
     return { pass: true, paidCalls: 0, cases };
   } finally {
     await rm(root, { recursive: true, force: true });

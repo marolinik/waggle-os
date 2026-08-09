@@ -4535,8 +4535,17 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
       allowedNotificationPolicyStart,
       denialProof.indexOf(']);', allowedNotificationPolicyStart) + 3,
     );
+    expect(allowedNotificationPolicy).toContain("'remoteControl/status/changed'");
     expect(allowedNotificationPolicy).not.toContain("'model/rerouted'");
     expect(denialProof).toContain("entry.message?.method === 'model/rerouted'");
+    expect(denialProof).toContain('const FAIL_CLOSED_PROJECT_TRUST_WARNING =');
+    expect(denialProof).toContain('function isFailClosedProjectTrustWarning(notification)');
+    expect(denialProof).toContain(
+      "const allowedKeys = new Set(['details', 'path', 'range', 'summary']);",
+    );
+    expect(denialProof).toContain('if (!keys.every((key) => allowedKeys.has(key))) return false;');
+    expect(denialProof).toContain("if (lines.at(-1) !== '') return false;");
+    expect(denialProof).toContain('&& !isFailClosedProjectTrustWarning(entry)');
     const auditFailureInvariantStart = denialProof.indexOf(
       'const EVENT_AUDIT_FAILURE_INVARIANTS = new Set([',
     );
@@ -4608,7 +4617,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(JSON.parse(helperSelfTest.stdout)).toMatchObject({
       pass: true,
       paidCalls: 0,
-      cases: 49,
+      cases: 54,
     });
 
     if (process.platform === 'win32') {
