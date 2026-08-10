@@ -53,6 +53,7 @@ import {
   type ToolManifest,
 } from '@waggle/shared';
 import { resolveToolCommandInvocation } from './tool-command.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
 import { getToolRegistry } from './tool-registry.js';
 import type { ManifestLoaderDeps } from './tool-manifest-loader.js';
 import { resolveShellEnv, resolvedShellPath, mergePathValue } from './shell-env.js';
@@ -155,14 +156,21 @@ async function defaultExists(p: string): Promise<boolean> {
   }
 }
 
-async function defaultExecVersion(
+export async function defaultExecVersion(
   binary: string,
   args: string[],
 ): Promise<string | null> {
   try {
-    const invocation = resolveToolCommandInvocation(binary, args);
+    const env = buildExternalProcessEnv(process.env);
+    const invocation = resolveToolCommandInvocation(
+      binary,
+      args,
+      process.platform,
+      { env },
+    );
     const { stdout } = await execFileAsync(invocation.binary, invocation.args, {
       timeout: 5000,
+      env,
       // Don't allow shell expansion; binary paths must be literal.
       shell: false,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,

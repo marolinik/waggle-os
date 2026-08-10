@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { SUPPORTED_TOOLS, type ToolId } from '@waggle/shared';
 import {
+  defaultExecVersion,
   detectInstalledTools,
   selectPathLookupCandidate,
   type ToolDetectionDeps,
@@ -121,6 +122,27 @@ async function detectClaudeHookStatus(
 }
 
 describe('detectInstalledTools', () => {
+  it('does not expose ambient secrets to the production version probe', async () => {
+    const previousOpenAi = process.env.OPENAI_API_KEY;
+    const previousUnknown = process.env.WAGGLE_FUTURE_PROVIDER_SECRET;
+    process.env.OPENAI_API_KEY = 'must-not-reach-version-probe';
+    process.env.WAGGLE_FUTURE_PROVIDER_SECRET = 'must-also-be-denied';
+
+    try {
+      const result = await defaultExecVersion(process.execPath, [
+        '-e',
+        "process.stdout.write(JSON.stringify({ openai: process.env.OPENAI_API_KEY ?? null, unknown: process.env.WAGGLE_FUTURE_PROVIDER_SECRET ?? null, hasPath: Boolean(process.env.PATH) }))",
+      ]);
+      expect(result).not.toBeNull();
+      expect(JSON.parse(result!)).toEqual({ openai: null, unknown: null, hasPath: true });
+    } finally {
+      if (previousOpenAi === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAi;
+      if (previousUnknown === undefined) delete process.env.WAGGLE_FUTURE_PROVIDER_SECRET;
+      else process.env.WAGGLE_FUTURE_PROVIDER_SECRET = previousUnknown;
+    }
+  });
+
   it('returns an envelope covering every supported tool', async () => {
     const result = await detectInstalledTools(makeDeps());
     const ids = result.tools.map((t) => t.id);
