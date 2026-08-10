@@ -33,6 +33,26 @@ const finish = (code) => {
   if (forceTimer) clearTimeout(forceTimer);
   process.exit(code);
 };
+const finishLikeTarget = (code, signal) => {
+  if (code !== null) return finish(code);
+  if (!signal) return finish(0);
+  process.removeListener('SIGTERM', stopTree);
+  process.removeListener('SIGINT', stopTree);
+  try { process.kill(process.pid, signal); } catch { finish(1); }
+};
+const reportTargetExit = (code, signal, done) => {
+  if (typeof process.send !== 'function' || !process.connected) return done();
+  let settled = false;
+  const complete = () => {
+    if (settled) return;
+    settled = true;
+    done();
+  };
+  try {
+    process.send({ type: 'waggle-sidecar-owned-process-exit', code, signal }, complete);
+    setTimeout(complete, 250).unref();
+  } catch { complete(); }
+};
 const stopTree = () => {
   if (stopping) return;
   stopping = true;
@@ -62,7 +82,9 @@ child.once('error', (error) => {
   finish(1);
 });
 child.once('exit', (code, signal) => {
-  if (!stopping) finish(code === null ? (signal ? 1 : 0) : code);
+  reportTargetExit(code, signal, () => {
+    if (!stopping) finishLikeTarget(code, signal);
+  });
 });
 process.once('disconnect', stopTree);
 process.on('message', (message) => { if (message === 'shutdown') stopTree(); });
@@ -74,6 +96,22 @@ export interface SidecarOwnedProcessOptions
   extends Omit<SpawnOptions, 'shell' | 'stdio' | 'windowsVerbatimArguments'> {
   stdio: SpawnOptions['stdio'];
   windowsVerbatimArguments?: boolean;
+}
+
+export interface SidecarOwnedProcessExitMessage {
+  type: 'waggle-sidecar-owned-process-exit';
+  code: number | null;
+  signal: string | null;
+}
+
+export function isSidecarOwnedProcessExitMessage(
+  value: unknown,
+): value is SidecarOwnedProcessExitMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const message = value as Partial<SidecarOwnedProcessExitMessage>;
+  return message.type === 'waggle-sidecar-owned-process-exit'
+    && (message.code === null || typeof message.code === 'number')
+    && (message.signal === null || typeof message.signal === 'string');
 }
 
 export function resolveOwnedProcessTaskkillPath(

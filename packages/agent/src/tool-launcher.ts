@@ -41,7 +41,7 @@
  *     therefore route through HOOKS_COHORT, not the launchable registry.
  */
 
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,6 +53,10 @@ import {
   type ToolCommandInvocation,
 } from './tool-command.js';
 import { buildExternalProcessEnv } from './external-process-env.js';
+import {
+  isSidecarOwnedProcessExitMessage,
+  spawnSidecarOwnedProcess,
+} from './sidecar-owned-process.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -148,19 +152,20 @@ function defaultSpawnDetached(
   }
 }
 
-function defaultSpawnObserved(
+export function defaultSpawnObserved(
   binary: string,
   args: string[],
   options: { cwd?: string; env?: NodeJS.ProcessEnv },
 ): { pid: number | null; error?: string; handle?: ObservedHandle } {
   try {
     const invocation = resolveSpawnInvocation(binary, args);
-    const child = spawn(invocation.binary, invocation.args, {
+    const child = spawnSidecarOwnedProcess(invocation.binary, invocation.args, {
       cwd: options.cwd,
       env: options.env,
-      // NOT detached, NOT unref'd: observation requires holding the pipes,
-      // so the child is tethered to the sidecar lifecycle.
+      // Observation keeps the pipes; IPC supervision makes that ownership
+      // survive an abrupt Windows sidecar termination.
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
     });
     child.once('error', () => {
@@ -169,15 +174,7 @@ function defaultSpawnObserved(
     if (child.pid == null) {
       return { pid: null, error: 'spawn returned no pid' };
     }
-    const handle: ObservedHandle = {
-      onData(cb) {
-        child.stdout?.on('data', (d: Buffer) => cb(d.toString('utf8')));
-        child.stderr?.on('data', (d: Buffer) => cb(d.toString('utf8')));
-      },
-      onExit(cb) {
-        child.on('exit', (code) => cb(code));
-      },
-    };
+    const handle = createObservedHandle(child);
     return { pid: child.pid, handle };
   } catch (err) {
     return {
@@ -185,6 +182,22 @@ function defaultSpawnObserved(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+export function createObservedHandle(child: ChildProcess): ObservedHandle {
+  let targetExitCode: number | null | undefined;
+  child.on('message', (message) => {
+    if (isSidecarOwnedProcessExitMessage(message)) targetExitCode = message.code;
+  });
+  return {
+    onData(cb) {
+      child.stdout?.on('data', (d: Buffer) => cb(d.toString('utf8')));
+      child.stderr?.on('data', (d: Buffer) => cb(d.toString('utf8')));
+    },
+    onExit(cb) {
+      child.on('exit', (code) => cb(targetExitCode === undefined ? code : targetExitCode));
+    },
+  };
 }
 
 export function resolveSpawnInvocation(

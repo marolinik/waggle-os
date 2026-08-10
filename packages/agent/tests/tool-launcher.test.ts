@@ -5,6 +5,8 @@
  * spawns are injected so the test never actually executes a binary.
  */
 
+import { execFileSync, type ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi } from 'vitest';
 import { join, resolve } from 'node:path';
 import {
@@ -12,6 +14,8 @@ import {
   runHookCommand,
   hookPackageFor,
   HOOKS_COHORT,
+  createObservedHandle,
+  defaultSpawnObserved,
   resolveHookRuntime,
   resolveSpawnInvocation,
   type HookRuntimePaths,
@@ -490,6 +494,62 @@ describe('hookPackageFor', () => {
 });
 
 describe('launchTool observe mode', () => {
+  it('preserves a target signal receipt instead of exposing the supervisor exit code', () => {
+    const child = new EventEmitter() as ChildProcess;
+    const handle = createObservedHandle(child);
+    const onExit = vi.fn();
+    handle.onExit(onExit);
+
+    child.emit('message', {
+      type: 'waggle-sidecar-owned-process-exit',
+      code: null,
+      signal: 'SIGTERM',
+    });
+    child.emit('exit', 1, null);
+
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onExit).toHaveBeenCalledWith(null);
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'keeps the production observed target under a sidecar-owned supervisor',
+    async () => {
+      const result = defaultSpawnObserved(process.execPath, [
+        '-e',
+        "setTimeout(() => console.log(JSON.stringify({ pid: process.pid, ppid: process.ppid })), 100); setInterval(() => {}, 1000)",
+      ], { env: process.env });
+      expect(result.pid).toBeTypeOf('number');
+      expect(result.handle).toBeDefined();
+      const supervisorPid = result.pid!;
+
+      try {
+        const payload = await new Promise<{ pid: number; ppid: number }>((resolvePayload, reject) => {
+          const timer = setTimeout(() => reject(new Error('Observed target produced no ownership receipt')), 5_000);
+          let output = '';
+          result.handle!.onData((chunk) => {
+            output += chunk;
+            const line = output.split(/\r?\n/, 1)[0];
+            try {
+              const parsed = JSON.parse(line) as { pid: number; ppid: number };
+              clearTimeout(timer);
+              resolvePayload(parsed);
+            } catch { /* wait for a complete JSON line */ }
+          });
+        });
+        expect(payload.pid).not.toBe(supervisorPid);
+        expect(payload.ppid).toBe(supervisorPid);
+      } finally {
+        const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR ?? 'C:\\Windows';
+        try {
+          execFileSync(join(windowsRoot, 'System32', 'taskkill.exe'), [
+            '/PID', String(supervisorPid), '/T', '/F',
+          ], { stdio: 'ignore', windowsHide: true });
+        } catch { /* best-effort fixture cleanup */ }
+      }
+    },
+    15_000,
+  );
+
   it('uses spawnObserved and returns its handle when observe:true', () => {
     const handle: ObservedHandle = { onData: () => {}, onExit: () => {} };
     const spawnObserved = vi.fn(() => ({ pid: 4242, handle }));

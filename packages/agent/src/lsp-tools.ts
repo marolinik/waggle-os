@@ -14,8 +14,14 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { spawn, type ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import type { ToolDefinition } from './tools.js';
+import { resolveToolCommandInvocationFromPath } from './tool-command.js';
+import { createSanitizedEnv } from './system-tools-helpers.js';
+import {
+  spawnSidecarOwnedProcess,
+  type SidecarOwnedProcessOptions,
+} from './sidecar-owned-process.js';
 
 // ── Minimal LSP/JSON-RPC wire shapes (only the fields we read) ──
 interface LspPosition { line?: number; character?: number }
@@ -44,6 +50,80 @@ let lspWorkspace: string = '';
 let requestId = 0;
 let pendingRequests = new Map<number, PendingRequest>();
 let receiveBuffer = '';
+
+export interface LspSpawnDeps {
+  resolveCommand?: typeof resolveToolCommandInvocationFromPath;
+  spawnOwned?: (
+    executable: string,
+    args: string[],
+    options: SidecarOwnedProcessOptions,
+  ) => ChildProcess;
+}
+
+export async function spawnLspServerProcess(
+  workspacePath: string,
+  deps: LspSpawnDeps = {},
+): Promise<ChildProcess> {
+  const env = createSanitizedEnv();
+  const invocation = await (deps.resolveCommand ?? resolveToolCommandInvocationFromPath)(
+    'typescript-language-server',
+    ['--stdio'],
+    process.platform,
+    { env },
+  );
+  return (deps.spawnOwned ?? spawnSidecarOwnedProcess)(
+    invocation.binary,
+    invocation.args,
+    {
+      cwd: workspacePath,
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
+    },
+  );
+}
+
+export async function stopLspServerProcess(
+  child: ChildProcess,
+  timeoutMs = 6_500,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolveStop, rejectStop) => {
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.removeListener('exit', onExit);
+      child.removeListener('error', onError);
+      if (error) rejectStop(error);
+      else resolveStop();
+    };
+    const onExit = (): void => finish();
+    const onError = (error: Error): void => finish(error);
+    const timer = setTimeout(
+      () => finish(new Error('Timed out while stopping the sidecar-owned LSP process tree')),
+      timeoutMs,
+    );
+    timer.unref();
+    child.once('exit', onExit);
+    child.once('error', onError);
+
+    if (child.exitCode !== null || child.signalCode !== null) {
+      finish();
+      return;
+    }
+    if (!child.connected || typeof child.send !== 'function') return;
+    try {
+      child.send('shutdown', (error) => {
+        if (error) finish(error);
+      });
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
 
 /** Reset module-level state (for testing). */
 export function _resetLspState(): void {
@@ -133,19 +213,9 @@ function handleData(data: string): void {
 async function ensureLsp(workspacePath: string): Promise<void> {
   if (lspProcess && lspInitialized && lspWorkspace === workspacePath) return;
 
-  // Check if typescript-language-server is available
-  const tsServerCmd = process.platform === 'win32'
-    ? 'typescript-language-server.cmd'
-    : 'typescript-language-server';
-
   // Try to spawn
   try {
-    lspProcess = spawn(tsServerCmd, ['--stdio'], {
-      cwd: workspacePath,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-      shell: process.platform === 'win32',
-    });
+    lspProcess = await spawnLspServerProcess(workspacePath);
   } catch {
     throw new Error(
       'LSP requires typescript-language-server. Install with: npm install -g typescript-language-server typescript',
@@ -203,15 +273,16 @@ async function ensureLsp(workspacePath: string): Promise<void> {
 /** Stop the LSP server. */
 async function stopLsp(): Promise<void> {
   if (lspProcess) {
+    const processToStop = lspProcess;
     try {
       sendNotification('shutdown', {});
       sendNotification('exit', {});
     } catch {
       // Already dead
     }
-    lspProcess.kill();
     lspProcess = null;
     lspInitialized = false;
+    await stopLspServerProcess(processToStop);
   }
 }
 
