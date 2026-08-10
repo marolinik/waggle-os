@@ -4556,6 +4556,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     expect(script).toContain('mcpServerNamesSha256 = [string]$codexDenialProof.invocation.mcpServerNamesSha256');
     expect(denialProof).toContain('extras.every((hook) => !hook.enabled)');
     expect(denialProof).toContain('verifyWindowsPowerShell');
+    expect(denialProof).toContain('model_reasoning_effort="low"');
     expect(denialProof).toContain('model_provider="openai"');
     expect(denialProof).not.toContain('model_providers.openai.');
     expect(denialProof).not.toContain('waggle_chatgpt');

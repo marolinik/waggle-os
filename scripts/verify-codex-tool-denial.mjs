@@ -930,6 +930,7 @@ function buildInvocationArguments(options) {
   }
   const overrides = [
     ...CONFIG_OVERRIDES,
+    'model_reasoning_effort="low"',
     `mcp_servers={${mcpServerEntries.join(',')}}`,
     `model_catalog_json=${tomlString(options.catalogPath)}`,
     ...(options.providerBaseUrl ? [
