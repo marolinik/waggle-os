@@ -525,6 +525,7 @@ describe('Waggle CLI Launcher', () => {
         const dataDir = path.join(home, 'data');
         const readyFile = path.join(home, 'desktop-ready.json');
         const restartReadyFile = path.join(home, 'desktop-ready-restart.json');
+        const desktopBootstrapToken = 'launcher-desktop-bootstrap-token-1234567890';
         const unreachableOllamaPort = await freePort();
         const unreachableVllmPort = await freePort();
         const providerFreeEnv = {
@@ -555,6 +556,7 @@ describe('Waggle CLI Launcher', () => {
             WAGGLE_DATA_DIR: dataDir,
             WAGGLE_DESKTOP_PORT_FALLBACK: '1',
             WAGGLE_INSTANCE_ID: 'launcher-fallback-health',
+            WAGGLE_DESKTOP_BOOTSTRAP_TOKEN: desktopBootstrapToken,
             WAGGLE_READY_FILE: readyFile,
             ...providerFreeEnv,
           },
@@ -584,7 +586,9 @@ describe('Waggle CLI Launcher', () => {
         expect(bearerRequestCount()).toBe(0);
         expect(requestCount()).toBe(0);
 
-        const tokenResponse = await fetch(`${baseUrl}/api/auth/session-token`);
+        const tokenResponse = await fetch(`${baseUrl}/api/auth/session-token`, {
+          headers: { 'x-waggle-desktop-bootstrap': desktopBootstrapToken },
+        });
         expect(tokenResponse.status).toBe(200);
         const token = (await tokenResponse.json() as { token?: string }).token;
         if (!token) throw new Error('Installed launcher returned no session token');
@@ -651,6 +655,7 @@ describe('Waggle CLI Launcher', () => {
             WAGGLE_DATA_DIR: dataDir,
             WAGGLE_DESKTOP_PORT_FALLBACK: '1',
             WAGGLE_INSTANCE_ID: 'launcher-fallback-history-restart',
+            WAGGLE_DESKTOP_BOOTSTRAP_TOKEN: desktopBootstrapToken,
             WAGGLE_READY_FILE: restartReadyFile,
             ...providerFreeEnv,
           },
@@ -673,7 +678,9 @@ describe('Waggle CLI Launcher', () => {
         expect(restartHealth.database).toMatchObject({ healthy: true });
         expect(restartStderr).not.toContain('Failed to start Waggle');
 
-        const restartTokenResponse = await fetch(`${restartBaseUrl}/api/auth/session-token`);
+        const restartTokenResponse = await fetch(`${restartBaseUrl}/api/auth/session-token`, {
+          headers: { 'x-waggle-desktop-bootstrap': desktopBootstrapToken },
+        });
         expect(restartTokenResponse.status).toBe(200);
         const restartToken = (await restartTokenResponse.json() as { token?: string }).token;
         if (!restartToken) throw new Error('Restarted launcher returned no session token');
