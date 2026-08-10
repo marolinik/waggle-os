@@ -192,30 +192,45 @@ async function defaultReadJson(p: string): Promise<unknown> {
 }
 
 /**
- * Env for the `which`/`where` lookup. On POSIX, merge the resolved login-shell
+ * Env for the `which`/`where` lookup. Fail closed to the non-secret external
+ * process environment. On POSIX, merge the resolved login-shell
  * PATH (GUI-launched sidecars inherit a bare PATH) so `which claude`
- * can find CLIs installed behind shell-profile shims. Returns `undefined` (keep
- * the inherited env) on Windows or when no login-shell PATH is available yet.
+ * can find CLIs installed behind shell-profile shims.
  */
 export function pathLookupEnv(
   platform: NodeJS.Platform = process.platform,
   base: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv | undefined {
-  if (platform === 'win32') return undefined;
+): NodeJS.ProcessEnv {
+  const env = buildExternalProcessEnv(base, {}, platform);
+  if (platform === 'win32') return env;
   const shellPath = resolvedShellPath();
-  if (!shellPath) return undefined;
-  return { ...base, PATH: mergePathValue(shellPath, base.PATH) };
+  if (shellPath) env.PATH = mergePathValue(shellPath, env.PATH);
+  return env;
+}
+
+function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const match = Object.entries(env).find(([key]) => key.toUpperCase() === name);
+  return match?.[1];
+}
+
+export function pathLookupCommand(
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): string {
+  if (platform !== 'win32') return 'which';
+  const windowsRoot = envValue(env, 'SYSTEMROOT') ?? envValue(env, 'WINDIR') ?? 'C:\\Windows';
+  return pathWin32.join(windowsRoot, 'System32', 'where.exe');
 }
 
 async function defaultPathFromEnv(name: string): Promise<string | null> {
-  const isWin = process.platform === 'win32';
-  const cmd = isWin ? 'where.exe' : 'which';
   const env = pathLookupEnv(process.platform);
+  const cmd = pathLookupCommand(process.platform, env);
   try {
     const { stdout } = await execFileAsync(cmd, [name], {
       timeout: 3000,
       shell: false,
-      ...(env ? { env } : {}),
+      env,
+      windowsHide: true,
     });
     return selectPathLookupCandidate(stdout, process.platform);
   } catch {

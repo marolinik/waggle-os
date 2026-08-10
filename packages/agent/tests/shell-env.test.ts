@@ -8,7 +8,7 @@ import {
   mergePathValue,
   __resetShellEnvStateForTests,
 } from '../src/shell-env.js';
-import { pathLookupEnv } from '../src/tool-detection.js';
+import { pathLookupCommand, pathLookupEnv } from '../src/tool-detection.js';
 
 /** Minimal ChildProcess double exposing only what shell-env consumes. */
 function makeChild(): EventEmitter & { stdout: EventEmitter; kill: ReturnType<typeof vi.fn> } {
@@ -127,15 +127,26 @@ describe('detector PATH wiring', () => {
 
     const env = pathLookupEnv('darwin', { PATH: '/usr/bin' });
     expect(env).toBeDefined();
-    expect(env?.PATH).toBe('/opt/homebrew/bin:/usr/local/bin:/usr/bin');
+    expect(env.PATH).toBe('/opt/homebrew/bin:/usr/local/bin:/usr/bin');
   });
 
-  it('pathLookupEnv is a no-op on win32', () => {
-    expect(pathLookupEnv('win32', { PATH: '/usr/bin' })).toBeUndefined();
+  it('pathLookupEnv sanitizes secrets and uses System32 where.exe on win32', () => {
+    const env = pathLookupEnv('win32', {
+      PATH: 'C:\\Tools',
+      SystemRoot: 'C:\\Windows',
+      OPENAI_API_KEY: 'must-not-cross',
+    });
+    expect(env.PATH).toBe('C:\\Tools');
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(pathLookupCommand('win32', env)).toBe('C:\\Windows\\System32\\where.exe');
   });
 
-  it('pathLookupEnv is a no-op when no login-shell PATH is resolved', () => {
-    // No resolve has run → best-effort returns process source → null shell PATH.
-    expect(pathLookupEnv('darwin', { PATH: '/usr/bin' })).toBeUndefined();
+  it('pathLookupEnv keeps a sanitized base PATH when no login-shell PATH is resolved', () => {
+    const env = pathLookupEnv('darwin', {
+      PATH: '/usr/bin',
+      ANTHROPIC_API_KEY: 'must-not-cross',
+    });
+    expect(env.PATH).toBe('/usr/bin');
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
   });
 });
