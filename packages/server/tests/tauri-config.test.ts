@@ -4672,7 +4672,7 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
       expect(JSON.parse(validatorSelfTest.stdout)).toMatchObject({
         pass: true,
         paidCalls: 0,
-        cases: 48,
+        cases: 50,
       });
     }
   });

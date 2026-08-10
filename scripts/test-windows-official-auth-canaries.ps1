@@ -420,7 +420,9 @@ function Assert-SanitizedCodexFailureProjection([object]$Failure) {
   if (-not ($Failure.lane -is [string]) -or [string]$Failure.lane -cne 'codex') {
     throw 'Sanitized Codex failure lane is invalid.'
   }
-  $null = Assert-CodexFailureStage -Value $Failure.stage
+  $null = Assert-CodexFailureStage `
+    -Value $Failure.stage `
+    -AllowNull ([string]$Failure.class -ceq 'codex-proof-incomplete')
   $null = Assert-NullableProtocolCode -Value $Failure.protocolCode
   $null = Assert-SanitizedCodexTurnFailure -Failure $Failure.turn
 }
@@ -532,7 +534,16 @@ function New-SanitizedCodexFailureReceipt(
   [bool]$TemporaryRootRemoved
 ) {
   $turnFailure = Assert-SanitizedCodexTurnFailure -Failure $TurnFailure
-  $failureStage = Assert-CodexFailureStage -Value $FailureStage
+  $failureClass = if ($null -ne $turnFailure) {
+    'codex-paid-turn-incomplete'
+  } elseif ($ProofSummary.executed -eq $true) {
+    'codex-post-turn-invariant-failed'
+  } else {
+    'codex-proof-incomplete'
+  }
+  $failureStage = Assert-CodexFailureStage `
+    -Value $FailureStage `
+    -AllowNull ($failureClass -eq 'codex-proof-incomplete')
   $protocolCode = Assert-NullableProtocolCode -Value $ProtocolCode
   foreach ($entry in @(
     [pscustomobject]@{ Value = $ScriptSha256; Label = 'failure receipt script hash' }
@@ -554,13 +565,6 @@ function New-SanitizedCodexFailureReceipt(
     }
   }
   if (-not $TemporaryRootRemoved) { throw 'Codex failure receipt requires completed temporary cleanup.' }
-  $failureClass = if ($null -ne $turnFailure) {
-    'codex-paid-turn-incomplete'
-  } elseif ($ProofSummary.executed -eq $true) {
-    'codex-post-turn-invariant-failed'
-  } else {
-    'codex-proof-incomplete'
-  }
   $failureProjection = [ordered]@{
     class = $failureClass
     lane = 'codex'
@@ -840,6 +844,43 @@ function Invoke-CodexProofValidatorSelfTest {
     [string]::Join(',', @($failureReceipt.failure.Keys | Sort-Object)) -cne
       'class,lane,protocolCode,stage,turn') {
     throw 'Valid staged Codex failure receipt did not retain the safe fixed diagnostics.'
+  }
+  $script:codexProofSelfTestCases += 1
+
+  $proofIncompleteSummary = & $copy $validProofSummary
+  $proofIncompleteSummary.paidCalls = 0
+  $proofIncompleteSummary.attempted = $false
+  $proofIncompleteSummary.executed = $false
+  $proofIncompleteReceipt = New-SanitizedCodexFailureReceipt `
+    -TurnFailure $null -FailureStage $null -ProtocolCode $null `
+    -ChildResult $validChild -GitState $validGit `
+    -ExpectedHead $expectedHead -ScriptSha256 $helperHash -ScriptBlob $gitObject `
+    -HelperSha256 $helperHash -HelperBlob $gitObject -ExecutableSha256 $executableHash `
+    -ReportSha256 $otherHash -ProofSummary $proofIncompleteSummary -TemporaryRootRemoved $true
+  $proofIncompleteFailure = [pscustomobject]$proofIncompleteReceipt.failure
+  Assert-SanitizedCodexFailureProjection -Failure $proofIncompleteFailure
+  if ([string]$proofIncompleteFailure.class -cne 'codex-proof-incomplete' -or
+    $null -ne $proofIncompleteFailure.stage -or
+    $null -ne $proofIncompleteFailure.protocolCode) {
+    throw 'Codex proof-incomplete failure receipt did not preserve safe null lifecycle diagnostics.'
+  }
+  $script:codexProofSelfTestCases += 1
+
+  $postTurnInvariantSummary = & $copy $validProofSummary
+  $postTurnInvariantSummary.executed = $true
+  $postTurnAccepted = $true
+  try {
+    $null = New-SanitizedCodexFailureReceipt `
+      -TurnFailure $null -FailureStage $null -ProtocolCode $null `
+      -ChildResult $validChild -GitState $validGit `
+      -ExpectedHead $expectedHead -ScriptSha256 $helperHash -ScriptBlob $gitObject `
+      -HelperSha256 $helperHash -HelperBlob $gitObject -ExecutableSha256 $executableHash `
+      -ReportSha256 $otherHash -ProofSummary $postTurnInvariantSummary -TemporaryRootRemoved $true
+  } catch {
+    $postTurnAccepted = $false
+  }
+  if ($postTurnAccepted) {
+    throw 'Codex post-turn invariant failure accepted null lifecycle diagnostics.'
   }
   $script:codexProofSelfTestCases += 1
 
@@ -1604,7 +1645,8 @@ try {
     if (-not ($codexFailureSummary.markerMatched -is [bool])) {
       throw 'Failed Codex summary markerMatched must be a JSON boolean.'
     }
-    $summaryFailureStage = Assert-CodexFailureStage -Value $codexFailureSummary.failureStage
+    $summaryFailureStage = Assert-CodexFailureStage `
+      -Value $codexFailureSummary.failureStage -AllowNull $true
     $summaryProtocolCode = Assert-NullableProtocolCode -Value $codexFailureSummary.protocolCode
     $summaryCompletedStage = Assert-CodexFailureStage `
       -Value $codexFailureSummary.completedStage -AllowNull $true
@@ -1674,7 +1716,8 @@ try {
       ($reportTurnFailure | ConvertTo-Json -Compress)) {
       throw 'Failed Codex child summary and report disagree on the terminal status.'
     }
-    $reportFailureStage = Assert-CodexFailureStage -Value $codexFailureReport.diagnostic.failureStage
+    $reportFailureStage = Assert-CodexFailureStage `
+      -Value $codexFailureReport.diagnostic.failureStage -AllowNull $true
     $reportProtocolCode = Assert-NullableProtocolCode -Value $codexFailureReport.diagnostic.protocolCode
     $reportCompletedStage = Assert-CodexFailureStage `
       -Value $codexFailureReport.diagnostic.completedStage -AllowNull $true
