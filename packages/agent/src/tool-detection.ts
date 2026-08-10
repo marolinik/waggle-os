@@ -222,11 +222,20 @@ export function pathLookupCommand(
   return pathWin32.join(windowsRoot, 'System32', 'where.exe');
 }
 
+export function pathLookupArgs(
+  platform: NodeJS.Platform,
+  name: string,
+): string[] {
+  // Windows `where.exe name` searches the current directory before PATH. The
+  // $PATH: prefix confines lookup to PATH and prevents launch-cwd hijacks.
+  return [platform === 'win32' ? `$PATH:${name}` : name];
+}
+
 async function defaultPathFromEnv(name: string): Promise<string | null> {
   const env = pathLookupEnv(process.platform);
   const cmd = pathLookupCommand(process.platform, env);
   try {
-    const { stdout } = await execFileAsync(cmd, [name], {
+    const { stdout } = await execFileAsync(cmd, pathLookupArgs(process.platform, name), {
       timeout: 3000,
       shell: false,
       env,

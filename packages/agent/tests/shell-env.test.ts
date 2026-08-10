@@ -8,7 +8,7 @@ import {
   mergePathValue,
   __resetShellEnvStateForTests,
 } from '../src/shell-env.js';
-import { pathLookupCommand, pathLookupEnv } from '../src/tool-detection.js';
+import { pathLookupArgs, pathLookupCommand, pathLookupEnv } from '../src/tool-detection.js';
 
 /** Minimal ChildProcess double exposing only what shell-env consumes. */
 function makeChild(): EventEmitter & { stdout: EventEmitter; kill: ReturnType<typeof vi.fn> } {
@@ -139,6 +139,7 @@ describe('detector PATH wiring', () => {
     expect(env.PATH).toBe('C:\\Tools');
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(pathLookupCommand('win32', env)).toBe('C:\\Windows\\System32\\where.exe');
+    expect(pathLookupArgs('win32', 'vitest')).toEqual(['$PATH:vitest']);
   });
 
   it('pathLookupEnv keeps a sanitized base PATH when no login-shell PATH is resolved', () => {

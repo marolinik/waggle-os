@@ -102,13 +102,14 @@ describe('checkSkillRequirements', () => {
 
 describe('buildSkillBinLookupInvocation', () => {
   it('uses a sanitized env and absolute System32 where.exe on win32', () => {
-    const invocation = buildSkillBinLookupInvocation('win32', {
+    const invocation = buildSkillBinLookupInvocation('vitest', 'win32', {
       PATH: 'C:\\Tools',
       SystemRoot: 'C:\\Windows',
       OPENAI_API_KEY: 'must-not-cross',
     });
 
     expect(invocation.command).toBe('C:\\Windows\\System32\\where.exe');
+    expect(invocation.args).toEqual(['$PATH:vitest']);
     expect(invocation.env.PATH).toBe('C:\\Tools');
     expect(invocation.env.OPENAI_API_KEY).toBeUndefined();
   });

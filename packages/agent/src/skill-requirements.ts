@@ -38,6 +38,7 @@ export interface SkillRequirementDeps {
 
 export interface SkillBinLookupInvocation {
   command: string;
+  args: string[];
   env: NodeJS.ProcessEnv;
 }
 
@@ -62,19 +63,26 @@ function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
 }
 
 export function buildSkillBinLookupInvocation(
+  name: string,
   platform: NodeJS.Platform = process.platform,
   base: NodeJS.ProcessEnv = process.env,
 ): SkillBinLookupInvocation {
   const env = buildExternalProcessEnv(base, {}, platform);
-  if (platform !== 'win32') return { command: 'which', env };
+  if (platform !== 'win32') return { command: 'which', args: [name], env };
   const windowsRoot = envValue(env, 'SYSTEMROOT') ?? envValue(env, 'WINDIR') ?? 'C:\\Windows';
-  return { command: pathWin32.join(windowsRoot, 'System32', 'where.exe'), env };
+  return {
+    command: pathWin32.join(windowsRoot, 'System32', 'where.exe'),
+    // Windows `where.exe name` includes the current directory; $PATH confines
+    // badge checks to PATH so workspace-local executables do not spoof setup.
+    args: [`$PATH:${name}`],
+    env,
+  };
 }
 
 async function defaultHasBin(name: string): Promise<boolean> {
-  const invocation = buildSkillBinLookupInvocation();
+  const invocation = buildSkillBinLookupInvocation(name);
   try {
-    const { stdout } = await execFileAsync(invocation.command, [name], {
+    const { stdout } = await execFileAsync(invocation.command, invocation.args, {
       timeout: 3000,
       shell: false,
       env: invocation.env,
