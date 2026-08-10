@@ -587,6 +587,68 @@ describe('Anthropic Proxy Routes', () => {
       }
     });
 
+    it('rejects a run token completion when the assigned model changes after middleware auth', async () => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-run-token-model-reassignment-'));
+      const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+      const room = registry.createRoom({
+        workspaceIds: ['workspace-1'],
+        source: 'external_tool',
+        title: 'OpenClaw room',
+        task: 'Use the currently assigned model only',
+      });
+      const run = registry.createWorker({
+        parentRunId: room.id,
+        workspaceId: 'workspace-1',
+        source: 'external_tool',
+        executor: { kind: 'external_tool', toolId: 'openclaw', model: 'anthropic/claude-sonnet-4-6' },
+        title: 'OpenClaw',
+        task: room.task,
+      });
+      const runToken = registry.issueCredential(run.id);
+      let reassignedAfterMiddlewareAuth = false;
+      server = createTestServer({
+        vaultApiKey: 'anthropic-key',
+        sessionToken: 'desktop-session-token',
+        authenticateRunToken: (candidate) => {
+          if (candidate !== runToken) return false;
+          const authenticatedRun = registry.authenticateCredential(candidate);
+          if (!authenticatedRun) return false;
+          if (!reassignedAfterMiddlewareAuth) {
+            reassignedAfterMiddlewareAuth = true;
+            registry.update(authenticatedRun.id, { executor: { model: 'anthropic/claude-haiku-4-5' } });
+          }
+          return { runId: authenticatedRun.id, model: authenticatedRun.executor.model };
+        },
+      });
+      server.decorate('agentRunRegistry', registry);
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'should not forward' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1, output_tokens: 2 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      try {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { authorization: `Bearer ${runToken}` },
+          payload: {
+            model: 'claude-sonnet-4.6',
+            messages: [{ role: 'user', content: 'Use the model that was assigned during middleware auth' }],
+            stream: false,
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain('outside the assigned run model');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+      } finally {
+        registry.close();
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    });
+
     it('returns 500 when no API key is configured', async () => {
       // No vault key, no env key, no config key
       server = createTestServer();

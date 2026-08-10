@@ -124,8 +124,11 @@ function validateRunTokenModelScope(
     if (!currentRun) {
       return { statusCode: 401, message: 'The authenticated run credential is no longer active.' };
     }
+    if (authenticatedRun.runId && authenticatedRun.runId !== currentRun.id) {
+      return { statusCode: 401, message: 'The authenticated run credential no longer matches the active run.' };
+    }
     return validateAssignedRunModel(
-      authenticatedRun.model?.trim() || currentRun.executor.model?.trim(),
+      currentRun.executor.model?.trim(),
       requestedModel,
       requestedRoute,
     );
