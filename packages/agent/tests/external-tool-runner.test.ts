@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BUILTIN_TOOL_MANIFESTS, type ToolManifest } from '@waggle/shared';
 import {
@@ -264,6 +267,31 @@ describe('runExternalTool', () => {
     expect(args).not.toContain('--oneshot');
     expect(child.stdin.value).toBe('');
     expect(result).toMatchObject({ status: 'completed', summary: 'Hermes finished', sessionId: 'hermes-session' });
+  });
+
+  it.runIf(process.platform === 'win32')('fails closed before a Hermes batch shim can reparse its prompt', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-hermes-unsafe-batch-'));
+    const batch = path.join(directory, 'hermes.cmd');
+    const marker = path.join(directory, 'injected.txt');
+    fs.writeFileSync(batch, '@echo off\r\necho Hermes finished\r\n');
+
+    try {
+      const result = await runExternalTool({
+        ...baseRequest('hermes'),
+        binary: batch,
+        workspacePath: directory,
+        prompt: `safe" & echo injected>${marker} & rem`,
+        access: 'native',
+      }, { platform: 'win32' });
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        summary: expect.stringContaining('UNSAFE_WINDOWS_BATCH_SHIM'),
+      });
+      expect(fs.existsSync(marker)).toBe(false);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('keeps resumed Hermes sessions in the newly assigned workspace', async () => {
