@@ -28,6 +28,12 @@ interface SlideDef {
   table?: { headers: string[]; rows: string[][] };
 }
 
+function hasUnsupportedImageInput(slide: unknown): boolean {
+  if (!slide || typeof slide !== 'object') return false;
+  return Object.prototype.hasOwnProperty.call(slide, 'image')
+    || Object.prototype.hasOwnProperty.call(slide, 'images');
+}
+
 // Hive DS colors for presentations
 const COLORS = {
   bg: '08090C',
@@ -74,6 +80,9 @@ export function createPresentationTools(workspace: string): ToolDefinition[] {
 
         if (!filePath?.endsWith('.pptx')) return 'Error: filePath must end with .pptx';
         if (!slides || slides.length === 0) return 'Error: at least one slide is required';
+        if (slides.some(hasUnsupportedImageInput)) {
+          return 'Error: image inputs are not supported by the Waggle presentation tool';
+        }
 
         try {
           const resolved = resolveSafe(workspace, filePath);
