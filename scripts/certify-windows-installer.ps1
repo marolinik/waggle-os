@@ -410,6 +410,7 @@ function Get-CertificateSessionHeaders {
     'Tauri bootstrap helper is missing.'
   $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) `
     "waggle-bootstrap-token-$([Guid]::NewGuid().ToString('N')).stderr.log"
+  $tokenResponse = $null
   try {
     $tokenJson = & $NodeExecutable --experimental-websocket $BootstrapHelperPath `
       --port $DebugPort --timeout-ms 60000 2> $stderrPath
@@ -419,7 +420,7 @@ function Get-CertificateSessionHeaders {
     } else {
       ''
     }
-    $tokenError = ([string]$tokenErrorRaw).Trim()
+    $tokenError = (@($tokenErrorRaw) -join [Environment]::NewLine).Trim()
     Assert-True ($tokenExitCode -eq 0) `
       "Tauri bootstrap IPC helper failed: $tokenError"
     $tokenJsonText = ([string](@($tokenJson) -join [Environment]::NewLine)).Trim()
@@ -447,9 +448,15 @@ function Get-CertificateSessionHeaders {
       Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
     }
   }
-  Assert-True (-not [string]::IsNullOrWhiteSpace([string]$tokenResponse.token)) `
+  Assert-True ($null -ne $tokenResponse) `
+    'Session-token bootstrap returned no JSON response.'
+  $sessionTokenProperty = $tokenResponse.PSObject.Properties['token']
+  Assert-True ($null -ne $sessionTokenProperty) `
+    'Session-token bootstrap returned no token field.'
+  $sessionToken = [string]$sessionTokenProperty.Value
+  Assert-True (-not [string]::IsNullOrWhiteSpace($sessionToken)) `
     'Session-token bootstrap returned no token.'
-  return @{ Authorization = "Bearer $($tokenResponse.token)" }
+  return @{ Authorization = "Bearer $sessionToken" }
 }
 
 function Assert-CertificateLifecycleData {
