@@ -138,14 +138,15 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
               .map(async (cli): Promise<CliResult | null> => {
                 const args = cli.versionFlag.split(' ');
                 const env = createSanitizedEnv();
-                const invocation = await resolveToolCommandInvocationFromPath(
-                  cli.name,
-                  args,
-                  process.platform,
-                  { env, fallbackToWhere: false },
-                );
-                const resolvedFromPath = invocation.binary !== cli.name;
+                let resolvedFromPath = false;
                 try {
+                  const invocation = await resolveToolCommandInvocationFromPath(
+                    cli.name,
+                    args,
+                    process.platform,
+                    { env, fallbackToWhere: false },
+                  );
+                  resolvedFromPath = invocation.binary !== cli.name;
                   const { stdout, stderr } = await execCliInvocation(invocation, env, 2_000);
                   return {
                     name: cli.name,

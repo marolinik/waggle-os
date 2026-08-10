@@ -742,9 +742,9 @@ describe('extended-cohort detectors (Codex / Hermes / OpenClaw — Phase 4)', ()
     });
   });
 
-  it('uses HERMES_HOME for the Windows CLI fallback and hook pointer', async () => {
+  it('uses the direct HERMES_HOME Windows executable fallback and hook pointer', async () => {
     const hermesHome = 'D:\\Hermes Data';
-    const installed = `${hermesHome}\\bin\\hermes.cmd`;
+    const installed = `${hermesHome}\\hermes-agent\\venv\\Scripts\\hermes.exe`;
     const pointer = `${hermesHome}\\hive-mind-install.json`;
     const backup = `${hermesHome}\\config.yaml.hive-mind-backup.X`;
     const existsSet = new Set([installed, pointer, backup]);
@@ -809,9 +809,9 @@ describe('extended-cohort detectors (Codex / Hermes / OpenClaw — Phase 4)', ()
     });
   });
 
-  it('skips a broken PATH Hermes shim for a healthy Windows fallback', async () => {
+  it('skips a broken PATH Hermes shim for a healthy direct Windows executable', async () => {
     const broken = 'C:\\broken\\hermes.exe';
-    const healthy = 'C:\\Users\\test\\AppData\\Local\\hermes\\bin\\hermes.cmd';
+    const healthy = 'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\hermes.exe';
     const result = await detectInstalledTools(
       makeDeps({
         exists: async (p) => p === broken || p === healthy,
@@ -1053,18 +1053,12 @@ describe('resolveToolCommandInvocation', () => {
     });
   });
 
-  it('wraps non-npm Windows cmd shims through a quoted cmd.exe call', () => {
-    const invocation = resolveToolCommandInvocation(
+  it('rejects non-npm Windows batch shims instead of constructing a cmd.exe program', () => {
+    expect(() => resolveToolCommandInvocation(
       'C:\\Tools\\custom.cmd',
-      ['--version'],
+      ['safe" & echo injected & rem'],
       'win32',
       { readTextFile: () => null },
-    );
-
-    expect(invocation).toEqual({
-      binary: 'cmd.exe',
-      args: ['/d', '/v:off', '/s', '/c', 'call "C:\\Tools\\custom.cmd" "--version"'],
-      windowsVerbatimArguments: true,
-    });
+    )).toThrow(/UNSAFE_WINDOWS_BATCH_SHIM/);
   });
 });

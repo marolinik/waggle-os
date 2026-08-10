@@ -580,21 +580,12 @@ describe('resolveHookRuntime', () => {
 });
 
 describe('resolveSpawnInvocation', () => {
-  it('wraps Windows cmd shims through cmd.exe', () => {
-    const invocation = resolveSpawnInvocation(
+  it('rejects unrecognized Windows batch shims instead of invoking cmd.exe', () => {
+    expect(() => resolveSpawnInvocation(
       'C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd',
-      ['--version'],
+      ['safe" & echo injected & rem'],
       'win32',
-    );
-    expect(invocation.binary).toBe('cmd.exe');
-    expect(invocation.args).toEqual([
-      '/d',
-      '/v:off',
-      '/s',
-      '/c',
-      'call "C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd" "--version"',
-    ]);
-    expect(invocation.windowsVerbatimArguments).toBe(true);
+    )).toThrow(/UNSAFE_WINDOWS_BATCH_SHIM/);
   });
 
   it('leaves Windows exe launches untouched', () => {

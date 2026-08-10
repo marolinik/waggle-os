@@ -43,10 +43,6 @@ function npmCmdShimTarget(content: string): string | null {
   return npmCli?.[1] ?? null;
 }
 
-function quoteCmdArg(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
 export function resolveToolCommandInvocation(
   binary: string,
   args: string[],
@@ -67,17 +63,10 @@ export function resolveToolCommandInvocation(
       };
     }
 
-    return {
-      binary: 'cmd.exe',
-      args: [
-        '/d',
-        '/v:off',
-        '/s',
-        '/c',
-        ['call', quoteCmdArg(binary), ...args.map(quoteCmdArg)].join(' '),
-      ],
-      windowsVerbatimArguments: true,
-    };
+    throw Object.assign(
+      new Error(`UNSAFE_WINDOWS_BATCH_SHIM: Refusing unrecognized Windows batch shim: ${binary}`),
+      { code: 'UNSAFE_WINDOWS_BATCH_SHIM' },
+    );
   }
   return { binary, args };
 }
@@ -150,14 +139,16 @@ export async function resolveToolCommandInvocationFromPath(
   }
 
   const lookupEnv = windowsLookupEnv(deps.env ?? process.env);
+  let candidates: string[];
   try {
-    const candidates = deps.pathLookup
+    candidates = deps.pathLookup
       ? await deps.pathLookup(binary, lookupEnv)
       : await defaultWindowsPathLookup(binary, lookupEnv, deps.fallbackToWhere !== false);
-    const resolved = candidates.find((candidate) => /\.(?:exe|com|cmd|bat)$/i.test(candidate));
-    if (resolved) return resolveToolCommandInvocation(resolved, args, platform, deps);
   } catch {
     // Preserve the original spawn error when PATH lookup itself fails.
+    return resolveToolCommandInvocation(binary, args, platform, deps);
   }
+  const resolved = candidates.find((candidate) => /\.(?:exe|com|cmd|bat)$/i.test(candidate));
+  if (resolved) return resolveToolCommandInvocation(resolved, args, platform, deps);
   return resolveToolCommandInvocation(binary, args, platform, deps);
 }

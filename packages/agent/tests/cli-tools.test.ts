@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCliTools } from '../src/cli-tools.js';
@@ -51,6 +51,27 @@ describe('Windows CLI command resolution', () => {
 });
 
 describe('cli_discover', () => {
+  it.runIf(process.platform === 'win32')('skips an unsafe batch-only candidate without aborting discovery', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'waggle-cli-discover-batch-'));
+    const batch = join(directory, 'python3.cmd');
+    const previousPath = process.env.PATH;
+    writeFileSync(batch, '@echo off\r\necho unsafe-python-wrapper\r\n');
+    process.env.PATH = `${directory};${previousPath ?? ''}`;
+
+    try {
+      const tools = createCliTools({ allowlist: [] });
+      const discover = tools.find(t => t.name === 'cli_discover')!;
+      const result = JSON.parse(await discover.execute({}));
+
+      expect(result.programs.some((program: { name: string }) => program.name === 'node')).toBe(true);
+      expect(result.programs.some((program: { name: string }) => program.name === 'python3')).toBe(false);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('scans PATH and returns available CLIs', async () => {
     const tools = createCliTools({ allowlist: [] });
     const discover = tools.find(t => t.name === 'cli_discover')!;
@@ -224,6 +245,28 @@ describe('cli_execute', () => {
 
     expect(result.success).toBe(true);
     expect(result.stdout).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it.runIf(process.platform === 'win32')('fails closed before a generic batch shim can reparse CLI arguments', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'waggle-cli-unsafe-batch-'));
+    const batch = join(directory, 'custom.cmd');
+    const marker = join(directory, 'injected.txt');
+    writeFileSync(batch, '@echo off\r\necho wrapper-ran\r\n');
+    const tools = createCliTools({ allowlist: [batch] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const result = JSON.parse(await execute.execute({
+        program: batch,
+        args: [`safe" & echo injected>${marker} & rem`],
+      }));
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('UNSAFE_WINDOWS_BATCH_SHIM');
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('does not expose ambient secrets to allowed CLI processes', async () => {
