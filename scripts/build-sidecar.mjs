@@ -152,9 +152,10 @@ try {
     // last compiled — the same stale-server-in-the-binary class D12 exists
     // to kill — and a clean checkout can't build at all without
     // build:packages. Alias to source so the bundle ALWAYS compiles from
-    // src, like the vitest aliases do. (No subpath imports of either
-    // package exist — verified before aliasing the bare names.)
+    // src, like the vitest aliases do. Exact subpath aliases must precede
+    // their package root so esbuild never appends a subpath to index.ts.
     alias: {
+      '@waggle/agent/external-process-env': path.join(root, 'packages', 'agent', 'src', 'external-process-env.ts'),
       '@waggle/agent': path.join(root, 'packages', 'agent', 'src', 'index.ts'),
       '@waggle/core': path.join(root, 'packages', 'core', 'src', 'index.ts'),
       '@waggle/marketplace': path.join(root, 'packages', 'marketplace', 'src', 'index.ts'),

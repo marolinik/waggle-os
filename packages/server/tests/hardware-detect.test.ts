@@ -6,6 +6,7 @@ import {
   detectAppleSilicon,
   isAppleSilicon,
   detectHardware,
+  runHardwareProbeCommand,
   type CommandRunner,
   type SystemProbe,
 } from '../src/local/hardware-detect.js';
@@ -129,6 +130,27 @@ describe('detectAppleSilicon', () => {
 });
 
 describe('detectHardware (orchestrator)', () => {
+  it('does not expose ambient secrets to the production hardware probe', async () => {
+    const previousOpenAi = process.env.OPENAI_API_KEY;
+    const previousUnknown = process.env.WAGGLE_FUTURE_GPU_SECRET;
+    process.env.OPENAI_API_KEY = 'must-not-reach-gpu-probe';
+    process.env.WAGGLE_FUTURE_GPU_SECRET = 'must-also-be-denied';
+
+    try {
+      const result = await runHardwareProbeCommand(process.execPath, [
+        '-e',
+        "process.stdout.write(JSON.stringify({ openai: process.env.OPENAI_API_KEY ?? null, unknown: process.env.WAGGLE_FUTURE_GPU_SECRET ?? null, hasPath: Boolean(process.env.PATH) }))",
+      ]);
+      expect(result).not.toBeNull();
+      expect(JSON.parse(result!)).toEqual({ openai: null, unknown: null, hasPath: true });
+    } finally {
+      if (previousOpenAi === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAi;
+      if (previousUnknown === undefined) delete process.env.WAGGLE_FUTURE_GPU_SECRET;
+      else process.env.WAGGLE_FUTURE_GPU_SECRET = previousUnknown;
+    }
+  });
+
   it('Apple path: arm64 Darwin → metal, unified, no subprocess spawned', async () => {
     const spawned: string[] = [];
     const spy: CommandRunner = async (c) => { spawned.push(c); return null; };

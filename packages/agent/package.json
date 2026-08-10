@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./external-process-env": {
+      "types": "./dist/external-process-env.d.ts",
+      "import": "./dist/external-process-env.js"
     }
   },
   "files": [

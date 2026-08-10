@@ -322,12 +322,43 @@ describe('Tauri Production Configuration', () => {
     expect(content).toContain("path.join(root, 'packages', 'marketplace', 'marketplace.db')");
     expect(content).not.toContain("'marketplace', 'seed', 'marketplace.db'");
     expect(content).toContain('Required marketplace database is missing');
+    expect(content).toContain(
+      "'@waggle/agent/external-process-env': path.join(root, 'packages', 'agent', 'src', 'external-process-env.ts')",
+    );
 
     const serverIndex = fs.readFileSync(
       path.join(ROOT, 'packages', 'server', 'src', 'local', 'index.ts'),
       'utf-8',
     );
     expect(serverIndex).toContain("path.resolve(__dirname, 'marketplace.db')");
+  });
+
+  it('build-sidecar exact alias resolves the agent env helper before its root alias', async () => {
+    const esbuild = await import('esbuild');
+    const result = await esbuild.build({
+      stdin: {
+        contents: "import { buildExternalProcessEnv } from '@waggle/agent/external-process-env'; export const env = buildExternalProcessEnv({ PATH: 'fixture' });",
+        loader: 'ts',
+        resolveDir: ROOT,
+        sourcefile: 'sidecar-agent-subpath-probe.ts',
+      },
+      absWorkingDir: ROOT,
+      bundle: true,
+      platform: 'node',
+      target: 'node20',
+      format: 'esm',
+      write: false,
+      logLevel: 'silent',
+      alias: {
+        '@waggle/agent/external-process-env': path.join(
+          ROOT, 'packages', 'agent', 'src', 'external-process-env.ts',
+        ),
+        '@waggle/agent': path.join(ROOT, 'packages', 'agent', 'src', 'index.ts'),
+      },
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.outputFiles[0]?.text).toContain('buildExternalProcessEnv');
   });
 
   it('build-sidecar provenance follows transitive tsconfig inheritance', () => {

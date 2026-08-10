@@ -22,6 +22,7 @@
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { buildExternalProcessEnv } from '@waggle/agent/external-process-env';
 
 const execFileAsync = promisify(execFile);
 
@@ -266,12 +267,13 @@ function assembleGpu(
 
 // ── Default runtime adapters (NOT used by tests) ──────────────────────────────────────
 
-const defaultRunner: CommandRunner = async (command, args) => {
+export const runHardwareProbeCommand: CommandRunner = async (command, args) => {
   try {
     const { stdout, stderr } = await execFileAsync(command, [...args], {
       timeout: 8000,
       maxBuffer: 1024 * 1024,
       windowsHide: true,
+      env: buildExternalProcessEnv(process.env),
     });
     const out = `${stdout}${stderr}`.trim();
     return out.length > 0 ? out : null;
@@ -312,7 +314,7 @@ export interface DetectHardwareDeps {
  */
 export async function detectHardware(deps: DetectHardwareDeps = {}): Promise<HardwareInfo> {
   const system = deps.system ?? readSystemProbe();
-  const run = deps.run ?? defaultRunner;
+  const run = deps.run ?? runHardwareProbeCommand;
 
   if (isAppleSilicon(system)) {
     const apple = detectAppleSilicon(system);
