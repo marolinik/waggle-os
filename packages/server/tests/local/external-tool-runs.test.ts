@@ -1218,6 +1218,7 @@ describe('external tool run routes', () => {
         apiKey: { source: 'env', provider: 'default', id: 'WAGGLE_RUN_TOKEN' },
         models: [{ id: 'anthropic/claude-sonnet-4-6', name: 'Waggle routed model' }],
       });
+      expect(registry.get(request.runId)?.executor.model).toBe('anthropic/claude-sonnet-4-6');
       expect(config.agents.defaults).toMatchObject({
         skipBootstrap: true,
         workspace: sharedRoot,

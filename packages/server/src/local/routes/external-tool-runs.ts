@@ -1046,6 +1046,7 @@ async function prepareOpenClawInvocation(
   if (!model) {
     throw openClawIsolationError('Waggle did not resolve an executable model', binaryVersion);
   }
+  server.agentRunRegistry.update(run.id, { executor: { model } });
   const home = requireOpenClawProfileHome();
   const workspacePath = fs.realpathSync(cwd);
   const workspaceKey = canonicalPath(workspacePath);

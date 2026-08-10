@@ -102,6 +102,35 @@ function resolveProviderRoute(model: string): ProviderRoute | null {
   return providerId ? { providerId, model: trimmed } : null;
 }
 
+function validateRunTokenModelScope(
+  server: FastifyInstance,
+  authHeader: string | undefined,
+  requestedModel: string,
+  requestedRoute: ProviderRoute,
+): string | null {
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+  const run = token ? server.agentRunRegistry?.authenticateCredential(token) : undefined;
+  if (!run) return null;
+
+  const assignedModel = run.executor.model?.trim();
+  const assignedRoute = assignedModel ? resolveProviderRoute(assignedModel) : null;
+  if (!assignedRoute) {
+    return 'This run token cannot use the model proxy because the run has no assigned completion model.';
+  }
+  if (!providerRoutesMatch(assignedRoute, requestedRoute)) {
+    return `Requested model "${requestedModel}" is outside the assigned run model "${assignedModel}".`;
+  }
+  return null;
+}
+
+function providerRoutesMatch(a: ProviderRoute, b: ProviderRoute): boolean {
+  if (a.providerId.toLowerCase() !== b.providerId.toLowerCase()) return false;
+  const normalize = (route: ProviderRoute) => (
+    route.providerId === 'anthropic' ? mapModel(route.model) : route.model
+  ).trim().toLowerCase();
+  return normalize(a) === normalize(b);
+}
+
 function completionEndpoint(baseUrl: string): string {
   let normalized = baseUrl.trim().replace(/\/+$/, '');
   if (normalized.endsWith('/chat/completions')) return normalized;
@@ -593,6 +622,17 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         error: {
           message: `Model "${body.model}" does not identify a supported provider. Select a discovered provider/model id.`,
         },
+      });
+    }
+    const runScopeViolation = validateRunTokenModelScope(
+      server,
+      request.headers.authorization,
+      body.model,
+      route,
+    );
+    if (runScopeViolation) {
+      return reply.status(403).send({
+        error: { message: runScopeViolation },
       });
     }
     if (route.providerId === 'ollama') {

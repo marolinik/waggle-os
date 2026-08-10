@@ -12,6 +12,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { anthropicProxyRoutes } from '../../src/local/routes/anthropic-proxy.js';
 import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
@@ -404,6 +408,72 @@ describe('Anthropic Proxy Routes', () => {
   // ── POST /v1/chat/completions ─────────────────────────────────
 
   describe('POST /v1/chat/completions (non-streaming)', () => {
+    it('rejects a run token completion when the requested model is outside the assigned run model', async () => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-run-token-model-scope-'));
+      const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+      const room = registry.createRoom({
+        workspaceIds: ['workspace-1'],
+        source: 'external_tool',
+        title: 'OpenClaw room',
+        task: 'Use the assigned model only',
+      });
+      const run = registry.createWorker({
+        parentRunId: room.id,
+        workspaceId: 'workspace-1',
+        source: 'external_tool',
+        executor: { kind: 'external_tool', toolId: 'openclaw', model: 'anthropic/claude-sonnet-4-6' },
+        title: 'OpenClaw',
+        task: room.task,
+      });
+      const runToken = registry.issueCredential(run.id);
+      server = createTestServer({
+        vaultApiKey: 'anthropic-key',
+        vaultProviders: { openai: { value: 'openai-key' } },
+      });
+      server.decorate('agentRunRegistry', registry);
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'assigned model response' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1, output_tokens: 2 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      try {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { authorization: `Bearer ${runToken}` },
+          payload: {
+            model: 'openai/gpt-4.1',
+            messages: [{ role: 'user', content: 'Use a different provider' }],
+            stream: false,
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain('outside the assigned run model');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+
+        const assigned = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { authorization: `Bearer ${runToken}` },
+          payload: {
+            model: 'claude-sonnet-4.6',
+            messages: [{ role: 'user', content: 'Use the assigned provider' }],
+            stream: false,
+          },
+        });
+
+        expect(assigned.statusCode).toBe(200);
+        expect(assigned.json().choices[0].message.content).toBe('assigned model response');
+        expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe('https://api.anthropic.com/v1/messages');
+      } finally {
+        registry.close();
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    });
+
     it('returns 500 when no API key is configured', async () => {
       // No vault key, no env key, no config key
       server = createTestServer();
