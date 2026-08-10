@@ -1,11 +1,12 @@
 import { EventEmitter } from 'events';
-import { ChildProcess, spawn, type StdioOptions } from 'node:child_process';
+import { ChildProcess, type StdioOptions } from 'node:child_process';
 import type { Readable, Writable } from 'stream';
 import type { RiskLevel } from '@waggle/shared';
 import type { ToolDefinition } from '../tools.js';
 import { scanForInjection } from '../injection-scanner.js';
 import { resolveToolCommandInvocationFromPath } from '../tool-command.js';
 import { createSanitizedEnv, terminateProcessTree } from '../system-tools-helpers.js';
+import { spawnSidecarOwnedProcess } from '../sidecar-owned-process.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -532,7 +533,7 @@ function defaultSpawn(
     windowsVerbatimArguments?: boolean;
   },
 ): McpProcess {
-  return spawn(command, args, {
+  return spawnSidecarOwnedProcess(command, args, {
     env: options.env as NodeJS.ProcessEnv | undefined,
     stdio: options.stdio as StdioOptions,
     windowsHide: true,

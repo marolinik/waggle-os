@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import type {
 import { resolveToolCommandInvocation } from './tool-command.js';
 import { stripAnsi } from './tool-output-buffer.js';
 import { buildExternalProcessEnv } from './external-process-env.js';
+import { spawnSidecarOwnedProcess } from './sidecar-owned-process.js';
 
 const MAX_STDOUT = 256 * 1024;
 const MAX_STDERR = 64 * 1024;
@@ -623,10 +624,9 @@ function defaultSpawnProcess(
   options: { cwd: string; env: NodeJS.ProcessEnv },
 ): ExternalProcessHandle {
   const invocation = resolveToolCommandInvocation(binary, args);
-  const child = spawn(invocation.binary, invocation.args, {
+  const child = spawnSidecarOwnedProcess(invocation.binary, invocation.args, {
     cwd: options.cwd,
     env: options.env,
-    shell: false,
     detached: process.platform !== 'win32',
     windowsHide: true,
     windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
