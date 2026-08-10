@@ -300,8 +300,15 @@ export interface SecurityMiddlewareOpts {
   /** Session token for bearer auth. When set, all non-exempt routes require Authorization header. */
   sessionToken?: string;
   /** Validate a narrow per-run credential for WaggleDance and one model-completion route. */
-  authenticateRunToken?: (token: string) => boolean;
+  authenticateRunToken?: (token: string) => RunTokenAuthResult;
 }
+
+export interface AuthenticatedRunToken {
+  runId?: string;
+  model?: string;
+}
+
+export type RunTokenAuthResult = boolean | AuthenticatedRunToken | null | undefined;
 
 const RUN_TOKEN_METHODS = new Map<string, string>([
   ['/api/waggle-dance/signal', 'POST'],
@@ -336,11 +343,18 @@ const DEFAULT_WORKSPACE_MUTATION_PATHS = new Set([
 ]);
 
 const resolvedChatWorkspaceIds = new WeakMap<FastifyRequest, string | null>();
+const authenticatedRunTokens = new WeakMap<FastifyRequest, AuthenticatedRunToken>();
 
 export function getResolvedChatWorkspaceId(
   request: FastifyRequest,
 ): string | null | undefined {
   return resolvedChatWorkspaceIds.get(request);
+}
+
+export function getAuthenticatedRunToken(
+  request: FastifyRequest,
+): AuthenticatedRunToken | undefined {
+  return authenticatedRunTokens.get(request);
 }
 
 const STORED_CRON_OWNER_PATHS = new Set([
@@ -365,6 +379,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function bearerTokenFromAuth(authHeader: string | undefined): string | undefined {
+  const match = authHeader?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || undefined;
+}
+
+function runTokenAuthSnapshot(result: RunTokenAuthResult): AuthenticatedRunToken | null {
+  if (result === true) return {};
+  if (!result || typeof result !== 'object') return null;
+  return {
+    ...(typeof result.runId === 'string' ? { runId: result.runId } : {}),
+    ...(typeof result.model === 'string' ? { model: result.model } : {}),
+  };
 }
 
 function stringFields(
@@ -692,17 +720,21 @@ async function securityMiddlewarePlugin(
       const rawRunToken = request.headers['x-waggle-run-token'];
       const runToken = typeof rawRunToken === 'string' ? rawRunToken : undefined;
       const authHeader = request.headers.authorization;
-      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+      const bearerToken = bearerTokenFromAuth(authHeader);
       const runTokenEligible = RUN_TOKEN_METHODS.get(requestPath) === request.method;
-      const headerRunTokenValid = Boolean(
-        runTokenEligible && runToken && opts.authenticateRunToken?.(runToken),
-      );
-      const bearerRunTokenValid = Boolean(
-        request.method === 'POST'
+      const headerRunTokenSnapshot = runTokenEligible && runToken
+        ? runTokenAuthSnapshot(opts.authenticateRunToken?.(runToken))
+        : null;
+      const bearerRunTokenSnapshot = request.method === 'POST'
           && RUN_TOKEN_BEARER_PATHS.has(requestPath)
           && bearerToken
-          && opts.authenticateRunToken?.(bearerToken),
-      );
+        ? runTokenAuthSnapshot(opts.authenticateRunToken?.(bearerToken))
+        : null;
+      if (headerRunTokenSnapshot || bearerRunTokenSnapshot) {
+        authenticatedRunTokens.set(request, headerRunTokenSnapshot ?? bearerRunTokenSnapshot!);
+      }
+      const headerRunTokenValid = Boolean(headerRunTokenSnapshot);
+      const bearerRunTokenValid = Boolean(bearerRunTokenSnapshot);
       const runTokenValid = headerRunTokenValid || bearerRunTokenValid;
       if (!isAuthExempt && !runTokenValid) {
         // P1b-SSE: header-less GETs on the SSE allowlist may authenticate via
@@ -723,7 +755,7 @@ async function securityMiddlewarePlugin(
               code: runToken ? 'INVALID_TOKEN' : 'MISSING_TOKEN',
             });
           }
-          const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+          const token = bearerTokenFromAuth(authHeader) ?? null;
           if (token !== sessionToken) {
             return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
           }

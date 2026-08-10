@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { anthropicProxyRoutes } from '../../src/local/routes/anthropic-proxy.js';
+import { securityMiddleware, type RunTokenAuthResult } from '../../src/local/security-middleware.js';
 import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
 function createTestServer(options: {
@@ -25,6 +26,8 @@ function createTestServer(options: {
   envApiKey?: string;
   configApiKey?: string;
   dataDir?: string;
+  sessionToken?: string;
+  authenticateRunToken?: (token: string) => RunTokenAuthResult;
 } = {}) {
   const server = Fastify({ logger: false });
 
@@ -45,6 +48,12 @@ function createTestServer(options: {
     dataDir: options.dataDir ?? '/tmp/nonexistent-waggle-test',
   });
 
+  if (options.sessionToken || options.authenticateRunToken) {
+    server.register(securityMiddleware, {
+      sessionToken: options.sessionToken,
+      authenticateRunToken: options.authenticateRunToken,
+    });
+  }
   server.register(anthropicProxyRoutes);
   return server;
 }
@@ -454,10 +463,52 @@ describe('Anthropic Proxy Routes', () => {
         expect(response.json().error.message).toContain('outside the assigned run model');
         expect(globalThis.fetch).not.toHaveBeenCalled();
 
-        const assigned = await server.inject({
+        const sameProvider = await server.inject({
           method: 'POST',
           url: '/v1/chat/completions',
           headers: { authorization: `Bearer ${runToken}` },
+          payload: {
+            model: 'anthropic/claude-opus-4-6',
+            messages: [{ role: 'user', content: 'Use a different Anthropic model' }],
+            stream: false,
+          },
+        });
+
+        expect(sameProvider.statusCode).toBe(403);
+        expect(sameProvider.json().error.message).toContain('outside the assigned run model');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+
+        const missingToken = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'openai/gpt-4.1',
+            messages: [{ role: 'user', content: 'Use a different provider without a run token' }],
+            stream: false,
+          },
+        });
+
+        expect(missingToken.statusCode).toBe(401);
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+
+        const invalidToken = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { authorization: 'Bearer invalid-run-token-with-enough-entropy-123' },
+          payload: {
+            model: 'openai/gpt-4.1',
+            messages: [{ role: 'user', content: 'Use a different provider with an invalid run token' }],
+            stream: false,
+          },
+        });
+
+        expect(invalidToken.statusCode).toBe(401);
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+
+        const assigned = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { authorization: `bearer ${runToken}` },
           payload: {
             model: 'claude-sonnet-4.6',
             messages: [{ role: 'user', content: 'Use the assigned provider' }],
@@ -468,6 +519,68 @@ describe('Anthropic Proxy Routes', () => {
         expect(assigned.statusCode).toBe(200);
         expect(assigned.json().choices[0].message.content).toBe('assigned model response');
         expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toBe('https://api.anthropic.com/v1/messages');
+      } finally {
+        registry.close();
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects a run token completion when the token is revoked between auth and route handling', async () => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-run-token-revocation-race-'));
+      const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+      const room = registry.createRoom({
+        workspaceIds: ['workspace-1'],
+        source: 'external_tool',
+        title: 'OpenClaw room',
+        task: 'Use the assigned model only',
+      });
+      const run = registry.createWorker({
+        parentRunId: room.id,
+        workspaceId: 'workspace-1',
+        source: 'external_tool',
+        executor: { kind: 'external_tool', toolId: 'openclaw', model: 'anthropic/claude-sonnet-4-6' },
+        title: 'OpenClaw',
+        task: room.task,
+      });
+      const runToken = registry.issueCredential(run.id);
+      let revokedAfterMiddlewareAuth = false;
+      server = createTestServer({
+        vaultApiKey: 'anthropic-key',
+        sessionToken: 'desktop-session-token',
+        authenticateRunToken: (candidate) => {
+          if (candidate !== runToken) return false;
+          const authenticatedRun = registry.authenticateCredential(candidate);
+          if (!authenticatedRun) return false;
+          if (!revokedAfterMiddlewareAuth) {
+            revokedAfterMiddlewareAuth = true;
+            registry.revokeCredential(candidate);
+          }
+          return { runId: authenticatedRun.id, model: authenticatedRun.executor.model };
+        },
+      });
+      server.decorate('agentRunRegistry', registry);
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'should not forward' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1, output_tokens: 2 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      try {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { authorization: `Bearer ${runToken}` },
+          payload: {
+            model: 'openai/gpt-4.1',
+            messages: [{ role: 'user', content: 'Use a different provider after token revocation' }],
+            stream: false,
+          },
+        });
+
+        expect(response.statusCode).toBe(401);
+        expect(response.json().error.message).toContain('no longer active');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
       } finally {
         registry.close();
         fs.rmSync(dataDir, { recursive: true, force: true });

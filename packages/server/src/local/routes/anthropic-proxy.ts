@@ -7,10 +7,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FastifyPluginAsync, FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyPluginAsync, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { validateOrigin } from '../cors-config.js';
 import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
 import { isRemoteOllamaAlias, PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
+import { getAuthenticatedRunToken } from '../security-middleware.js';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -63,6 +64,8 @@ interface ProviderRoute {
   model: string;
 }
 
+const RUN_PROXY_ACTIVE_STATUSES = new Set(['queued', 'starting', 'running', 'waiting_for_approval', 'paused', 'cancelling']);
+
 const PROVIDER_ALIASES: Readonly<Record<string, string>> = {
   gemini: 'google',
 };
@@ -104,23 +107,79 @@ function resolveProviderRoute(model: string): ProviderRoute | null {
 
 function validateRunTokenModelScope(
   server: FastifyInstance,
-  authHeader: string | undefined,
+  request: FastifyRequest,
   requestedModel: string,
   requestedRoute: ProviderRoute,
-): string | null {
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-  const run = token ? server.agentRunRegistry?.authenticateCredential(token) : undefined;
-  if (!run) return null;
+): { statusCode: number; message: string } | null {
+  const activeRunProxy = hasActiveRunCompletionScope(server);
+  const token = parseBearerToken(request.headers.authorization);
+  if (!token) {
+    return activeRunProxy
+      ? { statusCode: 401, message: 'A Bearer credential is required while scoped agent runs are active.' }
+      : null;
+  }
+  const authenticatedRun = getAuthenticatedRunToken(request);
+  if (authenticatedRun) {
+    const currentRun = server.agentRunRegistry?.authenticateCredential(token);
+    if (!currentRun) {
+      return { statusCode: 401, message: 'The authenticated run credential is no longer active.' };
+    }
+    return validateAssignedRunModel(
+      authenticatedRun.model?.trim() || currentRun.executor.model?.trim(),
+      requestedModel,
+      requestedRoute,
+    );
+  }
+  const run = server.agentRunRegistry?.authenticateCredential(token);
+  if (!run) {
+    if (isSessionBearer(server, token)) return null;
+    return activeRunProxy
+      ? { statusCode: 401, message: 'The supplied bearer token is not an active run credential.' }
+      : null;
+  }
 
   const assignedModel = run.executor.model?.trim();
+  return validateAssignedRunModel(assignedModel, requestedModel, requestedRoute);
+}
+
+function validateAssignedRunModel(
+  assignedModel: string | undefined,
+  requestedModel: string,
+  requestedRoute: ProviderRoute,
+): { statusCode: number; message: string } | null {
   const assignedRoute = assignedModel ? resolveProviderRoute(assignedModel) : null;
   if (!assignedRoute) {
-    return 'This run token cannot use the model proxy because the run has no assigned completion model.';
+    return {
+      statusCode: 403,
+      message: 'This run token cannot use the model proxy because the run has no assigned completion model.',
+    };
   }
   if (!providerRoutesMatch(assignedRoute, requestedRoute)) {
-    return `Requested model "${requestedModel}" is outside the assigned run model "${assignedModel}".`;
+    return {
+      statusCode: 403,
+      message: `Requested model "${requestedModel}" is outside the assigned run model "${assignedModel}".`,
+    };
   }
   return null;
+}
+
+function parseBearerToken(authHeader: string | undefined): string | undefined {
+  const match = authHeader?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || undefined;
+}
+
+function hasActiveRunCompletionScope(server: FastifyInstance): boolean {
+  return server.agentRunRegistry?.list({ limit: 1_000 }).some((run) =>
+    run.kind === 'worker'
+      && typeof run.executor.model === 'string'
+      && run.executor.model.trim().length > 0
+      && RUN_PROXY_ACTIVE_STATUSES.has(run.status)) ?? false;
+}
+
+function isSessionBearer(server: FastifyInstance, token: string): boolean {
+  const agentState = server.agentState as { wsSessionToken?: unknown; litellmApiKey?: unknown } | undefined;
+  return [agentState?.wsSessionToken, agentState?.litellmApiKey]
+    .some((candidate) => typeof candidate === 'string' && candidate === token);
 }
 
 function providerRoutesMatch(a: ProviderRoute, b: ProviderRoute): boolean {
@@ -626,13 +685,13 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     }
     const runScopeViolation = validateRunTokenModelScope(
       server,
-      request.headers.authorization,
+      request,
       body.model,
       route,
     );
     if (runScopeViolation) {
-      return reply.status(403).send({
-        error: { message: runScopeViolation },
+      return reply.status(runScopeViolation.statusCode).send({
+        error: { message: runScopeViolation.message },
       });
     }
     if (route.providerId === 'ollama') {

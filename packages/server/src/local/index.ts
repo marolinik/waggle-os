@@ -2640,7 +2640,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   };
   await server.register(securityMiddleware, {
     sessionToken: server.agentState.wsSessionToken,
-    authenticateRunToken: (token) => agentRunRegistry.authenticateCredential(token) !== undefined,
+    authenticateRunToken: (token) => {
+      const run = agentRunRegistry.authenticateCredential(token);
+      if (!run) return false;
+      return { runId: run.id, model: run.executor.model };
+    },
     rateLimiter: Object.keys(rateLimiterConfig).length > 0 ? rateLimiterConfig : undefined,
   });
 
