@@ -414,14 +414,29 @@ function Get-CertificateSessionHeaders {
     $tokenJson = & $NodeExecutable --experimental-websocket $BootstrapHelperPath `
       --port $DebugPort --timeout-ms 60000 2> $stderrPath
     $tokenExitCode = $LASTEXITCODE
-    $tokenError = if (Test-Path -LiteralPath $stderrPath) {
-      (Get-Content -Raw -LiteralPath $stderrPath).Trim()
+    $tokenErrorRaw = if (Test-Path -LiteralPath $stderrPath) {
+      Get-Content -Raw -LiteralPath $stderrPath
     } else {
       ''
     }
+    $tokenError = ([string]$tokenErrorRaw).Trim()
     Assert-True ($tokenExitCode -eq 0) `
       "Tauri bootstrap IPC helper failed: $tokenError"
-    $bootstrapToken = [string](($tokenJson | ConvertFrom-Json).bootstrapToken)
+    $tokenJsonText = ([string](@($tokenJson) -join [Environment]::NewLine)).Trim()
+    $tokenPayload = $null
+    if (-not [string]::IsNullOrWhiteSpace($tokenJsonText)) {
+      try {
+        $tokenPayload = ConvertFrom-Json -InputObject $tokenJsonText -ErrorAction Stop
+      } catch {
+        $tokenPayload = $null
+      }
+    }
+    Assert-True ($null -ne $tokenPayload) `
+      'Tauri bootstrap IPC helper returned invalid JSON output.'
+    $bootstrapTokenProperty = $tokenPayload.PSObject.Properties['bootstrapToken']
+    Assert-True ($null -ne $bootstrapTokenProperty) `
+      'Tauri bootstrap IPC helper returned no credential field.'
+    $bootstrapToken = [string]$bootstrapTokenProperty.Value
     Assert-True ($bootstrapToken.Length -ge 32 -and $bootstrapToken.Length -le 200) `
       'Tauri bootstrap IPC helper returned an invalid credential.'
     $tokenResponse = Invoke-JsonRequest `
