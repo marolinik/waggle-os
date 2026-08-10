@@ -9,6 +9,7 @@
  */
 
 import type { ToolDefinition } from './tools.js';
+import { win32 as pathWin32 } from 'node:path';
 import {
   resolveToolCommandInvocation,
   resolveToolCommandInvocationFromPath,
@@ -48,12 +49,26 @@ async function execCliInvocation(
   return { stdout: result.stdout, stderr: result.stderr };
 }
 
+function isBareWindowsCommand(program: string): boolean {
+  return process.platform === 'win32' && !pathWin32.isAbsolute(program) && !/[\\/]/.test(program);
+}
+
 async function execCliFile(
   program: string,
   args: string[],
   timeoutMs: number,
 ): Promise<{ stdout: string; stderr: string }> {
   const env = createSanitizedEnv();
+  if (isBareWindowsCommand(program)) {
+    const resolved = await resolveToolCommandInvocationFromPath(
+      program,
+      args,
+      process.platform,
+      { env },
+    );
+    return execCliInvocation(resolved, env, timeoutMs);
+  }
+
   const direct = resolveToolCommandInvocation(program, args, process.platform, { env });
   try {
     return await execCliInvocation(direct, env, timeoutMs);

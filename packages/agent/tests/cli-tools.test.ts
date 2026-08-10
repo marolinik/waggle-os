@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCliTools } from '../src/cli-tools.js';
@@ -245,6 +245,51 @@ describe('cli_execute', () => {
 
     expect(result.success).toBe(true);
     expect(result.stdout).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it.runIf(process.platform === 'win32')('resolves bare known Windows command-shim names with extensions through PATH', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'waggle-cli-known-shims-'));
+    const previousPath = process.env.PATH;
+    const knownShims = ['npm.cmd', 'npx.cmd', 'claude.cmd', 'codex.cmd'];
+    process.env.PATH = `${directory};${previousPath ?? ''}`;
+
+    try {
+      for (const shimName of knownShims) {
+        const stem = shimName.replace(/\.cmd$/i, '');
+        mkdirSync(join(directory, 'node_modules', stem), { recursive: true });
+        const target = join(directory, 'node_modules', stem, 'cli.js');
+        writeFileSync(
+          target,
+          `console.log(${JSON.stringify(`known-shim:${shimName}:`)} + process.argv.slice(2).join('|'));\n`,
+        );
+        writeFileSync(
+          join(directory, shimName),
+          [
+            '@ECHO OFF',
+            'SETLOCAL',
+            'SET "_prog=%~dp0\\node.exe"',
+            `"%_prog%" "%dp0%\\node_modules\\${stem}\\cli.js" %*`,
+          ].join('\r\n'),
+        );
+      }
+
+      const tools = createCliTools({ allowlist: knownShims });
+      const execute = tools.find(t => t.name === 'cli_execute')!;
+
+      for (const shimName of knownShims) {
+        const result = JSON.parse(await execute.execute({
+          program: shimName,
+          args: ['arg&still-literal', '%PATH%'],
+        }));
+
+        expect(result.success).toBe(true);
+        expect(result.stdout).toBe(`known-shim:${shimName}:arg&still-literal|%PATH%`);
+      }
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it.runIf(process.platform === 'win32')('fails closed before a generic batch shim can reparse CLI arguments', async () => {
