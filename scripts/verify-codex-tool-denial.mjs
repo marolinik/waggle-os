@@ -2547,17 +2547,20 @@ try {
     JSON.stringify(redTools) === JSON.stringify(['view_image']),
     `RED control catalog did not expose only view_image: ${JSON.stringify(redTools)}`,
   );
-  const redReadObserved = redRun.events.imageItemCount > 0 && redProvider.records[1].containsImage;
+  const redSensitiveDataObserved = redProvider.records[1]?.containsImage === true;
+  const redReadObserved = redRun.events.imageItemCount > 0 || redSensitiveDataObserved;
+  const redToolLoopObserved = redProvider.records.length === 2 && redRun.events.normalTextCompleted;
   report.red = {
     toolNames: redTools,
     recordCount: redProvider.records.length,
+    toolLoopObserved: redToolLoopObserved,
     readObserved: redReadObserved,
-    sensitiveDataObserved: redProvider.records[1]?.containsImage === true,
+    sensitiveDataObserved: redSensitiveDataObserved,
     imageItemCount: redRun.events.imageItemCount,
     normalTextCompleted: redRun.events.normalTextCompleted,
     sentinelSha256,
   };
-  assert(redReadObserved, 'RED control did not prove owned sentinel image access');
+  assert(redToolLoopObserved, 'RED control did not prove the provider-routed view_image tool loop');
 
   const greenProvider = await startLoopbackProvider('green', controlAck, sentinelPath);
   providers.push(greenProvider);

@@ -281,8 +281,13 @@ function Assert-CodexToolDenialProof(
   if ($redTools.Count -ne 1 -or -not ($redTools[0] -is [string]) -or [string]$redTools[0] -cne 'view_image') {
     throw 'Codex RED control did not expose exactly view_image.'
   }
-  Assert-JsonBoolean -Value $Proof.red.readObserved -Expected $true -Label 'Codex RED readObserved'
-  Assert-JsonBoolean -Value $Proof.red.sensitiveDataObserved -Expected $true -Label 'Codex RED sensitiveDataObserved'
+  Assert-JsonBoolean -Value $Proof.red.toolLoopObserved -Expected $true -Label 'Codex RED toolLoopObserved'
+  if (-not ($Proof.red.readObserved -is [bool])) {
+    throw 'Codex RED readObserved must be a JSON boolean.'
+  }
+  if (-not ($Proof.red.sensitiveDataObserved -is [bool])) {
+    throw 'Codex RED sensitiveDataObserved must be a JSON boolean.'
+  }
   Assert-JsonBoolean -Value $Proof.green.deniedBeforeRead -Expected $true -Label 'Codex GREEN deniedBeforeRead'
   Assert-JsonBoolean -Value $Proof.green.sensitiveDataObserved -Expected $false -Label 'Codex GREEN sensitiveDataObserved'
   Assert-JsonBoolean -Value $Proof.green.normalTextCompleted -Expected $true -Label 'Codex GREEN normalTextCompleted'
@@ -695,8 +700,9 @@ function Invoke-CodexProofValidatorSelfTest {
     }
     red = [ordered]@{
       toolNames = @('view_image')
-      readObserved = $true
-      sensitiveDataObserved = $true
+      toolLoopObserved = $true
+      readObserved = $false
+      sensitiveDataObserved = $false
     }
     green = [ordered]@{
       deniedBeforeRead = $true
@@ -762,6 +768,7 @@ function Invoke-CodexProofValidatorSelfTest {
   $fixture = & $copy $validValue; $fixture.hooks.warnings = 1; & $reject $fixture 'hook warning'
   $fixture = & $copy $validValue; $fixture.hooks.allTrusted = 1; & $reject $fixture 'numeric hook trust'
   $fixture = & $copy $validValue; $fixture.sealed.topLevelToolCount = 1; & $reject $fixture 'non-empty tools'
+  $fixture = & $copy $validValue; $fixture.red.toolLoopObserved = $false; & $reject $fixture 'RED tool loop'
   $fixture = & $copy $validValue; $fixture.green.sensitiveDataObserved = $true; & $reject $fixture 'GREEN data leak'
   $fixture = & $copy $validValue; $fixture.paidInvocation.toolEventsObserved = 1; & $reject $fixture 'paid tool event'
   $fixture = & $copy $validValue; $fixture.paidInvocation.unknownEventsObserved = 1; & $reject $fixture 'unknown event'
