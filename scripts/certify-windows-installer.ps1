@@ -18,7 +18,6 @@ param(
 
   [string]$ExpectedSourceRevision,
 
-  [ValidateRange(1024, 65535)]
   [int]$WebViewDebugPort = 0,
 
   [switch]$VerifyManagedModel,
@@ -1792,7 +1791,10 @@ if ($RequireVersionToVersionUpgrade) {
 $receiptReservation = Reserve-CertificateReceiptPath $ReceiptPath
 $scratchOwnershipMarker = $null
 $ollamaPort = 0
-$webViewDebugPort = 0
+Assert-True (
+  $WebViewDebugPort -eq 0 -or
+  ($WebViewDebugPort -ge 1024 -and $WebViewDebugPort -le 65535)
+) 'WebViewDebugPort must be 0 or an integer between 1024 and 65535.'
 $managedRuntimeRoot = Join-Path $dataDir 'runtimes\ollama'
 $managedCertificateModel = 'qwen2.5:0.5b'
 $managedOperationTimeoutSeconds = 3600
