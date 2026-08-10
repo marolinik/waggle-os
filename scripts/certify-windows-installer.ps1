@@ -18,6 +18,9 @@ param(
 
   [string]$ExpectedSourceRevision,
 
+  [ValidateRange(1024, 65535)]
+  [int]$WebViewDebugPort = 0,
+
   [switch]$VerifyManagedModel,
 
   [switch]$RequireVersionToVersionUpgrade,
@@ -348,13 +351,20 @@ function Invoke-RawProcess {
 }
 
 function Start-InstalledApp {
-  param([Parameter(Mandatory = $true)] [string]$ExecutablePath)
+  param(
+    [Parameter(Mandatory = $true)] [string]$ExecutablePath,
+    [ValidateRange(1024, 65535)] [int]$DebugPort = 0
+  )
 
   $info = [System.Diagnostics.ProcessStartInfo]::new()
   $info.FileName = $ExecutablePath
   $info.UseShellExecute = $false
   $info.WorkingDirectory = Split-Path -Parent $ExecutablePath
   Remove-CertificationControlEnvironment $info
+  if ($DebugPort -gt 0) {
+    $info.Environment['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] =
+      "--remote-debugging-port=$DebugPort"
+  }
   $process = [System.Diagnostics.Process]::new()
   $process.StartInfo = $info
   Assert-True ($process.Start()) "Could not start installed Waggle: $ExecutablePath"
@@ -390,9 +400,39 @@ function Invoke-JsonPostRequest {
 }
 
 function Get-CertificateSessionHeaders {
-  param([Parameter(Mandatory = $true)] [string]$BaseUrl)
+  param(
+    [Parameter(Mandatory = $true)] [string]$BaseUrl,
+    [Parameter(Mandatory = $true)] [string]$NodeExecutable,
+    [Parameter(Mandatory = $true)] [string]$BootstrapHelperPath,
+    [ValidateRange(1024, 65535)] [int]$DebugPort
+  )
 
-  $tokenResponse = Invoke-JsonRequest "$BaseUrl/api/auth/session-token"
+  Assert-True (Test-Path -LiteralPath $BootstrapHelperPath -PathType Leaf) `
+    'Tauri bootstrap helper is missing.'
+  $stderrPath = Join-Path ([System.IO.Path]::GetTempPath()) `
+    "waggle-bootstrap-token-$([Guid]::NewGuid().ToString('N')).stderr.log"
+  try {
+    $tokenJson = & $NodeExecutable --experimental-websocket $BootstrapHelperPath `
+      --port $DebugPort --timeout-ms 60000 2> $stderrPath
+    $tokenExitCode = $LASTEXITCODE
+    $tokenError = if (Test-Path -LiteralPath $stderrPath) {
+      (Get-Content -Raw -LiteralPath $stderrPath).Trim()
+    } else {
+      ''
+    }
+    Assert-True ($tokenExitCode -eq 0) `
+      "Tauri bootstrap IPC helper failed: $tokenError"
+    $bootstrapToken = [string](($tokenJson | ConvertFrom-Json).bootstrapToken)
+    Assert-True ($bootstrapToken.Length -ge 32 -and $bootstrapToken.Length -le 200) `
+      'Tauri bootstrap IPC helper returned an invalid credential.'
+    $tokenResponse = Invoke-JsonRequest `
+      "$BaseUrl/api/auth/session-token" `
+      @{ 'x-waggle-desktop-bootstrap' = $bootstrapToken }
+  } finally {
+    if (Test-Path -LiteralPath $stderrPath) {
+      Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+  }
   Assert-True (-not [string]::IsNullOrWhiteSpace([string]$tokenResponse.token)) `
     'Session-token bootstrap returned no token.'
   return @{ Authorization = "Bearer $($tokenResponse.token)" }
@@ -1752,6 +1792,7 @@ if ($RequireVersionToVersionUpgrade) {
 $receiptReservation = Reserve-CertificateReceiptPath $ReceiptPath
 $scratchOwnershipMarker = $null
 $ollamaPort = 0
+$webViewDebugPort = 0
 $managedRuntimeRoot = Join-Path $dataDir 'runtimes\ollama'
 $managedCertificateModel = 'qwen2.5:0.5b'
 $managedOperationTimeoutSeconds = 3600
@@ -1775,6 +1816,9 @@ try {
   $nodeCommand = Get-Command node -CommandType Application -ErrorAction SilentlyContinue |
     Select-Object -First 1
   Assert-True ($null -ne $nodeCommand) 'Node.js is required to reproduce the sidecar bundle.'
+  $bootstrapHelperPath = Join-Path $PSScriptRoot 'read-tauri-bootstrap-token.mjs'
+  Assert-True (Test-Path -LiteralPath $bootstrapHelperPath -PathType Leaf) `
+    'Tauri bootstrap helper is missing.'
   Assert-True (Test-Path -LiteralPath $packagedServiceScript -PathType Leaf) `
     'Packaged resources/service.js is missing before certification.'
   $sidecarHashBeforeRebuild = (
@@ -1820,6 +1864,7 @@ try {
       'scripts/build-sidecar.mjs',
       'scripts/bundle-node.mjs',
       'scripts/certify-windows-installer.ps1',
+      'scripts/read-tauri-bootstrap-token.mjs',
       'scripts/check-sidecar-resources.mjs',
       'scripts/stage-sidecar-deps.mjs',
       'packages/server/src/local/index.ts',
@@ -2105,7 +2150,8 @@ try {
 
     $previousBaseUrl = "http://127.0.0.1:$($env:WAGGLE_PORT)"
     Assert-TcpPortAvailable 3333
-    $previousProcess = Start-InstalledApp $appExecutable
+    $webViewDebugPort = if ($WebViewDebugPort -gt 0) { $WebViewDebugPort } else { Get-FreeTcpPort }
+    $previousProcess = Start-InstalledApp $appExecutable $webViewDebugPort
     try {
       $null = Wait-ForHealth $previousBaseUrl $StartupTimeoutSeconds
       $previousProcess.Refresh()
@@ -2117,7 +2163,8 @@ try {
       Set-Content -LiteralPath $dataMarker -Value $runId -Encoding UTF8
       Assert-True (Test-Path -LiteralPath $profileDataMarker -PathType Leaf) `
         'Previous launch removed the profile preservation marker.'
-      $previousHeaders = Get-CertificateSessionHeaders $previousBaseUrl
+      $previousHeaders = Get-CertificateSessionHeaders `
+        $previousBaseUrl $nodeCommand.Source $bootstrapHelperPath $webViewDebugPort
       $previousTier = Invoke-JsonRequest "$previousBaseUrl/api/tier" $previousHeaders
       Assert-True ([string]$previousTier.tier -ceq 'FREE') `
         "The protected previous release reported an unexpected effective tier: $($previousTier.tier)"
@@ -2175,7 +2222,7 @@ try {
     } finally {
       Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
       Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-        -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+        -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort, $webViewDebugPort)
       $previousProcess.Dispose()
     }
 
@@ -2192,7 +2239,7 @@ try {
       $ExpectedSignerThumbprint `
       'Candidate installer after upgrade'
     Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort, $webViewDebugPort)
     Wait-ForPathState $appExecutable $true
     $upgradeRegistration = Get-ItemProperty -LiteralPath $uninstallRegistry
     Assert-True ([string]$upgradeRegistration.DisplayVersion -eq $ExpectedCandidateVersion) `
@@ -2464,7 +2511,8 @@ try {
 
   $baseUrl = "http://127.0.0.1:$($env:WAGGLE_PORT)"
   Assert-TcpPortAvailable 3333
-  $firstProcess = Start-InstalledApp $appExecutable
+  $webViewDebugPort = if ($WebViewDebugPort -gt 0) { $WebViewDebugPort } else { Get-FreeTcpPort }
+  $firstProcess = Start-InstalledApp $appExecutable $webViewDebugPort
   try {
     $health = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $firstProcess.Refresh()
@@ -2499,7 +2547,8 @@ try {
     Assert-True ((Get-HttpStatusCode "$baseUrl/api/tier") -eq 401) `
       'A protected API route did not reject an unauthenticated loopback request'
     $receipt.checks['unauthenticatedProtectedRoute'] = $true
-    $headers = Get-CertificateSessionHeaders $baseUrl
+    $headers = Get-CertificateSessionHeaders `
+      $baseUrl $nodeCommand.Source $bootstrapHelperPath $webViewDebugPort
     $tier = Invoke-JsonRequest "$baseUrl/api/tier" $headers
     Assert-True ([string]$tier.tier -ceq 'FREE') `
       "A clean Solo install reported an unexpected effective tier: $($tier.tier)"
@@ -2703,7 +2752,7 @@ try {
   } finally {
     Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
     Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort, $webViewDebugPort)
     $firstProcess.Dispose()
   }
 
@@ -2736,7 +2785,7 @@ try {
       'Candidate installer after repair'
   }
   Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-    -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+    -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort, $webViewDebugPort)
   Assert-True ((Get-FileHash -LiteralPath $serviceScript -Algorithm SHA256).Hash -eq $serviceHash) `
     'Same-version repair did not restore resources/service.js'
   Assert-True (
@@ -2789,12 +2838,14 @@ try {
   $receipt.checks['repairRegistrations'] = $true
 
   $runtimeConfirmedStopped = $false
-  $secondProcess = Start-InstalledApp $appExecutable
+  $webViewDebugPort = if ($WebViewDebugPort -gt 0) { $WebViewDebugPort } else { Get-FreeTcpPort }
+  $secondProcess = Start-InstalledApp $appExecutable $webViewDebugPort
   try {
     $null = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $secondProcess.Refresh()
     Assert-True (-not $secondProcess.HasExited) 'The installed desktop process exited after repair'
-    $repairHeaders = Get-CertificateSessionHeaders $baseUrl
+    $repairHeaders = Get-CertificateSessionHeaders `
+      $baseUrl $nodeCommand.Source $bootstrapHelperPath $webViewDebugPort
     $repairTier = Invoke-JsonRequest "$baseUrl/api/tier" $repairHeaders
     Assert-True ([string]$repairTier.tier -ceq 'FREE') `
       "The repaired Solo install reported an unexpected effective tier: $($repairTier.tier)"
@@ -2868,7 +2919,7 @@ try {
   } finally {
     Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
     Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort, $webViewDebugPort)
     $runtimeConfirmedStopped = $true
     $secondProcess.Dispose()
   }
@@ -2900,7 +2951,7 @@ try {
     -ServiceScript $serviceScript `
     -Port 3333 `
     -ManagedRuntimeRoot $managedRuntimeRoot `
-    -AdditionalPorts @($ollamaPort)
+    -AdditionalPorts @($ollamaPort, $webViewDebugPort)
   $uninstallPostconditionsConfirmed = $true
   $runtimeConfirmedStopped = $true
   $postUninstallDataManifest = @(Get-CertificateDataManifest $profileDataDir)
@@ -2957,7 +3008,7 @@ try {
     $runtimeConfirmedStopped = $false
     Stop-InstalledProcesses $appExecutable $serviceScript $managedRuntimeRoot
     Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
-      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort)
+      -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort, $webViewDebugPort)
     Assert-NoForeignWaggleProcesses $appExecutable
     Assert-TcpPortAvailable 3333
     $runtimeConfirmedStopped = $true
@@ -2998,7 +3049,7 @@ try {
         -ServiceScript $serviceScript `
         -Port 3333 `
         -ManagedRuntimeRoot $managedRuntimeRoot `
-        -AdditionalPorts @($ollamaPort)
+        -AdditionalPorts @($ollamaPort, $webViewDebugPort)
       $runtimeConfirmedStopped = $true
       $uninstallPostconditionsConfirmed = $true
     } catch {
