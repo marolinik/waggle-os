@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { win32 as pathWin32 } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import {
@@ -16,7 +17,7 @@ import { registerIdentityTools } from '../src/tools/identity.js';
 import { registerAwarenessTools } from '../src/tools/awareness.js';
 import { registerWorkspaceTools } from '../src/tools/workspace.js';
 import { registerHarvestTools } from '../src/tools/harvest.js';
-import { registerCleanupTools } from '../src/tools/cleanup.js';
+import { buildClaudeLaunch, registerCleanupTools } from '../src/tools/cleanup.js';
 import { registerEraseTools } from '../src/tools/erase.js';
 import { registerIngestTools } from '../src/tools/ingest.js';
 import { registerWikiTools } from '../src/tools/wiki.js';
@@ -42,6 +43,42 @@ function registerAll(server: McpServer): void {
   registerIngestTools(server);
   registerWikiTools(server);
 }
+
+describe('Claude consolidation launch boundary', () => {
+  it('uses the canonical npm CLI without a shell or ambient secrets on Windows', () => {
+    const npmRoot = 'C:\\Users\\test\\AppData\\Roaming\\npm';
+    const shim = pathWin32.join(npmRoot, 'claude.cmd');
+    const cli = pathWin32.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+    const files = new Set([shim.toLowerCase(), cli.toLowerCase()]);
+    const launch = buildClaudeLaunch(['-p', '--output-format=text'], {
+      platform: 'win32',
+      env: {
+        PATH: npmRoot,
+        USERPROFILE: 'C:\\Users\\test',
+        APPDATA: 'C:\\Users\\test\\AppData\\Roaming',
+        CLAUDE_CONFIG_DIR: 'C:\\Users\\test\\.claude-profile',
+        ANTHROPIC_API_KEY: 'must-not-reach-claude',
+        OPENAI_API_KEY: 'must-not-reach-claude',
+        WAGGLE_FUTURE_PROVIDER_SECRET: 'must-also-be-denied',
+      },
+      isFile: (candidate) => files.has(pathWin32.normalize(candidate).toLowerCase()),
+    });
+
+    expect(launch.command).toBe(process.execPath);
+    expect(launch.args).toEqual([cli, '-p', '--output-format=text']);
+    expect(launch.options.shell).toBe(false);
+    expect(launch.options.env).toMatchObject({
+      PATH: npmRoot,
+      USERPROFILE: 'C:\\Users\\test',
+      APPDATA: 'C:\\Users\\test\\AppData\\Roaming',
+      CLAUDE_CONFIG_DIR: 'C:\\Users\\test\\.claude-profile',
+      HIVE_MIND_NO_SYNTH: '1',
+    });
+    expect(launch.options.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(launch.options.env.OPENAI_API_KEY).toBeUndefined();
+    expect(launch.options.env.WAGGLE_FUTURE_PROVIDER_SECRET).toBeUndefined();
+  });
+});
 
 describe('parseScopes', () => {
   it('defaults to full read+write when unset', () => {
