@@ -2,8 +2,15 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ToolDefinition } from './tools.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
 
 const NO_WORKSPACE_REPO = 'Error: No Git repository exists inside the active workspace.';
+const EXECUTABLE_FILTER_CONFIG = /^filter\.(.+)\.(?:clean|process)$/i;
+const READ_ONLY_GIT_CONFIG = ['-c', 'core.fsmonitor=false', '-c', 'pager.diff=false'];
+
+function readOnlyGitArgs(...args: string[]): string[] {
+  return [...READ_ONLY_GIT_CONFIG, ...args];
+}
 
 /** Extract a human-readable message from a child_process spawn error. */
 function spawnErrorText(err: unknown): string {
@@ -22,6 +29,62 @@ function gitEnvironment(workspaceRoot: string): NodeJS.ProcessEnv {
   delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
   env.GIT_CEILING_DIRECTORIES = path.dirname(workspaceRoot);
   return env;
+}
+
+function gitDiffEnvironment(workspaceRoot: string): NodeJS.ProcessEnv {
+  return {
+    ...buildExternalProcessEnv(process.env),
+    GIT_CEILING_DIRECTORIES: path.dirname(workspaceRoot),
+    GIT_NO_LAZY_FETCH: '1',
+    GIT_OPTIONAL_LOCKS: '0',
+  };
+}
+
+function configuredExecutableFilters(
+  repoRoot: string,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  let configNames: string;
+  try {
+    configNames = execFileSync(
+      'git',
+      readOnlyGitArgs('config', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process)$'),
+      { cwd: repoRoot, env, encoding: 'utf-8', timeout: 10_000 },
+    );
+  } catch (err) {
+    if ((err as { status?: number }).status === 1) return [];
+    throw err;
+  }
+
+  const drivers = new Set<string>();
+  for (const name of configNames.split(/\r?\n/)) {
+    const driver = name.match(EXECUTABLE_FILTER_CONFIG)?.[1];
+    if (!driver) continue;
+    if (!/^[A-Za-z0-9._-]+$/.test(driver)) {
+      throw new Error(`unsafe Git filter driver name: ${JSON.stringify(driver)}`);
+    }
+    drivers.add(driver);
+  }
+  return [...drivers];
+}
+
+export function buildReadOnlyGitDiffArgs(
+  repoRoot: string,
+  env: NodeJS.ProcessEnv,
+  options: { staged?: boolean; file?: string },
+): string[] {
+  const filterOverrides = configuredExecutableFilters(repoRoot, env).flatMap((driver) => [
+    '-c', `filter.${driver}.clean=`,
+    '-c', `filter.${driver}.process=`,
+    '-c', `filter.${driver}.required=false`,
+  ]);
+  const args = readOnlyGitArgs(
+    ...filterOverrides,
+    'diff', '--no-ext-diff', '--no-textconv',
+  );
+  if (options.staged) args.push('--staged');
+  if (options.file) args.push('--', options.file);
+  return args;
 }
 
 function resolveWorkspaceRepository(workspace: string): string | null {
@@ -47,11 +110,16 @@ function resolveWorkspaceRepository(workspace: string): string | null {
   }
 }
 
-function runGitInRepo(repoRoot: string, args: string[], timeoutMs = 10_000): string {
+function runGitInRepo(
+  repoRoot: string,
+  args: string[],
+  timeoutMs = 10_000,
+  env = gitEnvironment(repoRoot),
+): string {
   try {
     return execFileSync('git', args, {
       cwd: repoRoot,
-      env: gitEnvironment(repoRoot),
+      env,
       encoding: 'utf-8',
       timeout: timeoutMs,
     }).trim();
@@ -117,10 +185,19 @@ export function createGitTools(workspace: string): ToolDefinition[] {
         },
       },
       execute: async (args) => {
-        const gitArgs = ['diff'];
-        if (args.staged) gitArgs.push('--staged');
-        if (args.file) gitArgs.push(args.file as string);
-        const diff = runGit(workspace, gitArgs);
+        const repoRoot = resolveWorkspaceRepository(workspace);
+        if (!repoRoot) return NO_WORKSPACE_REPO;
+        const env = gitDiffEnvironment(repoRoot);
+        let gitArgs: string[];
+        try {
+          gitArgs = buildReadOnlyGitDiffArgs(repoRoot, env, {
+            staged: Boolean(args.staged),
+            file: args.file as string | undefined,
+          });
+        } catch (err) {
+          return `Error: git_diff filter safety check failed: ${spawnErrorText(err)}`;
+        }
+        const diff = runGitInRepo(repoRoot, gitArgs, 10_000, env);
         return diff || 'No changes.';
       },
     },
