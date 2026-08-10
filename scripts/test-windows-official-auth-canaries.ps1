@@ -366,7 +366,7 @@ function Assert-SanitizedCodexTurnFailure([object]$Failure) {
   if ($null -ne $Failure.willRetry -and -not ($Failure.willRetry -is [bool])) {
     throw 'Codex turn failure retry flag must be a JSON boolean or null.'
   }
-  return [ordered]@{
+  return [pscustomobject][ordered]@{
     status = [string]$Failure.status
     code = if ($null -eq $code) { $null } else { [string]$code }
     httpStatusCode = if ($null -eq $httpStatusCode) { $null } else { [long]$httpStatusCode }
@@ -829,6 +829,19 @@ function Invoke-CodexProofValidatorSelfTest {
   if ($failureReceipt.kind -cne 'windows-official-auth-codex-failure' -or
     $failureReceipt.pass -ne $false -or $failureReceiptJson -match '(?i)(?:auth\.json|file:///|sk-|sess-)') {
     throw 'Sanitized Codex failure receipt retained untrusted diagnostic text.'
+  }
+  $script:codexProofSelfTestCases += 1
+
+  $normalizedFailure = Assert-SanitizedCodexTurnFailure -Failure $validFailure
+  $roundTripReceipt = New-SanitizedCodexFailureReceipt `
+    -TurnFailure $normalizedFailure -FailureStage 'thread-start' -ProtocolCode ([int]-32603) `
+    -ChildResult $validChild -GitState $validGit `
+    -ExpectedHead $expectedHead -ScriptSha256 $helperHash -ScriptBlob $gitObject `
+    -HelperSha256 $helperHash -HelperBlob $gitObject -ExecutableSha256 $executableHash `
+    -ReportSha256 $otherHash -ProofSummary $validProofSummary -TemporaryRootRemoved $true
+  if ($roundTripReceipt.failure.turn.status -cne 'failed' -or
+    $roundTripReceipt.failure.turn.code -cne 'unauthorized') {
+    throw 'Sanitized Codex failure receipt did not accept normalized turn failure.'
   }
   $script:codexProofSelfTestCases += 1
   $failureReject = {
