@@ -400,7 +400,11 @@ class LocalAdapter {
 
     const bindEpoch = ++this._epoch;
     this.baseUrl = `http://127.0.0.1:${endpoint.port}`;
-    this.desktopEndpoint = { port: endpoint.port, instanceId: endpoint.instanceId };
+    this.desktopEndpoint = {
+      port: endpoint.port,
+      instanceId: endpoint.instanceId,
+      ...(endpoint.bootstrapToken ? { bootstrapToken: endpoint.bootstrapToken } : {}),
+    };
     this.desktopEndpointReady = false;
     this.authToken = null;
     this._connected = false;
@@ -784,6 +788,13 @@ class LocalAdapter {
     }
     if (issuedToken) {
       headers['Authorization'] = `Bearer ${issuedToken}`;
+    }
+    if (
+      this.managedDesktop
+      && purePath === '/api/auth/session-token'
+      && this.desktopEndpoint?.bootstrapToken
+    ) {
+      headers['X-Waggle-Desktop-Bootstrap'] = this.desktopEndpoint.bootstrapToken;
     }
     const res = await fetchWithTimeout(`${this.baseUrl}${path}`, { ...init, headers }, timeoutMs);
     if (res.status === 403) {

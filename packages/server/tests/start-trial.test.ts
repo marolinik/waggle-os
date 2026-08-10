@@ -193,10 +193,15 @@ describe('D1 loopback auth + session-token bootstrap', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   const originalHost = process.env.WAGGLE_HOST;
+  const originalInstanceId = process.env.WAGGLE_INSTANCE_ID;
+  const originalDesktopBootstrap = process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN;
+  const desktopBootstrap = 'desktop-bootstrap-test-1234567890';
 
   beforeEach(async () => {
     // Exercise the SECURE D1 default (the suite setup defaults trust ON).
     process.env.WAGGLE_TRUST_LOCALHOST = '0';
+    process.env.WAGGLE_INSTANCE_ID = 'desktop-instance-test';
+    process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN = desktopBootstrap;
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-d1-'));
     server = await buildLocalServer({ dataDir: tmpDir });
   });
@@ -205,16 +210,76 @@ describe('D1 loopback auth + session-token bootstrap', () => {
     process.env.WAGGLE_TRUST_LOCALHOST = '1';
     if (originalHost === undefined) delete process.env.WAGGLE_HOST;
     else process.env.WAGGLE_HOST = originalHost;
+    if (originalInstanceId === undefined) delete process.env.WAGGLE_INSTANCE_ID;
+    else process.env.WAGGLE_INSTANCE_ID = originalInstanceId;
+    if (originalDesktopBootstrap === undefined) delete process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN;
+    else process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN = originalDesktopBootstrap;
     await new Promise(r => setTimeout(r, 100));
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* EBUSY on win32 */ }
   });
 
-  it('serves the session token from the auth-exempt, same-origin bootstrap', async () => {
-    const res = await server.inject({ method: 'GET', url: '/api/auth/session-token' });
+  it('serves the session token only with the per-launch desktop bootstrap credential', async () => {
+    const res = await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: { 'x-waggle-desktop-bootstrap': desktopBootstrap },
+    });
     expect(res.statusCode).toBe(200);
     const token = res.json().token as string;
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
+  });
+
+  it('scrubs the launch credential before child processes can inherit it', () => {
+    expect(process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN).toBeUndefined();
+  });
+
+  it('rejects a browser-reachable Tauri origin without the IPC-only bootstrap credential', async () => {
+    const missing = await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: { origin: 'http://tauri.localhost' },
+    });
+    expect(missing.statusCode).toBe(403);
+    expect(missing.json().code).toBe('DESKTOP_BOOTSTRAP_REQUIRED');
+
+    const wrong = await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: {
+        origin: 'http://tauri.localhost',
+        'x-waggle-desktop-bootstrap': 'wrong-bootstrap-token-1234567890',
+      },
+    });
+    expect(wrong.statusCode).toBe(403);
+    expect(wrong.json().code).toBe('DESKTOP_BOOTSTRAP_REQUIRED');
+  });
+
+  it('binds browser-mode bootstrap to the exact request authority', async () => {
+    await server.close();
+    delete process.env.WAGGLE_INSTANCE_ID;
+    delete process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN;
+    server = await buildLocalServer({ dataDir: tmpDir });
+
+    const crossLoopback = await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: {
+        host: '127.0.0.1:3333',
+        origin: 'http://127.0.0.1:5174',
+      },
+    });
+    expect(crossLoopback.statusCode).toBe(403);
+
+    const sameOrigin = await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: {
+        host: '127.0.0.1:3333',
+        origin: 'http://127.0.0.1:3333',
+      },
+    });
+    expect(sameOrigin.statusCode).toBe(200);
   });
 
   it('does not expose the process bearer when the sidecar is non-loopback-bound', async () => {
@@ -234,7 +299,11 @@ describe('D1 loopback auth + session-token bootstrap', () => {
   });
 
   it('accepts a normal route when the bootstrapped token is presented', async () => {
-    const token = (await server.inject({ method: 'GET', url: '/api/auth/session-token' })).json().token as string;
+    const token = (await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: { 'x-waggle-desktop-bootstrap': desktopBootstrap },
+    })).json().token as string;
     const res = await server.inject({
       method: 'GET', url: '/api/tier',
       headers: { authorization: `Bearer ${token}` },

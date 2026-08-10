@@ -16,11 +16,13 @@ const READY_RECORD_MAX_BYTES: u64 = 16 * 1024;
 pub struct ServiceEndpoint {
     pub port: u16,
     pub instance_id: String,
+    pub bootstrap_token: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ManagedLaunchConfig {
     instance_id: String,
+    bootstrap_token: String,
     ready_path: PathBuf,
 }
 
@@ -56,6 +58,7 @@ fn managed_launch_config(instance_id: &str) -> Result<ManagedLaunchConfig, Strin
     }
     Ok(ManagedLaunchConfig {
         instance_id: instance_id.to_string(),
+        bootstrap_token: Uuid::new_v4().to_string(),
         ready_path,
     })
 }
@@ -72,6 +75,7 @@ fn apply_managed_launch_environment(
     command.env("WAGGLE_PORT", preferred_port.to_string());
     command.env("WAGGLE_DESKTOP_PORT_FALLBACK", "1");
     command.env("WAGGLE_INSTANCE_ID", &config.instance_id);
+    command.env("WAGGLE_DESKTOP_BOOTSTRAP_TOKEN", &config.bootstrap_token);
     command.env("WAGGLE_READY_FILE", &config.ready_path);
 }
 
@@ -80,6 +84,7 @@ fn parse_ready_record(
     expected_instance_id: &str,
     expected_pid: u32,
     expected_preferred_port: u16,
+    bootstrap_token: &str,
 ) -> Result<ServiceEndpoint, String> {
     if bytes.len() as u64 > READY_RECORD_MAX_BYTES {
         return Err("Managed service ready record is too large".to_string());
@@ -99,6 +104,7 @@ fn parse_ready_record(
     Ok(ServiceEndpoint {
         port: record.port,
         instance_id: record.instance_id,
+        bootstrap_token: bootstrap_token.to_string(),
     })
 }
 
@@ -196,6 +202,7 @@ impl ServiceState {
 struct LaunchToken {
     generation: u64,
     instance_id: String,
+    bootstrap_token: String,
     ready_path: PathBuf,
     pid: u32,
     preferred_port: u16,
@@ -482,6 +489,7 @@ mod tests {
         let second = managed_launch_config("instance-b").expect("second launch config");
         assert!(first.ready_path.is_absolute());
         assert_ne!(first.ready_path, second.ready_path);
+        assert_ne!(first.bootstrap_token, second.bootstrap_token);
 
         let mut command = long_lived_command();
         apply_managed_launch_environment(&mut command, 3333, &first);
@@ -503,6 +511,10 @@ mod tests {
             Some(&"instance-a".into())
         );
         assert_eq!(
+            environment.get(OsStr::new("WAGGLE_DESKTOP_BOOTSTRAP_TOKEN")),
+            Some(&first.bootstrap_token.clone().into())
+        );
+        assert_eq!(
             environment.get(OsStr::new("WAGGLE_READY_FILE")),
             Some(&first.ready_path.into_os_string())
         );
@@ -510,6 +522,10 @@ mod tests {
         let generated_first = new_managed_launch_config().expect("generated first launch");
         let generated_second = new_managed_launch_config().expect("generated second launch");
         assert_ne!(generated_first.instance_id, generated_second.instance_id);
+        assert_ne!(
+            generated_first.bootstrap_token,
+            generated_second.bootstrap_token
+        );
         assert_ne!(generated_first.ready_path, generated_second.ready_path);
     }
 
@@ -517,23 +533,26 @@ mod tests {
     fn ready_record_accepts_only_the_owned_complete_launch() {
         let valid = br#"{"schemaVersion":1,"instanceId":"instance-a","pid":42,"host":"127.0.0.1","preferredPort":3333,"port":49152,"startedAt":"2026-08-03T00:00:00.000Z"}"#;
         assert_eq!(
-            parse_ready_record(valid, "instance-a", 42, 3333).expect("owned ready record"),
+            parse_ready_record(valid, "instance-a", 42, 3333, "bootstrap-a")
+                .expect("owned ready record"),
             ServiceEndpoint {
                 port: 49152,
-                instance_id: "instance-a".to_string()
+                instance_id: "instance-a".to_string(),
+                bootstrap_token: "bootstrap-a".to_string()
             }
         );
-        assert!(parse_ready_record(valid, "instance-b", 42, 3333).is_err());
-        assert!(parse_ready_record(valid, "instance-a", 43, 3333).is_err());
-        assert!(parse_ready_record(valid, "instance-a", 42, 3334).is_err());
+        assert!(parse_ready_record(valid, "instance-b", 42, 3333, "bootstrap-a").is_err());
+        assert!(parse_ready_record(valid, "instance-a", 43, 3333, "bootstrap-a").is_err());
+        assert!(parse_ready_record(valid, "instance-a", 42, 3334, "bootstrap-a").is_err());
         assert!(parse_ready_record(
             br#"{"instanceId":"instance-a","port":49152}"#,
             "instance-a",
             42,
-            3333
+            3333,
+            "bootstrap-a"
         )
         .is_err());
-        assert!(parse_ready_record(br#"{"schemaVersion":1,"instanceId":"instance-a","pid":42,"host":"127.0.0.1","preferredPort":3333,"port":0,"startedAt":"now"}"#, "instance-a", 42, 3333).is_err());
+        assert!(parse_ready_record(br#"{"schemaVersion":1,"instanceId":"instance-a","pid":42,"host":"127.0.0.1","preferredPort":3333,"port":0,"startedAt":"now"}"#, "instance-a", 42, 3333, "bootstrap-a").is_err());
     }
 
     #[test]
@@ -541,6 +560,7 @@ mod tests {
         let endpoint = ServiceEndpoint {
             port: 49152,
             instance_id: "instance-a".to_string(),
+            bootstrap_token: "bootstrap-a".to_string(),
         };
         assert!(health_payload_matches(
             br#"{"status":"ok","instanceId":"instance-a","port":49152}"#,
@@ -647,7 +667,8 @@ mod tests {
             &second,
             ServiceEndpoint {
                 port: 49153,
-                instance_id: second.instance_id.clone()
+                instance_id: second.instance_id.clone(),
+                bootstrap_token: second.bootstrap_token.clone()
             },
         )
         .expect("commits current endpoint"));
@@ -656,7 +677,8 @@ mod tests {
             &first,
             ServiceEndpoint {
                 port: 49152,
-                instance_id: first.instance_id.clone()
+                instance_id: first.instance_id.clone(),
+                bootstrap_token: first.bootstrap_token.clone()
             },
         )
         .expect("rejects stale commit"));
@@ -686,6 +708,7 @@ mod tests {
         let endpoint = ServiceEndpoint {
             port: 49152,
             instance_id: launch.instance_id.clone(),
+            bootstrap_token: launch.bootstrap_token.clone(),
         };
         assert!(
             commit_endpoint_if_current(&state, &launch, endpoint).expect("commits owned endpoint")
@@ -1031,6 +1054,7 @@ fn launch_token(launch: &ManagedLaunch, preferred_port: u16) -> LaunchToken {
     LaunchToken {
         generation: launch.generation,
         instance_id: launch.config.instance_id.clone(),
+        bootstrap_token: launch.config.bootstrap_token.clone(),
         ready_path: launch.config.ready_path.clone(),
         pid: launch.child.id(),
         preferred_port,
@@ -1206,7 +1230,14 @@ fn read_ready_endpoint(token: &LaunchToken) -> Result<Option<ServiceEndpoint>, S
     }
     let bytes = std::fs::read(&token.ready_path)
         .map_err(|error| format!("Unable to read managed service ready record: {error}"))?;
-    parse_ready_record(&bytes, &token.instance_id, token.pid, token.preferred_port).map(Some)
+    parse_ready_record(
+        &bytes,
+        &token.instance_id,
+        token.pid,
+        token.preferred_port,
+        &token.bootstrap_token,
+    )
+    .map(Some)
 }
 
 async fn probe_owned_endpoint(endpoint: &ServiceEndpoint) -> Result<bool, String> {

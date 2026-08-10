@@ -316,6 +316,8 @@ export function resetFirstLaunch(): Promise<void> {
 export interface DesktopServiceEndpoint {
   port: number;
   instanceId: string;
+  /** Per-launch secret delivered only through Tauri IPC. */
+  bootstrapToken?: string;
 }
 
 export type DesktopServiceLifecycleEvent =
@@ -327,9 +329,18 @@ function parseDesktopServiceEndpoint(value: unknown): DesktopServiceEndpoint | n
   const record = recordPayload(value);
   const port = record?.port;
   const instanceId = record?.instanceId;
+  const bootstrapToken = record?.bootstrapToken;
   return Number.isInteger(port) && (port as number) > 0 && (port as number) <= 65535
     && typeof instanceId === 'string' && instanceId.trim().length > 0
-    ? { port: port as number, instanceId }
+    ? {
+        port: port as number,
+        instanceId,
+        ...(typeof bootstrapToken === 'string'
+          && bootstrapToken.length >= 32
+          && bootstrapToken.length <= 200
+          ? { bootstrapToken }
+          : {}),
+      }
     : null;
 }
 

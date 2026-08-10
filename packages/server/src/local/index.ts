@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
@@ -419,6 +419,46 @@ declare module 'fastify' {
   }
 }
 
+const LOOPBACK_BOOTSTRAP_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+function loopbackAuthorityMatchesRequest(
+  rawOrigin: string,
+  rawHost: string | undefined,
+): boolean {
+  if (!rawHost) return false;
+  try {
+    const origin = new URL(rawOrigin);
+    const requestUrl = new URL(`http://${rawHost}`);
+    const originHost = origin.hostname.replace(/^\[|\]$/g, '');
+    const requestHost = requestUrl.hostname.replace(/^\[|\]$/g, '');
+    return origin.protocol === 'http:'
+      && origin.username === ''
+      && origin.password === ''
+      && LOOPBACK_BOOTSTRAP_HOSTS.has(originHost)
+      && LOOPBACK_BOOTSTRAP_HOSTS.has(requestHost)
+      && origin.host === requestUrl.host;
+  } catch {
+    return false;
+  }
+}
+
+function browserBootstrapAuthorityAllowed(request: FastifyRequest): boolean {
+  const rawOrigin = request.headers.origin ?? request.headers.referer;
+  if (!rawOrigin) return true;
+  return loopbackAuthorityMatchesRequest(rawOrigin, request.headers.host);
+}
+
+function desktopBootstrapMatches(
+  rawHeader: string | string[] | undefined,
+  expected: string | null,
+): boolean {
+  if (!expected || typeof rawHeader !== 'string') return false;
+  const actualBytes = Buffer.from(rawHeader);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length
+    && crypto.timingSafeEqual(actualBytes, expectedBytes);
+}
+
 export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const fullConfig: LocalConfig = {
     port: parseInt(process.env.WAGGLE_PORT ?? '3333'),
@@ -428,6 +468,17 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     ...config,
     instanceId: config.instanceId ?? process.env.WAGGLE_INSTANCE_ID,
   };
+  const managedDesktopBootstrap = typeof fullConfig.instanceId === 'string'
+    && fullConfig.instanceId.trim().length > 0;
+  const rawDesktopBootstrapToken = process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN?.trim();
+  // The credential is needed only to bind this server instance to its Tauri
+  // launcher. Remove it before any tool discovery or child process can inherit it.
+  delete process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN;
+  const desktopBootstrapToken = rawDesktopBootstrapToken
+    && rawDesktopBootstrapToken.length >= 32
+    && rawDesktopBootstrapToken.length <= 200
+    ? rawDesktopBootstrapToken
+    : null;
   const resolvedTier = parseTier(String(fullConfig.tier ?? '')) ?? readTierFromDataDir(fullConfig.dataDir);
   fullConfig.tier = resolvedTier;
 
@@ -1092,7 +1143,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       return undefined;
     }
   };
-
   const createWorkspaceCollaborationTools = (
     workerTools: ToolDefinition[],
     runLoop: AgentRunner,
@@ -2594,10 +2644,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     rateLimiter: Object.keys(rateLimiterConfig).length > 0 ? rateLimiterConfig : undefined,
   });
 
-  // D1: session-token bootstrap. Auth-exempt (you cannot require the token to fetch
-  // it) but same-origin gated — a cross-origin page is blocked from reading the
-  // response by CORS and rejected here by isLocalRequest. The Tauri webview reads
-  // this once on connect() and sends the token as a Bearer on every other request.
+  // D1: session-token bootstrap. Managed desktop launches require a random
+  // per-launch credential delivered only through Tauri IPC. An ordinary browser
+  // can forge a tauri.localhost Origin, so Origin alone is not an application
+  // identity. Browser-only mode has no IPC channel and is instead bound to the
+  // exact loopback request authority (host + port).
   server.get('/api/auth/session-token', async (request, reply) => {
     if (!isLoopbackBind()) {
       return reply.code(403).send({
@@ -2605,8 +2656,21 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         code: 'SESSION_BOOTSTRAP_LOOPBACK_ONLY',
       });
     }
-    if (!isLocalRequest(request)) {
-      return reply.code(403).send({ error: 'Forbidden: external origin' });
+    if (managedDesktopBootstrap) {
+      if (!desktopBootstrapMatches(
+        request.headers['x-waggle-desktop-bootstrap'],
+        desktopBootstrapToken,
+      )) {
+        return reply.code(403).send({
+          error: 'Desktop session bootstrap requires the owned launch credential.',
+          code: 'DESKTOP_BOOTSTRAP_REQUIRED',
+        });
+      }
+    } else if (!browserBootstrapAuthorityAllowed(request)) {
+      return reply.code(403).send({
+        error: 'Session bootstrap origin does not match the local service authority.',
+        code: 'SESSION_BOOTSTRAP_ORIGIN_MISMATCH',
+      });
     }
     return { token: server.agentState.wsSessionToken };
   });
