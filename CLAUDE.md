@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-04)
+### Current Release Qualification Contract (2026-08-11)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -62,6 +62,34 @@ WaggleDance, governance) is the upgrade trigger.
   official user authentication and zero unresolved Critical/High findings.
 - Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
   unless the current launch recommendation says GO for that same release.
+
+### Exact-HEAD evidence checkpoint (2026-08-11)
+
+The readiness branch is frozen for evidence at `43fcfdfd6c5141eebf0f1d646d0fb36c0283c8f9`.
+The following gates have current receipts at that exact revision:
+
+- Persona acceptance: 30/30 fresh receipts across the ten launch personas, each 100/100;
+  see `output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/`.
+- Smart router: passed with primary, compact-tool-context, budget, and fallback paths;
+  see `output/smart-router/qualification-20260811-43fcfdfd-retry2.json`.
+- Official user-auth: Claude Code, Codex, and Hermes passed serial isolation and marker
+  checks without copying auth files; see the receipt under
+  `C:/tmp/waggle-readiness-evidence/official-auth-43fcfdfd-20260811/`.
+- Verification: the exact-HEAD full Vitest run exited 0; the 341-test critical lane,
+  13-test performance lane, agent/server/app TypeScript checks, lint, and Tauri cargo
+  check are green. The affected channel suite is 22/22.
+
+The exact-HEAD installer lifecycle and managed-model certificate now passes 59 checks,
+including repair, offline `qwen2.5:0.5b` chat, data preservation, and cleanup; see
+`output/installer-certification/windows-installer-certificate-43fcfdfd-20260811-rerun4-managed.json`.
+The separate internal-pilot-signed exact-HEAD artifact also passes the same 59 checks;
+see `output/installer-certification/windows-installer-certificate-43fcfdfd-20260811-pilot-signed-rerun2.json`.
+Its embedded signer is `E2F028541E7A4D1FE80FFFF02079060D36579846`, but the self-signed root is
+intentionally not trusted on a clean machine, so this is signing-pipeline evidence, not a
+public release signature. Full Vitest, the 341-test critical lane, and the 13-test performance
+lane are also green.
+The remaining blockers are production Authenticode signing and a sealed formal deep
+Codex Security review. Do not promote this checkpoint to GO or 9.5/10.
 
 ### Key Technology Facts (Verified August 2026)
 

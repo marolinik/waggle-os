@@ -14,6 +14,20 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 
 Release status and exact-HEAD receipts are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
+### Readiness snapshot — 2026-08-11
+
+The frozen readiness checkout is currently at `43fcfdfd6c5141eebf0f1d646d0fb36c0283c8f9`.
+The exact-HEAD evidence now includes:
+
+- 10-persona paid acceptance: **30/30 receipts, 100/100 each**, sealed at
+  [`output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/seal.json`](output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/seal.json).
+- Smart-router/runtime qualification: **passed**, Docker not invoked, managed Ollama fallback and compact tool context verified in
+  [`output/smart-router/qualification-20260811-43fcfdfd-retry2.json`](output/smart-router/qualification-20260811-43fcfdfd-retry2.json).
+- Claude Code, Codex, and Hermes official-auth canaries: **passed** without copying auth files in
+  [`official-auth-receipt.json`](C:/tmp/waggle-readiness-evidence/official-auth-43fcfdfd-20260811/official-auth-receipt.json).
+
+The release is **not yet approved**: the exact-HEAD managed-model Windows installer certificate now passes 59 checks, and the full Vitest, critical, and performance lanes are green. An internal-pilot-signed exact-HEAD installer also passes all 59 lifecycle checks, proving the signing pipeline; its self-signed root is not trusted on a clean machine and is not a public release signature. The remaining release blockers are the unsigned/publicly-untrusted NSIS artifact and the unavailable sealed formal deep Codex Security review. These are release-gate facts, not a production-ready claim.
+
 ## Architecture
 
 ```
