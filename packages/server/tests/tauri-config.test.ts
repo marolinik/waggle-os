@@ -570,7 +570,7 @@ describe('Tauri Production Configuration', () => {
       'fast-uri': '3.1.5',
       'ip-address': '10.4.0',
       'find-my-way': '9.7.0',
-      'js-yaml': '4.3.0',
+      'js-yaml': '4.3.1',
       '@huggingface/transformers': { sharp: '0.35.3' },
       next: '16.3.0',
     };
@@ -621,7 +621,7 @@ describe('Tauri Production Configuration', () => {
     expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.5']));
     expect(versionsFor('ip-address')).toEqual(new Set(['10.4.0']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
-    expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.0']));
+    expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
     expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
     expect(versionsFor('better-sqlite3').size).toBe(1);
     const sharpBindings = Object.entries(lockfile.packages)

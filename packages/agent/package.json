@@ -18,6 +18,9 @@
   "files": [
     "dist"
   ],
+  "bundledDependencies": [
+    "pptxgenjs"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run"
