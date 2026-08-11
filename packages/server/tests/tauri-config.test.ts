@@ -190,11 +190,16 @@ describe('Tauri Production Configuration', () => {
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
     const win = conf.app.windows[0];
     expect(win.title).toBe('Waggle');
+    expect(win.create).toBe(false);
     expect(win.width).toBe(1200);
     expect(win.height).toBe(800);
     expect(win.minWidth).toBe(800);
     expect(win.minHeight).toBe(600);
     expect(win.resizable).toBe(true);
+
+    const lib = fs.readFileSync(path.join(TAURI_DIR, 'src', 'lib.rs'), 'utf-8');
+    expect(lib).toContain('WAGGLE_CERTIFIER_WEBVIEW_DEBUG_PORT');
+    expect(lib).toContain('additional_browser_args');
   });
 
   it('tauri.conf.json has the auto-updater intentionally disabled for v1', () => {

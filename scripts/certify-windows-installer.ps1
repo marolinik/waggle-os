@@ -361,8 +361,7 @@ function Start-InstalledApp {
   $info.WorkingDirectory = Split-Path -Parent $ExecutablePath
   Remove-CertificationControlEnvironment $info
   if ($DebugPort -gt 0) {
-    $info.Environment['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] =
-      "--remote-debugging-port=$DebugPort"
+    $info.Environment['WAGGLE_CERTIFIER_WEBVIEW_DEBUG_PORT'] = [string]$DebugPort
   }
   $process = [System.Diagnostics.Process]::new()
   $process.StartInfo = $info

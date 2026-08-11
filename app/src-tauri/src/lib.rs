@@ -59,6 +59,52 @@ pub fn run() {
             commands::onboarding::reset_first_launch,
         ])
         .setup(|app| {
+            // Create the configured window here so the Windows certifier can
+            // opt into a loopback-only WebView CDP port without shipping
+            // remote debugging enabled for normal launches.
+            let main_window_config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .cloned()
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "configured main window is missing",
+                    )
+                })?;
+            let mut main_window = tauri::WebviewWindowBuilder::from_config(
+                app.handle(),
+                &main_window_config,
+            )?;
+            #[cfg(windows)]
+            if let Some(raw_port) = std::env::var_os("WAGGLE_CERTIFIER_WEBVIEW_DEBUG_PORT") {
+                let raw_port = raw_port.to_string_lossy();
+                let port = raw_port.parse::<u16>().map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "WAGGLE_CERTIFIER_WEBVIEW_DEBUG_PORT must be an integer",
+                    )
+                })?;
+                if port < 1024 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "WAGGLE_CERTIFIER_WEBVIEW_DEBUG_PORT must be >= 1024",
+                    )
+                    .into());
+                }
+                let browser_args = format!(
+                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
+                );
+                main_window = main_window.additional_browser_args(&browser_args);
+                eprintln!(
+                    "[waggle] WebView certifier debug endpoint enabled on 127.0.0.1:{port}"
+                );
+            }
+            main_window.build()?;
+
             tray::setup_tray(app.handle())?;
 
             // Register global hotkey: Ctrl+Shift+W to toggle window visibility
