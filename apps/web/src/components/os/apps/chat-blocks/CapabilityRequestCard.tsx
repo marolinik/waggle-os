@@ -10,6 +10,8 @@ export interface CapabilityRequest {
   source: string;
   kind?: 'skill' | 'marketplace' | 'connector' | 'mcp';
   reason?: string;
+  packageId?: number;
+  installType?: 'skill' | 'plugin' | 'mcp';
   /** Reserved parser metadata; not authorized by the current card contract. */
   connectorId?: string;
   /** Reserved parser metadata; not authorized by the current card contract. */
@@ -38,8 +40,13 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
   const { install } = useInstallStore();
 
   const kind = request.kind;
+  const marketplaceIdentity = Number.isSafeInteger(request.packageId)
+    && (request.packageId ?? 0) > 0
+    && (request.installType === 'skill'
+      || request.installType === 'plugin'
+      || request.installType === 'mcp');
   const supportedRoute = (request.source === 'starter-pack' && kind === 'skill')
-    || (request.source === 'marketplace' && kind === 'marketplace');
+    || (request.source === 'marketplace' && kind === 'marketplace' && marketplaceIdentity);
   const isMarketplace = request.source === 'marketplace' && kind === 'marketplace';
   const isStarter = request.source === 'starter-pack' && kind === 'skill';
 
@@ -63,20 +70,10 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
     setErrorMessage(null);
     try {
       if (isMarketplace) {
-        // Marketplace search is fuzzy: authorization requires one exact match,
-        // never whichever result happens to sort first.
-        const searchRes = await adapter.searchMarketplace(request.name, 20);
-        const searchData = await searchRes.json().catch(() => ({ packages: [] }));
-        const exactMatches = (searchData.packages ?? []).filter(
-          (pkg: { name?: unknown }) => pkg.name === request.name,
-        ) as Array<{ id?: number; name: string; waggle_install_type?: string }>;
-        if (exactMatches.length !== 1 || !exactMatches[0]?.id) {
-          throw new Error(`Marketplace package "${request.name}" did not resolve to one exact match`);
-        }
-        const pkg = exactMatches[0];
+        const packageId = request.packageId!;
         const target: InstallTarget = {
-          id: `pkg:${pkg.id}`, type: pkg.waggle_install_type === 'mcp' ? 'mcp' : 'skill',
-          kind: 'package', name: request.name, packageId: pkg.id,
+          id: `pkg:${packageId}`, type: request.installType === 'mcp' ? 'mcp' : 'skill',
+          kind: 'package', name: request.name, packageId,
         };
         applyOutcome(await install(target));
         return;

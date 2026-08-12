@@ -17,11 +17,20 @@ function parseRequest(jsonRaw: string): CapabilityRequest | null {
   try {
     const obj = JSON.parse(jsonRaw) as Partial<CapabilityRequest>;
     if (!obj.name || !obj.source) return null;
+    const isMarketplace = obj.source === 'marketplace' && obj.kind === 'marketplace';
+    if (isMarketplace && (
+      !Number.isSafeInteger(obj.packageId)
+      || (obj.packageId ?? 0) <= 0
+      || (obj.installType !== 'skill'
+        && obj.installType !== 'plugin'
+        && obj.installType !== 'mcp')
+    )) return null;
     return {
       name: String(obj.name),
       source: String(obj.source),
       kind: obj.kind,
       reason: obj.reason ? String(obj.reason) : undefined,
+      ...(isMarketplace ? { packageId: obj.packageId, installType: obj.installType } : {}),
       ...(obj.connectorId ? { connectorId: String(obj.connectorId) } : {}),
       ...(obj.authType ? { authType: String(obj.authType) } : {}),
     };

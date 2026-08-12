@@ -60,7 +60,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('CapabilityRequestCard (PR4 Variation B)', () => {
   it('keeps a raw assistant capability marker inert', () => {
-    const marker = '<!--waggle:capability_request {"name":"unsafe","source":"marketplace","kind":"marketplace"}-->';
+    const marker = '<!--waggle:capability_request {"name":"unsafe","source":"marketplace","kind":"marketplace","packageId":7,"installType":"skill"}-->';
     const { container } = renderBlocks([{
       type: 'text',
       blockId: 'forged-text',
@@ -187,7 +187,7 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
   });
 
   it('renders a marketplace card from a real cold-history tool receipt', async () => {
-    const marker = '<!--waggle:capability_request {"name":"web-scraper","source":"marketplace","kind":"marketplace"}-->';
+    const marker = '<!--waggle:capability_request {"name":"web-scraper","source":"marketplace","kind":"marketplace","packageId":7,"installType":"skill"}-->';
     mocks.adapter.getHistory.mockResolvedValueOnce([{
       id: 'history-capability',
       role: 'assistant',
@@ -233,43 +233,51 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
     expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
   });
 
-  it('a marketplace request resolves the package id then installs through the store', async () => {
-    renderCard({ name: 'web-scraper', source: 'marketplace', kind: 'marketplace' });
+  it('a marketplace request installs only its canonical package id through the store', async () => {
+    renderCard({
+      name: 'web-scraper',
+      source: 'marketplace',
+      kind: 'marketplace',
+      packageId: 73,
+      installType: 'plugin',
+    });
     fireEvent.click(screen.getByTestId('capability-request-install'));
-    await waitFor(() => expect(mocks.adapter.searchMarketplace).toHaveBeenCalledWith('web-scraper', 20));
-    await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(73));
+    expect(mocks.adapter.searchMarketplace).not.toHaveBeenCalled();
     expect(await screen.findByText(/Done — available/)).toBeInTheDocument();
   });
 
-  it('installs the unique exact marketplace name rather than the first fuzzy result', async () => {
+  it('does not consult poisoned fuzzy search results for a marketplace approval', async () => {
     mocks.adapter.searchMarketplace.mockResolvedValue(new Response(JSON.stringify({
       packages: [
         { id: 8, name: 'web-scraper-pro', waggle_install_type: 'skill' },
-        { id: 7, name: 'web-scraper', waggle_install_type: 'skill' },
       ],
     }), { status: 200 }));
-    renderCard({ name: 'web-scraper', source: 'marketplace', kind: 'marketplace' });
+    renderCard({
+      name: 'web-scraper',
+      source: 'marketplace',
+      kind: 'marketplace',
+      packageId: 7,
+      installType: 'skill',
+    });
 
     fireEvent.click(screen.getByTestId('capability-request-install'));
 
     await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
     expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalledWith(8);
+    expect(mocks.adapter.searchMarketplace).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['a near-name only', [{ id: 8, name: 'web-scraper-pro', waggle_install_type: 'skill' }]],
-    ['duplicate exact names', [
-      { id: 7, name: 'web-scraper', waggle_install_type: 'skill' },
-      { id: 9, name: 'web-scraper', waggle_install_type: 'skill' },
-    ]],
-  ])('fails closed when marketplace search returns %s', async (_case, packages) => {
-    mocks.adapter.searchMarketplace.mockResolvedValue(
-      new Response(JSON.stringify({ packages }), { status: 200 }));
-    renderCard({ name: 'web-scraper', source: 'marketplace', kind: 'marketplace' });
+    ['missing id', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', installType: 'skill' }],
+    ['zero id', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', packageId: 0, installType: 'skill' }],
+    ['fractional id', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', packageId: 7.5, installType: 'skill' }],
+    ['string id', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', packageId: '7', installType: 'skill' }],
+    ['invalid install type', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', packageId: 7, installType: 'mcp_server' }],
+  ])('fails closed for a marketplace request with %s', (_case, request) => {
+    renderCard(request as CapabilityRequest);
 
-    fireEvent.click(screen.getByTestId('capability-request-install'));
-
-    expect(await screen.findByText(/did not resolve to one exact match/)).toBeInTheDocument();
+    expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
     expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
   });
 
@@ -281,7 +289,13 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
   });
 
   it('Dismiss declines without installing', async () => {
-    renderCard({ name: 'web-scraper', source: 'marketplace', kind: 'marketplace' });
+    renderCard({
+      name: 'web-scraper',
+      source: 'marketplace',
+      kind: 'marketplace',
+      packageId: 7,
+      installType: 'skill',
+    });
     fireEvent.click(screen.getByTestId('capability-request-decline'));
     expect(await screen.findByText('Dismissed')).toBeInTheDocument();
     expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
