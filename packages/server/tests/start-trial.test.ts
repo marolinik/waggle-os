@@ -225,6 +225,7 @@ describe('D1 loopback auth + session-token bootstrap', () => {
       headers: { 'x-waggle-desktop-bootstrap': desktopBootstrap },
     });
     expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
     const token = res.json().token as string;
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
@@ -280,6 +281,61 @@ describe('D1 loopback auth + session-token bootstrap', () => {
       },
     });
     expect(sameOrigin.statusCode).toBe(200);
+
+    for (const headers of [
+      {
+        host: '127.0.0.1:3333',
+        origin: 'http://127.0.0.1:3333',
+        'sec-fetch-site': 'none',
+      },
+      {
+        host: '127.0.0.1:3333',
+        referer: 'http://127.0.0.1:3333/app',
+        'sec-fetch-site': 'none',
+      },
+    ]) {
+      const inconsistent = await server.inject({
+        method: 'GET',
+        url: '/api/auth/session-token',
+        headers,
+      });
+      expect(inconsistent.statusCode).toBe(403);
+      expect(inconsistent.json().code).toBe('SESSION_BOOTSTRAP_ORIGIN_MISMATCH');
+    }
+  });
+
+  it('rejects originless top-level and MV3 requests at the browser-mode process-token bootstrap', async () => {
+    await server.close();
+    delete process.env.WAGGLE_INSTANCE_ID;
+    delete process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN;
+    server = await buildLocalServer({ dataDir: tmpDir });
+
+    for (const headers of [
+      { host: '127.0.0.1:3333', 'sec-fetch-site': 'none' },
+      {
+        host: '127.0.0.1:3333',
+        'sec-fetch-site': 'none',
+        'x-waggle-extension-id': 'abcdefghijklmnopabcdefghijklmnop',
+      },
+    ]) {
+      const res = await server.inject({
+        method: 'GET',
+        url: '/api/auth/session-token',
+        headers,
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('SESSION_BOOTSTRAP_ORIGIN_MISMATCH');
+    }
+
+    const sameOriginFetch = await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: {
+        host: '127.0.0.1:3333',
+        'sec-fetch-site': 'same-origin',
+      },
+    });
+    expect(sameOriginFetch.statusCode).toBe(200);
   });
 
   it('does not expose the process bearer when the sidecar is non-loopback-bound', async () => {

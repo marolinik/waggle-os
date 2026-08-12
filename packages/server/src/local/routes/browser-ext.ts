@@ -41,7 +41,8 @@ export async function browserExtRoutes(server: FastifyInstance) {
       });
     }
 
-    return { token: server.agentState.wsSessionToken };
+    reply.header('Cache-Control', 'no-store');
+    return { token: server.agentState.browserCompanionToken };
   });
 
   server.get('/api/browser-ext/health', async () => {

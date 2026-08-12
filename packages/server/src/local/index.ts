@@ -367,6 +367,8 @@ export interface AgentState {
   llmProvider: LlmProviderStatus;
   /** Session token for WebSocket authentication (generated on server startup) */
   wsSessionToken: string;
+  /** Narrow Browser Companion token for health and personal-memory capture only. */
+  browserCompanionToken: string;
   /** Memory-weaver run timestamps for the personal mind. */
   weaverState: { lastPersonalConsolidation: string | null; lastPersonalDecay: string | null };
   /** Per-workspace memory-weaver run timestamps, keyed by workspace ID. */
@@ -443,8 +445,10 @@ function loopbackAuthorityMatchesRequest(
 }
 
 function browserBootstrapAuthorityAllowed(request: FastifyRequest): boolean {
+  const secFetchSite = request.headers['sec-fetch-site'];
+  if (secFetchSite !== undefined && secFetchSite !== 'same-origin') return false;
   const rawOrigin = request.headers.origin ?? request.headers.referer;
-  if (!rawOrigin) return true;
+  if (!rawOrigin) return secFetchSite === 'same-origin';
   return loopbackAuthorityMatchesRequest(rawOrigin, request.headers.host);
 }
 
@@ -682,6 +686,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // ── Agent state (matches CLI initialization) ────────────────────────
   const wsSessionToken = crypto.randomBytes(32).toString('hex');
+  const browserCompanionToken = crypto.randomBytes(32).toString('hex');
   const litellmApiKey = fullConfig.useBuiltInProxy
     ? wsSessionToken
     : process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
@@ -1668,6 +1673,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       checkedAt: new Date().toISOString(),
     },
     wsSessionToken,
+    browserCompanionToken,
   });
   activateWorkspaceMindWithWeaver(defaultWorkspaceId);
 
@@ -2640,6 +2646,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   };
   await server.register(securityMiddleware, {
     sessionToken: server.agentState.wsSessionToken,
+    browserCompanionToken: server.agentState.browserCompanionToken,
     authenticateRunToken: (token) => {
       const run = agentRunRegistry.authenticateCredential(token);
       if (!run) return false;
@@ -2676,6 +2683,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         code: 'SESSION_BOOTSTRAP_ORIGIN_MISMATCH',
       });
     }
+    reply.header('Cache-Control', 'no-store');
     return { token: server.agentState.wsSessionToken };
   });
 

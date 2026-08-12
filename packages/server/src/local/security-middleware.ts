@@ -299,6 +299,8 @@ export interface SecurityMiddlewareOpts {
   rateLimiter?: RateLimiterConfig;
   /** Session token for bearer auth. When set, all non-exempt routes require Authorization header. */
   sessionToken?: string;
+  /** Narrow Browser Companion credential for health and personal-memory capture only. */
+  browserCompanionToken?: string;
   /** Validate a narrow per-run credential for WaggleDance and one model-completion route. */
   authenticateRunToken?: (token: string) => RunTokenAuthResult;
 }
@@ -652,6 +654,8 @@ async function securityMiddlewarePlugin(
 ) {
   const limiter = new RateLimiter(opts.rateLimiter);
   const sessionToken = opts.sessionToken ?? null;
+  const browserCompanionToken = opts.browserCompanionToken ?? null;
+  const browserCompanionRequests = new WeakSet<FastifyRequest>();
 
   // R2-004: when bound to loopback, reject requests whose Host header is not a
   // known-local name. This defeats DNS-rebinding, which would otherwise let a
@@ -721,6 +725,15 @@ async function securityMiddlewarePlugin(
       const runToken = typeof rawRunToken === 'string' ? rawRunToken : undefined;
       const authHeader = request.headers.authorization;
       const bearerToken = bearerTokenFromAuth(authHeader);
+      const browserCompanionEligible = browserCompanionToken !== null
+        && bearerToken === browserCompanionToken
+        && (
+          (request.method === 'GET' && requestPath === '/api/browser-ext/health')
+          || (request.method === 'POST' && requestPath === '/api/memory/frames')
+        );
+      if (browserCompanionEligible) {
+        browserCompanionRequests.add(request);
+      }
       const runTokenEligible = RUN_TOKEN_METHODS.get(requestPath) === request.method;
       const headerRunTokenSnapshot = runTokenEligible && runToken
         ? runTokenAuthSnapshot(opts.authenticateRunToken?.(runToken))
@@ -736,7 +749,7 @@ async function securityMiddlewarePlugin(
       const headerRunTokenValid = Boolean(headerRunTokenSnapshot);
       const bearerRunTokenValid = Boolean(bearerRunTokenSnapshot);
       const runTokenValid = headerRunTokenValid || bearerRunTokenValid;
-      if (!isAuthExempt && !runTokenValid) {
+      if (!isAuthExempt && !runTokenValid && !browserCompanionEligible) {
         // P1b-SSE: header-less GETs on the SSE allowlist may authenticate via
         // `?token=` (EventSource cannot send headers). A header, when present,
         // always wins — the query path is a fallback transport, not an
@@ -807,6 +820,29 @@ async function securityMiddlewarePlugin(
   // not only /api/chat. Resolve the persisted workspace role after Fastify has
   // parsed params/body/query, then stop before any route handler can mutate.
   fastify.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (browserCompanionRequests.has(request) && request.method === 'POST') {
+      const body = request.body;
+      const isRecord = body !== null && typeof body === 'object' && !Array.isArray(body);
+      const payload = isRecord ? body as Record<string, unknown> : null;
+      const targetsWorkspace = payload !== null && (
+        Object.prototype.hasOwnProperty.call(payload, 'workspace')
+        || Object.prototype.hasOwnProperty.call(payload, 'workspaceId')
+      );
+      const sourceEscalates = payload !== null
+        && Object.prototype.hasOwnProperty.call(payload, 'source')
+        && payload.source !== 'import';
+      const importanceEscalates = payload !== null
+        && Object.prototype.hasOwnProperty.call(payload, 'importance')
+        && payload.importance !== 'normal'
+        && payload.importance !== 'low';
+      if (!payload || targetsWorkspace || sourceEscalates || importanceEscalates) {
+        return reply.code(403).send({
+          error: 'Browser Companion is limited to personal imported-memory capture.',
+          code: 'BROWSER_COMPANION_SCOPE_VIOLATION',
+        });
+      }
+    }
+
     for (const workspaceId of mutationWorkspaceIds(request, fastify)) {
       const workspace = fastify.workspaceManager?.get(workspaceId);
       if (workspace?.teamId && workspace.teamRole === 'viewer') {
