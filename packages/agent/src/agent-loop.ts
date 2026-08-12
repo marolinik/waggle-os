@@ -20,6 +20,7 @@ import type {
   ModelSpendBillingClass,
   ModelSpendReservation,
 } from './cost-tracker.js';
+import { MODEL_SPEND_RESERVATION_HEADER } from './cost-tracker.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 type PluginToolCandidate = Omit<ToolDefinition, 'riskLevel'> & { riskLevel?: unknown };
@@ -60,6 +61,8 @@ export interface AgentLoopConfig {
   /** Set to free only after the server has verified the route is offline/free. */
   modelSpendBillingClass?: ModelSpendBillingClass;
   spendWorkspaceId?: string;
+  /** Existing durable trace that must own self-proxy spend before dispatch. */
+  modelSpendTraceId?: number;
   systemPrompt: string;
   tools: ToolDefinition[];
   messages: Array<{ role: string; content: string }>;
@@ -606,17 +609,38 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       workspaceId: config.spendWorkspaceId,
       billingClass: config.modelSpendBillingClass,
     });
+    const reservationHandoff = spendReservation
+      ? config.modelSpendBudget?.issueModelSpendReservationHandoff?.(
+          spendReservation,
+          JSON.stringify(body),
+          litellmUrl,
+          config.modelSpendTraceId ?? config.traceRecording?.handle.id,
+        )
+      : undefined;
     try {
       response = await fetchFn(`${litellmUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${litellmApiKey}`,
+          ...(reservationHandoff
+            ? { [MODEL_SPEND_RESERVATION_HEADER]: reservationHandoff.token }
+            : {}),
         },
         body: JSON.stringify(body),
         signal: requestSignal,
       });
     } catch (netErr) {
+      if (reservationHandoff) {
+        const handoffDisposition = config.modelSpendBudget?.takeModelSpendReservationHandoffDisposition?.(
+          reservationHandoff.token,
+        );
+        config.modelSpendBudget?.discardModelSpendReservationHandoff?.(reservationHandoff.token);
+        if (handoffDisposition === 'release' && spendReservation) {
+          config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
+          spendReservation = undefined;
+        }
+      }
       if (spendReservation) {
         config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
         spendReservation = undefined;
@@ -637,6 +661,16 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       continue;
     }
 
+    if (reservationHandoff) {
+      const handoffDisposition = config.modelSpendBudget?.takeModelSpendReservationHandoffDisposition?.(
+        reservationHandoff.token,
+      );
+      config.modelSpendBudget?.discardModelSpendReservationHandoff?.(reservationHandoff.token);
+      if (handoffDisposition === 'release' && spendReservation) {
+        config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
+        spendReservation = undefined;
+      }
+    }
     if (!response.ok) {
       const action = await handleNonOkResponse(response, retryState);
       if (spendReservation) {

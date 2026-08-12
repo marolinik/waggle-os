@@ -15,32 +15,54 @@ import type { FastifyInstance } from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { CostTracker, runAgentLoop } from '@waggle/agent';
+import { ExecutionTraceStore, MindDB } from '@waggle/core';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { anthropicProxyRoutes } from '../../src/local/routes/anthropic-proxy.js';
 import { securityMiddleware, type RunTokenAuthResult } from '../../src/local/security-middleware.js';
 import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
+const MODEL_SPEND_RESERVATION_HEADER = 'x-waggle-model-spend-reservation';
+
 function createTestServer(options: {
   vaultApiKey?: string;
   vaultProviders?: Record<string, { value: string; metadata?: Record<string, unknown> }>;
+  vaultGet?: (name: string) => { value: string; metadata?: Record<string, unknown> } | null;
   envApiKey?: string;
   configApiKey?: string;
   dataDir?: string;
   sessionToken?: string;
   authenticateRunToken?: (token: string) => RunTokenAuthResult;
+  costTracker?: CostTracker;
+  traceStore?: FastifyInstance['traceStore'];
+  registerSpendTarget?: string;
 } = {}) {
   const server = Fastify({ logger: false });
 
   // Mock vault
-  if (options.vaultApiKey || options.vaultProviders) {
+  if (options.vaultApiKey || options.vaultProviders || options.vaultGet) {
     server.decorate('vault', {
       get: (name: string) => {
+        if (options.vaultGet) return options.vaultGet(name);
         if (name === 'anthropic' && options.vaultApiKey) return { value: options.vaultApiKey };
         return options.vaultProviders?.[name] ?? null;
       },
     });
   } else {
     server.decorate('vault', null);
+  }
+
+  if (options.costTracker) {
+    server.decorate('agentState', {
+      costTracker: options.costTracker,
+    } as FastifyInstance['agentState']);
+    if (options.registerSpendTarget) {
+      options.costTracker.registerModelSpendReservationTarget(options.registerSpendTarget);
+    }
+  }
+
+  if (options.traceStore) {
+    server.decorate('traceStore', options.traceStore);
   }
 
   // Mock localConfig (needed by getAnthropicKey for config.json fallback)
@@ -417,6 +439,986 @@ describe('Anthropic Proxy Routes', () => {
   // ── POST /v1/chat/completions ─────────────────────────────────
 
   describe('POST /v1/chat/completions (non-streaming)', () => {
+    it('rejects a paid provider request before dispatch when the shared hard cap is exhausted', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.000001, 'hard');
+      server = createTestServer({
+        vaultApiKey: 'test-key-budget-cap',
+        costTracker,
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'must not dispatch' }],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Do not cross the configured daily model budget.' }],
+          max_tokens: 4096,
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(429);
+      expect(response.json()).toMatchObject({
+        error: { code: 'DAILY_MODEL_BUDGET_EXCEEDED' },
+      });
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('accepts exactly one request-bound reservation handoff without double charging', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'soft');
+      server = createTestServer({
+        vaultApiKey: 'test-key-reservation-handoff',
+        costTracker,
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'reserved once' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const body = {
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user' as const, content: 'Use the already reserved provider call.' }],
+        max_tokens: 4096,
+        stream: false,
+      };
+      const estimatedInputTokens = Math.max(1, Math.ceil(JSON.stringify({
+        messages: body.messages,
+        tools: [],
+      }).length / 4));
+      const reservation = costTracker.reserveModelSpend({
+        model: body.model,
+        inputTokens: estimatedInputTokens,
+        maxOutputTokens: body.max_tokens,
+        billingClass: 'priced',
+      });
+      const targetUrl = 'http://127.0.0.1:3333/v1';
+      costTracker.registerModelSpendReservationTarget(targetUrl);
+      const handoff = costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        targetUrl,
+      );
+      expect(handoff).toBeDefined();
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: { [MODEL_SPEND_RESERVATION_HEADER]: handoff!.token },
+        payload: body,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      expect(costTracker.getReservedDailyTotal()).toBeGreaterThan(0);
+      expect(costTracker.getDailyTotal()).toBe(0);
+      expect(costTracker.reconcileModelSpend(reservation, {
+        inputTokens: 10,
+        outputTokens: 10,
+      })).toBe(true);
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+      expect(costTracker.getDailyTotal()).toBeGreaterThan(0);
+    });
+
+    it('registers only the actual listening self-proxy target and revokes it on close', async () => {
+      const costTracker = new CostTracker();
+      server = createTestServer({
+        vaultApiKey: 'test-key-lifecycle-handoff',
+        costTracker,
+      });
+      await server.listen({ host: '127.0.0.1', port: 0 });
+      const address = server.server.address();
+      if (!address || typeof address === 'string') throw new Error('Test server did not bind TCP');
+      const targetUrl = `http://127.0.0.1:${address.port}/v1`;
+      const body = {
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user' as const, content: 'Bind this token to the active proxy.' }],
+        max_tokens: 64,
+        stream: false,
+      };
+      const reservation = costTracker.reserveModelSpend({
+        model: body.model,
+        inputTokens: 12,
+        maxOutputTokens: body.max_tokens,
+      });
+
+      expect(costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        targetUrl,
+      )).toBeDefined();
+      expect(costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        `${targetUrl}/`,
+      )).toBeUndefined();
+      expect(costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        `http://127.0.0.1:${address.port + 1}/v1`,
+      )).toBeUndefined();
+      expect(costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        'https://router.example/v1',
+      )).toBeUndefined();
+
+      await server.close();
+      expect(costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        targetUrl,
+      )).toBeUndefined();
+      costTracker.releaseReservedModelSpend(reservation);
+    });
+
+    it('claims a reservation handoff once and rejects replay', () => {
+      const costTracker = new CostTracker();
+      const targetUrl = 'http://127.0.0.1:3333/v1';
+      const binding = JSON.stringify({ model: 'claude-sonnet-4-6', messages: [] });
+      costTracker.registerModelSpendReservationTarget(targetUrl);
+      const reservation = costTracker.reserveModelSpend({
+        model: 'claude-sonnet-4-6',
+        inputTokens: 1,
+        maxOutputTokens: 1,
+      });
+      const handoff = costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        binding,
+        targetUrl,
+      );
+
+    expect(costTracker.claimModelSpendReservationHandoff(handoff!.token, binding)).toMatchObject({
+      reservation,
+      estimatedCostUsd: expect.any(Number),
+    });
+      expect(costTracker.claimModelSpendReservationHandoff(handoff!.token, binding)).toBeUndefined();
+      costTracker.releaseReservedModelSpend(reservation);
+    });
+
+  it('allows only one live handoff token per reservation', () => {
+    const costTracker = new CostTracker();
+    const targetUrl = 'http://127.0.0.1:3333/v1';
+    const binding = JSON.stringify({ model: 'claude-sonnet-4-6', messages: [] });
+    costTracker.registerModelSpendReservationTarget(targetUrl);
+    const reservation = costTracker.reserveModelSpend({
+      model: 'claude-sonnet-4-6',
+      inputTokens: 1,
+      maxOutputTokens: 1,
+    });
+
+    const first = costTracker.issueModelSpendReservationHandoff(
+      reservation,
+      binding,
+      targetUrl,
+    );
+    const second = costTracker.issueModelSpendReservationHandoff(
+      reservation,
+      binding,
+      targetUrl,
+    );
+    const claims = [first, second].filter((handoff) => (
+      handoff
+      && costTracker.claimModelSpendReservationHandoff(handoff.token, binding) !== undefined
+    ));
+
+    expect(first).toBeDefined();
+    expect(second).toBeUndefined();
+    expect(claims).toHaveLength(1);
+    costTracker.releaseReservedModelSpend(reservation);
+  });
+
+  it('hands an AgentLoop reservation to the local proxy and settles it exactly once', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'hard');
+      const traceStore = {
+        start: vi.fn(() => 75),
+        reserveCost: vi.fn(() => 91),
+        settleReservedCost: vi.fn(() => true),
+        releaseReservedCost: vi.fn(() => true),
+        recordCost: vi.fn(),
+        finalize: vi.fn(),
+      } as unknown as FastifyInstance['traceStore'];
+    server = createTestServer({
+      vaultApiKey: 'test-key-agent-loop-handoff',
+      costTracker,
+      traceStore,
+      registerSpendTarget: 'http://127.0.0.1:3333/v1',
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'one owner' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+      const localFetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const injected = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: Object.fromEntries(new Headers(init?.headers).entries()),
+          payload: JSON.parse(String(init?.body)),
+        });
+        return new Response(injected.body, {
+          status: injected.statusCode,
+          headers: { 'content-type': injected.headers['content-type'] ?? 'application/json' },
+        });
+      }) as unknown as typeof globalThis.fetch;
+
+      const result = await runAgentLoop({
+        litellmUrl: 'http://127.0.0.1:3333/v1',
+        litellmApiKey: 'local-token',
+        model: 'claude-sonnet-4-6',
+        systemPrompt: 'Answer directly.',
+        messages: [{ role: 'user', content: 'Prove single reservation ownership.' }],
+        tools: [],
+        fetch: localFetch,
+        stream: false,
+        maxOutputTokens: 4096,
+        verificationGate: false,
+        skillDistillationGate: false,
+        modelSpendBudget: costTracker,
+        modelSpendTraceId: 75,
+      });
+
+      expect(result.content).toBe('one owner');
+      expect(localFetch).toHaveBeenCalledOnce();
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+      expect(costTracker.getDailyTotal()).toBeGreaterThan(0);
+      expect(traceStore.reserveCost).toHaveBeenCalledWith(75, expect.any(Number));
+      expect(traceStore.settleReservedCost).toHaveBeenCalledWith(91, expect.any(Number));
+      expect(traceStore.releaseReservedCost).not.toHaveBeenCalled();
+      expect(traceStore.start).not.toHaveBeenCalled();
+      expect(traceStore.recordCost).not.toHaveBeenCalled();
+      expect(traceStore.finalize).not.toHaveBeenCalled();
+  });
+
+  it('persists an AgentLoop handoff before provider dispatch and settles it once', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-proxy-spend-restart-'));
+    const dbPath = path.join(dataDir, 'personal.mind');
+    const mind = new MindDB(dbPath);
+    const traceStore = new ExecutionTraceStore(mind);
+    const traceId = traceStore.start({
+      sessionId: 'caller-session',
+      model: 'claude-sonnet-4-6',
+      input: 'Persist the reservation before dispatch.',
+    });
+    const costTracker = new CostTracker();
+    costTracker.setBudget(0.07, 'hard');
+    server = createTestServer({
+      vaultApiKey: 'test-key-durable-agent-loop-handoff',
+      costTracker,
+      traceStore,
+    });
+    await server.listen({ host: '127.0.0.1', port: 0 });
+    const address = server.server.address();
+    if (!address || typeof address === 'string') throw new Error('Test server did not bind TCP');
+
+    let signalProviderStarted!: () => void;
+    const providerStarted = new Promise<void>((resolve) => { signalProviderStarted = resolve; });
+    let resolveProvider!: (response: Response) => void;
+    const providerResponse = new Promise<Response>((resolve) => { resolveProvider = resolve; });
+    let providerReleased = false;
+    globalThis.fetch = vi.fn(async () => {
+      signalProviderStarted();
+      return providerResponse;
+    }) as unknown as typeof globalThis.fetch;
+
+    const run = runAgentLoop({
+      litellmUrl: `http://127.0.0.1:${address.port}/v1`,
+      litellmApiKey: 'local-token',
+      model: 'claude-sonnet-4-6',
+      systemPrompt: 'Answer directly.',
+      messages: [{ role: 'user', content: 'Persist before dispatch.' }],
+      tools: [],
+      fetch: originalFetch,
+      stream: false,
+      maxOutputTokens: 64,
+      verificationGate: false,
+      skillDistillationGate: false,
+      modelSpendBudget: costTracker,
+      modelSpendTraceId: traceId,
+    });
+
+    try {
+      await providerStarted;
+      const restartedMind = new MindDB(dbPath);
+      const restartedStore = new ExecutionTraceStore(restartedMind);
+      const pendingTotal = restartedStore.getTotalCostSince('2000-01-01T00:00:00.000Z');
+      const pendingRows = restartedMind.getDatabase().prepare(`
+        SELECT trace_id AS traceId, state, estimated_cost_usd AS estimatedCostUsd
+        FROM execution_trace_spend_reservations
+      `).all() as Array<{ traceId: number; state: string; estimatedCostUsd: number }>;
+      restartedMind.close();
+
+      providerReleased = true;
+      resolveProvider(new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'durably settled' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      const result = await run;
+
+      const finalReservations = mind.getDatabase().prepare(`
+        SELECT trace_id AS traceId, state, actual_cost_usd AS actualCostUsd
+        FROM execution_trace_spend_reservations
+      `).all() as Array<{ traceId: number; state: string; actualCostUsd: number }>;
+      const settledLedger = mind.getDatabase().prepare(`
+        SELECT COUNT(*) AS entries, COALESCE(SUM(cost_usd), 0) AS total
+        FROM execution_trace_spend
+        WHERE trace_id = ?
+      `).get(traceId) as { entries: number; total: number };
+
+      expect(pendingTotal).toBeGreaterThan(0);
+      expect(pendingRows).toEqual([
+        expect.objectContaining({ traceId, state: 'pending', estimatedCostUsd: expect.any(Number) }),
+      ]);
+      expect(result.content).toBe('durably settled');
+      expect(finalReservations).toEqual([
+        expect.objectContaining({ traceId, state: 'settled', actualCostUsd: expect.any(Number) }),
+      ]);
+      expect(finalReservations[0]!.actualCostUsd).toBeGreaterThan(0);
+      expect(settledLedger.entries).toBe(1);
+      expect(settledLedger.total).toBeCloseTo(finalReservations[0]!.actualCostUsd);
+      expect(traceStore.get(traceId)?.cost_usd).toBeCloseTo(settledLedger.total);
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+    } finally {
+      if (!providerReleased) {
+        resolveProvider(new Response(JSON.stringify({ error: 'test cleanup' }), { status: 500 }));
+      }
+      await run.catch(() => undefined);
+      mind.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+    it('hands AgentLoop ownership to the self-proxy on its actual listening port', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'hard');
+      const traceStore = {
+        reserveCost: vi.fn(() => 92),
+        settleReservedCost: vi.fn(() => true),
+        releaseReservedCost: vi.fn(() => true),
+      } as unknown as FastifyInstance['traceStore'];
+      server = createTestServer({
+        vaultApiKey: 'test-key-real-port-handoff',
+        costTracker,
+        traceStore,
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'actual port owner' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 10 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+      await server.listen({ host: '127.0.0.1', port: 0 });
+      const address = server.server.address();
+      if (!address || typeof address === 'string') throw new Error('Test server did not bind TCP');
+
+      const result = await runAgentLoop({
+        litellmUrl: `http://127.0.0.1:${address.port}/v1`,
+        litellmApiKey: 'local-token',
+        model: 'claude-sonnet-4-6',
+        systemPrompt: 'Answer directly.',
+        messages: [{ role: 'user', content: 'Prove actual-port ownership.' }],
+        tools: [],
+        fetch: originalFetch,
+        stream: false,
+        maxOutputTokens: 4096,
+        verificationGate: false,
+        skillDistillationGate: false,
+        modelSpendBudget: costTracker,
+        modelSpendTraceId: 76,
+      });
+
+      expect(result.content).toBe('actual port owner');
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+      expect(costTracker.getDailyTotal()).toBeGreaterThan(0);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      expect(traceStore.reserveCost).toHaveBeenCalledWith(76, expect.any(Number));
+      expect(traceStore.settleReservedCost).toHaveBeenCalledWith(92, expect.any(Number));
+      expect(traceStore.releaseReservedCost).not.toHaveBeenCalled();
+    });
+
+    it('does not disclose reservation handoff tokens to a remote model endpoint', async () => {
+      const costTracker = new CostTracker();
+      const remoteFetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        expect(new Headers(init?.headers).has(MODEL_SPEND_RESERVATION_HEADER)).toBe(false);
+        return new Response(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'remote complete' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }) as unknown as typeof globalThis.fetch;
+
+      const result = await runAgentLoop({
+        litellmUrl: 'https://router.example/v1',
+        litellmApiKey: 'remote-token',
+        model: 'claude-sonnet-4-6',
+        systemPrompt: 'Answer directly.',
+        messages: [{ role: 'user', content: 'Do not disclose local handoff state.' }],
+        tools: [],
+        fetch: remoteFetch,
+        stream: false,
+        maxOutputTokens: 64,
+        verificationGate: false,
+        skillDistillationGate: false,
+        modelSpendBudget: costTracker,
+      });
+
+      expect(result.content).toBe('remote complete');
+      expect(remoteFetch).toHaveBeenCalledOnce();
+    });
+
+    it('leaves a caller-owned reservation for the caller to release after provider rejection', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'hard');
+      const traceStore = {
+        reserveCost: vi.fn(() => 93),
+        settleReservedCost: vi.fn(() => true),
+        releaseReservedCost: vi.fn(() => true),
+      } as unknown as FastifyInstance['traceStore'];
+      server = createTestServer({
+        vaultApiKey: 'test-key-rejected-handoff',
+        costTracker,
+        traceStore,
+      });
+      globalThis.fetch = vi.fn(async () => new Response('Invalid API key', {
+        status: 401,
+      })) as unknown as typeof globalThis.fetch;
+      const body = {
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user' as const, content: 'Keep caller ownership on rejection.' }],
+        max_tokens: 4096,
+        stream: false,
+      };
+      const reservation = costTracker.reserveModelSpend({
+        model: body.model,
+        inputTokens: 10,
+        maxOutputTokens: body.max_tokens,
+        billingClass: 'priced',
+      });
+      const targetUrl = 'http://127.0.0.1:3333/v1';
+      costTracker.registerModelSpendReservationTarget(targetUrl);
+      const handoff = costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        targetUrl,
+        77,
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: { [MODEL_SPEND_RESERVATION_HEADER]: handoff!.token },
+        payload: body,
+      });
+
+      expect(response.statusCode, response.body).toBe(401);
+      expect(traceStore.reserveCost).toHaveBeenCalledWith(77, expect.any(Number));
+      expect(traceStore.releaseReservedCost).toHaveBeenCalledWith(93);
+      expect(traceStore.settleReservedCost).not.toHaveBeenCalled();
+      expect(costTracker.takeModelSpendReservationHandoffDisposition(handoff!.token)).toBe('release');
+      expect(costTracker.getReservedDailyTotal()).toBeGreaterThan(0);
+      expect(costTracker.releaseReservedModelSpend(reservation)).toBe(true);
+    });
+
+    it.each([
+      {
+        label: 'definite streaming 401 rejection',
+        traceId: 78,
+        durableReservationId: 94,
+        stream: true,
+        upstreamStatus: 401,
+        expectedStatus: 401,
+        expectedDisposition: 'release' as const,
+      },
+      {
+        label: 'ambiguous 409 response',
+        traceId: 79,
+        durableReservationId: 95,
+        stream: false,
+        upstreamStatus: 409,
+        expectedStatus: 409,
+        expectedDisposition: 'commit' as const,
+      },
+      {
+        label: 'ambiguous network failure',
+        traceId: 80,
+        durableReservationId: 96,
+        stream: false,
+        upstreamStatus: null,
+        expectedStatus: 502,
+        expectedDisposition: 'commit' as const,
+      },
+    ])('classifies caller-owned durable spend for $label', async ({
+      traceId,
+      durableReservationId,
+      stream,
+      upstreamStatus,
+      expectedStatus,
+      expectedDisposition,
+    }) => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'hard');
+      const traceStore = {
+        reserveCost: vi.fn(() => durableReservationId),
+        settleReservedCost: vi.fn(() => true),
+        releaseReservedCost: vi.fn(() => true),
+      } as unknown as FastifyInstance['traceStore'];
+      server = createTestServer({
+        vaultProviders: { openai: { value: 'openai-durable-spend-key' } },
+        costTracker,
+        traceStore,
+      });
+      globalThis.fetch = vi.fn(async () => {
+        if (upstreamStatus === null) throw new Error('provider connection lost');
+        return new Response(stream ? 'data: unauthorized\n\n' : JSON.stringify({ error: 'upstream' }), {
+          status: upstreamStatus,
+          headers: { 'content-type': stream ? 'text/event-stream' : 'application/json' },
+        });
+      }) as unknown as typeof globalThis.fetch;
+      const body = {
+        model: 'openai/gpt-5.3-codex',
+        messages: [{ role: 'user' as const, content: 'Classify this dispatched request safely.' }],
+        max_tokens: 64,
+        stream,
+      };
+      const reservation = costTracker.reserveModelSpend({
+        model: body.model,
+        // Deliberately exceed the proxy's serialized-body estimate so an ambiguous
+        // outcome proves the durable ledger retains the caller's full reservation.
+        inputTokens: 10_000,
+        maxOutputTokens: body.max_tokens,
+        billingClass: 'priced',
+      });
+      const targetUrl = 'http://127.0.0.1:3333/v1';
+      costTracker.registerModelSpendReservationTarget(targetUrl);
+      const handoff = costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(body),
+        targetUrl,
+        traceId,
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: { [MODEL_SPEND_RESERVATION_HEADER]: handoff!.token },
+        payload: body,
+      });
+
+      expect(response.statusCode, response.body).toBe(expectedStatus);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      expect(traceStore.reserveCost).toHaveBeenCalledWith(traceId, expect.any(Number));
+      expect(costTracker.takeModelSpendReservationHandoffDisposition(handoff!.token))
+        .toBe(expectedDisposition);
+      if (expectedDisposition === 'release') {
+        expect(traceStore.releaseReservedCost).toHaveBeenCalledWith(durableReservationId);
+        expect(traceStore.settleReservedCost).not.toHaveBeenCalled();
+        expect(costTracker.releaseReservedModelSpend(reservation)).toBe(true);
+      } else {
+        const durableEstimate = vi.mocked(traceStore.reserveCost).mock.calls[0]?.[1];
+        expect(traceStore.settleReservedCost)
+          .toHaveBeenCalledWith(durableReservationId, durableEstimate);
+        expect(traceStore.releaseReservedCost).not.toHaveBeenCalled();
+        expect(costTracker.commitReservedModelSpend(reservation)).toBe(true);
+      }
+    });
+
+    it('fails only a missing-trace hard handoff and accepts the next traced handoff', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'hard');
+      const traceStore = {
+        reserveCost: vi.fn(() => 97),
+        settleReservedCost: vi.fn(() => true),
+        releaseReservedCost: vi.fn(() => true),
+      } as unknown as FastifyInstance['traceStore'];
+      server = createTestServer({
+        vaultApiKey: 'test-key-request-local-ledger-failure',
+        costTracker,
+        traceStore,
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'valid trace dispatched' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 8, output_tokens: 6 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+      const targetUrl = 'http://127.0.0.1:3333/v1';
+      costTracker.registerModelSpendReservationTarget(targetUrl);
+      const firstBody = {
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user' as const, content: 'Missing trace must fail locally.' }],
+        max_tokens: 64,
+        stream: false,
+      };
+      const firstReservation = costTracker.reserveModelSpend({
+        model: firstBody.model,
+        inputTokens: 10,
+        maxOutputTokens: firstBody.max_tokens,
+        billingClass: 'priced',
+      });
+      const firstHandoff = costTracker.issueModelSpendReservationHandoff(
+        firstReservation,
+        JSON.stringify(firstBody),
+        targetUrl,
+      );
+
+      const rejected = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: { [MODEL_SPEND_RESERVATION_HEADER]: firstHandoff!.token },
+        payload: firstBody,
+      });
+
+      expect(rejected.statusCode, rejected.body).toBe(503);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(costTracker.takeModelSpendReservationHandoffDisposition(firstHandoff!.token)).toBe('release');
+      costTracker.discardModelSpendReservationHandoff(firstHandoff!.token);
+      expect(costTracker.releaseReservedModelSpend(firstReservation)).toBe(true);
+
+      const secondBody = {
+        ...firstBody,
+        messages: [{ role: 'user' as const, content: 'A valid trace must still dispatch.' }],
+      };
+      const secondReservation = costTracker.reserveModelSpend({
+        model: secondBody.model,
+        inputTokens: 10,
+        maxOutputTokens: secondBody.max_tokens,
+        billingClass: 'priced',
+      });
+      const secondHandoff = costTracker.issueModelSpendReservationHandoff(
+        secondReservation,
+        JSON.stringify(secondBody),
+        targetUrl,
+        81,
+      );
+      const accepted = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: { [MODEL_SPEND_RESERVATION_HEADER]: secondHandoff!.token },
+        payload: secondBody,
+      });
+
+      expect(accepted.statusCode, accepted.body).toBe(200);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      expect(traceStore.reserveCost).toHaveBeenCalledWith(81, expect.any(Number));
+      expect(traceStore.settleReservedCost).toHaveBeenCalledWith(97, expect.any(Number));
+      expect(traceStore.releaseReservedCost).not.toHaveBeenCalled();
+      expect(costTracker.takeModelSpendReservationHandoffDisposition(secondHandoff!.token)).toBe('commit');
+      costTracker.discardModelSpendReservationHandoff(secondHandoff!.token);
+      expect(costTracker.commitReservedModelSpend(secondReservation)).toBe(true);
+    });
+
+    it('lets AgentLoop release its reservation when the self-proxy has no provider credential', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'hard');
+      server = createTestServer({
+        costTracker,
+        registerSpendTarget: 'http://127.0.0.1:3333/v1',
+      });
+      const upstreamFetch = vi.fn() as unknown as typeof globalThis.fetch;
+      globalThis.fetch = upstreamFetch;
+      const localFetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const injected = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: Object.fromEntries(new Headers(init?.headers).entries()),
+          payload: JSON.parse(String(init?.body)),
+        });
+        return new Response(injected.body, {
+          status: injected.statusCode,
+          headers: { 'content-type': injected.headers['content-type'] ?? 'application/json' },
+        });
+      }) as unknown as typeof globalThis.fetch;
+
+      await expect(runAgentLoop({
+        litellmUrl: 'http://127.0.0.1:3333/v1',
+        litellmApiKey: 'local-token',
+        model: 'claude-sonnet-4-6',
+        systemPrompt: 'Answer directly.',
+        messages: [{ role: 'user', content: 'Do not charge before provider dispatch.' }],
+        tools: [],
+        fetch: localFetch,
+        stream: false,
+        maxOutputTokens: 4096,
+        verificationGate: false,
+        skillDistillationGate: false,
+        modelSpendBudget: costTracker,
+      })).rejects.toThrow(/No Anthropic API key/i);
+
+      expect(localFetch).toHaveBeenCalledOnce();
+      expect(upstreamFetch).not.toHaveBeenCalled();
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+      expect(costTracker.getDailyTotal()).toBe(0);
+    });
+
+    it.each([
+      { messages: null },
+      { messages: [{ role: 'user', content: 'test' }], tools: {} },
+      {
+        messages: [{ role: 'user', content: 'test' }],
+        tools: [{ type: 'function', function: null }],
+      },
+      {
+        messages: [{
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'read_file' } }],
+        }],
+      },
+    ])('rejects malformed request shape before reserving or dispatching: $messages', async (invalid) => {
+      const costTracker = new CostTracker();
+      server = createTestServer({
+        vaultApiKey: 'test-key-invalid-shape',
+        costTracker,
+      });
+      globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: { model: 'claude-sonnet-4-6', ...invalid },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+    });
+
+    it('preserves OpenAI content-part arrays while validating before reservation', async () => {
+      server = createTestServer({ vaultProviders: { openai: { value: 'openai-key' } } });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'accepted' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+      const content = [
+        { type: 'text', text: 'Describe the image.' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } },
+      ];
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: {
+        model: 'openai/gpt-5.4',
+        messages: [{ role: 'user', content }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const outbound = JSON.parse(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.body));
+      expect(outbound.messages[0].content).toEqual(content);
+    });
+
+    it('persists a directly-owned proxy settlement in the execution trace ledger', async () => {
+      const costTracker = new CostTracker();
+      const traceStore = {
+        start: vi.fn(() => 73),
+        reserveCost: vi.fn(() => 91),
+        settleReservedCost: vi.fn(() => true),
+        releaseReservedCost: vi.fn(() => true),
+        finalize: vi.fn(),
+      } as unknown as FastifyInstance['traceStore'];
+      server = createTestServer({
+        vaultApiKey: 'test-key-direct-proxy-ledger',
+        costTracker,
+        traceStore,
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'persisted once' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 12, output_tokens: 8 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Persist this direct proxy spend.' }],
+          max_tokens: 64,
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(traceStore.start).toHaveBeenCalledOnce();
+      expect(traceStore.reserveCost).toHaveBeenCalledWith(73, expect.any(Number));
+      expect(traceStore.settleReservedCost).toHaveBeenCalledWith(91, expect.any(Number));
+      expect(traceStore.finalize).toHaveBeenCalledWith(73, expect.objectContaining({
+        outcome: 'success',
+        model: 'claude-sonnet-4-6',
+        tokens: { input: 12, output: 8 },
+        costUsd: expect.any(Number),
+      }));
+      expect(vi.mocked(traceStore.finalize).mock.calls[0]?.[1]?.costUsd).toBeGreaterThan(0);
+    });
+
+    it('settles conservatively when credentials disappear after an ambiguous provider 500', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(1, 'hard');
+      let openAiKey: string | undefined = 'openai-key-before-dispatch';
+      const traceStore = {
+        start: vi.fn(() => 83),
+        reserveCost: vi.fn(() => 93),
+        settleReservedCost: vi.fn(() => true),
+        releaseReservedCost: vi.fn(() => true),
+        finalize: vi.fn(),
+      } as unknown as FastifyInstance['traceStore'];
+      server = createTestServer({
+        costTracker,
+        traceStore,
+        vaultGet: (name) => (
+          name === 'openai' && openAiKey ? { value: openAiKey } : null
+        ),
+      });
+      globalThis.fetch = vi.fn(async () => {
+        openAiKey = undefined;
+        return new Response(JSON.stringify({ error: { message: 'ambiguous upstream failure' } }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }) as unknown as typeof globalThis.fetch;
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      payload: {
+        model: 'openai/gpt-5.3-codex',
+        messages: [{ role: 'user', content: 'Account for every dispatched request.' }],
+          max_tokens: 64,
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      expect(traceStore.settleReservedCost).toHaveBeenCalledWith(93, expect.any(Number));
+      expect(traceStore.releaseReservedCost).not.toHaveBeenCalled();
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+      expect(costTracker.getDailyTotal()).toBeGreaterThan(0);
+    });
+
+    it('fails closed before direct dispatch when a hard cap has no durable spend ledger', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(1, 'hard');
+      server = createTestServer({
+        vaultApiKey: 'test-key-missing-ledger',
+        costTracker,
+      });
+      globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Do not dispatch without a durable ledger.' }],
+          max_tokens: 64,
+          stream: false,
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(503);
+      expect(response.json()).toMatchObject({
+        error: { code: 'DAILY_MODEL_BUDGET_LEDGER_UNAVAILABLE' },
+      });
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+    });
+
+    it('blocks the next hard-cap dispatch after a direct proxy ledger write fails', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(1, 'hard');
+      const traceStore = {
+        start: vi.fn(() => 74),
+        reserveCost: vi.fn(() => { throw new Error('ledger is read-only'); }),
+        finalize: vi.fn(),
+      } as unknown as FastifyInstance['traceStore'];
+      server = createTestServer({
+        vaultApiKey: 'test-key-ledger-write-failure',
+        costTracker,
+        traceStore,
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        content: [{ type: 'text', text: 'first dispatch completed' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 12, output_tokens: 8 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+      const payload = {
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user', content: 'Persist every hard-cap settlement.' }],
+        max_tokens: 64,
+        stream: false,
+      };
+
+      const first = await server.inject({ method: 'POST', url: '/v1/chat/completions', payload });
+      const second = await server.inject({ method: 'POST', url: '/v1/chat/completions', payload });
+
+      expect(first.statusCode, first.body).toBe(503);
+      expect(second.statusCode, second.body).toBe(503);
+      expect(first.json()).toMatchObject({
+        error: { code: 'DAILY_MODEL_BUDGET_LEDGER_UNAVAILABLE' },
+      });
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('does not consume or trust a reservation handoff for a mutated request body', async () => {
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.07, 'hard');
+      server = createTestServer({
+        vaultApiKey: 'test-key-mutated-handoff',
+        costTracker,
+      });
+      globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+      const originalBody = {
+        model: 'claude-sonnet-4-6',
+        messages: [{ role: 'user' as const, content: 'Original reserved request.' }],
+        max_tokens: 4096,
+        stream: false,
+      };
+      const reservation = costTracker.reserveModelSpend({
+        model: originalBody.model,
+        inputTokens: 8,
+        maxOutputTokens: originalBody.max_tokens,
+        billingClass: 'priced',
+      });
+      const targetUrl = 'http://127.0.0.1:3333/v1';
+      costTracker.registerModelSpendReservationTarget(targetUrl);
+      const handoff = costTracker.issueModelSpendReservationHandoff(
+        reservation,
+        JSON.stringify(originalBody),
+        targetUrl,
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: { [MODEL_SPEND_RESERVATION_HEADER]: handoff!.token },
+        payload: {
+          ...originalBody,
+          model: 'claude-opus-4-6',
+          messages: [{ role: 'user', content: 'Mutated higher-cost request.' }],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(429);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(costTracker.getReservedDailyTotal()).toBeGreaterThan(0);
+      costTracker.releaseReservedModelSpend(reservation);
+    });
+
     it('rejects a run token completion when the requested model is outside the assigned run model', async () => {
       const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-run-token-model-scope-'));
       const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
@@ -1027,7 +2029,8 @@ describe('Anthropic Proxy Routes', () => {
 
     it('does not synthesize DONE when the upstream stream ends before message_stop', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-key-stream-premature-eof';
-      server = createTestServer();
+      const costTracker = new CostTracker();
+      server = createTestServer({ costTracker });
       const anthropicStream = [
         'data: {"type":"message_start","message":{"usage":{"input_tokens":100}}}',
         'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Partial answer"}}',
@@ -1052,6 +2055,7 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.body).toContain('Partial answer');
       expect(res.body).not.toContain('finish_reason');
       expect(res.body).not.toContain('data: [DONE]');
+      expect(costTracker.getDailyTotal()).toBeGreaterThan(0.05);
     });
 
     it('fails closed when message_stop arrives without a stop reason', async () => {
@@ -1342,10 +2346,14 @@ describe('Anthropic Proxy Routes', () => {
     it('forwards Ollama models to the loopback runtime without cloud credentials', async () => {
       vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11455');
       server = createTestServer();
-      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
-        choices: [{ message: { role: 'assistant', content: 'Local route works.' }, finish_reason: 'stop' }],
-        model: 'qwen3:1.7b',
-      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+      globalThis.fetch = vi.fn(async (url: string | URL | Request) => new Response(JSON.stringify(
+        String(url).endsWith('/api/tags')
+          ? { models: [{ name: 'qwen3:1.7b' }] }
+          : {
+              choices: [{ message: { role: 'assistant', content: 'Local route works.' }, finish_reason: 'stop' }],
+              model: 'qwen3:1.7b',
+            },
+      ), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -1363,7 +2371,7 @@ describe('Anthropic Proxy Routes', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().choices[0].message.content).toBe('Local route works.');
-      const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+      const [url, init] = vi.mocked(globalThis.fetch).mock.calls[1];
       expect(String(url)).toBe('http://127.0.0.1:11455/v1/chat/completions');
       expect(init?.method).toBe('POST');
       expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
@@ -1378,10 +2386,15 @@ describe('Anthropic Proxy Routes', () => {
       vi.stubEnv('OLLAMA_HOST', 'http://localhost:11455');
       server = createTestServer();
       const upstream = 'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n';
-      globalThis.fetch = vi.fn(async () => new Response(upstream, {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      })) as unknown as typeof globalThis.fetch;
+      globalThis.fetch = vi.fn(async (url: string | URL | Request) => String(url).endsWith('/api/tags')
+        ? new Response(JSON.stringify({ models: [{ name: 'qwen3:1.7b' }] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response(upstream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          })) as unknown as typeof globalThis.fetch;
 
       const res = await server.inject({
         method: 'POST',
@@ -1396,7 +2409,7 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toContain('text/event-stream');
       expect(res.body).toBe(upstream);
-      expect(String(vi.mocked(globalThis.fetch).mock.calls[0][0]))
+      expect(String(vi.mocked(globalThis.fetch).mock.calls[1][0]))
         .toBe('http://localhost:11455/v1/chat/completions');
     });
 
@@ -1404,7 +2417,13 @@ describe('Anthropic Proxy Routes', () => {
       vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11455');
       server = createTestServer();
       let upstreamSignal: AbortSignal | undefined;
-      globalThis.fetch = vi.fn(async (_url, init) => {
+      globalThis.fetch = vi.fn(async (url, init) => {
+        if (String(url).endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'qwen3:1.7b' }] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
         upstreamSignal = init?.signal as AbortSignal | undefined;
         return new Response(new ReadableStream<Uint8Array>({
           start(controller) {
@@ -1634,10 +2653,48 @@ describe('Anthropic Proxy Routes', () => {
         },
       });
 
-      expect(res.statusCode).toBe(503);
-      expect(res.json().error.message).toContain('HTTP loopback');
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe('OLLAMA_MODEL_NOT_LOCAL');
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
+
+    it.each([
+      { model: 'qwen3:cloud', remoteHost: undefined },
+      { model: 'qwen3:remote', remoteHost: 'https://ollama.com' },
+    ]) (
+      'rejects Ollama remote alias $model without dispatching a completion',
+      async ({ model, remoteHost }) => {
+        vi.stubEnv('OLLAMA_HOST', 'http://127.0.0.1:11455');
+        server = createTestServer();
+        globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+          if (String(url).endsWith('/api/tags')) {
+            return new Response(JSON.stringify({
+              models: [{ name: model, ...(remoteHost ? { remote_host: remoteHost } : {}) }],
+            }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          throw new Error('completion dispatch must not occur');
+        }) as unknown as typeof globalThis.fetch;
+
+        const res = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: `ollama/${model}`,
+            messages: [{ role: 'user', content: 'test' }],
+          },
+        });
+
+        expect(res.statusCode).toBe(409);
+        expect(res.json().error.code).toBe('OLLAMA_MODEL_NOT_LOCAL');
+        expect(globalThis.fetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('/v1/chat/completions'),
+          expect.anything(),
+        );
+      },
+    );
 
     it('forwards OpenAI-compatible models directly without LiteLLM', async () => {
       server = createTestServer({

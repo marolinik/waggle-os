@@ -3039,6 +3039,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...agentConfig,
           ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
+          modelSpendTraceId: traceHandle?.id,
           ...(allowDerivedPersistence && traceRecorder && traceHandle
             ? { traceRecording: { recorder: traceRecorder, handle: traceHandle } }
             : {}),

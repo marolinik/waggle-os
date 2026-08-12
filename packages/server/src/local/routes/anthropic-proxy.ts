@@ -11,18 +11,28 @@ import type { FastifyPluginAsync, FastifyInstance, FastifyReply, FastifyRequest 
 import { validateOrigin } from '../cors-config.js';
 import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
 import { isRemoteOllamaAlias, PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
+import { fetchOllamaRoutingModels } from '../model-availability.js';
 import { getAuthenticatedRunToken } from '../security-middleware.js';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  content: string | OpenAIContentPart[] | null;
   tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
   tool_call_id?: string;
 }
 
+interface OpenAIContentPart {
+  type: string;
+  [key: string]: unknown;
+}
+
 interface OpenAITool {
   type: 'function';
-  function: { name: string; description: string; parameters: Record<string, unknown> };
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
 }
 
 interface ChatCompletionBody {
@@ -33,6 +43,357 @@ interface ChatCompletionBody {
   stream_options?: { include_usage?: boolean };
   max_tokens?: number;
   temperature?: number;
+}
+
+const MODEL_SPEND_RESERVATION_HEADER = 'x-waggle-model-spend-reservation';
+const DEFINITE_PRE_INFERENCE_REJECTION_STATUSES = new Set([
+  400, 401, 403, 404, 405, 413, 415, 422, 429,
+]);
+type ProxyModelSpendBudget = FastifyInstance['agentState']['costTracker'];
+type ProxyModelSpendReservation = ReturnType<ProxyModelSpendBudget['reserveModelSpend']>;
+type ProxyModelSpendRequest = Parameters<ProxyModelSpendBudget['reserveModelSpend']>[0];
+
+interface ProxySpendReservation {
+  reservation: ProxyModelSpendReservation;
+  owner: 'caller' | 'proxy';
+  request: ProxyModelSpendRequest;
+  estimatedCostUsd?: number;
+  durableTraceId?: number;
+  handoffToken?: string;
+  traceId?: number;
+  traceCostReservationId?: number;
+}
+
+class ProxySpendLedgerUnavailableError extends Error {
+  public readonly code = 'DAILY_MODEL_BUDGET_LEDGER_UNAVAILABLE';
+
+  constructor(cause?: unknown) {
+    super('Hard daily model budget cannot continue without a durable spend ledger', { cause });
+    this.name = 'ProxySpendLedgerUnavailableError';
+  }
+}
+
+function estimateProxyInputTokens(body: ChatCompletionBody): number {
+  const serialized = JSON.stringify({
+    messages: body.messages,
+    tools: body.tools ?? [],
+  });
+  let tokens = 0;
+  for (const character of serialized) {
+    const code = character.codePointAt(0) ?? 0;
+    tokens += code >= 0x10000
+      ? 2
+      : ((code >= 0x3000 && code <= 0x9fff)
+          || (code >= 0xac00 && code <= 0xd7af)
+          || (code >= 0xf900 && code <= 0xfaff)
+        ? 1
+        : 0.25);
+  }
+  return Math.max(1, Math.ceil(tokens));
+}
+
+function isValidChatCompletionBody(body: unknown): body is ChatCompletionBody {
+  if (!body || typeof body !== 'object') return false;
+  const value = body as Partial<ChatCompletionBody>;
+  if (typeof value.model !== 'string' || value.model.trim().length === 0) return false;
+  if (!Array.isArray(value.messages) || value.messages.length === 0) return false;
+  if (value.tools !== undefined && (
+    !Array.isArray(value.tools)
+    || !value.tools.every(isValidOpenAITool)
+  )) return false;
+  return value.messages.every((message) => (
+    message !== null
+    && typeof message === 'object'
+    && ['system', 'user', 'assistant', 'tool'].includes(message.role)
+    && isValidOpenAIContent(message.content)
+    && (message.tool_calls === undefined || (
+      message.role === 'assistant'
+      && Array.isArray(message.tool_calls)
+      && message.tool_calls.every(isValidOpenAIToolCall)
+    ))
+    && (message.tool_call_id === undefined || typeof message.tool_call_id === 'string')
+  ));
+}
+
+function isValidOpenAIContent(content: unknown): boolean {
+  return typeof content === 'string'
+    || content === null
+    || (Array.isArray(content) && content.every((part) => (
+      part !== null
+      && typeof part === 'object'
+      && typeof (part as { type?: unknown }).type === 'string'
+    )));
+}
+
+function isValidOpenAIToolCall(toolCall: unknown): boolean {
+  if (!toolCall || typeof toolCall !== 'object') return false;
+  const value = toolCall as NonNullable<OpenAIMessage['tool_calls']>[number];
+  return typeof value.id === 'string'
+    && typeof value.type === 'string'
+    && value.function !== null
+    && typeof value.function === 'object'
+    && typeof value.function.name === 'string'
+    && typeof value.function.arguments === 'string';
+}
+
+function isValidOpenAITool(tool: unknown): boolean {
+  if (!tool || typeof tool !== 'object') return false;
+  const value = tool as OpenAITool;
+  return value.type === 'function'
+    && value.function !== null
+    && typeof value.function === 'object'
+    && typeof value.function.name === 'string'
+    && (value.function.description === undefined || typeof value.function.description === 'string')
+    && (value.function.parameters === undefined || (
+      value.function.parameters !== null
+      && typeof value.function.parameters === 'object'
+      && !Array.isArray(value.function.parameters)
+    ));
+}
+
+function reserveProxySpend(
+  server: FastifyInstance,
+  request: FastifyRequest,
+  body: ChatCompletionBody,
+): ProxySpendReservation | undefined {
+  const budget = server.agentState?.costTracker;
+  if (!budget) return undefined;
+  const spendRequest = proxySpendRequest(body);
+  const claimed = claimProxySpendHandoff(server, request, body, spendRequest);
+  if (claimed) {
+    const { dailyBudgetUsd, mode } = budget.getBudget();
+    const hardBudgetEnabled = mode === 'hard' && dailyBudgetUsd !== null;
+    const estimatedCostUsd = claimed.estimatedCostUsd;
+    if (estimatedCostUsd === undefined || claimed.durableTraceId === undefined || !server.traceStore) {
+      if (!hardBudgetEnabled) return claimed;
+      const error = new ProxySpendLedgerUnavailableError();
+      budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
+      throw error;
+    }
+    if (estimatedCostUsd <= 0) return claimed;
+    try {
+      const traceCostReservationId = server.traceStore.reserveCost(
+        claimed.durableTraceId,
+        estimatedCostUsd,
+      );
+      budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'commit');
+      return {
+        ...claimed,
+        traceId: claimed.durableTraceId,
+        traceCostReservationId,
+      };
+    } catch (error) {
+      budget.markModelSpendPersistenceUnavailable(error);
+      if (hardBudgetEnabled) {
+        budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
+        throw new ProxySpendLedgerUnavailableError(error);
+      }
+      return claimed;
+    }
+  }
+
+  const reservation = budget.reserveModelSpend(spendRequest);
+  let traceId: number | undefined;
+  let traceCostReservationId: number | undefined;
+  try {
+    if (!server.traceStore) {
+      const { dailyBudgetUsd, mode } = budget.getBudget();
+      if (mode === 'hard' && dailyBudgetUsd !== null) {
+        throw new ProxySpendLedgerUnavailableError();
+      }
+    } else {
+      traceId = server.traceStore.start({
+        sessionId: 'provider-proxy',
+        model: body.model,
+        taskShape: 'provider-proxy',
+        input: 'Direct built-in provider proxy request',
+        tags: ['model-spend:proxy'],
+      });
+      const estimatedCostUsd = proxySpendCost(
+        budget,
+        spendRequest,
+        spendRequest.inputTokens,
+        spendRequest.maxOutputTokens,
+      );
+      if (estimatedCostUsd > 0) {
+        traceCostReservationId = server.traceStore.reserveCost(traceId, estimatedCostUsd);
+      }
+    }
+  } catch (error) {
+    budget.markModelSpendPersistenceUnavailable(error);
+    const { dailyBudgetUsd, mode } = budget.getBudget();
+    if (mode === 'hard' && dailyBudgetUsd !== null) {
+      budget.releaseReservedModelSpend(reservation);
+      throw error instanceof ProxySpendLedgerUnavailableError
+        ? error
+        : new ProxySpendLedgerUnavailableError(error);
+    }
+    traceId = undefined;
+    traceCostReservationId = undefined;
+  }
+  return {
+    reservation,
+    owner: 'proxy',
+    request: spendRequest,
+    traceId,
+    traceCostReservationId,
+  };
+}
+
+function proxySpendRequest(body: ChatCompletionBody): ProxyModelSpendRequest {
+  return {
+    model: body.model,
+    inputTokens: estimateProxyInputTokens(body),
+    maxOutputTokens: body.max_tokens ?? 4096,
+    billingClass: 'priced',
+  };
+}
+
+function claimProxySpendHandoff(
+  server: FastifyInstance,
+  request: FastifyRequest,
+  body: ChatCompletionBody,
+  spendRequest = proxySpendRequest(body),
+): ProxySpendReservation | undefined {
+  const budget = server.agentState?.costTracker;
+  if (!budget) return undefined;
+  const header = request.headers[MODEL_SPEND_RESERVATION_HEADER];
+  const handoffToken = typeof header === 'string' ? header : undefined;
+  const handoff = handoffToken
+    ? budget.claimModelSpendReservationHandoff?.(handoffToken, JSON.stringify(body))
+    : undefined;
+  return handoff ? {
+    ...handoff,
+    owner: 'caller',
+    request: spendRequest,
+    handoffToken,
+  } : undefined;
+}
+
+function proxySpendCost(
+  budget: ProxyModelSpendBudget,
+  request: ProxyModelSpendRequest,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const rawCost = budget.calculateCost(inputTokens, outputTokens, request.model);
+  return Math.ceil((Math.max(0, rawCost) * 1_000_000) - 1e-9) / 1_000_000;
+}
+
+function modelSpendFailureCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && [
+    'DAILY_MODEL_BUDGET_EXCEEDED',
+    'DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE',
+    'DAILY_MODEL_BUDGET_LEDGER_UNAVAILABLE',
+  ].includes(code) ? code : undefined;
+}
+
+function sendProxyBudgetFailure(reply: FastifyReply, error: unknown, code: string): unknown {
+  return reply.status(code === 'DAILY_MODEL_BUDGET_LEDGER_UNAVAILABLE' ? 503 : 429).send({
+    error: {
+      code,
+      message: error instanceof Error ? error.message : 'Daily model budget unavailable.',
+    },
+  });
+}
+
+function settleProxySpend(
+  server: FastifyInstance,
+  spend: ProxySpendReservation | undefined,
+  usage?: { inputTokens: number; outputTokens: number },
+): void {
+  if (!spend) return;
+  const budget = server.agentState.costTracker;
+  const hasAuthoritativeUsage = usage !== undefined
+    && Number.isFinite(usage.inputTokens)
+    && usage.inputTokens > 0
+    && Number.isFinite(usage.outputTokens)
+    && usage.outputTokens > 0;
+  const tokens = hasAuthoritativeUsage
+    ? usage
+    : { inputTokens: spend.request.inputTokens, outputTokens: spend.request.maxOutputTokens };
+  const costUsd = proxySpendCost(
+    budget,
+    spend.request,
+    tokens.inputTokens,
+    tokens.outputTokens,
+  );
+  if (spend.owner === 'caller') {
+    if (spend.traceCostReservationId === undefined) return;
+    const durableCostUsd = hasAuthoritativeUsage
+      ? costUsd
+      : (spend.estimatedCostUsd ?? costUsd);
+    try {
+      server.traceStore.settleReservedCost(spend.traceCostReservationId, durableCostUsd);
+    } catch (error) {
+      budget.markModelSpendPersistenceUnavailable(error);
+      server.log.error({ err: error }, 'Failed to settle caller-owned provider proxy spend');
+    }
+    return;
+  }
+  const settled = hasAuthoritativeUsage
+    ? budget.reconcileModelSpend(spend.reservation, usage)
+    : budget.commitReservedModelSpend(spend.reservation);
+  if (!settled || spend.traceId === undefined) return;
+
+  try {
+    if (spend.traceCostReservationId !== undefined) {
+      server.traceStore.settleReservedCost(spend.traceCostReservationId, costUsd);
+    } else if (costUsd > 0) {
+      server.traceStore.recordCost(spend.traceId, costUsd);
+    }
+    server.traceStore.finalize(spend.traceId, {
+      outcome: 'success',
+      output: 'Built-in provider proxy request settled',
+      model: spend.request.model,
+      tokens: { input: tokens.inputTokens, output: tokens.outputTokens },
+      costUsd,
+    });
+  } catch (error) {
+    budget.markModelSpendPersistenceUnavailable(error);
+    server.log.error({ err: error }, 'Failed to persist built-in provider proxy spend');
+  }
+}
+
+function releaseProxySpend(server: FastifyInstance, spend: ProxySpendReservation | undefined): void {
+  if (!spend) return;
+  if (spend.owner === 'caller') {
+    if (spend.traceCostReservationId !== undefined) {
+      try {
+        server.traceStore.releaseReservedCost(spend.traceCostReservationId);
+      } catch (error) {
+        server.agentState.costTracker.markModelSpendPersistenceUnavailable(error);
+        server.log.warn({ err: error }, 'Failed to release caller-owned provider proxy spend');
+      }
+    }
+    if (spend.handoffToken) {
+      server.agentState.costTracker.setModelSpendReservationHandoffDisposition(
+        spend.handoffToken,
+        'release',
+      );
+    }
+    return;
+  }
+  server.agentState.costTracker.releaseReservedModelSpend(spend.reservation);
+  if (spend.traceId !== undefined) {
+    try {
+      if (spend.traceCostReservationId !== undefined) {
+        server.traceStore.releaseReservedCost(spend.traceCostReservationId);
+      }
+      server.traceStore.finalize(spend.traceId, {
+        outcome: 'abandoned',
+        output: 'Provider rejected request before inference',
+        model: spend.request.model,
+        tokens: { input: 0, output: 0 },
+        costUsd: 0,
+      });
+    } catch (error) {
+      server.agentState.costTracker.markModelSpendPersistenceUnavailable(error);
+      server.log.warn({ err: error }, 'Failed to finalize rejected provider proxy trace');
+    }
+  }
 }
 
 interface AnthropicUsage {
@@ -453,6 +814,7 @@ async function sendCompatibleResponse(
   const contentType = upstream.headers.get('content-type')
     ?? (stream ? 'text/event-stream' : 'application/json');
   if (stream && upstream.body) {
+    reply.code(upstream.status);
     await reply.hijack();
     reply.raw.writeHead(upstream.status, {
       'Content-Type': contentType,
@@ -524,6 +886,14 @@ async function forwardOllamaProvider(
   } finally {
     reply.raw.off('close', abortUpstream);
   }
+}
+
+async function isVerifiedLocalOllamaRoute(route: ProviderRoute): Promise<boolean> {
+  if (!ollamaBaseUrl()) return false;
+  if (isRemoteOllamaAlias(route.model)) return false;
+  return (await fetchOllamaRoutingModels()).some((model) => (
+    model.id === `ollama/${route.model}` && model.source === 'local'
+  ));
 }
 
 async function forwardCompatibleProvider(
@@ -652,6 +1022,26 @@ function mapModel(model: string): string {
 
 export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   const hasReadyOllamaModel = createOllamaReadinessChecker();
+  let registeredSpendTarget: string | undefined;
+  let registeredSpendBudget: ProxyModelSpendBudget | undefined;
+
+  server.addHook('onListen', async () => {
+    const address = server.server.address();
+    if (!address || typeof address === 'string') return;
+    const targetUrl = `http://127.0.0.1:${address.port}/v1`;
+    const budget = server.agentState?.costTracker;
+    if (budget?.registerModelSpendReservationTarget?.(targetUrl)) {
+      registeredSpendTarget = targetUrl;
+      registeredSpendBudget = budget;
+    }
+  });
+  server.addHook('onClose', async () => {
+    if (registeredSpendTarget && registeredSpendBudget) {
+      registeredSpendBudget.unregisterModelSpendReservationTarget?.(registeredSpendTarget);
+      registeredSpendTarget = undefined;
+      registeredSpendBudget = undefined;
+    }
+  });
 
   // Process liveness is independent from whether a completion provider is
   // configured. Installer/startup probes use this endpoint.
@@ -677,6 +1067,14 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
 
   // POST /v1/chat/completions — translate to Anthropic Messages API
   server.post<{ Body: ChatCompletionBody }>('/v1/chat/completions', async (request, reply) => {
+    if (!isValidChatCompletionBody(request.body)) {
+      return reply.status(400).send({
+        error: {
+          code: 'INVALID_CHAT_COMPLETION_BODY',
+          message: 'A model and non-empty messages array are required.',
+        },
+      });
+    }
     const body = request.body;
     const route = resolveProviderRoute(body.model);
     if (!route) {
@@ -698,6 +1096,17 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     }
     if (route.providerId === 'ollama') {
+      const callerSpend = claimProxySpendHandoff(server, request, body);
+      if (!await isVerifiedLocalOllamaRoute(route)) {
+        releaseProxySpend(server, callerSpend);
+        return reply.status(409).send({
+          error: {
+            code: 'OLLAMA_MODEL_NOT_LOCAL',
+            message: `Ollama model "ollama/${route.model}" is not a verified installed local model.`,
+          },
+        });
+      }
+      releaseProxySpend(server, callerSpend);
       return forwardOllamaProvider(
         route,
         body,
@@ -705,23 +1114,44 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         reply,
       );
     }
+    if (route.providerId === 'anthropic' && !getAnthropicKey(server)) {
+      releaseProxySpend(server, claimProxySpendHandoff(server, request, body));
+      return reply.status(500).send({
+        error: { message: 'No Anthropic API key configured. Add one in Settings > API Keys.' },
+      });
+    }
+    if (route.providerId !== 'anthropic' && getProviderApiKeys(route.providerId, server.vault).length === 0) {
+      releaseProxySpend(server, claimProxySpendHandoff(server, request, body));
+      return reply.status(500).send({
+        error: {
+          message: `No ${route.providerId} API key configured. Add one in Settings > API Keys.`,
+        },
+      });
+    }
+    let spend: ProxySpendReservation | undefined;
+    try {
+      spend = reserveProxySpend(server, request, body);
+    } catch (error) {
+      const code = modelSpendFailureCode(error);
+      if (code) return sendProxyBudgetFailure(reply, error, code);
+      throw error;
+    }
     if (route.providerId !== 'anthropic') {
-      return forwardCompatibleProvider(
+      const compatibleResult = await forwardCompatibleProvider(
         server,
         route,
         body,
         request.headers.origin as string | undefined,
         reply,
       );
+      if (DEFINITE_PRE_INFERENCE_REJECTION_STATUSES.has(reply.statusCode)) {
+        releaseProxySpend(server, spend);
+      }
+      else settleProxySpend(server, spend);
+      return compatibleResult;
     }
 
-    const apiKey = getAnthropicKey(server);
-
-    if (!apiKey) {
-      return reply.status(500).send({
-        error: { message: 'No Anthropic API key configured. Add one in Settings > API Keys.' },
-      });
-    }
+    const apiKey = getAnthropicKey(server)!;
 
     const mappedModel = mapModel(route.model);
 
@@ -776,8 +1206,8 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     // Convert tools
     const tools = body.tools?.map(t => ({
       name: t.function.name,
-      description: t.function.description,
-      input_schema: t.function.parameters,
+      description: t.function.description ?? '',
+      input_schema: t.function.parameters ?? { type: 'object', properties: {} },
     }));
 
     // Apply Anthropic prompt caching — cache system prompt for multi-turn efficiency
@@ -828,6 +1258,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         body: JSON.stringify(anthropicBody),
       });
     } catch (error) {
+      settleProxySpend(server, spend);
       return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
     }
 
@@ -836,7 +1267,13 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       try {
         errText = await anthropicRes.text();
       } catch (error) {
+        settleProxySpend(server, spend);
         return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
+      }
+      if (DEFINITE_PRE_INFERENCE_REJECTION_STATUSES.has(anthropicRes.status)) {
+        releaseProxySpend(server, spend);
+      } else {
+        settleProxySpend(server, spend);
       }
       return reply.status(anthropicRes.status).send({
         error: { message: `Anthropic API error: ${errText}` },
@@ -862,6 +1299,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       let currentToolName = '';
       let toolCallIndex = -1;
       let stopReason: string | undefined;
+      let messageStopObserved = false;
 
       try {
         streamRead: for (;;) {
@@ -926,7 +1364,8 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
                 if (typeof event.delta?.stop_reason === 'string') {
                   stopReason = event.delta.stop_reason;
                 }
-              } else if (event.type === 'message_stop') {
+            } else if (event.type === 'message_stop') {
+              messageStopObserved = true;
                 raw.write(`data: ${JSON.stringify({
                   choices: [{
                     delta: {},
@@ -953,6 +1392,11 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
 
       await reader.cancel().catch(() => undefined);
       reader.releaseLock();
+      const translatedUsage = translateAnthropicUsage(usage);
+      settleProxySpend(server, spend, messageStopObserved ? {
+          inputTokens: Number(translatedUsage.prompt_tokens ?? 0),
+          outputTokens: Number(translatedUsage.completion_tokens ?? 0),
+        } : undefined);
       if (!raw.destroyed && !raw.writableEnded) raw.end();
     } else {
       // Non-streaming — translate Anthropic response to OpenAI format
@@ -960,6 +1404,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       try {
         data = await anthropicRes.json() as AnthropicMessageResponse;
       } catch (error) {
+        settleProxySpend(server, spend);
         return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
       }
 
@@ -991,9 +1436,14 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         finish_reason: translateAnthropicStopReason(data.stop_reason, toolCalls.length > 0),
       };
 
+      const translatedUsage = translateAnthropicUsage(data.usage);
+      settleProxySpend(server, spend, {
+        inputTokens: Number(translatedUsage.prompt_tokens ?? 0),
+        outputTokens: Number(translatedUsage.completion_tokens ?? 0),
+      });
       return reply.send({
         choices: [choice],
-        usage: translateAnthropicUsage(data.usage),
+        usage: translatedUsage,
         model: data.model,
       });
     }
