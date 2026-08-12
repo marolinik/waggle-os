@@ -2,6 +2,10 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { securityMiddleware } from '../../src/local/security-middleware.js';
 import { browserExtRoutes } from '../../src/local/routes/browser-ext.js';
+import {
+  BROWSER_COMPANION_CREDENTIAL_VAULT_KEY,
+  hashBrowserCompanionCredential,
+} from '../../src/local/browser-companion-pairing.js';
 
 const TEST_TOKEN = 'global-session-token';
 const TEST_BROWSER_TOKEN = 'browser-companion-scoped-token';
@@ -11,14 +15,26 @@ const OTHER_EXTENSION_ORIGIN = 'chrome-extension://ponmlkjihgfedcbaponmlkjihgfed
 
 async function createBrowserExtServer(browserToken = TEST_BROWSER_TOKEN) {
   const server = Fastify({ logger: false });
+  const vaultEntries = new Map<string, { value: string; metadata?: Record<string, unknown> }>();
+  server.decorate('vault', {
+    get: (name: string) => vaultEntries.get(name) ?? null,
+    set: (name: string, value: string, metadata?: Record<string, unknown>) => {
+      vaultEntries.set(name, { value, metadata });
+    },
+    delete: (name: string) => vaultEntries.delete(name),
+  });
   server.decorate('agentState', {
     wsSessionToken: TEST_TOKEN,
     browserCompanionToken: browserToken,
+    browserCompanionCredentialHash: null,
     activeWorkspaceId: 'workspace-1',
   });
   await server.register(securityMiddleware, {
     sessionToken: TEST_TOKEN,
     browserCompanionToken: browserToken,
+    authenticateBrowserCompanionToken: (token) => (
+      server.agentState.browserCompanionCredentialHash === hashBrowserCompanionCredential(token)
+    ),
   });
   server.get('/api/memory/frames', async () => ({ ok: true }));
   server.post('/api/memory/frames', async (request) => ({ ok: true, body: request.body }));
@@ -196,6 +212,104 @@ describe('Browser Companion auth bootstrap', () => {
         activeWorkspaceId: 'workspace-1',
         activeWorkspace: 'workspace-1',
       });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('requires a desktop-minted one-time code instead of automatic extension-id bootstrap', async () => {
+    const server = await createBrowserExtServer();
+    try {
+      const codeRes = await server.inject({
+        method: 'POST',
+        url: '/api/browser-ext/pairing-code',
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      });
+
+      expect(codeRes.statusCode).toBe(200);
+      expect(codeRes.headers['cache-control']).toBe('no-store');
+      expect(codeRes.json().code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+
+      const pairRes = await server.inject({
+        method: 'POST',
+        url: '/api/browser-ext/pair',
+        headers: {
+          'x-waggle-extension-id': EXTENSION_ID,
+          'sec-fetch-site': 'none',
+        },
+        payload: { code: codeRes.json().code },
+      });
+      const pairedToken = pairRes.json().token as string;
+
+      expect(pairRes.statusCode).toBe(200);
+      expect(pairRes.headers['cache-control']).toBe('no-store');
+      expect(pairedToken).not.toBe(TEST_TOKEN);
+      expect(pairedToken).not.toBe(TEST_BROWSER_TOKEN);
+      const storedCredential = server.vault?.get(BROWSER_COMPANION_CREDENTIAL_VAULT_KEY);
+      expect(storedCredential?.value).toBe(hashBrowserCompanionCredential(pairedToken));
+      expect(storedCredential?.value).not.toContain(pairedToken);
+
+      const healthRes = await server.inject({
+        method: 'GET',
+        url: '/api/browser-ext/health',
+        headers: { authorization: `Bearer ${pairedToken}` },
+      });
+      expect(healthRes.statusCode).toBe(200);
+
+      const replayRes = await server.inject({
+        method: 'POST',
+        url: '/api/browser-ext/pair',
+        headers: {
+          'x-waggle-extension-id': EXTENSION_ID,
+          'sec-fetch-site': 'none',
+        },
+        payload: { code: codeRes.json().code },
+      });
+      expect(replayRes.statusCode).toBe(403);
+      expect(replayRes.json().code).toBe('PAIRING_CODE_INVALID');
+
+      const statusRes = await server.inject({
+        method: 'GET',
+        url: '/api/browser-ext/pairing',
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      });
+      expect(statusRes.json()).toMatchObject({ paired: true, extensionId: EXTENSION_ID });
+
+      const revokeRes = await server.inject({
+        method: 'DELETE',
+        url: '/api/browser-ext/pairing',
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      });
+      expect(revokeRes.statusCode).toBe(200);
+      expect(server.vault?.get(BROWSER_COMPANION_CREDENTIAL_VAULT_KEY)).toBeNull();
+
+      const revokedHealth = await server.inject({
+        method: 'GET',
+        url: '/api/browser-ext/health',
+        headers: { authorization: `Bearer ${pairedToken}` },
+      });
+      expect(revokedHealth.statusCode).toBe(401);
+      expect(revokedHealth.json().code).toBe('INVALID_TOKEN');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not let a distinct extension replay the public id without a pairing code', async () => {
+    const server = await createBrowserExtServer();
+    try {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/browser-ext/pair',
+        headers: {
+          'x-waggle-extension-id': EXTENSION_ID,
+          'sec-fetch-site': 'none',
+        },
+        payload: { code: 'BADCODE2' },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().code).toBe('PAIRING_CODE_INVALID');
     } finally {
       await server.close();
     }

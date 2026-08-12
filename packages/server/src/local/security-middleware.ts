@@ -254,6 +254,7 @@ const AUTH_EXEMPT_PATHS = [
   '/health',
   '/api/auth/session-token',
   '/api/browser-ext/session-token',
+  '/api/browser-ext/pair',
   '/api/stripe/webhook',
 ];
 
@@ -299,8 +300,10 @@ export interface SecurityMiddlewareOpts {
   rateLimiter?: RateLimiterConfig;
   /** Session token for bearer auth. When set, all non-exempt routes require Authorization header. */
   sessionToken?: string;
-  /** Narrow Browser Companion credential for health and personal-memory capture only. */
+  /** Legacy per-process Browser Companion credential, removed after client migration. */
   browserCompanionToken?: string;
+  /** Validate the persisted, scoped Browser Companion credential. */
+  authenticateBrowserCompanionToken?: (token: string) => boolean;
   /** Validate a narrow per-run credential for WaggleDance and one model-completion route. */
   authenticateRunToken?: (token: string) => RunTokenAuthResult;
 }
@@ -725,8 +728,11 @@ async function securityMiddlewarePlugin(
       const runToken = typeof rawRunToken === 'string' ? rawRunToken : undefined;
       const authHeader = request.headers.authorization;
       const bearerToken = bearerTokenFromAuth(authHeader);
-      const browserCompanionEligible = browserCompanionToken !== null
-        && bearerToken === browserCompanionToken
+      const browserCompanionTokenValid = typeof bearerToken === 'string' && (
+        (browserCompanionToken !== null && bearerToken === browserCompanionToken)
+        || (opts.authenticateBrowserCompanionToken?.(bearerToken) ?? false)
+      );
+      const browserCompanionEligible = browserCompanionTokenValid
         && (
           (request.method === 'GET' && requestPath === '/api/browser-ext/health')
           || (request.method === 'POST' && requestPath === '/api/memory/frames')

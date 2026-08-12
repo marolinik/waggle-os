@@ -139,6 +139,11 @@ import { documentRoutes } from './routes/documents.js';
 import { fileRoutes } from './routes/files.js';
 import { browseRoutes } from './routes/browse.js';
 import { browserExtRoutes } from './routes/browser-ext.js';
+import {
+  BROWSER_COMPANION_CREDENTIAL_VAULT_KEY,
+  browserCompanionCredentialMatches,
+  isBrowserCompanionCredentialHash,
+} from './browser-companion-pairing.js';
 import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
 import { ChannelManager } from './channels/manager.js';
 import { runChannelChatTurn } from './channels/chat-client.js';
@@ -367,8 +372,10 @@ export interface AgentState {
   llmProvider: LlmProviderStatus;
   /** Session token for WebSocket authentication (generated on server startup) */
   wsSessionToken: string;
-  /** Narrow Browser Companion token for health and personal-memory capture only. */
+  /** Legacy per-process Browser Companion token retained during pairing migration. */
   browserCompanionToken: string;
+  /** SHA-256 hash of the paired Browser Companion credential, or null when unpaired. */
+  browserCompanionCredentialHash: string | null;
   /** Memory-weaver run timestamps for the personal mind. */
   weaverState: { lastPersonalConsolidation: string | null; lastPersonalDecay: string | null };
   /** Per-workspace memory-weaver run timestamps, keyed by workspace ID. */
@@ -687,6 +694,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // ── Agent state (matches CLI initialization) ────────────────────────
   const wsSessionToken = crypto.randomBytes(32).toString('hex');
   const browserCompanionToken = crypto.randomBytes(32).toString('hex');
+  const storedBrowserCompanionHash = vault.get(BROWSER_COMPANION_CREDENTIAL_VAULT_KEY)?.value;
+  const browserCompanionCredentialHash = isBrowserCompanionCredentialHash(storedBrowserCompanionHash)
+    ? storedBrowserCompanionHash
+    : null;
   const litellmApiKey = fullConfig.useBuiltInProxy
     ? wsSessionToken
     : process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
@@ -1674,6 +1685,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     },
     wsSessionToken,
     browserCompanionToken,
+    browserCompanionCredentialHash,
   });
   activateWorkspaceMindWithWeaver(defaultWorkspaceId);
 
@@ -2647,6 +2659,10 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(securityMiddleware, {
     sessionToken: server.agentState.wsSessionToken,
     browserCompanionToken: server.agentState.browserCompanionToken,
+    authenticateBrowserCompanionToken: (token) => browserCompanionCredentialMatches(
+      token,
+      server.agentState.browserCompanionCredentialHash,
+    ),
     authenticateRunToken: (token) => {
       const run = agentRunRegistry.authenticateCredential(token);
       if (!run) return false;
