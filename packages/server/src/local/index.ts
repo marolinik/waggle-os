@@ -1055,6 +1055,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Cost tracker
   const costTracker = new CostTracker({});
+  const budgetConfig = new WaggleConfig(fullConfig.dataDir);
+  costTracker.setBudget(
+    budgetConfig.getDailyBudget(),
+    budgetConfig.getBudgetHardCap() ? 'hard' : 'soft',
+  );
 
   // Command registry — workflow-native slash commands
   const commandRegistry = new CommandRegistry();

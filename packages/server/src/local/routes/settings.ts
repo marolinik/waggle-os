@@ -21,7 +21,7 @@ const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
 const settingsUpdateSchema = z.object({
   defaultModel: z.string().optional(),
   providers: z.record(z.string(), z.unknown()).optional(),
-  dailyBudget: z.number().nullable().optional(),
+  dailyBudget: z.number().nonnegative().nullable().optional(),
   budgetHardCap: z.boolean().optional(),
   fallbackModel: z.string().nullable().optional(),
   budgetModel: z.string().nullable().optional(),
@@ -129,16 +129,11 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
     // F8: Update daily cost budget
     if (dailyBudget !== undefined) {
-      config.setDailyBudget(dailyBudget);
+      config.setDailyBudget(dailyBudget === 0 ? null : dailyBudget);
     }
     if (budgetHardCap !== undefined) {
       config.setBudgetHardCap(budgetHardCap);
-      server.agentState.costTracker.setBudget(
-        config.getDailyBudget(),
-        budgetHardCap ? 'hard' : 'soft',
-      );
     }
-
     // Model Pilot fields
     if (fallbackModel !== undefined) {
       // W2C: a fallback equal to the primary can never fire (chat.ts guards
@@ -193,6 +188,15 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     }
 
     config.save();
+
+    // Apply the live guard only after the durable settings transaction wins.
+    // A failed write must not leave this process less restrictive than disk.
+    if (dailyBudget !== undefined || budgetHardCap !== undefined) {
+      server.agentState.costTracker.setBudget(
+        config.getDailyBudget(),
+        config.getBudgetHardCap() ? 'hard' : 'soft',
+      );
+    }
 
     let router: LiteLLMRefreshResult | undefined;
     if (providerKeyChanged && server.localConfig.manageLiteLLM) {

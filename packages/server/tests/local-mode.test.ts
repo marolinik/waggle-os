@@ -682,5 +682,65 @@ describe('Local Server Mode', () => {
       const getBody = JSON.parse(getRes.body);
       expect(getBody.defaultModel).toBe('claude-opus-4-6');
     });
+
+    it('hydrates a saved hard budget and refreshes daily-budget-only updates', async () => {
+      const isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-budget-settings-'));
+      const config = new waggleCore.WaggleConfig(isolatedDir);
+      config.setDailyBudget(1.25);
+      config.setBudgetHardCap(true);
+      config.save();
+      const isolatedServer = await buildLocalServer({ dataDir: isolatedDir });
+
+      try {
+        expect(isolatedServer.agentState.costTracker.getBudget()).toEqual({
+          dailyBudgetUsd: 1.25,
+          mode: 'hard',
+        });
+
+        const saveSpy = vi.spyOn(waggleCore.WaggleConfig.prototype, 'save')
+          .mockImplementationOnce(() => { throw new Error('simulated config write failure'); });
+        const failedUpdate = await (async () => {
+          try {
+            return await injectWithAuth(isolatedServer, {
+              method: 'PUT',
+              url: '/api/settings',
+              payload: { dailyBudget: 0 },
+            });
+          } finally {
+            saveSpy.mockRestore();
+          }
+        })();
+        expect(failedUpdate.statusCode).toBe(500);
+        expect(isolatedServer.agentState.costTracker.getBudget()).toEqual({
+          dailyBudgetUsd: 1.25,
+          mode: 'hard',
+        });
+
+        const update = await injectWithAuth(isolatedServer, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: { dailyBudget: 2.5 },
+        });
+        expect(update.statusCode).toBe(200);
+        expect(isolatedServer.agentState.costTracker.getBudget()).toEqual({
+          dailyBudgetUsd: 2.5,
+          mode: 'hard',
+        });
+
+        const disable = await injectWithAuth(isolatedServer, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: { dailyBudget: 0 },
+        });
+        expect(disable.statusCode).toBe(200);
+        expect(isolatedServer.agentState.costTracker.getBudget()).toEqual({
+          dailyBudgetUsd: null,
+          mode: 'hard',
+        });
+      } finally {
+        await isolatedServer.close();
+        fs.rmSync(isolatedDir, { recursive: true, force: true });
+      }
+    }, 30_000);
   });
 });

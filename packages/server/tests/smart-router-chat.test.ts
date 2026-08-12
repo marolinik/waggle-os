@@ -7,7 +7,7 @@ import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/age
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
-import { loadSessionMessages } from '../src/local/routes/chat-persistence.js';
+import { loadSessionMessages, persistMessage } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
 describe('chat smart-router integration', () => {
@@ -42,8 +42,10 @@ describe('chat smart-router integration', () => {
     config.setBudgetModel(budget);
     config.clearFallbackModel();
     config.setDailyBudget(null);
+    config.setBudgetHardCap(false);
     config.setBudgetThreshold(0.8);
     config.save();
+    server.agentState.costTracker.setBudget(null, 'soft');
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       capturedModel = agentConfig.model;
       capturedConfigs.push(agentConfig);
@@ -101,7 +103,36 @@ describe('chat smart-router integration', () => {
 
     expect(response.statusCode).toBe(200);
     expect(capturedModel).toBe('primary-test-model');
+    expect(capturedConfigs[0].billingModel).toBe(primary);
+    expect(capturedConfigs[0].modelSpendBudget).toBe(server.agentState.costTracker);
+    expect(capturedConfigs[0].modelSpendBillingClass).toBe('free');
+    expect(capturedConfigs[0].spendWorkspaceId).toBe(activeWorkspaceId);
     expect(response.body).not.toContain('event: model_switch');
+  });
+
+  it('does not retry or fall back after terminal hard-budget rejection', async () => {
+    const config = new WaggleConfig(tmpDir);
+    config.setFallbackModel('ollama/fallback-test-model');
+    config.setDailyBudget(null);
+    config.save();
+    const attempts: string[] = [];
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(agentConfig.model);
+      throw Object.assign(new Error('Daily budget exceeded'), {
+        code: 'DAILY_MODEL_BUDGET_EXCEEDED',
+      });
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: { message: 'What is 19 * 23?', session: 'hard-budget-terminal' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attempts).toEqual(['primary-test-model']);
+    expect(response.body).toContain('event: error');
+    expect(response.body).toContain('Daily budget exceeded');
   });
 
   it('keeps an under-threshold trivial turn on the configured primary model', async () => {
@@ -371,6 +402,53 @@ describe('chat smart-router integration', () => {
     expect(localCompressionRequests.length).toBeGreaterThan(0);
     expect(capturedConfigs.every((agentConfig) => agentConfig.model === 'primary-test-model'))
       .toBe(true);
+  });
+
+  it('does not call a paid context compressor while a hard model budget is active', async () => {
+    const previousProvider = server.agentState.llmProvider;
+    const previousCurrentModel = server.agentState.currentModel;
+    const session = 'hard-budget-paid-compression-blocked';
+    server.vault.set('mistral', 'mistral-hard-budget-compression-test');
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'test',
+      checkedAt: new Date().toISOString(),
+    };
+    server.agentState.currentModel = 'mistral/mistral-large-latest';
+
+    const config = new WaggleConfig(tmpDir);
+    config.setDefaultModel('mistral/mistral-large-latest');
+    config.setBudgetModel('mistral/mistral-small-latest');
+    config.setDailyBudget(1);
+    config.setBudgetHardCap(true);
+    config.save();
+    server.agentState.costTracker.setBudget(1, 'hard');
+    vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(1);
+
+    for (let turn = 0; turn < 8; turn++) {
+      persistMessage(tmpDir, activeWorkspaceId, session, {
+        role: turn % 2 === 0 ? 'user' : 'assistant',
+        content: `Sensitive history ${turn}: ${'private detail '.repeat(3_000)}`,
+      });
+    }
+    completionRequests = [];
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Summarize the latest point.', session },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(completionRequests).toEqual([]);
+    } finally {
+      server.vault.delete('mistral');
+      server.agentState.costTracker.setBudget(null, 'soft');
+      server.agentState.llmProvider = previousProvider;
+      server.agentState.currentModel = previousCurrentModel;
+    }
   });
 
   it('returns to the primary when an optional budget model is unavailable', async () => {

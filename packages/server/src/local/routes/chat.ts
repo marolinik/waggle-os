@@ -293,6 +293,13 @@ function hasExplicitGatedToolIntent(message: string): boolean {
     || isExplicitPlanAuthoringRequest(message);
 }
 
+function isTerminalModelBudgetError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 'DAILY_MODEL_BUDGET_EXCEEDED'
+    || code === 'DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE';
+}
+
 export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
   if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
@@ -1473,13 +1480,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       return;
     }
     activeChatTurns.add(activeSessionStateKey);
+    const hasCustomRunner = !!server.agentRunner;
+    const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
 
     try {
-      const hasCustomRunner = !!server.agentRunner;
       requestHookRegistry = hasCustomRunner ? undefined : hookRegistry.fork();
 
       // Resolve the agent runner (injectable for tests)
-      const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
       const sessionId = activeSessionId;
       const effectiveWorkspace = activeExecutionWorkspaceId;
       const sessionStateKey = activeSessionStateKey;
@@ -2442,6 +2449,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && canUseBudgetModelWithoutCloudEgress(resolvedModel, budgetModel)
           ? budgetModel
           : null;
+        const liveModelBudget = costTracker.getBudget();
+        const paidCompressionBlocked = liveModelBudget.mode === 'hard'
+          && liveModelBudget.dailyBudgetUsd !== null;
+        if (compressionModel
+          && paidCompressionBlocked
+          && !isOfflineOllamaModelReference(compressionModel)) {
+          compressionModel = null;
+        }
         const discoveredWindow = getModelContextWindow(resolvedModel);
         const isLocalModel = isOfflineOllamaModelReference(resolvedModel);
         const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
@@ -2845,6 +2860,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           litellmUrl: getLitellmUrl(),
           litellmApiKey: server.agentState.litellmApiKey,
           model: resolvedModel,
+          billingModel: resolvedModel,
+          modelSpendBudget: costTracker,
+          modelSpendBillingClass: isOfflineOllamaModelReference(resolvedModel) ? 'free' : 'priced',
+          spendWorkspaceId: executionScopeId,
           systemPrompt,
           tools: effectiveTools,
           messages: windowedMessages,
@@ -3069,6 +3088,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ...runConfig,
             systemPrompt: systemPromptForAttempt,
             model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
+            billingModel: logicalModel,
+            modelSpendBillingClass: isOfflineOllamaModelReference(logicalModel) ? 'free' : 'priced',
             litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
             litellmApiKey: apiKey,
             reasoning: reasoningForModelAttempt(logicalModel),
@@ -3096,7 +3117,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // The agent may already have executed tools before detecting a
           // truncated final completion. Replaying the whole run on another
           // model would repeat those side effects, so this signal is terminal.
-          if (isIncompleteCompletionError(initialError)) throw initialError;
+          if (isIncompleteCompletionError(initialError) || isTerminalModelBudgetError(initialError)) {
+            throw initialError;
+          }
           let failure = initialError;
           let failedBudgetModel: string | null = null;
 
@@ -3118,7 +3141,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             try {
               return await runAgentAttempt(await configForModelAttempt(resolvedModel));
             } catch (primaryRunError) {
-              if (isIncompleteCompletionError(primaryRunError)) throw primaryRunError;
+              if (isIncompleteCompletionError(primaryRunError)
+                || isTerminalModelBudgetError(primaryRunError)) {
+                throw primaryRunError;
+              }
               failure = primaryRunError;
             }
           }
@@ -3146,7 +3172,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
           if (turnSignal.aborted) throw primaryErr;
-          if (isIncompleteCompletionError(primaryErr)) throw primaryErr;
+          if (isIncompleteCompletionError(primaryErr) || isTerminalModelBudgetError(primaryErr)) {
+            throw primaryErr;
+          }
           // Report error to credential pool and try next key
           if (credPool && poolKey) {
             let failedKey = poolKey;
@@ -3183,7 +3211,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 break;
               } catch (nextCredentialError) {
                 if (turnSignal.aborted) throw nextCredentialError;
-                if (isIncompleteCompletionError(nextCredentialError)) throw nextCredentialError;
+                if (isIncompleteCompletionError(nextCredentialError)
+                  || isTerminalModelBudgetError(nextCredentialError)) {
+                  throw nextCredentialError;
+                }
                 failedKey = nextKey;
                 credentialError = nextCredentialError;
               }
@@ -3252,12 +3283,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           result.usage.outputTokens,
           resolvedModel,
         );
-        costTracker.addUsage(
+        if (hasCustomRunner) {
+          costTracker.addUsage(
           resolvedModel,
           result.usage.inputTokens,
           result.usage.outputTokens,
           executionScopeId,
-        );
+          );
+        }
 
         // L-17 C3: per-session token accumulation for /api/fleet visibility.
         // costTracker is per-workspace cost; sessionManager holds per-session
@@ -3606,12 +3639,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             billableFailureUsage.outputTokens,
             activeAttemptModel,
           );
-          costTracker.addUsage(
-            activeAttemptModel,
-            billableFailureUsage.inputTokens,
-            billableFailureUsage.outputTokens,
-            activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
-          );
+          if (hasCustomRunner) {
+            costTracker.addUsage(
+              activeAttemptModel,
+              billableFailureUsage.inputTokens,
+              billableFailureUsage.outputTokens,
+              activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
+            );
+          }
           if (activeExecutionWorkspaceId) {
             server.sessionManager?.addTokens(
               activeExecutionWorkspaceId,
@@ -3674,7 +3709,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         errorMessage = 'Something went wrong. Try sending your message again.';
       }
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
-      sendEvent('error', { message: errorMessage });
+      const budgetCode = isTerminalModelBudgetError(err)
+        ? (err as { code: string }).code
+        : undefined;
+      sendEvent('error', { message: errorMessage, ...(budgetCode ? { code: budgetCode } : {}) });
 
       // Persist the assistant-side failure as a real conversation turn. The UI
       // already shows the SSE error while the stream is live, but without this
