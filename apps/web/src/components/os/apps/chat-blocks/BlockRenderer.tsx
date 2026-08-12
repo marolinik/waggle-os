@@ -6,6 +6,8 @@ import ModelSwitchBlock from './ModelSwitchBlock';
 import ArtifactBlock, { isArtifactBlock } from './ArtifactBlock';
 import ErrorBlock from './ErrorBlock';
 import RouteProposalCard from './RouteProposalCard';
+import CapabilityRequestCard, { type CapabilityRequest } from './CapabilityRequestCard';
+import { segmentText } from './capability-request-parser';
 import type { RouteProposalConfirmResponse } from '@/lib/route-proposals';
 import { ActivityStream, type ActivityStep } from '../../warm';
 import { frameSourceLabel } from '@/lib/frame-source';
@@ -25,6 +27,32 @@ function getBlockKey(block: ContentBlock, index: number): string {
   if (block.type === 'tool_use') return block.id;
   if ('blockId' in block && block.blockId) return block.blockId;
   return `${block.type}-${index}`;
+}
+
+function trustedCapabilityProposal(blocks: ContentBlock[]): {
+  blockId: string;
+  request: CapabilityRequest;
+} | null {
+  let trusted: { blockId: string; request: CapabilityRequest } | null = null;
+  for (const block of blocks) {
+    if (
+      block.type !== 'tool_use'
+      || block.name !== 'acquire_capability'
+      || block.status !== 'done'
+      || typeof block.result !== 'string'
+    ) continue;
+
+    const segments = segmentText(block.result.trim());
+    const finalSegment = segments.at(-1);
+    const finalProposal = finalSegment?.kind === 'capability' ? finalSegment : null;
+    if (!finalProposal) continue;
+
+    const { request } = finalProposal;
+    const supportedRoute = (request.source === 'starter-pack' && request.kind === 'skill')
+      || (request.source === 'marketplace' && request.kind === 'marketplace');
+    if (supportedRoute) trusted = { blockId: block.id, request };
+  }
+  return trusted;
 }
 
 /**
@@ -80,6 +108,7 @@ const BlockRenderer = ({
   // so a tool_use between two steps no longer splits the run into two cards.
   const allSteps = blocks.filter((b): b is StepContentBlock => b.type === 'step');
   const firstStepIdx = blocks.findIndex(b => b.type === 'step');
+  const capabilityProposal = trustedCapabilityProposal(blocks);
 
   blocks.forEach((block, i) => {
     if (block.type === 'step') {
@@ -100,6 +129,14 @@ const BlockRenderer = ({
             ? <ArtifactBlock key={key} block={block} />
             : <ToolUseBlock key={key} block={block} />,
         );
+        if (capabilityProposal?.blockId === block.id) {
+          out.push(
+            <CapabilityRequestCard
+              key={`${key}-capability`}
+              request={capabilityProposal.request}
+            />,
+          );
+        }
         break;
       case 'model_switch':
         out.push(<ModelSwitchBlock key={key} block={block} />);

@@ -1,9 +1,9 @@
-import { memo, useMemo, Fragment } from 'react';
+import { memo, useMemo } from 'react';
 import type { TextContentBlock } from '@/lib/types';
-import CapabilityRequestCard from './CapabilityRequestCard';
-import { segmentText } from './capability-request-parser';
 import { renderChatMarkdown } from '@/lib/render-markdown';
 import { useStreamCadence } from '@/hooks/useStreamCadence';
+
+const CAPABILITY_MARKER_DISPLAY_RE = /<!--\s*waggle:capability_request[\s\S]*?(?:-->|$)/g;
 
 interface TextBlockProps {
   block: TextContentBlock;
@@ -17,44 +17,24 @@ const TextBlock = memo(({ block, isStreaming }: TextBlockProps) => {
   // first-token latency — `raw` already holds every delivered chunk; this only
   // paces the paint. Settled/history turns + reduced-motion snap to whole text.
   const { shown, caretVisible } = useStreamCadence(raw, !!isStreaming);
-  const segments = useMemo(() => segmentText(shown), [shown]);
+  const displayText = useMemo(
+    () => shown.replace(CAPABILITY_MARKER_DISPLAY_RE, ''),
+    [shown],
+  );
 
   if (!raw && !isStreaming) return null;
 
-  // Streaming caret + bouncing-dot loader behaviour preserved from the original
-  // implementation. We attach the caret to the last text segment so the visual
-  // flow doesn't break when capability cards are interleaved with text.
-  let cursorAttached = false;
-
   return (
     <div>
-      {segments.map((seg, i) => {
-        if (seg.kind === 'capability') {
-          return <CapabilityRequestCard key={`cap-${i}`} request={seg.request} />;
-        }
-        const isLastTextSegment = !cursorAttached && i === segments.length - 1;
-        cursorAttached = cursorAttached || isLastTextSegment;
-        return (
-          <Fragment key={`txt-${i}`}>
-            {/* renderChatMarkdown escapes the full input before emitting any
-                tag (S04-hardened pattern) — partial markdown crossing the reveal
-                head forms as escaped text, never raw noise. */}
-            {seg.content && (
-              <span dangerouslySetInnerHTML={{ __html: renderChatMarkdown(seg.content) }} />
-            )}
-            {caretVisible && isLastTextSegment && seg.content && (
-              <span
-                aria-hidden
-                // R21 (design/competitor HIGH): the 2px caret was invisible at
-                // video scale ("no blinking caret"). A 3px rounded honey bar at
-                // ~1.15em reads as a live typing cursor; .stream-caret carries the
-                // token'd blink (reduced-motion → solid, no blink).
-                className="stream-caret inline-block w-[3px] h-[1.15em] rounded-[1.5px] bg-[var(--honey-text)] ml-0.5 align-text-bottom"
-              />
-            )}
-          </Fragment>
-        );
-      })}
+      {/* Assistant text is presentation data only. renderChatMarkdown escapes
+          it before emitting tags; privileged controls come from tool results. */}
+      {displayText && <span dangerouslySetInnerHTML={{ __html: renderChatMarkdown(displayText) }} />}
+      {caretVisible && displayText && (
+        <span
+          aria-hidden
+          className="stream-caret inline-block w-[3px] h-[1.15em] rounded-[1.5px] bg-[var(--honey-text)] ml-0.5 align-text-bottom"
+        />
+      )}
       {isStreaming && !shown && (
         <span className="inline-flex gap-1 ml-1">
           <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms' }} />

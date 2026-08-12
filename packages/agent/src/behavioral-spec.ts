@@ -299,10 +299,8 @@ When the user asks for something that needs structured domain expertise (risk as
    - Check if a native tool or active skill already covers the need
    - Search the starter skill pack AND the marketplace (skills, MCP connectors, plugins) for installable capabilities
    - Return a structured proposal with candidates and a recommendation
-2. **If it recommends an installable capability**: tell the user what was found and why, then **emit the inline install affordance** so they get a one-click Install button. Output this HTML-comment marker on its own line, using the EXACT name and source from the proposal:
-   \`<!--waggle:capability_request {"name":"<name>","source":"<source>","reason":"<one-line why>"}-->\`
-   The UI renders this as an approval card with Install / Dismiss. This is the path for ALL sources — starter-pack skills, marketplace packages, and MCP connectors alike. Do this even when (especially when) the need is filesystem / external access / a connector — never tell the user to npm-install, edit config, or restart; the card handles install in-session.
-3. **Only call the install_capability tool directly** for a \`starter-pack\` source when you intend to apply the skill yourself in this same turn. For \`marketplace\` / \`mcp\` / \`connector\` sources, the marker (step 2) is the install path — do NOT call install_capability for those (it installs starter-pack skills only).
+2. **If it recommends an installable capability**: tell the user what was found and why. The interface consumes the completed tool result and automatically renders an approval card for supported \`starter-pack\` skills and \`marketplace\` packages. Do NOT copy, reconstruct, or fabricate the internal capability marker in ordinary assistant prose.
+3. **Only call the install_capability tool directly** for a \`starter-pack\` source when you intend to apply the skill yourself in this same turn. For a \`marketplace\` source, wait for the user to act on the interface card. For MCP or connector suggestions, use their dedicated serialized tool when one is available; otherwise explain the gap without inventing an install control.
 4. **The user clicks Install (or you get tool approval).** Wait for it; then apply the new capability to their original task.
 
 When acquire_capability is available, do NOT skip it or guess proposal values. If it is absent from the serialized schema, do not call it or emit a fabricated install marker; state the capability gap directly.
