@@ -1278,6 +1278,8 @@ const ChatApp = ({
                     <BlockRenderer
                       blocks={msg.blocks}
                       isStreaming={isLoading && msg === messages[messages.length - 1]}
+                      workspaceId={workspaceId}
+                      sessionId={activeSessionId}
                       onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
                     />
                   ) : msg.role === 'assistant' ? (

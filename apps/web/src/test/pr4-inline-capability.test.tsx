@@ -1,8 +1,7 @@
 /**
  * PR4 Phase D — the inline capability card (Variation B). Each kind routes
- * through the shared install store (so a chat install reflects in the grid +
- * count bar): connector token-paste / OAuth→Hub, mcp enable, marketplace
- * resolve-then-install, starter via installPack.
+ * through a server-issued, scoped proposal for marketplace packages and the
+ * bundled install path for starter packs.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, renderHook, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
@@ -18,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     getConnectors: vi.fn().mockResolvedValue([]),
     getMcps: vi.fn().mockResolvedValue([]),
     getMarketplace: vi.fn().mockResolvedValue({ packages: [] }),
+    fetch: vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
     searchMarketplace: vi.fn(),
     installMarketplacePackage: vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
     uninstallMarketplacePackage: vi.fn().mockResolvedValue(new Response('{}', { status: 200 })),
@@ -29,19 +29,66 @@ const mocks = vi.hoisted(() => ({
   },
   toast: vi.fn(),
 }));
-vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
+vi.mock('@/lib/adapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/adapter')>();
+  return { ...actual, adapter: mocks.adapter, default: vi.fn() };
+});
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mocks.toast }) }));
 
 import { ServiceProvider } from '@/providers/ServiceProvider';
-import { InstallProvider } from '@/providers/InstallProvider';
+import { InstallProvider, useInstallStore } from '@/providers/InstallProvider';
+import { AdapterHttpError } from '@/lib/adapter';
 import CapabilityRequestCard from '@/components/os/apps/chat-blocks/CapabilityRequestCard';
 import BlockRenderer from '@/components/os/apps/chat-blocks/BlockRenderer';
+
+const InstalledCountProbe = () => {
+  const { installedCount } = useInstallStore();
+  return <span data-testid="installed-count">{installedCount}</span>;
+};
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ServiceProvider><InstallProvider>{children}</InstallProvider></ServiceProvider>
 );
-const renderCard = (request: CapabilityRequest) => render(<CapabilityRequestCard request={request} />, { wrapper });
-const renderBlocks = (blocks: ContentBlock[]) => render(<BlockRenderer blocks={blocks} />, { wrapper });
+const DEFAULT_CONTEXT = { workspaceId: 'workspace-a', sessionId: 'session-a' };
+const PROPOSAL_ID = '123e4567-e89b-42d3-a456-426614174000';
+
+const marketplaceRequest = (overrides: Partial<CapabilityRequest> = {}): CapabilityRequest => ({
+  name: 'web-scraper',
+  source: 'marketplace',
+  kind: 'marketplace',
+  proposalId: PROPOSAL_ID,
+  expiresAt: '2999-01-01T00:00:00.000Z',
+  packageId: 7,
+  sourceId: 2,
+  publisher: 'Waggle Labs',
+  version: '1.2.3',
+  installType: 'skill',
+  manifestDigest: `sha256:${'a'.repeat(64)}`,
+  riskStatus: 'CLEAN',
+  riskScore: 100,
+  riskContentHash: 'b'.repeat(64),
+  riskBlocked: false,
+  riskDigest: `sha256:${'c'.repeat(64)}`,
+  ...overrides,
+});
+
+const marketplaceMarker = (overrides: Partial<CapabilityRequest> = {}) =>
+  `<!--waggle:capability_request ${JSON.stringify(marketplaceRequest(overrides))}-->`;
+
+const renderCard = (
+  request: CapabilityRequest,
+  context: { workspaceId?: string | null; sessionId?: string | null } = DEFAULT_CONTEXT,
+) => render(
+  <>
+    <CapabilityRequestCard request={request} {...context} />
+    <InstalledCountProbe />
+  </>,
+  { wrapper },
+);
+const renderBlocks = (
+  blocks: ContentBlock[],
+  context: { workspaceId?: string | null; sessionId?: string | null } = DEFAULT_CONTEXT,
+) => render(<BlockRenderer blocks={blocks} {...context} />, { wrapper });
 
 beforeEach(() => {
   mocks.adapter.getHistory.mockResolvedValue([]);
@@ -49,6 +96,7 @@ beforeEach(() => {
   mocks.adapter.getConnectors.mockResolvedValue([]);
   mocks.adapter.getMcps.mockResolvedValue([]);
   mocks.adapter.getMarketplace.mockResolvedValue({ packages: [] });
+  mocks.adapter.fetch.mockResolvedValue(new Response('{}', { status: 200 }));
   mocks.adapter.searchMarketplace.mockResolvedValue(
     new Response(JSON.stringify({ packages: [{ id: 7, name: 'web-scraper', waggle_install_type: 'skill' }] }), { status: 200 }));
   mocks.adapter.installMarketplacePackage.mockResolvedValue(new Response('{}', { status: 200 }));
@@ -93,6 +141,18 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
     }]);
 
     expect(screen.getByTestId('capability-request-card')).toHaveTextContent('daily-plan');
+  });
+
+  it('keeps a legacy marketplace receipt without a server proposal inert', () => {
+    renderBlocks([{
+      type: 'tool_use',
+      id: 'legacy-marketplace-receipt',
+      name: 'acquire_capability',
+      status: 'done',
+      result: '<!--waggle:capability_request {"name":"web-scraper","source":"marketplace","kind":"marketplace","packageId":7,"installType":"skill"}-->',
+    }]);
+
+    expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
   });
 
   it.each([
@@ -186,8 +246,35 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
     expect(screen.getByTestId('capability-request-card')).not.toHaveTextContent('wrong-route');
   });
 
+  it('renders every independently issued marketplace proposal in a live turn', () => {
+    renderBlocks([
+      {
+        type: 'tool_use',
+        id: 'proposal-one',
+        name: 'acquire_capability',
+        status: 'done',
+        result: marketplaceMarker({ name: 'web-scraper', packageId: 7 }),
+      },
+      {
+        type: 'tool_use',
+        id: 'proposal-two',
+        name: 'acquire_capability',
+        status: 'done',
+        result: marketplaceMarker({
+          name: 'document-reader',
+          packageId: 8,
+          proposalId: '123e4567-e89b-42d3-a456-426614174001',
+        }),
+      },
+    ]);
+
+    expect(screen.getAllByTestId('capability-request-card')).toHaveLength(2);
+    expect(screen.getByText('web-scraper')).toBeInTheDocument();
+    expect(screen.getByText('document-reader')).toBeInTheDocument();
+  });
+
   it('renders a marketplace card from a real cold-history tool receipt', async () => {
-    const marker = '<!--waggle:capability_request {"name":"web-scraper","source":"marketplace","kind":"marketplace","packageId":7,"installType":"skill"}-->';
+    const marker = marketplaceMarker();
     mocks.adapter.getHistory.mockResolvedValueOnce([{
       id: 'history-capability',
       role: 'assistant',
@@ -221,7 +308,10 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
       }),
     ]));
 
-    renderBlocks(blocks);
+    renderBlocks(blocks, {
+      workspaceId: 'capability-history-workspace',
+      sessionId: 'capability-history-session',
+    });
     expect(screen.getByTestId('capability-request-card')).toHaveTextContent('web-scraper');
   });
 
@@ -233,18 +323,22 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
     expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
   });
 
-  it('a marketplace request installs only its canonical package id through the store', async () => {
-    renderCard({
-      name: 'web-scraper',
-      source: 'marketplace',
-      kind: 'marketplace',
-      packageId: 73,
-      installType: 'plugin',
-    });
+  it('confirms a marketplace request by proposal id and exact chat scope', async () => {
+    renderCard(marketplaceRequest({ packageId: 73, installType: 'plugin' }));
+    await waitFor(() => expect(mocks.adapter.getMarketplace).toHaveBeenCalledTimes(2));
+    await act(async () => { await Promise.resolve(); });
     fireEvent.click(screen.getByTestId('capability-request-install'));
-    await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(73));
+    await waitFor(() => expect(mocks.adapter.fetch).toHaveBeenCalledWith(
+      `/api/capability-proposals/${PROPOSAL_ID}/confirm`,
+      {
+        method: 'POST',
+        body: JSON.stringify(DEFAULT_CONTEXT),
+      },
+    ));
+    expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
     expect(mocks.adapter.searchMarketplace).not.toHaveBeenCalled();
     expect(await screen.findByText(/Done — available/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('installed-count')).toHaveTextContent('1'));
   });
 
   it('does not consult poisoned fuzzy search results for a marketplace approval', async () => {
@@ -253,18 +347,49 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
         { id: 8, name: 'web-scraper-pro', waggle_install_type: 'skill' },
       ],
     }), { status: 200 }));
-    renderCard({
-      name: 'web-scraper',
-      source: 'marketplace',
-      kind: 'marketplace',
-      packageId: 7,
-      installType: 'skill',
-    });
+    renderCard(marketplaceRequest());
 
     fireEvent.click(screen.getByTestId('capability-request-install'));
 
-    await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
-    expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalledWith(8);
+    await waitFor(() => expect(mocks.adapter.fetch).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
+    expect(mocks.adapter.searchMarketplace).not.toHaveBeenCalled();
+  });
+
+  it('submits at most one confirmation when Install is clicked twice', async () => {
+    let release!: () => void;
+    mocks.adapter.fetch.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      release = () => resolve(new Response('{}', { status: 200 }));
+    }));
+    renderCard(marketplaceRequest());
+
+    const install = screen.getByTestId('capability-request-install');
+    fireEvent.click(install);
+    fireEvent.click(install);
+
+    expect(mocks.adapter.fetch).toHaveBeenCalledTimes(1);
+    release();
+    expect(await screen.findByText(/Done — available/)).toBeInTheDocument();
+  });
+
+  it.each([
+    [404, 'CAPABILITY_PROPOSAL_NOT_AVAILABLE', 'This install request is no longer available.'],
+    [409, 'CAPABILITY_PROPOSAL_ALREADY_USED', 'This install request was already used.'],
+    [410, 'CAPABILITY_PROPOSAL_EXPIRED', 'This install request expired. Ask Waggle to find it again.'],
+    [422, 'INSTALL_FAILED', 'Install failed'],
+  ])('fails without a direct-install fallback after proposal HTTP %s', async (status, code, message) => {
+    mocks.adapter.fetch.mockRejectedValueOnce(new AdapterHttpError(
+      status,
+      'failed',
+      { code, message: code === 'INSTALL_FAILED' ? message : undefined },
+    ));
+    renderCard(marketplaceRequest());
+
+    fireEvent.click(screen.getByTestId('capability-request-install'));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(mocks.adapter.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
     expect(mocks.adapter.searchMarketplace).not.toHaveBeenCalled();
   });
 
@@ -274,11 +399,23 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
     ['fractional id', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', packageId: 7.5, installType: 'skill' }],
     ['string id', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', packageId: '7', installType: 'skill' }],
     ['invalid install type', { name: 'web-scraper', source: 'marketplace', kind: 'marketplace', packageId: 7, installType: 'mcp_server' }],
+    ['missing proposal', marketplaceRequest({ proposalId: undefined })],
+    ['expired proposal', marketplaceRequest({ expiresAt: '2000-01-01T00:00:00.000Z' })],
   ])('fails closed for a marketplace request with %s', (_case, request) => {
     renderCard(request as CapabilityRequest);
 
     expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
     expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing workspace', { workspaceId: null, sessionId: 'session-a' }],
+    ['missing session', { workspaceId: 'workspace-a', sessionId: null }],
+  ])('fails closed for a proposal with %s', (_case, context) => {
+    renderCard(marketplaceRequest(), context);
+
+    expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
+    expect(mocks.adapter.fetch).not.toHaveBeenCalled();
   });
 
   it('a starter-pack request installs via installPack (bundled, not store-tracked)', async () => {
@@ -289,15 +426,10 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
   });
 
   it('Dismiss declines without installing', async () => {
-    renderCard({
-      name: 'web-scraper',
-      source: 'marketplace',
-      kind: 'marketplace',
-      packageId: 7,
-      installType: 'skill',
-    });
+    renderCard(marketplaceRequest());
     fireEvent.click(screen.getByTestId('capability-request-decline'));
     expect(await screen.findByText('Dismissed')).toBeInTheDocument();
+    expect(mocks.adapter.fetch).not.toHaveBeenCalled();
     expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
   });
 });

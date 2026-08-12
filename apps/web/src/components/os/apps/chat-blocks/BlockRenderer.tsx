@@ -15,6 +15,8 @@ import { frameSourceLabel } from '@/lib/frame-source';
 interface BlockRendererProps {
   blocks: ContentBlock[];
   isStreaming?: boolean;
+  workspaceId?: string | null;
+  sessionId?: string | null;
   /** F4: re-issue the last failed turn (threaded to error blocks). */
   onRetry?: () => void;
   /** Router arc B2: a route_proposal dispatch landed (ChatApp consumes the composer text). */
@@ -29,11 +31,8 @@ function getBlockKey(block: ContentBlock, index: number): string {
   return `${block.type}-${index}`;
 }
 
-function trustedCapabilityProposal(blocks: ContentBlock[]): {
-  blockId: string;
-  request: CapabilityRequest;
-} | null {
-  let trusted: { blockId: string; request: CapabilityRequest } | null = null;
+function trustedCapabilityProposals(blocks: ContentBlock[]): Map<string, CapabilityRequest> {
+  const trusted = new Map<string, CapabilityRequest>();
   for (const block of blocks) {
     if (
       block.type !== 'tool_use'
@@ -50,7 +49,7 @@ function trustedCapabilityProposal(blocks: ContentBlock[]): {
     const { request } = finalProposal;
     const supportedRoute = (request.source === 'starter-pack' && request.kind === 'skill')
       || (request.source === 'marketplace' && request.kind === 'marketplace');
-    if (supportedRoute) trusted = { blockId: block.id, request };
+    if (supportedRoute) trusted.set(block.id, request);
   }
   return trusted;
 }
@@ -99,7 +98,8 @@ function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: bo
 }
 
 const BlockRenderer = ({
-  blocks, isStreaming, onRetry, onRouteProposalDispatched, onRouteProposalRePropose,
+  blocks, isStreaming, workspaceId, sessionId, onRetry,
+  onRouteProposalDispatched, onRouteProposalRePropose,
 }: BlockRendererProps) => {
   const out: ReactNode[] = [];
   // F11: one Activity card per turn. Collect every step of the turn and render
@@ -108,7 +108,7 @@ const BlockRenderer = ({
   // so a tool_use between two steps no longer splits the run into two cards.
   const allSteps = blocks.filter((b): b is StepContentBlock => b.type === 'step');
   const firstStepIdx = blocks.findIndex(b => b.type === 'step');
-  const capabilityProposal = trustedCapabilityProposal(blocks);
+  const capabilityProposals = trustedCapabilityProposals(blocks);
 
   blocks.forEach((block, i) => {
     if (block.type === 'step') {
@@ -121,7 +121,7 @@ const BlockRenderer = ({
       case 'text':
         out.push(<TextBlock key={key} block={block} isStreaming={isStreaming && isLast} />);
         break;
-      case 'tool_use':
+      case 'tool_use': {
         // C2: a completed file-write IS the deliverable — render an openable
         // artifact card; in-flight/failed calls keep the generic tool row.
         out.push(
@@ -129,15 +129,19 @@ const BlockRenderer = ({
             ? <ArtifactBlock key={key} block={block} />
             : <ToolUseBlock key={key} block={block} />,
         );
-        if (capabilityProposal?.blockId === block.id) {
+        const capabilityProposal = capabilityProposals.get(block.id);
+        if (capabilityProposal) {
           out.push(
             <CapabilityRequestCard
               key={`${key}-capability`}
-              request={capabilityProposal.request}
+              request={capabilityProposal}
+              workspaceId={workspaceId}
+              sessionId={sessionId}
             />,
           );
         }
         break;
+      }
       case 'model_switch':
         out.push(<ModelSwitchBlock key={key} block={block} />);
         break;

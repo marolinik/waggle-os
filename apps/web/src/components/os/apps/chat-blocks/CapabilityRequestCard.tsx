@@ -1,17 +1,28 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Loader2, Download, CheckCircle2, XCircle, Package, ShieldCheck } from 'lucide-react';
-import { adapter } from '@/lib/adapter';
+import { adapter, AdapterHttpError } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 import { useInstallStore } from '@/providers/InstallProvider';
-import { describeError, type InstallOutcome, type InstallTarget } from '@/lib/install-store';
+import { describeError } from '@/lib/install-store';
 
 export interface CapabilityRequest {
   name: string;
   source: string;
   kind?: 'skill' | 'marketplace' | 'connector' | 'mcp';
   reason?: string;
+  proposalId?: string;
+  expiresAt?: string;
   packageId?: number;
+  sourceId?: number;
+  publisher?: string;
+  version?: string;
   installType?: 'skill' | 'plugin' | 'mcp';
+  manifestDigest?: string;
+  riskStatus?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'CLEAN';
+  riskScore?: number;
+  riskContentHash?: string;
+  riskBlocked?: boolean;
+  riskDigest?: string;
   /** Reserved parser metadata; not authorized by the current card contract. */
   connectorId?: string;
   /** Reserved parser metadata; not authorized by the current card contract. */
@@ -20,6 +31,8 @@ export interface CapabilityRequest {
 
 interface CapabilityRequestCardProps {
   request: CapabilityRequest;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 }
 
 type Phase = 'pending' | 'installing' | 'installed' | 'declined' | 'failed';
@@ -33,15 +46,48 @@ type Phase = 'pending' | 'installing' | 'installed' | 'declined' | 'failed';
  * and exact-name marketplace packages. Connector and MCP proposals use their
  * dedicated flows and are rejected here until they carry canonical IDs.
  */
-export default function CapabilityRequestCard({ request }: CapabilityRequestCardProps) {
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export default function CapabilityRequestCard({
+  request,
+  workspaceId,
+  sessionId,
+}: CapabilityRequestCardProps) {
   const [phase, setPhase] = useState<Phase>('pending');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const installStarted = useRef(false);
   const { toast } = useToast();
-  const { install } = useInstallStore();
+  const { confirmPackageProposal } = useInstallStore();
 
   const kind = request.kind;
   const marketplaceIdentity = Number.isSafeInteger(request.packageId)
     && (request.packageId ?? 0) > 0
+    && Number.isSafeInteger(request.sourceId)
+    && (request.sourceId ?? 0) > 0
+    && typeof request.proposalId === 'string'
+    && UUID_V4_RE.test(request.proposalId)
+    && typeof request.expiresAt === 'string'
+    && Number.isFinite(Date.parse(request.expiresAt))
+    && Date.parse(request.expiresAt) > Date.now()
+    && typeof request.publisher === 'string'
+    && request.publisher.trim().length > 0
+    && typeof request.version === 'string'
+    && request.version.trim().length > 0
+    && typeof request.manifestDigest === 'string'
+    && /^sha256:[0-9a-f]{64}$/i.test(request.manifestDigest)
+    && typeof request.riskStatus === 'string'
+    && ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'CLEAN'].includes(request.riskStatus)
+    && typeof request.riskScore === 'number'
+    && Number.isFinite(request.riskScore)
+    && typeof request.riskContentHash === 'string'
+    && /^(?:|[0-9a-f]{64})$/i.test(request.riskContentHash)
+    && typeof request.riskBlocked === 'boolean'
+    && typeof request.riskDigest === 'string'
+    && /^sha256:[0-9a-f]{64}$/i.test(request.riskDigest)
+    && typeof workspaceId === 'string'
+    && workspaceId.length > 0
+    && typeof sessionId === 'string'
+    && sessionId.length > 0
     && (request.installType === 'skill'
       || request.installType === 'plugin'
       || request.installType === 'mcp');
@@ -52,30 +98,21 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
 
   if (!supportedRoute) return null;
 
-  /** Map a store outcome → the card's terminal phase (the store already
-   *  toasted; tier dispatched the upgrade event via the adapter). */
-  const applyOutcome = (outcome: InstallOutcome) => {
-    if (outcome.ok) { setPhase('installed'); return; }
-    setPhase('failed');
-    setErrorMessage(
-      outcome.reason === 'tier' ? 'Upgrade required'
-        : outcome.reason === 'security' ? 'Blocked by the security scan'
-          : outcome.reason === 'needs-credentials' ? 'A token is required'
-            : 'Install failed',
-    );
-  };
-
   const handleInstall = async () => {
+    if (installStarted.current) return;
+    installStarted.current = true;
     setPhase('installing');
     setErrorMessage(null);
     try {
       if (isMarketplace) {
-        const packageId = request.packageId!;
-        const target: InstallTarget = {
-          id: `pkg:${packageId}`, type: request.installType === 'mcp' ? 'mcp' : 'skill',
-          kind: 'package', name: request.name, packageId,
-        };
-        applyOutcome(await install(target));
+        await confirmPackageProposal(
+          request.packageId!,
+          request.proposalId!,
+          workspaceId!,
+          sessionId!,
+        );
+        setPhase('installed');
+        toast({ title: 'Installed', description: `${request.name} is now active.` });
         return;
       }
       // Starter pack — bundled, no auth; not store-tracked (on-disk skill).
@@ -83,7 +120,16 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
       setPhase('installed');
       toast({ title: 'Installed', description: `${request.name} is now active.` });
     } catch (err) {
-      const message = describeError(err);
+      const proposalMessage = err instanceof AdapterHttpError
+        ? ({
+          CAPABILITY_PROPOSAL_NOT_AVAILABLE: 'This install request is no longer available.',
+          CAPABILITY_PROPOSAL_EXPIRED: 'This install request expired. Ask Waggle to find it again.',
+          CAPABILITY_PROPOSAL_ALREADY_USED: 'This install request was already used.',
+        } as const)[err.code as 'CAPABILITY_PROPOSAL_NOT_AVAILABLE'
+          | 'CAPABILITY_PROPOSAL_EXPIRED'
+          | 'CAPABILITY_PROPOSAL_ALREADY_USED']
+        : undefined;
+      const message = proposalMessage ?? describeError(err);
       setPhase('failed');
       setErrorMessage(message);
       toast({ title: 'Install failed', description: message, variant: 'destructive' });
