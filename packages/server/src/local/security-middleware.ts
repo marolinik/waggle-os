@@ -300,8 +300,6 @@ export interface SecurityMiddlewareOpts {
   rateLimiter?: RateLimiterConfig;
   /** Session token for bearer auth. When set, all non-exempt routes require Authorization header. */
   sessionToken?: string;
-  /** Legacy per-process Browser Companion credential, removed after client migration. */
-  browserCompanionToken?: string;
   /** Validate the persisted, scoped Browser Companion credential. */
   authenticateBrowserCompanionToken?: (token: string) => boolean;
   /** Validate a narrow per-run credential for WaggleDance and one model-completion route. */
@@ -657,7 +655,6 @@ async function securityMiddlewarePlugin(
 ) {
   const limiter = new RateLimiter(opts.rateLimiter);
   const sessionToken = opts.sessionToken ?? null;
-  const browserCompanionToken = opts.browserCompanionToken ?? null;
   const browserCompanionRequests = new WeakSet<FastifyRequest>();
 
   // R2-004: when bound to loopback, reject requests whose Host header is not a
@@ -728,11 +725,9 @@ async function securityMiddlewarePlugin(
       const runToken = typeof rawRunToken === 'string' ? rawRunToken : undefined;
       const authHeader = request.headers.authorization;
       const bearerToken = bearerTokenFromAuth(authHeader);
-      const browserCompanionTokenValid = typeof bearerToken === 'string' && (
-        (browserCompanionToken !== null && bearerToken === browserCompanionToken)
-        || (opts.authenticateBrowserCompanionToken?.(bearerToken) ?? false)
-      );
-      const browserCompanionEligible = browserCompanionTokenValid
+      const browserCompanionCredentialValid = typeof bearerToken === 'string'
+        && (opts.authenticateBrowserCompanionToken?.(bearerToken) ?? false);
+      const browserCompanionEligible = browserCompanionCredentialValid
         && (
           (request.method === 'GET' && requestPath === '/api/browser-ext/health')
           || (request.method === 'POST' && requestPath === '/api/memory/frames')

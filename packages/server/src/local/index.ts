@@ -372,8 +372,6 @@ export interface AgentState {
   llmProvider: LlmProviderStatus;
   /** Session token for WebSocket authentication (generated on server startup) */
   wsSessionToken: string;
-  /** Legacy per-process Browser Companion token retained during pairing migration. */
-  browserCompanionToken: string;
   /** SHA-256 hash of the paired Browser Companion credential, or null when unpaired. */
   browserCompanionCredentialHash: string | null;
   /** Memory-weaver run timestamps for the personal mind. */
@@ -693,7 +691,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // ── Agent state (matches CLI initialization) ────────────────────────
   const wsSessionToken = crypto.randomBytes(32).toString('hex');
-  const browserCompanionToken = crypto.randomBytes(32).toString('hex');
   const storedBrowserCompanionHash = vault.get(BROWSER_COMPANION_CREDENTIAL_VAULT_KEY)?.value;
   const browserCompanionCredentialHash = isBrowserCompanionCredentialHash(storedBrowserCompanionHash)
     ? storedBrowserCompanionHash
@@ -1684,7 +1681,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       checkedAt: new Date().toISOString(),
     },
     wsSessionToken,
-    browserCompanionToken,
     browserCompanionCredentialHash,
   });
   activateWorkspaceMindWithWeaver(defaultWorkspaceId);
@@ -2658,7 +2654,6 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   };
   await server.register(securityMiddleware, {
     sessionToken: server.agentState.wsSessionToken,
-    browserCompanionToken: server.agentState.browserCompanionToken,
     authenticateBrowserCompanionToken: (token) => browserCompanionCredentialMatches(
       token,
       server.agentState.browserCompanionCredentialHash,

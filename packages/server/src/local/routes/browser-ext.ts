@@ -1,14 +1,6 @@
 /**
- * Browser Companion (FR-1) — /api/browser-ext
- *
- * Endpoint surface for the `apps/browser-ext` Chrome MV3 extension. Today
- * exposes a narrow token bootstrap plus health check so the extension can
- * pair with the local desktop; ingest + ask flows reuse the
- * existing `/api/memory/frames` and `/api/chat` endpoints rather than
- * duplicating them.
- *
- *   GET  /api/browser-ext/health  ->  { ok: true, version, activeWorkspaceId }
- *   GET  /api/browser-ext/session-token  ->  { token }
+ * Browser Companion (FR-1) - explicit one-time pairing and health endpoints.
+ * Imported-memory capture reuses the existing `/api/memory/frames` route.
  */
 
 import type { FastifyInstance } from 'fastify';
@@ -26,30 +18,12 @@ function headerValue(value: string | string[] | undefined): string | undefined {
 export async function browserExtRoutes(server: FastifyInstance) {
   const pairing = new BrowserCompanionPairing();
 
-  server.get('/api/browser-ext/session-token', async (request, reply) => {
-    if (!isLoopbackBind()) {
-      return reply.code(403).send({
-        error: 'Session bootstrap is available only on a loopback-bound sidecar.',
-        code: 'SESSION_BOOTSTRAP_LOOPBACK_ONLY',
-      });
-    }
-    const origin = headerValue(request.headers.origin);
-    const extensionId = headerValue(request.headers['x-waggle-extension-id']);
-    const secFetchSite = headerValue(request.headers['sec-fetch-site']);
-    const isOriginAllowlisted = browserExtensionOriginAllowed(origin);
-    const isOriginlessMv3Request = !origin &&
-      secFetchSite === 'none' &&
-      browserExtensionIdAllowed(extensionId);
-
-    if (!isOriginAllowlisted && !isOriginlessMv3Request) {
-      return reply.code(403).send({
-        error: 'Browser Companion extension origin is not allowlisted.',
-        code: 'EXTENSION_NOT_ALLOWLISTED',
-      });
-    }
-
+  server.get('/api/browser-ext/session-token', async (_request, reply) => {
     reply.header('Cache-Control', 'no-store');
-    return { token: server.agentState.browserCompanionToken };
+    return reply.code(410).send({
+      error: 'This Browser Companion version is no longer supported. Update the extension and pair it from Waggle Settings.',
+      code: 'BROWSER_COMPANION_UPDATE_REQUIRED',
+    });
   });
 
   server.post('/api/browser-ext/pairing-code', async (_request, reply) => {
@@ -68,12 +42,12 @@ export async function browserExtRoutes(server: FastifyInstance) {
     const origin = headerValue(request.headers.origin);
     const extensionId = headerValue(request.headers['x-waggle-extension-id']);
     const secFetchSite = headerValue(request.headers['sec-fetch-site']);
-    const isOriginAllowlisted = Boolean(extensionId)
+    const isOriginAllowlisted = typeof extensionId === 'string'
       && origin === `chrome-extension://${extensionId}`
       && browserExtensionOriginAllowed(origin);
-    const isOriginlessMv3Request = !origin &&
-      secFetchSite === 'none' &&
-      browserExtensionIdAllowed(extensionId);
+    const isOriginlessMv3Request = !origin
+      && secFetchSite === 'none'
+      && browserExtensionIdAllowed(extensionId);
     if (!isOriginAllowlisted && !isOriginlessMv3Request) {
       return reply.code(403).send({
         error: 'Browser Companion extension origin is not allowlisted.',
@@ -110,7 +84,7 @@ export async function browserExtRoutes(server: FastifyInstance) {
       server.agentState.browserCompanionCredentialHash = redeemed.credentialHash;
     } catch {
       return reply.code(503).send({
-        error: 'Browser Companion pairing could not be saved securely.',
+        error: 'Browser Companion pairing could not be stored securely.',
         code: 'PAIRING_STORAGE_UNAVAILABLE',
       });
     }
@@ -151,10 +125,7 @@ export async function browserExtRoutes(server: FastifyInstance) {
     return {
       ok: true,
       version: '0.1.0',
-      // The local sidecar currently owns only the active workspace id here.
-      // The popup labels this honestly instead of presenting it as a name.
       activeWorkspaceId,
-      // Kept for older extension builds that read activeWorkspace.
       activeWorkspace: activeWorkspaceId,
     };
   });

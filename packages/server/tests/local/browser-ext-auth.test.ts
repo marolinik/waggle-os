@@ -9,11 +9,11 @@ import {
 
 const TEST_TOKEN = 'global-session-token';
 const TEST_BROWSER_TOKEN = 'browser-companion-scoped-token';
+const FABRICATED_LEGACY_TOKEN = 'fabricated-legacy-browser-token';
 const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
 const EXTENSION_ORIGIN = `chrome-extension://${EXTENSION_ID}`;
-const OTHER_EXTENSION_ORIGIN = 'chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba';
 
-async function createBrowserExtServer(browserToken = TEST_BROWSER_TOKEN) {
+async function createBrowserExtServer() {
   const server = Fastify({ logger: false });
   const vaultEntries = new Map<string, { value: string; metadata?: Record<string, unknown> }>();
   server.decorate('vault', {
@@ -25,13 +25,11 @@ async function createBrowserExtServer(browserToken = TEST_BROWSER_TOKEN) {
   });
   server.decorate('agentState', {
     wsSessionToken: TEST_TOKEN,
-    browserCompanionToken: browserToken,
-    browserCompanionCredentialHash: null,
+    browserCompanionCredentialHash: hashBrowserCompanionCredential(TEST_BROWSER_TOKEN),
     activeWorkspaceId: 'workspace-1',
   });
   await server.register(securityMiddleware, {
     sessionToken: TEST_TOKEN,
-    browserCompanionToken: browserToken,
     authenticateBrowserCompanionToken: (token) => (
       server.agentState.browserCompanionCredentialHash === hashBrowserCompanionCredential(token)
     ),
@@ -73,29 +71,10 @@ describe('Browser Companion auth bootstrap', () => {
     else process.env.WAGGLE_HOST = originalHost;
   });
 
-  it('returns a scoped token, never the process bearer, to an allowlisted extension origin', async () => {
+  it('returns upgrade guidance without a credential from the retired bootstrap endpoint', async () => {
     const server = await createBrowserExtServer();
     try {
-      const res = await server.inject({
-        method: 'GET',
-        url: '/api/browser-ext/session-token',
-        headers: { origin: EXTENSION_ORIGIN },
-      });
-
-      expect(res.statusCode).toBe(200);
-      expect(res.headers['cache-control']).toBe('no-store');
-      expect(res.json()).toEqual({ token: TEST_BROWSER_TOKEN });
-      expect(res.json().token).not.toBe(TEST_TOKEN);
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('does not expose the process bearer to extension headers on a non-loopback bind', async () => {
-    process.env.WAGGLE_HOST = '0.0.0.0';
-    const server = await createBrowserExtServer();
-    try {
-      const res = await server.inject({
+      const publicRequest = await server.inject({
         method: 'GET',
         url: '/api/browser-ext/session-token',
         headers: {
@@ -103,79 +82,19 @@ describe('Browser Companion auth bootstrap', () => {
           'sec-fetch-site': 'none',
         },
       });
-
-      expect(res.statusCode).toBe(403);
-      expect(res.json().code).toBe('SESSION_BOOTSTRAP_LOOPBACK_ONLY');
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('returns the scoped token to an allowlisted MV3 service-worker request without an Origin header', async () => {
-    const server = await createBrowserExtServer();
-    try {
-      const res = await server.inject({
+      const authenticatedRequest = await server.inject({
         method: 'GET',
         url: '/api/browser-ext/session-token',
-        headers: {
-          'x-waggle-extension-id': EXTENSION_ID,
-          'sec-fetch-site': 'none',
-        },
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
       });
 
-      expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ token: TEST_BROWSER_TOKEN });
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('rejects the token bootstrap for unallowlisted extension origins', async () => {
-    const server = await createBrowserExtServer();
-    try {
-      const res = await server.inject({
-        method: 'GET',
-        url: '/api/browser-ext/session-token',
-        headers: { origin: OTHER_EXTENSION_ORIGIN },
-      });
-
-      expect(res.statusCode).toBe(403);
-      expect(res.json().code).toBe('EXTENSION_NOT_ALLOWLISTED');
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('rejects MV3 service-worker token bootstrap when the extension id header is missing', async () => {
-    const server = await createBrowserExtServer();
-    try {
-      const res = await server.inject({
-        method: 'GET',
-        url: '/api/browser-ext/session-token',
-        headers: { 'sec-fetch-site': 'none' },
-      });
-
-      expect(res.statusCode).toBe(403);
-      expect(res.json().code).toBe('EXTENSION_NOT_ALLOWLISTED');
-    } finally {
-      await server.close();
-    }
-  });
-
-  it('rejects MV3 service-worker token bootstrap with an unallowlisted extension id header', async () => {
-    const server = await createBrowserExtServer();
-    try {
-      const res = await server.inject({
-        method: 'GET',
-        url: '/api/browser-ext/session-token',
-        headers: {
-          'x-waggle-extension-id': 'ponmlkjihgfedcbaponmlkjihgfedcba',
-          'sec-fetch-site': 'none',
-        },
-      });
-
-      expect(res.statusCode).toBe(403);
-      expect(res.json().code).toBe('EXTENSION_NOT_ALLOWLISTED');
+      expect(publicRequest.statusCode).toBe(410);
+      expect(publicRequest.headers['cache-control']).toBe('no-store');
+      expect(publicRequest.json().code).toBe('BROWSER_COMPANION_UPDATE_REQUIRED');
+      expect(publicRequest.json()).not.toHaveProperty('token');
+      expect(authenticatedRequest.statusCode).toBe(410);
+      expect(authenticatedRequest.json().code).toBe('BROWSER_COMPANION_UPDATE_REQUIRED');
+      expect(authenticatedRequest.json()).not.toHaveProperty('token');
     } finally {
       await server.close();
     }
@@ -434,15 +353,13 @@ describe('Browser Companion auth bootstrap', () => {
     }
   });
 
-  it('rejects a stale scoped token after the sidecar token rotates', async () => {
-    const oldServer = await createBrowserExtServer('old-browser-token');
-    await oldServer.close();
-    const restartedServer = await createBrowserExtServer('new-browser-token');
+  it('rejects a fabricated legacy per-process credential', async () => {
+    const restartedServer = await createBrowserExtServer();
     try {
       const res = await restartedServer.inject({
         method: 'GET',
         url: '/api/browser-ext/health',
-        headers: { authorization: 'Bearer old-browser-token' },
+        headers: { authorization: `Bearer ${FABRICATED_LEGACY_TOKEN}` },
       });
 
       expect(res.statusCode).toBe(401);
