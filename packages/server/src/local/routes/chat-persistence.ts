@@ -19,6 +19,74 @@ const CHAT_HISTORY_LAYOUT_VERSION = 1;
 
 export const CHAT_HISTORY_RECOVERY_CODE = 'CHAT_HISTORY_RECOVERY_REQUIRED';
 
+const MAX_CAPABILITY_NEED_CHARS = 2_000;
+const MAX_CAPABILITY_RESULT_CHARS = 32_000;
+const CAPABILITY_MARKER_AT_END_RE = /<!--\s*waggle:capability_request\s+(\{[^\r\n]*\})\s*-->\s*$/;
+
+export interface PersistedCapabilityReceipt {
+  id: string;
+  name: 'acquire_capability';
+  status: 'done';
+  input: { need: string };
+  output: string;
+}
+
+export interface ChatHistoryMessage {
+  role: string;
+  content: string;
+  model?: string;
+  tools?: PersistedCapabilityReceipt[];
+}
+
+function hasCanonicalCapabilityMarker(result: string): boolean {
+  const match = result.match(CAPABILITY_MARKER_AT_END_RE);
+  if (!match) return false;
+  try {
+    const marker = JSON.parse(match[1]) as { name?: unknown; source?: unknown };
+    return typeof marker.name === 'string'
+      && marker.name.trim().length > 0
+      && marker.name.length <= 200
+      && typeof marker.source === 'string'
+      && marker.source.trim().length > 0
+      && marker.source.length <= 100;
+  } catch {
+    return false;
+  }
+}
+
+export function createPersistedCapabilityReceipt(
+  input: unknown,
+  result: string,
+): PersistedCapabilityReceipt | null {
+  if (!input || typeof input !== 'object') return null;
+  const needValue = (input as { need?: unknown }).need;
+  const need = typeof needValue === 'string' ? needValue.trim() : '';
+  if (!need || need.length > MAX_CAPABILITY_NEED_CHARS) return null;
+  if (!result || result.length > MAX_CAPABILITY_RESULT_CHARS) return null;
+  if (result.startsWith('Error:') || result.startsWith('Error ')) return null;
+  if (!hasCanonicalCapabilityMarker(result)) return null;
+  return {
+    id: `capability-${crypto.randomUUID()}`,
+    name: 'acquire_capability',
+    status: 'done',
+    input: { need },
+    output: result,
+  };
+}
+
+export function normalizePersistedCapabilityTools(
+  value: unknown,
+): PersistedCapabilityReceipt[] | undefined {
+  if (!Array.isArray(value) || value.length !== 1) return undefined;
+  const receipt = value[0] as Partial<PersistedCapabilityReceipt> | null;
+  if (!receipt || receipt.name !== 'acquire_capability' || receipt.status !== 'done') return undefined;
+  if (typeof receipt.id !== 'string' || !receipt.id.startsWith('capability-') || receipt.id.length > 128) return undefined;
+  if (typeof receipt.output !== 'string') return undefined;
+  const normalized = createPersistedCapabilityReceipt(receipt.input, receipt.output);
+  if (!normalized) return undefined;
+  return [{ ...normalized, id: receipt.id }];
+}
+
 export type ChatHistoryLayoutStatus =
   | { status: 'ready' }
   | {
@@ -351,7 +419,7 @@ export function persistMessage(
   dataDir: string,
   workspaceId: string,
   sessionId: string,
-  msg: { role: string; content: string; model?: string },
+  msg: ChatHistoryMessage,
 ): void {
   const sessionsDir = path.join(dataDir, 'workspaces', workspaceId, 'sessions');
   if (!fs.existsSync(sessionsDir)) {
@@ -365,11 +433,13 @@ export function persistMessage(
     fs.writeFileSync(filePath, meta + '\n', 'utf-8');
   }
 
+  const tools = normalizePersistedCapabilityTools(msg.tools);
   const line = JSON.stringify({
     role: msg.role,
     content: msg.content,
     timestamp: new Date().toISOString(),
     ...(typeof msg.model === 'string' && msg.model.trim() ? { model: msg.model } : {}),
+    ...(tools ? { tools } : {}),
   });
   fs.appendFileSync(filePath, line + '\n', 'utf-8');
 }
@@ -423,14 +493,14 @@ export function loadSessionMessages(
   dataDir: string,
   workspaceId: string,
   sessionId: string,
-): Array<{ role: string; content: string; model?: string }> {
+): ChatHistoryMessage[] {
   const filePath = path.join(dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`);
   if (!fs.existsSync(filePath)) return [];
 
   const content = fs.readFileSync(filePath, 'utf-8').trim();
   if (!content) return [];
 
-  const messages: Array<{ role: string; content: string; model?: string }> = [];
+  const messages: ChatHistoryMessage[] = [];
   for (const line of content.split('\n')) {
     if (!line.trim()) continue;
     try {
@@ -440,10 +510,12 @@ export function loadSessionMessages(
         const model = typeof parsed.model === 'string' && parsed.model.trim()
           ? parsed.model
           : undefined;
+        const tools = normalizePersistedCapabilityTools(parsed.tools);
         messages.push({
           role: parsed.role,
           content: parsed.content,
           ...(model ? { model } : {}),
+          ...(tools ? { tools } : {}),
         });
       }
     } catch {

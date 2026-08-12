@@ -42,6 +42,7 @@ import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } f
 import { allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
+  createPersistedCapabilityReceipt,
   isChatSessionStateKeyForWorkspace,
   isolateLegacyDefaultChatSessions,
   registerChatHistoryRestoreParticipant,
@@ -2828,6 +2829,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Build agent loop config — with windowed conversation history + hooks
         let bufferedAgentTokens: string[] = [];
+        let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
 
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
@@ -2876,6 +2878,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             });
           },
           onToolResult: (name: string, input: Record<string, unknown>, result: string) => {
+            if (name === 'acquire_capability') {
+              capabilityReceipt = createPersistedCapabilityReceipt(input, result) ?? capabilityReceipt;
+            }
             // Calculate duration from the most recent start of this tool
             let duration: number | undefined;
             // Find the latest matching start entry
@@ -3467,7 +3472,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         bufferedAgentTokens = [];
 
         // Add assistant response to history (maintains context for next turn) and persist.
-        const assistantMessage = { role: 'assistant', content: finalContent, model: resolvedModel };
+        const assistantMessage = {
+          role: 'assistant',
+          content: finalContent,
+          model: resolvedModel,
+          ...(capabilityReceipt ? { tools: [capabilityReceipt] } : {}),
+        };
         if (!turnMutationPolicy.denyConversationHistory) {
           history.push(assistantMessage);
           persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, assistantMessage);

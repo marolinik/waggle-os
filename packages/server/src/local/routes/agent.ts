@@ -5,7 +5,9 @@ import { resolveUsableModel } from '../model-availability.js';
 import {
   chatSessionStateKey,
   isolateLegacyDefaultChatSessions,
+  normalizePersistedCapabilityTools,
   resolveChatHistoryTarget,
+  type ChatHistoryMessage,
 } from './chat-persistence.js';
 import { assertSafeSegment } from './validate.js';
 
@@ -133,7 +135,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       );
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8').trim();
-        const messages: Array<{ role: string; content: string; timestamp?: string; model?: string }> = [];
+        const messages: Array<ChatHistoryMessage & { timestamp?: string }> = [];
         for (const line of content.split('\n')) {
           if (!line.trim()) continue;
           try {
@@ -143,11 +145,13 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
               const model = typeof parsed.model === 'string' && parsed.model.trim()
                 ? parsed.model
                 : undefined;
+              const tools = normalizePersistedCapabilityTools(parsed.tools);
               messages.push({
                 role: parsed.role,
                 content: parsed.content,
                 timestamp: parsed.timestamp,
                 ...(model ? { model } : {}),
+                ...(tools ? { tools } : {}),
               });
             }
           } catch { /* skip */ }
@@ -157,6 +161,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
           role: m.role,
           content: m.content,
           ...(m.model ? { model: m.model } : {}),
+          ...(m.tools ? { tools: m.tools } : {}),
         })));
         return {
           sessionId,
@@ -166,6 +171,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
             content: m.content,
             timestamp: m.timestamp ?? new Date().toISOString(),
             ...(m.model ? { model: m.model } : {}),
+            ...(m.tools ? { tools: m.tools } : {}),
           })),
           count: messages.length,
         };
@@ -181,6 +187,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
         content: m.content,
         timestamp: new Date().toISOString(),
         ...(m.model ? { model: m.model } : {}),
+        ...(m.tools ? { tools: m.tools } : {}),
       })),
       count: history.length,
     };
