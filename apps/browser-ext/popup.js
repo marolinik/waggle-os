@@ -12,6 +12,9 @@ const btnSelection = $('save-selection');
 const btnPage = $('save-page');
 const btnOpen = $('open-waggle');
 const toast = $('toast');
+const pairForm = $('pair-form');
+const pairCode = $('pair-code');
+const pairSubmit = $('pair-submit');
 
 let cachedSelection = '';
 let cachedPageMeta = null;
@@ -60,6 +63,7 @@ async function refreshHealth() {
       // textContent (not innerHTML) — workspace names are user-controlled
       // and could otherwise be XSS sinks in the extension context.
       workspaceNameEl.textContent = formatMemoryDestination(reply);
+      pairForm.hidden = true;
     } else {
       throw new Error(reply?.error || 'No response');
     }
@@ -67,8 +71,29 @@ async function refreshHealth() {
     dot.className = 'dot disconnected';
     statusText.textContent = 'Not connected';
     workspaceNameEl.textContent = 'Unavailable';
+    pairForm.hidden = false;
     const msg = err?.message || 'Start Waggle desktop on this machine, then re-open this popup.';
     showToast(msg, 'err', { sticky: true });
+  }
+}
+
+async function pair(event) {
+  event.preventDefault();
+  const code = pairCode.value.trim().toUpperCase();
+  pairSubmit.disabled = true;
+  try {
+    const reply = await chrome.runtime.sendMessage({ type: 'pair', code });
+    if (!reply?.ok) {
+      showToast(reply?.error || 'Pairing failed.', 'err', { sticky: true });
+      return;
+    }
+    pairCode.value = '';
+    showToast('Browser Companion paired.', 'ok');
+    await refreshHealth();
+  } catch (err) {
+    showToast(err?.message || 'Pairing failed.', 'err', { sticky: true });
+  } finally {
+    pairSubmit.disabled = false;
   }
 }
 
@@ -108,6 +133,7 @@ async function save(kind) {
     showToast(reply.duplicate ? 'Already in memory.' : 'Saved to Waggle memory ✓', 'ok');
   } else {
     const msg = reply?.error || 'Save failed.';
+    if (isSetupError(msg)) pairForm.hidden = false;
     showToast(msg, 'err', { sticky: isSetupError(msg) });
   }
 }
@@ -115,6 +141,7 @@ async function save(kind) {
 btnSelection.addEventListener('click', () => save('selection'));
 btnPage.addEventListener('click', () => save('page'));
 btnOpen.addEventListener('click', () => chrome.tabs.create({ url: 'http://127.0.0.1:3333' }));
+pairForm.addEventListener('submit', pair);
 
 refreshHealth();
 readActiveTab();

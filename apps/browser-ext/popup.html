@@ -74,6 +74,19 @@
     }
     #toast.ok { color: var(--success); border-color: var(--success); }
     #toast.err { color: var(--danger); border-color: var(--danger); }
+    #pair-form {
+      margin-bottom: 10px; padding: 8px; border: 1px solid var(--border);
+      border-radius: 8px; background: #101014;
+    }
+    #pair-form label { display: block; margin-bottom: 6px; color: var(--fg); }
+    .pair-row { display: flex; gap: 6px; }
+    #pair-code {
+      width: 100%; min-width: 0; padding: 7px 8px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--fg);
+      font: 600 14px/1 monospace; letter-spacing: .12em; text-transform: uppercase;
+    }
+    #pair-code:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    #pair-submit { width: auto; margin: 0; }
     footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); text-align: center; }
     a { color: var(--primary); text-decoration: none; }
   </style>
@@ -86,6 +99,15 @@
   </header>
 
   <div class="workspace">Memory destination: <strong id="workspace-name">—</strong></div>
+
+  <form id="pair-form" hidden>
+    <label for="pair-code">One-time code from Waggle Settings</label>
+    <div class="pair-row">
+      <input id="pair-code" name="pair-code" maxlength="8" minlength="8"
+        pattern="[A-HJ-NP-Za-hj-np-z2-9]{8}" autocomplete="off" spellcheck="false" required>
+      <button class="primary" id="pair-submit" type="submit">Pair</button>
+    </div>
+  </form>
 
   <button class="primary" id="save-selection" disabled>
     <span class="icon">💾</span><span>Save selection to memory</span>

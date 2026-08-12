@@ -1,11 +1,9 @@
-// Waggle Companion background service worker — routes messages from
-// popup.js to the local Waggle sidecar at 127.0.0.1:3333.
-//
-// MV3 service workers are short-lived; we don't keep any state here
-// beyond per-message handlers. The sidecar's session token (if any) is
-// pulled from chrome.storage.local on every request.
+// Waggle Companion background service worker — the only extension process that
+// talks to the loopback sidecar. The popup supplies a one-time code; only the
+// resulting scoped credential is persisted.
 
 const SIDECAR = 'http://127.0.0.1:3333';
+const PAIRING_REQUIRED = 'Browser Companion not paired. Generate a one-time code in Waggle Settings.';
 
 async function readJson(response) {
   try {
@@ -18,56 +16,77 @@ async function readJson(response) {
 function authErrorMessage(status, body) {
   const code = body?.code;
   if (code === 'EXTENSION_NOT_ALLOWLISTED') {
-    return 'Browser Companion is not allowlisted. Add this extension ID to Waggle, restart Waggle, then try again.';
+    return 'Browser Companion not allowlisted. Add the extension ID in Waggle, restart Waggle, and try again.';
   }
-  if (status === 401 && code === 'INVALID_TOKEN') {
-    return 'Browser Companion pairing expired. Reopen Waggle desktop, then try again.';
+  if (code === 'PAIRING_CODE_INVALID') {
+    return 'Invalid or expired pairing code. Generate a new one-time code in Waggle Settings.';
   }
-  if (status === 401 && (code === 'MISSING_TOKEN' || !code)) {
-    return 'Browser Companion is not paired. Start Waggle desktop, then try again.';
+  if (status === 401 && (code === 'INVALID_TOKEN' || code === 'MISSING_TOKEN' || !code)) {
+    return PAIRING_REQUIRED;
   }
   return body?.error || `HTTP ${status}`;
 }
 
-async function requestSessionToken() {
-  const r = await fetch(`${SIDECAR}/api/browser-ext/session-token`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'X-Waggle-Extension-Id': chrome.runtime.id,
-    },
-  });
-  const data = await readJson(r);
-  if (!r.ok || !data?.token) {
-    return { ok: false, error: authErrorMessage(r.status, data) };
-  }
-  await chrome.storage.local.set({ sessionToken: data.token });
-  return { ok: true, token: data.token };
+async function removeLegacyToken() {
+  await chrome.storage.local.remove('sessionToken');
 }
 
-async function getAuthHeaders(options = {}) {
+async function getAuthHeaders() {
   try {
-    const { sessionToken } = await chrome.storage.local.get(['sessionToken']);
-    if (sessionToken) return { headers: { Authorization: `Bearer ${sessionToken}` } };
-    if (!options.pair) return { headers: {} };
-    const paired = await requestSessionToken();
-    if (!paired.ok) return { headers: {}, error: paired.error };
-    return { headers: { Authorization: `Bearer ${paired.token}` } };
+    const { companionToken, sessionToken } = await chrome.storage.local.get([
+      'companionToken',
+      'sessionToken',
+    ]);
+    if (sessionToken) await removeLegacyToken();
+    if (!companionToken) return { headers: {}, error: PAIRING_REQUIRED };
+    return { headers: { Authorization: `Bearer ${companionToken}` } };
   } catch (err) {
     return { headers: {}, error: String(err) };
   }
 }
 
+async function pairWithCode(rawCode) {
+  const code = typeof rawCode === 'string' ? rawCode.trim().toUpperCase() : '';
+  if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
+    return { ok: false, error: 'Enter the 8-character code shown in Waggle Settings.' };
+  }
+  try {
+    const response = await fetch(`${SIDECAR}/api/browser-ext/pair`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Waggle-Extension-Id': chrome.runtime.id,
+      },
+      body: JSON.stringify({ code }),
+    });
+    const data = await readJson(response);
+    if (!response.ok || typeof data?.token !== 'string') {
+      return { ok: false, error: authErrorMessage(response.status, data) };
+    }
+    await chrome.storage.local.set({ companionToken: data.token });
+    await removeLegacyToken();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
 async function health() {
   try {
-    const auth = await getAuthHeaders({ pair: true });
+    const auth = await getAuthHeaders();
     if (auth.error) return { ok: false, error: auth.error };
-    const r = await fetch(`${SIDECAR}/api/browser-ext/health`, {
+    const response = await fetch(`${SIDECAR}/api/browser-ext/health`, {
       method: 'GET',
       headers: { Accept: 'application/json', ...auth.headers },
     });
-    if (!r.ok) return { ok: false, error: authErrorMessage(r.status, await readJson(r)) };
-    return await r.json();
+    const data = await readJson(response);
+    if (response.status === 401) {
+      await chrome.storage.local.remove('companionToken');
+      return { ok: false, error: PAIRING_REQUIRED };
+    }
+    if (!response.ok) return { ok: false, error: authErrorMessage(response.status, data) };
+    return data;
   } catch (err) {
     return { ok: false, error: String(err) };
   }
@@ -75,30 +94,23 @@ async function health() {
 
 async function saveMemory(payload) {
   try {
-    const body = JSON.stringify({
-      content: payload.content,
-      source: payload.source || 'import',
-      importance: payload.importance || 'normal',
-    });
-    const auth = await getAuthHeaders({ pair: true });
+    const auth = await getAuthHeaders();
     if (auth.error) return { saved: false, error: auth.error };
-    let r = await fetch(`${SIDECAR}/api/memory/frames`, {
+    const response = await fetch(`${SIDECAR}/api/memory/frames`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...auth.headers },
-      body,
+      body: JSON.stringify({
+        content: payload.content,
+        source: payload.source || 'import',
+        importance: payload.importance || 'normal',
+      }),
     });
-    if (r.status === 401) {
-      const paired = await requestSessionToken();
-      if (paired.ok) {
-        r = await fetch(`${SIDECAR}/api/memory/frames`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${paired.token}` },
-          body,
-        });
-      }
+    const data = await readJson(response);
+    if (response.status === 401) {
+      await chrome.storage.local.remove('companionToken');
+      return { saved: false, error: PAIRING_REQUIRED };
     }
-    if (!r.ok) return { saved: false, error: authErrorMessage(r.status, await readJson(r)) };
-    const data = await r.json();
+    if (!response.ok) return { saved: false, error: authErrorMessage(response.status, data) };
     return {
       saved: data?.saved ?? true,
       duplicate: data?.duplicate ?? false,
@@ -109,16 +121,16 @@ async function saveMemory(payload) {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   (async () => {
-    if (msg?.type === 'health') sendResponse(await health());
-    else if (msg?.type === 'save-memory') sendResponse(await saveMemory(msg));
+    if (message?.type === 'health') sendResponse(await health());
+    else if (message?.type === 'pair') sendResponse(await pairWithCode(message.code));
+    else if (message?.type === 'save-memory') sendResponse(await saveMemory(message));
     else sendResponse({ error: 'unknown message type' });
   })();
-  return true; // keep channel open for async sendResponse
+  return true;
 });
 
-// Context menu: right-click selection → "Save to Waggle memory"
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'waggle-save-selection',
@@ -134,7 +146,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     source: 'import',
     importance: 'normal',
   });
-  // Best-effort badge feedback (MV3 has no toast API in background).
   await chrome.action.setBadgeText({ text: result.saved ? '✓' : '!' });
   await chrome.action.setBadgeBackgroundColor({ color: result.saved ? '#10b981' : '#ef4444' });
   setTimeout(() => chrome.action.setBadgeText({ text: '' }), 2500);
