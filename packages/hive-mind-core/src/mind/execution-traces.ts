@@ -166,6 +166,23 @@ const EXECUTION_TRACES_DDL: string[] = [
     settled_at TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_trace_spend_settled ON execution_trace_spend (settled_at, trace_id)`,
+  `CREATE TABLE IF NOT EXISTS execution_trace_spend_reservations (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     trace_id INTEGER NOT NULL REFERENCES execution_traces(id) ON DELETE CASCADE,
+     estimated_cost_usd REAL NOT NULL CHECK (estimated_cost_usd > 0),
+     actual_cost_usd REAL CHECK (actual_cost_usd IS NULL OR actual_cost_usd >= 0),
+     state TEXT NOT NULL DEFAULT 'pending'
+       CHECK (state IN ('pending', 'settled', 'released')),
+     reserved_at TEXT NOT NULL,
+     resolved_at TEXT,
+     CHECK (
+       (state = 'pending' AND actual_cost_usd IS NULL AND resolved_at IS NULL) OR
+       (state = 'settled' AND actual_cost_usd IS NOT NULL AND resolved_at IS NOT NULL) OR
+       (state = 'released' AND actual_cost_usd IS NULL AND resolved_at IS NOT NULL)
+     )
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_trace_spend_reservations_time
+     ON execution_trace_spend_reservations (reserved_at, trace_id, state)`,
 ];
 
 /** Exported DDL concatenated — kept for anyone who needs the full table SQL. */
@@ -273,6 +290,118 @@ export class ExecutionTraceStore {
         INSERT INTO execution_trace_spend (trace_id, cost_usd, settled_at)
         VALUES (?, ?, ?)
       `).run(id, costUsd, settledAt);
+    })();
+  }
+
+  /**
+   * Persist a conservative model-spend reservation before provider dispatch.
+   * Pending reservations intentionally have no settled-spend row, so restart
+   * recovery counts the estimate through the reservation ledger.
+   */
+  reserveCost(
+    id: number,
+    estimatedCostUsd: number,
+    timestamp = new Date().toISOString(),
+  ): number {
+    if (!Number.isFinite(estimatedCostUsd) || estimatedCostUsd <= 0) {
+      throw new RangeError('Trace cost reservation must be positive and finite');
+    }
+    const reservedMs = Date.parse(timestamp);
+    if (!Number.isFinite(reservedMs)) {
+      throw new RangeError('Trace cost reservation timestamp must be valid ISO date');
+    }
+    const result = this.db.getDatabase().prepare(`
+      INSERT INTO execution_trace_spend_reservations
+        (trace_id, estimated_cost_usd, state, reserved_at)
+      SELECT id, ?, 'pending', ?
+      FROM execution_traces
+      WHERE id = ? AND outcome = 'pending'
+    `).run(estimatedCostUsd, new Date(reservedMs).toISOString(), id);
+    if (result.changes !== 1) {
+      throw new Error(`Pending execution trace ${id} does not exist`);
+    }
+    return Number(result.lastInsertRowid);
+  }
+
+  /** Replace a pending estimate with one authoritative settled charge. */
+  settleReservedCost(
+    reservationId: number,
+    actualCostUsd: number,
+    timestamp = new Date().toISOString(),
+  ): boolean {
+    if (!Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+      throw new RangeError('Settled trace cost must be non-negative and finite');
+    }
+    const settledMs = Date.parse(timestamp);
+    if (!Number.isFinite(settledMs)) {
+      throw new RangeError('Trace cost timestamp must be valid ISO date');
+    }
+    const settledAt = new Date(settledMs).toISOString();
+    const raw = this.db.getDatabase();
+    return raw.transaction(() => {
+      const current = raw.prepare(`
+        SELECT trace_id AS traceId, reserved_at AS reservedAt,
+               state, actual_cost_usd AS actualCostUsd
+        FROM execution_trace_spend_reservations
+        WHERE id = ?
+      `).get(reservationId) as {
+        traceId: number;
+        reservedAt: string;
+        state: 'pending' | 'settled' | 'released';
+        actualCostUsd: number | null;
+      } | undefined;
+      if (!current) throw new Error(`Cost reservation ${reservationId} does not exist`);
+      if (current.state === 'settled' && current.actualCostUsd === actualCostUsd) return false;
+      if (current.state !== 'pending') {
+        throw new Error(`Cost reservation ${reservationId} is already ${current.state}`);
+      }
+      const updated = raw.prepare(`
+        UPDATE execution_trace_spend_reservations
+        SET state = 'settled', actual_cost_usd = ?, resolved_at = ?
+        WHERE id = ? AND state = 'pending'
+      `).run(actualCostUsd, settledAt, reservationId);
+      if (updated.changes !== 1) return false;
+      if (actualCostUsd > 0) {
+        raw.prepare(`
+          INSERT INTO execution_trace_spend (trace_id, cost_usd, settled_at)
+          VALUES (?, ?, ?)
+        `).run(current.traceId, actualCostUsd, current.reservedAt);
+        raw.prepare(`
+          UPDATE execution_traces SET cost_usd = cost_usd + ? WHERE id = ?
+        `).run(actualCostUsd, current.traceId);
+      }
+      return true;
+    })();
+  }
+
+  /** Release a definitely pre-inference reservation without recording spend. */
+  releaseReservedCost(reservationId: number, timestamp = new Date().toISOString()): boolean {
+    const resolvedMs = Date.parse(timestamp);
+    if (!Number.isFinite(resolvedMs)) {
+      throw new RangeError('Trace cost timestamp must be valid ISO date');
+    }
+    const raw = this.db.getDatabase();
+    return raw.transaction(() => {
+      const current = raw.prepare(`
+        SELECT id, state
+        FROM execution_trace_spend_reservations
+        WHERE id = ?
+      `).get(reservationId) as {
+        id: number;
+        state: 'pending' | 'settled' | 'released';
+      } | undefined;
+      if (!current) throw new Error(`Cost reservation ${reservationId} does not exist`);
+      if (current.state === 'released') return false;
+      if (current.state !== 'pending') {
+        throw new Error(`Cost reservation ${reservationId} is already ${current.state}`);
+      }
+      const result = raw.prepare(`
+        UPDATE execution_trace_spend_reservations
+        SET state = 'released', actual_cost_usd = NULL, resolved_at = ?
+        WHERE id = ? AND state = 'pending'
+      `).run(new Date(resolvedMs).toISOString(), reservationId);
+      if (result.changes !== 1) return false;
+      return true;
     })();
   }
 
@@ -385,6 +514,11 @@ export class ExecutionTraceStore {
       JOIN execution_traces t ON t.id = s.trace_id
       WHERE s.settled_at >= ? AND t.id <= ?
     `).get(settledSince, throughId) as { total: number | null };
+    const pending = raw.prepare(`
+      SELECT COALESCE(SUM(estimated_cost_usd), 0) AS total
+      FROM execution_trace_spend_reservations
+      WHERE state = 'pending' AND reserved_at >= ? AND trace_id <= ?
+    `).get(settledSince, throughId) as { total: number | null };
     const legacy = raw.prepare(`
       SELECT COALESCE(SUM(t.cost_usd), 0) AS total
       FROM execution_traces t
@@ -393,7 +527,9 @@ export class ExecutionTraceStore {
           SELECT 1 FROM execution_trace_spend s WHERE s.trace_id = t.id
         )
     `).get(since, throughId) as { total: number | null };
-    return Number(ledger.total ?? 0) + Number(legacy.total ?? 0);
+    return Number(ledger.total ?? 0)
+      + Number(pending.total ?? 0)
+      + Number(legacy.total ?? 0);
   }
 
   /** Query traces with optional filters. */
