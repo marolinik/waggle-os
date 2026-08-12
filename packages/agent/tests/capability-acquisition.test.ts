@@ -217,6 +217,7 @@ describe('capability-acquisition', () => {
       expect(result.summary).toContain('<!--waggle:capability_request ');
       expect(result.summary).toContain('"name":"risk-assessment"');
       expect(result.summary).toContain('"source":"starter-pack"');
+      expect(result.summary).toContain('"kind":"skill"');
       expect(result.summary).toMatch(/<!--waggle:capability_request \{[^}]+\}-->/);
     });
 

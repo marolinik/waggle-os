@@ -42,13 +42,16 @@ function hasCanonicalCapabilityMarker(result: string): boolean {
   const match = result.match(CAPABILITY_MARKER_AT_END_RE);
   if (!match) return false;
   try {
-    const marker = JSON.parse(match[1]) as { name?: unknown; source?: unknown };
+    const marker = JSON.parse(match[1]) as { name?: unknown; source?: unknown; kind?: unknown };
+    const supportedRoute = (marker.source === 'starter-pack' && marker.kind === 'skill')
+      || (marker.source === 'marketplace' && marker.kind === 'marketplace');
     return typeof marker.name === 'string'
       && marker.name.trim().length > 0
       && marker.name.length <= 200
       && typeof marker.source === 'string'
       && marker.source.trim().length > 0
-      && marker.source.length <= 100;
+      && marker.source.length <= 100
+      && supportedRoute;
   } catch {
     return false;
   }

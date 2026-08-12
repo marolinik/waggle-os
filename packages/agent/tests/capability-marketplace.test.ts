@@ -204,6 +204,7 @@ describe('capability-marketplace', () => {
       const result = await acquireTool!.execute({ need: 'email automation' });
       expect(searchCalled).toBe(true);
       expect(result).toContain('email-pro');
+      expect(result).toContain('"kind":"marketplace"');
     });
 
     it('degrades gracefully when marketplace callback throws', async () => {
