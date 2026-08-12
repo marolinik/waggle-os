@@ -14,6 +14,11 @@ import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
+import {
+  issueCapabilityProposalFromToolResult,
+  resolveMarketplaceApprovalIdentity,
+  stripCapabilityRequestMarker,
+} from './capability-proposals.js';
 import { resolveGrantRiskLevel } from '../approval-grants.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
@@ -2830,6 +2835,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Build agent loop config — with windowed conversation history + hooks
         let bufferedAgentTokens: string[] = [];
         let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
+        let pendingCapabilityToolResults: Array<{
+          input: Record<string, unknown>;
+          output: string;
+          duration?: number;
+        }> = [];
 
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
@@ -2878,9 +2888,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             });
           },
           onToolResult: (name: string, input: Record<string, unknown>, result: string) => {
-            if (name === 'acquire_capability') {
-              capabilityReceipt = createPersistedCapabilityReceipt(input, result) ?? capabilityReceipt;
-            }
             // Calculate duration from the most recent start of this tool
             let duration: number | undefined;
             // Find the latest matching start entry
@@ -2894,7 +2901,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
             // Send tool_result SSE event so client can update status + show result
             const isError = result.startsWith('Error:') || result.startsWith('Error ');
-            sendEvent('tool_result', { name, result, duration, isError });
+            if (name === 'acquire_capability') {
+              if (createPersistedCapabilityReceipt(input, result)) {
+                pendingCapabilityToolResults.push({ input, output: result, duration });
+              } else {
+                sendEvent('tool_result', {
+                  name,
+                  result: stripCapabilityRequestMarker(result),
+                  duration,
+                  isError,
+                });
+              }
+            } else {
+              sendEvent('tool_result', { name, result, duration, isError });
+            }
           // F2: Audit trail — log tool result (truncated output)
           emitAuditEvent(server, {
             workspaceId: executionScopeId,
@@ -3057,6 +3077,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         const runAgentAttempt = async (config: typeof runConfig) => {
           bufferedAgentTokens = [];
+          capabilityReceipt = null;
+          pendingCapabilityToolResults = [];
           activeAttemptModel = resolvedModel;
           abortedAttemptUsage = null;
           const attemptedResult = await agentRunner(config);
@@ -3175,6 +3197,34 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } finally {
           agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));
         }
+
+        const capabilityToolResults = pendingCapabilityToolResults as Array<{
+          input: Record<string, unknown>;
+          output: string;
+          duration?: number;
+        }>;
+        for (const capabilityToolResult of capabilityToolResults) {
+          const issued = await issueCapabilityProposalFromToolResult({
+            store: server.capabilityProposalStore,
+            workspaceId: activeWorkspaceId,
+            sessionId,
+            output: capabilityToolResult.output,
+            resolveIdentity: (packageId) => resolveMarketplaceApprovalIdentity(server, packageId),
+          });
+          // Marketplace output is proposal-bound; bundled starter-pack output
+          // remains a trusted completed receipt without marketplace lifecycle.
+          capabilityReceipt = createPersistedCapabilityReceipt(
+            capabilityToolResult.input,
+            issued.output,
+          ) ?? capabilityReceipt;
+          sendEvent('tool_result', {
+            name: 'acquire_capability',
+            result: issued.output,
+            duration: capabilityToolResult.duration,
+            isError: false,
+          });
+        }
+        pendingCapabilityToolResults = [];
 
         // Notify client of model switch
         if (modelSwitchReason) {

@@ -112,6 +112,11 @@ import { notificationRoutes, emitNotification, emitSubagentStatus } from './rout
 import { materialFingerprint } from './notification-gate.js';
 import { marketplaceDevRoutes } from './routes/marketplace-dev.js';
 import { marketplaceRoutes } from './routes/marketplace.js';
+import {
+  CapabilityProposalStore,
+  createCapabilityProposalRoutes,
+  installMarketplaceApprovalIdentity,
+} from './routes/capability-proposals.js';
 import { agentSearchRoutes } from './routes/agent-search.js';
 import { connectorRoutes } from './routes/connectors.js';
 import { mcpRoutes } from './routes/mcps.js';
@@ -685,6 +690,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // Marketplace is optional — never block startup
   }
   server.decorate('marketplace', marketplaceDb);
+  const capabilityProposalStore = new CapabilityProposalStore();
+  server.decorate('capabilityProposalStore', capabilityProposalStore);
 
   // ── Daily marketplace sync (non-blocking, 60s delay after startup) ──
   const stopMarketplaceBackgroundSync = scheduleMarketplaceBackgroundSync({ marketplaceDb, log });
@@ -2779,6 +2786,10 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(notificationRoutes);
   await server.register(marketplaceDevRoutes);
   await server.register(marketplaceRoutes);
+  await server.register(createCapabilityProposalRoutes(
+    capabilityProposalStore,
+    (identity) => installMarketplaceApprovalIdentity(server, identity),
+  ));
   await server.register(agentSearchRoutes);
   await server.register(connectorRoutes);
   // UX-Refactor Phase 4 (Extend layer): MCP Hub (S08) + the marketplace
