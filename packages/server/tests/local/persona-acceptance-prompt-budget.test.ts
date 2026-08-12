@@ -1389,6 +1389,11 @@ describe('persona acceptance prompt budget', () => {
       expect(loopConfigs).toHaveLength(2);
       expect(childOutput).toContain(childName);
       expect(childOutput).toContain(childResult);
+      expect(loopConfigs[0].modelSpendTraceId).toEqual(expect.any(Number));
+      expect(loopConfigs[1].modelSpendBudget).toBe(loopConfigs[0].modelSpendBudget);
+      expect(loopConfigs[1].modelSpendTraceId).toBe(loopConfigs[0].modelSpendTraceId);
+      expect(loopConfigs[1].spendWorkspaceId).toBe(loopConfigs[0].spendWorkspaceId);
+      expect(loopConfigs[1].modelSpendBillingClass).toBe('priced');
       const parentToolNames = loopConfigs[0].tools.map(tool => tool.name);
       expect(parentToolNames).toContain('spawn_agent');
       expect(parentToolNames).not.toContain('list_agents');
@@ -1555,6 +1560,11 @@ describe('persona acceptance prompt budget', () => {
       expect(loopConfigs).toHaveLength(2);
       expect(workflowOutput).toContain(workflowName);
       expect(workflowOutput).toContain(workerResult);
+      expect(loopConfigs[0].modelSpendTraceId).toEqual(expect.any(Number));
+      expect(loopConfigs[1].modelSpendBudget).toBe(loopConfigs[0].modelSpendBudget);
+      expect(loopConfigs[1].modelSpendTraceId).toBe(loopConfigs[0].modelSpendTraceId);
+      expect(loopConfigs[1].spendWorkspaceId).toBe(loopConfigs[0].spendWorkspaceId);
+      expect(loopConfigs[1].modelSpendBillingClass).toBe('priced');
       const parentToolNames = loopConfigs[0].tools.map(tool => tool.name);
       expect(parentToolNames).toContain('orchestrate_workflow');
       expect(parentToolNames).not.toContain('list_agents');

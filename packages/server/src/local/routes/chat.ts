@@ -72,9 +72,11 @@ import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import {
   canonicalizeModelReference,
+  listOllamaChatModelIds,
   resolveExplicitRoutableModel,
   resolveUsableModel,
 } from '../model-availability.js';
+import { bindModelSpendBudget } from '../model-spend-meter.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
@@ -2612,6 +2614,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // security policy, and runner. Static startup tools are replaced only
         // when their names survived persona/availability/intent filtering.
         if (!hasCustomRunner) {
+          const childAgentRunner = bindModelSpendBudget(
+            agentRunner,
+            costTracker,
+            executionScopeId,
+            listOllamaChatModelIds,
+            () => traceHandle?.id,
+          );
           effectiveTools = bindChatCollaborationTools({
             server,
             visibleTools: effectiveTools,
@@ -2620,7 +2629,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             parentSessionId: sessionId,
             parentTask: agentMessage,
             model: resolvedModel,
-            runLoop: agentRunner,
+            runLoop: childAgentRunner,
             runWorkerTransaction: workspaceTurnScope
               ? (tools, operation) => workspaceTurnScope!.runChildTransaction(
                   tools,

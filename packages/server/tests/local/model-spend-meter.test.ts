@@ -1,10 +1,55 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CostTracker } from '@waggle/agent';
-import { createModelSpendMeter } from '../../src/local/model-spend-meter.js';
+import {
+  bindModelSpendBudget,
+  createModelSpendMeter,
+} from '../../src/local/model-spend-meter.js';
 
 const TARGET = 'http://127.0.0.1:3333/v1';
 
 describe('ModelSpendMeter durable handoff ownership', () => {
+  it('forces one root spend scope onto child calls and verifies local billing', async () => {
+    const shared = new CostTracker();
+    const calls: Array<Record<string, unknown>> = [];
+    const runner = bindModelSpendBudget(
+      async (config) => {
+        calls.push(config as unknown as Record<string, unknown>);
+        return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+      shared,
+      'workspace-a',
+      async () => ['ollama/qwen2.5:0.5b'],
+      () => 77,
+    );
+    const baseConfig = {
+      litellmUrl: 'http://llm.test',
+      litellmApiKey: 'test-key',
+      systemPrompt: 'test',
+      tools: [],
+      messages: [{ role: 'user' as const, content: 'test' }],
+    };
+
+    await runner({
+      ...baseConfig,
+      model: 'openai/gpt-5.3-codex',
+      modelSpendTraceId: 999,
+    });
+    await runner({ ...baseConfig, model: 'ollama/qwen2.5:0.5b' });
+    await runner({ ...baseConfig, model: 'ollama/unverified:latest' });
+
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call.modelSpendBudget).toBe(shared);
+      expect(call.modelSpendTraceId).toBe(77);
+      expect(call.spendWorkspaceId).toBe('workspace-a');
+    }
+    expect(calls.map((call) => call.modelSpendBillingClass)).toEqual([
+      'priced',
+      'free',
+      'priced',
+    ]);
+  });
+
   it('updates live usage without writing a second durable charge', () => {
     const shared = new CostTracker();
     const onCostSettled = vi.fn();

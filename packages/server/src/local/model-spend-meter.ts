@@ -118,9 +118,10 @@ export function createModelSpendMeter(
 
 export function bindModelSpendBudget(
   underlyingRunner: AgentRunner,
-  meter: ModelSpendMeter,
+  budget: ModelSpendBudget,
   workspaceId: string,
   listVerifiedLocalModels: () => Promise<string[]>,
+  getDurableTraceId?: () => number | undefined,
 ): AgentRunner {
   let verifiedLocalModels: Promise<Set<string>> | undefined;
   return async (config) => {
@@ -133,9 +134,12 @@ export function bindModelSpendBudget(
     return underlyingRunner({
       ...config,
       billingModel,
-      modelSpendBudget: meter,
+      modelSpendBudget: budget,
       modelSpendBillingClass: billingClass,
       spendWorkspaceId: workspaceId,
+      modelSpendTraceId: getDurableTraceId
+        ? getDurableTraceId()
+        : config.modelSpendTraceId,
     });
   };
 }
