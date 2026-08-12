@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { CostTracker, DEFAULT_MODEL_PRICING, type ModelPricing } from '../src/cost-tracker.js';
+import {
+  BudgetExceededError,
+  BudgetPricingUnavailableError,
+  CostTracker,
+  DEFAULT_MODEL_PRICING,
+  type ModelPricing,
+} from '../src/cost-tracker.js';
 
 describe('CostTracker', () => {
   const pricing: Record<string, ModelPricing> = {
@@ -130,5 +136,139 @@ describe('CostTracker', () => {
         vi.useRealTimers();
       }
     });
+  });
+});
+
+describe('hard daily spend reservations', () => {
+  const pricing: Record<string, ModelPricing> = {
+    paid: { inputPer1k: 1, outputPer1k: 1 },
+  };
+
+  it('atomically prevents concurrent reservations from sharing the same capacity', async () => {
+    const tracker = new CostTracker(pricing);
+    tracker.setBudget(1, 'hard');
+
+    const attempts = await Promise.allSettled([
+      Promise.resolve().then(() => tracker.reserveModelSpend({
+        model: 'paid', inputTokens: 400, maxOutputTokens: 200,
+      })),
+      Promise.resolve().then(() => tracker.reserveModelSpend({
+        model: 'paid', inputTokens: 400, maxOutputTokens: 200,
+      })),
+    ]);
+
+    expect(attempts.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(attempts.find(result => result.status === 'rejected')).toMatchObject({
+      reason: expect.any(BudgetExceededError),
+    });
+    expect(tracker.getReservedDailyTotal()).toBeCloseTo(0.6, 6);
+  });
+
+  it('reconciles a conservative reservation to actual usage exactly once', () => {
+    const tracker = new CostTracker(pricing);
+    tracker.setBudget(1, 'hard');
+    const reservation = tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 400, maxOutputTokens: 400, workspaceId: 'workspace-a',
+    });
+
+    tracker.reconcileModelSpend(reservation, { inputTokens: 100, outputTokens: 100 });
+    tracker.reconcileModelSpend(reservation, { inputTokens: 900, outputTokens: 900 });
+
+    expect(tracker.getReservedDailyTotal()).toBe(0);
+    expect(tracker.getDailyTotal()).toBeCloseTo(0.2, 6);
+    expect(tracker.getWorkspaceCost('workspace-a')).toBeCloseTo(0.2, 6);
+    expect(() => tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 400, maxOutputTokens: 400,
+    })).not.toThrow();
+  });
+
+  it('retains the conservative reservation after ambiguous provider failure', () => {
+    const tracker = new CostTracker(pricing);
+    tracker.setBudget(1, 'hard');
+    const reservation = tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 500, maxOutputTokens: 500,
+    });
+
+    tracker.commitReservedModelSpend(reservation);
+
+    expect(tracker.getReservedDailyTotal()).toBe(0);
+    expect(tracker.getDailyTotal()).toBeCloseTo(1, 6);
+    expect(() => tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 1, maxOutputTokens: 1,
+    })).toThrow(BudgetExceededError);
+  });
+
+  it('allows explicitly verified free execution after the paid cap is exhausted', () => {
+    const tracker = new CostTracker(pricing);
+    tracker.setBudget(1, 'hard');
+    const paid = tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 500, maxOutputTokens: 500,
+    });
+    tracker.commitReservedModelSpend(paid);
+
+    const local = tracker.reserveModelSpend({
+      model: 'unpriced-local-model',
+      inputTokens: 10_000,
+      maxOutputTokens: 10_000,
+      billingClass: 'free',
+    });
+    tracker.reconcileModelSpend(local, { inputTokens: 10_000, outputTokens: 10_000 });
+
+    expect(tracker.getDailyTotal()).toBeCloseTo(1, 6);
+  });
+
+  it('normalizes zero to disabled and rejects negative budgets', () => {
+    const tracker = new CostTracker(pricing);
+
+    tracker.setBudget(0, 'hard');
+    expect(tracker.getBudget()).toEqual({ dailyBudgetUsd: null, mode: 'hard' });
+    expect(() => tracker.setBudget(-1, 'hard')).toThrow(/non-negative finite/i);
+  });
+
+  it('preserves an explicit priced classification for ollama-prefixed routes', () => {
+    const tracker = new CostTracker({
+      'ollama/remote-paid': { inputPer1k: 1, outputPer1k: 1 },
+    });
+    tracker.setBudget(1, 'hard');
+    const reservation = tracker.reserveModelSpend({
+      model: 'ollama/remote-paid', inputTokens: 300, maxOutputTokens: 300,
+      billingClass: 'priced',
+    });
+
+    tracker.reconcileModelSpend(reservation, { inputTokens: 100, outputTokens: 100 });
+
+    expect(tracker.getDailyTotal()).toBeCloseTo(0.2, 6);
+  });
+
+  it('commits the reservation when provider usage is non-finite', () => {
+    const tracker = new CostTracker(pricing);
+    tracker.setBudget(1, 'hard');
+    const reservation = tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 400, maxOutputTokens: 400,
+    });
+
+    tracker.reconcileModelSpend(reservation, { inputTokens: Number.NaN, outputTokens: 0 });
+
+    expect(tracker.getDailyTotal()).toBeCloseTo(0.8, 6);
+    expect(() => tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 200, maxOutputTokens: 1,
+    })).toThrow(BudgetExceededError);
+  });
+
+  it('rejects non-finite direct usage before it can poison the ledger', () => {
+    const tracker = new CostTracker(pricing);
+
+    expect(() => tracker.addUsage('paid', Number.NaN, 0)).toThrow(/finite/i);
+    expect(tracker.getDailyTotal()).toBe(0);
+  });
+
+  it('fails closed when hard mode lacks trusted pricing for a paid route', () => {
+    const tracker = new CostTracker();
+    tracker.setBudget(1, 'hard');
+
+    expect(() => tracker.reserveModelSpend({
+      model: 'openrouter/auto', inputTokens: 1, maxOutputTokens: 1,
+      billingClass: 'priced',
+    })).toThrow(BudgetPricingUnavailableError);
   });
 });

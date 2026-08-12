@@ -4,6 +4,7 @@ import {
   compactToolContextForModel,
   selectAgentRunBudget,
 } from '../src/agent-run-budget.js';
+import { BudgetExceededError, CostTracker } from '../src/cost-tracker.js';
 import type { ToolDefinition } from '../src/tools.js';
 import {
   UNTRUSTED_GUARD_CLOSE,
@@ -717,6 +718,199 @@ describe('fetched source citations', () => {
 });
 
 describe('hard request dispatch budget', () => {
+  it('reserves daily spend before the provider call and fails closed at the cap', async () => {
+    const fetchFn = vi.fn() as unknown as typeof fetch;
+    const tracker = new CostTracker({ paid: { inputPer1k: 1, outputPer1k: 1 } });
+    tracker.setBudget(0.001, 'hard');
+    const full = tracker.reserveModelSpend({
+      model: 'paid', inputTokens: 1, maxOutputTokens: 0,
+    });
+    tracker.commitReservedModelSpend(full);
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'paid',
+      systemPrompt: 'Be concise.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      maxOutputTokens: 1,
+      modelSpendBudget: tracker,
+    })).rejects.toBeInstanceOf(BudgetExceededError);
+
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('reconciles a successful provider dispatch to actual usage', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse(
+      { role: 'assistant', content: 'done' },
+      100,
+      20,
+    )) as unknown as typeof fetch;
+    const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
+    tracker.setBudget(1, 'hard');
+
+    const result = await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'paid',
+      systemPrompt: 'Be concise.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      maxOutputTokens: 1_000,
+      verificationGate: false,
+      skillDistillationGate: false,
+      modelSpendBudget: tracker,
+      spendWorkspaceId: 'workspace-a',
+    });
+
+    expect(result.usage).toEqual({ inputTokens: 100, outputTokens: 20 });
+    expect(tracker.getReservedDailyTotal()).toBe(0);
+    expect(tracker.getWorkspaceCost('workspace-a')).toBeCloseTo(0.00012, 8);
+  });
+
+  it('commits a conservative reservation before retrying an ambiguous network failure', async () => {
+    const fetchFn = vi.fn()
+      .mockRejectedValue(new Error('socket hang up')) as unknown as typeof fetch;
+    const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
+    tracker.setBudget(10, 'hard');
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'paid',
+      systemPrompt: 'Be concise.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      maxOutputTokens: 100,
+      verificationGate: false,
+      skillDistillationGate: false,
+      modelSpendBudget: tracker,
+    })).rejects.toThrow();
+
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    expect(tracker.getReservedDailyTotal()).toBe(0);
+    expect(tracker.getDailyTotal()).toBeGreaterThan(0);
+  });
+
+  it.each([400, 429])(
+    'releases spend after a definite pre-inference HTTP %s rejection',
+    async (status) => {
+      const fetchFn = vi.fn(async () => ({
+        ok: false,
+        status,
+        headers: new Headers({ 'retry-after': '0' }),
+        text: async () => 'request rejected',
+      }) as Response) as unknown as typeof fetch;
+      const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
+      tracker.setBudget(10, 'hard');
+
+      await expect(runAgentLoop({
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        model: 'paid',
+        systemPrompt: 'Be concise.',
+        messages: [{ role: 'user', content: 'Answer.' }],
+        tools: [],
+        fetch: fetchFn,
+        maxOutputTokens: 100,
+        verificationGate: false,
+        skillDistillationGate: false,
+        modelSpendBudget: tracker,
+      })).rejects.toThrow();
+
+      expect(fetchFn).toHaveBeenCalledTimes(status === 429 ? 3 : 1);
+      expect(tracker.getReservedDailyTotal()).toBe(0);
+      expect(tracker.getDailyTotal()).toBe(0);
+    },
+  );
+
+  it('settles spend when an in-flight response is followed by client abort', async () => {
+    const controller = new AbortController();
+    const fetchFn = vi.fn(async () => {
+      controller.abort();
+      return jsonResponse({ role: 'assistant', content: 'done' }, 100, 20);
+    }) as unknown as typeof fetch;
+    const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
+    tracker.setBudget(10, 'hard');
+
+    const result = await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'paid',
+      systemPrompt: 'Be concise.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      signal: controller.signal,
+      maxOutputTokens: 100,
+      verificationGate: false,
+      skillDistillationGate: false,
+      modelSpendBudget: tracker,
+    });
+
+    expect(result.content).toMatch(/aborted/i);
+    expect(tracker.getReservedDailyTotal()).toBe(0);
+    expect(tracker.getDailyTotal()).toBeGreaterThan(0);
+  });
+
+  it('commits conservative spend when a successful response body is malformed', async () => {
+    const fetchFn = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('invalid JSON'); },
+    }) as unknown as Response) as unknown as typeof fetch;
+    const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
+    tracker.setBudget(10, 'hard');
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'paid',
+      systemPrompt: 'Be concise.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      maxOutputTokens: 100,
+      verificationGate: false,
+      skillDistillationGate: false,
+      modelSpendBudget: tracker,
+    })).rejects.toThrow(/invalid JSON/);
+
+    expect(tracker.getReservedDailyTotal()).toBe(0);
+    expect(tracker.getDailyTotal()).toBeGreaterThan(0);
+  });
+
+  it('commits conservative spend when a successful response has an invalid choice', async () => {
+    const fetchFn = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{}], usage: { prompt_tokens: 10, completion_tokens: 0 } }),
+    }) as unknown as Response) as unknown as typeof fetch;
+    const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
+    tracker.setBudget(10, 'hard');
+
+    await expect(runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'paid',
+      systemPrompt: 'Be concise.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      maxOutputTokens: 100,
+      verificationGate: false,
+      skillDistillationGate: false,
+      modelSpendBudget: tracker,
+    })).rejects.toThrow(/invalid choice/i);
+
+    expect(tracker.getReservedDailyTotal()).toBe(0);
+    expect(tracker.getDailyTotal()).toBeGreaterThan(0);
+  });
+
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
     'rejects invalid maxTokenBudget=%s before any provider call',
     async (maxTokenBudget) => {

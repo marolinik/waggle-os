@@ -15,6 +15,11 @@ import {
   type ToolContextBudget,
 } from './agent-run-budget.js';
 import { estimateTokens as estimateTextTokens } from './tool-output-compressor.js';
+import type {
+  ModelSpendBudget,
+  ModelSpendBillingClass,
+  ModelSpendReservation,
+} from './cost-tracker.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 type PluginToolCandidate = Omit<ToolDefinition, 'riskLevel'> & { riskLevel?: unknown };
@@ -48,6 +53,13 @@ export interface AgentLoopConfig {
   litellmUrl: string;
   litellmApiKey: string;
   model: string;
+  /** Canonical priced model before any provider-specific ID rewriting. */
+  billingModel?: string;
+  /** Shared process budget ledger. Omit to preserve unmanaged/library callers. */
+  modelSpendBudget?: ModelSpendBudget;
+  /** Set to free only after the server has verified the route is offline/free. */
+  modelSpendBillingClass?: ModelSpendBillingClass;
+  spendWorkspaceId?: string;
   systemPrompt: string;
   tools: ToolDefinition[];
   messages: Array<{ role: string; content: string }>;
@@ -587,6 +599,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       : timeoutSignal;
 
     let response: Response;
+    let spendReservation: ModelSpendReservation | undefined = config.modelSpendBudget?.reserveModelSpend({
+      model: config.billingModel ?? model,
+      inputTokens: estimatedNextRequestTokens,
+      maxOutputTokens: outputTokenLimit,
+      workspaceId: config.spendWorkspaceId,
+      billingClass: config.modelSpendBillingClass,
+    });
     try {
       response = await fetchFn(`${litellmUrl}/chat/completions`, {
         method: 'POST',
@@ -598,6 +617,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         signal: requestSignal,
       });
     } catch (netErr) {
+      if (spendReservation) {
+        config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+        spendReservation = undefined;
+      }
       // The fetch promise itself rejected — a network-level failure (endpoint
       // down / restarting, socket hang-up, "fetch failed") or our timeout fired.
       // A genuine client disconnect re-throws (caught by the between-turn guard
@@ -616,6 +639,17 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     if (!response.ok) {
       const action = await handleNonOkResponse(response, retryState);
+      if (spendReservation) {
+        const definitelyRejectedBeforeInference = response.status === 429
+          || [400, 401, 403, 404, 405, 413, 415, 422].includes(response.status);
+        if (definitelyRejectedBeforeInference) {
+          config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
+        } else {
+          // Server-side failures can be ambiguous about inference/token use.
+          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+        }
+        spendReservation = undefined;
+      }
       if (action.kind === 'fatal') throw action.error;
       if (onToken) onToken(action.notice);
       await new Promise(r => setTimeout(r, action.waitMs));
@@ -645,7 +679,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           },
         });
       } catch (error) {
-        if (!isIncompleteCompletionError(error)) throw error;
+        if (!isIncompleteCompletionError(error)) {
+          if (spendReservation) {
+            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            spendReservation = undefined;
+          }
+          throw error;
+        }
         const observedInput = error.usage?.inputTokens ?? 0;
         const observedOutput = error.usage?.outputTokens ?? 0;
         const failedInputTokens = observedInput > 0
@@ -661,6 +701,17 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           inputTokens: totalInputTokens + failedInputTokens,
           outputTokens: totalOutputTokens + failedOutputTokens,
         };
+        if (spendReservation) {
+          if (observedInput > 0 || observedOutput > 0) {
+            config.modelSpendBudget?.reconcileModelSpend(spendReservation, {
+              inputTokens: failedInputTokens,
+              outputTokens: failedOutputTokens,
+            });
+          } else {
+            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+          }
+          spendReservation = undefined;
+        }
         throw error;
       }
       turnInputTokens = parsed.usage.inputTokens;
@@ -675,6 +726,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     } else {
       // Non-streaming path: parse the single chat completion response.
+      try {
       const data = await response.json() as {
         choices?: Array<{
           finish_reason?: string | null;
@@ -685,15 +737,45 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
-      if (!data.choices || data.choices.length === 0) {
-        throw new Error(
-          `LiteLLM returned no choices: ${JSON.stringify(data).slice(0, 200)}`
-        );
-      }
-      assistantMessage = data.choices[0].message;
-      completionFinishReason = data.choices[0].finish_reason ?? null;
+        if (!data.choices || data.choices.length === 0) {
+          throw new Error(
+            `LiteLLM returned no choices: ${JSON.stringify(data).slice(0, 200)}`
+          );
+        }
+        const choice = data.choices[0];
+        if (!choice.message || typeof choice.message !== 'object') {
+          throw new Error(
+            `LiteLLM returned an invalid choice: ${JSON.stringify(choice).slice(0, 200)}`
+          );
+        }
+        assistantMessage = choice.message;
+        completionFinishReason = choice.finish_reason ?? null;
       turnInputTokens = data.usage?.prompt_tokens ?? 0;
       turnOutputTokens = data.usage?.completion_tokens ?? 0;
+      } catch (error) {
+        if (spendReservation) {
+          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+          spendReservation = undefined;
+        }
+        throw error;
+      }
+    }
+
+    // Some OpenAI-compatible providers omit or corrupt usage counters. Do not
+    // interpret missing/non-finite counters as free work.
+    if (!Number.isFinite(turnInputTokens) || turnInputTokens <= 0) {
+      turnInputTokens = estimatedNextRequestTokens;
+    }
+    if (!Number.isFinite(turnOutputTokens) || turnOutputTokens <= 0) {
+      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
+    }
+
+    if (spendReservation) {
+      config.modelSpendBudget?.reconcileModelSpend(spendReservation, {
+        inputTokens: turnInputTokens,
+        outputTokens: turnOutputTokens,
+      });
+      spendReservation = undefined;
     }
 
     // R3-008: if the run was aborted while the in-flight response was being
@@ -707,14 +789,6 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         toolsUsed,
         usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
       };
-    }
-
-    // Some OpenAI-compatible providers omit usage entirely. Do not interpret
-    // missing counters as free work: fall back to the pre-dispatch input
-    // estimate and a conservative serialization estimate for the response.
-    if (turnInputTokens <= 0) turnInputTokens = estimatedNextRequestTokens;
-    if (turnOutputTokens <= 0) {
-      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
     }
 
     totalInputTokens += turnInputTokens;
