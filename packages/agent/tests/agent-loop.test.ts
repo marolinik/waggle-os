@@ -350,6 +350,8 @@ describe('runAgentLoop', () => {
 
   it('merges plugin tools into the agent toolset via pluginTools provider', async () => {
     const pluginExecute = vi.fn(async () => 'plugin-result');
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ authorize: true }));
     const pluginToolProvider: PluginToolProvider = {
       getAllTools: () => [
         {
@@ -372,7 +374,7 @@ describe('runAgentLoop', () => {
     ]);
 
     const result = await runAgentLoop(
-      makeConfig({ fetch, pluginTools: pluginToolProvider })
+      makeConfig({ fetch, pluginTools: pluginToolProvider, hooks })
     );
 
     expect(result.content).toBe('Found via plugin.');

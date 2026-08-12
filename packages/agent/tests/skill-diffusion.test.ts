@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { runAgentLoop, type AgentLoopConfig } from '../src/agent-loop.js';
+import { HookRegistry } from '../src/hooks.js';
 import type { ToolDefinition } from '../src/tools.js';
 
 interface FakeResponse {
@@ -63,6 +64,8 @@ function makeNoopTool(name: string): ToolDefinition {
 }
 
 function makeConfig(overrides: Partial<AgentLoopConfig> = {}): AgentLoopConfig {
+  const hooks = new HookRegistry();
+  hooks.on('pre:tool', () => ({ authorize: true }));
   return {
     litellmUrl: 'http://stub',
     litellmApiKey: 'test',
@@ -78,6 +81,7 @@ function makeConfig(overrides: Partial<AgentLoopConfig> = {}): AgentLoopConfig {
     messages: [{ role: 'user', content: 'do a 5-tool task' }],
     maxTurns: 6,
     stream: false,
+    hooks,
     ...overrides,
   };
 }
