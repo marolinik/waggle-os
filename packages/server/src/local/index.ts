@@ -788,9 +788,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       try {
         const results = marketplaceDb.search({ query, limit: 10 });
         return results.packages.map(pkg => ({
+          packageId: pkg.id,
           name: pkg.name,
           description: pkg.description,
           packageType: pkg.package_type,
+          installType: pkg.waggle_install_type,
+          version: pkg.version,
+          author: pkg.author,
           source: 'marketplace',
           score: undefined, // FTS5 doesn't expose raw scores through our API
         }));

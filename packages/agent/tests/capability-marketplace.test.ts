@@ -189,9 +189,11 @@ describe('capability-marketplace', () => {
           searchCalled = true;
           return [
             {
+              packageId: 73,
               name: 'email-pro',
               description: `Professional email tools matching: ${query}`,
               packageType: 'skill',
+              installType: 'plugin',
               source: 'marketplace',
             },
           ];
@@ -205,6 +207,30 @@ describe('capability-marketplace', () => {
       expect(searchCalled).toBe(true);
       expect(result).toContain('email-pro');
       expect(result).toContain('"kind":"marketplace"');
+      expect(result).toContain('"packageId":73');
+      expect(result).toContain('"installType":"plugin"');
+    });
+
+    it('does not emit an actionable marketplace marker without canonical identity', async () => {
+      const tools = createSkillTools({
+        waggleHome: tmpDir,
+        starterSkillsDir: starterDir,
+        nativeToolNames: [],
+        searchMarketplace: async () => [
+          {
+            name: 'email-pro',
+            description: 'Professional email automation tools',
+            packageType: 'skill',
+            source: 'marketplace',
+          },
+        ],
+      });
+
+      const acquireTool = tools.find(t => t.name === 'acquire_capability');
+      const result = await acquireTool!.execute({ need: 'email automation' });
+
+      expect(result).toContain('email-pro');
+      expect(result).not.toContain('waggle:capability_request');
     });
 
     it('degrades gracefully when marketplace callback throws', async () => {
