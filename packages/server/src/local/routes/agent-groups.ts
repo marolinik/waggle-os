@@ -22,9 +22,14 @@ import {
 import type { AgentRunner } from './chat.js';
 import { buildWorkflowFromGroup } from '../../services/agent-group-executor.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
-import { resolveUsableModel } from '../model-availability.js';
+import { listOllamaChatModelIds, resolveUsableModel } from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 import { isOfflineOllamaModelReference } from './chat-helpers.js';
+import {
+  bindModelSpendBudget,
+  createModelSpendMeter,
+  type ModelSpendMeter,
+} from '../model-spend-meter.js';
 
 interface AgentGroupMember {
   agentId: string;
@@ -367,6 +372,8 @@ async function executeGroup(
   let settleExecution!: () => void;
   const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
   let acquired = false;
+  let traceId: number | undefined;
+  let spendMeter: ModelSpendMeter | undefined;
 
   try {
     if (runContext) {
@@ -390,7 +397,21 @@ async function executeGroup(
       }, { once: true });
     }
 
-    const baseRunLoop = guardAgentRunner(server.agentRunner ?? runAgentLoop);
+    const underlyingRunLoop = guardAgentRunner(server.agentRunner ?? runAgentLoop);
+    spendMeter = runContext && server.agentState.costTracker
+      ? createModelSpendMeter(server.agentState.costTracker, (costUsd) => {
+          if (traceId === undefined) return;
+          server.traceStore?.recordCost(traceId, costUsd);
+        })
+      : undefined;
+    const baseRunLoop = spendMeter && runContext
+      ? bindModelSpendBudget(
+          underlyingRunLoop,
+          spendMeter,
+          runContext.workspaceId,
+          listOllamaChatModelIds,
+        )
+      : underlyingRunLoop;
     let availableTools = server.agentState.allTools;
     let sessionOrchestrator: ReturnType<FastifyInstance['agentState']['createSessionOrchestrator']> | undefined;
     let workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0] | undefined;
@@ -403,6 +424,13 @@ async function executeGroup(
         runContext.cwd,
         runContext.workspaceId,
       );
+      traceId = server.traceStore?.start({
+        sessionId: `group-${jobId}`,
+        workspaceId: runContext.workspaceId,
+        model: localExecutionModel ?? server.agentState.currentModel,
+        input: task,
+        tags: [`room:${runContext.roomId}`, `group:${group.id}`, `job:${jobId}`],
+      });
     }
     const members = group.members.map((member) => {
       const persona = resolvePersona(member.agentId)!;
@@ -561,6 +589,13 @@ async function executeGroup(
         output: { aggregated, workers, ...(runContext ? { roomId: runContext.roomId } : {}) },
       });
     }
+    if (traceId !== undefined) {
+      server.traceStore?.finalize(traceId, {
+        outcome: signal.aborted || failed ? 'abandoned' : 'success',
+        output: aggregated,
+        costUsd: spendMeter?.totalCostUsd(),
+      });
+    }
   } catch (error) {
     const durableError = guardAgentOutput(error instanceof Error ? error.message : String(error), 'error');
     if (runContext) {
@@ -579,6 +614,13 @@ async function executeGroup(
         status: 'failed',
         completedAt: new Date().toISOString(),
         output: { error: durableError },
+      });
+    }
+    if (traceId !== undefined) {
+      server.traceStore?.finalize(traceId, {
+        outcome: 'abandoned',
+        output: durableError,
+        costUsd: spendMeter?.totalCostUsd(),
       });
     }
   } finally {

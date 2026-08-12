@@ -159,6 +159,13 @@ const EXECUTION_TRACES_DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_traces_persona ON execution_traces (persona_id, outcome)`,
   `CREATE INDEX IF NOT EXISTS idx_traces_outcome ON execution_traces (outcome, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_traces_workspace ON execution_traces (workspace_id, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS execution_trace_spend (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id INTEGER NOT NULL REFERENCES execution_traces(id) ON DELETE CASCADE,
+    cost_usd REAL NOT NULL CHECK (cost_usd > 0),
+    settled_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_trace_spend_settled ON execution_trace_spend (settled_at, trace_id)`,
 ];
 
 /** Exported DDL concatenated — kept for anyone who needs the full table SQL. */
@@ -176,10 +183,6 @@ export class ExecutionTraceStore {
   private ensureTable(): void {
     try {
       const raw = this.db.getDatabase();
-      const exists = raw.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='execution_traces'",
-      ).get();
-      if (exists) return;
       for (const stmt of EXECUTION_TRACES_DDL) {
         raw.prepare(stmt).run();
       }
@@ -250,6 +253,29 @@ export class ExecutionTraceStore {
       .run(JSON.stringify(payload), id);
   }
 
+  /** Persist one settled model charge while a long-running trace is pending. */
+  recordCost(id: number, costUsd: number, timestamp = new Date().toISOString()): void {
+    if (!Number.isFinite(costUsd) || costUsd <= 0) {
+      throw new RangeError('Trace cost entry must be a positive finite number');
+    }
+    const settledMs = Date.parse(timestamp);
+    if (!Number.isFinite(settledMs)) {
+      throw new RangeError('Trace cost timestamp must be a valid ISO date');
+    }
+    const settledAt = new Date(settledMs).toISOString();
+    const raw = this.db.getDatabase();
+    raw.transaction(() => {
+      const updated = raw.prepare(`
+        UPDATE execution_traces SET cost_usd = cost_usd + ? WHERE id = ?
+      `).run(costUsd, id);
+      if (updated.changes === 0) return;
+      raw.prepare(`
+        INSERT INTO execution_trace_spend (trace_id, cost_usd, settled_at)
+        VALUES (?, ?, ?)
+      `).run(id, costUsd, settledAt);
+    })();
+  }
+
   /** Finalize a trace — set outcome, merge payload, record cost + duration. */
   finalize(id: number, input: FinalizeTraceInput): ExecutionTrace | undefined {
     const current = this.get(id);
@@ -273,23 +299,40 @@ export class ExecutionTraceStore {
     const durationMs = Number.isFinite(createdMs) ? Math.max(0, now - createdMs) : 0;
     const finalModel = input.model === undefined ? current.model : input.model;
 
-    this.db.getDatabase().prepare(`
-      UPDATE execution_traces
-      SET outcome = ?,
-          model = ?,
-          trace_json = ?,
-          cost_usd = ?,
-          duration_ms = ?,
-          finalized_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      input.outcome,
-      finalModel,
-      JSON.stringify(merged),
-      input.costUsd ?? current.cost_usd,
-      durationMs,
-      id,
-    );
+    const raw = this.db.getDatabase();
+    raw.transaction(() => {
+      const finalCost = Math.max(current.cost_usd, input.costUsd ?? current.cost_usd);
+      if (input.costUsd !== undefined && finalCost > 0) {
+        const ledger = raw.prepare(`
+          SELECT COUNT(*) AS entries, COALESCE(SUM(cost_usd), 0) AS total
+          FROM execution_trace_spend WHERE trace_id = ?
+        `).get(id) as { entries: number; total: number | null };
+        const missingCost = Math.max(0, finalCost - Number(ledger.total ?? 0));
+        if (ledger.entries > 0 && missingCost > 0) {
+          raw.prepare(`
+            INSERT INTO execution_trace_spend (trace_id, cost_usd, settled_at)
+            VALUES (?, ?, ?)
+          `).run(id, missingCost, new Date().toISOString());
+        }
+      }
+      raw.prepare(`
+        UPDATE execution_traces
+        SET outcome = ?,
+            model = ?,
+            trace_json = ?,
+            cost_usd = ?,
+            duration_ms = ?,
+            finalized_at = datetime('now')
+        WHERE id = ?
+      `).run(
+        input.outcome,
+        finalModel,
+        JSON.stringify(merged),
+        finalCost,
+        durationMs,
+        id,
+      );
+    })();
 
     return this.get(id);
   }
@@ -334,13 +377,23 @@ export class ExecutionTraceStore {
 
   /** Sum persisted model cost from a timestamp through an inclusive trace-id boundary. */
   getTotalCostSince(since: string, throughId: number = Number.MAX_SAFE_INTEGER): number {
-    const row = this.db.getDatabase().prepare(`
-      SELECT COALESCE(SUM(cost_usd), 0) AS total
-      FROM execution_traces
-      WHERE created_at >= datetime(?)
-        AND id <= ?
+    const settledSince = new Date(since).toISOString();
+    const raw = this.db.getDatabase();
+    const ledger = raw.prepare(`
+      SELECT COALESCE(SUM(s.cost_usd), 0) AS total
+      FROM execution_trace_spend s
+      JOIN execution_traces t ON t.id = s.trace_id
+      WHERE s.settled_at >= ? AND t.id <= ?
+    `).get(settledSince, throughId) as { total: number | null };
+    const legacy = raw.prepare(`
+      SELECT COALESCE(SUM(t.cost_usd), 0) AS total
+      FROM execution_traces t
+      WHERE t.created_at >= datetime(?) AND t.id <= ?
+        AND NOT EXISTS (
+          SELECT 1 FROM execution_trace_spend s WHERE s.trace_id = t.id
+        )
     `).get(since, throughId) as { total: number | null };
-    return Number(row.total ?? 0);
+    return Number(ledger.total ?? 0) + Number(legacy.total ?? 0);
   }
 
   /** Query traces with optional filters. */

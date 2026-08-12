@@ -3,7 +3,6 @@ import type { FastifyInstance } from 'fastify';
 import { FrameStore, SessionStore } from '@waggle/core';
 import {
   TraceRecorder,
-  CostTracker,
   detectTaskShape,
   filterAvailableTools,
   isEnabled,
@@ -30,60 +29,13 @@ import {
 } from './model-availability.js';
 import type { WorkspaceTurnScope } from './workspace-turn-coordinator.js';
 import { isOfflineOllamaModelReference } from './routes/chat-helpers.js';
+import {
+  bindModelSpendBudget,
+  createModelSpendMeter,
+  type ModelSpendMeter,
+} from './model-spend-meter.js';
 
 const ACTIVE = new Set(['queued', 'starting', 'running', 'waiting_for_approval', 'paused', 'cancelling']);
-
-type ModelSpendBudget = NonNullable<Parameters<AgentRunner>[0]['modelSpendBudget']>;
-type ModelSpendReservationRequest = Parameters<ModelSpendBudget['reserveModelSpend']>[0];
-
-function createFleetSpendMeter(shared: ModelSpendBudget): ModelSpendBudget & { totalCostUsd(): number } {
-  const reservations = new Map<string, ModelSpendReservationRequest>();
-  let total = 0;
-  return {
-    reserveModelSpend(request) {
-      const reservation = shared.reserveModelSpend(request);
-      reservations.set(reservation.id, request);
-      return reservation;
-    },
-    reconcileModelSpend(reservation, usage) {
-      const request = reservations.get(reservation.id);
-      const reconciled = shared.reconcileModelSpend(reservation, usage);
-      if (reconciled && request) {
-        total += request.billingClass === 'free'
-          ? 0
-          : serverCost(request.model, usage.inputTokens, usage.outputTokens);
-      }
-      reservations.delete(reservation.id);
-      return reconciled;
-    },
-    commitReservedModelSpend(reservation) {
-      const request = reservations.get(reservation.id);
-      const committed = shared.commitReservedModelSpend(reservation);
-      if (committed && request && request.billingClass !== 'free') {
-        total += serverCost(request.model, request.inputTokens, request.maxOutputTokens);
-      }
-      reservations.delete(reservation.id);
-      return committed;
-    },
-    releaseReservedModelSpend(reservation) {
-      reservations.delete(reservation.id);
-      return shared.releaseReservedModelSpend(reservation);
-    },
-    totalCostUsd: () => total,
-  };
-}
-
-function serverCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-): number {
-  const pricedModel = model.toLowerCase().startsWith('ollama/')
-    ? model.slice('ollama/'.length)
-    : model;
-  const exact = new CostTracker().calculateCost(inputTokens, outputTokens, pricedModel);
-  return Math.ceil((Math.max(0, exact) * 1_000_000) - 1e-9) / 1_000_000;
-}
 
 async function resolveExplicitFleetModel(
   server: FastifyInstance,
@@ -285,34 +237,27 @@ async function executeFleetRun(
   let acquired = false;
   let workspaceTurnScope: WorkspaceTurnScope | undefined;
   let traceId: number | undefined;
-  let fleetSpendMeter: ReturnType<typeof createFleetSpendMeter> | undefined;
+  let fleetSpendMeter: ModelSpendMeter | undefined;
   try {
     const mind = server.mindCache.acquire(run.workspaceId);
     acquired = true;
     const orchestrator = server.agentState.createSessionOrchestrator(mind);
     const persona = listPersonas().find((item) => item.id === personaId) ?? null;
     fleetSpendMeter = server.agentState.costTracker
-      ? createFleetSpendMeter(server.agentState.costTracker)
+      ? createModelSpendMeter(server.agentState.costTracker, (costUsd) => {
+          if (traceId === undefined) return;
+          server.traceStore?.recordCost(traceId, costUsd);
+        })
       : undefined;
     const underlyingRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
-    let verifiedLocalOllamaModels: Promise<Set<string>> | undefined;
-    const runner: AgentRunner = async (config) => {
-      const billingModel = config.billingModel ?? config.model;
-      let billingClass: 'priced' | 'free' = 'priced';
-      if (billingModel.toLowerCase().startsWith('ollama/')) {
-        verifiedLocalOllamaModels ??= listOllamaChatModelIds().then((models) => new Set(models));
-        billingClass = (await verifiedLocalOllamaModels).has(billingModel) ? 'free' : 'priced';
-      }
-      return underlyingRunner({
-        ...config,
-        billingModel,
-        ...(fleetSpendMeter ? {
-          modelSpendBudget: fleetSpendMeter,
-          modelSpendBillingClass: billingClass,
-          spendWorkspaceId: run.workspaceId,
-        } : {}),
-      });
-    };
+    const runner = fleetSpendMeter
+      ? bindModelSpendBudget(
+          underlyingRunner,
+          fleetSpendMeter,
+          run.workspaceId,
+          listOllamaChatModelIds,
+        )
+      : underlyingRunner;
     let workerTools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
     if (persona) workerTools = applyPersonaToolFilter(workerTools, persona);
     workerTools = filterAvailableTools(workerTools);

@@ -869,4 +869,218 @@ describe('Local Server Mode', () => {
       fs.rmSync(restartDir, { recursive: true, force: true });
     }
   });
+
+  it('persists shared Agent Group spend and blocks all members after restart', async () => {
+    const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-group-budget-restart-'));
+    const config = new waggleCore.WaggleConfig(restartDir);
+    config.setDailyBudget(0.04);
+    config.setBudgetHardCap(false);
+    config.save();
+    const waitForJob = async (target: FastifyInstance, jobId: string) => {
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const response = await injectWithAuth(target, { method: 'GET', url: `/api/jobs/${jobId}` });
+        const job = response.json() as { status: string; output?: { error?: string } };
+        if (['completed', 'failed', 'cancelled'].includes(job.status)) return job;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      throw new Error(`Group job ${jobId} did not settle`);
+    };
+
+    const firstServer = await buildLocalServer({ dataDir: restartDir });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'qwen2.5:1.5b' }] }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+    try {
+      firstServer.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
+      const workspaceId = firstServer.workspaceManager.getDefault()!;
+      firstServer.workspaceManager.update(workspaceId, { model: 'anthropic/claude-sonnet-4-6' });
+      let providerDispatches = 0;
+      firstServer.agentRunner = async (agentConfig) => {
+        const reservation = agentConfig.modelSpendBudget!.reserveModelSpend({
+          model: agentConfig.billingModel ?? agentConfig.model,
+          inputTokens: 1_000,
+          maxOutputTokens: 1_000,
+          workspaceId: agentConfig.spendWorkspaceId,
+          billingClass: agentConfig.modelSpendBillingClass,
+        });
+        providerDispatches += 1;
+        agentConfig.modelSpendBudget!.reconcileModelSpend(reservation, {
+          inputTokens: 1_000,
+          outputTokens: 1_000,
+        });
+        return { content: `group result ${providerDispatches}`, toolsUsed: [], usage: { inputTokens: 1_000, outputTokens: 1_000 } };
+      };
+      const created = await injectWithAuth(firstServer, {
+        method: 'POST',
+        url: '/api/agent-groups',
+        payload: {
+          name: 'Budget pair', strategy: 'parallel',
+          members: [
+            { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+            { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+          ],
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const groupId = (created.json() as { id: string }).id;
+      const paidStart = await injectWithAuth(firstServer, {
+        method: 'POST', url: `/api/agent-groups/${groupId}/run`,
+        payload: { task: 'Run two paid members', workspaceId },
+      });
+      const paidJobId = (paidStart.json() as { jobId: string }).jobId;
+      const paidJob = await waitForJob(firstServer, paidJobId);
+      expect(paidJob.status, JSON.stringify(paidJob)).toBe('completed');
+      expect(providerDispatches).toBe(2);
+      const [paidTrace] = firstServer.traceStore.query({ sessionId: `group-${paidJobId}`, limit: 1 });
+      expect(paidTrace.cost_usd).toBeCloseTo(0.036, 6);
+
+      firstServer.agentState.currentModel = 'ollama/qwen2.5:1.5b';
+      firstServer.workspaceManager.update(workspaceId, { model: 'ollama/qwen2.5:1.5b' });
+      const localStart = await injectWithAuth(firstServer, {
+        method: 'POST', url: `/api/agent-groups/${groupId}/run`,
+        payload: { task: 'Run two local members', workspaceId },
+      });
+      const localJobId = (localStart.json() as { jobId: string }).jobId;
+      expect((await waitForJob(firstServer, localJobId)).status).toBe('completed');
+      expect(providerDispatches).toBe(4);
+      const [localTrace] = firstServer.traceStore.query({ sessionId: `group-${localJobId}`, limit: 1 });
+      expect(localTrace.cost_usd).toBe(0);
+      expect(firstServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.036, 6);
+
+      firstServer.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
+      firstServer.workspaceManager.update(workspaceId, { model: 'anthropic/claude-sonnet-4-6' });
+      let releaseSecondMember!: () => void;
+      let markSecondMemberStarted!: () => void;
+      const secondMemberRelease = new Promise<void>((resolve) => { releaseSecondMember = resolve; });
+      const secondMemberStarted = new Promise<void>((resolve) => { markSecondMemberStarted = resolve; });
+      let crashDispatches = 0;
+      firstServer.agentRunner = async (agentConfig) => {
+        crashDispatches += 1;
+        if (crashDispatches === 2) {
+          markSecondMemberStarted();
+          await secondMemberRelease;
+          return { content: 'released after restart proof', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+        }
+        const reservation = agentConfig.modelSpendBudget!.reserveModelSpend({
+          model: agentConfig.billingModel ?? agentConfig.model,
+          inputTokens: 1_000,
+          maxOutputTokens: 1_000,
+          workspaceId: agentConfig.spendWorkspaceId,
+          billingClass: agentConfig.modelSpendBillingClass,
+        });
+        agentConfig.modelSpendBudget!.reconcileModelSpend(reservation, {
+          inputTokens: 1_000,
+          outputTokens: 1_000,
+        });
+        return { content: 'first member settled', toolsUsed: [], usage: { inputTokens: 1_000, outputTokens: 1_000 } };
+      };
+      const crashGroup = await injectWithAuth(firstServer, {
+        method: 'POST',
+        url: '/api/agent-groups',
+        payload: {
+          name: 'Crash window pair', strategy: 'sequential',
+          members: [
+            { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+            { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+          ],
+        },
+      });
+      const crashGroupId = (crashGroup.json() as { id: string }).id;
+      const crashStart = await injectWithAuth(firstServer, {
+        method: 'POST', url: `/api/agent-groups/${crashGroupId}/run`,
+        payload: { task: 'Settle one member, then remain in flight', workspaceId },
+      });
+      const crashJobId = (crashStart.json() as { jobId: string }).jobId;
+      await secondMemberStarted;
+      const [pendingCrashTrace] = firstServer.traceStore.query({ sessionId: `group-${crashJobId}`, limit: 1 });
+      expect(pendingCrashTrace.outcome).toBe('pending');
+      expect(pendingCrashTrace.cost_usd).toBeCloseTo(0.018, 6);
+      const midnightTraceId = firstServer.traceStore.start({
+        sessionId: 'group-midnight-boundary',
+        workspaceId,
+        model: 'anthropic/claude-sonnet-4-6',
+        input: 'Charge after UTC midnight on a trace started before it',
+      });
+      firstServer.multiMind.personal.getDatabase().prepare(`
+        UPDATE execution_traces SET created_at = datetime('now', '-1 day') WHERE id = ?
+      `).run(midnightTraceId);
+      firstServer.traceStore.recordCost(
+        midnightTraceId,
+        0.002,
+        new Date(Date.now() - 86_400_000).toISOString(),
+      );
+      firstServer.traceStore.recordCost(midnightTraceId, 0.001, new Date().toISOString());
+      expect(firstServer.traceStore.get(midnightTraceId)?.cost_usd).toBeCloseTo(0.003, 6);
+      const todayStart = `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+      expect(firstServer.traceStore.getTotalCostSince(todayStart)).toBeCloseTo(0.055, 6);
+
+      const recoveredTraceId = firstServer.traceStore.start({
+        sessionId: 'group-ledger-write-recovery',
+        workspaceId,
+        model: 'anthropic/claude-sonnet-4-6',
+        input: 'Recover a later settlement whose ledger write failed',
+      });
+      firstServer.traceStore.recordCost(recoveredTraceId, 0.018);
+      firstServer.multiMind.personal.getDatabase().prepare(`
+        CREATE TRIGGER fail_test_trace_spend
+        BEFORE INSERT ON execution_trace_spend
+        WHEN NEW.trace_id = ${recoveredTraceId}
+        BEGIN SELECT RAISE(ABORT, 'simulated ledger failure'); END
+      `).run();
+      expect(() => firstServer.traceStore.recordCost(recoveredTraceId, 0.018))
+        .toThrow('simulated ledger failure');
+      firstServer.multiMind.personal.getDatabase().prepare('DROP TRIGGER fail_test_trace_spend').run();
+      firstServer.traceStore.finalize(recoveredTraceId, {
+        outcome: 'abandoned',
+        output: 'second settlement ledger write failed',
+        costUsd: 0.036,
+      });
+      expect(firstServer.traceStore.get(recoveredTraceId)?.cost_usd).toBeCloseTo(0.036, 6);
+      expect(firstServer.traceStore.getTotalCostSince(todayStart)).toBeCloseTo(0.091, 6);
+
+      config.setBudgetHardCap(true);
+      config.save();
+      const restartedServer = await buildLocalServer({ dataDir: restartDir });
+      try {
+        expect(restartedServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.091, 6);
+        restartedServer.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
+        const restartedWorkspaceId = restartedServer.workspaceManager.getDefault()!;
+        restartedServer.workspaceManager.update(restartedWorkspaceId, { model: 'anthropic/claude-sonnet-4-6' });
+        let blockedDispatches = 0;
+        restartedServer.agentRunner = async (agentConfig) => {
+          const reservation = agentConfig.modelSpendBudget!.reserveModelSpend({
+            model: agentConfig.billingModel ?? agentConfig.model,
+            inputTokens: 1_000,
+            maxOutputTokens: 1_000,
+            workspaceId: agentConfig.spendWorkspaceId,
+            billingClass: agentConfig.modelSpendBillingClass,
+          });
+          blockedDispatches += 1;
+          agentConfig.modelSpendBudget!.releaseReservedModelSpend(reservation);
+          return { content: 'should not dispatch', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+        };
+        const blockedStart = await injectWithAuth(restartedServer, {
+          method: 'POST', url: `/api/agent-groups/${groupId}/run`,
+          payload: { task: 'Must stop both members', workspaceId: restartedWorkspaceId },
+        });
+        const blockedJobId = (blockedStart.json() as { jobId: string }).jobId;
+        const blockedJob = await waitForJob(restartedServer, blockedJobId);
+        expect(blockedJob.status).toBe('failed');
+        expect(JSON.stringify(blockedJob.output)).toContain('Daily budget exceeded');
+        expect(blockedDispatches).toBe(0);
+      } finally {
+        await restartedServer.close();
+        releaseSecondMember();
+        await waitForJob(firstServer, crashJobId);
+        await firstServer.close();
+      }
+    } finally {
+      fetchSpy.mockRestore();
+      if (firstServer.server.listening) await firstServer.close();
+      fs.rmSync(restartDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }, 30_000);
 });
