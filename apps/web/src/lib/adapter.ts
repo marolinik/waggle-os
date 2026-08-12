@@ -123,6 +123,12 @@ export interface ChannelPairedSender {
 
 export type ChannelPairings = Partial<Record<ChannelPlatform, ChannelPairedSender[]>>;
 
+export interface BrowserCompanionPairingStatus {
+  paired: boolean;
+  extensionId: string | null;
+  pairedAt: string | null;
+}
+
 export function resolveDefaultServerUrl(
   locationLike: Pick<Location, 'protocol' | 'hostname' | 'port' | 'origin'> | undefined =
     typeof window !== 'undefined' ? window.location : undefined,
@@ -2461,6 +2467,20 @@ class LocalAdapter {
   async getChannelPairings(): Promise<ChannelPairings> {
     const res = await this.fetch('/api/channels/pairing');
     return res.json();
+  }
+
+  async getBrowserCompanionPairing(): Promise<BrowserCompanionPairingStatus> {
+    const res = await this.fetch('/api/browser-ext/pairing');
+    return res.json();
+  }
+
+  async createBrowserCompanionPairingCode(): Promise<{ code: string; expiresAt: number }> {
+    const res = await this.fetch('/api/browser-ext/pairing-code', { method: 'POST' });
+    return res.json();
+  }
+
+  async revokeBrowserCompanionPairing(): Promise<void> {
+    await this.fetch('/api/browser-ext/pairing', { method: 'DELETE' });
   }
 
   async saveChannelConfig(
