@@ -87,6 +87,23 @@ export interface ModelSpendReservation {
   readonly id: string;
 }
 
+export const MODEL_SPEND_RESERVATION_HEADER = 'x-waggle-model-spend-reservation';
+
+export interface ModelSpendReservationHandoff {
+  reservation: ModelSpendReservation;
+  estimatedCostUsd: number;
+  durableTraceId?: number;
+}
+
+export type ModelSpendReservationDisposition = 'commit' | 'release';
+
+function isCanonicalModelSpendReservationTarget(targetUrl: string): boolean {
+  const match = /^http:\/\/127\.0\.0\.1:([1-9]\d{0,4})\/v1$/.exec(targetUrl);
+  if (!match) return false;
+  const port = Number(match[1]);
+  return Number.isInteger(port) && port <= 65_535;
+}
+
 export interface ModelSpendBudget {
   reserveModelSpend(request: ModelSpendReservationRequest): ModelSpendReservation;
   reconcileModelSpend(
@@ -95,6 +112,27 @@ export interface ModelSpendBudget {
   ): boolean;
   commitReservedModelSpend(reservation: ModelSpendReservation): boolean;
   releaseReservedModelSpend(reservation: ModelSpendReservation): boolean;
+  issueModelSpendReservationHandoff?(
+    reservation: ModelSpendReservation,
+    requestBinding: string,
+    targetUrl: string,
+    durableTraceId?: number,
+  ): { token: string } | undefined;
+  claimModelSpendReservationHandoff?(
+    token: string,
+    requestBinding: string,
+  ): ModelSpendReservationHandoff | undefined;
+  discardModelSpendReservationHandoff?(token: string): void;
+  setModelSpendReservationHandoffDisposition?(
+    token: string,
+    disposition: ModelSpendReservationDisposition,
+  ): void;
+  takeModelSpendReservationHandoffDisposition?(
+    token: string,
+  ): ModelSpendReservationDisposition | undefined;
+  registerModelSpendReservationTarget?(targetUrl: string): boolean;
+  unregisterModelSpendReservationTarget?(targetUrl: string): void;
+  markModelSpendPersistenceUnavailable?(cause: unknown): void;
 }
 
 interface StoredModelSpendReservation extends ModelSpendReservation {
@@ -128,6 +166,15 @@ export class BudgetPricingUnavailableError extends Error {
   }
 }
 
+export class BudgetPersistenceUnavailableError extends Error {
+  public readonly code = 'DAILY_MODEL_BUDGET_LEDGER_UNAVAILABLE';
+
+  constructor(cause?: unknown) {
+    super('Hard daily model budget cannot continue without a durable spend ledger', { cause });
+    this.name = 'BudgetPersistenceUnavailableError';
+  }
+}
+
 export class CostTracker implements ModelSpendBudget {
   private pricing: Record<string, ModelPricing>;
   private usage: UsageEntry[] = [];
@@ -135,6 +182,16 @@ export class CostTracker implements ModelSpendBudget {
   private dailyBudgetUsd: number | null = null;
   private budgetMode: BudgetMode = 'soft';
   private reservations = new Map<string, StoredModelSpendReservation>();
+  private reservationHandoffs = new Map<string, {
+    reservationId: string;
+    requestBinding: string;
+    targetUrl: string;
+    durableTraceId?: number;
+    state: 'issued' | 'claimed';
+  }>();
+  private reservationHandoffDispositions = new Map<string, ModelSpendReservationDisposition>();
+  private modelSpendReservationTargets = new Set<string>();
+  private modelSpendPersistenceFailure: unknown;
   private nextReservationId = 0;
 
   constructor(pricing: Record<string, ModelPricing> = {}) {
@@ -187,6 +244,14 @@ export class CostTracker implements ModelSpendBudget {
       throw new RangeError('Model spend token estimates must be non-negative finite numbers');
     }
 
+    if (
+      this.budgetMode === 'hard'
+      && this.dailyBudgetUsd !== null
+      && this.modelSpendPersistenceFailure !== undefined
+    ) {
+      throw new BudgetPersistenceUnavailableError(this.modelSpendPersistenceFailure);
+    }
+
     const now = new Date().toISOString();
     const day = now.slice(0, 10);
     const billingClass = request.billingClass ?? 'priced';
@@ -231,6 +296,97 @@ export class CostTracker implements ModelSpendBudget {
       estimatedCostUsd,
     });
     return { id };
+  }
+
+  issueModelSpendReservationHandoff(
+    reservation: ModelSpendReservation,
+    requestBinding: string,
+    targetUrl: string,
+    durableTraceId?: number,
+  ): { token: string } | undefined {
+    if (!this.reservations.has(reservation.id) || !this.modelSpendReservationTargets.has(targetUrl)) {
+      return undefined;
+    }
+    if (durableTraceId !== undefined && (!Number.isSafeInteger(durableTraceId) || durableTraceId <= 0)) {
+      return undefined;
+    }
+    for (const handoff of this.reservationHandoffs.values()) {
+      if (handoff.reservationId === reservation.id) return undefined;
+    }
+    const token = crypto.randomUUID();
+    this.reservationHandoffs.set(token, {
+      reservationId: reservation.id,
+      requestBinding,
+      targetUrl,
+      durableTraceId,
+      state: 'issued',
+    });
+    return { token };
+  }
+
+  claimModelSpendReservationHandoff(
+    token: string,
+    requestBinding: string,
+  ): ModelSpendReservationHandoff | undefined {
+    const handoff = this.reservationHandoffs.get(token);
+    if (!handoff || handoff.state !== 'issued') return undefined;
+    const stored = this.reservations.get(handoff.reservationId);
+    if (!stored) {
+      this.reservationHandoffs.delete(token);
+      return undefined;
+    }
+    if (handoff.requestBinding !== requestBinding) {
+      this.reservationHandoffs.delete(token);
+      this.reservationHandoffDispositions.delete(token);
+      return undefined;
+    }
+    handoff.state = 'claimed';
+    return {
+      reservation: { id: stored.id },
+      estimatedCostUsd: stored.estimatedCostUsd,
+      ...(handoff.durableTraceId === undefined ? {} : { durableTraceId: handoff.durableTraceId }),
+    };
+  }
+
+  discardModelSpendReservationHandoff(token: string): void {
+    this.reservationHandoffs.delete(token);
+    this.reservationHandoffDispositions.delete(token);
+  }
+
+  setModelSpendReservationHandoffDisposition(
+    token: string,
+    disposition: ModelSpendReservationDisposition,
+  ): void {
+    if (this.reservationHandoffs.get(token)?.state !== 'claimed') return;
+    this.reservationHandoffDispositions.set(token, disposition);
+  }
+
+  takeModelSpendReservationHandoffDisposition(
+    token: string,
+  ): ModelSpendReservationDisposition | undefined {
+    const disposition = this.reservationHandoffDispositions.get(token);
+    this.reservationHandoffDispositions.delete(token);
+    return disposition;
+  }
+
+  registerModelSpendReservationTarget(targetUrl: string): boolean {
+    if (!isCanonicalModelSpendReservationTarget(targetUrl)) return false;
+    this.modelSpendReservationTargets.add(targetUrl);
+    return true;
+  }
+
+  unregisterModelSpendReservationTarget(targetUrl: string): void {
+    this.modelSpendReservationTargets.delete(targetUrl);
+    for (const [token, handoff] of this.reservationHandoffs) {
+      if (handoff.targetUrl === targetUrl) {
+        this.reservationHandoffs.delete(token);
+        this.reservationHandoffDispositions.delete(token);
+      }
+    }
+  }
+
+  markModelSpendPersistenceUnavailable(cause: unknown): void {
+    this.modelSpendPersistenceFailure = cause;
   }
 
   /** Replace a reservation with authoritative provider usage, exactly once. */
@@ -401,6 +557,12 @@ export class CostTracker implements ModelSpendBudget {
     const stored = this.reservations.get(reservation.id);
     if (!stored) return undefined;
     this.reservations.delete(reservation.id);
+    for (const [token, handoff] of this.reservationHandoffs) {
+      if (handoff.reservationId === reservation.id) {
+        this.reservationHandoffs.delete(token);
+        this.reservationHandoffDispositions.delete(token);
+      }
+    }
     return stored;
   }
 
