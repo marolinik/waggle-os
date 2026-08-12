@@ -19,6 +19,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
 import { join, dirname, resolve } from 'path';
 import { homedir } from 'os';
+import { createHash } from 'node:crypto';
 import { MarketplaceDB } from './db.js';
 import { SecurityGate, type ScanResult, type SecurityGateConfig } from './security.js';
 import { type FetchFn, defaultFetch } from './fetcher.js';
@@ -38,6 +39,7 @@ import type {
   PackInstallResult,
   InstallationType,
   MarketplaceMcpProvenance,
+  MarketplaceApprovalIdentity,
   McpServerConfig,
   PluginManifest,
 } from './types.js';
@@ -46,6 +48,33 @@ const WAGGLE_DIR = join(homedir(), '.waggle');
 const SKILLS_DIR = join(WAGGLE_DIR, 'skills');
 const PLUGINS_DIR = join(WAGGLE_DIR, 'plugins');
 const REGISTRY_PATH = join(PLUGINS_DIR, 'registry.json');
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+function identityChangedResult(
+  pkg: MarketplacePackage,
+  installType: InstallationType,
+): InstallResult {
+  const message = 'Marketplace package changed after approval; review a fresh proposal';
+  return {
+    success: false,
+    packageId: pkg.id,
+    packageName: pkg.name,
+    installType,
+    installPath: pkg.waggle_install_path,
+    message,
+    errors: [message],
+    errorCode: 'PACKAGE_IDENTITY_CHANGED',
+  };
+}
 
 function isPluginRegistryPath(candidate: string): boolean {
   // Reserve the same namespace on every platform; Windows aliases path casing.
@@ -111,6 +140,76 @@ export class MarketplaceInstaller {
       && actual.profileDigest === expected.profileDigest;
   }
 
+  static createApprovalIdentity(
+    pkg: MarketplacePackage,
+    scan: ScanResult,
+  ): MarketplaceApprovalIdentity {
+    const digest = (value: unknown): `sha256:${string}` => `sha256:${createHash('sha256')
+      .update(stableJson(value))
+      .digest('hex')}`;
+    const riskSnapshot = {
+      status: scan.overall_severity,
+      score: scan.security_score,
+      blocked: scan.blocked,
+      contentHash: scan.content_hash,
+      engines: scan.engines_used,
+      findings: scan.findings,
+    };
+    return {
+      schemaVersion: 1,
+      packageId: pkg.id,
+      sourceId: pkg.source_id,
+      name: pkg.name,
+      publisher: pkg.author,
+      version: pkg.version,
+      installType: pkg.waggle_install_type,
+      manifestDigest: digest(pkg.install_manifest ?? null),
+      riskStatus: scan.overall_severity,
+      riskScore: scan.security_score,
+      riskContentHash: scan.content_hash,
+      riskBlocked: scan.blocked,
+      riskDigest: digest(riskSnapshot),
+    };
+  }
+
+  private static approvalPackageMatches(
+    pkg: MarketplacePackage,
+    requestedPackageId: number,
+    expected: MarketplaceApprovalIdentity,
+  ): boolean {
+    const digest = `sha256:${createHash('sha256')
+      .update(stableJson(pkg.install_manifest ?? null))
+      .digest('hex')}`;
+    return expected.schemaVersion === 1
+      && requestedPackageId === expected.packageId
+      && pkg.id === expected.packageId
+      && pkg.source_id === expected.sourceId
+      && pkg.name === expected.name
+      && pkg.author === expected.publisher
+      && pkg.version === expected.version
+      && pkg.waggle_install_type === expected.installType
+      && digest === expected.manifestDigest;
+  }
+
+  private static approvalIdentityMatches(
+    actual: MarketplaceApprovalIdentity,
+    expected: MarketplaceApprovalIdentity,
+  ): boolean {
+    return actual.schemaVersion === expected.schemaVersion
+      && actual.packageId === expected.packageId
+      && actual.sourceId === expected.sourceId
+      && actual.name === expected.name
+      && actual.publisher === expected.publisher
+      && actual.version === expected.version
+      && actual.installType === expected.installType
+      && actual.manifestDigest === expected.manifestDigest
+      && actual.riskStatus === expected.riskStatus
+      && actual.riskScore === expected.riskScore
+      && actual.riskContentHash === expected.riskContentHash
+      && actual.riskBlocked === expected.riskBlocked
+      && actual.riskDigest === expected.riskDigest;
+  }
+
   // ─── Public API ───────────────────────────────────────────────────
 
   /**
@@ -131,6 +230,14 @@ export class MarketplaceInstaller {
     }
 
     const installType = pkg.waggle_install_type as InstallationType;
+    const approvalIdentity = request.expectedApprovalIdentity;
+    if (approvalIdentity && !MarketplaceInstaller.approvalPackageMatches(
+      pkg,
+      request.packageId,
+      approvalIdentity,
+    )) {
+      return identityChangedResult(pkg, installType);
+    }
     if (request.expectedInstallType && installType !== request.expectedInstallType) {
       const error = `Expected ${request.expectedInstallType} package but installer loaded ${installType}`;
       return {
@@ -223,7 +330,7 @@ export class MarketplaceInstaller {
 
     // Check if already installed
     const wasInstalled = this.db.isInstalled(pkg.id);
-    if (installType !== 'mcp' && !request.force && wasInstalled) {
+    if (installType !== 'mcp' && !request.force && wasInstalled && !approvalIdentity) {
       return {
         success: true,
         packageId: pkg.id,
@@ -244,7 +351,25 @@ export class MarketplaceInstaller {
     }
 
     const scanResult = await this.security.scan(pkg, contentToScan);
+    if (approvalIdentity) {
+      const currentIdentity = MarketplaceInstaller.createApprovalIdentity(pkg, scanResult);
+      if (!MarketplaceInstaller.approvalIdentityMatches(currentIdentity, approvalIdentity)) {
+        return identityChangedResult(pkg, installType);
+      }
+    }
     this.recordScanResult(pkg.id, scanResult);
+
+    if (installType !== 'mcp' && !request.force && wasInstalled) {
+      return {
+        success: true,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: `${pkg.display_name} is already installed. Use force=true to reinstall.`,
+        scanResult,
+      };
+    }
 
     if (scanResult.blocked && !request.forceInsecure) {
       return {

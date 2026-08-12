@@ -195,8 +195,27 @@ export interface PostInstallHook {
 
 export type InstallationType = 'skill' | 'plugin' | 'mcp';
 
+/** Immutable marketplace snapshot approved by a capability proposal. */
+export interface MarketplaceApprovalIdentity {
+  schemaVersion: 1;
+  packageId: number;
+  sourceId: number;
+  name: string;
+  publisher: string;
+  version: string;
+  installType: InstallationType;
+  manifestDigest: `sha256:${string}`;
+  riskStatus: import('./security.js').Severity;
+  riskScore: number;
+  riskContentHash: string;
+  riskBlocked: boolean;
+  riskDigest: `sha256:${string}`;
+}
+
 export interface InstallRequest {
   packageId: number;
+  /** Exact package and scan snapshot the user approved. */
+  expectedApprovalIdentity?: MarketplaceApprovalIdentity;
   /** Require the freshly loaded package snapshot to keep this install type. */
   expectedInstallType?: InstallationType;
   /**

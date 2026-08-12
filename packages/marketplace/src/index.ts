@@ -58,6 +58,7 @@ export type {
   SettingField,
   PostInstallHook,
   InstallationType,
+  MarketplaceApprovalIdentity,
   InstallRequest,
   InstallResult,
   PackInstallResult,

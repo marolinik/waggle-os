@@ -971,6 +971,60 @@ describe('MarketplaceInstaller security boundaries', () => {
       .toEqual({ BRAVE_API_KEY: 'brave-test-key' });
   });
 
+  it('installs only when the approval identity matches the exact package and scan result', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server offline')));
+    const name = `approved-skill-${randomUUID()}`;
+    const pkg = packageFixture({
+      name,
+      display_name: 'Approved skill',
+      install_manifest: { skill_content: '# Approved\n\nSafe content.' },
+    });
+    const { installer, recordInstallation } = installerFor(pkg);
+    const scan = await installer.scanOnly(pkg.id);
+    expect(scan).not.toBeNull();
+    const expectedApprovalIdentity = MarketplaceInstaller.createApprovalIdentity(pkg, scan!);
+    cleanupPaths.push(join(isolatedHome, '.waggle', 'skills', `${name}.md`));
+
+    const result = await installer.install({ packageId: pkg.id, expectedApprovalIdentity });
+
+    expect(result.success).toBe(true);
+    expect(recordInstallation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['package id', { packageId: 2 }],
+    ['source', { sourceId: 2 }],
+    ['name', { name: 'same-name-decoy' }],
+    ['publisher', { publisher: 'attacker' }],
+    ['version', { version: '9.9.9' }],
+    ['install type', { installType: 'plugin' }],
+    ['manifest', { manifestDigest: `sha256:${'0'.repeat(64)}` }],
+    ['risk status', { riskStatus: 'HIGH' }],
+    ['risk score', { riskScore: 25 }],
+    ['risk blocked state', { riskBlocked: true }],
+    ['risk content', { riskContentHash: 'changed' }],
+    ['risk result', { riskDigest: `sha256:${'f'.repeat(64)}` }],
+  ])('rejects approval identity mismatch in %s before installation', async (_case, mismatch) => {
+    const pkg = packageFixture({
+      name: `identity-${randomUUID()}`,
+      install_manifest: { skill_content: '# Approved\n\nSafe content.' },
+    });
+    const { installer: approvalScanner } = installerFor(pkg);
+    const scan = await approvalScanner.scanOnly(pkg.id);
+    expect(scan).not.toBeNull();
+    const approved = MarketplaceInstaller.createApprovalIdentity(pkg, scan!);
+    const { installer, recordInstallation } = installerFor(pkg);
+
+    const result = await installer.install({
+      packageId: pkg.id,
+      expectedApprovalIdentity: { ...approved, ...mismatch },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('PACKAGE_IDENTITY_CHANGED');
+    expect(recordInstallation).not.toHaveBeenCalled();
+  });
+
   it('includes post-install hook bytes in the pre-install content hash', async () => {
     const pluginManifest = {
       name: 'hash-test',
