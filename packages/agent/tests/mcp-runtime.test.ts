@@ -227,7 +227,7 @@ describe('McpServerInstance', () => {
 
   it('uses the configured process-tree terminator when stopping', async () => {
     const { spawn, lastProcess } = createMockSpawn();
-    const terminate = vi.fn();
+    const terminate = vi.fn(() => true);
     const instance = new McpServerInstance(baseConfig, { spawn, terminate });
 
     await instance.start();
@@ -247,7 +247,7 @@ describe('McpServerInstance', () => {
       on: vi.fn(() => silentProcess),
       removeAllListeners: vi.fn(() => silentProcess),
     };
-    const terminate = vi.fn();
+    const terminate = vi.fn(() => true);
     const instance = new McpServerInstance(baseConfig, {
       spawn: () => silentProcess,
       terminate,
@@ -620,6 +620,38 @@ describe('McpRuntime', () => {
     await runtime.removeServer('removable');
     expect(runtime.getServer('removable')).toBeUndefined();
     expect(runtime.getServerStates()).toEqual({});
+  });
+
+  it('keeps a server registered when stop fails so removal can be retried', async () => {
+    const terminate = vi.fn()
+      .mockImplementationOnce(() => { throw new Error('termination failed'); })
+      .mockImplementation(() => true);
+    const retryableRuntime = new McpRuntime({ spawn: spawnFn, terminate });
+    retryableRuntime.addServer({ name: 'retryable', command: 'node' });
+    await retryableRuntime.startAll();
+
+    await expect(retryableRuntime.removeServer('retryable')).rejects.toThrow('termination failed');
+    expect(retryableRuntime.getServer('retryable')).toBeDefined();
+
+    await retryableRuntime.removeServer('retryable');
+    expect(retryableRuntime.getServer('retryable')).toBeUndefined();
+    expect(terminate).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a server registered when process exit cannot be confirmed', async () => {
+    const terminate = vi.fn(() => false);
+    const unsettledRuntime = new McpRuntime({ spawn: spawnFn, terminate });
+    unsettledRuntime.addServer({ name: 'unsettled', command: 'node' });
+    await unsettledRuntime.startAll();
+
+    await expect(unsettledRuntime.removeServer('unsettled')).rejects.toThrow(
+      'MCP process termination could not be confirmed',
+    );
+    expect(unsettledRuntime.getServer('unsettled')).toBeDefined();
+    expect(terminate).toHaveBeenCalledOnce();
+    await expect(unsettledRuntime.getServer('unsettled')!.start()).rejects.toThrow(
+      'previous process termination is unconfirmed',
+    );
   });
 
   it('emits serverStateChange events', async () => {

@@ -88,9 +88,13 @@ export function createSanitizedEnv(): Record<string, string | undefined> {
   return sanitizedEnv;
 }
 
-/** Terminate a process and its descendants. Windows requires taskkill /T. */
-export function terminateProcessTree(child: ChildProcess): void {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+/** Dispatch termination for a process and its descendants. */
+export function terminateProcessTree(
+  child: ChildProcess,
+  taskkillTimeoutMs = 5_000,
+): boolean {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  if (!child.pid) return false;
   try {
     if (process.platform === 'win32') {
       const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR ?? 'C:\\Windows';
@@ -100,13 +104,97 @@ export function terminateProcessTree(child: ChildProcess): void {
         env: createSanitizedEnv(),
         stdio: 'ignore',
         windowsHide: true,
+        timeout: taskkillTimeoutMs,
       });
+      return true;
+    }
+    return child.kill('SIGTERM');
+  } catch {
+    // Preserve best-effort parent cleanup for legacy callers, but do not count
+    // it as proof that the Windows process tree settled.
+    if (process.platform === 'win32') {
+      try { child.kill('SIGKILL'); } catch { /* process may already be gone */ }
+      return child.exitCode !== null || child.signalCode !== null;
+    }
+    try {
+      return child.kill('SIGKILL');
+    } catch {
+      return child.exitCode !== null || child.signalCode !== null;
+    }
+  }
+}
+
+/** Terminate a real child and confirm that it actually settled. */
+export async function terminateProcessTreeAndWait(
+  child: ChildProcess,
+  timeoutMs = 5_000,
+): Promise<boolean> {
+  const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+  if (hasExited()) return true;
+  if (!child.pid) return false;
+
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let finished = false;
+
+    const onExit = () => finish(true);
+    const finish = (confirmed: boolean) => {
+      if (finished) return;
+      finished = true;
+      if (timer) clearTimeout(timer);
+      child.removeListener('exit', onExit);
+      resolve(confirmed);
+    };
+
+    child.once('exit', onExit);
+    if (hasExited()) {
+      finish(true);
       return;
     }
-    child.kill('SIGTERM');
-  } catch {
-    try { child.kill('SIGKILL'); } catch { /* process already exited */ }
-  }
+
+    const dispatched = terminateProcessTree(child, timeoutMs);
+    if (finished) return;
+    if (!dispatched || hasExited()) {
+      finish(hasExited());
+      return;
+    }
+
+    const remainingMs = Math.max(0, timeoutMs - (Date.now() - startedAt));
+    if (remainingMs === 0) {
+      finish(hasExited());
+      return;
+    }
+
+    if (process.platform === 'win32') {
+      timer = setTimeout(() => finish(hasExited()), remainingMs);
+      return;
+    }
+
+    const gracefulWaitMs = Math.max(1, Math.floor(remainingMs / 2));
+    timer = setTimeout(() => {
+      if (hasExited()) {
+        finish(true);
+        return;
+      }
+
+      let forceDispatched = false;
+      try {
+        forceDispatched = child.kill('SIGKILL');
+      } catch {
+        forceDispatched = false;
+      }
+      if (finished) return;
+      if (!forceDispatched && !hasExited()) {
+        finish(false);
+        return;
+      }
+      timer = setTimeout(
+        () => finish(hasExited()),
+        Math.max(1, remainingMs - gracefulWaitMs),
+      );
+    }, gracefulWaitMs);
+  });
 }
 
 export interface TimedProcessOptions {

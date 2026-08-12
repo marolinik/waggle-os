@@ -24,10 +24,13 @@ import { InstallAuditStore } from '@waggle/core';
 import { MCP_CATALOG } from '@waggle/shared';
 import { SecurityGate } from '@waggle/marketplace';
 import { McpRuntime, type McpProcess, type SpawnFn } from '@waggle/agent';
+import { terminateProcessTree } from '../../../agent/src/system-tools-helpers.js';
+import type { ChildProcess } from 'node:child_process';
 import { mcpRoutes } from '../../src/local/routes/mcps.js';
 import { loadMcpConfig, saveMcpServerEntry } from '../../src/local/mcp-config.js';
 
 const childProcess = vi.hoisted(() => ({ execFileSync: vi.fn() }));
+const mcpConfigFailure = vi.hoisted(() => ({ remove: null as Error | null }));
 const isolatedHome = vi.hoisted(() => {
   const base = process.env.TEMP ?? process.env.TMPDIR ?? '/tmp';
   const separator = process.platform === 'win32' ? '\\' : '/';
@@ -45,6 +48,17 @@ vi.mock('os', async importOriginal => ({
   ...await importOriginal<typeof import('os')>(),
   homedir: () => isolatedHome,
 }));
+
+vi.mock('../../src/local/mcp-config.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../src/local/mcp-config.js')>();
+  return {
+    ...actual,
+    removeMcpServerEntry: (dataDir: string, name: string) => {
+      if (mcpConfigFailure.remove) throw mcpConfigFailure.remove;
+      return actual.removeMcpServerEntry(dataDir, name);
+    },
+  };
+});
 
 // Redirect the marketplace installer's module-level MCP_CONFIG_PATH away from
 // the real ~/.waggle BEFORE the installer module loads (it reads the env at
@@ -189,6 +203,7 @@ describe('MCP Hub routes (Phase 4)', () => {
   let db: MindDB;
   let auditStore: InstallAuditStore;
   let runtime: McpRuntime;
+  let processSettlementConfirmed: boolean;
   let server: ReturnType<typeof Fastify>;
   let marketplaceRaw: Database.Database;
   let marketplaceFake: ReturnType<typeof createFakeMarketplace>['db'];
@@ -219,11 +234,33 @@ describe('MCP Hub routes (Phase 4)', () => {
 
   beforeEach(async () => {
     childProcess.execFileSync.mockReset();
+    mcpConfigFailure.remove = null;
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-mcps-'));
     db = new MindDB(':memory:');
     auditStore = new InstallAuditStore(db);
-    runtime = new McpRuntime({ spawn: createMockSpawn() });
+    processSettlementConfirmed = true;
+    runtime = new McpRuntime({
+      spawn: createMockSpawn(),
+      terminate: () => processSettlementConfirmed,
+    });
     server = await buildServer({ tier: 'TEAMS' });
+  });
+
+  it('bounds the Windows taskkill dispatch used for MCP revocation', () => {
+    if (process.platform !== 'win32') return;
+    const child = {
+      pid: 4242,
+      exitCode: null,
+      signalCode: null,
+      kill: vi.fn(() => true),
+    } as unknown as ChildProcess;
+
+    expect(terminateProcessTree(child, 1_234)).toBe(true);
+    expect(childProcess.execFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/taskkill\.exe$/i),
+      ['/PID', '4242', '/T', '/F'],
+      expect.objectContaining({ timeout: 1_234 }),
+    );
   });
 
   afterEach(async () => {
@@ -835,6 +872,59 @@ describe('MCP Hub routes (Phase 4)', () => {
     // reboot can no longer resurrect the uninstalled server.
     expect(runtime.getServer('memory')).toBeUndefined();
     expect(loadMcpConfig(tmpDir).mcpServers.memory).toBeUndefined();
+  });
+
+  it('fails closed and remains retryable when live MCP shutdown fails', async () => {
+    await server.inject({ method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'memory' } });
+    processSettlementConfirmed = false;
+
+    const failed = await server.inject({
+      method: 'POST', url: '/api/marketplace/uninstall', payload: { packageId: 1 },
+    });
+
+    expect(failed.statusCode).toBe(503);
+    expect(failed.json()).toMatchObject({
+      success: false,
+      errorCode: 'MCP_REVOCATION_INCOMPLETE',
+      residualState: { installed: true, runtimeRegistered: true, bootConfigured: false },
+    });
+    expect(marketplaceFake.isInstalled(1)).toBe(true);
+    expect(runtime.getServer('memory')).toBeDefined();
+    expect(loadMcpConfig(tmpDir).mcpServers.memory).toBeUndefined();
+
+    processSettlementConfirmed = true;
+    const retried = await server.inject({
+      method: 'POST', url: '/api/marketplace/uninstall', payload: { packageId: 1 },
+    });
+    expect(retried.statusCode).toBe(200);
+    expect(marketplaceFake.isInstalled(1)).toBe(false);
+    expect(runtime.getServer('memory')).toBeUndefined();
+  });
+
+  it('does not stop or retire an MCP when canonical config removal fails', async () => {
+    await server.inject({ method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'memory' } });
+    mcpConfigFailure.remove = new Error('config locked');
+    const remove = vi.spyOn(runtime, 'removeServer');
+
+    try {
+      const failed = await server.inject({
+        method: 'POST', url: '/api/marketplace/uninstall', payload: { packageId: 1 },
+      });
+
+      expect(failed.statusCode).toBe(503);
+      expect(failed.json()).toMatchObject({
+        success: false,
+        errorCode: 'MCP_REVOCATION_INCOMPLETE',
+        residualState: { installed: true, runtimeRegistered: true, bootConfigured: true },
+      });
+      expect(remove).not.toHaveBeenCalled();
+      expect(marketplaceFake.isInstalled(1)).toBe(true);
+      expect(runtime.getServer('memory')).toBeDefined();
+      expect(loadMcpConfig(tmpDir).mcpServers.memory).toBeDefined();
+    } finally {
+      remove.mockRestore();
+      mcpConfigFailure.remove = null;
+    }
   });
 
   it('install 404s on unknown mcpId and 503s without a marketplace db', async () => {

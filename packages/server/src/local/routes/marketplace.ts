@@ -19,7 +19,7 @@ import { safeFetch, assertUrlAllowed, scanForInjection } from '@waggle/agent';
 import { getKvarkConfig } from '../../kvark/kvark-config.js';
 import { emitNotification } from './notifications.js';
 import { requireTier } from '../../middleware/assert-tier.js';
-import { removeMcpServerEntry } from '../mcp-config.js';
+import { loadMcpConfig, removeMcpServerEntry } from '../mcp-config.js';
 import { enqueueHeldAction } from '../held-action-executor.js';
 import { isMarketplaceBackgroundSyncDisabled } from '../marketplace-background-sync.js';
 
@@ -535,27 +535,49 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'packageId is required' });
     }
 
-    const installer = new MarketplaceInstaller(db, undefined, guardedFetch);
-    const result = await installer.uninstall(body.packageId);
+    const pkg = db.getPackage(body.packageId);
+    if (pkg?.waggle_install_type === 'mcp') {
+      const manifest = pkg.install_manifest as { mcp_config?: { name?: string } } | null;
+      const serverName = manifest?.mcp_config?.name || pkg.name;
+      const dataDir = fastify.localConfig?.dataDir ?? '';
+      const runtime = (fastify.agentState as {
+        mcpRuntime?: { getServer(n: string): unknown; removeServer(n: string): Promise<void> };
+      } | undefined)?.mcpRuntime;
 
-    // Phase 4 (S08): an MCP uninstall must ALSO leave the live runtime and the
-    // server's persisted <dataDir>/.mcp.json — the installer only edits its
-    // own WAGGLE_DATA_DIR/~/.waggle copy, so without this the "uninstalled"
-    // server keeps running and resurrects at every boot via the C4 loader.
-    if (result.success) {
       try {
-        const pkg = db.getPackage(body.packageId);
-        if (pkg?.waggle_install_type === 'mcp') {
-          const manifest = pkg.install_manifest as { mcp_config?: { name?: string } } | null;
-          const serverName = manifest?.mcp_config?.name || pkg.name;
-          const runtime = (fastify.agentState as { mcpRuntime?: { getServer(n: string): unknown; removeServer(n: string): Promise<void> } } | undefined)?.mcpRuntime;
-          if (runtime?.getServer(serverName)) await runtime.removeServer(serverName);
-          removeMcpServerEntry(fastify.localConfig?.dataDir ?? '', serverName);
+        // Remove the boot source before touching the live process: a failed
+        // shutdown must never leave a server able to resurrect after restart.
+        removeMcpServerEntry(dataDir, serverName);
+        if (loadMcpConfig(dataDir).mcpServers[serverName]) {
+          throw new Error('Canonical MCP configuration still contains the server');
+        }
+        if (runtime?.getServer(serverName)) await runtime.removeServer(serverName);
+        if (runtime?.getServer(serverName)) {
+          throw new Error('MCP runtime still contains the server');
         }
       } catch (err) {
-        fastify.log.warn({ err, packageId: body.packageId }, 'MCP runtime/config cleanup on uninstall failed (non-blocking)');
+        const residualState = {
+          installed: db.isInstalled(body.packageId),
+          runtimeRegistered: Boolean(runtime?.getServer(serverName)),
+          bootConfigured: Boolean(loadMcpConfig(dataDir).mcpServers[serverName]),
+        };
+        fastify.log.warn({ err, packageId: body.packageId, residualState }, 'MCP revocation incomplete');
+        return reply.code(503).send({
+          success: false,
+          packageId: pkg.id,
+          packageName: pkg.name,
+          installType: 'mcp',
+          installPath: pkg.waggle_install_path,
+          message: `MCP revocation incomplete: ${(err as Error).message}`,
+          errors: [(err as Error).message],
+          errorCode: 'MCP_REVOCATION_INCOMPLETE',
+          residualState,
+        });
       }
     }
+
+    const installer = new MarketplaceInstaller(db, undefined, guardedFetch);
+    const result = await installer.uninstall(body.packageId);
 
     return reply.code(result.success ? 200 : 422).send(result);
   });
