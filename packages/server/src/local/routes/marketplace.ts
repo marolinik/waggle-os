@@ -13,7 +13,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { MarketplaceDB, MarketplaceInstaller, MarketplaceSync, SecurityGate, ENTERPRISE_PACKS, PACKAGE_CATEGORIES, recategorizeAll, isCiscoScannerAvailable, resolveSkillSource, SkillSourceError, createMarketplaceMcpProvenance } from '@waggle/marketplace';
-import type { InstallationType, SearchSort, ScanResult, MarketplacePackage, MarketplaceMcpProvenance, FetchFn } from '@waggle/marketplace';
+import type { InstallationType, SearchSort, ScanResult, MarketplacePackage, MarketplaceMcpProvenance, MarketplaceApprovalIdentity, FetchFn } from '@waggle/marketplace';
 import { validateSkillMd } from '@waggle/sdk';
 import { safeFetch, assertUrlAllowed, scanForInjection } from '@waggle/agent';
 import { getKvarkConfig } from '../../kvark/kvark-config.js';
@@ -228,6 +228,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       forceInsecure?: boolean;
       expectedInstallType?: InstallationType;
       expectedMcpProvenance?: MarketplaceMcpProvenance;
+      expectedApprovalIdentity?: MarketplaceApprovalIdentity;
     };
 
     if (!body.packageId) {
@@ -427,6 +428,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       forceInsecure: body.forceInsecure,
       expectedInstallType: body.expectedInstallType,
       expectedMcpProvenance: body.expectedMcpProvenance,
+      expectedApprovalIdentity: body.expectedApprovalIdentity,
     });
 
     // Update security status in DB after successful install. Prefer the
