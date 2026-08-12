@@ -3,7 +3,7 @@ import type { TextContentBlock } from '@/lib/types';
 import { renderChatMarkdown } from '@/lib/render-markdown';
 import { useStreamCadence } from '@/hooks/useStreamCadence';
 
-const CAPABILITY_MARKER_DISPLAY_RE = /<!--\s*waggle:capability_request[\s\S]*?(?:-->|$)/g;
+const CAPABILITY_MARKER_DISPLAY_RE = /<!--\s*waggle:capability_request[\s\S]*?-->/g;
 
 interface TextBlockProps {
   block: TextContentBlock;

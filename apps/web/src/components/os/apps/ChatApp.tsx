@@ -1264,20 +1264,32 @@ const ChatApp = ({
                     : 'rounded-[14px] px-3.5 py-2.5 leading-[1.6] text-[var(--text)]'
                 }`}>
                   {msg.role === 'assistant' && msg.draft?.content ? (
-                    <span
+                    <div
                       className="whitespace-pre-wrap break-words"
                       data-testid="chat-draft-content"
                     >
-                      {msg.draft.content}
-                    </span>
+                      <BlockRenderer blocks={[{
+                        type: 'text',
+                        blockId: `draft-${msg.id}`,
+                        content: msg.draft.content,
+                      }]} />
+                    </div>
                   ) : msg.role === 'assistant' && msg.blocks && msg.blocks.length > 0 ? (
                     <BlockRenderer
                       blocks={msg.blocks}
                       isStreaming={isLoading && msg === messages[messages.length - 1]}
                       onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
                     />
+                  ) : msg.role === 'assistant' ? (
+                    <BlockRenderer blocks={[{
+                      type: 'text',
+                      blockId: `legacy-${msg.id}`,
+                      content: msg.content,
+                    }]} />
                   ) : (
-                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                    <span className="whitespace-pre-wrap">
+                      {msg.content}
+                    </span>
                   )}
                   {/* Copy button — assistant turns get Copy in the hover action
                       row below (round-6 fix 2), so this overlay stays for user/

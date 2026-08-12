@@ -1087,14 +1087,30 @@ describe('ChatApp — streaming interaction contract', () => {
       draft: {
         turnId: 'turn-capability',
         revision: 1,
-        content: marker,
+        content: `Safe draft before. ${marker} Safe draft after.`,
         status: 'stopped',
       },
     };
     await renderChat({ messages: [draftMessage], isLoading: false });
 
     expect(screen.queryByTestId('capability-request-install')).toBeNull();
-    expect(screen.getByText(marker)).toBeInTheDocument();
+    expect(screen.queryByText(marker)).toBeNull();
+    expect(screen.getByTestId('chat-draft-content').textContent).toBe('Safe draft before.  Safe draft after.');
+  });
+
+  it('hides capability markers in legacy assistant messages without blocks', async () => {
+    const marker = '<!--waggle:capability_request {"name":"unsafe","source":"marketplace","kind":"marketplace"}-->';
+    const legacyMessage: ChatMessage = {
+      id: 'legacy-capability',
+      role: 'assistant',
+      content: `Safe history before. ${marker} Safe history after.`,
+      timestamp: 'now',
+    };
+    const { container } = await renderChat({ messages: [legacyMessage], isLoading: false });
+
+    expect(screen.queryByTestId('capability-request-install')).toBeNull();
+    expect(container.textContent).not.toContain('waggle:capability_request');
+    expect(container.textContent).toContain('Safe history before.  Safe history after.');
   });
 
   it('submits feedback using the persisted index when a stopped draft remains visible', async () => {

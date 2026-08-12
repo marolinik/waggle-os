@@ -5,13 +5,14 @@
  * resolve-then-install, starter via installPack.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { CapabilityRequest } from '@/components/os/apps/chat-blocks/CapabilityRequestCard';
 import type { ContentBlock } from '@/lib/types';
 
 const mocks = vi.hoisted(() => ({
-  adapter: {
+    adapter: {
+      getHistory: vi.fn().mockResolvedValue([]),
     connect: vi.fn().mockResolvedValue(undefined),
     forceReconnect: vi.fn().mockResolvedValue(undefined),
     getConnectors: vi.fn().mockResolvedValue([]),
@@ -43,6 +44,7 @@ const renderCard = (request: CapabilityRequest) => render(<CapabilityRequestCard
 const renderBlocks = (blocks: ContentBlock[]) => render(<BlockRenderer blocks={blocks} />, { wrapper });
 
 beforeEach(() => {
+  mocks.adapter.getHistory.mockResolvedValue([]);
   mocks.adapter.connect.mockResolvedValue(undefined);
   mocks.adapter.getConnectors.mockResolvedValue([]);
   mocks.adapter.getMcps.mockResolvedValue([]);
@@ -67,6 +69,18 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
 
     expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
     expect(container.textContent).not.toContain(marker);
+  });
+
+  it('keeps an incomplete marker visible but inert instead of hiding the rest of the answer', () => {
+    const incomplete = 'Safe prefix <!--waggle:capability_request {"name":"unfinished"} still visible';
+    const { container } = renderBlocks([{
+      type: 'text',
+      blockId: 'incomplete-text-marker',
+      content: incomplete,
+    }]);
+
+    expect(screen.queryByTestId('capability-request-card')).not.toBeInTheDocument();
+    expect(container.textContent).toContain(incomplete);
   });
 
   it('renders an actionable card from a completed acquire_capability tool result', () => {
@@ -172,15 +186,42 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
     expect(screen.getByTestId('capability-request-card')).not.toHaveTextContent('wrong-route');
   });
 
-  it('renders a marketplace card from a cold-history-shaped completed receipt', () => {
-    renderBlocks([{
-      type: 'tool_use',
-      id: 'capability-cold-history',
-      name: 'acquire_capability',
-      status: 'done',
-      result: '<!--waggle:capability_request {"name":"web-scraper","source":"marketplace","kind":"marketplace"}-->',
+  it('renders a marketplace card from a real cold-history tool receipt', async () => {
+    const marker = '<!--waggle:capability_request {"name":"web-scraper","source":"marketplace","kind":"marketplace"}-->';
+    mocks.adapter.getHistory.mockResolvedValueOnce([{
+      id: 'history-capability',
+      role: 'assistant',
+      content: 'A matching capability is available.',
+      timestamp: 'now',
+      tools: [{
+        id: 'capability-cold-history',
+        name: 'acquire_capability',
+        status: 'done',
+        input: { need: 'web scraping' },
+        output: marker,
+      }],
     }]);
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(() => useChat({
+      workspaceId: 'capability-history-workspace',
+      sessionId: 'capability-history-session',
+    }));
 
+    await act(async () => { await Promise.resolve(); });
+    await waitFor(() => expect(hook.result.current.historyLoaded).toBe(true));
+    const assistant = hook.result.current.messages.find(message => message.id === 'history-capability');
+    const blocks = assistant?.blocks ?? [];
+    expect(blocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'tool_use',
+        id: 'capability-cold-history',
+        name: 'acquire_capability',
+        status: 'done',
+        result: marker,
+      }),
+    ]));
+
+    renderBlocks(blocks);
     expect(screen.getByTestId('capability-request-card')).toHaveTextContent('web-scraper');
   });
 
