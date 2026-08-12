@@ -649,6 +649,41 @@ function mutationWorkspaceIds(
   return workspaceIds;
 }
 
+function storedAgentRunControlWorkspaceIds(
+  request: FastifyRequest,
+  fastify: FastifyInstance,
+): string[] | null | undefined {
+  const routeUrl = request.routeOptions?.url ?? request.url.split('?')[0];
+  if (
+    request.method !== 'POST'
+    || (routeUrl !== '/api/agent-runs/:id/control' && routeUrl !== '/api/agents/:id/pause')
+  ) {
+    return undefined;
+  }
+
+  const id = stringFields(asRecord(request.params), ['id'])[0];
+  if (!id) return null;
+  if (!fastify.agentRunRegistry) {
+    return routeUrl === '/api/agent-runs/:id/control' ? null : undefined;
+  }
+
+  const run = routeUrl === '/api/agent-runs/:id/control'
+    ? fastify.agentRunRegistry.get(id)
+    : fastify.agentRunRegistry.list({ source: 'fleet', limit: 1_000 })
+      .find((candidate) => candidate.kind === 'worker' && candidate.executor.agentId === id);
+  if (!run) return undefined;
+
+  const workspaceIds = run.kind === 'room' ? run.workspaceIds : [run.workspaceId];
+  if (
+    workspaceIds.length === 0
+    || workspaceIds.some((workspaceId) => !fastify.workspaceManager?.get(workspaceId))
+  ) {
+    return null;
+  }
+
+  return workspaceIds;
+}
+
 async function securityMiddlewarePlugin(
   fastify: FastifyInstance,
   opts: SecurityMiddlewareOpts,
@@ -844,7 +879,19 @@ async function securityMiddlewarePlugin(
       }
     }
 
-    for (const workspaceId of mutationWorkspaceIds(request, fastify)) {
+    const storedRunWorkspaceIds = storedAgentRunControlWorkspaceIds(request, fastify);
+    if (storedRunWorkspaceIds === null) {
+      return reply.code(403).send({
+        error: 'Agent run workspace scope could not be resolved.',
+        code: 'RUN_WORKSPACE_SCOPE_UNRESOLVED',
+      });
+    }
+
+    const mutationTargets = new Set([
+      ...mutationWorkspaceIds(request, fastify),
+      ...(storedRunWorkspaceIds ?? []),
+    ]);
+    for (const workspaceId of mutationTargets) {
       const workspace = fastify.workspaceManager?.get(workspaceId);
       if (workspace?.teamId && workspace.teamRole === 'viewer') {
         return reply.code(403).send({

@@ -31,6 +31,8 @@ import { randomUUID } from 'node:crypto';
 import { MindDB, ExecutionTraceStore } from '@waggle/core';
 import { agentRoutes } from '../../src/local/routes/agent.js';
 import { agentEntityRoutes } from '../../src/local/routes/agents.js';
+import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
+import { securityMiddleware } from '../../src/local/security-middleware.js';
 import type { WorkspaceSession } from '../../src/local/workspace-sessions.js';
 
 interface FakeSession {
@@ -48,6 +50,8 @@ function createTestServer(opts: {
   pausedIds?: string[];
   spawnCalls?: Array<Record<string, unknown>>;
   auditRecords?: Array<Record<string, unknown>>;
+  agentRunRegistry?: AgentRunRegistry;
+  workspaceManager?: { get(id: string): unknown };
 }) {
   const server = Fastify({ logger: false });
   server.decorate('localConfig', { dataDir: opts.dataDir });
@@ -65,6 +69,8 @@ function createTestServer(opts: {
       return input;
     },
   });
+  if (opts.agentRunRegistry) server.decorate('agentRunRegistry', opts.agentRunRegistry);
+  if (opts.workspaceManager) server.decorate('workspaceManager', opts.workspaceManager as never);
   // Minimal agentState so the REAL agentRoutes plugin registers (it reads
   // costTracker at register time). No subagentOrchestrator → /api/agents/active
   // returns the empty orchestrator state.
@@ -89,6 +95,7 @@ function createTestServer(opts: {
       model: body.model,
     };
   });
+  if (opts.agentRunRegistry && opts.workspaceManager) server.register(securityMiddleware);
   // Same order as local/index.ts: agentRoutes (static /api/agents/active)
   // first, then the /:id param plugin.
   server.register(agentRoutes);
@@ -406,6 +413,54 @@ describe('Agent entity routes (Phase 3)', () => {
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toMatch(/no recorded run/i);
     expect(pausedIds).toEqual([]);
+  });
+
+  it('blocks a viewer from pausing the agent durable run resolved by stored ownership', async () => {
+    const agent = await createAgent({ ...VALID_BODY, workspaceIds: ['viewer-workspace'] });
+    await server.close();
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    server = createTestServer({
+      dataDir,
+      traceStore,
+      sessions,
+      pausedIds,
+      spawnCalls,
+      auditRecords,
+      agentRunRegistry: registry,
+      workspaceManager: {
+        get: (id: string) => id === 'viewer-workspace'
+          ? { id, teamId: 'team-1', teamRole: 'viewer' }
+          : undefined,
+      },
+    });
+    const room = registry.createRoom({
+      workspaceIds: ['viewer-workspace'],
+      source: 'fleet',
+      title: 'Viewer agent room',
+      task: 'Keep running',
+    });
+    const worker = registry.createWorker({
+      parentRunId: room.id,
+      workspaceId: 'viewer-workspace',
+      source: 'fleet',
+      executor: { kind: 'waggle_agent', agentId: agent.id },
+      title: 'Viewer agent worker',
+      task: room.task,
+      status: 'running',
+      capabilities: { cancel: true },
+    });
+    let controlCalls = 0;
+    registry.registerControls(worker.id, { cancel: () => { controlCalls++; } });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: `/api/agents/${agent.id}/pause`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(controlCalls).toBe(0);
+    expect(registry.get(worker.id)?.status).toBe('running');
   });
 
   it('agent with no workspaceIds is pausable after /run (default-workspace fallback)', async () => {
