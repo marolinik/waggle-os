@@ -743,4 +743,130 @@ describe('Local Server Mode', () => {
       }
     }, 30_000);
   });
+
+  it('blocks first-after-restart Fleet dispatch after persisted spend exhausts hard cap', async () => {
+    const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-budget-restart-'));
+    const config = new waggleCore.WaggleConfig(restartDir);
+    config.setDailyBudget(1);
+    config.setBudgetHardCap(false);
+    config.save();
+
+    const firstServer = await buildLocalServer({ dataDir: restartDir });
+    firstServer.vault.set('anthropic', 'test-key');
+    firstServer.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'test provider',
+      checkedAt: new Date().toISOString(),
+    };
+    const firstWorkspaceId = firstServer.workspaceManager.getDefault()!;
+    firstServer.workspaceManager.update(firstWorkspaceId, { model: 'anthropic/claude-sonnet-4-6' });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'remote-model:latest', remote_host: 'https://ollama.example' },
+            { name: 'qwen2.5:1.5b' },
+          ],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+    firstServer.agentRunner = async (agentConfig) => {
+      if (agentConfig.model === 'anthropic/claude-sonnet-4-6') {
+        const spawn = agentConfig.tools.find((tool) => tool.name === 'spawn_agent');
+        expect(spawn).toBeDefined();
+        await spawn!.execute({
+          name: 'Paid Ollama child', role: 'researcher', task: 'Use paid Ollama cloud',
+          model: 'ollama/remote-model:latest',
+        });
+        await spawn!.execute({
+          name: 'Free Ollama child', role: 'researcher', task: 'Use offline Ollama',
+          model: 'ollama/qwen2.5:1.5b',
+        });
+        return { content: 'parent Fleet run', toolsUsed: ['spawn_agent'], usage: { inputTokens: 0, outputTokens: 0 } };
+      }
+
+      const reservation = agentConfig.modelSpendBudget!.reserveModelSpend({
+        model: agentConfig.billingModel ?? agentConfig.model,
+        inputTokens: 1_000,
+        maxOutputTokens: 1_000,
+        workspaceId: agentConfig.spendWorkspaceId,
+        billingClass: agentConfig.modelSpendBillingClass,
+      });
+      agentConfig.modelSpendBudget!.reconcileModelSpend(reservation, {
+        inputTokens: 1_000,
+        outputTokens: 1_000,
+      });
+      return { content: 'child Fleet run', toolsUsed: [], usage: { inputTokens: 1_000, outputTokens: 1_000 } };
+    };
+    const firstResponse = await injectWithAuth(firstServer, {
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: {
+        task: 'Use spawn_agent for paid and local Ollama work',
+        persona: 'general-purpose',
+        parentWorkspaceId: firstWorkspaceId,
+      },
+    });
+    const { runId: firstRunId } = firstResponse.json() as { runId: string };
+    for (let attempt = 0; attempt < 200 && firstServer.agentRunRegistry.get(firstRunId)?.status !== 'completed'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const firstRun = firstServer.agentRunRegistry.get(firstRunId);
+    expect(firstRun?.status, JSON.stringify(firstRun)).toBe('completed');
+    const [firstTrace] = firstServer.traceStore.query({ sessionId: `spawn-${firstRunId}`, limit: 1 });
+    expect(firstTrace.cost_usd).toBeCloseTo(0.018, 6);
+
+    expect(firstServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.018, 6);
+    await firstServer.close();
+
+    config.setBudgetHardCap(true);
+    config.save();
+
+    const restartedServer = await buildLocalServer({ dataDir: restartDir });
+    try {
+      expect(restartedServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.018, 6);
+      restartedServer.vault.set('anthropic', 'test-key');
+      restartedServer.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        detail: 'test provider',
+        checkedAt: new Date().toISOString(),
+      };
+      const workspaceId = restartedServer.workspaceManager.getDefault()!;
+      restartedServer.workspaceManager.update(workspaceId, { model: 'anthropic/claude-sonnet-4-6' });
+      let providerDispatches = 0;
+      restartedServer.agentRunner = async (agentConfig) => {
+        const reservation = agentConfig.modelSpendBudget?.reserveModelSpend({
+          model: agentConfig.billingModel ?? agentConfig.model,
+          inputTokens: 55_000,
+          maxOutputTokens: 55_000,
+          workspaceId: agentConfig.spendWorkspaceId,
+          billingClass: agentConfig.modelSpendBillingClass,
+        });
+        providerDispatches += 1;
+        if (reservation) agentConfig.modelSpendBudget?.releaseReservedModelSpend(reservation);
+        return { content: 'should not run', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+      };
+
+      const response = await injectWithAuth(restartedServer, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: { task: 'direct first request after restart', parentWorkspaceId: workspaceId },
+      });
+      expect(response.statusCode).toBe(202);
+      const { runId } = response.json() as { runId: string };
+      for (let attempt = 0; attempt < 200 && restartedServer.agentRunRegistry.get(runId)?.status !== 'failed'; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(restartedServer.agentRunRegistry.get(runId)?.status).toBe('failed');
+      expect(restartedServer.agentRunRegistry.get(runId)?.result?.error).toContain('Daily budget exceeded');
+      expect(providerDispatches).toBe(0);
+
+    } finally {
+      await restartedServer.close();
+      fs.rmSync(restartDir, { recursive: true, force: true });
+    }
+  });
 });

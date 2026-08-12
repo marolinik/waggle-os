@@ -271,4 +271,47 @@ describe('hard daily spend reservations', () => {
       billingClass: 'priced',
     })).toThrow(BudgetPricingUnavailableError);
   });
+
+  it('prices provider-wrapped model IDs only through a trusted catalog suffix', () => {
+    const tracker = new CostTracker();
+    tracker.setBudget(1, 'hard');
+
+    const reservation = tracker.reserveModelSpend({
+      model: 'anthropic/claude-sonnet-4-6',
+      inputTokens: 1_000,
+      maxOutputTokens: 1_000,
+      billingClass: 'priced',
+    });
+    tracker.reconcileModelSpend(reservation, { inputTokens: 1_000, outputTokens: 1_000 });
+
+    expect(tracker.getDailyTotal()).toBeCloseTo(0.018, 6);
+    expect(() => tracker.reserveModelSpend({
+      model: 'anthropic/untrusted-custom-model',
+      inputTokens: 1,
+      maxOutputTokens: 1,
+      billingClass: 'priced',
+    })).toThrow(BudgetPricingUnavailableError);
+  });
+
+  it('honors explicit paid versus free billing for Ollama-routed reservations', () => {
+    const tracker = new CostTracker();
+
+    const paid = tracker.reserveModelSpend({
+      model: 'ollama/minimax-m2.7:cloud',
+      inputTokens: 1_000,
+      maxOutputTokens: 1_000,
+      billingClass: 'priced',
+    });
+    tracker.reconcileModelSpend(paid, { inputTokens: 1_000, outputTokens: 1_000 });
+    const local = tracker.reserveModelSpend({
+      model: 'ollama/qwen2.5:1.5b',
+      inputTokens: 1_000,
+      maxOutputTokens: 1_000,
+      billingClass: 'free',
+    });
+    tracker.reconcileModelSpend(local, { inputTokens: 1_000, outputTokens: 1_000 });
+
+    expect(tracker.getDailyTotal()).toBeCloseTo(0.018, 6);
+  });
+
 });

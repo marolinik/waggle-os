@@ -194,7 +194,7 @@ export class CostTracker implements ModelSpendBudget {
       billingClass === 'priced'
       && this.budgetMode === 'hard'
       && this.dailyBudgetUsd !== null
-      && this.pricing[request.model] === undefined
+      && this.resolveTrustedPricing(request.model) === undefined
     ) {
       throw new BudgetPricingUnavailableError(request.model);
     }
@@ -299,7 +299,7 @@ export class CostTracker implements ModelSpendBudget {
     model: string,
     inferOllamaFree: boolean,
   ): number {
-    const price = this.pricing[model];
+    const price = this.resolveTrustedPricing(model);
     if (price) {
       return (input / 1000) * price.inputPer1k + (output / 1000) * price.outputPer1k;
     }
@@ -352,6 +352,19 @@ export class CostTracker implements ModelSpendBudget {
 
   hasDailyCarryover(day: string): boolean {
     return this.dailyCarryover?.day === day;
+  }
+
+  /** Resolve provider-wrapped IDs only when their suffix exists in the trusted catalog. */
+  private resolveTrustedPricing(model: string): ModelPricing | undefined {
+    let candidate = model;
+    while (candidate.length > 0) {
+      const price = this.pricing[candidate];
+      if (price) return price;
+      const separator = candidate.indexOf('/');
+      if (separator < 0) return undefined;
+      candidate = candidate.slice(separator + 1);
+    }
+    return undefined;
   }
 
   /** Seed cost persisted before this process started, once per UTC day. */

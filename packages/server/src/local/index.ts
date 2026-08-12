@@ -1060,6 +1060,19 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     budgetConfig.getDailyBudget(),
     budgetConfig.getBudgetHardCap() ? 'hard' : 'soft',
   );
+  const budgetDay = new Date().toISOString().slice(0, 10);
+  const budgetDayStart = `${budgetDay}T00:00:00.000Z`;
+  try {
+    costTracker.initializeDailyCarryover(
+      budgetDay,
+      traceStore.getTotalCostSince(budgetDayStart, traceStore.getLatestId()),
+    );
+  } catch (error) {
+    if (budgetConfig.getBudgetHardCap() && budgetConfig.getDailyBudget() !== null) {
+      throw new Error('Cannot initialize hard daily model budget from persisted spend', { cause: error });
+    }
+    server.log.warn({ err: error }, 'Persisted daily model spend unavailable');
+  }
 
   // Command registry — workflow-native slash commands
   const commandRegistry = new CommandRegistry();
