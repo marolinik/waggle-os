@@ -44,6 +44,13 @@ export interface InstallStore {
   uninstall: (target: InstallTarget) => Promise<InstallOutcome>;
   /** Re-read server truth (initial, on connect-settled, and on nav per D4). */
   hydrate: () => Promise<void>;
+  /** Confirm a server-held marketplace proposal through the shared transaction state. */
+  confirmPackageProposal: (
+    packageId: number,
+    proposalId: string,
+    workspaceId: string,
+    sessionId: string,
+  ) => Promise<void>;
 }
 
 const InstallContext = createContext<InstallStore | null>(null);
@@ -94,6 +101,27 @@ export const InstallProvider = ({ children }: { children: ReactNode }) => {
     hydrateSeq.current += 1;
     setInstalled(prev => { const n = new Set(prev); n.add(id); return n; });
   }, []);
+  const confirmPackageProposal = useCallback(async (
+    packageId: number,
+    proposalId: string,
+    workspaceId: string,
+    sessionId: string,
+  ) => {
+    const id = `pkg:${packageId}`;
+    addInstalling(id);
+    try {
+      await adapter.fetch(
+        `/api/capability-proposals/${encodeURIComponent(proposalId)}/confirm`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ workspaceId, sessionId }),
+        },
+      );
+      markInstalled(id);
+    } finally {
+      clearInstalling(id);
+    }
+  }, [addInstalling, clearInstalling, markInstalled]);
   const markUninstalled = useCallback((id: string) => {
     hydrateSeq.current += 1;
     setInstalled(prev => { const n = new Set(prev); n.delete(id); return n; });
@@ -296,7 +324,8 @@ export const InstallProvider = ({ children }: { children: ReactNode }) => {
     install,
     uninstall,
     hydrate,
-  }), [installed, installing, hydrating, install, uninstall, hydrate]);
+    confirmPackageProposal,
+  }), [installed, installing, hydrating, install, uninstall, hydrate, confirmPackageProposal]);
 
   return <InstallContext.Provider value={value}>{children}</InstallContext.Provider>;
 };

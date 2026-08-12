@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     getConnectors: vi.fn().mockResolvedValue([]),
     getMcps: vi.fn().mockResolvedValue([]),
     getMarketplace: vi.fn().mockResolvedValue({ packages: [] }),
+    fetch: vi.fn(),
     installMarketplacePackage: vi.fn(),
     uninstallMarketplacePackage: vi.fn().mockResolvedValue(undefined),
     connectConnector: vi.fn().mockResolvedValue(undefined),
@@ -70,6 +71,7 @@ beforeEach(() => {
   mocks.adapter.getConnectors.mockResolvedValue([]);
   mocks.adapter.getMcps.mockResolvedValue([]);
   mocks.adapter.getMarketplace.mockResolvedValue({ packages: [] });
+  mocks.adapter.fetch.mockResolvedValue(new Response('{}', { status: 200 }));
   mocks.adapter.installMarketplacePackage.mockResolvedValue(new Response('{}', { status: 200 }));
   mocks.adapter.uninstallMarketplacePackage.mockResolvedValue(undefined);
   mocks.adapter.connectConnector.mockResolvedValue(undefined);
@@ -104,6 +106,54 @@ describe('InstallProvider — hydrate', () => {
 });
 
 describe('InstallProvider — install dispatcher', () => {
+  it('holds proposal confirmation in shared installing state and marks exact package on success', async () => {
+    let release!: () => void;
+    mocks.adapter.fetch.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      release = () => resolve(new Response('{}', { status: 200 }));
+    }));
+    const { result } = await mountStore();
+
+    let confirmation!: Promise<void>;
+    act(() => {
+      confirmation = result.current.confirmPackageProposal(
+        9,
+        '123e4567-e89b-42d3-a456-426614174000',
+        'workspace-a',
+        'session-a',
+      );
+    });
+    await waitFor(() => expect(result.current.isInstalling('pkg:9')).toBe(true));
+    expect(result.current.isInstalled('pkg:9')).toBe(false);
+
+    await act(async () => {
+      release();
+      await confirmation;
+    });
+
+    expect(result.current.isInstalling('pkg:9')).toBe(false);
+    expect(result.current.isInstalled('pkg:9')).toBe(true);
+    expect(mocks.adapter.fetch).toHaveBeenCalledWith(
+      '/api/capability-proposals/123e4567-e89b-42d3-a456-426614174000/confirm',
+      { method: 'POST', body: JSON.stringify({ workspaceId: 'workspace-a', sessionId: 'session-a' }) },
+    );
+    expect(mocks.adapter.installMarketplacePackage).not.toHaveBeenCalled();
+  });
+
+  it('clears shared installing state when proposal confirmation fails', async () => {
+    mocks.adapter.fetch.mockRejectedValueOnce(new Error('expired'));
+    const { result } = await mountStore();
+
+    await expect(result.current.confirmPackageProposal(
+      9,
+      '123e4567-e89b-42d3-a456-426614174000',
+      'workspace-a',
+      'session-a',
+    )).rejects.toThrow('expired');
+
+    expect(result.current.isInstalling('pkg:9')).toBe(false);
+    expect(result.current.isInstalled('pkg:9')).toBe(false);
+  });
+
   it('package install success flips installed + toasts Added', async () => {
     mocks.adapter.installMarketplacePackage.mockResolvedValue(new Response('{}', { status: 200 }));
     const { result } = await mountStore();
