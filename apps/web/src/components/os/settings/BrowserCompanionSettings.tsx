@@ -1,25 +1,35 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, KeyRound, Loader2, Unplug } from 'lucide-react';
 import { adapter, type BrowserCompanionPairingStatus } from '@/lib/adapter';
 
 const BrowserCompanionSettings = () => {
   const [status, setStatus] = useState<BrowserCompanionPairingStatus | null>(null);
   const [pairingCode, setPairingCode] = useState<{ code: string; expiresAt: number } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'generate' | 'check' | 'revoke' | null>(null);
   const [error, setError] = useState('');
+  const refreshId = useRef(0);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showBusy = false) => {
+    const requestId = ++refreshId.current;
+    if (showBusy) setBusy('check');
     try {
       const nextStatus = await adapter.getBrowserCompanionPairing();
+      if (requestId !== refreshId.current) return;
       setStatus(nextStatus);
       if (nextStatus.paired) setPairingCode(null);
       setError('');
     } catch {
+      if (requestId !== refreshId.current) return;
       setError('Could not read Browser Companion pairing status.');
+    } finally {
+      if (showBusy && requestId === refreshId.current) setBusy(null);
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshId.current += 1; };
+  }, [refresh]);
 
   useEffect(() => {
     if (!pairingCode) return;
@@ -33,7 +43,7 @@ const BrowserCompanionSettings = () => {
   }, [pairingCode]);
 
   const createCode = async () => {
-    setBusy(true);
+    setBusy('generate');
     setPairingCode(null);
     try {
       setPairingCode(await adapter.createBrowserCompanionPairingCode());
@@ -41,43 +51,53 @@ const BrowserCompanionSettings = () => {
     } catch {
       setError('Could not create a pairing code.');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const revoke = async () => {
-    setBusy(true);
+    refreshId.current += 1;
+    setBusy('revoke');
     try {
       await adapter.revokeBrowserCompanionPairing();
       setPairingCode(null);
       setStatus({ paired: false, extensionId: null, pairedAt: null });
-      await refresh();
+      setError('');
     } catch {
       setError('Could not revoke Browser Companion pairing.');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   return (
-    <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-2.5" data-testid="browser-companion-settings">
+    <section
+      className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-2.5"
+      data-testid="browser-companion-settings"
+      aria-labelledby="browser-companion-title"
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-display font-medium text-foreground flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5 text-honey" /> Browser Companion
-          </p>
+          <h4 id="browser-companion-title" className="text-xs font-display font-medium text-foreground flex items-center gap-1.5">
+            <KeyRound aria-hidden="true" className="w-3.5 h-3.5 text-honey" /> Browser Companion
+          </h4>
           <p className="text-[11px] text-muted-foreground mt-1">
             Pair the extension with a short-lived, single-use code. Captures can write only to personal imported memory.
           </p>
         </div>
-        <span className="text-[10px] text-muted-foreground shrink-0" data-testid="browser-companion-status">
-          {status?.paired ? 'Paired' : 'Not paired'}
+        <span
+          className="text-[10px] text-muted-foreground shrink-0"
+          data-testid="browser-companion-status"
+          role="status"
+          aria-live="polite"
+        >
+          {status?.paired ? 'Paired' : status ? 'Not paired' : error ? 'Unavailable' : 'Checking…'}
         </span>
       </div>
 
       {status?.paired && (
         <p className="text-[11px] text-status-healthy flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" /> Connected extension: {status.extensionId ?? 'Browser Companion'}
+          <CheckCircle2 aria-hidden="true" className="w-3 h-3" /> Connected extension: {status.extensionId ?? 'Browser Companion'}
         </p>
       )}
 
@@ -90,11 +110,12 @@ const BrowserCompanionSettings = () => {
           <p className="text-[10px] text-muted-foreground">Expires {new Date(pairingCode.expiresAt).toLocaleTimeString()}.</p>
           <button
             type="button"
-            onClick={() => void refresh()}
-            disabled={busy}
-            className="mt-2 px-2.5 py-1 text-[11px] rounded-md bg-secondary text-foreground disabled:opacity-50"
+            onClick={() => void refresh(true)}
+            disabled={busy !== null}
+            className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-[11px] text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           >
-            Check pairing
+            {busy === 'check' && <Loader2 aria-hidden="true" className="w-3 h-3 animate-spin motion-reduce:animate-none" />}
+            {busy === 'check' ? 'Checking…' : 'Check pairing'}
           </button>
         </div>
       )}
@@ -106,25 +127,30 @@ const BrowserCompanionSettings = () => {
           <button
             type="button"
             onClick={() => void createCode()}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
+            disabled={busy !== null}
+            className="flex min-h-8 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           >
-            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <KeyRound className="w-3 h-3" />}
-            Generate one-time code
+            {busy === 'generate'
+              ? <Loader2 aria-hidden="true" className="w-3 h-3 animate-spin motion-reduce:animate-none" />
+              : <KeyRound aria-hidden="true" className="w-3 h-3" />}
+            {busy === 'generate' ? 'Generating…' : 'Generate one-time code'}
           </button>
         )}
         {status?.paired && (
           <button
             type="button"
             onClick={() => void revoke()}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-foreground disabled:opacity-50"
+            disabled={busy !== null}
+            className="flex min-h-8 items-center gap-1.5 rounded-lg bg-secondary px-3 py-1.5 text-xs text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           >
-            <Unplug className="w-3 h-3" /> Revoke
+            {busy === 'revoke'
+              ? <Loader2 aria-hidden="true" className="w-3 h-3 animate-spin motion-reduce:animate-none" />
+              : <Unplug aria-hidden="true" className="w-3 h-3" />}
+            {busy === 'revoke' ? 'Revoking…' : 'Revoke'}
           </button>
         )}
       </div>
-    </div>
+    </section>
   );
 };
 

@@ -29,11 +29,35 @@ afterEach(() => {
 });
 
 describe('BrowserCompanionSettings', () => {
+  it('reports that pairing status is being checked before showing an actionable state', async () => {
+    let resolveStatus!: (value: { paired: boolean; extensionId: null; pairedAt: null }) => void;
+    mocks.getStatus.mockReturnValue(new Promise((resolve) => { resolveStatus = resolve; }));
+
+    render(<BrowserCompanionSettings />);
+
+    expect(screen.getByTestId('browser-companion-status')).toHaveTextContent('Checking…');
+    expect(screen.queryByText('Not paired')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /generate one-time code/i })).not.toBeInTheDocument();
+
+    resolveStatus({ paired: false, extensionId: null, pairedAt: null });
+    expect(await screen.findByText('Not paired')).toBeInTheDocument();
+  });
+
+  it('fails closed when pairing status is unavailable', async () => {
+    mocks.getStatus.mockRejectedValue(new Error('offline'));
+
+    render(<BrowserCompanionSettings />);
+
+    expect(await screen.findByText('Unavailable')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not read Browser Companion pairing status.');
+    expect(screen.queryByRole('button', { name: /generate one-time code/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /revoke/i })).not.toBeInTheDocument();
+  });
+
   it('generates a code, confirms pairing, and revokes it', async () => {
     mocks.getStatus
       .mockResolvedValueOnce({ paired: false, extensionId: null, pairedAt: null })
-      .mockResolvedValueOnce({ paired: true, extensionId: 'extension-id', pairedAt: '2026-08-12T00:00:00Z' })
-      .mockResolvedValueOnce({ paired: false, extensionId: null, pairedAt: null });
+      .mockResolvedValueOnce({ paired: true, extensionId: 'extension-id', pairedAt: '2026-08-12T00:00:00Z' });
     render(<BrowserCompanionSettings />);
     await screen.findByText('Not paired');
     fireEvent.click(screen.getByRole('button', { name: /generate one-time code/i }));
