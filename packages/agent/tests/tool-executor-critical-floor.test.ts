@@ -7,7 +7,7 @@ import type { ToolDefinition } from '../src/tools.js';
 import type { RiskLevel } from '@waggle/shared';
 
 /**
- * SEC-GATE — defense-in-depth critical floor (tool-executor.ts step 4b).
+ * SEC-GATE — defense-in-depth state-change approval floor (step 4b).
  *
  * The confirmation-bypass let a spawn path constructed with `hooks: undefined`
  * execute CRITICAL_NEVER_AUTOPASS commands (rm -rf ~, sudo, git push --force
@@ -36,7 +36,7 @@ function call(name: string, args: Record<string, unknown> = {}) {
 const CRITICAL_BASH = { command: 'rm -rf ~' };
 const CRITICAL_FORCE_PUSH = { command: 'git push --force origin main' };
 
-describe('tool-executor critical-destructive hard floor (SEC-GATE step 4b)', () => {
+describe('tool-executor state-change approval floor (SEC-GATE step 4b)', () => {
   it('DENIES a critical bash command when no hook and no approval callback are wired', async () => {
     const spy = vi.fn();
     const toolMap = new Map([['bash', tool('bash', 'BASH_RAN', spy)]]);
@@ -147,12 +147,107 @@ describe('tool-executor critical-destructive hard floor (SEC-GATE step 4b)', () 
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('does NOT block non-critical commands with no gate (floor is surgical)', async () => {
+  it('DENIES a non-critical state-changing bash command when no approval gate is wired', async () => {
     const spy = vi.fn();
-    const toolMap = new Map([['bash', tool('bash', 'LISTING', spy)]]);
-    const r = await executeToolCall(call('bash', { command: 'ls -la' }), { toolMap, guard: new LoopGuard() });
-    expect(r.content).toContain('LISTING');
-    expect(r.countedAsUsed).toBe(true);
+    const toolMap = new Map([['bash', tool('bash', 'DIRECTORY_CREATED', spy)]]);
+    const r = await executeToolCall(call('bash', { command: 'mkdir work-output' }), { toolMap, guard: new LoopGuard() });
+    expect(r.content).toContain('[BLOCKED]');
+    expect(r.countedAsUsed).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['write_file', { path: 'report.md', content: 'unsafe write' }, undefined],
+    ['opaque_connector_write', { task: 'create' }, 'medium' as RiskLevel],
+    ['connector_database_drop_table', { table: 'users' }, undefined],
+    ['connector_drive_remove', { id: 'shared-file' }, 'low' as RiskLevel],
+    ['git_pull', { remote: 'origin', branch: 'main' }, undefined],
+    ['git_branch', { action: 'create', name: 'feature/new' }, undefined],
+    ['git_branch', { action: 'switch', name: 'feature/next' }, undefined],
+    ['git_branch', { action: 'delete', name: 'feature/old' }, undefined],
+    ['git_stash', { action: 'save', message: 'work' }, undefined],
+    ['git_stash', { action: 'pop' }, undefined],
+    ['git_stash', { action: 'drop' }, undefined],
+  ])('DENIES confirmation-required %s when no approval gate is wired', async (name, args, riskLevel) => {
+    const spy = vi.fn();
+    const toolMap = new Map([[name, tool(name, 'MUTATION_RAN', spy, riskLevel)]]);
+
+    const result = await executeToolCall(call(name, args), {
+      toolMap,
+      guard: new LoopGuard(),
+    });
+
+    expect(result.content).toContain('[BLOCKED]');
+    expect(result.countedAsUsed).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('ALLOWS a confirmation-required write after explicit hook authorization', async () => {
+    const spy = vi.fn();
+    const toolMap = new Map([['write_file', tool('write_file', 'FILE_WRITTEN', spy)]]);
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ authorize: true }));
+
+    const result = await executeToolCall(call('write_file', {
+      path: 'report.md',
+      content: 'approved write',
+    }), {
+      toolMap,
+      guard: new LoopGuard(),
+      hooks,
+    });
+
+    expect(result.content).toContain('FILE_WRITTEN');
+    expect(result.countedAsUsed).toBe(true);
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('ALLOWS a critical connector action after explicit hook authorization', async () => {
+    const spy = vi.fn();
+    const name = 'connector_database_drop_table';
+    const toolMap = new Map([[name, tool(name, 'TABLE_DROPPED', spy, 'low')]]);
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ authorize: true }));
+
+    const result = await executeToolCall(call(name, { table: 'approved_archive' }), {
+      toolMap,
+      guard: new LoopGuard(),
+      hooks,
+    });
+
+    expect(result.content).toContain('TABLE_DROPPED');
+    expect(result.countedAsUsed).toBe(true);
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['git_branch', { action: 'list' }],
+    ['git_stash', { action: 'list' }],
+  ])('still ALLOWS read-only %s list operations without an approval gate', async (name, args) => {
+    const spy = vi.fn();
+    const toolMap = new Map([[name, tool(name, 'LISTING', spy)]]);
+
+    const result = await executeToolCall(call(name, args), {
+      toolMap,
+      guard: new LoopGuard(),
+    });
+
+    expect(result.content).toContain('LISTING');
+    expect(result.countedAsUsed).toBe(true);
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('still ALLOWS a read-only tool when no approval gate is wired', async () => {
+    const spy = vi.fn();
+    const toolMap = new Map([['read_file', tool('read_file', 'CONTENTS', spy)]]);
+
+    const result = await executeToolCall(call('read_file', { path: 'report.md' }), {
+      toolMap,
+      guard: new LoopGuard(),
+    });
+
+    expect(result.content).toContain('CONTENTS');
+    expect(result.countedAsUsed).toBe(true);
     expect(spy).toHaveBeenCalledOnce();
   });
 });

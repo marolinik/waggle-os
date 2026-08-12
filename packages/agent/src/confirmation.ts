@@ -17,7 +17,7 @@ const ALWAYS_CONFIRM = new Set([
   'write_file', 'edit_file', 'multi_edit', 'generate_docx', 'generate_xlsx', 'generate_pptx', 'generate_pdf',
   'cli_execute',
   'run_code',
-  'git_commit', 'git_push', 'git_pr', 'git_merge',
+  'git_commit', 'git_push', 'git_pull', 'git_pr', 'git_merge',
   'install_capability',
   // D4(i) skill-write governance: create_skill gates at normal (auto-passes at
   // trusted/yolo via TRUSTED_AUTOPASS); delete_skill gates at every level via
@@ -28,7 +28,7 @@ const ALWAYS_CONFIRM = new Set([
 ]);
 
 // Connector action name patterns that indicate write operations
-const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|remove|add|set|put|upload|append)_/;
+const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|remove|destroy|purge|drop|add|set|put|upload|append)(?:_|$)/;
 
 // Bash command patterns that are safe (read-only / informational)
 const SAFE_BASH_PATTERNS = [
@@ -91,6 +91,10 @@ export function needsConfirmation(
   args?: Record<string, unknown>,
   trustedRiskLevel?: RiskLevel,
 ): boolean {
+  // Terminal operations are always gated, even if a narrower name classifier
+  // below does not yet recognize the specific destructive verb.
+  if (isCriticalNeverAutopass(toolName, args, trustedRiskLevel)) return true;
+
   // ToolDefinition metadata is server/provider-authored. It may only add a
   // gate; name- and argument-based policy below remains authoritative.
   if (trustedRiskLevel && riskAtLeast(trustedRiskLevel, 'medium')) return true;
@@ -100,6 +104,13 @@ export function needsConfirmation(
   if (toolName.startsWith('connector_')) {
     if (isHighRiskConnectorAction(toolName)) return true;
     return CONNECTOR_WRITE_PATTERNS.test(toolName);
+  }
+
+  // Extended Git tools mix read-only and state-changing actions under one
+  // tool name. Unknown/missing actions fail closed; only the explicit list
+  // variants are informational and may run without approval.
+  if (toolName === 'git_branch' || toolName === 'git_stash') {
+    return String(args?.action ?? '').toLowerCase() !== 'list';
   }
 
   // Non-bash tools: simple set check

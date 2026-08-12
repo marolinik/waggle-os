@@ -153,7 +153,8 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
 
   // Register confirmation gate as pre:tool hook
   hookRegistry.on('pre:tool', async (ctx) => {
-    if (!ctx.toolName || !needsConfirmation(ctx.toolName)) return;
+    const trustedRiskLevel = ctx.riskLevel as Parameters<typeof needsConfirmation>[2];
+    if (!ctx.toolName || !needsConfirmation(ctx.toolName, ctx.args, trustedRiskLevel)) return;
 
     // Ask user for confirmation via readline
     const answer = await new Promise<string>((resolve) => {
@@ -166,6 +167,7 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
     if (answer === 'n' || answer === 'no') {
       return { cancel: true, reason: `User denied ${ctx.toolName}` };
     }
+    return { authorize: true };
   });
 
   rl.prompt();

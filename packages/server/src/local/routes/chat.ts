@@ -2069,10 +2069,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
           // blocks even at YOLO (see isCriticalNeverAutopass).
+          const requiresBaseConfirmation = needsConfirmation(
+            ctx.toolName,
+            args,
+            trustedRiskLevel,
+          );
           if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel, trustedRiskLevel)) {
             // Surface an audit-visible step when elevated autonomy pre-approved
             // so users can see WHY the tool ran without a prompt.
-            if (autonomyLevel !== 'normal' && needsConfirmation(ctx.toolName, args, trustedRiskLevel)) {
+            if (autonomyLevel !== 'normal' && requiresBaseConfirmation) {
               sendEvent('step', { content: `\u26a1 ${ctx.toolName} auto-approved (${autonomyLevel})` });
               // Tag the audit input with the autonomy level so forensics can
               // see WHY the tool was auto-approved.
@@ -2085,7 +2090,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 approved: true,
               });
             }
-            return;
+            return requiresBaseConfirmation ? { authorize: true } : undefined;
           }
 
           // Headless channel/review turn: no interactive client is watching this

@@ -10,8 +10,8 @@
  *   2. onToolUse callback
  *   3. Governance.blockedTools — early return on block (fires onToolResult)
  *   4. pre:tool hook — early return on cancel
- *  4b. critical-destructive hard floor — deny isCriticalNeverAutopass ops that
- *      reach here without an approval gate (defense-in-depth; independent of hooks)
+ *  4b. state-change approval floor — deny confirmation-required ops that reach
+ *      here without explicit authorization (defense-in-depth; independent of hooks)
  *   5. pre:memory-write hook (save_memory only) — early return on cancel
  *   6. LoopGuard.check — produces error result if duplicate
  *   7. Execute (or capability-router fallback or unknown-tool error)
@@ -33,7 +33,7 @@ import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { LoopGuard } from './loop-guard.js';
 import { evaluateExternalMemoryIngress } from '@waggle/core';
-import { isCriticalNeverAutopass } from './confirmation.js';
+import { isCriticalNeverAutopass, needsConfirmation } from './confirmation.js';
 import { compressToolOutput } from './tool-output-compressor.js';
 import { logTurnEvent } from './turn-context.js';
 import { untrustedContextWrapper } from './untrusted-context.js';
@@ -171,29 +171,30 @@ export async function executeToolCall(
     approvedByHook = hookResult.authorized === true;
   }
 
-  // ── Step 4b: critical-destructive hard floor (defense-in-depth) ──
-  // isCriticalNeverAutopass flags terminal, irreversible operations that must
-  // pass a human/policy approval gate at EVERY layer — not only the main chat
-  // loop. The main loop gates them via the pre:tool hook fired above; spawn
-  // paths (sub-agent / workflow / worker) that forward that same hook registry
-  // inherit the gate. If NO approval mechanism reached this call, fail closed:
-  // deny rather than silently execute. This runs unconditionally — it does not
-  // depend on the pre:tool hook being wired, which is the whole point. Without
-  // it, a spawn path constructed with `hooks: undefined` executed rm -rf ~,
-  // sudo, git push --force main, delete_skill, etc. unconfirmed.
-  if (isCriticalNeverAutopass(fnName, fnArgs, existingTool.riskLevel)) {
+  // ── Step 4b: state-change approval floor (defense-in-depth) ──
+  // Every confirmation-required operation must carry an explicit authorization
+  // across this final execution boundary. Interactive chat supplies it through
+  // its request-local pre:tool hook; saved grants and elevated autonomy do the
+  // same after their policy checks. Background paths without an approval
+  // provider therefore fail closed instead of silently mutating state.
+  const critical = isCriticalNeverAutopass(fnName, fnArgs, existingTool.riskLevel);
+  if (critical || needsConfirmation(fnName, fnArgs, existingTool.riskLevel)) {
     const approvedOutOfBand = confirmCriticalAction
+      && critical
       ? await confirmCriticalAction(fnName, fnArgs)
       : false;
     // Only an explicit successful hook authorization or approval callback can
     // cross the hard floor. Registry presence or a swallowed hook error is not
     // proof that a human or policy gate approved the call.
     if (!approvedOutOfBand && !approvedByHook) {
-      const denyMsg =
-        `[BLOCKED] "${fnName}" is a critical, irreversible operation that requires ` +
-        `explicit human approval. It was denied because this execution context ` +
-        `(such as a sub-agent or automated workflow) has no approval gate. ` +
-        `Terminal-destructive commands never run unconfirmed.`;
+      const denyMsg = critical
+        ? `[BLOCKED] "${fnName}" is a critical, irreversible operation that requires ` +
+          `explicit human approval. It was denied because this execution context ` +
+          `(such as a sub-agent or automated workflow) has no approval gate. ` +
+          `Terminal-destructive commands never run unconfirmed.`
+        : `[BLOCKED] "${fnName}" changes state and requires explicit approval. ` +
+          `It was denied because this execution context (such as a sub-agent or ` +
+          `automated workflow) did not provide an authorization decision.`;
       if (onToolResult) onToolResult(fnName, fnArgs, denyMsg);
       return { content: denyMsg, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
     }
