@@ -174,8 +174,15 @@ export class WorkspaceManager {
     this.assertWorkspaceId(id);
     const existing = this.get(id);
     if (existing) return existing;
-    if (fs.lstatSync(path.join(this.workspacesDir, id), { throwIfNoEntry: false })) {
-      throw new Error(`Workspace path already exists but is not a valid workspace: ${id}`);
+    const workspacePath = path.join(this.workspacesDir, id);
+    const workspaceStat = fs.lstatSync(workspacePath, { throwIfNoEntry: false });
+    if (workspaceStat) {
+      if (id !== 'default' || !this.isEmptyLegacyWorkspaceDirectory(workspacePath, workspaceStat)) {
+        throw new Error(`Workspace path already exists but is not a valid workspace: ${id}`);
+      }
+      const sessionsPath = path.join(workspacePath, 'sessions');
+      if (fs.lstatSync(sessionsPath, { throwIfNoEntry: false })) fs.rmdirSync(sessionsPath);
+      fs.rmdirSync(workspacePath);
     }
 
     return this.createWithId(id, {
@@ -378,6 +385,21 @@ export class WorkspaceManager {
 
   private assertWorkspaceId(id: string): void {
     if (!WORKSPACE_ID.test(id)) throw new Error(`Invalid workspace id: ${id}`);
+  }
+
+  private isEmptyLegacyWorkspaceDirectory(workspacePath: string, stat: fs.Stats): boolean {
+    if (stat.isSymbolicLink() || !stat.isDirectory()) return false;
+    const canonicalRoot = fs.realpathSync.native(this.workspacesDir);
+    const canonicalWorkspace = fs.realpathSync.native(workspacePath);
+    if (!isContained(canonicalRoot, canonicalWorkspace)) return false;
+    const entries = fs.readdirSync(workspacePath, { withFileTypes: true });
+    if (entries.length === 0) return true;
+    if (entries.length !== 1 || entries[0]?.name !== 'sessions' || !entries[0].isDirectory()) return false;
+    const sessionsPath = path.join(workspacePath, 'sessions');
+    const sessionsStat = fs.lstatSync(sessionsPath);
+    if (sessionsStat.isSymbolicLink()) return false;
+    const canonicalSessions = fs.realpathSync.native(sessionsPath);
+    return isContained(canonicalWorkspace, canonicalSessions) && fs.readdirSync(sessionsPath).length === 0;
   }
 
   private resolveWorkspaceDir(id: string): string | null {

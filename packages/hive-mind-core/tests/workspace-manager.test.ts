@@ -420,6 +420,60 @@ describe('WorkspaceManager', () => {
       expect(fs.readFileSync(mindPath, 'utf8')).toBe('mind sentinel');
       expect(fs.existsSync(path.join(wsDir, 'sessions'))).toBe(false);
     });
+
+    it.each([false, true])(
+      'adopts an empty legacy directory (sessions subdirectory: %s)',
+      (withSessions) => {
+      const workspaceDir = path.join(tmpDir, 'workspaces', 'default');
+      const sessionsDir = path.join(workspaceDir, 'sessions');
+      fs.mkdirSync(withSessions ? sessionsDir : workspaceDir, { recursive: true });
+
+      const workspace = manager.ensure('default', { name: 'Legacy Default', group: 'Work' });
+
+      expect(workspace.id).toBe('default');
+      expect(fs.statSync(sessionsDir).isDirectory()).toBe(true);
+      expect(fs.existsSync(path.join(workspaceDir, 'workspace.mind'))).toBe(true);
+      expect(manager.get('default')).toEqual(workspace);
+      },
+    );
+
+    it('does not adopt the legacy empty-directory shape for another workspace id', () => {
+      const workspaceDir = path.join(tmpDir, 'workspaces', 'not-default');
+      fs.mkdirSync(path.join(workspaceDir, 'sessions'), { recursive: true });
+
+      expect(() => manager.ensure('not-default')).toThrow(/already exists|valid workspace/i);
+      expect(fs.readdirSync(workspaceDir)).toEqual(['sessions']);
+    });
+
+    it('rejects a legacy sessions junction and preserves its outside target', () => {
+      const workspaceDir = path.join(tmpDir, 'workspaces', 'default');
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-legacy-sessions-'));
+      fs.mkdirSync(workspaceDir);
+      fs.symlinkSync(outsideDir, path.join(workspaceDir, 'sessions'), process.platform === 'win32' ? 'junction' : 'dir');
+
+      try {
+        expect(() => manager.ensure('default')).toThrow(/already exists|valid workspace/i);
+        expect(fs.readdirSync(outsideDir)).toEqual([]);
+      } finally {
+        fs.unlinkSync(path.join(workspaceDir, 'sessions'));
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it.each([
+      ['a legacy session file', 'sessions', 'session.jsonl'],
+      ['an unexpected sibling', '', 'unexpected.txt'],
+    ])('rejects legacy adoption when the directory contains %s', (_label, childDir, fileName) => {
+      const wsDir = path.join(tmpDir, 'workspaces', 'default');
+      const parent = path.join(wsDir, childDir);
+      fs.mkdirSync(parent, { recursive: true });
+      const sentinel = path.join(parent, fileName);
+      fs.writeFileSync(sentinel, 'preserve me');
+
+      expect(() => manager.ensure('default')).toThrow(/already exists|valid workspace/i);
+      expect(fs.readFileSync(sentinel, 'utf8')).toBe('preserve me');
+      expect(fs.existsSync(path.join(wsDir, 'workspace.mind'))).toBe(false);
+    });
     it('creates a workspace with the exact supplied id when missing', () => {
       const ws = manager.ensure('cwd-derived-id');
 
