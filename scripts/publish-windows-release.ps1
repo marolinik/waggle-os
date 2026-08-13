@@ -37,24 +37,111 @@ function Assert-RemoteTagCommit {
   }
 }
 
+function Get-ProtectedSignerIdentity {
+  $approvedSubject = [string]$env:WINDOWS_CODESIGN_APPROVED_SUBJECT
+  $approvedThumbprint = [string]$env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT
+  $hasApprovedSubject = -not [string]::IsNullOrWhiteSpace($approvedSubject)
+  $hasApprovedThumbprint = -not [string]::IsNullOrWhiteSpace($approvedThumbprint)
+  if ($hasApprovedSubject -eq $hasApprovedThumbprint) {
+    throw 'Exactly one protected publication signer identity must be configured'
+  }
+  if ($hasApprovedSubject) {
+    return [pscustomobject][ordered]@{
+      mode = 'subject'
+      subject = $approvedSubject
+      thumbprint = $null
+    }
+  }
+
+  $normalizedThumbprint = ($approvedThumbprint -replace '\s', '').ToUpperInvariant()
+  if ($normalizedThumbprint -notmatch '^[0-9A-F]{40}$') {
+    throw 'Protected publication signer thumbprint is invalid'
+  }
+  return [pscustomobject][ordered]@{
+    mode = 'thumbprint'
+    subject = $null
+    thumbprint = $normalizedThumbprint
+  }
+}
+
 function Assert-ExpectedAuthenticodeSignature {
-  param([System.IO.FileInfo]$Artifact, [string]$ExpectedThumbprint)
+  param([System.IO.FileInfo]$Artifact, [object]$ExpectedIdentity)
 
   $signature = Get-AuthenticodeSignature -FilePath $Artifact.FullName
-  $signerThumbprint = if ($null -eq $signature.SignerCertificate) {
-    ''
-  } else {
-    $signature.SignerCertificate.Thumbprint
-  }
   if ($signature.Status -ne 'Valid' -or
-      -not [string]::Equals(
-        $signerThumbprint,
-        $ExpectedThumbprint,
-        [System.StringComparison]::OrdinalIgnoreCase
-      ) -or
+      [string]$signature.SignatureType -ne 'Authenticode' -or
+      $null -eq $signature.SignerCertificate -or
       $null -eq $signature.TimeStamperCertificate) {
     throw "Artifact signature is no longer valid for the approved signer: $($Artifact.FullName)"
   }
+  $signerSubject = [string]$signature.SignerCertificate.Subject
+  $signerThumbprint = (
+    [string]$signature.SignerCertificate.Thumbprint -replace '\s', ''
+  ).ToUpperInvariant()
+  $matchesProtectedIdentity = if ($ExpectedIdentity.mode -ceq 'subject') {
+    [string]::Equals(
+      $signerSubject,
+      [string]$ExpectedIdentity.subject,
+      [System.StringComparison]::Ordinal
+    )
+  } else {
+    [string]::Equals(
+      $signerThumbprint,
+      [string]$ExpectedIdentity.thumbprint,
+      [System.StringComparison]::Ordinal
+    )
+  }
+  if (-not $matchesProtectedIdentity) {
+    throw "Artifact signature is no longer valid for the approved signer: $($Artifact.FullName)"
+  }
+  return [pscustomobject][ordered]@{
+    subject = $signerSubject
+    thumbprint = $signerThumbprint
+  }
+}
+
+function Assert-ReceiptSignerIdentity {
+  param([object]$ReceiptArtifact, [object]$ActualIdentity, [string]$Label)
+
+  if ([string]::IsNullOrWhiteSpace([string]$ReceiptArtifact.signerSubject) -or
+      [string]::IsNullOrWhiteSpace([string]$ReceiptArtifact.signerThumbprint) -or
+      -not [string]::Equals(
+        [string]$ReceiptArtifact.signerSubject,
+        [string]$ActualIdentity.subject,
+        [System.StringComparison]::Ordinal
+      ) -or
+      -not [string]::Equals(
+        ([string]$ReceiptArtifact.signerThumbprint -replace '\s', '').ToUpperInvariant(),
+        [string]$ActualIdentity.thumbprint,
+        [System.StringComparison]::Ordinal
+      )) {
+    throw "$Label signer identity does not match the certified Authenticode artifact"
+  }
+}
+
+function Assert-LifecycleReceiptSignerIdentities {
+  param(
+    [object]$Receipt,
+    [object]$PreviousLiveIdentity,
+    [object]$CandidateLiveIdentity
+  )
+
+  Assert-ReceiptSignerIdentity `
+    $Receipt.previousInstaller `
+    $PreviousLiveIdentity `
+    'Upgrade previous-installer receipt'
+  Assert-ReceiptSignerIdentity `
+    $Receipt.previousInstalledApp `
+    $PreviousLiveIdentity `
+    'Upgrade previous-installed-app receipt'
+  Assert-ReceiptSignerIdentity `
+    $Receipt.installer `
+    $CandidateLiveIdentity `
+    'Upgrade candidate-installer receipt'
+  Assert-ReceiptSignerIdentity `
+    $Receipt.installedApp `
+    $CandidateLiveIdentity `
+    'Upgrade candidate-installed-app receipt'
 }
 
 function Assert-PassingWindowsCertificateReceipt {
@@ -563,27 +650,12 @@ if (-not [string]::Equals(
   throw 'Certified installer hash no longer matches the clean receipt and pre-publication output'
 }
 
-$approvedThumbprint = (
-  [string]$env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT -replace '\s', ''
-).ToUpperInvariant()
-if ($approvedThumbprint -notmatch '^[0-9A-F]{40}$') {
-  throw 'Protected publication signer thumbprint is invalid'
-}
-Assert-ExpectedAuthenticodeSignature $installer $approvedThumbprint
+$approvedSignerIdentity = Get-ProtectedSignerIdentity
+$installerSignerIdentity = Assert-ExpectedAuthenticodeSignature $installer $approvedSignerIdentity
 if ($cleanReceiptData.installer.authenticodeStatus -ne 'Valid' -or
     $cleanReceiptData.installedApp.authenticodeStatus -ne 'Valid' -or
     $cleanReceiptData.installer.signatureType -ne 'Authenticode' -or
     $cleanReceiptData.installedApp.signatureType -ne 'Authenticode' -or
-    -not [string]::Equals(
-      [string]$cleanReceiptData.installer.signerThumbprint,
-      $approvedThumbprint,
-      [System.StringComparison]::OrdinalIgnoreCase
-    ) -or
-    -not [string]::Equals(
-      [string]$cleanReceiptData.installedApp.signerThumbprint,
-      $approvedThumbprint,
-      [System.StringComparison]::OrdinalIgnoreCase
-    ) -or
     [string]::IsNullOrWhiteSpace(
       [string]$cleanReceiptData.installer.timestampAuthorityThumbprint
     ) -or
@@ -592,6 +664,10 @@ if ($cleanReceiptData.installer.authenticodeStatus -ne 'Valid' -or
     )) {
   throw 'Clean-install receipt does not preserve valid signer and timestamp evidence'
 }
+Assert-ReceiptSignerIdentity `
+  $cleanReceiptData.installer $installerSignerIdentity 'Clean-install installer receipt'
+Assert-ReceiptSignerIdentity `
+  $cleanReceiptData.installedApp $installerSignerIdentity 'Clean-install installed-app receipt'
 Assert-ManagedModelAndMemoryEvidence `
   $cleanReceiptData `
   'Clean-install receipt'
@@ -701,21 +777,9 @@ if ($Mode -ceq 'bootstrap') {
       $receiptData.previousInstalledApp.signatureType -ne 'Authenticode') {
     throw 'Lifecycle receipt does not contain valid previous and candidate signatures'
   }
-  Assert-ExpectedAuthenticodeSignature $baseInstaller $approvedThumbprint
-  foreach ($signerThumbprint in @(
-    $receiptData.previousInstaller.signerThumbprint,
-    $receiptData.previousInstalledApp.signerThumbprint,
-    $receiptData.installer.signerThumbprint,
-    $receiptData.installedApp.signerThumbprint
-  )) {
-    if (-not [string]::Equals(
-      [string]$signerThumbprint,
-      $approvedThumbprint,
-      [System.StringComparison]::OrdinalIgnoreCase
-    )) {
-      throw 'Lifecycle receipt signer does not match the imported production certificate'
-    }
-  }
+  $baseInstallerSignerIdentity = Assert-ExpectedAuthenticodeSignature $baseInstaller $approvedSignerIdentity
+  Assert-LifecycleReceiptSignerIdentities `
+    $receiptData $baseInstallerSignerIdentity $installerSignerIdentity
   foreach ($timestampThumbprint in @(
     $receiptData.previousInstaller.timestampAuthorityThumbprint,
     $receiptData.previousInstalledApp.timestampAuthorityThumbprint,

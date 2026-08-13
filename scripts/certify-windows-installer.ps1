@@ -16,6 +16,8 @@ param(
 
   [string]$ExpectedSignerThumbprint,
 
+  [string]$ExpectedSignerSubject,
+
   [string]$ExpectedSourceRevision,
 
   [int]$WebViewDebugPort = 0,
@@ -69,28 +71,86 @@ function Test-CertificateTimestamp {
 function Assert-ExpectedAuthenticodeSignature {
   param(
     [Parameter(Mandatory = $true)] [object]$Signature,
-    [Parameter(Mandatory = $true)] [string]$ExpectedThumbprint,
+    [AllowEmptyString()] [string]$ExpectedThumbprint,
+    [AllowEmptyString()] [string]$ExpectedSubject,
     [Parameter(Mandatory = $true)] [string]$ArtifactLabel
   )
 
-  $normalizedExpectedThumbprint = ($ExpectedThumbprint -replace '\s', '').ToUpperInvariant()
-  Assert-True ($normalizedExpectedThumbprint -match '^[0-9A-F]{40}$') `
-    'Expected signer thumbprint must be exactly 40 hexadecimal characters.'
+  $hasExpectedThumbprint = -not [string]::IsNullOrWhiteSpace($ExpectedThumbprint)
+  $hasExpectedSubject = -not [string]::IsNullOrWhiteSpace($ExpectedSubject)
+  Assert-True ($hasExpectedThumbprint -xor $hasExpectedSubject) `
+    'Exactly one expected signer identity binding is required.'
   Assert-True ([string]$Signature.SignatureType -eq 'Authenticode') `
     "$ArtifactLabel does not contain a portable embedded Authenticode signature."
   Assert-True ($Signature.Status -eq [System.Management.Automation.SignatureStatus]::Valid) `
     "$ArtifactLabel Authenticode signature is not valid: $($Signature.Status)"
   Assert-True ($null -ne $Signature.SignerCertificate) `
     "$ArtifactLabel has no Authenticode signer certificate."
-  Assert-True (
-    [string]::Equals(
-      ($Signature.SignerCertificate.Thumbprint -replace '\s', '').ToUpperInvariant(),
-      $normalizedExpectedThumbprint,
-      [System.StringComparison]::Ordinal
-    )
-  ) "$ArtifactLabel signer does not match the imported production certificate."
+  if ($hasExpectedThumbprint) {
+    $normalizedExpectedThumbprint = ($ExpectedThumbprint -replace '\s', '').ToUpperInvariant()
+    Assert-True ($normalizedExpectedThumbprint -match '^[0-9A-F]{40}$') `
+      'Expected signer thumbprint must be exactly 40 hexadecimal characters.'
+    Assert-True (
+      [string]::Equals(
+        ($Signature.SignerCertificate.Thumbprint -replace '\s', '').ToUpperInvariant(),
+        $normalizedExpectedThumbprint,
+        [System.StringComparison]::Ordinal
+      )
+    ) "$ArtifactLabel signer does not match the imported production certificate."
+  } else {
+    Assert-True (
+      [string]::Equals(
+        [string]$Signature.SignerCertificate.Subject,
+        $ExpectedSubject,
+        [System.StringComparison]::Ordinal
+      )
+    ) "$ArtifactLabel signer subject does not match the approved production identity."
+  }
   Assert-True ($null -ne $Signature.TimeStamperCertificate) `
     "$ArtifactLabel has no validated Authenticode timestamp certificate."
+}
+
+function Assert-LifecycleReceiptApprovedSigner {
+  param(
+    [Parameter(Mandatory = $true)] [object]$Receipt,
+    [AllowEmptyString()] [string]$ExpectedThumbprint,
+    [AllowEmptyString()] [string]$ExpectedSubject
+  )
+
+  $hasExpectedThumbprint = -not [string]::IsNullOrWhiteSpace($ExpectedThumbprint)
+  $hasExpectedSubject = -not [string]::IsNullOrWhiteSpace($ExpectedSubject)
+  Assert-True ($hasExpectedThumbprint -xor $hasExpectedSubject) `
+    'Exactly one expected signer identity binding is required.'
+  $expectedSigner = if ($hasExpectedSubject) {
+    $ExpectedSubject
+  } else {
+    $normalizedExpectedThumbprint = ($ExpectedThumbprint -replace '\s', '').ToUpperInvariant()
+    Assert-True ($normalizedExpectedThumbprint -match '^[0-9A-F]{40}$') `
+      'Expected signer thumbprint must be exactly 40 hexadecimal characters.'
+    $normalizedExpectedThumbprint
+  }
+  $comparison = if ($hasExpectedSubject) {
+    [System.StringComparison]::Ordinal
+  } else {
+    [System.StringComparison]::OrdinalIgnoreCase
+  }
+  foreach ($artifact in @(
+    $Receipt.previousInstaller,
+    $Receipt.previousInstalledApp,
+    $Receipt.installer,
+    $Receipt.installedApp
+  )) {
+    $actualSigner = if ($hasExpectedSubject) {
+      [string]$artifact.signerSubject
+    } else {
+      [string]$artifact.signerThumbprint
+    }
+    Assert-True ([string]::Equals(
+      $actualSigner,
+      $expectedSigner,
+      $comparison
+    )) 'Previous and candidate artifacts are not signed by the same approved signer.'
+  }
 }
 
 function ConvertTo-StrictSemanticVersion {
@@ -157,7 +217,8 @@ function Assert-ArtifactIdentity {
   param(
     [Parameter(Mandatory = $true)] [string]$FilePath,
     [Parameter(Mandatory = $true)] [string]$ExpectedSha256,
-    [Parameter(Mandatory = $true)] [string]$ExpectedSignerThumbprint,
+    [AllowEmptyString()] [string]$ExpectedSignerThumbprint,
+    [AllowEmptyString()] [string]$ExpectedSignerSubject,
     [Parameter(Mandatory = $true)] [string]$ArtifactLabel
   )
 
@@ -170,7 +231,8 @@ function Assert-ArtifactIdentity {
     [System.StringComparison]::OrdinalIgnoreCase
   )) "$ArtifactLabel SHA-256 changed during certification."
   $signature = Get-AuthenticodeSignature -LiteralPath $FilePath
-  Assert-ExpectedAuthenticodeSignature $signature $ExpectedSignerThumbprint $ArtifactLabel
+  Assert-ExpectedAuthenticodeSignature `
+    $signature $ExpectedSignerThumbprint $ExpectedSignerSubject $ArtifactLabel
 }
 
 function Get-FreeTcpPort {
@@ -306,7 +368,9 @@ function Remove-CertificationControlEnvironment {
   $explicitNames = @(
     'CI', 'GH_TOKEN', 'GITHUB_TOKEN',
     'WINDOWS_CODESIGN_PFX_BASE64', 'WINDOWS_CODESIGN_PFX_PASSWORD',
-    'WINDOWS_UPGRADE_BASE_SHA256', 'WAGGLE_APPROVED_CODESIGN_THUMBPRINT',
+    'WINDOWS_CODESIGN_APPROVED_SUBJECT', 'WINDOWS_CODESIGN_APPROVED_THUMBPRINT',
+    'WINDOWS_UPGRADE_BASE_SHA256', 'WAGGLE_APPROVED_CODESIGN_SUBJECT',
+    'WAGGLE_APPROVED_CODESIGN_THUMBPRINT', 'WAGGLE_CODESIGN_SUBJECT',
     'WAGGLE_CODESIGN_THUMBPRINT', 'WAGGLE_RELEASE_VERSION'
   )
   foreach ($name in @($Info.Environment.Keys)) {
@@ -1567,6 +1631,20 @@ function Remove-CertificateProfileData {
     'Certificate profile cleanup did not remove the owned profile root.'
 }
 
+$hasExpectedSignerThumbprint = -not [string]::IsNullOrWhiteSpace($ExpectedSignerThumbprint)
+$hasExpectedSignerSubject = -not [string]::IsNullOrWhiteSpace($ExpectedSignerSubject)
+if ($RequireAuthenticodeSignature) {
+  Assert-True ($hasExpectedSignerThumbprint -xor $hasExpectedSignerSubject) `
+    'Exactly one expected signer identity binding is required when Authenticode is required.'
+  if ($hasExpectedSignerThumbprint) {
+    $normalizedExpectedSignerThumbprint = (
+      $ExpectedSignerThumbprint -replace '\s', ''
+    ).ToUpperInvariant()
+    Assert-True ($normalizedExpectedSignerThumbprint -match '^[0-9A-F]{40}$') `
+      'Expected signer thumbprint must be exactly 40 hexadecimal characters.'
+  }
+}
+
 $installer = Get-Item -LiteralPath $InstallerPath
 Assert-True (-not $installer.PSIsContainer) 'InstallerPath must be a file'
 Assert-True ($installer.Extension -eq '.exe') 'InstallerPath must be an NSIS .exe'
@@ -1635,7 +1713,10 @@ if ($RequireVersionToVersionUpgrade) {
   )) 'Previous installer does not match the protected SHA-256.'
   $previousInstallerSignature = Get-AuthenticodeSignature -LiteralPath $PreviousInstallerPath
   Assert-ExpectedAuthenticodeSignature `
-    $previousInstallerSignature $ExpectedSignerThumbprint 'Previous release installer'
+    $previousInstallerSignature `
+    $ExpectedSignerThumbprint `
+    $ExpectedSignerSubject `
+    'Previous release installer'
   $previousInstallerEvidence = New-AuthenticodeArtifactReceipt `
     $previousInstaller $previousInstallerSignature
   $previousInstallerEvidence['expectedVersion'] = $ExpectedPreviousVersion
@@ -1987,9 +2068,8 @@ try {
     $receipt.installer.timestampAuthorityNotAfter = $signature.TimeStamperCertificate.NotAfter.ToUniversalTime().ToString('o')
   }
   if ($RequireAuthenticodeSignature) {
-    Assert-True (-not [string]::IsNullOrWhiteSpace($ExpectedSignerThumbprint)) `
-      'Release certification requires the expected signer thumbprint.'
-    Assert-ExpectedAuthenticodeSignature $signature $ExpectedSignerThumbprint 'Release installer'
+    Assert-ExpectedAuthenticodeSignature `
+      $signature $ExpectedSignerThumbprint $ExpectedSignerSubject 'Release installer'
     $receipt.checks['authenticodeSignature'] = $true
     $receipt.checks['authenticodeSigner'] = $true
     $receipt.checks['authenticodeTimestamp'] = $true
@@ -2127,6 +2207,7 @@ try {
       $PreviousInstallerPath `
       $ExpectedPreviousInstallerSha256 `
       $ExpectedSignerThumbprint `
+      $ExpectedSignerSubject `
       'Previous installer before install'
     Invoke-RawProcess $PreviousInstallerPath "/S /D=$installDir" 420
     Wait-ForPathState $appExecutable $true
@@ -2156,7 +2237,10 @@ try {
     $previousInstalledAppFile = Get-Item -LiteralPath $appExecutable
     $previousInstalledAppSignature = Get-AuthenticodeSignature -LiteralPath $appExecutable
     Assert-ExpectedAuthenticodeSignature `
-      $previousInstalledAppSignature $ExpectedSignerThumbprint 'Previous installed Waggle executable'
+      $previousInstalledAppSignature `
+      $ExpectedSignerThumbprint `
+      $ExpectedSignerSubject `
+      'Previous installed Waggle executable'
     $previousInstalledProductVersion = Get-InstalledProductVersion `
       $appExecutable 'Previous installed Waggle executable'
     Assert-True ($previousInstalledProductVersion.normalized -eq $ExpectedPreviousVersion) `
@@ -2254,12 +2338,14 @@ try {
       $InstallerPath `
       $ExpectedCandidateInstallerSha256 `
       $ExpectedSignerThumbprint `
+      $ExpectedSignerSubject `
       'Candidate installer before upgrade'
     Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
     Assert-ArtifactIdentity `
       $InstallerPath `
       $ExpectedCandidateInstallerSha256 `
       $ExpectedSignerThumbprint `
+      $ExpectedSignerSubject `
       'Candidate installer after upgrade'
     Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `
       -ManagedRuntimeRoot $managedRuntimeRoot -AdditionalPorts @($ollamaPort, $webViewDebugPort)
@@ -2465,7 +2551,8 @@ try {
   }
   $receipt.checks['installedAppPayload'] = $true
   if ($RequireAuthenticodeSignature) {
-    Assert-ExpectedAuthenticodeSignature $installedAppSignature $ExpectedSignerThumbprint 'Installed Waggle executable'
+    Assert-ExpectedAuthenticodeSignature `
+      $installedAppSignature $ExpectedSignerThumbprint $ExpectedSignerSubject 'Installed Waggle executable'
     $receipt.checks['installedAppAuthenticodeSignature'] = $true
     $receipt.checks['installedAppAuthenticodeSigner'] = $true
     $receipt.checks['installedAppAuthenticodeTimestamp'] = $true
@@ -2477,15 +2564,8 @@ try {
       'Installed candidate executable version does not match the protected candidate version.'
     $receipt.installedApp['productVersion'] = $installedProductVersion.raw
     $receipt.upgrade.observedCandidateVersion = $installedProductVersion.normalized
-    Assert-True ([string]::Equals(
-      [string]$receipt.previousInstaller.signerThumbprint,
-      [string]$receipt.installer.signerThumbprint,
-      [System.StringComparison]::OrdinalIgnoreCase
-    ) -and [string]::Equals(
-      [string]$receipt.previousInstalledApp.signerThumbprint,
-      [string]$receipt.installedApp.signerThumbprint,
-      [System.StringComparison]::OrdinalIgnoreCase
-    )) 'Previous and candidate artifacts are not signed by the same approved signer.'
+    Assert-LifecycleReceiptApprovedSigner `
+      $receipt $ExpectedSignerThumbprint $ExpectedSignerSubject
     $receipt.checks['sameApprovedSigner'] = $true
   }
 
@@ -2797,6 +2877,7 @@ try {
       $InstallerPath `
       $ExpectedCandidateInstallerSha256 `
       $ExpectedSignerThumbprint `
+      $ExpectedSignerSubject `
       'Candidate installer before repair'
   }
   Invoke-RawProcess $InstallerPath "/S /D=$installDir" 420
@@ -2805,6 +2886,7 @@ try {
       $InstallerPath `
       $ExpectedCandidateInstallerSha256 `
       $ExpectedSignerThumbprint `
+      $ExpectedSignerSubject `
       'Candidate installer after repair'
   }
   Wait-ForInstalledRuntimeStop $appExecutable $serviceScript 3333 `

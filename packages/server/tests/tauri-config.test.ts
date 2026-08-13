@@ -2271,6 +2271,354 @@ Expect-Rejection {
   );
 
   it.runIf(process.platform === 'win32')(
+    'release signer identity accepts exact subjects or legacy thumbprints, never both',
+    () => {
+      const publisher = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'publish-windows-release.ps1'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const helperStart = publisher.indexOf('function Get-ProtectedSignerIdentity {');
+      const helperEnd = publisher.indexOf(
+        '\nfunction Assert-PassingWindowsCertificateReceipt {',
+        helperStart,
+      );
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-signer-identity-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$subject = 'CN=Managed Identity, O=Fixture Corp, C=NL'
+$thumbprint = '0123456789abcdef0123456789abcdef01234567'
+$artifactPath = Join-Path $PSScriptRoot 'fixture.exe'
+[System.IO.File]::WriteAllText($artifactPath, 'fixture')
+$artifact = Get-Item -LiteralPath $artifactPath
+$script:fakeSignature = [pscustomobject]@{
+  Status = 'Valid'
+  SignatureType = 'Authenticode'
+  SignerCertificate = [pscustomobject]@{
+    Subject = $subject
+    Thumbprint = $thumbprint
+  }
+  TimeStamperCertificate = [pscustomobject]@{ Subject = 'CN=Timestamp Fixture' }
+}
+function Get-AuthenticodeSignature { return $script:fakeSignature }
+
+Remove-Item Env:WINDOWS_CODESIGN_APPROVED_SUBJECT -ErrorAction SilentlyContinue
+Remove-Item Env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT -ErrorAction SilentlyContinue
+Expect-Rejection { Get-ProtectedSignerIdentity } 'missing identity'
+$env:WINDOWS_CODESIGN_APPROVED_SUBJECT = $subject
+$env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT = $thumbprint
+Expect-Rejection { Get-ProtectedSignerIdentity } 'ambiguous identity'
+
+Remove-Item Env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT
+$subjectBinding = Get-ProtectedSignerIdentity
+if ($subjectBinding.mode -cne 'subject' -or $subjectBinding.subject -cne $subject) {
+  throw 'Exact subject binding was not preserved'
+}
+$actualSubjectIdentity = Assert-ExpectedAuthenticodeSignature $artifact $subjectBinding
+
+Remove-Item Env:WINDOWS_CODESIGN_APPROVED_SUBJECT
+$env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT = '01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef 01 23 45 67'
+$thumbprintBinding = Get-ProtectedSignerIdentity
+if ($thumbprintBinding.mode -cne 'thumbprint' -or
+    $thumbprintBinding.thumbprint -cne $thumbprint.ToUpperInvariant()) {
+  throw 'Legacy thumbprint binding was not normalized'
+}
+$actualThumbprintIdentity = Assert-ExpectedAuthenticodeSignature $artifact $thumbprintBinding
+
+$receiptArtifact = [pscustomobject]@{
+  signerSubject = $subject
+  signerThumbprint = $thumbprint
+}
+Assert-ReceiptSignerIdentity $receiptArtifact $actualSubjectIdentity 'valid receipt'
+$receiptArtifact.signerSubject = $subject.ToLowerInvariant()
+Expect-Rejection {
+  Assert-ReceiptSignerIdentity $receiptArtifact $actualSubjectIdentity 'wrong-case subject'
+} 'wrong-case subject receipt'
+$receiptArtifact.signerSubject = $subject
+$receiptArtifact.signerThumbprint = 'ffffffffffffffffffffffffffffffffffffffff'
+Expect-Rejection {
+  Assert-ReceiptSignerIdentity $receiptArtifact $actualThumbprintIdentity 'wrong thumbprint'
+} 'wrong thumbprint receipt'
+
+$script:fakeSignature.SignatureType = 'Catalog'
+Expect-Rejection {
+  Assert-ExpectedAuthenticodeSignature $artifact $subjectBinding
+} 'non-embedded signature'
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${publisher.slice(helperStart, helperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(`Signer identity probe failed: ${result.stderr || result.stdout}`);
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'release identity receipts remain rotation-safe without weakening legacy pinning',
+    () => {
+      const publisher = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'publish-windows-release.ps1'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const helperStart = publisher.indexOf('function Get-ProtectedSignerIdentity {');
+      const helperEnd = publisher.indexOf(
+        '\nfunction Assert-PassingWindowsCertificateReceipt {',
+        helperStart,
+      );
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-signer-rotation-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$subject = 'CN=Managed Identity, O=Fixture Corp, C=NL'
+$previousThumbprint = '1111111111111111111111111111111111111111'
+$candidateThumbprint = '2222222222222222222222222222222222222222'
+$previousPath = Join-Path $PSScriptRoot 'previous.exe'
+$candidatePath = Join-Path $PSScriptRoot 'candidate.exe'
+[System.IO.File]::WriteAllText($previousPath, 'previous')
+[System.IO.File]::WriteAllText($candidatePath, 'candidate')
+$previousArtifact = Get-Item -LiteralPath $previousPath
+$candidateArtifact = Get-Item -LiteralPath $candidatePath
+$script:signatureByName = @{
+  'previous.exe' = [pscustomobject]@{
+    Status = 'Valid'
+    SignatureType = 'Authenticode'
+    SignerCertificate = [pscustomobject]@{
+      Subject = $subject
+      Thumbprint = $previousThumbprint
+    }
+    TimeStamperCertificate = [pscustomobject]@{ Subject = 'CN=Timestamp Fixture' }
+  }
+  'candidate.exe' = [pscustomobject]@{
+    Status = 'Valid'
+    SignatureType = 'Authenticode'
+    SignerCertificate = [pscustomobject]@{
+      Subject = $subject
+      Thumbprint = $candidateThumbprint
+    }
+    TimeStamperCertificate = [pscustomobject]@{ Subject = 'CN=Timestamp Fixture' }
+  }
+}
+function Get-AuthenticodeSignature {
+  param([string]$FilePath)
+  return $script:signatureByName[(Split-Path -Leaf $FilePath)]
+}
+
+$env:WINDOWS_CODESIGN_APPROVED_SUBJECT = $subject
+Remove-Item Env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT -ErrorAction SilentlyContinue
+$subjectBinding = Get-ProtectedSignerIdentity
+$previousIdentity = Assert-ExpectedAuthenticodeSignature $previousArtifact $subjectBinding
+$candidateIdentity = Assert-ExpectedAuthenticodeSignature $candidateArtifact $subjectBinding
+if ($previousIdentity.thumbprint -ceq $candidateIdentity.thumbprint) {
+  throw 'Rotation fixture did not produce distinct certificate thumbprints'
+}
+
+$previousReceiptIdentity = [pscustomobject]@{
+  signerSubject = $subject
+  signerThumbprint = $previousThumbprint
+}
+$candidateReceiptIdentity = [pscustomobject]@{
+  signerSubject = $subject
+  signerThumbprint = $candidateThumbprint
+}
+$lifecycleReceipt = [pscustomobject]@{
+  previousInstaller = $previousReceiptIdentity
+  previousInstalledApp = $previousReceiptIdentity
+  installer = $candidateReceiptIdentity
+  installedApp = $candidateReceiptIdentity
+}
+Assert-LifecycleReceiptSignerIdentities $lifecycleReceipt $previousIdentity $candidateIdentity
+$swappedLifecycleReceipt = [pscustomobject]@{
+  previousInstaller = $candidateReceiptIdentity
+  previousInstalledApp = $candidateReceiptIdentity
+  installer = $previousReceiptIdentity
+  installedApp = $previousReceiptIdentity
+}
+Expect-Rejection {
+  Assert-LifecycleReceiptSignerIdentities $swappedLifecycleReceipt $previousIdentity $candidateIdentity
+} 'swapped lifecycle receipt mappings'
+
+Remove-Item Env:WINDOWS_CODESIGN_APPROVED_SUBJECT
+$env:WINDOWS_CODESIGN_APPROVED_THUMBPRINT = $previousThumbprint
+$legacyBinding = Get-ProtectedSignerIdentity
+$null = Assert-ExpectedAuthenticodeSignature $previousArtifact $legacyBinding
+Expect-Rejection {
+  Assert-ExpectedAuthenticodeSignature $candidateArtifact $legacyBinding
+} 'legacy fixed-thumbprint rotation'
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${publisher.slice(helperStart, helperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(`Signer rotation probe failed: ${result.stderr || result.stdout}`);
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'installer certifier applies the chosen signer identity to Authenticode evidence',
+    () => {
+      const certifier = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const helperStart = certifier.indexOf('function Assert-True {');
+      const helperEnd = certifier.indexOf(
+        '\nfunction ConvertTo-StrictSemanticVersion {',
+        helperStart,
+      );
+      const environmentHelperStart = certifier.indexOf(
+        'function Remove-CertificationControlEnvironment {',
+      );
+      const environmentHelperEnd = certifier.indexOf(
+        '\nfunction Invoke-RawProcess {',
+        environmentHelperStart,
+      );
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+      expect(environmentHelperStart).toBeGreaterThanOrEqual(0);
+      expect(environmentHelperEnd).toBeGreaterThan(environmentHelperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-certifier-signer-'));
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const fixtureSource = String.raw`
+function Expect-Rejection {
+  param([scriptblock]$Action, [string]$Label)
+  $rejected = $false
+  try { & $Action } catch { $rejected = $true }
+  if (-not $rejected) { throw "$Label was accepted" }
+}
+
+$subject = 'CN=Managed Identity, O=Fixture Corp, C=NL'
+$thumbprint = '0123456789abcdef0123456789abcdef01234567'
+$signature = [pscustomobject]@{
+  Status = [System.Management.Automation.SignatureStatus]::Valid
+  SignatureType = 'Authenticode'
+  SignerCertificate = [pscustomobject]@{
+    Subject = $subject
+    Thumbprint = $thumbprint
+  }
+  TimeStamperCertificate = [pscustomobject]@{ Subject = 'CN=Timestamp Fixture' }
+}
+
+Assert-ExpectedAuthenticodeSignature $signature '' $subject 'subject fixture'
+Assert-ExpectedAuthenticodeSignature $signature $thumbprint '' 'thumbprint fixture'
+$rotatedThumbprint = 'fedcba9876543210fedcba9876543210fedcba98'
+$previousReceiptIdentity = [pscustomobject]@{
+  signerSubject = $subject
+  signerThumbprint = $thumbprint
+}
+$candidateReceiptIdentity = [pscustomobject]@{
+  signerSubject = $subject
+  signerThumbprint = $rotatedThumbprint
+}
+$lifecycleReceipt = [pscustomobject]@{
+  previousInstaller = $previousReceiptIdentity
+  previousInstalledApp = $previousReceiptIdentity
+  installer = $candidateReceiptIdentity
+  installedApp = $candidateReceiptIdentity
+}
+Assert-LifecycleReceiptApprovedSigner $lifecycleReceipt '' $subject
+Expect-Rejection {
+  Assert-LifecycleReceiptApprovedSigner $lifecycleReceipt $thumbprint ''
+} 'legacy certifier rotated candidate'
+$processInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$protectedIdentityNames = @(
+  'WINDOWS_CODESIGN_APPROVED_SUBJECT',
+  'WINDOWS_CODESIGN_APPROVED_THUMBPRINT',
+  'WAGGLE_APPROVED_CODESIGN_SUBJECT',
+  'WAGGLE_APPROVED_CODESIGN_THUMBPRINT',
+  'WAGGLE_CODESIGN_SUBJECT',
+  'WAGGLE_CODESIGN_THUMBPRINT'
+)
+foreach ($name in $protectedIdentityNames) {
+  $processInfo.Environment[$name] = 'must-not-reach-installed-process'
+}
+$processInfo.Environment['WAGGLE_NON_CONTROL_FIXTURE'] = 'preserve'
+Remove-CertificationControlEnvironment $processInfo
+foreach ($name in $protectedIdentityNames) {
+  if ($processInfo.Environment.ContainsKey($name)) {
+    throw "Protected signer identity environment escaped certification: $name"
+  }
+}
+if ($processInfo.Environment['WAGGLE_NON_CONTROL_FIXTURE'] -cne 'preserve') {
+  throw 'Unrelated application environment was removed'
+}
+Expect-Rejection {
+  Assert-ExpectedAuthenticodeSignature $signature '' '' 'missing binding'
+} 'missing signer binding'
+Expect-Rejection {
+  Assert-ExpectedAuthenticodeSignature $signature $thumbprint $subject 'ambiguous binding'
+} 'ambiguous signer binding'
+Expect-Rejection {
+  Assert-ExpectedAuthenticodeSignature $signature '' $subject.ToLowerInvariant() 'wrong subject'
+} 'wrong-case signer subject'
+$signature.SignatureType = 'Catalog'
+Expect-Rejection {
+  Assert-ExpectedAuthenticodeSignature $signature '' $subject 'catalog signature'
+} 'non-embedded signature'
+`;
+
+      try {
+        fs.writeFileSync(
+          probePath,
+          `${certifier.slice(helperStart, helperEnd)}\n${certifier.slice(environmentHelperStart, environmentHelperEnd)}\n${fixtureSource}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        if (result.status !== 0) {
+          throw new Error(`Certifier signer identity probe failed: ${result.stderr || result.stdout}`);
+        }
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
     'release publisher binds release identity and exact asset bytes',
     () => {
       const publisher = fs
@@ -2610,7 +2958,19 @@ Expect-Rejection {
         );
         expect(publisher).toContain('Assert-ExpectedAuthenticodeSignature $installer');
         expect(publisher).toContain('Assert-ExpectedAuthenticodeSignature $baseInstaller');
+        expect(publisher).toContain('WINDOWS_CODESIGN_APPROVED_SUBJECT');
         expect(publisher).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
+        expect(publisher).toContain('Exactly one protected publication signer identity must be configured');
+        expect(publisher).toContain('function Assert-ReceiptSignerIdentity');
+        expect(publisher).toContain('function Assert-LifecycleReceiptSignerIdentities');
+        expect([
+          ...publisher.matchAll(/^\s+Assert-LifecycleReceiptSignerIdentities `$/gm),
+        ]).toHaveLength(1);
+        expect(publisher).toContain('signerSubject');
+        expect(publisher).toContain("SignatureType -ne 'Authenticode'");
+        expect(publisher).not.toContain(
+          'CN=EGZAKTA DOO BEOGRAD, O=EGZAKTA DOO BEOGRAD, L=Amsterdam, C=NL',
+        );
         expect(publisher).toContain('$env:GITHUB_REF_NAME');
         expect(publisher).not.toContain("$tag = '${{ github.ref_name }}'");
         expect(publisher).toContain('versionToVersionUpgrade');
@@ -2920,6 +3280,16 @@ Expect-Rejection {
     expect(script).not.toContain('embeddingModelVerified');
     expect(script).toContain('RequireAuthenticodeSignature');
     expect(script).toContain('ExpectedSignerThumbprint');
+    expect(script).toContain('ExpectedSignerSubject');
+    expect(script).toContain('Exactly one expected signer identity binding is required');
+    expect(script).toContain('function Assert-LifecycleReceiptApprovedSigner');
+    expect([
+      ...script.matchAll(/^\s+Assert-LifecycleReceiptApprovedSigner `$/gm),
+    ]).toHaveLength(1);
+    expect(script).toContain('[System.StringComparison]::Ordinal');
+    expect(script).not.toContain(
+      'CN=EGZAKTA DOO BEOGRAD, O=EGZAKTA DOO BEOGRAD, L=Amsterdam, C=NL',
+    );
     expect(script).toContain('ExpectedSourceRevision');
     expect(script).toContain('function Get-SidecarProvenance');
     expect(script).toContain('Packaged resources/service.js does not match a clean sidecar rebuild.');
@@ -2958,6 +3328,10 @@ Expect-Rejection {
     expect(script).toContain('Remove-CertificationControlEnvironment');
     expect(script).toContain("'^(?:ACTIONS_|GITHUB_|RUNNER_|WAGGLE_UPGRADE_BASE_)'");
     expect(script).toContain("'GH_TOKEN', 'GITHUB_TOKEN'");
+    expect(script).toContain("'WINDOWS_CODESIGN_APPROVED_SUBJECT'");
+    expect(script).toContain("'WINDOWS_CODESIGN_APPROVED_THUMBPRINT'");
+    expect(script).toContain("'WAGGLE_APPROVED_CODESIGN_SUBJECT'");
+    expect(script).toContain("'WAGGLE_CODESIGN_SUBJECT'");
     expect(script).toContain("$receipt.checks['candidateInstallerHash']");
     const previousInstallIndex = script.indexOf('Invoke-RawProcess $PreviousInstallerPath');
     const previousLaunchIndex = script.indexOf('$previousProcess = Start-InstalledApp');
