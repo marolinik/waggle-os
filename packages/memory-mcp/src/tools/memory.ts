@@ -49,7 +49,14 @@ export function registerMemoryTools(server: McpServer): void {
       const src = (source ?? 'agent_inferred') as FrameSource;
 
       // Resolve target mind
-      const target = workspace ? getWorkspaceMind(workspace) : null;
+      const workspaceRequested = workspace !== undefined;
+      const target = workspaceRequested ? getWorkspaceMind(workspace) : null;
+      if (workspaceRequested && !target) {
+        return {
+          content: [{ type: 'text' as const, text: 'Error: Requested workspace is unavailable.' }],
+          isError: true,
+        };
+      }
       const frameStore = target?.frameStore ?? getFrameStore();
       const sessions = target?.sessions ?? getSessions();
       const search = target?.search ?? getSearch();
@@ -77,7 +84,7 @@ export function registerMemoryTools(server: McpServer): void {
             importance: frame.importance,
             source: frame.source,
             created_at: frame.created_at,
-            workspace: workspace ?? 'personal',
+            workspace: workspaceRequested ? workspace : 'personal',
           }, null, 2),
         }],
       };

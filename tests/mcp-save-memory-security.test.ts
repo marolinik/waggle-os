@@ -26,8 +26,7 @@ vi.mock('../packages/memory-mcp/src/core/setup.js', () => ({
   },
   getEmbedder: vi.fn(),
   getWorkspaceMind: (workspace: string) => {
-    setupMocks.getWorkspaceMind(workspace);
-    return null;
+    return setupMocks.getWorkspaceMind(workspace);
   },
   getWorkspaceManager: () => ({ list: () => [] }),
 }));
@@ -46,8 +45,7 @@ vi.mock('../packages/hive-mind-mcp-server/src/core/setup.js', () => ({
     return { ensure: setupMocks.sessionEnsure };
   },
   getWorkspaceMind: (workspace: string) => {
-    setupMocks.getWorkspaceMind(workspace);
-    return null;
+    return setupMocks.getWorkspaceMind(workspace);
   },
   getWorkspaceManager: () => ({ list: () => [] }),
 }));
@@ -108,6 +106,51 @@ describe.each(surfaces)('$name save_memory ingress safety', (surface) => {
       }),
     );
     setupMocks.indexFrame.mockReset().mockResolvedValue(undefined);
+  });
+
+  it.each(['missing-workspace', '', '<hostile-workspace>']) (
+    'rejects unavailable workspace %j without falling back or reflecting input',
+    async (workspace) => {
+    const result = await surface.saveMemory({
+      content: 'Store only in the requested workspace.',
+      workspace,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toBe('Error: Requested workspace is unavailable.');
+    if (workspace) expect(resultText(result)).not.toContain(workspace);
+    expect(setupMocks.getWorkspaceMind).toHaveBeenCalledWith(workspace);
+    expect(setupMocks.getFrameStore).not.toHaveBeenCalled();
+    expect(setupMocks.getSessions).not.toHaveBeenCalled();
+    expect(setupMocks.getSearch).not.toHaveBeenCalled();
+    expect(setupMocks.createIFrame).not.toHaveBeenCalled();
+    },
+  );
+
+  it('persists into a valid requested workspace without touching personal memory', async () => {
+    setupMocks.getWorkspaceMind.mockReturnValue({
+      frameStore: { createIFrame: setupMocks.createIFrame },
+      sessions: { ensure: setupMocks.sessionEnsure },
+      search: { indexFrame: setupMocks.indexFrame },
+    });
+    const content = 'Workspace-scoped launch decision.';
+    const result = await surface.saveMemory({
+      content,
+      importance: 'important',
+      source: 'user_stated',
+      workspace: 'launch-workspace',
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(setupMocks.getWorkspaceMind).toHaveBeenCalledWith('launch-workspace');
+    expect(setupMocks.getFrameStore).not.toHaveBeenCalled();
+    expect(setupMocks.getSessions).not.toHaveBeenCalled();
+    expect(setupMocks.getSearch).not.toHaveBeenCalled();
+    expect(setupMocks.createIFrame).toHaveBeenCalledWith(
+      'mcp-session', content, 'important', 'user_stated',
+    );
+    expect(setupMocks.indexFrame).toHaveBeenCalledWith(42, content);
+    expect(resultText(result)).toContain('"workspace": "launch-workspace"');
   });
 
   it.each([
