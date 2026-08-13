@@ -594,6 +594,45 @@ export async function requestSidecarSessionToken(
   return parsed as Record<string, unknown>;
 }
 
+export async function seedQualificationDailySpend(
+  dataDir: string,
+  amountUsd: number,
+  timestamp = new Date().toISOString(),
+): Promise<void> {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    throw new RangeError('Qualification spend seed must be a positive finite amount');
+  }
+  await mkdir(dataDir, { recursive: true });
+  const [{ MindDB }, { ExecutionTraceStore }] = await Promise.all([
+    import('../packages/hive-mind-core/src/mind/db.js'),
+    import('../packages/hive-mind-core/src/mind/execution-traces.js'),
+  ]);
+  const db = new MindDB(path.join(dataDir, 'personal.mind'));
+  try {
+    const store = new ExecutionTraceStore(db);
+    const traceId = store.start({
+      sessionId: 'smart-router-qualification',
+      model: 'qualification-spend-seed',
+      taskShape: 'smart-router-qualification',
+      input: 'Seed deterministic smart-router qualification spend',
+      tags: ['qualification', 'model-spend:seed'],
+    });
+    const reservationId = store.reserveCost(traceId, amountUsd, timestamp);
+    if (!store.settleReservedCost(reservationId, amountUsd, timestamp)) {
+      throw new Error('Qualification spend reservation did not settle');
+    }
+    if (!store.finalize(traceId, {
+      outcome: 'success',
+      output: 'Seeded deterministic smart-router qualification spend',
+      tags: ['qualification', 'model-spend:seed'],
+    })) {
+      throw new Error('Qualification spend trace did not finalize');
+    }
+  } finally {
+    db.close();
+  }
+}
+
 export async function postJsonForStatus(
   url: string,
   body: Record<string, unknown>,
@@ -1109,6 +1148,7 @@ async function qualify(options: QualifierOptions): Promise<void> {
 
     auditProxy = await startAuditProxy({ port: auditProxyPort, targetEndpoint: ollamaEndpoint, dispatches });
 
+    await seedQualificationDailySpend(serviceDataDir, QUALIFICATION_DAILY_SPEND_USD);
     const service = await startService({ dataDir: serviceDataDir, port: servicePort, litellmPort, skipLiteLLM: true });
     server = service.server;
     const tokenResponse = await requestSidecarSessionToken(serviceBaseUrl);
@@ -1129,10 +1169,6 @@ async function qualify(options: QualifierOptions): Promise<void> {
       budgetThreshold: persisted.budgetThreshold,
     };
     const qualificationDay = new Date().toISOString().slice(0, 10);
-    service.server.agentState.costTracker.initializeDailyCarryover(
-      qualificationDay,
-      QUALIFICATION_DAILY_SPEND_USD,
-    );
     const seededDailySpend = service.server.agentState.costTracker.getDailyTotal();
     if (seededDailySpend !== QUALIFICATION_DAILY_SPEND_USD) {
       throw new Error(`Qualification daily spend seed must be $${QUALIFICATION_DAILY_SPEND_USD.toFixed(2)}, received $${seededDailySpend.toFixed(2)}`);
@@ -1140,7 +1176,7 @@ async function qualify(options: QualifierOptions): Promise<void> {
     receipt.qualificationDailySpend = {
       day: qualificationDay,
       amountUsd: seededDailySpend,
-      source: 'cost-tracker daily carryover seed',
+      source: 'pre-start durable execution-trace spend seed',
     };
 
     const routerCases: ChatReceipt[] = [];

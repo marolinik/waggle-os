@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, it } from 'vitest';
+import { CostTracker } from '../packages/agent/src/cost-tracker.js';
+import { MindDB } from '../packages/hive-mind-core/src/mind/db.js';
+import { ExecutionTraceStore } from '../packages/hive-mind-core/src/mind/execution-traces.js';
 import {
   assertQualifiedChatCase,
   assertQualifiedToolContextCase,
@@ -22,11 +28,33 @@ import {
   postJsonForStatus,
   requestSidecarSessionToken,
   recordAliasBeforeCopy,
+  seedQualificationDailySpend,
   startAuditProxy,
 } from './qualify-smart-router.js';
 import { routeMessage } from '../packages/agent/src/smart-router.js';
 
 describe('qualify-smart-router helpers', () => {
+  it('seeds qualification spend through the durable ledger before server startup', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'waggle-router-spend-seed-'));
+    const timestamp = new Date().toISOString();
+    const day = timestamp.slice(0, 10);
+    try {
+      await seedQualificationDailySpend(dataDir, 0.8, timestamp);
+      const db = new MindDB(path.join(dataDir, 'personal.mind'));
+      try {
+        const persisted = new ExecutionTraceStore(db).getTotalCostSince(`${day}T00:00:00.000Z`);
+        assert.equal(persisted, 0.8);
+        const tracker = new CostTracker({});
+        tracker.initializeDailyCarryover(day, persisted);
+        assert.equal(tracker.getDailyTotal(), 0.8);
+      } finally {
+        db.close();
+      }
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it('binds session bootstrap to the exact dynamic sidecar authority', async () => {
     const baseUrl = 'http://127.0.0.1:49152';
     const fetchImpl = async (input: string | URL, init?: RequestInit) => {
