@@ -20,12 +20,30 @@ import {
   parseSse,
   partitionWindowsProcesses,
   postJsonForStatus,
+  requestSidecarSessionToken,
   recordAliasBeforeCopy,
   startAuditProxy,
 } from './qualify-smart-router.js';
 import { routeMessage } from '../packages/agent/src/smart-router.js';
 
 describe('qualify-smart-router helpers', () => {
+  it('binds session bootstrap to the exact dynamic sidecar authority', async () => {
+    const baseUrl = 'http://127.0.0.1:49152';
+    const fetchImpl = async (input: string | URL, init?: RequestInit) => {
+      assert.equal(String(input), `${baseUrl}/api/auth/session-token`);
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('origin'), baseUrl);
+      assert.equal(headers.get('sec-fetch-site'), 'same-origin');
+      return new Response(JSON.stringify({ token: 'session-token' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    const response = await requestSidecarSessionToken(baseUrl, fetchImpl);
+    assert.equal(response.token, 'session-token');
+  });
+
   it('strictly parses JSON SSE events', () => {
     const events = parseSse([
       'event: token',

@@ -578,6 +578,22 @@ async function requestJson(url: string, init: RequestInit = {}, timeoutMs = 30_0
   return parsed as Record<string, unknown>;
 }
 
+export async function requestSidecarSessionToken(
+  baseUrl: string,
+  fetchImpl: (input: string | URL, init?: RequestInit) => Promise<Response> = fetch,
+): Promise<Record<string, unknown>> {
+  const url = `${baseUrl}/api/auth/session-token`;
+  const response = await fetchImpl(url, {
+    headers: { origin: baseUrl, 'sec-fetch-site': 'same-origin' },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}: ${text.slice(0, 500)}`);
+  const parsed: unknown = JSON.parse(text);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error(`${url} returned non-object JSON`);
+  return parsed as Record<string, unknown>;
+}
+
 export async function postJsonForStatus(
   url: string,
   body: Record<string, unknown>,
@@ -1095,7 +1111,7 @@ async function qualify(options: QualifierOptions): Promise<void> {
 
     const service = await startService({ dataDir: serviceDataDir, port: servicePort, litellmPort, skipLiteLLM: true });
     server = service.server;
-    const tokenResponse = await requestJson(`${serviceBaseUrl}/api/auth/session-token`);
+    const tokenResponse = await requestSidecarSessionToken(serviceBaseUrl);
     if (typeof tokenResponse.token !== 'string' || !tokenResponse.token) throw new Error('Sidecar did not issue a loopback session token');
     const headers = { authorization: `Bearer ${tokenResponse.token}` };
     const settings = buildRouterSettings(aliases);
