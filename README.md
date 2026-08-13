@@ -14,25 +14,26 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 
 Release status and exact-HEAD receipts are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
-### Historical readiness checkpoint — 2026-08-11
+### Frozen Windows Solo candidate evidence — 2026-08-13
 
-The last sealed readiness checkpoint was `43fcfdfd6c5141eebf0f1d646d0fb36c0283c8f9`.
-The readiness branch has advanced since then, so the evidence below is historical until
-the final HEAD is rebuilt and resealed:
+The frozen tested code candidate is `692c69b9a6586b15ccc6f3f2eb40c65a95acd3aa`.
 
-- 10-persona paid acceptance: **30/30 receipts, 100/100 each**, sealed at
-  [`output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/seal.json`](output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/seal.json).
-- Smart-router/runtime qualification: **passed**, Docker not invoked, managed Ollama fallback and compact tool context verified in
-  [`output/smart-router/qualification-20260811-43fcfdfd-retry2.json`](output/smart-router/qualification-20260811-43fcfdfd-retry2.json).
-- Claude Code, Codex, and Hermes official-auth canaries: **passed** without copying auth files in
-  [`official-auth-receipt.json`](C:/tmp/waggle-readiness-evidence/official-auth-43fcfdfd-20260811/official-auth-receipt.json).
+- Paid ten-persona acceptance: **30/30 accepted, all selected receipts 100/100** in
+  [`output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/seal.json`](output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/seal.json).
+- Smart-router/runtime qualification: **passed** all four paths with managed Ollama,
+  durable budget carry-over, compact tool context, and no Docker in
+  [`output/smart-router/qualification-20260813T022319Z-692c69b9.json`](output/smart-router/qualification-20260813T022319Z-692c69b9.json).
+- Claude Code, Codex, and Hermes official-auth canaries: **passed** without reading or
+  copying auth files in [`official-auth-receipt.json`](C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json).
+- The unsigned internal NSIS candidate, SHA-256
+  `636DCD22BEB0765D8D15202A3268717385B383C9A8D7B6217650FEEB9A922D0A`,
+  passed **59/59** clean-profile lifecycle and managed-model checks in
+  [`windows-installer-certificate-692c69b9-20260813T031200Z-managed.json`](output/installer-certification/692c69b9-20260813T025915Z/windows-installer-certificate-692c69b9-20260813T031200Z-managed.json).
 
-The release is **not yet approved**. Before the external release blockers can close,
-the final HEAD still needs fresh persona, smart-router, official-auth, installer/runtime,
-dependency, and affected regression receipts. Publicly trusted Authenticode signing and
-a sealed formal deep security review also remain open. The pilot signature at the
-historical checkpoint proved the signing pipeline only; its self-signed root was not
-trusted on a clean machine. These are release-gate facts, not a production-ready claim.
+The internal Windows Solo release candidate is qualified, but the public Windows binary release
+is **not yet approved**. A publicly trusted Authenticode signature and a sealed managed Codex Security Deep
+Scan remain open. A later documentation-only release-record commit is a no-impact attestation
+over this frozen code candidate; it does not relabel older binaries or test receipts.
 
 ## Architecture
 

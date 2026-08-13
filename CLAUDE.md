@@ -56,6 +56,12 @@ WaggleDance, governance) is the upgrade trigger.
   compact-tool-context, budget, and fallback paths. A user-installed Ollama remains optional.
 - Runtime, agent, persona, and security claims are valid only for the exact source revision and
   installer SHA-256 sealed by the current launch recommendation; older receipts are historical evidence.
+- A descendant commit may carry a documented no-impact attestation only when every non-documentation
+  change is confined to a non-shipping release-qualification harness, is independently reviewed, and
+  passes focused tests and lint. Runtime/persona/router/auth/installer receipts must still name the
+  exact frozen code candidate; any shipped/runtime behavior change requires fresh affected receipts.
+  A release-record-only Markdown descendant does not change the sealed code revision or installer
+  SHA-256, which every claim must continue to name.
 - A GO seal requires a valid 30/30 persona seal across 10 personas at >=95/100 plus a final-HEAD
   no-impact attestation, or a fresh 30/30 rerun when intervening changes affect persona/chat/provider/
   memory/routing behavior. It also requires exact-HEAD Claude Code/Codex/Hermes canaries using
@@ -63,35 +69,34 @@ WaggleDance, governance) is the upgrade trigger.
 - Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
   unless the current launch recommendation says GO for that same release.
 
-### Historical exact-HEAD evidence checkpoint (2026-08-11)
+### Frozen Windows Solo candidate evidence (2026-08-13)
 
-The last sealed readiness checkpoint was `43fcfdfd6c5141eebf0f1d646d0fb36c0283c8f9`.
-The branch has advanced since that revision, so the following receipts are historical
-and must not be presented as current release evidence:
+The frozen tested code candidate is `692c69b9a6586b15ccc6f3f2eb40c65a95acd3aa`.
 
-- Persona acceptance: 30/30 fresh receipts across the ten launch personas, each 100/100;
-  see `output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/`.
-- Smart router: passed with primary, compact-tool-context, budget, and fallback paths;
-  see `output/smart-router/qualification-20260811-43fcfdfd-retry2.json`.
-- Official user-auth: Claude Code, Codex, and Hermes passed serial isolation and marker
-  checks without copying auth files; see the receipt under
-  `C:/tmp/waggle-readiness-evidence/official-auth-43fcfdfd-20260811/`.
-- Verification: the exact-HEAD full Vitest run exited 0; the 341-test critical lane,
-  13-test performance lane, agent/server/app TypeScript checks, lint, and Tauri cargo
-  check are green. The affected channel suite is 22/22.
+- Persona acceptance: 30/30 accepted receipts across ten launch personas x3, every
+  selected receipt 100/100; see
+  `output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/`.
+- Smart router: primary, compact tool context, durable budget carry-over, and fallback
+  passed with managed Ollama and without Docker; see
+  `output/smart-router/qualification-20260813T022319Z-692c69b9.json`.
+- Official user-auth: Claude Code, Codex, and Hermes passed serial isolated canaries
+  without reading or copying auth files; see
+  `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/`.
+- Installer: unsigned internal NSIS SHA-256
+  `636DCD22BEB0765D8D15202A3268717385B383C9A8D7B6217650FEEB9A922D0A`
+  passed 59/59 clean-profile lifecycle and managed-model checks; see
+  `output/installer-certification/692c69b9-20260813T025915Z/windows-installer-certificate-692c69b9-20260813T031200Z-managed.json`.
+- Verification: the full Vitest run, 341-test critical lane, 13-test performance lane,
+  agent/server/app TypeScript checks, lint, and Tauri cargo check are green at code
+  ancestor `9a898846`; subsequent non-documentation source changes are limited to the independently
+  reviewed and focused-tested smart-router qualifier, not shipped product runtime.
 
-The exact-HEAD installer lifecycle and managed-model certificate now passes 59 checks,
-including repair, offline `qwen2.5:0.5b` chat, data preservation, and cleanup; see
-`output/installer-certification/windows-installer-certificate-43fcfdfd-20260811-rerun4-managed.json`.
-The separate internal-pilot-signed exact-HEAD artifact also passes the same 59 checks;
-see `output/installer-certification/windows-installer-certificate-43fcfdfd-20260811-pilot-signed-rerun2.json`.
-Its embedded signer is `E2F028541E7A4D1FE80FFFF02079060D36579846`, but the self-signed root is
-intentionally not trusted on a clean machine, so this is signing-pipeline evidence, not a
-public release signature. Full Vitest, the 341-test critical lane, and the 13-test performance
-lane are also green.
-The remaining gates are a final-HEAD regression/persona/router/auth/installer reseal,
-production Authenticode signing, and a sealed formal deep Codex Security review. Do
-not promote the historical checkpoint to GO or 9.5/10.
+This qualifies the internal Windows Solo release candidate. Public Windows binary GO
+still requires a publicly trusted Authenticode artifact and a sealed managed Codex
+Security Deep Scan with no unresolved Critical/High findings. Public source/repository
+publication additionally requires curated Hive Mind forward-port, exclusion/provenance,
+drift, and repository-hygiene gates. A later documentation-only release-record commit is
+a no-impact attestation over the frozen code candidate, not a new binary.
 
 ### Key Technology Facts (Verified August 2026)
 

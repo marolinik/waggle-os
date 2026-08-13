@@ -2,7 +2,7 @@
 
 Updated: 2026-08-13
 
-## Current verdict: NOT YET RELEASE-APPROVED
+## Current verdict: INTERNAL RC QUALIFIED; NOT YET PUBLIC RELEASE-APPROVED
 
 The launch scope is intentionally narrow: **Windows Solo**, with **Claude Code,
 Codex, and Hermes** as the supported external-agent cohort. Cursor, OpenClaw,
@@ -10,64 +10,68 @@ and macOS packaging/certification remain roadmap work and do not block this
 scope. This document is the ship authority; older readiness reports are
 historical evidence only.
 
-## Historical sealed evidence revision
+## Frozen code candidate
 
-The last sealed receipt set below refers to the historical clean readiness HEAD:
+All current runtime and persona receipts refer to clean code candidate:
 
-`43fcfdfd6c5141eebf0f1d646d0fb36c0283c8f9`
+`692c69b9a6586b15ccc6f3f2eb40c65a95acd3aa`
 
-The local unsigned NSIS build was completed from that source:
+The internal NSIS candidate is unsigned (`NotSigned`), 98,706,368 bytes, and has
+SHA-256 `636DCD22BEB0765D8D15202A3268717385B383C9A8D7B6217650FEEB9A922D0A`.
+A later documentation-only release-record commit is a no-impact attestation and
+does not change this binary candidate.
 
-- Path: `app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/Waggle_0.2.0_x64-setup.exe`
-- Size: `98,632,255` bytes
-- SHA-256: `6432133733FF28AA53439CACEDEA1F36494B73AC6BDE90608020238B02650520`
-
-The branch has advanced since this revision. These results are not current release
-evidence until the final HEAD is rebuilt and resealed.
-
-## Historical gate evidence
+## Current gate evidence
 
 | Gate | Result | Receipt / evidence |
 |---|---|---|
-| Ten-persona paid acceptance | **HISTORICAL PASS; final-HEAD reseal pending** — 30/30, every receipt 100/100 | `output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/` |
-| Smart router and compact tool context | **HISTORICAL PASS; final-HEAD reseal pending** — primary, budget, fallback, managed Ollama runtime; Docker not invoked | `output/smart-router/qualification-20260811-43fcfdfd-retry2.json` |
-| Official user-auth cohort | **HISTORICAL PASS; final-HEAD reseal pending** — Claude Code, Codex, Hermes; 0 auth files read/copied | `C:/tmp/waggle-readiness-evidence/official-auth-43fcfdfd-20260811/official-auth-receipt.json` |
-| TypeScript / lint / Tauri checks | **HISTORICAL PASS; final-HEAD reseal pending** — agent, server, app tsc; lint; cargo check | Command output recorded in readiness session |
-| Full Vitest regression | **HISTORICAL PASS; final-HEAD reseal pending** — exit 0; critical 341/341; performance 13/13 | Full run plus `npm run test:critical` and `npm run test:perf` |
-| Dependency severity snapshot | **HISTORICAL PASS; final-HEAD reseal pending** — 0 Critical and 0 High; lower-severity advisories remain | `output/audit-full-43fcfdfd.json`, `output/audit-omit-dev-43fcfdfd.json` |
-| Windows installer lifecycle + managed model | **HISTORICAL PASS; final-HEAD rebuild/certification pending** — 59 checks; built-in proxy, in-process embeddings, managed model, repair, data preservation, cleanup. The pilot artifact was not publicly trusted. | `output/installer-certification/windows-installer-certificate-43fcfdfd-20260811-rerun4-managed.json`; pilot: `output/installer-certification/windows-installer-certificate-43fcfdfd-20260811-pilot-signed-rerun2.json` |
+| Ten-persona paid acceptance | **PASS** — 30/30 accepted across ten personas x3; all selected receipts 100/100; no missing, duplicate, invalid, or manifest-error slots | `output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/` |
+| Smart router and compact tool context | **PASS** — primary, tool-context, durable-budget, and fallback; managed Ollama; Docker not invoked; cleanup 0 errors/0 owned processes | `output/smart-router/qualification-20260813T022319Z-692c69b9.json` |
+| Official user-auth cohort | **PASS** — Claude Code, Codex, Hermes; three serial model calls; 0 auth files read/copied; tracked tree unchanged | `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json` |
+| TypeScript / lint / Tauri checks | **PASS with no-impact attestation** — agent, server, app tsc and cargo check green at `9a898846`; repo lint green there and focused lint green for both later qualifier files | Readiness session receipts; exact-candidate focused ESLint exit 0 |
+| Full Vitest regression | **PASS with no-impact attestation** — full run exit 0; critical 341/341; performance 13/13 at `9a898846`; the exact-candidate smart-router qualification passed after qualifier-only changes | Readiness-session exit-0 receipt for full Vitest; `output/readiness-gates/9a898846/critical.log`; `output/readiness-gates/9a898846/perf.log` |
+| Dependency severity snapshot | **PASS Critical/High gate** — 0 Critical and 0 High at `4de47ec6`; lower-severity advisories remain; subsequent non-documentation source changes are qualifier-harness only | `output/readiness-gates/4de47ec6/audit-full.json`, `audit-omit-dev.json` |
+| Windows installer lifecycle + managed model | **PASS internal RC** — exact-candidate unsigned NSIS and embedded sidecar both at `692c69b9`; 59/59 clean-profile lifecycle, offline managed model, repair, data preservation, cleanup | `output/installer-certification/692c69b9-20260813T025915Z/windows-installer-certificate-692c69b9-20260813T031200Z-managed.json` |
 
-## Release blockers
+## Public Windows binary blockers
 
-1. **Final-HEAD reseal:** rerun the affected regression, ten-persona, smart-router,
-   official-auth, dependency, and Windows installer/runtime gates at the frozen final HEAD.
-2. **Authenticode:** the historical NSIS artifact is unsigned (`NotSigned`); no public release
-   artifact may be approved without the production signing workflow and signature
-   verification.
-3. **Formal deep security seal:** Codex Security deep scans have not produced a
-   sealed canonical report in this host because of the permission/policy/artifact
-   blockers recorded in the scan attempts. Static evidence and `npm audit` are not
-   substitutes for that formal seal.
+1. **Authenticode:** the current NSIS artifact is unsigned (`NotSigned`); no public
+   release artifact may be approved without the production signing workflow and
+   verification against a publicly trusted signer.
+2. **Formal deep security seal:** Codex Security deep scans have not produced a
+   sealed canonical report in this host because of recorded permission, policy,
+   and artifact-workflow blockers. Static review and `npm audit` are not substitutes.
+
+## Public source/repository blockers
+
+1. Publish and freeze the reviewed readiness source and artifact provenance; the branch
+   remains local-only until an explicitly approved push/merge operation.
+2. Complete the curated Hive Mind forward-port, exclusion/provenance review, and drift
+   classification before claiming OSS mirror parity.
+3. Prune obsolete worktree registrations and stale release scratch/output roots before
+   the final public repository merge. These are source-publication gates, not Windows
+   runtime defects.
 
 ## Installation contract
 
 Windows Solo must run without Docker, Python, developer Node.js, external LiteLLM,
 or a separately installed Ollama. The bundled Node sidecar and no-Python
-OpenAI-compatible proxy are required; in-process embeddings are the default and
-local Ollama is optional for offline chat/routing.
+OpenAI-compatible proxy are required; in-process embeddings are the default and a
+local Ollama runtime/model is Waggle-managed. A user-installed Ollama remains optional.
 
 ## Deferred scope and repository hygiene
 
 Cursor and OpenClaw remain roadmap integrations. macOS packaging, signing,
 notarization, and runtime certification are also roadmap work. Hive Mind OSS
-forward-port/drift cleanup and branch/worktree cleanup are required before a
+forward-port/drift cleanup and branch/worktree cleanup are required before the
 public repository merge/release, but are separate from the Windows Solo runtime
-GO decision.
+qualification decision.
 
 ## Approval rule
 
-Change this verdict to **GO** only after the final-HEAD reseal, a production
-Authenticode artifact, and a formal deep security seal have current exact-HEAD
-evidence, with no unresolved Critical or High security findings. Until those gates
-close, do not describe Waggle as production-ready, claim an overall 9.5/10, or claim
+Change the Windows binary verdict to **GO** only after a production Authenticode
+artifact and a formal managed deep security seal cover the frozen candidate, with no
+unresolved Critical or High security findings. Public source/repository publication
+also requires the repository blockers above to close. Until the applicable gates close,
+do not describe Waggle as production-ready, claim an overall 9.5/10, or claim
 superiority over competing products.
