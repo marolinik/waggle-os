@@ -9,7 +9,7 @@ remains **NOT YET RELEASE-APPROVED**.
 
 ## Evidence checked
 
-| Surface | Current evidence | Result |
+| Surface | Evidence at reviewed revision `43fcfdfd` | Result |
 |---|---|---|
 | Dependency severity | `npm audit --audit-level=high` and `--omit=dev` both exit 0; reports contain 0 High and 0 Critical advisories (lower-severity advisories remain) | Pass for the Critical/High gate |
 | Security-critical tests | `npm run test:critical`: 16 files, 341 tests passed; vault ACL, approval, origin, injection and protected-route cases included | Pass |
@@ -24,26 +24,33 @@ remains **NOT YET RELEASE-APPROVED**.
 The historical March application-security report listed plaintext refresh
 tokens, `unsafe-eval`, permissive local auth/CORS, auto-approve timeout,
 unwired injection scanning and shell-interpolated marketplace scanning. The
-current HEAD contains the corresponding controls: encrypted companion vault
+reviewed revision contains the corresponding controls: encrypted companion vault
 entries, `script-src 'self'`, bearer/Host/CORS enforcement, auto-deny/hold
 timeout behavior, chat-path injection scanning and `execFileSync` scanner
-invocation. Those historical findings are not carried forward as current
-Critical/High findings on this review.
+invocation. Those historical findings were not carried forward as Critical/High
+findings at the reviewed revision. This does not assert a zero-finding result for a
+later HEAD.
 
 ## Remaining limitations
 
-1. No public Authenticode-signed release artifact is available; the exact local
-   NSIS artifact is `NotSigned`.
+1. No public Authenticode-signed release artifact was available; the reviewed local
+   NSIS artifact was `NotSigned`.
 2. Prior Codex Security Deep Scan attempts did not produce a sealed canonical
    report because of host permission/policy/artifact blockers. No no-findings
    claim is made.
 3. The Docker/Postgres/Redis infra lane was not run; it is explicitly outside
    the Windows Solo no-Docker launch contract.
-4. npm reports 23 moderate advisories in the full dependency tree. They are not
-   High/Critical, but remain maintenance work and should not be silently hidden.
+4. The 2026-08-11 npm snapshot reported 23 moderate advisories in the full dependency
+   tree. They were not High/Critical, but remain maintenance work and should not be
+   silently hidden.
+5. Standalone/development managed-LiteLLM mode lacks crash-durable reservation handoff
+   for finite hard paid budgets. Packaged Windows Solo is not exposed because bundled
+   Tauri forces the registered built-in proxy. Keep this P2 hardening out of launch
+   claims until direct mode gains equivalent durable accounting.
 
 ## Release interpretation
 
-The local review supports **zero currently observed Critical/High findings**
-for the checked Windows Solo surfaces. It does not authorize a production-ready
-or 9.5/10 claim until the public signing and formal security-seal gates close.
+The local review supports **zero observed Critical/High findings at the reviewed
+`43fcfdfd` snapshot** for the checked Windows Solo surfaces. It does not authorize a
+current-HEAD zero-finding, production-ready, or 9.5/10 claim until revalidation,
+public signing, and the formal security-seal gates close.

@@ -63,10 +63,11 @@ WaggleDance, governance) is the upgrade trigger.
 - Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
   unless the current launch recommendation says GO for that same release.
 
-### Exact-HEAD evidence checkpoint (2026-08-11)
+### Historical exact-HEAD evidence checkpoint (2026-08-11)
 
-The readiness branch is frozen for evidence at `43fcfdfd6c5141eebf0f1d646d0fb36c0283c8f9`.
-The following gates have current receipts at that exact revision:
+The last sealed readiness checkpoint was `43fcfdfd6c5141eebf0f1d646d0fb36c0283c8f9`.
+The branch has advanced since that revision, so the following receipts are historical
+and must not be presented as current release evidence:
 
 - Persona acceptance: 30/30 fresh receipts across the ten launch personas, each 100/100;
   see `output/playwright/seals/persona-acceptance-schema7-20260811T174500Z-43fcfdfd/`.
@@ -88,8 +89,9 @@ Its embedded signer is `E2F028541E7A4D1FE80FFFF02079060D36579846`, but the self-
 intentionally not trusted on a clean machine, so this is signing-pipeline evidence, not a
 public release signature. Full Vitest, the 341-test critical lane, and the 13-test performance
 lane are also green.
-The remaining blockers are production Authenticode signing and a sealed formal deep
-Codex Security review. Do not promote this checkpoint to GO or 9.5/10.
+The remaining gates are a final-HEAD regression/persona/router/auth/installer reseal,
+production Authenticode signing, and a sealed formal deep Codex Security review. Do
+not promote the historical checkpoint to GO or 9.5/10.
 
 ### Key Technology Facts (Verified August 2026)
 
