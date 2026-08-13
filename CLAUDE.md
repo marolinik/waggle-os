@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-11)
+### Current Release Qualification Contract (2026-08-14)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -49,54 +49,69 @@ WaggleDance, governance) is the upgrade trigger.
 - Claude Desktop, Codex Desktop, and Hermes Desktop may remain as detected convenience launch
   surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
 - ChatGPT/OpenAI is a model/provider and memory-import surface, not a separate launcher target.
-- The Windows Solo launch contract requires an exact-HEAD Windows installer qualification receipt to
+- The Windows Solo launch contract requires an exact-revision Windows installer qualification receipt to
   prove its bundled Node sidecar, no-Python OpenAI-compatible proxy, Waggle-managed local runtime/model, default
   in-process embedding path, and freedom from developer Node, Docker, Python, external LiteLLM, or a
-  separately installed Ollama. A separate exact-HEAD router receipt must prove the smart-router primary,
+  separately installed Ollama. A separate revision-bound router receipt must prove the smart-router primary,
   compact-tool-context, budget, and fallback paths. A user-installed Ollama remains optional.
-- Runtime, agent, persona, and security claims are valid only for the exact source revision and
-  installer SHA-256 sealed by the current launch recommendation; older receipts are historical evidence.
-- A descendant commit may carry a documented no-impact attestation only when every non-documentation
-  change is confined to a non-shipping release-qualification harness, is independently reviewed, and
-  passes focused tests and lint. Runtime/persona/router/auth/installer receipts must still name the
-  exact frozen code candidate; any shipped/runtime behavior change requires fresh affected receipts.
-  A release-record-only Markdown descendant does not change the sealed code revision or installer
-  SHA-256, which every claim must continue to name.
-- A GO seal requires a valid 30/30 persona seal across 10 personas at >=95/100 plus a final-HEAD
-  no-impact attestation, or a fresh 30/30 rerun when intervening changes affect persona/chat/provider/
-  memory/routing behavior. It also requires exact-HEAD Claude Code/Codex/Hermes canaries using
-  official user authentication and zero unresolved Critical/High findings.
+- Every receipt is valid first for the exact source revision and artifact SHA-256 it names. An older
+  router, persona, or authentication receipt is historical unless the current launch recommendation
+  explicitly carries it forward through a bounded no-impact attestation.
+- Bounded carry-forward is allowed only when an exhaustive intervening-diff review proves that no
+  covered runtime surface changed, independent review approves that classification, and focused tests
+  and lint cover the intervening changes. Any affected persona, chat, provider, authentication, memory,
+  routing, or tool-context behavior requires a fresh receipt. Installer, public signing, and sealed
+  security artifacts remain revision-bound and must name the exact candidate they cover.
+- A release-record-only Markdown descendant does not change the frozen runtime revision or installer
+  SHA-256. The eventual public hosted artifact and managed Deep Scan must instead be regenerated for
+  and name the exact approved release-tag commit.
+- A GO seal requires a valid 30/30 persona seal across 10 personas at >=95/100 plus either a fresh
+  release-revision run or an approved bounded no-impact attestation. Claude Code/Codex/Hermes official
+  user-auth canaries follow the same rule. GO also requires zero unresolved Critical/High findings.
 - Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
   unless the current launch recommendation says GO for that same release.
 
-### Frozen Windows Solo candidate evidence (2026-08-13)
+### Current Windows Solo internal RC evidence (2026-08-14)
 
-The frozen tested code candidate is `692c69b9a6586b15ccc6f3f2eb40c65a95acd3aa`.
+The frozen internal runtime/binary evidence revision is
+`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. A later Markdown-only release-record
+commit is a bounded no-impact descendant; it changes no shipped runtime surface and
+must not relabel the `d4f1dae3` installer or receipts as exact evidence for that later HEAD.
 
-- Persona acceptance: 30/30 accepted receipts across ten launch personas x3, every
-  selected receipt 100/100; see
-  `output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/`.
-- Smart router: primary, compact tool context, durable budget carry-over, and fallback
-  passed with managed Ollama and without Docker; see
-  `output/smart-router/qualification-20260813T022319Z-692c69b9.json`.
-- Official user-auth: Claude Code, Codex, and Hermes passed serial isolated canaries
-  without reading or copying auth files; see
-  `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/`.
-- Installer: unsigned internal NSIS SHA-256
-  `636DCD22BEB0765D8D15202A3268717385B383C9A8D7B6217650FEEB9A922D0A`
-  passed 59/59 clean-profile lifecycle and managed-model checks; see
-  `output/installer-certification/692c69b9-20260813T025915Z/windows-installer-certificate-692c69b9-20260813T031200Z-managed.json`.
-- Verification: the full Vitest run, 341-test critical lane, 13-test performance lane,
-  agent/server/app TypeScript checks, lint, and Tauri cargo check are green at code
-  ancestor `9a898846`; subsequent non-documentation source changes are limited to the independently
-  reviewed and focused-tested smart-router qualifier, not shipped product runtime.
+- Persona acceptance: the `692c69b9` seal remains valid after scoped diff review;
+  30/30 accepted receipts across ten launch personas x3, every selected receipt
+  100/100. Local receipt SHA-256:
+  `53EADFE2123D5D26BF234CD8E9C4ACEF85A7665EA32738112A7A61F09464D4FB`.
+- Smart router: the `692c69b9` primary, compact-tool-context, durable-budget, and
+  fallback qualification remains valid because no affected runtime surface changed.
+  Local receipt SHA-256:
+  `973DBDF718156A049486894DD1E2892E2C7F518834AEBA33F91F9CE3C7BD1D9A`.
+- Official user authentication: the Claude Code, Codex, and Hermes serial canaries
+  remain valid after scoped diff review; they read/copied zero auth files. Local receipt
+  SHA-256: `2D27609067E4703969F0AD6055F5A0414B00E9F3B271CE3B917E0860E4393ABD`.
+- Broad regression: at `af19b387`, 714 test files and 11,586 tests passed, with
+  five tests skipped. Changes through `d4f1dae3` are confined to release, signing,
+  certification, and their tests. Log SHA-256:
+  `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E`.
+- Exact-`d4f1dae3` installer: the unsigned NSIS is 98,686,269 bytes, SHA-256
+  `B5B427B7D4828BF18FC639CA475D7B21D6E007F3095285859AA67164D9C7DC7D`,
+  and passed 59/59 clean-profile lifecycle, managed-model, proxy-restart, repair,
+  data-preservation, and uninstall checks. Receipt SHA-256:
+  `07C0B3D1E24801DE2006A998CDF1F10D40EBF03354003E58EACCFAE4BF3C4DCF`.
+- Exact-`d4f1dae3` signing workflow: 248/248 PowerShell policy tests and 85/85 workflow/Tauri
+  tests passed, together with app/agent/server typechecks, full lint, YAML and dual
+  PowerShell parsing, and three independent no-P0-P2 approvals.
+- A live `d4f1dae3` dependency audit refreshed on 2026-08-14 is recorded in the current
+  launch recommendation: full and production-only trees both contain zero Critical and
+  zero High advisories. Moderate advisories remain and are tracked as maintenance.
 
-This qualifies the internal Windows Solo release candidate. Public Windows binary GO
-still requires a publicly trusted Authenticode artifact and a sealed managed Codex
-Security Deep Scan with no unresolved Critical/High findings. Public source/repository
-publication additionally requires curated Hive Mind forward-port, exclusion/provenance,
-drift, and repository-hygiene gates. A later documentation-only release-record commit is
-a no-impact attestation over the frozen code candidate, not a new binary.
+This qualifies the `d4f1dae3` internal Windows Solo runtime RC. It does not qualify a
+public release: the installer is `NotSigned`, the protected hosted signing environment
+has not executed, and no current managed Codex Security Deep Scan has produced a sealed
+report. Public source publication also requires the final Hive Mind drift/exclusion and
+repository hygiene gates. The eventual hosted artifact must be rebuilt from and name
+the exact approved release-tag commit. Never convert these receipts into a GO or overall
+9.5/10 claim early.
 
 ### Key Technology Facts (Verified August 2026)
 
@@ -289,28 +304,26 @@ npm ci
 npm ci --prefix app --ignore-scripts
 npm run build:packages
 
-# Local unsigned smoke build only; this is not a releasable artifact.
+# Local unsigned build only; this verifies packaging/runtime, not public trust.
 npm --prefix app run tauri:build:win
 
-# Signed release build, only after release.yml imports and validates exactly one
-# approved production certificate and writes app/src-tauri/.thumbprint.txt.
-node app/scripts/apply-signing-config.mjs
-Push-Location app
-node node_modules/@tauri-apps/cli/tauri.js build --bundles nsis --config src-tauri/tauri.build-override.conf.json
-Pop-Location
-
-# Run under a disposable Windows user against that signed NSIS artifact.
+# Internal clean-profile certification of an unsigned local candidate.
 pwsh -NoProfile -File scripts/certify-windows-installer.ps1 `
   -InstallerPath "<absolute-path-to-Waggle-setup.exe>" `
   -ExpectedSourceRevision "<40-character-final-HEAD>" `
-  -ExpectedSignerThumbprint "<production-signer-thumbprint>" `
-  -RequireAuthenticodeSignature `
   -VerifyManagedModel
 ```
 
-`.github/workflows/release.yml` is authoritative for certificate import,
-thumbprint validation, staged hook verification, signing, certification,
-attestation, and publication. Never treat the local smoke command as signed.
+Production signing is hosted-only. Do not run `new-windows-signing-handoff.ps1`,
+`sign-windows-artifact.ps1`, or a local thumbprint-signing substitute to create a
+release artifact. `.github/workflows/release.yml` is authoritative and must run from
+an approved exact release tag. Its Windows chain is `build-windows-prebuilt` ->
+`sign-windows` -> `certify-windows` -> `attest-windows` -> `publish-windows`.
+`sign-windows` requires the protected `production-windows-signing` environment,
+Azure Artifact Signing OIDC variables, an environment-scoped federated credential,
+and the least-privilege certificate-profile signer role. It must verify the approved
+signer subject and timestamp before the credential-free certification and attestation
+jobs may publish. Never treat the local certification command as signed.
 The certified installed desktop must not depend on developer Node.js, Python,
 Docker, external LiteLLM, or a separately installed Ollama.
 

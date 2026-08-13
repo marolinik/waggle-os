@@ -9,31 +9,47 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 - **Cursor and OpenClaw are roadmap integrations.** They remain registered for detection and future development, but the production launcher, hooks, Fleet/task path, and direct run API do not offer them.
 - Claude Desktop, Codex Desktop, and Hermes Desktop may appear as detected convenience launch surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
 - **ChatGPT/OpenAI is a model and memory-import surface**, not a separate local coding-agent launcher.
-- The Windows Solo launch contract requires an exact-HEAD Windows installer qualification receipt to prove its bundled Node sidecar, no-Python OpenAI-compatible proxy, Waggle-managed local runtime/model, default in-process embedding path, and freedom from developer Node, Docker, Python, an external LiteLLM service, or a separately installed Ollama. A separate exact-HEAD router receipt must prove the smart-router primary, compact-tool-context, budget, and fallback paths. A user-installed Ollama remains optional.
+- The Windows Solo launch contract requires an exact-revision Windows installer qualification receipt to prove its bundled Node sidecar, no-Python OpenAI-compatible proxy, Waggle-managed local runtime/model, default in-process embedding path, and freedom from developer Node, Docker, Python, an external LiteLLM service, or a separately installed Ollama. A separate revision-bound router receipt must prove the smart-router primary, compact-tool-context, budget, and fallback paths. Router, persona, and authentication receipts may cover a later candidate only through an independently reviewed bounded no-impact attestation proving that no covered runtime surface changed; otherwise they must be rerun. A user-installed Ollama remains optional.
 - Docker/LiteLLM deployment files remain optional server and team deployment choices; they are not desktop prerequisites.
 
-Release status and exact-HEAD receipts are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
+Release status, revision-bound receipts, and any bounded carry-forward attestations are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
-### Frozen Windows Solo candidate evidence — 2026-08-13
+### Current Windows Solo internal RC evidence — 2026-08-14
 
-The frozen tested code candidate is `692c69b9a6586b15ccc6f3f2eb40c65a95acd3aa`.
+The frozen internal runtime/binary evidence revision is
+`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. This Markdown release-record update
+is a no-impact descendant: it changes no shipped runtime surface and does not relabel
+the installer or receipts as if they had been produced from the documentation commit.
 
-- Paid ten-persona acceptance: **30/30 accepted, all selected receipts 100/100** in
-  [`output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/seal.json`](output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/seal.json).
-- Smart-router/runtime qualification: **passed** all four paths with managed Ollama,
-  durable budget carry-over, compact tool context, and no Docker in
-  [`output/smart-router/qualification-20260813T022319Z-692c69b9.json`](output/smart-router/qualification-20260813T022319Z-692c69b9.json).
-- Claude Code, Codex, and Hermes official-auth canaries: **passed** without reading or
-  copying auth files in [`official-auth-receipt.json`](C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json).
-- The unsigned internal NSIS candidate, SHA-256
-  `636DCD22BEB0765D8D15202A3268717385B383C9A8D7B6217650FEEB9A922D0A`,
-  passed **59/59** clean-profile lifecycle and managed-model checks in
-  [`windows-installer-certificate-692c69b9-20260813T031200Z-managed.json`](output/installer-certification/692c69b9-20260813T025915Z/windows-installer-certificate-692c69b9-20260813T031200Z-managed.json).
+- Paid ten-persona acceptance is carried forward after a scoped no-impact diff review:
+  **30/30 accepted across ten personas x3, all selected receipts 100/100**.
+- Smart-router qualification and the Claude Code, Codex, and Hermes official-auth
+  canaries are carried forward from `692c69b9` after scoped no-impact diff review.
+  The router passed primary, compact-tool-context, durable-budget, and fallback paths
+  with a managed local runtime and without Docker; the auth harness read/copied zero
+  authentication files.
+- The application-runtime regression at `af19b387` passed **714 test files and 11,586
+  tests**. Changes from that revision through `d4f1dae3` are confined to
+  release, signing, certification, and their tests and are covered by focused
+  `d4f1dae3` gates.
+- The exact-`d4f1dae3` unsigned NSIS installer is 98,686,269 bytes with SHA-256
+  `B5B427B7D4828BF18FC639CA475D7B21D6E007F3095285859AA67164D9C7DC7D`.
+  It passed **59/59** clean-profile lifecycle, Docker-independent Solo, managed-model,
+  proxy-restart, repair, data-preservation, and uninstall checks.
+- The exact-`d4f1dae3` hosted-signing implementation passed **248/248** PowerShell policy tests,
+  **85/85** workflow/Tauri tests, app/agent/server typechecks, lint, YAML/PowerShell
+  parsing, and three independent reviews with no P0-P2 finding.
 
-The internal Windows Solo release candidate is qualified, but the public Windows binary release
-is **not yet approved**. A publicly trusted Authenticode signature and a sealed managed Codex Security Deep
-Scan remain open. A later documentation-only release-record commit is a no-impact attestation
-over this frozen code candidate; it does not relabel older binaries or test receipts.
+Detailed local receipt paths and SHA-256 digests are recorded in the current
+[launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md); the
+receipts themselves are intentionally not published from ignored local `output/` or
+temporary directories.
+
+The `d4f1dae3` internal Windows Solo runtime RC is qualified, but the public Windows
+binary release is **not yet approved**. The installer above is `NotSigned`; a protected
+hosted run must build the exact approved release-tag commit and produce a publicly
+trusted Authenticode signature and timestamp. A managed Codex Security Deep Scan must
+also produce a sealed report with no unresolved Critical/High findings.
 
 ## Architecture
 

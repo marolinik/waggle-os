@@ -1,6 +1,6 @@
 # Launch Recommendation — Windows Solo
 
-Updated: 2026-08-13
+Updated: 2026-08-14
 
 ## Current verdict: INTERNAL RC QUALIFIED; NOT YET PUBLIC RELEASE-APPROVED
 
@@ -12,48 +12,65 @@ historical evidence only.
 
 ## Frozen code candidate
 
-All current runtime and persona receipts refer to clean code candidate:
+The frozen internal runtime/binary evidence revision is:
 
-`692c69b9a6586b15ccc6f3f2eb40c65a95acd3aa`
+`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`
 
-The internal NSIS candidate is unsigned (`NotSigned`), 98,706,368 bytes, and has
-SHA-256 `636DCD22BEB0765D8D15202A3268717385B383C9A8D7B6217650FEEB9A922D0A`.
-A later documentation-only release-record commit is a no-impact attestation and
-does not change this binary candidate.
+This Markdown release-record update is a bounded no-impact descendant. It changes no
+shipped runtime surface and does not relabel the installer or receipts as if they were
+produced from the documentation commit.
+
+The exact-`d4f1dae3` local NSIS candidate is unsigned (`NotSigned`), 98,686,269 bytes,
+and has SHA-256
+`B5B427B7D4828BF18FC639CA475D7B21D6E007F3095285859AA67164D9C7DC7D`.
+Its embedded sidecar provenance also names `d4f1dae3`. This is the frozen internal
+runtime candidate, not the future public artifact: the protected hosted workflow must
+rebuild and sign the exact approved release-tag commit, including this release record.
+
+Receipt paths below are machine-local evidence locations under ignored `output/` or
+temporary directories. Their SHA-256 digests are recorded here deliberately; they are
+not public repository links and must not be presented as downloadable release assets.
 
 ## Current gate evidence
 
 | Gate | Result | Receipt / evidence |
 |---|---|---|
-| Ten-persona paid acceptance | **PASS** — 30/30 accepted across ten personas x3; all selected receipts 100/100; no missing, duplicate, invalid, or manifest-error slots | `output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/` |
-| Smart router and compact tool context | **PASS** — primary, tool-context, durable-budget, and fallback; managed Ollama; Docker not invoked; cleanup 0 errors/0 owned processes | `output/smart-router/qualification-20260813T022319Z-692c69b9.json` |
-| Official user-auth cohort | **PASS** — Claude Code, Codex, Hermes; three serial model calls; 0 auth files read/copied; tracked tree unchanged | `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json` |
-| TypeScript / lint / Tauri checks | **PASS with no-impact attestation** — agent, server, app tsc and cargo check green at `9a898846`; repo lint green there and focused lint green for both later qualifier files | Readiness session receipts; exact-candidate focused ESLint exit 0 |
-| Full Vitest regression | **PASS with no-impact attestation** — full run exit 0; critical 341/341; performance 13/13 at `9a898846`; the exact-candidate smart-router qualification passed after qualifier-only changes | Readiness-session exit-0 receipt for full Vitest; `output/readiness-gates/9a898846/critical.log`; `output/readiness-gates/9a898846/perf.log` |
-| Dependency severity snapshot | **PASS Critical/High gate** — 0 Critical and 0 High at `4de47ec6`; lower-severity advisories remain; subsequent non-documentation source changes are qualifier-harness only | `output/readiness-gates/4de47ec6/audit-full.json`, `audit-omit-dev.json` |
-| Windows installer lifecycle + managed model | **PASS internal RC** — exact-candidate unsigned NSIS and embedded sidecar both at `692c69b9`; 59/59 clean-profile lifecycle, offline managed model, repair, data preservation, cleanup | `output/installer-certification/692c69b9-20260813T025915Z/windows-installer-certificate-692c69b9-20260813T031200Z-managed.json` |
+| Ten-persona paid acceptance | **PASS, carried forward after scoped diff review** — 30/30 accepted across ten personas x3; all selected receipts 100/100; no missing, duplicate, invalid, or manifest-error slots | `output/playwright/seals/persona-acceptance-schema7-20260813T023117Z-692c69b9/seal.json`; SHA-256 `53EADFE2123D5D26BF234CD8E9C4ACEF85A7665EA32738112A7A61F09464D4FB` |
+| Smart router and compact tool context | **PASS, carried forward after scoped diff review** — primary, compact-tool-context, durable-budget, and fallback paths; managed local runtime; Docker not invoked; clean teardown | `output/smart-router/qualification-20260813T022319Z-692c69b9.json`; SHA-256 `973DBDF718156A049486894DD1E2892E2C7F518834AEBA33F91F9CE3C7BD1D9A` |
+| Official user-auth cohort | **PASS, carried forward after scoped diff review** — Claude Code, Codex, Hermes; three serial model calls; zero auth files read/copied; tracked tree unchanged | `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json`; SHA-256 `2D27609067E4703969F0AD6055F5A0414B00E9F3B271CE3B917E0860E4393ABD` |
+| Full application regression | **PASS with bounded carry-forward** — at `af19b387`, 714 test files and 11,586 tests passed; five tests skipped. Later changes are release/signing/certification-only and have focused `d4f1dae3` coverage | `output/readiness-broad-af19b387-20260813T115524.log`; SHA-256 `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E` |
+| Exact-`d4f1dae3` release/signing implementation | **PASS locally** — 248/248 PowerShell signing-policy tests; 85/85 workflow/Tauri tests; app/agent/server typechecks, full lint, YAML and 23 embedded PowerShell blocks green; security, compatibility, and test reviews approved with no P0-P2 finding | `output/readiness/exact-head-handoff-d4f1dae3.json`; SHA-256 `71229391E7F38D254A875FB7E1A9C39CD4CF87E81164CDC006482A425F2B2919` |
+| Dependency severity snapshot | **PASS Critical/High gate, refreshed 2026-08-14** — full tree 0 Critical/0 High/22 Moderate; production tree 0 Critical/0 High/18 Moderate. Package manifests and lockfiles are unchanged from the preserved audit baseline | `npm audit --audit-level=high --json`; `npm audit --omit=dev --audit-level=high --json` |
+| Windows installer lifecycle + managed model | **PASS internal RC, exact `d4f1dae3`** — unsigned NSIS and embedded sidecar at `d4f1dae3`; 59/59 clean-profile checks; FREE/Solo tier; managed `qwen2.5:0.5b`; proxy restart/chat, repair, data preservation, managed cleanup, and uninstall | `output/installer-certification/d4f1dae3-20260813T221108Z/windows-installer-certificate-managed.json`; SHA-256 `07C0B3D1E24801DE2006A998CDF1F10D40EBF03354003E58EACCFAE4BF3C4DCF` |
 
 ## Public Windows binary blockers
 
-1. **Authenticode:** the current NSIS artifact is unsigned (`NotSigned`); no public
-   release artifact may be approved without the production signing workflow and
-   verification against a publicly trusted signer.
-2. **Formal deep security seal:** Codex Security deep scans have not produced a
-   sealed canonical report in this host because of recorded permission, policy,
-   and artifact-workflow blockers. Static review and `npm audit` are not substitutes.
+1. **Authenticode:** the current NSIS artifact is unsigned (`NotSigned`). The protected
+   GitHub environment `production-windows-signing` is not yet active, and no hosted
+   Azure OIDC signing run has produced a publicly trusted signer/timestamp receipt.
+   Microsoft public-identity/profile readiness is external and must be verified live
+   before the exact-tag workflow runs.
+2. **Formal deep security seal:** a historical sealed Deep Scan exists for old
+   revision `75e4bba4`, and a later sealed Standard scan exists for `d594b110`;
+   neither covers frozen runtime revision `d4f1dae3` or the eventual release-tag
+   commit. Current managed Deep Scan attempts were blocked by recorded permission,
+   policy, and artifact-workflow failures. Static review and `npm audit` are not
+   substitutes for a sealed current-candidate managed Deep Scan.
 
 ## Public source/repository blockers
 
 1. Publish and freeze the reviewed readiness source and artifact provenance; the branch
    remains local-only until an explicitly approved push/merge operation.
-2. The mapped Hive Mind core-substrate exclusion/provenance audit is complete and recorded in
-   `11-HIVE-MIND-PARITY-AUDIT-2026-08-13.md`. The separate OSS mirror remains
-   drifted and requires a curated forward-port before its next release or any mirror
-   parity claim. CLI, MCP, hooks, and wiki are outside that core checker and retain
-   separate inventory requirements. Mirror parity does not block the Windows binary.
-3. Repository/worktree hygiene classification is complete. Two stale registrations
-   were pruned; live and reachable worktrees were preserved. The readiness worktree is
-   tracked-clean. Local scratch retention is host hygiene, not a source-release defect.
+2. The mapped Hive Mind exclusion/provenance status is recorded in
+   `11-HIVE-MIND-PARITY-AUDIT-2026-08-13.md`. The OSS mirror remains drifted and
+   requires a curated forward-port before its next release or any parity claim.
+   Mirror parity does not block the Windows binary, but final drift/exclusion evidence
+   and the separate CLI, MCP, hook, and wiki inventories must be current before a
+   repository-wide provenance claim.
+3. Final repository/worktree hygiene, tracked documentation consistency, and integration
+   classification remain required after the two external binary gates close. The current
+   readiness worktree is tracked-clean before this documentation phase; no push, tag,
+   merge, GitHub Release, or local-main change has occurred.
 
 ## Installation contract
 

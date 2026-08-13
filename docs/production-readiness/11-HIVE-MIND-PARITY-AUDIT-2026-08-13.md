@@ -1,4 +1,4 @@
-# Hive Mind mirror parity audit — 2026-08-13
+# Hive Mind mirror parity audit — 2026-08-13 (refreshed 2026-08-14)
 
 ## Verdict
 
@@ -11,13 +11,18 @@ a raw subtree copy is forbidden because it would export Waggle-only surfaces.
 
 ## Frozen inputs
 
-- Waggle readiness HEAD: `825c4d6be3491bf6fffe3a995cf630862c48668c`
+- Waggle readiness HEAD: `d4f1dae3476829f1fc6d73c2173c960527c7b4c9`
 - Hive Mind OSS HEAD: `c5ae6569768b342cfe3c2c91846064e2c73481b1`
-- Both worktrees were clean before the read-only comparison.
+- Both worktrees were clean before the read-only comparison. The OSS HEAD also
+  matches the live `origin/master` revision checked on 2026-08-14.
 - Command: `scripts/oss-drift-check.sh D:/Projects/hive-mind`
 - Result: exit `1` (`DRIFT DETECTED`)
-- Inventory: 1 only in OSS, 10 only in monorepo, 54 differing, 4 byte-equal
-  common files.
+- Inventory: 68 monorepo source files, 59 OSS source files, 58 common files;
+  1 only in OSS, 10 only in monorepo, 54 differing, and 4 byte-equal common files.
+
+The Markdown-only release-record descendant that carries this refreshed audit changes
+no substrate source. The inventory remains an audit of `d4f1dae3`; it is not rewritten
+as though the drift command ran at the later documentation commit.
 
 The checker covers `packages/hive-mind-core/src` against the OSS
 `packages/core/src`. This document therefore closes only the mapped core-substrate
@@ -49,20 +54,24 @@ The following are explicit Waggle-only exclusions and must not be exported:
 - every interleaved `install_audit` DDL, index, trigger, and migration hunk in
   `mind/schema.ts` and `mind/db.ts`
 
-Seventeen differing files contain substantive or mixed drift. The highest-risk
+Eighteen differing files contain substantive or mixed drift. The highest-risk
 public omissions are URL redirect/DNS SSRF protection, memory-ingress scanning,
 SQL update-key allowlisting, archive bounds and reclaim, deprecated-frame search
 exclusion, model-load locking and corrupt-cache quarantine, DB contention retries,
 deduplication delimiters, suppression provenance, and cache eviction.
 
-Thirty-five differing files are adaptation or non-material curation noise. Two
-more (`mind/embedding-provider.ts` and `workspace-manager.ts`) intentionally omit
-Waggle tiers, billing, compliance, and product lifecycle behavior and must not be
-copied wholesale.
+Thirty-five differing files are adaptation or non-material curation noise. One
+more (`mind/embedding-provider.ts`) intentionally omits Waggle tiers, billing,
+compliance, and product lifecycle behavior and must not be copied wholesale.
+`workspace-manager.ts` moves to substantive/mixed: it contains product curation,
+but now also carries generic public-worthy path containment, strict-ID, and
+link/hardlink rejection absent from OSS. The refreshed 2026-08-14 inventory maps
+all 54 differing files to these 18 substantive/mixed, 1 intentional-product, and
+35 adaptation categories; no differing file is unclassified or stale.
 
 ### Reproducible differing-file classification
 
-Substantive or mixed drift (17):
+Substantive or mixed drift (18):
 
 - `harvest/dedup.ts`
 - `harvest/pipeline.ts`
@@ -81,11 +90,11 @@ Substantive or mixed drift (17):
 - `mind/search.ts`
 - `mind/suppression.ts`
 - `multi-mind-cache.ts`
+- `workspace-manager.ts`
 
-Intentional product curation (2):
+Intentional product curation (1):
 
 - `mind/embedding-provider.ts`
-- `workspace-manager.ts`
 
 Adaptation or non-material curation differences (35):
 
@@ -127,7 +136,7 @@ Adaptation or non-material curation differences (35):
 
 ## Release impact
 
-- **Windows Solo binary:** no blocker; the frozen Waggle candidate contains the
+- **Windows Solo binary:** no blocker; the `d4f1dae3` Waggle candidate contains the
   canonical implementations.
 - **Waggle repository integration:** no core-substrate code port is required.
   Preserve this audit and do not claim that the OSS mirror is synchronized. Complete
@@ -154,18 +163,35 @@ core drift-check result above and do not change the frozen Windows RC verdict.
   injection, and suppression review before becoming canonical.
 - **MCP:** both expose 21 tools and 4 resources, but the OSS server lacks the
   monorepo scope gate, import containment, ingress checks, and sticky-erasure
-  controls. The monorepo full MCP path also needs fail-closed handling for invalid
-  or missing workspace IDs; the qualified external-agent hook path already uses
-  the independently guarded hook runtime. No unrestricted MCP parity claim is valid
-  until that monorepo issue and the curated OSS export are closed.
-- **Wiki compiler:** all 14 mapped files are present. The OSS compiler raises its
+  controls. The former monorepo direct-MCP workspace issue is closed: commits
+  `ce68c70f`, `c780286f`, and `00dee23e` added workspace path containment,
+  unavailable-workspace fail-closed behavior, and legacy-default migration;
+  76/76 focused monorepo checks pass. The OSS registration lane passes 11/11
+  and still exposes 21 tools plus 4 resources, but no unrestricted cross-repository
+  MCP parity claim is valid until the curated export and its security tests close.
+- **Wiki compiler:** all 14 mapped package files are present in both checkouts
+  (9 under `src/` plus `LICENSE`, `NOTICE`, `package.json`, `README.md`, and
+  `tsconfig.json`), with zero files present on only one side. This proves inventory
+  coverage, not byte-for-byte or behavioral parity. The OSS compiler raises its
   entity cap from 200 to 2,000; that behavior needs a mono-first reverse-port and
   regression test. OSS-only `wiki-web` and `enrichment` have no monorepo mapping and
   must be explicitly classified as OSS-native or reverse-ported before any
   whole-repository parity claim.
 
-The default Windows Solo Claude Code, Codex, and Hermes hook lifecycle does not use
-the unsafe full MCP workspace resolver: it uses `hook-call`, which enforces workspace
-ID syntax, existence, config-ID equality, realpath containment, and link rejection.
-The remaining full-MCP workspace issue is nevertheless a shipped direct-MCP
-hardening gate and is tracked for fail-closed correction before the final freeze.
+The default Windows Solo Claude Code, Codex, and Hermes hook lifecycle uses
+`hook-call`, which enforces workspace ID syntax, existence, config-ID equality,
+realpath containment, and link rejection. The direct MCP path now also fails closed
+for invalid, missing, unavailable, escaped, or mismatched workspaces. This closes the
+previous Waggle-side hardening gate; it does not make the drifted OSS mirror parity-ready.
+
+## Exclusion verification
+
+The raw subtree-split helper remains an inspection-only starting point and retains its
+hard abort guard. The 2026-08-14 OSS negative DB/exclusion lane passed 12/12, including
+a runtime assertion that proprietary tables are absent. Forbidden private paths are
+absent, and non-test OSS core source has zero active DDL/DML for `install_audit`,
+`execution_traces`, `evolution_runs`, `improvement_signals`, `ai_interactions`, or
+`procedures`. Literal `install_audit` text remains intentionally in exclusion comments
+and a negative test, so a naive zero-string scan is not valid. This evidence is not
+permission to mechanically copy the monorepo tree: interleaved audit hunks still require
+human curation and negative leak scans.
