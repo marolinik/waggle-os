@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import * as waggleCore from '@waggle/core';
 import { MindDB, FrameStore, SessionStore } from '@waggle/core';
+import type { AgentLoopConfig } from '@waggle/agent';
 import { buildLocalServer } from '../src/local/index.js';
 import { getAuditDb } from '../src/local/routes/events.js';
 import { sanitizeFrameContent } from '../src/local/routes/memory.js';
@@ -772,7 +773,9 @@ describe('Local Server Mode', () => {
       }
       return new Response('', { status: 503 });
     });
+    const fleetTraceIds: Array<number | undefined> = [];
     firstServer.agentRunner = async (agentConfig) => {
+      fleetTraceIds.push(agentConfig.modelSpendTraceId);
       if (agentConfig.model === 'anthropic/claude-sonnet-4-6') {
         const spawn = agentConfig.tools.find((tool) => tool.name === 'spawn_agent');
         expect(spawn).toBeDefined();
@@ -817,6 +820,7 @@ describe('Local Server Mode', () => {
     expect(firstRun?.status, JSON.stringify(firstRun)).toBe('completed');
     const [firstTrace] = firstServer.traceStore.query({ sessionId: `spawn-${firstRunId}`, limit: 1 });
     expect(firstTrace.cost_usd).toBeCloseTo(0.018, 6);
+    expect(fleetTraceIds).toEqual([firstTrace.id, firstTrace.id, firstTrace.id]);
 
     expect(firstServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.018, 6);
     await firstServer.close();
@@ -898,7 +902,9 @@ describe('Local Server Mode', () => {
       const workspaceId = firstServer.workspaceManager.getDefault()!;
       firstServer.workspaceManager.update(workspaceId, { model: 'anthropic/claude-sonnet-4-6' });
       let providerDispatches = 0;
+      const paidGroupTraceIds: Array<number | undefined> = [];
       firstServer.agentRunner = async (agentConfig) => {
+        paidGroupTraceIds.push(agentConfig.modelSpendTraceId);
         const reservation = agentConfig.modelSpendBudget!.reserveModelSpend({
           model: agentConfig.billingModel ?? agentConfig.model,
           inputTokens: 1_000,
@@ -936,6 +942,7 @@ describe('Local Server Mode', () => {
       expect(providerDispatches).toBe(2);
       const [paidTrace] = firstServer.traceStore.query({ sessionId: `group-${paidJobId}`, limit: 1 });
       expect(paidTrace.cost_usd).toBeCloseTo(0.036, 6);
+      expect(paidGroupTraceIds).toEqual([paidTrace.id, paidTrace.id]);
 
       firstServer.agentState.currentModel = 'ollama/qwen2.5:1.5b';
       firstServer.workspaceManager.update(workspaceId, { model: 'ollama/qwen2.5:1.5b' });
@@ -1081,6 +1088,78 @@ describe('Local Server Mode', () => {
       fetchSpy.mockRestore();
       if (firstServer.server.listening) await firstServer.close();
       fs.rmSync(restartDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }, 30_000);
+
+  it('isolates durable traces for concurrent Agent Group jobs in one workspace', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-group-trace-isolation-'));
+    const isolatedServer = await buildLocalServer({ dataDir });
+    try {
+      isolatedServer.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
+      const workspaceId = isolatedServer.workspaceManager.getDefault()!;
+      isolatedServer.workspaceManager.update(workspaceId, {
+        model: 'anthropic/claude-sonnet-4-6',
+      });
+      const calls: AgentLoopConfig[] = [];
+      isolatedServer.agentRunner = async (agentConfig) => {
+        calls.push(agentConfig);
+        return {
+          content: 'isolated group result',
+          toolsUsed: [],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      };
+      const created = await injectWithAuth(isolatedServer, {
+        method: 'POST',
+        url: '/api/agent-groups',
+        payload: {
+          name: 'Concurrent trace pair',
+          strategy: 'parallel',
+          members: [
+            { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+            { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+          ],
+        },
+      });
+      const groupId = (created.json() as { id: string }).id;
+      const [startedA, startedB] = await Promise.all([
+        injectWithAuth(isolatedServer, {
+          method: 'POST',
+          url: `/api/agent-groups/${groupId}/run`,
+          payload: { task: 'SESSION_A concurrent work', workspaceId },
+        }),
+        injectWithAuth(isolatedServer, {
+          method: 'POST',
+          url: `/api/agent-groups/${groupId}/run`,
+          payload: { task: 'SESSION_B concurrent work', workspaceId },
+        }),
+      ]);
+      const jobA = (startedA.json() as { jobId: string }).jobId;
+      const jobB = (startedB.json() as { jobId: string }).jobId;
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const [statusA, statusB] = await Promise.all([
+          injectWithAuth(isolatedServer, { method: 'GET', url: `/api/jobs/${jobA}` }),
+          injectWithAuth(isolatedServer, { method: 'GET', url: `/api/jobs/${jobB}` }),
+        ]);
+        if ([statusA, statusB].every((response) => response.json().status === 'completed')) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      expect(calls).toHaveLength(4);
+      const [traceA] = isolatedServer.traceStore.query({ sessionId: `group-${jobA}`, limit: 1 });
+      const [traceB] = isolatedServer.traceStore.query({ sessionId: `group-${jobB}`, limit: 1 });
+      expect(traceA.id).not.toBe(traceB.id);
+      const callsA = calls.filter((call) => String(call.messages[0]?.content).includes('SESSION_A'));
+      const callsB = calls.filter((call) => String(call.messages[0]?.content).includes('SESSION_B'));
+      expect(callsA.map((call) => call.modelSpendTraceId)).toEqual([traceA.id, traceA.id]);
+      expect(callsB.map((call) => call.modelSpendTraceId)).toEqual([traceB.id, traceB.id]);
+      expect(calls.every((call) => call.spendWorkspaceId === workspaceId)).toBe(true);
+      expect(callsA.every((call) => call.modelSpendBudget === callsA[0].modelSpendBudget)).toBe(true);
+      expect(callsB.every((call) => call.modelSpendBudget === callsB[0].modelSpendBudget)).toBe(true);
+      expect(callsA[0].modelSpendBudget).not.toBe(callsB[0].modelSpendBudget);
+    } finally {
+      await isolatedServer.close();
+      fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   }, 30_000);
 });

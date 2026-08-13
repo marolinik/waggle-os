@@ -256,6 +256,7 @@ async function executeFleetRun(
           fleetSpendMeter,
           run.workspaceId,
           listOllamaChatModelIds,
+          () => traceId,
         )
       : underlyingRunner;
     let workerTools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);

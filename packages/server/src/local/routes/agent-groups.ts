@@ -410,6 +410,7 @@ async function executeGroup(
           spendMeter,
           runContext.workspaceId,
           listOllamaChatModelIds,
+          () => traceId,
         )
       : underlyingRunLoop;
     let availableTools = server.agentState.allTools;
