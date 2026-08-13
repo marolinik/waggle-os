@@ -46,11 +46,14 @@ does not change this binary candidate.
 
 1. Publish and freeze the reviewed readiness source and artifact provenance; the branch
    remains local-only until an explicitly approved push/merge operation.
-2. Complete the curated Hive Mind forward-port, exclusion/provenance review, and drift
-   classification before claiming OSS mirror parity.
-3. Prune obsolete worktree registrations and stale release scratch/output roots before
-   the final public repository merge. These are source-publication gates, not Windows
-   runtime defects.
+2. The mapped Hive Mind core-substrate exclusion/provenance audit is complete and recorded in
+   `11-HIVE-MIND-PARITY-AUDIT-2026-08-13.md`. The separate OSS mirror remains
+   drifted and requires a curated forward-port before its next release or any mirror
+   parity claim. CLI, MCP, hooks, and wiki are outside that core checker and retain
+   separate inventory requirements. Mirror parity does not block the Windows binary.
+3. Repository/worktree hygiene classification is complete. Two stale registrations
+   were pruned; live and reachable worktrees were preserved. The readiness worktree is
+   tracked-clean. Local scratch retention is host hygiene, not a source-release defect.
 
 ## Installation contract
 
@@ -62,10 +65,9 @@ local Ollama runtime/model is Waggle-managed. A user-installed Ollama remains op
 ## Deferred scope and repository hygiene
 
 Cursor and OpenClaw remain roadmap integrations. macOS packaging, signing,
-notarization, and runtime certification are also roadmap work. Hive Mind OSS
-forward-port/drift cleanup and branch/worktree cleanup are required before the
-public repository merge/release, but are separate from the Windows Solo runtime
-qualification decision.
+notarization, and runtime certification are also roadmap work. The Hive Mind OSS
+forward-port is required before the mirror's next release, but is a separate operation
+from the Windows Solo runtime and Waggle repository integration decisions.
 
 ## Approval rule
 
