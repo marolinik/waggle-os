@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   parseThumbprintString,
+  addWindowsArtifactSigningToOverride,
   addWindowsSigningToOverride,
   addMacosAdhocToOverride,
   type TauriOverrideConfig,
@@ -86,6 +90,23 @@ describe('addWindowsSigningToOverride', () => {
     expect(out.bundle?.windows?.certificateThumbprint).toBe(VALID_THUMBPRINT);
   });
 
+  it('removes an Azure signCommand when returning to certificate-store signing', () => {
+    const azure: TauriOverrideConfig = addWindowsArtifactSigningToOverride(
+      {
+        bundle: {
+          windows: { nsis: { installMode: 'currentUser' } },
+        },
+      },
+      String.raw`D:\a\waggle-os\app\scripts\sign-windows-artifact.ps1`,
+    );
+
+    const out = addWindowsSigningToOverride(azure, VALID_THUMBPRINT);
+
+    expect(out.bundle?.windows?.signCommand).toBeUndefined();
+    expect(out.bundle?.windows?.certificateThumbprint).toBe(VALID_THUMBPRINT);
+    expect(out.bundle?.windows?.nsis).toEqual({ installMode: 'currentUser' });
+  });
+
   it('overrides custom digestAlgorithm and timestampUrl when options provided', () => {
     const out = addWindowsSigningToOverride({}, VALID_THUMBPRINT, {
       digestAlgorithm: 'sha384',
@@ -124,6 +145,154 @@ describe('addWindowsSigningToOverride', () => {
     expect(() =>
       addWindowsSigningToOverride({}, 'too-short'),
     ).toThrow(/must be 40 hex characters/i);
+  });
+});
+
+// ─── addWindowsArtifactSigningToOverride ───────────────────────────────────
+
+describe('addWindowsArtifactSigningToOverride', () => {
+  const WRAPPER_PATH = String.raw`D:\a\waggle-os\app\scripts\sign-windows-artifact.ps1`;
+  const SYSTEM_POWERSHELL_PATH =
+    String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
+
+  it('configures an object-form Tauri signCommand with one artifact placeholder', () => {
+    const out = addWindowsArtifactSigningToOverride(
+      {},
+      WRAPPER_PATH,
+    );
+
+    expect(out.bundle?.windows?.signCommand).toEqual({
+      cmd: SYSTEM_POWERSHELL_PATH,
+      args: [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        WRAPPER_PATH,
+        '-ArtifactPath',
+        '%1',
+      ],
+    });
+  });
+
+  it('removes mutually exclusive certificate-store signing fields', () => {
+    const input: TauriOverrideConfig = {
+      bundle: {
+        windows: {
+          certificateThumbprint: 'AB'.repeat(20),
+          digestAlgorithm: 'sha256',
+          timestampUrl: 'http://timestamp.digicert.com',
+          tsp: true,
+          nsis: { installMode: 'currentUser' },
+        },
+      },
+    };
+
+    const out = addWindowsArtifactSigningToOverride(
+      input,
+      WRAPPER_PATH,
+    );
+    expect(out.bundle?.windows?.certificateThumbprint).toBeUndefined();
+    expect(out.bundle?.windows?.digestAlgorithm).toBeUndefined();
+    expect(out.bundle?.windows?.timestampUrl).toBeUndefined();
+    expect(out.bundle?.windows?.tsp).toBeUndefined();
+    expect(out.bundle?.windows?.nsis).toEqual({ installMode: 'currentUser' });
+  });
+
+  it('is immutable and idempotent', () => {
+    const input: TauriOverrideConfig = {
+      build: {
+        beforeBuildCommand: 'npm run build',
+        beforeBundleCommand: 'node mutate-bundle.mjs',
+      },
+      bundle: {
+        active: false,
+        targets: ['msi'],
+        windows: { nsis: { installMode: 'currentUser' } },
+      },
+    };
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const once = addWindowsArtifactSigningToOverride(
+      input,
+      WRAPPER_PATH,
+    );
+    const twice = addWindowsArtifactSigningToOverride(
+      once,
+      WRAPPER_PATH,
+    );
+
+    expect(input).toEqual(snapshot);
+    expect(twice).toEqual(once);
+    expect(once.build).toEqual({
+      beforeBuildCommand: '',
+      beforeBundleCommand: '',
+    });
+    expect(once.bundle?.active).toBe(true);
+    expect(once.bundle?.targets).toEqual(['nsis']);
+    expect(once.bundle?.windows?.nsis).toEqual({ installMode: 'currentUser' });
+  });
+
+  it('rejects non-absolute, placeholder-bearing, or control-character wrapper paths', () => {
+    expect(() =>
+      addWindowsArtifactSigningToOverride(
+        {},
+        'scripts/sign.ps1',
+      ),
+    ).toThrow(/absolute Windows path/i);
+    expect(() =>
+      addWindowsArtifactSigningToOverride(
+        {},
+        String.raw`D:\a\%1\sign-windows-artifact.ps1`,
+      ),
+    ).toThrow(/placeholder/i);
+    expect(() =>
+      addWindowsArtifactSigningToOverride(
+        {},
+        'D:\\safe\nmalicious.ps1',
+      ),
+    ).toThrow(/control characters/i);
+    expect(() =>
+      addWindowsArtifactSigningToOverride(
+        {},
+        String.raw`D:\safe\..\malicious.ps1`,
+      ),
+    ).toThrow(/canonical local Windows/i);
+    expect(() =>
+      addWindowsArtifactSigningToOverride(
+        {},
+        String.raw`D:\safe\sign.ps1:payload`,
+      ),
+    ).toThrow(/canonical local Windows/i);
+  });
+
+  it('contains exactly one artifact placeholder across the complete command', () => {
+    const out = addWindowsArtifactSigningToOverride({}, WRAPPER_PATH);
+    const command = out.bundle?.windows?.signCommand;
+    const placeholderCount = [command?.cmd, ...(command?.args ?? [])]
+      .flatMap((part) => part?.match(/%1/g) ?? [])
+      .length;
+    expect(placeholderCount).toBe(1);
+  });
+});
+
+describe('apply-signing-config Artifact Signing boundary', () => {
+  it('fails closed toward the protected hosted release workflow, never local Build mode', () => {
+    const scriptDir = dirname(fileURLToPath(import.meta.url));
+    const result = spawnSync(
+      process.execPath,
+      [resolve(scriptDir, 'apply-signing-config.mjs')],
+      {
+        cwd: resolve(scriptDir, '..'),
+        env: { ...process.env, WAGGLE_WINDOWS_SIGNING_MODE: 'artifact-signing' },
+        encoding: 'utf8',
+      },
+    );
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.status).not.toBe(0);
+    expect(output).toMatch(/protected GitHub-hosted release workflow/i);
+    expect(output).not.toMatch(/-Mode Build/i);
   });
 });
 

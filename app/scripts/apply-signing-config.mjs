@@ -16,12 +16,10 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The pure helpers below mirror app/scripts/signing-config.ts so this CLI has
-// zero TS-loader dependency at runtime. The .ts version is the canonical
-// implementation tested by signing-config.test.ts (19 cases covering parse,
-// merge, idempotency, immutability). Keep the two implementations in lockstep:
-// any change to parseThumbprintString or addWindowsSigningToOverride below
-// MUST be mirrored in signing-config.ts and vice versa.
+// The pure helpers below mirror the certificate-store helpers in
+// app/scripts/signing-config.ts so this pilot CLI has zero TS-loader dependency
+// at runtime. Keep parseThumbprintString and addWindowsSigningToOverride in
+// lockstep with the canonical TypeScript implementation.
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const APP_DIR = resolve(SCRIPT_DIR, '..');
@@ -33,11 +31,12 @@ const OVERRIDE_PATH = resolve(
   'tauri.build-override.conf.json',
 );
 const THUMBPRINT_PATH = resolve(APP_DIR, 'src-tauri', '.thumbprint.txt');
-
 const DEFAULT_DIGEST_ALGORITHM = 'sha256';
 const DEFAULT_TIMESTAMP_URL = 'http://timestamp.digicert.com';
 const THUMBPRINT_LENGTH = 40;
 const HEX_PATTERN = /^[0-9A-F]+$/;
+const WINDOWS_SIGNING_MODE =
+  process.env.WAGGLE_WINDOWS_SIGNING_MODE ?? 'certificate-store';
 
 function parseThumbprintString(raw) {
   if (!raw || raw.trim().length === 0) {
@@ -59,13 +58,15 @@ function addWindowsSigningToOverride(config, thumbprint, options = {}) {
 
   const existingBundle = config.bundle ?? {};
   const existingWindows = existingBundle.windows ?? {};
+  const nonCustomCommandWindows = { ...existingWindows };
+  delete nonCustomCommandWindows.signCommand;
 
   return {
     ...config,
     bundle: {
       ...existingBundle,
       windows: {
-        ...existingWindows,
+        ...nonCustomCommandWindows,
         certificateThumbprint: normalisedThumbprint,
         digestAlgorithm,
         timestampUrl,
@@ -77,6 +78,20 @@ function addWindowsSigningToOverride(config, thumbprint, options = {}) {
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 function main() {
+  if (!['certificate-store', 'artifact-signing'].includes(WINDOWS_SIGNING_MODE)) {
+    console.error(
+      `[apply-signing-config] unsupported WAGGLE_WINDOWS_SIGNING_MODE: ${WINDOWS_SIGNING_MODE}`,
+    );
+    process.exit(1);
+  }
+  if (WINDOWS_SIGNING_MODE === 'artifact-signing') {
+    console.error(
+      '[apply-signing-config] Azure Artifact Signing is hosted-only. '
+      + 'Run the protected GitHub-hosted release workflow; this local helper cannot issue '
+      + 'the immutable build receipt, protected OIDC identity, session manifest, or callback ledger.',
+    );
+    process.exit(1);
+  }
   if (!existsSync(THUMBPRINT_PATH)) {
     console.error(
       `[apply-signing-config] thumbprint file missing: ${THUMBPRINT_PATH}`,
@@ -93,7 +108,6 @@ function main() {
     process.exit(1);
   }
 
-  const rawThumbprint = readFileSync(THUMBPRINT_PATH, 'utf8');
   const overrideRaw = readFileSync(OVERRIDE_PATH, 'utf8');
 
   let override;
@@ -108,6 +122,7 @@ function main() {
 
   let updated;
   try {
+    const rawThumbprint = readFileSync(THUMBPRINT_PATH, 'utf8');
     updated = addWindowsSigningToOverride(override, rawThumbprint);
   } catch (err) {
     console.error(
@@ -122,9 +137,9 @@ function main() {
   writeFileSync(OVERRIDE_PATH, serialised, 'utf8');
 
   const relativePath = OVERRIDE_PATH.replace(REPO_ROOT, '').replace(/^\\/, '');
-  console.log(
-    `[apply-signing-config] wrote thumbprint ${updated.bundle.windows.certificateThumbprint.slice(0, 8)}... to ${relativePath}`,
-  );
+  const signingDescription =
+    `thumbprint ${updated.bundle.windows.certificateThumbprint.slice(0, 8)}...`;
+  console.log(`[apply-signing-config] wrote ${signingDescription} to ${relativePath}`);
 }
 
 main();
