@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { WorkspaceManager, type WorkspaceConfig } from '../src/workspace-manager.js';
+import { MultiMindCache } from '../src/multi-mind-cache.js';
 
 describe('WorkspaceManager', () => {
   let tmpDir: string;
@@ -167,6 +168,95 @@ describe('WorkspaceManager', () => {
       const mindPath = manager.getMindPath('mind-test');
       expect(mindPath).toBe(path.join(tmpDir, 'workspaces', 'mind-test', 'workspace.mind'));
     });
+
+    it.each(['missing-workspace', '..', '../escape', 'C:\\escape']) (
+      'rejects invalid or missing workspace id %s before resolving a mind path',
+      (id) => {
+        expect(() => manager.getMindPath(id)).toThrow(/workspace/i);
+      },
+    );
+
+    it('rejects an on-disk workspace whose config identity does not match', () => {
+      manager.create({ name: 'Expected Workspace', group: 'Work' });
+      const configPath = path.join(tmpDir, 'workspaces', 'expected-workspace', 'workspace.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as WorkspaceConfig;
+      fs.writeFileSync(configPath, JSON.stringify({ ...config, id: 'different-workspace' }));
+
+      expect(() => manager.getMindPath('expected-workspace')).toThrow(/config id/i);
+    });
+
+    it('rejects a dangling mind junction before opening its target', () => {
+      manager.create({ name: 'Linked Mind', group: 'Work' });
+      const mindPath = path.join(tmpDir, 'workspaces', 'linked-mind', 'workspace.mind');
+      const missingTarget = path.join(tmpDir, 'missing-mind-target');
+      fs.unlinkSync(mindPath);
+      fs.symlinkSync(missingTarget, mindPath, process.platform === 'win32' ? 'junction' : 'dir');
+
+      expect(() => manager.getMindPath('linked-mind')).toThrow(/regular file/i);
+      expect(fs.existsSync(missingTarget)).toBe(false);
+      fs.unlinkSync(mindPath);
+    });
+
+    it('rejects a mind file with another hard-link', () => {
+      manager.create({ name: 'Hard Linked Mind', group: 'Work' });
+      const mindPath = path.join(tmpDir, 'workspaces', 'hard-linked-mind', 'workspace.mind');
+      const outsidePath = path.join(tmpDir, 'outside.mind');
+      fs.writeFileSync(outsidePath, 'outside sentinel');
+      fs.unlinkSync(mindPath);
+      fs.linkSync(outsidePath, mindPath);
+
+      expect(() => manager.getMindPath('hard-linked-mind')).toThrow(/regular file/i);
+      expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside sentinel');
+    });
+
+    it('allows a valid workspace to recreate a missing mind inside its directory', () => {
+      manager.create({ name: 'Missing Mind', group: 'Work' });
+      const mindPath = path.join(tmpDir, 'workspaces', 'missing-mind', 'workspace.mind');
+      fs.unlinkSync(mindPath);
+      expect(manager.getMindPath('missing-mind')).toBe(mindPath);
+
+      const cache = new MultiMindCache({
+        maxOpen: 2,
+        getMindPath: id => manager.getMindPath(id),
+        allowedRoot: path.join(tmpDir, 'workspaces'),
+      });
+      expect(cache.getOrOpen('missing-mind')).not.toBeNull();
+      expect(fs.statSync(mindPath).isFile()).toBe(true);
+      cache.closeAll();
+    });
+
+    it('contains resolver failures and rejects a post-resolution junction swap', () => {
+      const throwingCache = new MultiMindCache({
+        maxOpen: 2,
+        getMindPath: () => { throw new Error('unsafe workspace'); },
+        allowedRoot: path.join(tmpDir, 'workspaces'),
+      });
+      expect(throwingCache.getOrOpen('missing')).toBeNull();
+
+      manager.create({ name: 'Swap Target', group: 'Work' });
+      const workspaceDir = path.join(tmpDir, 'workspaces', 'swap-target');
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-ws-swap-'));
+      const outsideMind = path.join(outsideDir, 'workspace.mind');
+      fs.writeFileSync(outsideMind, 'outside sentinel');
+      const cache = new MultiMindCache({
+        maxOpen: 2,
+        allowedRoot: path.join(tmpDir, 'workspaces'),
+        getMindPath: id => {
+          const resolved = manager.getMindPath(id);
+          fs.rmSync(workspaceDir, { recursive: true, force: true });
+          fs.symlinkSync(outsideDir, workspaceDir, process.platform === 'win32' ? 'junction' : 'dir');
+          return resolved;
+        },
+      });
+
+      try {
+        expect(cache.getOrOpen('swap-target')).toBeNull();
+        expect(fs.readFileSync(outsideMind, 'utf8')).toBe('outside sentinel');
+      } finally {
+        fs.unlinkSync(workspaceDir);
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('listGroups', () => {
@@ -294,6 +384,42 @@ describe('WorkspaceManager', () => {
 
   // Reverse-ported from OSS hive-mind (oss-drift triage R4, 2026-06-11).
   describe('ensure', () => {
+    it('rejects a pre-existing workspace junction without writing through it', () => {
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-ws-outside-'));
+      const outsideConfig = path.join(outsideDir, 'workspace.json');
+      const outsideMind = path.join(outsideDir, 'workspace.mind');
+      fs.writeFileSync(outsideConfig, 'outside config');
+      fs.writeFileSync(outsideMind, 'outside mind');
+      const linkPath = path.join(tmpDir, 'workspaces', 'escape');
+      fs.symlinkSync(outsideDir, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+
+      try {
+        expect(() => manager.ensure('escape')).toThrow(/already exists|valid workspace/i);
+        expect(fs.readFileSync(outsideConfig, 'utf8')).toBe('outside config');
+        expect(fs.readFileSync(outsideMind, 'utf8')).toBe('outside mind');
+        expect(fs.existsSync(path.join(outsideDir, 'sessions'))).toBe(false);
+      } finally {
+        fs.unlinkSync(linkPath);
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it.each([
+      ['malformed', '{"id":'],
+      ['mismatched', JSON.stringify({ id: 'other-workspace' })],
+    ])('preserves an existing %s workspace when ensure cannot validate it', (_label, rawConfig) => {
+      const wsDir = path.join(tmpDir, 'workspaces', 'victim');
+      fs.mkdirSync(wsDir);
+      const configPath = path.join(wsDir, 'workspace.json');
+      const mindPath = path.join(wsDir, 'workspace.mind');
+      fs.writeFileSync(configPath, rawConfig);
+      fs.writeFileSync(mindPath, 'mind sentinel');
+
+      expect(() => manager.ensure('victim')).toThrow(/already exists|valid workspace/i);
+      expect(fs.readFileSync(configPath, 'utf8')).toBe(rawConfig);
+      expect(fs.readFileSync(mindPath, 'utf8')).toBe('mind sentinel');
+      expect(fs.existsSync(path.join(wsDir, 'sessions'))).toBe(false);
+    });
     it('creates a workspace with the exact supplied id when missing', () => {
       const ws = manager.ensure('cwd-derived-id');
 

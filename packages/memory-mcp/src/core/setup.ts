@@ -164,6 +164,7 @@ export async function initialize(): Promise<void> {
   _mindCache = new MultiMindCache({
     maxOpen: 20,
     getMindPath: (workspaceId: string) => _workspaceManager.getMindPath(workspaceId),
+    allowedRoot: path.join(_dataDir, 'workspaces'),
   });
 
   _initialized = true;
