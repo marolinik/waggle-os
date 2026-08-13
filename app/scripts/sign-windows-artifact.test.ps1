@@ -71,6 +71,23 @@ function Get-Sha256 {
   return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
+function Get-RealSha256 {
+  param([string]$Path)
+  $stream = [IO.File]::Open(
+    $Path,
+    [IO.FileMode]::Open,
+    [IO.FileAccess]::Read,
+    [IO.FileShare]::Read
+  )
+  $algorithm = [Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($algorithm.ComputeHash($stream)) -replace '-', '')
+  } finally {
+    $algorithm.Dispose()
+    $stream.Dispose()
+  }
+}
+
 function New-PendingLedger {
   param([string]$SessionId, [string]$ManifestSha256, [object[]]$Slots)
   return [pscustomobject][ordered]@{
@@ -248,6 +265,42 @@ if ($wrapperSource -notmatch "ValidateSet\('Callback',\s*'Package'\)" -or
     $wrapperSource -notmatch 'function\s+Assert-WaggleSigningPackageComplete') {
   throw 'Production Artifact Signing lacks the hosted-only Package issuer.'
 }
+foreach ($portableParameter in @(
+    'PortableToolchainRoot', 'PortableNodePath',
+    'PortableGitPath', 'PortableSevenZipPath'
+  )) {
+  if ($wrapperSource -notmatch "\[string\]\`$$portableParameter") {
+    throw "Hosted Package mode lacks the explicit $portableParameter input."
+  }
+  $passed++
+}
+$portableEnvironmentNames = @(
+  'WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT',
+  'WAGGLE_SIGNING_PORTABLE_NODE_PATH',
+  'WAGGLE_SIGNING_PORTABLE_GIT_PATH',
+  'WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH'
+)
+foreach ($portableEnvironmentName in $portableEnvironmentNames) {
+  if ($wrapperSource -notmatch [Regex]::Escape($portableEnvironmentName)) {
+    throw "Signing callbacks do not receive $portableEnvironmentName."
+  }
+  $passed++
+}
+if ($wrapperSource -notmatch 'function\s+Get-WagglePortableToolchain' -or
+    $wrapperSource -notmatch 'portableToolchainRoot' -or
+    $wrapperSource -notmatch 'sevenZipDllPath' -or
+    $wrapperSource -notmatch 'sevenZipDllSha256') {
+  throw 'Portable signing tools are not path-, manifest-, and closure-bound.'
+}
+$passed++
+if ($wrapperSource -notmatch [Regex]::Escape(
+      'CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
+    ) -or
+    $wrapperSource -notmatch
+      'Assert-MicrosoftAuthenticodeFile\s+\$dotnet\s+''\.NET host''\s+\$null\s+\$DotNetPublisher') {
+  throw '.NET 8 validation is not bound to the exact repository-pinned .NET signer.'
+}
+$passed++
 if ($wrapperSource -notmatch 'Restore-WaggleReplacedArtifact\s+`?\s*-ArtifactPath') {
   throw 'Production signing callback does not use the verified rollback path.'
 }
@@ -321,6 +374,585 @@ foreach ($environmentName in @(
     throw "Production signing build does not sanitize $environmentName."
   }
   $passed++
+}
+if ($packageSource -notmatch '(?s)foreach\s*\(\$name\s+in\s+\$environmentNames\).*?\$savedEnvironment\[\$name\].*?finally\s*\{.*?SetEnvironmentVariable\(\$name,\s*\$savedEnvironment\[\$name\]\)' -or
+    $wrapperSource -notmatch "@\('-PortableToolchainRoot',\s*\`$ToolchainRoot\)" -or
+    $wrapperSource -notmatch "@\('-PortableNodePath',\s*\`$Node\)" -or
+    $wrapperSource -notmatch "@\('-PortableGitPath',\s*\`$Git\)" -or
+    $wrapperSource -notmatch "@\('-PortableSevenZipPath',\s*\`$SevenZip\)") {
+  throw 'Portable toolchain inputs are not forwarded and transactionally restored.'
+}
+$passed++
+
+& {
+  $handoffPath = Join-Path $PSScriptRoot 'new-windows-signing-handoff.ps1'
+  . $handoffPath -SourceTargetRoot 'C:\unused' -DestinationRoot 'C:\unused'
+
+  Assert-Equal $MaxTargetFileCount 18000 'handoff target file-count production bound'
+  Assert-Equal $MaxTargetBytes ([long]768MB) 'handoff target byte production bound'
+  Assert-Equal $MaxResourceFileCount 17500 'handoff resource file-count production bound'
+  Assert-Equal $MaxResourceBytes ([long]600MB) 'handoff resource byte production bound'
+
+  $handoffFixtureRoot = Join-Path `
+    ([IO.Path]::GetTempPath()) `
+    "waggle-handoff-test-$([Guid]::NewGuid().ToString('N'))"
+  [IO.Directory]::CreateDirectory($handoffFixtureRoot) | Out-Null
+  $handoffReparsePath = $null
+  try {
+    $sourceRoot = Join-Path $handoffFixtureRoot 'source'
+    $sourceDependency = Join-Path $sourceRoot 'release\deps\waggle.exe'
+    $sourceMain = Join-Path $sourceRoot 'release\waggle.exe'
+    $sourceResource = Join-Path $sourceRoot 'resources\service.js'
+    $sourceResourceTwo = Join-Path $sourceRoot 'resources\model.json'
+    $sourceNsis = Join-Path $sourceRoot 'nsis\makensis.exe'
+    $sourceNsisDll = Join-Path $sourceRoot 'nsis\plugin.dll'
+    [IO.Directory]::CreateDirectory((Split-Path $sourceDependency -Parent)) | Out-Null
+    [IO.Directory]::CreateDirectory((Split-Path $sourceResource -Parent)) | Out-Null
+    [IO.Directory]::CreateDirectory((Split-Path $sourceNsis -Parent)) | Out-Null
+    New-SyntheticPe $sourceDependency 211
+    New-Item -ItemType HardLink -Path $sourceMain -Target $sourceDependency | Out-Null
+    [IO.File]::WriteAllText($sourceResource, 'receipt-bound-service')
+    [IO.File]::WriteAllText($sourceResourceTwo, '{"model":"fixture"}')
+    [IO.File]::WriteAllText($sourceNsis, 'fixture-makensis')
+    [IO.File]::WriteAllText($sourceNsisDll, 'fixture-plugin')
+
+    $targetMappings = @(
+      [pscustomobject]@{
+        Source = $sourceMain
+        Path = "$TargetTriple\release\waggle.exe"
+      },
+      [pscustomobject]@{
+        Source = $sourceDependency
+        Path = "$TargetTriple\release\deps\waggle.exe"
+      },
+      [pscustomobject]@{ Source = $sourceResource; Path = 'resources\service.js' },
+      [pscustomobject]@{ Source = $sourceResourceTwo; Path = 'resources\model.json' }
+    )
+    $resourceMappings = @(
+      [pscustomobject]@{ Source = $sourceResource; Path = 'service.js' },
+      [pscustomobject]@{ Source = $sourceResourceTwo; Path = 'model.json' }
+    )
+    $nsisMappings = @(
+      [pscustomobject]@{ Source = $sourceNsis; Path = 'makensis.exe' },
+      [pscustomobject]@{ Source = $sourceNsisDll; Path = 'plugins\plugin.dll' }
+    )
+    $expectedTarget = New-HandoffInventory $targetMappings 'Fixture target'
+    $expectedResources = New-HandoffInventory $resourceMappings 'Fixture resources'
+    $expectedNsis = New-HandoffInventory $nsisMappings 'Fixture NSIS'
+    $sourceRevision = 'a' * 40
+    $checkerSha256 = 'B' * 64
+    $transactionArguments = @{
+      DestinationParentRoot = $handoffFixtureRoot
+      TargetMappings = $targetMappings
+      ResourceMappings = $resourceMappings
+      NsisMappings = $nsisMappings
+      ExpectedTargetInventory = $expectedTarget
+      ExpectedResourcesInventory = $expectedResources
+      ExpectedNsisInventory = $expectedNsis
+      SourceRevision = $sourceRevision
+      CheckerSha256 = $checkerSha256
+      TargetFileCountLimit = 8
+      TargetByteLimit = 1MB
+      ResourceFileCountLimit = 4
+      ResourceByteLimit = 1MB
+      NsisFileCountLimit = 4
+      NsisByteLimit = 1MB
+    }
+
+    $acceptedDestination = Join-Path $handoffFixtureRoot 'accepted'
+    $accepted = Invoke-HandoffDestinationTransaction `
+      -DestinationRoot $acceptedDestination @transactionArguments
+    Assert-Equal `
+      (Test-Path -LiteralPath $accepted.ReceiptPath -PathType Leaf) $true `
+      'handoff transaction publishes a receipt'
+    Assert-Equal `
+      (Get-HandoffFileSha256 $accepted.ReceiptPath) $accepted.ReceiptSha256 `
+      'handoff receipt digest binds exact bytes'
+    $acceptedReceipt = Get-Content -Raw -LiteralPath $accepted.ReceiptPath |
+      ConvertFrom-Json -Depth 32 -DateKind String
+    Assert-Equal $acceptedReceipt.schemaVersion 1 'handoff receipt schema'
+    Assert-Equal $acceptedReceipt.repository $ApprovedRepository 'handoff receipt repository'
+    Assert-Equal $acceptedReceipt.sourceRevision $sourceRevision `
+      'handoff receipt source revision'
+    Assert-Equal $acceptedReceipt.targetInventory.sha256 $expectedTarget.sha256 `
+      'handoff receipt target inventory'
+    Assert-Equal $acceptedReceipt.resourcesInventory.sha256 $expectedResources.sha256 `
+      'handoff receipt resource inventory'
+    Assert-Equal $acceptedReceipt.nsisInventory.sha256 $expectedNsis.sha256 `
+      'handoff receipt NSIS inventory'
+    $acceptedRelease = Join-Path `
+      $accepted.PrebuiltRoot "$TargetTriple\release"
+    Assert-HandoffCargoPair $acceptedRelease 'Accepted staged Cargo output'
+    $passed++
+
+    foreach ($boundProbe in @(
+        [pscustomobject]@{ Name = 'target-count'; Overrides = @{ TargetFileCountLimit = 3 } },
+        [pscustomobject]@{
+          Name = 'target-bytes'
+          Overrides = @{
+            TargetByteLimit = ([long](Assert-HandoffMappingBounds `
+              $targetMappings 8 1MB 'Fixture target bytes')) - 1
+          }
+        },
+        [pscustomobject]@{ Name = 'resource-count'; Overrides = @{ ResourceFileCountLimit = 1 } },
+        [pscustomobject]@{ Name = 'nsis-count'; Overrides = @{ NsisFileCountLimit = 1 } }
+      )) {
+      $probeDestination = Join-Path $handoffFixtureRoot ([string]$boundProbe.Name)
+      $probeArguments = @{} + $transactionArguments
+      foreach ($override in $boundProbe.Overrides.GetEnumerator()) {
+        $probeArguments[$override.Key] = $override.Value
+      }
+      Assert-Throws {
+        Invoke-HandoffDestinationTransaction `
+          -DestinationRoot $probeDestination @probeArguments | Out-Null
+      } 'deterministic file-count or byte bound' `
+        "handoff $($boundProbe.Name) rejection"
+      Assert-Equal (Test-Path -LiteralPath $probeDestination) $false `
+        "handoff $($boundProbe.Name) leaves no destination"
+    }
+
+    $tamperedDestination = Join-Path $handoffFixtureRoot 'tampered-stage'
+    Assert-Throws {
+      Invoke-HandoffDestinationTransaction `
+        -DestinationRoot $tamperedDestination @transactionArguments `
+        -FinalSourceAssertion {
+          param([string]$StagedRoot)
+          [IO.File]::WriteAllText(
+            (Join-Path $StagedRoot 'resources\service.js'),
+            'tampered-after-copy'
+          )
+        } | Out-Null
+    } 'inventory changed during handoff staging' `
+      'handoff tampered staged inventory rejection'
+    Assert-Equal (Test-Path -LiteralPath $tamperedDestination) $false `
+      'handoff tamper rollback removes the entire destination'
+
+    $collisionMappings = @($resourceMappings) + @(
+      [pscustomobject]@{ Source = $sourceResource; Path = 'SERVICE.JS' }
+    )
+    Assert-Throws {
+      New-HandoffInventory $collisionMappings 'Fixture collision' | Out-Null
+    } 'duplicate path or case-insensitive collision' `
+      'handoff case-insensitive collision rejection'
+    Assert-Throws {
+      Invoke-HandoffDestinationTransaction `
+        -DestinationRoot (Join-Path $handoffFixtureRoot '..\escape') `
+        @transactionArguments | Out-Null
+    } 'safe, fully qualified local Windows path|absent direct child' `
+      'handoff unsafe destination rejection'
+
+    $adsRoot = Join-Path $handoffFixtureRoot 'ads-tree'
+    [IO.Directory]::CreateDirectory($adsRoot) | Out-Null
+    $adsFile = Join-Path $adsRoot 'payload.bin'
+    [IO.File]::WriteAllText($adsFile, 'visible')
+    [IO.File]::WriteAllText("${adsFile}:hidden", 'hidden')
+    Assert-Throws {
+      Get-HandoffTreeFiles $adsRoot 'Fixture ADS tree' | Out-Null
+    } 'alternate data stream' 'handoff ADS rejection'
+
+    $reparseTarget = Join-Path $handoffFixtureRoot 'reparse-target'
+    $reparseRoot = Join-Path $handoffFixtureRoot 'reparse-tree'
+    [IO.Directory]::CreateDirectory($reparseTarget) | Out-Null
+    [IO.Directory]::CreateDirectory($reparseRoot) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $reparseTarget 'payload.bin'), 'outside')
+    $handoffReparsePath = Join-Path $reparseRoot 'linked'
+    New-Item -ItemType Junction -Path $handoffReparsePath `
+      -Target $reparseTarget | Out-Null
+    Assert-Throws {
+      Get-HandoffTreeFiles $reparseRoot 'Fixture reparse tree' | Out-Null
+    } 'reparse point|linked directory' 'handoff reparse rejection'
+
+    $git = [string](
+      Get-Command git.exe -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1 -ExpandProperty Source
+    )
+    $repoFixture = Join-Path $handoffFixtureRoot 'repo'
+    [IO.Directory]::CreateDirectory($repoFixture) | Out-Null
+    & $git -C $repoFixture init --quiet
+    & $git -C $repoFixture config user.email 'handoff-test@invalid.example'
+    & $git -C $repoFixture config user.name 'Waggle Handoff Test'
+    for ($index = 0; $index -lt 101; $index++) {
+      [IO.File]::WriteAllText(
+        (Join-Path $repoFixture ("input-{0:D3}.txt" -f $index)),
+        "canonical-$index",
+        [Text.UTF8Encoding]::new($false)
+      )
+    }
+    & $git -C $repoFixture add -- .
+    & $git -C $repoFixture commit --quiet -m 'fixture'
+    & $git -C $repoFixture tag v1.0.0
+    $fixtureRevision = [string](& $git -C $repoFixture rev-parse HEAD)
+    $trackedFixture = @('input-000.txt')
+    Assert-HandoffRepositoryState `
+      $git $repoFixture $fixtureRevision '1.0.0' $trackedFixture
+    $passed++
+    [IO.File]::AppendAllText((Join-Path $repoFixture 'input-000.txt'), 'dirty')
+    Assert-Throws {
+      Assert-HandoffRepositoryState `
+        $git $repoFixture $fixtureRevision '1.0.0' $trackedFixture
+    } 'clean exact tagged' 'handoff dirty repository rejection'
+    & $git -C $repoFixture checkout --quiet -- input-000.txt
+    & $git -C $repoFixture tag -d v1.0.0 | Out-Null
+    Assert-Throws {
+      Assert-HandoffRepositoryState `
+        $git $repoFixture $fixtureRevision '1.0.0' $trackedFixture 2>$null
+    } 'clean exact tagged' 'handoff missing release tag rejection'
+    & $git -C $repoFixture tag v1.0.0
+    & $git -C $repoFixture update-index --skip-worktree input-000.txt
+    Assert-Throws {
+      Assert-HandoffRepositoryState `
+        $git $repoFixture $fixtureRevision '1.0.0' $trackedFixture
+    } 'non-default tracked state' 'handoff skip-worktree index rejection'
+    & $git -C $repoFixture update-index --no-skip-worktree input-000.txt
+  } finally {
+    if ($null -ne $handoffReparsePath -and
+        (Test-Path -LiteralPath $handoffReparsePath)) {
+      [IO.Directory]::Delete($handoffReparsePath)
+    }
+    if (Test-Path -LiteralPath $handoffFixtureRoot) {
+      foreach ($fixtureItem in @(Get-ChildItem `
+          -LiteralPath $handoffFixtureRoot -Force -Recurse)) {
+        if (($fixtureItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+          $fixtureItem.Attributes = [IO.FileAttributes]::Normal
+        }
+      }
+      [IO.Directory]::Delete($handoffFixtureRoot, $true)
+    }
+  }
+}
+
+& {
+  $portableFixtureParent = Join-Path `
+    ([IO.Path]::GetTempPath()) `
+    "waggle-portable-tools-$([Guid]::NewGuid().ToString('N'))"
+  [IO.Directory]::CreateDirectory($portableFixtureParent) | Out-Null
+  $portableRoot = New-PrivateDirectory (Join-Path $portableFixtureParent 'private')
+  $node = Join-Path $portableRoot 'node\node.exe'
+  $git = Join-Path $portableRoot 'git\cmd\git.exe'
+  $gitRuntime = Join-Path $portableRoot 'git\mingw64\bin\git.exe'
+  $gitDependency = Join-Path $portableRoot 'git\mingw64\bin\libcrypto-3-x64.dll'
+  $sevenZip = Join-Path $portableRoot 'sevenzip\7z.exe'
+  $sevenZipDll = Join-Path $portableRoot 'sevenzip\7z.dll'
+  $outsideNode = Join-Path $portableFixtureParent 'outside-node.exe'
+  foreach ($path in @(
+      $node, $git, $gitRuntime, $gitDependency,
+      $sevenZip, $sevenZipDll, $outsideNode
+    )) {
+    [IO.Directory]::CreateDirectory((Split-Path $path -Parent)) | Out-Null
+    [IO.File]::WriteAllText($path, "fixture:$([IO.Path]::GetFileName($path))")
+  }
+
+  function Get-FileHash {
+    param([string]$LiteralPath, [string]$Algorithm)
+    if ($null -ne (Get-Variable receiptPath -ErrorAction SilentlyContinue) -and
+        [string]::Equals(
+          [IO.Path]::GetFullPath($LiteralPath),
+          [IO.Path]::GetFullPath($receiptPath),
+          [StringComparison]::OrdinalIgnoreCase
+        )) {
+      return [pscustomobject]@{ Hash = Get-RealSha256 $LiteralPath }
+    }
+    $content = [IO.File]::ReadAllText($LiteralPath)
+    $hash = if ($content -match 'tampered') {
+      '0' * 64
+    } else {
+      switch ([IO.Path]::GetFileName($LiteralPath)) {
+        'node.exe' { $NodeSha256 }
+        'git.exe' {
+          if ($LiteralPath -match 'mingw64') { $GitRuntimeSha256 } else { $GitSha256 }
+        }
+        '7z.exe' { $SevenZipSha256 }
+        '7z.dll' { $SevenZipDllSha256 }
+        'node.zip' { $NodeArchiveSha256 }
+        'mingit.zip' { $GitArchiveSha256 }
+        'sevenzip.exe' { $SevenZipArchiveSha256 }
+        default { 'F' * 64 }
+      }
+    }
+    return [pscustomobject]@{ Hash = $hash }
+  }
+
+  $archiveRoot = Join-Path $portableFixtureParent 'downloads'
+  [IO.Directory]::CreateDirectory($archiveRoot) | Out-Null
+  $nodeArchive = Join-Path $archiveRoot 'node.zip'
+  $gitArchive = Join-Path $archiveRoot 'mingit.zip'
+  $sevenZipArchive = Join-Path $archiveRoot 'sevenzip.exe'
+  foreach ($archive in @($nodeArchive, $gitArchive, $sevenZipArchive)) {
+    [IO.File]::WriteAllText($archive, 'fixture:vendor-archive')
+  }
+  $portableInventory = New-WagglePrebuiltInventory -Root $portableRoot
+  $receiptPath = Join-Path $portableFixtureParent 'portable-receipt.json'
+  Write-WaggleJsonNoBom $receiptPath ([ordered]@{
+    schemaVersion = 1
+    portableToolchainRoot = $portableRoot
+    archives = [ordered]@{
+      node = [ordered]@{ path = $nodeArchive; sha256 = $NodeArchiveSha256 }
+      git = [ordered]@{ path = $gitArchive; sha256 = $GitArchiveSha256 }
+      sevenZip = [ordered]@{ path = $sevenZipArchive; sha256 = $SevenZipArchiveSha256 }
+    }
+    inventory = $portableInventory
+  })
+  $portableReceiptJson = [IO.File]::ReadAllText($receiptPath)
+  $receiptSha256 = Get-RealSha256 $receiptPath
+  $savedPortableFileCount = $PortableToolchainFileCount
+  $savedPortableInventorySha256 = $PortableToolchainInventorySha256
+  $PortableToolchainFileCount = @($portableInventory.entries).Count
+  $PortableToolchainInventorySha256 = $portableInventory.sha256
+
+  function Get-AuthenticodeSignature {
+    param([string]$LiteralPath)
+    $content = [IO.File]::ReadAllText($LiteralPath)
+    $subject = switch ([IO.Path]::GetFileName($LiteralPath)) {
+      'node.exe' { $NodePublisher }
+      'git.exe' {
+        if ($content -match 'wrong-publisher') { $MicrosoftPublisher } else { $GitPublisher }
+      }
+      'dotnet.exe' {
+        if ($content -match 'wrong-publisher') { $MicrosoftPublisher } else { $DotNetPublisher }
+      }
+      default { $MicrosoftPublisher }
+    }
+    $oids = [Security.Cryptography.OidCollection]::new()
+    [void]$oids.Add([Security.Cryptography.Oid]::new($CodeSigningOid))
+    $eku = [Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new(
+      $oids,
+      $false
+    )
+    return [pscustomobject]@{
+      Status = [Management.Automation.SignatureStatus]::Valid
+      SignatureType = 'Authenticode'
+      SignerCertificate = [pscustomobject]@{
+        Subject = $subject
+        Extensions = @($eku)
+      }
+    }
+  }
+
+  $portableEnvironmentNames = @(
+    'WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT',
+    'WAGGLE_SIGNING_PORTABLE_NODE_PATH',
+    'WAGGLE_SIGNING_PORTABLE_GIT_PATH',
+    'WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH',
+    'WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH',
+    'WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256',
+    'WAGGLE_SIGNING_MANIFEST_PATH',
+    'WAGGLE_SIGNING_MANIFEST_SHA256'
+  )
+  $savedPortableEnvironment = @{}
+  foreach ($name in $portableEnvironmentNames) {
+    $savedPortableEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+  }
+  try {
+    $portable = Get-WagglePortableToolchain `
+      $portableRoot $node $git $sevenZip $receiptPath $receiptSha256
+    Assert-Equal $portable.NodePath $node 'portable Node path validation'
+    Assert-Equal $portable.GitPath $git 'portable Git path validation'
+    Assert-Equal $portable.GitRuntimePath $gitRuntime `
+      'portable Git runtime closure validation'
+    Assert-Equal $portable.SevenZipDllPath $sevenZipDll `
+      'portable 7-Zip closure validation'
+    foreach ($lock in $portable.Locks) { $lock.Dispose() }
+
+    [IO.File]::AppendAllText(
+      $receiptPath, ' ', [Text.UTF8Encoding]::new($false)
+    )
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath $receiptSha256
+    } 'does not match its handoff SHA-256' `
+      'portable raw receipt byte tamper with stale digest rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath ('E' * 64)
+    } 'does not match its handoff SHA-256' 'portable receipt handoff digest rejection'
+
+    $mutatedReceipt = $portableReceiptJson | ConvertFrom-Json -Depth 32
+    $mutatedReceipt.schemaVersion = 2
+    Write-WaggleJsonNoBom $receiptPath $mutatedReceipt
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath `
+        (Get-RealSha256 $receiptPath)
+    } 'schemaVersion must be 1' 'portable receipt schema rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    $mutatedReceipt = $portableReceiptJson | ConvertFrom-Json -Depth 32
+    $mutatedReceipt.portableToolchainRoot = $portableFixtureParent
+    Write-WaggleJsonNoBom $receiptPath $mutatedReceipt
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath `
+        (Get-RealSha256 $receiptPath)
+    } 'receipt root' 'portable receipt root substitution rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    $mutatedReceipt = $portableReceiptJson | ConvertFrom-Json -Depth 32
+    $mutatedReceipt.archives.node.sha256 = '0' * 64
+    Write-WaggleJsonNoBom $receiptPath $mutatedReceipt
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath `
+        (Get-RealSha256 $receiptPath)
+    } 'exact distinct repository-pinned handoff' `
+      'portable receipt recomputed archive hash rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    $mutatedReceipt = $portableReceiptJson | ConvertFrom-Json -Depth 32
+    $mutatedReceipt.archives.node.path = $gitArchive
+    Write-WaggleJsonNoBom $receiptPath $mutatedReceipt
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath `
+        (Get-RealSha256 $receiptPath)
+    } 'exact distinct repository-pinned handoff|does not match its pinned SHA-256' `
+      'portable receipt recomputed archive path rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    $mutatedReceipt = $portableReceiptJson | ConvertFrom-Json -Depth 32
+    $mutatedReceipt.inventory.sha256 = '0' * 64
+    Write-WaggleJsonNoBom $receiptPath $mutatedReceipt
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath `
+        (Get-RealSha256 $receiptPath)
+    } 'repository-pinned full closure' `
+      'portable receipt recomputed inventory aggregate rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    $mutatedReceipt = $portableReceiptJson | ConvertFrom-Json -Depth 32
+    $mutatedReceipt.inventory.entries[0].sha256 = '0' * 64
+    Write-WaggleJsonNoBom $receiptPath $mutatedReceipt
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath `
+        (Get-RealSha256 $receiptPath)
+    } 'inventory aggregate SHA-256 digest is invalid' `
+      'portable receipt recomputed inventory entry rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    $mutatedReceipt = $portableReceiptJson | ConvertFrom-Json -Depth 32
+    $mutatedReceipt.inventory.entries = @($mutatedReceipt.inventory.entries)[1..(
+      @($mutatedReceipt.inventory.entries).Count - 1
+    )]
+    Write-WaggleJsonNoBom $receiptPath $mutatedReceipt
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath `
+        (Get-RealSha256 $receiptPath)
+    } 'repository-pinned full closure' `
+      'portable receipt recomputed inventory full-count rejection'
+    [IO.File]::WriteAllText(
+      $receiptPath, $portableReceiptJson, [Text.UTF8Encoding]::new($false)
+    )
+
+    $unexpectedDependency = Join-Path $portableRoot 'git\mingw64\bin\injected.dll'
+    [IO.File]::WriteAllText($unexpectedDependency, 'unexpected')
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath $receiptSha256
+    } 'missing, extra, or unexpected files' `
+      'portable unexpected adjacent dependency rejection'
+    [IO.File]::Delete($unexpectedDependency)
+
+    [IO.File]::WriteAllText($gitDependency, 'tampered adjacent dependency')
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath $receiptSha256
+    } 'inventory SHA-256 digest and size' `
+      'portable mutated adjacent dependency rejection'
+    [IO.File]::WriteAllText($gitDependency, 'fixture:libcrypto-3-x64.dll')
+
+    [IO.File]::Delete($gitDependency)
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath $receiptSha256
+    } 'missing, extra, or unexpected files' `
+      'portable missing adjacent dependency rejection'
+    [IO.File]::WriteAllText($gitDependency, 'fixture:libcrypto-3-x64.dll')
+
+    [IO.File]::WriteAllText($node, 'tampered')
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath $receiptSha256
+    } 'inventory SHA-256 digest and size' 'portable Node tamper rejection'
+    [IO.File]::WriteAllText($node, 'fixture:node.exe')
+
+    [IO.File]::WriteAllText($git, 'wrong-publisher')
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath $receiptSha256
+    } 'Git executable.*approved publisher' 'portable Git publisher rejection'
+    [IO.File]::WriteAllText($git, 'fixture:git.exe')
+
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $outsideNode $git $sevenZip $receiptPath $receiptSha256
+    } 'contained by the private portable toolchain root' `
+      'portable tool path containment rejection'
+    Assert-Throws {
+      Get-WagglePortableToolchain `
+        $portableRoot $node $git $sevenZip $receiptPath $receiptSha256 `
+        -DisallowedRoots @($portableFixtureParent)
+    } 'overlaps.*boundary' 'portable root overlap rejection'
+
+    [Environment]::SetEnvironmentVariable(
+      'WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT', $portableRoot
+    )
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_NODE_PATH', $node)
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_GIT_PATH', $git)
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH', $sevenZip)
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH', $receiptPath)
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256', $receiptSha256)
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_PATH', $null)
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_SHA256', $null)
+    Assert-Throws {
+      Get-WaggleSigningToolchain
+    } 'active receipt-bound signing session' `
+      'portable callback outside receipt-bound session rejection'
+    $resolvedPortable = Get-WaggleSigningToolchain -AllowPortableBeforeManifest
+    Assert-Equal $resolvedPortable.PortableToolchainRoot $portableRoot `
+      'Package setup resolves exact portable root'
+    foreach ($lock in $resolvedPortable.Locks) { $lock.Dispose() }
+    [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_NODE_PATH', $null)
+    Assert-Throws {
+      Get-WaggleSigningToolchain -AllowPortableBeforeManifest
+    } 'must provide the exact root, Node, Git, 7-Zip, receipt path, and receipt SHA-256' `
+      'partial portable environment rejection'
+
+    $dotnetFixture = Join-Path $portableRoot 'dotnet.exe'
+    [IO.File]::WriteAllText($dotnetFixture, 'wrong-publisher')
+    Assert-Throws {
+      Assert-MicrosoftAuthenticodeFile `
+        $dotnetFixture '.NET host' $null $DotNetPublisher
+    } 'approved publisher' 'generic Microsoft signer rejected for .NET host'
+    [IO.File]::WriteAllText($dotnetFixture, 'exact-dotnet-publisher')
+    Assert-MicrosoftAuthenticodeFile `
+      $dotnetFixture '.NET host' $null $DotNetPublisher
+    $script:passed++
+  } finally {
+    $PortableToolchainFileCount = $savedPortableFileCount
+    $PortableToolchainInventorySha256 = $savedPortableInventorySha256
+    foreach ($name in $portableEnvironmentNames) {
+      [Environment]::SetEnvironmentVariable($name, $savedPortableEnvironment[$name])
+    }
+    [IO.Directory]::Delete($portableFixtureParent, $true)
+  }
 }
 
 Assert-Equal `
@@ -415,11 +1047,11 @@ try {
   Assert-Throws {
     Assert-MicrosoftAuthenticodeFile `
       (Get-TrustedPath $fakeSignTool 'Fake SignTool') 'Fake SignTool' $null
-  } 'not validly Authenticode-signed by Microsoft' 'fake SignTool rejection'
+  } 'not validly Authenticode-signed by the approved publisher' 'fake SignTool rejection'
   Assert-Throws {
     Assert-MicrosoftAuthenticodeFile `
       (Get-TrustedPath $fakeDlib 'Fake dlib') 'Fake dlib' $ArtifactSigningDlibSha256
-  } 'not validly Authenticode-signed by Microsoft' 'fake dlib rejection'
+  } 'not validly Authenticode-signed by the approved publisher' 'fake dlib rejection'
 
   $currentPowerShell = Get-TrustedPath (Get-Process -Id $PID).Path 'Current PowerShell'
   Assert-MicrosoftAuthenticodeFile $currentPowerShell 'Current PowerShell' $null
@@ -1001,6 +1633,10 @@ $environmentNames = @(
   'WAGGLE_SIGNING_MANIFEST_PATH', 'WAGGLE_SIGNING_MANIFEST_SHA256',
   'WAGGLE_SIGNING_SESSION_ID', 'CARGO_TARGET_DIR', 'TEMP', 'TMP',
   'WAGGLE_NSIS_SIGNING_TEMP_ROOT', 'NODE_OPTIONS', 'NODE_PATH',
+  'WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT',
+  'WAGGLE_SIGNING_PORTABLE_NODE_PATH',
+  'WAGGLE_SIGNING_PORTABLE_GIT_PATH',
+  'WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH',
   'NAPI_RS_NATIVE_LIBRARY_PATH', 'NAPI_RS_FORCE_WASI',
   'npm_config_node_options', 'TARGET_ARCH'
 )
@@ -1073,7 +1709,7 @@ try {
     'tauri-package.json', 'tauri-native-package.json', 'tauri-native.node',
     'vite.js', 'vite-package.json', 'bundle-node.mjs', 'build-sidecar.mjs',
     'bundle-native-deps.mjs', 'stage-sidecar-deps.mjs', 'makensis.exe',
-    'git.exe', 'node.exe', 'npm-cli.js', '7z.exe', 'signtool.exe',
+    'git.exe', 'git-runtime.exe', 'node.exe', 'npm-cli.js', '7z.exe', 'signtool.exe',
     'artifact-signing.nupkg'
   )
   $toolPaths = @{}
@@ -1110,9 +1746,12 @@ try {
     }
     MakensisPath = $toolPaths['makensis.exe']
     GitPath = $toolPaths['git.exe']
+    GitRuntimePath = $toolPaths['git-runtime.exe']
+    PortableToolchainRoot = $null
     NodePath = $toolPaths['node.exe']
     NpmCliPath = $toolPaths['npm-cli.js']
     SevenZipPath = $toolPaths['7z.exe']
+    SevenZipDllPath = $toolPaths['7z.exe']
     SignToolPath = $toolPaths['signtool.exe']
     ArtifactSigningPackagePath = $toolPaths['artifact-signing.nupkg']
     SourceRevision = 'a' * 40
@@ -1134,9 +1773,11 @@ try {
     }
     MakensisSha256 = Get-Sha256 $toolPaths['makensis.exe']
     GitSha256 = Get-Sha256 $toolPaths['git.exe']
+    GitRuntimeSha256 = Get-Sha256 $toolPaths['git-runtime.exe']
     NodeSha256 = Get-Sha256 $toolPaths['node.exe']
     NpmCliSha256 = Get-Sha256 $toolPaths['npm-cli.js']
     SevenZipSha256 = Get-Sha256 $toolPaths['7z.exe']
+    SevenZipDllSha256 = Get-Sha256 $toolPaths['7z.exe']
     SignToolSha256 = Get-Sha256 $toolPaths['signtool.exe']
     ArtifactSigningPackageSha256 = Get-Sha256 $toolPaths['artifact-signing.nupkg']
     ArtifactSigningX64ManifestSha256 = 'B' * 64
@@ -1229,6 +1870,8 @@ try {
       makensisSha256 = $context.MakensisSha256
       gitPath = $context.GitPath
       gitSha256 = $context.GitSha256
+      gitRuntimePath = $context.GitRuntimePath
+      gitRuntimeSha256 = $context.GitRuntimeSha256
       nodePath = $context.NodePath
       nodeSha256 = $context.NodeSha256
       npmCliPath = $context.NpmCliPath
@@ -1281,6 +1924,115 @@ try {
   } finally {
     foreach ($lock in $loadedSession.Locks) { $lock.Dispose() }
   }
+
+  $portableContext = $context | Select-Object *
+  $portableContext.PortableToolchainRoot = $toolDirectory
+  $portableContext | Add-Member `
+    -NotePropertyName PortableToolchainReceiptPath `
+    -NotePropertyValue $toolPaths['artifact-signing.nupkg']
+  $portableContext | Add-Member `
+    -NotePropertyName PortableToolchainReceiptSha256 `
+    -NotePropertyValue (Get-Sha256 $toolPaths['artifact-signing.nupkg'])
+  $portableContext | Add-Member `
+    -NotePropertyName PortableToolchainInventorySha256 `
+    -NotePropertyValue $PortableToolchainInventorySha256
+  $portableContext | Add-Member `
+    -NotePropertyName PortableToolchainLocks `
+    -NotePropertyValue ([Collections.Generic.List[IDisposable]]::new())
+  $portableContext.SevenZipDllPath = $toolPaths['7z.exe']
+  $portableContext.SevenZipDllSha256 = Get-Sha256 $toolPaths['7z.exe']
+  $portableManifest = $baseManifest | ConvertTo-Json -Depth 32 |
+    ConvertFrom-Json -Depth 32 -DateKind String
+  $portableManifest | Add-Member -NotePropertyName buildReceipt -NotePropertyValue (
+    [pscustomobject]@{
+      schemaVersion = 1
+      repository = 'marolinik/waggle-os'
+      sourceRevision = $context.SourceRevision
+      targetTriple = 'x86_64-pc-windows-msvc'
+    }
+  )
+  $portableManifest.toolchain | Add-Member `
+    -NotePropertyName portableToolchainRoot -NotePropertyValue $toolDirectory
+  $portableManifest.toolchain | Add-Member `
+    -NotePropertyName sevenZipDllPath -NotePropertyValue $portableContext.SevenZipDllPath
+  $portableManifest.toolchain | Add-Member `
+    -NotePropertyName sevenZipDllSha256 -NotePropertyValue $portableContext.SevenZipDllSha256
+  $portableManifest.toolchain | Add-Member `
+    -NotePropertyName portableToolchainReceiptPath `
+    -NotePropertyValue $portableContext.PortableToolchainReceiptPath
+  $portableManifest.toolchain | Add-Member `
+    -NotePropertyName portableToolchainReceiptSha256 `
+    -NotePropertyValue $portableContext.PortableToolchainReceiptSha256
+  $portableManifest.toolchain | Add-Member `
+    -NotePropertyName portableToolchainInventorySha256 `
+    -NotePropertyValue $PortableToolchainInventorySha256
+  $portableManifest.toolchain | Add-Member `
+    -NotePropertyName portableToolchainFileCount `
+    -NotePropertyValue $PortableToolchainFileCount
+  $env:WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT = $toolDirectory
+  $env:WAGGLE_SIGNING_PORTABLE_NODE_PATH = $context.NodePath
+  $env:WAGGLE_SIGNING_PORTABLE_GIT_PATH = $context.GitPath
+  $env:WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH = $context.SevenZipPath
+  $env:WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH = `
+    $portableContext.PortableToolchainReceiptPath
+  $env:WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256 = `
+    $portableContext.PortableToolchainReceiptSha256
+  [void](& $writeSessionFixture $portableManifest)
+  $portableSession = Get-WaggleSigningSession $portableContext
+  try {
+    Assert-Equal $portableSession.Id $sessionId `
+      'receipt-bound portable manifest session load'
+  } finally {
+    foreach ($lock in $portableSession.Locks) { $lock.Dispose() }
+  }
+
+  $wrongPortableRootManifest = $portableManifest | ConvertTo-Json -Depth 32 |
+    ConvertFrom-Json -Depth 32 -DateKind String
+  $wrongPortableRootManifest.toolchain.portableToolchainRoot = `
+    Join-Path $sessionFixtureRoot 'substituted-tools'
+  [void](& $writeSessionFixture $wrongPortableRootManifest)
+  Assert-Throws {
+    Get-WaggleSigningSession $portableContext
+  } 'Portable signing toolchain root does not match' `
+    'portable manifest root substitution rejection'
+
+  $wrongPortableHashManifest = $portableManifest | ConvertTo-Json -Depth 32 |
+    ConvertFrom-Json -Depth 32 -DateKind String
+  $wrongPortableHashManifest.toolchain.sevenZipDllSha256 = '0' * 64
+  [void](& $writeSessionFixture $wrongPortableHashManifest)
+  Assert-Throws {
+    Get-WaggleSigningSession $portableContext
+  } '7-Zip runtime library manifest SHA-256' `
+    'portable manifest closure digest substitution rejection'
+
+  [void](& $writeSessionFixture $portableManifest)
+  $env:WAGGLE_SIGNING_PORTABLE_NODE_PATH = $context.GitPath
+  Assert-Throws {
+    Get-WaggleSigningSession $portableContext
+  } 'WAGGLE_SIGNING_PORTABLE_NODE_PATH does not match' `
+    'portable callback environment substitution rejection'
+  $env:WAGGLE_SIGNING_PORTABLE_NODE_PATH = $context.NodePath
+
+  $unboundPortableManifest = $portableManifest | ConvertTo-Json -Depth 32 |
+    ConvertFrom-Json -Depth 32 -DateKind String
+  $unboundPortableManifest.PSObject.Properties.Remove('buildReceipt')
+  [void](& $writeSessionFixture $unboundPortableManifest)
+  Assert-Throws {
+    Get-WaggleSigningSession $portableContext
+  } 'missing required property.*buildReceipt' `
+    'portable callback without hosted receipt rejection'
+
+  foreach ($portableEnvironmentName in @(
+      'WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT',
+      'WAGGLE_SIGNING_PORTABLE_NODE_PATH',
+      'WAGGLE_SIGNING_PORTABLE_GIT_PATH',
+      'WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH',
+      'WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH',
+      'WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256'
+    )) {
+    [Environment]::SetEnvironmentVariable($portableEnvironmentName, $null)
+  }
+  [void](& $writeSessionFixture $baseManifest)
 
   $validManifestHash = $env:WAGGLE_SIGNING_MANIFEST_SHA256
   $env:WAGGLE_SIGNING_MANIFEST_SHA256 = '0' * 64

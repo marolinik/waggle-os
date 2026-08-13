@@ -12,6 +12,7 @@ import path from 'node:path';
 import { execFile, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import Database from 'better-sqlite3';
+import { parse as parseYaml } from 'yaml';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const TAURI_DIR = path.join(ROOT, 'app', 'src-tauri');
@@ -1872,29 +1873,122 @@ Expect-Rejection {
     },
   );
 
-  it('release workflow keeps bootstrap and upgrade artifact paths fail-closed', () => {
+  it('release workflow isolates unsigned build, protected signing, and publication authority', () => {
     const workflow = fs.readFileSync(
       path.join(ROOT, '.github', 'workflows', 'release.yml'),
       'utf-8',
-    );
+    ).replace(/\r\n/g, '\n');
     const publisherPath = path.join(ROOT, 'scripts', 'publish-windows-release.ps1');
     expect(fs.existsSync(publisherPath)).toBe(true);
     const publisher = fs.readFileSync(publisherPath, 'utf-8');
-    const step = (name: string) => {
-      const marker = `      - name: ${name}`;
+    const job = (name: string, nextName: string) => {
+      const marker = `  ${name}:`;
+      const nextMarker = `\n  ${nextName}:`;
       const start = workflow.indexOf(marker);
+      const end = workflow.indexOf(nextMarker, start);
       expect(start).toBeGreaterThanOrEqual(0);
       expect(workflow.lastIndexOf(marker)).toBe(start);
-      const end = workflow.indexOf('\n      - name:', start + 1);
-      return workflow.slice(start, end >= 0 ? end : undefined);
+      expect(end).toBeGreaterThan(start);
+      return workflow.slice(start, end);
     };
-    const windowsJobStart = workflow.indexOf('  build-windows:');
-    const windowsJobEnd = workflow.indexOf('\n  build-macos:', windowsJobStart);
-    expect(windowsJobStart).toBeGreaterThanOrEqual(0);
-    expect(windowsJobEnd).toBeGreaterThan(windowsJobStart);
-    const windowsJob = workflow.slice(windowsJobStart, windowsJobEnd);
+    const step = (jobSource: string, name: string) => {
+      const marker = `      - name: ${name}`;
+      const start = jobSource.indexOf(marker);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(jobSource.lastIndexOf(marker)).toBe(start);
+      const end = jobSource.indexOf('\n      - name:', start + 1);
+      return jobSource.slice(start, end >= 0 ? end : undefined);
+    };
+    const buildJob = job('build-windows-prebuilt', 'sign-windows');
+    const signingJob = job('sign-windows', 'certify-windows');
+    const certificationJob = job('certify-windows', 'attest-windows');
+    const attestationJob = job('attest-windows', 'publish-windows');
+    const publicationJob = job('publish-windows', 'build-macos');
 
-    const resolverStep = step('Resolve Windows release mode');
+    expect(buildJob).toContain('permissions:\n      contents: read');
+    expect(buildJob).not.toMatch(/^ {4}environment:/m);
+    expect(buildJob).not.toContain('id-token: write');
+    expect(buildJob).not.toContain('attestations: write');
+    expect(buildJob).not.toContain('contents: write');
+    expect(buildJob).not.toContain('azure/login@');
+    expect(buildJob).not.toContain('GH_TOKEN:');
+
+    expect(signingJob).toContain('needs: build-windows-prebuilt');
+    expect(signingJob).toContain('environment: production-windows-signing');
+    expect(signingJob).toContain('permissions:\n      contents: read');
+    expect(signingJob).not.toContain('attestations: write');
+    expect(signingJob).toContain('id-token: write');
+    expect(signingJob).not.toContain('contents: write');
+    expect([...certificationJob.matchAll(/GH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/g)])
+      .toHaveLength(1);
+
+    expect(certificationJob).toContain('needs: sign-windows');
+    expect(certificationJob).not.toMatch(/^ {4}environment:/m);
+    expect(certificationJob).not.toContain('id-token: write');
+    expect(certificationJob).not.toContain('azure/login@');
+    expect(attestationJob).toContain('needs: certify-windows');
+    expect(attestationJob).toContain('runs-on: ubuntu-latest');
+    expect(attestationJob).toContain('attestations: write');
+    expect(attestationJob).toContain('id-token: write');
+    expect(attestationJob).not.toContain('azure/login@');
+
+    expect(publicationJob).toContain('needs: [certify-windows, attest-windows]');
+    expect(publicationJob).toContain('permissions:\n      contents: write');
+    expect(publicationJob).not.toMatch(/^ {4}environment:/m);
+    expect(publicationJob).not.toContain('id-token: write');
+    expect(publicationJob).not.toContain('attestations: write');
+    expect(publicationJob).not.toContain('azure/login@');
+    expect(publicationJob).not.toContain('sign-windows-artifact.ps1');
+    expect(publicationJob).not.toContain('certify-windows-installer.ps1');
+
+    for (const forbidden of [
+      'WINDOWS_CODESIGN_PFX_BASE64',
+      'WINDOWS_CODESIGN_PFX_PASSWORD',
+      'Import-PfxCertificate',
+      'Cert:\\',
+      'WAGGLE_IMPORTED_CERT_THUMBPRINTS',
+      'WINDOWS_CODESIGN_APPROVED_THUMBPRINT',
+      'client-secret:',
+      'creds:',
+    ]) {
+      expect(workflow).not.toContain(forbidden);
+    }
+    expect(signingJob).toContain(
+      'azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca',
+    );
+    expect(signingJob).toContain('client-id: ${{ vars.AZURE_CLIENT_ID }}');
+    expect(signingJob).toContain('tenant-id: ${{ vars.AZURE_TENANT_ID }}');
+    expect(signingJob).toContain('subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}');
+    expect(signingJob).toContain('audience: api://AzureADTokenExchange');
+    expect(workflow).not.toContain('[checked]');
+
+    const capacityIndex = signingJob.indexOf(
+      'Validate capacity before duplicate handoff extraction',
+    );
+    const setupNodeIndex = signingJob.indexOf(
+      'Setup Node.js for protected packaging',
+    );
+    const rootDependenciesIndex = certificationJob.indexOf(
+      'Install locked certification dependencies',
+    );
+    const certificationSetupNodeIndex = certificationJob.indexOf(
+      'Setup Node.js for source-bound certification',
+    );
+    const appDependenciesIndex = signingJob.indexOf(
+      'Install locked Tauri packaging CLI',
+    );
+    const certificationIndex = certificationJob.indexOf(
+      'Certify Windows Solo installer lifecycle',
+    );
+    expect(capacityIndex).toBeGreaterThanOrEqual(0);
+    expect(setupNodeIndex).toBeGreaterThan(capacityIndex);
+    expect(appDependenciesIndex).toBeGreaterThan(setupNodeIndex);
+    expect(certificationSetupNodeIndex).toBeGreaterThanOrEqual(0);
+    expect(rootDependenciesIndex).toBeGreaterThan(certificationSetupNodeIndex);
+    expect(rootDependenciesIndex).toBeGreaterThanOrEqual(0);
+    expect(certificationIndex).toBeGreaterThan(rootDependenciesIndex);
+
+    const resolverStep = step(signingJob, 'Resolve Windows release mode');
     expect(resolverStep).toContain('id: release-mode');
     expect(resolverStep).toContain(
       '-CandidateVersion $candidateVersion `',
@@ -1905,14 +1999,15 @@ Expect-Rejection {
       '"mode=$releaseMode" | Out-File -FilePath $env:GITHUB_OUTPUT',
     );
 
-    const baselineStep = step('Download signed Windows upgrade baseline');
+    const baselineStep = step(certificationJob, 'Download signed Windows upgrade baseline');
     expect(baselineStep).toContain(
-      "if: steps.release-mode.outputs.mode == 'upgrade'",
+      "if: steps.verify-signed.outputs.release_mode == 'upgrade'",
     );
+    expect(baselineStep).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
 
-    const certificateStep = step('Certify Windows Solo installer lifecycle');
+    const certificateStep = step(certificationJob, 'Certify Windows Solo installer lifecycle');
     expect(certificateStep).toContain(
-      'WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}',
+      'WAGGLE_RELEASE_MODE: ${{ steps.verify-signed.outputs.release_mode }}',
     );
     expect(certificateStep).toContain(
       "if ($env:WAGGLE_RELEASE_MODE -eq 'upgrade') {",
@@ -1921,112 +2016,42 @@ Expect-Rejection {
       'Bootstrap certification unexpectedly produced an upgrade receipt',
     );
 
-    const bootstrapAttestation = step('Attest bootstrap Windows artifacts');
+    const bootstrapAttestation = step(attestationJob, 'Attest bootstrap Windows artifacts');
     expect(bootstrapAttestation).toContain(
-      "if: steps.release-mode.outputs.mode == 'bootstrap'",
+      "if: needs.certify-windows.outputs.release_mode == 'bootstrap'",
     );
     expect(bootstrapAttestation).toContain('windows-installer-certificate.json');
     expect(bootstrapAttestation).not.toContain(
       'windows-installer-upgrade-certificate.json',
     );
 
-    const upgradeAttestation = step('Attest upgrade Windows artifacts');
+    const upgradeAttestation = step(attestationJob, 'Attest upgrade Windows artifacts');
     expect(upgradeAttestation).toContain(
-      "if: steps.release-mode.outputs.mode == 'upgrade'",
+      "if: needs.certify-windows.outputs.release_mode == 'upgrade'",
     );
     expect(upgradeAttestation).toContain('windows-installer-certificate.json');
     expect(upgradeAttestation).toContain(
       'windows-installer-upgrade-certificate.json',
     );
 
-    const bootstrapUpload = step('Upload Windows bootstrap certificate');
-    expect(bootstrapUpload).toContain(
-      "if: always() && steps.release-mode.outputs.mode == 'bootstrap'",
+    const publishStep = step(publicationJob, 'Publish certified Windows release');
+    expect(publishStep).toContain(
+      "if: success() && startsWith(github.ref, 'refs/tags/v')",
     );
-    expect(bootstrapUpload).not.toContain(
-      'windows-installer-upgrade-certificate.json',
+    expect(publishStep).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
+    expect(publishStep).toContain(
+      'WINDOWS_CODESIGN_APPROVED_SUBJECT: ${{ needs.certify-windows.outputs.signer_subject }}',
     );
-
-    const upgradeUpload = step('Upload Windows lifecycle certificate');
-    expect(upgradeUpload).toContain(
-      "if: always() && steps.release-mode.outputs.mode == 'upgrade'",
+    expect(publishStep).toContain(
+      'WAGGLE_RELEASE_MODE: ${{ needs.certify-windows.outputs.release_mode }}',
     );
-    expect(upgradeUpload).toContain(
-      'windows-installer-upgrade-certificate.json',
+    expect(publishStep).toContain(
+      'WAGGLE_CERTIFIED_CANDIDATE_SHA256: ${{ needs.certify-windows.outputs.candidate_sha256 }}',
     );
-
-    const bootstrapPublish = step('Publish certified Windows bootstrap installer');
-    expect(bootstrapPublish).toContain(
-      "if: success() && startsWith(github.ref, 'refs/tags/v') && steps.release-mode.outputs.mode == 'bootstrap'",
+    expect(publishStep).toContain(
+      './scripts/publish-windows-release.ps1 -Mode $env:WAGGLE_RELEASE_MODE',
     );
-    expect(bootstrapPublish).toContain(
-      'WINDOWS_BOOTSTRAP_RELEASE_IDENTITY: ${{ vars.WINDOWS_BOOTSTRAP_RELEASE_IDENTITY }}',
-    );
-    expect(bootstrapPublish).toContain(
-      'WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}',
-    );
-    expect(bootstrapPublish).toContain(
-      'run: ./scripts/publish-windows-release.ps1 -Mode bootstrap',
-    );
-    expect(bootstrapPublish).not.toContain('function ');
-    expect(bootstrapPublish).not.toContain('gh release ');
-
-    const upgradePublish = step('Publish certified Windows installer');
-    expect(upgradePublish).toContain(
-      "if: success() && startsWith(github.ref, 'refs/tags/v') && steps.release-mode.outputs.mode == 'upgrade'",
-    );
-    expect(upgradePublish).toContain(
-      'WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}',
-    );
-    expect(upgradePublish).toContain(
-      'run: ./scripts/publish-windows-release.ps1 -Mode upgrade',
-    );
-    expect(upgradePublish).not.toContain('function ');
-    expect(upgradePublish).not.toContain('gh release ');
-
-    for (const publishStep of [bootstrapPublish, upgradePublish]) {
-      expect(publishStep).toContain('shell: pwsh');
-      expect(publishStep).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
-      expect(publishStep).toContain(
-        'WINDOWS_BOOTSTRAP_RELEASE_IDENTITY: ${{ vars.WINDOWS_BOOTSTRAP_RELEASE_IDENTITY }}',
-      );
-      expect(publishStep).toContain(
-        'WINDOWS_UPGRADE_BASE_TAG: ${{ vars.WINDOWS_UPGRADE_BASE_TAG }}',
-      );
-      expect(publishStep).toContain(
-        'WINDOWS_UPGRADE_BASE_ASSET_NAME: ${{ vars.WINDOWS_UPGRADE_BASE_ASSET_NAME }}',
-      );
-      expect(publishStep).toContain(
-        'WINDOWS_UPGRADE_BASE_SHA256: ${{ vars.WINDOWS_UPGRADE_BASE_SHA256 }}',
-      );
-      expect(publishStep).toContain(
-        'WINDOWS_UPGRADE_BASE_COMMIT: ${{ vars.WINDOWS_UPGRADE_BASE_COMMIT }}',
-      );
-      expect(publishStep).toContain(
-        'WINDOWS_CODESIGN_APPROVED_THUMBPRINT: ${{ vars.WINDOWS_CODESIGN_APPROVED_THUMBPRINT }}',
-      );
-      expect(publishStep).toContain(
-        'WAGGLE_CERTIFIED_CANDIDATE_SHA256: ${{ steps.certify-windows.outputs.candidate_sha256 }}',
-      );
-      expect(publishStep).toContain(
-        'WAGGLE_CERTIFIED_CANDIDATE_VERSION: ${{ steps.certify-windows.outputs.candidate_version }}',
-      );
-    }
-    expect(upgradePublish).toContain(
-      'WAGGLE_UPGRADE_BASE_INSTALLER_PATH: ${{ steps.upgrade-baseline.outputs.installer_path }}',
-    );
-    expect(upgradePublish).toContain(
-      'WAGGLE_UPGRADE_BASE_VERSION: ${{ steps.upgrade-baseline.outputs.base_version }}',
-    );
-    expect(upgradePublish).toContain(
-      'WAGGLE_UPGRADE_BASE_COMMIT: ${{ steps.upgrade-baseline.outputs.base_commit }}',
-    );
-
-    expect([
-      ...windowsJob.matchAll(
-        /^\s*run: \.\/scripts\/publish-windows-release\.ps1 -Mode (?:bootstrap|upgrade)\s*$/gm,
-      ),
-    ]).toHaveLength(2);
+    expect(publishStep).not.toContain('gh release ');
 
     expect(publisher).toContain(
       "[ValidateSet('bootstrap', 'upgrade')]",
@@ -2175,6 +2200,598 @@ Expect-Rejection {
         /^Assert-ReleaseIdentity `\s*$/gm,
       ),
     ]).toHaveLength(3);
+  });
+
+  it('keeps Azure signing, candidate execution, GitHub attestation, and publication in separate jobs', () => {
+    const workflow = fs
+      .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+      .replace(/\r\n/g, '\n');
+    const job = (name: string, nextName: string) => {
+      const start = workflow.indexOf(`  ${name}:`);
+      const end = workflow.indexOf(`\n  ${nextName}:`, start);
+      expect(start, name).toBeGreaterThanOrEqual(0);
+      expect(end, nextName).toBeGreaterThan(start);
+      return workflow.slice(start, end);
+    };
+    const signingJob = job('sign-windows', 'certify-windows');
+    const certificationJob = job('certify-windows', 'attest-windows');
+    const attestationJob = job('attest-windows', 'publish-windows');
+    const publicationJob = job('publish-windows', 'build-macos');
+
+    expect(signingJob).toContain('needs: build-windows-prebuilt');
+    expect(signingJob).toContain('environment: production-windows-signing');
+    expect(signingJob).toContain('id-token: write');
+    expect(signingJob).toContain('azure/login@');
+    expect(signingJob).toContain('Package and sign from immutable prebuilt roots');
+    expect(signingJob).not.toContain('certify-windows-installer.ps1');
+    expect(signingJob).not.toContain('attest-build-provenance@');
+    expect(signingJob).not.toContain('GH_TOKEN:');
+
+    expect(certificationJob).toContain('needs: sign-windows');
+    expect(certificationJob).toContain('runs-on: windows-latest');
+    expect(certificationJob).toContain('permissions:\n      contents: read');
+    expect(certificationJob).not.toMatch(/^ {4}environment:/m);
+    expect(certificationJob).not.toContain('id-token: write');
+    expect(certificationJob).not.toContain('attestations: write');
+    expect(certificationJob).not.toContain('azure/login@');
+    expect(certificationJob).toContain('Validate exact signed handoff before candidate execution');
+    expect(certificationJob).toContain('Certify Windows Solo installer lifecycle');
+    expect(certificationJob.indexOf('Validate exact signed handoff before candidate execution'))
+      .toBeLessThan(certificationJob.indexOf('Certify Windows Solo installer lifecycle'));
+
+    expect(attestationJob).toContain('needs: certify-windows');
+    expect(attestationJob).toContain('runs-on: ubuntu-latest');
+    expect(attestationJob).toContain('attestations: write');
+    expect(attestationJob).toContain('id-token: write');
+    expect(attestationJob).not.toMatch(/^ {4}environment:/m);
+    expect(attestationJob).not.toContain('azure/login@');
+    expect(attestationJob).not.toContain('certify-windows-installer.ps1');
+    expect(attestationJob).not.toContain('Start-Process');
+    expect(attestationJob).not.toContain('& $installer');
+
+    expect(publicationJob).toContain('needs: [certify-windows, attest-windows]');
+    expect(publicationJob).not.toContain('id-token: write');
+    expect(publicationJob).not.toContain('azure/login@');
+    expect(workflow).toContain('artifact-ids: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}');
+    expect(workflow).toContain('artifact-ids: ${{ needs.sign-windows.outputs.artifact_id }}');
+    expect(workflow).toContain('artifact-ids: ${{ needs.certify-windows.outputs.artifact_id }}');
+    expect(workflow).not.toMatch(/^\s+[a-z_]*path:\s*\$\{\{\s*steps\.[^\n]+outputs\.[^\n]+\}\}/m);
+  });
+
+  it('flattens every immutable artifact-ID download into its exact configured root', () => {
+    const workflow = parseYaml(
+      fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8'),
+    ) as {
+      jobs?: Record<
+        string,
+        {
+          steps?: Array<{
+            name?: string;
+            uses?: string;
+            with?: Record<string, unknown>;
+          }>;
+        }
+      >;
+    };
+    const idDownloads = Object.entries(workflow.jobs ?? {}).flatMap(([jobName, job]) =>
+      (job.steps ?? [])
+        .filter(
+          (step) =>
+            step.uses?.startsWith('actions/download-artifact@') &&
+            typeof step.with?.['artifact-ids'] === 'string',
+        )
+        .map((step) => ({
+          jobName,
+          name: step.name,
+          artifactIds: step.with?.['artifact-ids'],
+          path: step.with?.path,
+          mergeMultiple: step.with?.['merge-multiple'],
+        })),
+    );
+
+    expect(idDownloads).toEqual([
+      {
+        jobName: 'sign-windows',
+        name: 'Download immutable prebuilt handoff for unsigned verification',
+        artifactIds: '${{ needs.build-windows-prebuilt.outputs.artifact_id }}',
+        path: '${{ runner.temp }}\\waggle-prebuilt-unsigned',
+        mergeMultiple: true,
+      },
+      {
+        jobName: 'sign-windows',
+        name: 'Download immutable prebuilt handoff for signed packaging',
+        artifactIds: '${{ needs.build-windows-prebuilt.outputs.artifact_id }}',
+        path: '${{ runner.temp }}\\waggle-prebuilt-signing',
+        mergeMultiple: true,
+      },
+      {
+        jobName: 'certify-windows',
+        name: 'Download immutable signed Windows handoff',
+        artifactIds: '${{ needs.sign-windows.outputs.artifact_id }}',
+        path: '${{ runner.temp }}\\waggle-windows-signed',
+        mergeMultiple: true,
+      },
+      {
+        jobName: 'attest-windows',
+        name: 'Download certified Windows release by immutable artifact ID',
+        artifactIds: '${{ needs.certify-windows.outputs.artifact_id }}',
+        path: '${{ runner.temp }}/waggle-windows-sealed',
+        mergeMultiple: true,
+      },
+      {
+        jobName: 'publish-windows',
+        name: 'Download sealed Windows release outputs',
+        artifactIds: '${{ needs.certify-windows.outputs.artifact_id }}',
+        path: '${{ runner.temp }}\\waggle-windows-sealed',
+        mergeMultiple: true,
+      },
+    ]);
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'normalizes lowercase upload-artifact digests before exact signed-handoff comparison',
+    () => {
+      const workflow = fs
+        .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const stepMarker = '      - name: Validate exact signed handoff before candidate execution\n';
+      const stepStart = workflow.indexOf(stepMarker);
+      const stepEnd = workflow.indexOf('\n      - name:', stepStart + stepMarker.length);
+      const stepSource = workflow.slice(stepStart, stepEnd);
+      const runMarker = '        run: |\n';
+      const runStart = stepSource.indexOf(runMarker);
+      expect(stepStart).toBeGreaterThanOrEqual(0);
+      expect(stepEnd).toBeGreaterThan(stepStart);
+      expect(runStart).toBeGreaterThanOrEqual(0);
+      const stepScript = stepSource
+        .slice(runStart + runMarker.length)
+        .split('\n')
+        .map((line) => line.replace(/^ {10}/, ''))
+        .join('\n');
+      const bindingStart = stepScript.indexOf('$receipt = Get-Content');
+      const bindingEnd = stepScript.indexOf('. ./app/scripts/sign-windows-artifact.ps1');
+      expect(bindingStart).toBeGreaterThanOrEqual(0);
+      expect(bindingEnd).toBeGreaterThan(bindingStart);
+
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-signed-binding-'));
+      try {
+        const receiptPath = path.join(root, 'signing-handoff-receipt.json');
+        const sourceRevision = '1'.repeat(40);
+        const candidateSha256 = 'A'.repeat(64);
+        const buildReceiptSha256 = 'B'.repeat(64);
+        const lowercaseBuildArtifactDigest = 'c1'.repeat(32);
+        fs.writeFileSync(
+          receiptPath,
+          JSON.stringify({
+            schemaVersion: 1,
+            sourceRevision,
+            candidateTag: 'v0.2.0',
+            candidateVersion: '0.2.0',
+            releaseMode: 'bootstrap',
+            bootstrapIdentity: 'v0.2.0',
+            upgradeBaseTag: '',
+            upgradeBaseAssetName: '',
+            upgradeBaseSha256: '',
+            upgradeBaseCommit: '',
+            signerSubject: 'CN=Waggle Test',
+            candidateSha256,
+            buildReceiptSha256,
+            buildArtifactId: '123',
+            buildArtifactDigest: lowercaseBuildArtifactDigest.toUpperCase(),
+            timestampPolicy: 'fresh-certification-monotonic-v1',
+          }),
+          'utf-8',
+        );
+        const scriptPath = path.join(root, 'validate-binding.ps1');
+        fs.writeFileSync(
+          scriptPath,
+          `$receiptPath = $env:WAGGLE_FIXTURE_RECEIPT\n${stepScript.slice(bindingStart, bindingEnd)}`,
+          'utf-8',
+        );
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', scriptPath],
+          {
+            cwd: ROOT,
+            encoding: 'utf-8',
+            windowsHide: true,
+            env: {
+              ...process.env,
+              WAGGLE_FIXTURE_RECEIPT: receiptPath,
+              GITHUB_SHA: sourceRevision,
+              GITHUB_REF_NAME: 'v0.2.0',
+              EXPECTED_CANDIDATE_VERSION: '0.2.0',
+              EXPECTED_RELEASE_MODE: 'bootstrap',
+              EXPECTED_BOOTSTRAP_IDENTITY: 'v0.2.0',
+              EXPECTED_UPGRADE_BASE_TAG: '',
+              EXPECTED_UPGRADE_BASE_ASSET_NAME: '',
+              EXPECTED_UPGRADE_BASE_SHA256: '',
+              EXPECTED_UPGRADE_BASE_COMMIT: '',
+              EXPECTED_SIGNER_SUBJECT: 'CN=Waggle Test',
+              EXPECTED_CANDIDATE_SHA256: candidateSha256,
+              EXPECTED_BUILD_RECEIPT_SHA256: buildReceiptSha256,
+              EXPECTED_BUILD_ARTIFACT_ID: '123',
+              EXPECTED_BUILD_ARTIFACT_DIGEST: lowercaseBuildArtifactDigest,
+            },
+          },
+        );
+        expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'executes exact publication staging for bootstrap and upgrade and rejects tampering',
+    () => {
+      const workflow = fs
+        .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const stepMarker = '      - name: Stage exact publication inputs\n';
+      const stepStart = workflow.indexOf(stepMarker);
+      const stepEnd = workflow.indexOf('\n      - name:', stepStart + stepMarker.length);
+      const stepSource = workflow.slice(stepStart, stepEnd);
+      const runMarker = '        run: |\n';
+      const runStart = stepSource.indexOf(runMarker);
+      expect(stepStart).toBeGreaterThanOrEqual(0);
+      expect(stepEnd).toBeGreaterThan(stepStart);
+      expect(runStart).toBeGreaterThanOrEqual(0);
+      const stageScript = stepSource
+        .slice(runStart + runMarker.length)
+        .split('\n')
+        .map((line) => line.replace(/^ {10}/, ''))
+        .join('\n');
+
+      const sha256 = (value: string) => createHash('sha256').update(value).digest('hex').toUpperCase();
+      const runFixture = (
+        mode: 'bootstrap' | 'upgrade',
+        mutation?: 'tampered-source' | 'unexpected-file',
+      ) => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), `waggle-publish-stage-${mode}-`));
+        const runnerTemp = path.join(root, 'runner');
+        const sealedRoot = path.join(runnerTemp, 'waggle-windows-sealed');
+        const releaseRoot = path.join(sealedRoot, 'release');
+        const sourceNsisRoot = path.join(sealedRoot, 'source', 'release-nsis');
+        const sourceResourcesRoot = path.join(sealedRoot, 'source', 'resources');
+        const provenanceRoot = path.join(sealedRoot, 'provenance');
+        const repositoryRoot = path.join(root, 'repo');
+        const outputPath = path.join(root, 'github-output.txt');
+        const envPath = path.join(root, 'github-env.txt');
+        const candidateVersion = mode === 'bootstrap' ? '0.2.0' : '0.3.0';
+        const candidateSha = '1'.repeat(40);
+        const installerName = `Waggle_${candidateVersion}_x64-setup.exe`;
+        const installer = 'signed-installer';
+        const nsis = 'signed-nsis';
+        const service = 'signed-service';
+        fs.mkdirSync(releaseRoot, { recursive: true });
+        fs.mkdirSync(sourceNsisRoot, { recursive: true });
+        fs.mkdirSync(sourceResourcesRoot, { recursive: true });
+        fs.mkdirSync(provenanceRoot, { recursive: true });
+        fs.mkdirSync(path.join(repositoryRoot, 'app', 'src-tauri', 'resources'), { recursive: true });
+        fs.writeFileSync(path.join(releaseRoot, installerName), installer);
+        fs.writeFileSync(path.join(sourceNsisRoot, 'installer.nsi'), nsis);
+        fs.writeFileSync(path.join(sourceResourcesRoot, 'service.js'), service);
+        fs.writeFileSync(path.join(provenanceRoot, 'provenance-receipt.json'), '{}');
+        fs.writeFileSync(
+          path.join(releaseRoot, 'windows-installer-certificate.json'),
+          JSON.stringify({
+            evidence: {
+              generatedInstallerScriptSha256: sha256(nsis),
+              sidecarBundleSha256: sha256(service),
+            },
+          }),
+        );
+        let baseName = '';
+        let baseSha256 = '';
+        if (mode === 'upgrade') {
+          fs.writeFileSync(path.join(releaseRoot, 'windows-installer-upgrade-certificate.json'), '{}');
+          const baselineRoot = path.join(sealedRoot, 'baseline');
+          fs.mkdirSync(baselineRoot, { recursive: true });
+          baseName = 'Waggle_0.2.0_x64-setup.exe';
+          const baseline = 'baseline-installer';
+          baseSha256 = sha256(baseline);
+          fs.writeFileSync(path.join(baselineRoot, baseName), baseline);
+        }
+        if (mutation === 'tampered-source') {
+          fs.appendFileSync(path.join(sourceResourcesRoot, 'service.js'), '-tampered');
+        }
+        const inventoryEntries = listFiles(sealedRoot)
+          .map((file) => ({
+            path: path.relative(sealedRoot, file).split(path.sep).join('\\'),
+            size: fs.statSync(file).size,
+            sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex').toUpperCase(),
+          }))
+          .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+        const bootstrapIdentity = mode === 'bootstrap' ? `v0.2.0@${candidateSha}` : '';
+        const baseTag = mode === 'upgrade' ? 'v0.2.0' : '';
+        const baseCommit = mode === 'upgrade' ? '2'.repeat(40) : '';
+        const signerSubject = 'CN=EGZAKTA DOO BEOGRAD, O=EGZAKTA DOO BEOGRAD, L=Amsterdam, C=NL';
+        const sealedReceipt = {
+          schemaVersion: 1,
+          sourceRevision: candidateSha,
+          candidateTag: `v${candidateVersion}`,
+          candidateVersion,
+          releaseMode: mode,
+          bootstrapIdentity,
+          upgradeBaseTag: baseTag,
+          upgradeBaseAssetName: baseName,
+          upgradeBaseSha256: baseSha256,
+          upgradeBaseCommit: baseCommit,
+          signerSubject,
+          candidateSha256: sha256(installer),
+          signedHandoffReceiptSha256: 'A'.repeat(64),
+          signedHandoffArtifactId: '123',
+          signedHandoffArtifactDigest: 'B'.repeat(64),
+          inventory: {
+            entries: inventoryEntries,
+            sha256: sha256(JSON.stringify(inventoryEntries)),
+          },
+        };
+        const sealedReceiptPath = path.join(sealedRoot, 'sealed-release-receipt.json');
+        fs.writeFileSync(sealedReceiptPath, JSON.stringify(sealedReceipt));
+        if (mutation === 'unexpected-file') {
+          fs.writeFileSync(path.join(sealedRoot, 'unexpected.txt'), 'unexpected');
+        }
+        const scriptPath = path.join(root, 'stage.ps1');
+        fs.writeFileSync(scriptPath, stageScript);
+        const result = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+          {
+            cwd: repositoryRoot,
+            encoding: 'utf-8',
+            timeout: 30_000,
+            windowsHide: true,
+            env: {
+              ...process.env,
+              RUNNER_TEMP: runnerTemp,
+              GITHUB_OUTPUT: outputPath,
+              GITHUB_ENV: envPath,
+              GITHUB_SHA: candidateSha,
+              GITHUB_REF_NAME: `v${candidateVersion}`,
+              WAGGLE_RELEASE_MODE: mode,
+              EXPECTED_CANDIDATE_SHA256: sha256(installer),
+              EXPECTED_CANDIDATE_VERSION: candidateVersion,
+              EXPECTED_BOOTSTRAP_IDENTITY: bootstrapIdentity,
+              EXPECTED_BASE_TAG: baseTag,
+              EXPECTED_BASE_ASSET_NAME: baseName,
+              EXPECTED_BASE_SHA256: baseSha256,
+              EXPECTED_BASE_COMMIT: baseCommit,
+              EXPECTED_SIGNER_SUBJECT: signerSubject,
+              EXPECTED_SEALED_RECEIPT_SHA256: createHash('sha256')
+                .update(fs.readFileSync(sealedReceiptPath))
+                .digest('hex')
+                .toUpperCase(),
+              EXPECTED_SEALED_ARTIFACT_ID: '456',
+              EXPECTED_SEALED_ARTIFACT_DIGEST: 'C'.repeat(64),
+            },
+          },
+        );
+        return { root, result, outputPath, envPath };
+      };
+
+      for (const mode of ['bootstrap', 'upgrade'] as const) {
+        const positive = runFixture(mode);
+        try {
+          expect(positive.result.status, positive.result.stderr || positive.result.stdout).toBe(0);
+          const statePath = fs.existsSync(positive.envPath) ? positive.envPath : positive.outputPath;
+          const state = fs.readFileSync(statePath, 'utf-8');
+          expect(state).toContain('WAGGLE_UPGRADE_BASE_INSTALLER_PATH=');
+          if (mode === 'upgrade') expect(state).toContain('Waggle_0.2.0_x64-setup.exe');
+        } finally {
+          fs.rmSync(positive.root, { recursive: true, force: true });
+        }
+
+        const tampered = runFixture(mode, 'tampered-source');
+        try {
+          expect(tampered.result.status).not.toBe(0);
+          expect(tampered.result.stderr).toContain(
+            'Sealed publication source inputs differ from their certified hashes.',
+          );
+        } finally {
+          fs.rmSync(tampered.root, { recursive: true, force: true });
+        }
+
+        const unexpected = runFixture(mode, 'unexpected-file');
+        try {
+          expect(unexpected.result.status).not.toBe(0);
+          expect(unexpected.result.stderr).toContain(
+            'Sealed publication artifact topology is not exact.',
+          );
+        } finally {
+          fs.rmSync(unexpected.root, { recursive: true, force: true });
+        }
+      }
+    },
+    180_000,
+  );
+
+  it('release workflow binds one immutable prebuilt handoff and restores its exact NSIS closure', () => {
+    const workflow = fs
+      .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+      .replace(/\r\n/g, '\n');
+    const buildStart = workflow.indexOf('  build-windows-prebuilt:');
+    const signingStart = workflow.indexOf('\n  sign-windows:', buildStart);
+    const certificationStart = workflow.indexOf('\n  certify-windows:', signingStart);
+    expect(buildStart).toBeGreaterThanOrEqual(0);
+    expect(signingStart).toBeGreaterThan(buildStart);
+    expect(certificationStart).toBeGreaterThan(signingStart);
+    const buildJob = workflow.slice(buildStart, signingStart);
+    const signingJob = workflow.slice(signingStart, certificationStart);
+
+    const buildIndex = buildJob.indexOf('Build full unsigned Tauri NSIS package');
+    const handoffIndex = buildJob.indexOf('Issue immutable Windows signing handoff');
+    const uploadIndex = buildJob.indexOf('Upload immutable Windows signing handoff');
+    expect(buildIndex).toBeGreaterThanOrEqual(0);
+    expect(handoffIndex).toBeGreaterThan(buildIndex);
+    expect(uploadIndex).toBeGreaterThan(handoffIndex);
+    expect(buildJob).toContain('./app/scripts/new-windows-signing-handoff.ps1');
+    expect(buildJob).toContain(
+      'build_receipt_sha256: ${{ steps.handoff.outputs.receipt_sha256 }}',
+    );
+    expect(buildJob).toContain('name: waggle-windows-prebuilt-${{ github.sha }}');
+    expect(buildJob).toContain('include-hidden-files: true');
+
+    expect([
+      ...signingJob.matchAll(/artifact-ids: \$\{\{ needs\.build-windows-prebuilt\.outputs\.artifact_id \}\}/g),
+    ]).toHaveLength(2);
+    expect(signingJob).toContain('waggle-prebuilt-unsigned');
+    expect(signingJob).toContain('waggle-prebuilt-signing');
+    expect(signingJob).toContain(
+      'EXPECTED_BUILD_RECEIPT_SHA256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}',
+    );
+    expect(signingJob).toContain('foreach ($path in @($unsignedReceipt, $signingReceipt))');
+    expect(signingJob).toContain('build-receipt.package.json');
+    expect(signingJob).toContain(
+      "@($receipt.nsisInventory.entries).Count -ne 442",
+    );
+    expect(signingJob).toContain(
+      "1FC822D1A183552A80ADEA01B0BF456F462B90518256EF1FE9EDFA22D76CD85A",
+    );
+    expect(signingJob).toContain("Join-Path $env:LOCALAPPDATA 'tauri\\NSIS'");
+    expect(signingJob).toContain(
+      'Fresh protected signer runner unexpectedly already contains a Tauri NSIS closure.',
+    );
+    expect(signingJob).toContain('[IO.Directory]::Move($temporaryNsisRoot, $installedNsisRoot)');
+    expect(signingJob).toContain(
+      '($receipt.nsisInventory | ConvertTo-Json -Depth 8 -Compress)',
+    );
+    expect(signingJob).toContain('Assert-WaggleCanonicalInventoryEntries $resourceEntries');
+    expect(signingJob).toContain(
+      'Materialized canonical repository resources differ from the hosted build receipt.',
+    );
+    for (const argument of [
+      "-UnsignedInputRoot '${{ steps.verify-handoff.outputs.unsigned_root }}'",
+      "-SigningInputRoot '${{ steps.verify-handoff.outputs.signing_root }}'",
+      "-BuildReceiptPath '${{ steps.verify-handoff.outputs.receipt_path }}'",
+      '-BuildReceiptSha256 $env:EXPECTED_BUILD_RECEIPT_SHA256',
+    ]) {
+      expect(signingJob).toContain(argument);
+    }
+    expect(signingJob).not.toContain('node node_modules/@tauri-apps/cli/tauri.js build');
+    expect(signingJob).not.toContain('node scripts/build-sidecar.mjs');
+    expect(signingJob).not.toContain('node scripts/bundle-node.mjs');
+  });
+
+  it('protected signer uses only pinned explicit portable package tools', () => {
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+      'utf-8',
+    );
+    const wrapper = fs.readFileSync(
+      path.join(ROOT, 'app', 'scripts', 'sign-windows-artifact.ps1'),
+      'utf-8',
+    );
+    const signingStart = workflow.indexOf('  sign-windows:');
+    const certificationStart = workflow.indexOf('\n  certify-windows:', signingStart);
+    const signingJob = workflow.slice(signingStart, certificationStart);
+
+    for (const expected of [
+      'https://nodejs.org/dist/v22.22.2/node-v22.22.2-win-x64.zip',
+      '7C93E9D92BF68C07182B471AA187E35EE6CD08EF0F24AB060DFFF605FCC1C57C',
+      'https://github.com/git-for-windows/git/releases/download/v2.51.0.windows.1/MinGit-2.51.0-64-bit.zip',
+      'C2C955A21FA99889D83F485F24FA5D9A38FFFC2D509D4022385510E11C26B250',
+      'https://www.7-zip.org/a/7z2501-x64.exe',
+      '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F',
+      'AE1A50511BE58E987483FDBC12125407443926D2D394669ADE2352776E920DD3',
+      '34A408843194BE320D8A87A3C12CD5C7D2E08D03B24567A41DB32E21D12569D2',
+      '4CD7D776C686427226A151789D2D61F0B2ED2C392148CC4E69C0238362FAFECF',
+      '5BD20FB38499D95C39594F41D4781B6181B3304B7F1F4D06B0182F514E7EAA74',
+      'CN=OpenJS Foundation, O=OpenJS Foundation, L=San Francisco, S=California, C=US',
+      'CN=Johannes Schindelin, O=Johannes Schindelin, S=Nordrhein-Westfalen, C=DE',
+      'linked file or alternate data stream',
+      '@($toolchainInventory.entries).Count -ne 2495',
+      'D64F897D4E1A7F07FE9BA62D6AF062EF9F0E41C595CDAF2F3C4F73991BBEA0F5',
+      'portable-toolchain-receipt.json',
+      'inventory = $toolchainInventory',
+      'receipt_path=$receiptPath',
+      'receipt_sha256=$receiptSha256',
+    ]) {
+      expect(signingJob).toContain(expected);
+    }
+    for (const argument of [
+      "-PortableToolchainRoot '${{ steps.portable-toolchain.outputs.root }}'",
+      "-PortableToolchainReceiptPath '${{ steps.portable-toolchain.outputs.receipt_path }}'",
+      "-PortableToolchainReceiptSha256 '${{ steps.portable-toolchain.outputs.receipt_sha256 }}'",
+      "-PortableNodePath '${{ steps.portable-toolchain.outputs.node_path }}'",
+      "-PortableGitPath '${{ steps.portable-toolchain.outputs.git_path }}'",
+      "-PortableSevenZipPath '${{ steps.portable-toolchain.outputs.sevenzip_path }}'",
+    ]) {
+      expect(signingJob).toContain(argument);
+    }
+    expect(signingJob).toContain(
+      "& 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'",
+    );
+    for (const parameter of [
+      'PortableToolchainRoot',
+      'PortableNodePath',
+      'PortableGitPath',
+      'PortableSevenZipPath',
+    ]) {
+      expect(wrapper).toContain(`[string]$${parameter}`);
+    }
+    expect(wrapper).toContain('function Get-WagglePortableToolchain');
+    expect(wrapper).toContain(
+      "$DotNetPublisher = 'CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'",
+    );
+  });
+
+  it('sealed Windows publication reconstructs certified NSIS and sidecar source evidence', () => {
+    const workflow = fs
+      .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
+      .replace(/\r\n/g, '\n');
+    const certificationStart = workflow.indexOf('  certify-windows:');
+    const attestationStart = workflow.indexOf('\n  attest-windows:', certificationStart);
+    const publicationStart = workflow.indexOf('\n  publish-windows:', attestationStart);
+    const macStart = workflow.indexOf('\n  build-macos:', publicationStart);
+    const certificationJob = workflow.slice(certificationStart, attestationStart);
+    const attestationJob = workflow.slice(attestationStart, publicationStart);
+    const publicationJob = workflow.slice(publicationStart, macStart);
+
+    const certifyIndex = certificationJob.indexOf('Certify Windows Solo installer lifecycle');
+    const sealIndex = certificationJob.indexOf('Stage sealed Windows release outputs');
+    const uploadIndex = certificationJob.indexOf('Upload sealed Windows release outputs');
+    const attestIndex = attestationJob.indexOf('Attest bootstrap Windows artifacts');
+    expect(certifyIndex).toBeGreaterThanOrEqual(0);
+    expect(sealIndex).toBeGreaterThan(certifyIndex);
+    expect(uploadIndex).toBeGreaterThan(sealIndex);
+    expect(attestIndex).toBeGreaterThanOrEqual(0);
+    expect(certificationJob).toContain("Join-Path $sealedRoot 'source\\release-nsis'");
+    expect(certificationJob).toContain("Get-Item -LiteralPath 'app/src-tauri/resources/service.js'");
+    expect(certificationJob).toContain('evidence.generatedInstallerScriptSha256');
+    expect(certificationJob).toContain('evidence.sidecarBundleSha256');
+    expect(attestationJob).toContain('waggle-windows-sealed/source/release-nsis/installer.nsi');
+    expect(attestationJob).toContain('waggle-windows-sealed/source/resources/service.js');
+    expect(certificationJob).toContain("Join-Path $sealedRoot 'provenance'");
+
+    const stageIndex = publicationJob.indexOf('Stage exact publication inputs');
+    const publishIndex = publicationJob.indexOf('Publish certified Windows release');
+    expect(stageIndex).toBeGreaterThanOrEqual(0);
+    expect(publishIndex).toBeGreaterThan(stageIndex);
+    expect(publicationJob).toContain(
+      "'app/src-tauri/target/x86_64-pc-windows-msvc/release'",
+    );
+    expect(publicationJob).toContain("Join-Path $targetReleaseRoot 'bundle\\nsis'");
+    expect(publicationJob).toContain("Join-Path $targetReleaseRoot 'nsis'");
+    expect(publicationJob).toContain("'app/src-tauri/resources/service.js'");
+    expect(publicationJob).toContain(
+      'Publication bundle contains an unexpected asset; provenance must remain separate.',
+    );
+    expect(publicationJob).not.toContain('npm ci');
+    expect(publicationJob).not.toContain('cargo ');
+    expect(publicationJob).not.toContain('@tauri-apps/cli/tauri.js');
+
+    const publisher = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'publish-windows-release.ps1'),
+      'utf-8',
+    );
+    expect(publisher).toContain(
+      'Assert-ReceiptSourceHashes $receiptDataSet $installer $sourceRevision',
+    );
+    expect(publisher).toContain("Join-Path $releaseDirectory 'nsis'");
+    expect(publisher).toContain("$currentSidecarPath = 'app/src-tauri/resources/service.js'");
   });
 
   it.runIf(process.platform === 'win32')(
@@ -2772,21 +3389,29 @@ Expect-Rejection {
 
   it('Windows desktop workflows verify isolated packaged hook lifecycles after staging', () => {
     const workflows = [
-      { name: 'release.yml', windowsJob: '  build-windows:', macJob: '  build-macos:' },
-      { name: 'tauri-build-pr.yml', windowsJob: '  verify-windows:', macJob: '  verify-macos:' },
+      {
+        name: 'release.yml',
+        windowsJob: '  build-windows-prebuilt:',
+        nextJob: '  sign-windows:',
+      },
+      {
+        name: 'tauri-build-pr.yml',
+        windowsJob: '  verify-windows:',
+        nextJob: '  verify-macos:',
+      },
     ];
 
-    for (const { name, windowsJob, macJob } of workflows) {
+    for (const { name, windowsJob, nextJob } of workflows) {
       const workflow = fs.readFileSync(
         path.join(ROOT, '.github', 'workflows', name),
         'utf-8',
       );
       const windowsStart = workflow.indexOf(windowsJob);
-      const macStart = workflow.indexOf(macJob);
+      const nextStart = workflow.indexOf(nextJob, windowsStart);
       expect(windowsStart).toBeGreaterThanOrEqual(0);
-      expect(macStart).toBeGreaterThan(windowsStart);
+      expect(nextStart).toBeGreaterThan(windowsStart);
 
-      const windowsSteps = workflow.slice(windowsStart, macStart);
+      const windowsSteps = workflow.slice(windowsStart, nextStart);
       const stageIndex = windowsSteps.indexOf('node scripts/stage-sidecar-deps.mjs');
       const lifecycleIndex = windowsSteps.indexOf('hook-packages-runtime.test.ts');
       expect(stageIndex).toBeGreaterThanOrEqual(0);
@@ -2796,208 +3421,30 @@ Expect-Rejection {
     }
   });
 
-  it('Windows desktop workflows certify the built NSIS lifecycle before artifact handoff', () => {
-    const workflows = [
-      {
-        name: 'release.yml',
-        windowsJob: '  build-windows:',
-        macJob: '  build-macos:',
-        handoff: 'Publish certified Windows installer',
-      },
-      {
-        name: 'tauri-build-pr.yml',
-        windowsJob: '  verify-windows:',
-        macJob: '  verify-macos:',
-        handoff: 'Upload Windows artifacts',
-      },
-    ];
-
-    for (const { name, windowsJob, macJob, handoff } of workflows) {
-      const workflow = fs.readFileSync(
-        path.join(ROOT, '.github', 'workflows', name),
-        'utf-8',
-      );
-      const publisher = name === 'release.yml'
-        ? fs.readFileSync(
-          path.join(ROOT, 'scripts', 'publish-windows-release.ps1'),
-          'utf-8',
-        )
-        : '';
-      const windowsSteps = workflow.slice(
-        workflow.indexOf(windowsJob),
-        workflow.indexOf(macJob),
-      );
-      const buildIndex = windowsSteps.indexOf('Build Tauri (Windows)');
-      const pruneIndex = windowsSteps.indexOf('Reclaim Windows build intermediates');
-      const certificateIndex = windowsSteps.indexOf('certify-windows-installer.ps1');
-      const signerCleanupIndex = windowsSteps.indexOf('Remove imported Windows code-signing certificates');
-      const receiptIndex = windowsSteps.indexOf(
-        'windows-installer-certificate.json',
-        certificateIndex,
-      );
-      const handoffIndex = windowsSteps.indexOf(handoff);
-      const nextStepIndex = windowsSteps.indexOf('\n      - name:', handoffIndex + handoff.length);
-      const handoffStep = windowsSteps.slice(
-        handoffIndex,
-        nextStepIndex >= 0 ? nextStepIndex : undefined,
-      );
-
-      expect(buildIndex).toBeGreaterThanOrEqual(0);
-      if (name === 'release.yml') {
-        expect(pruneIndex).toBeGreaterThan(buildIndex);
-        expect(pruneIndex).toBeLessThan(certificateIndex);
-        expect(signerCleanupIndex).toBeGreaterThan(buildIndex);
-        expect(signerCleanupIndex).toBeLessThan(certificateIndex);
-      }
-      expect(certificateIndex).toBeGreaterThan(buildIndex);
-      expect(receiptIndex).toBeGreaterThan(certificateIndex);
-      expect(handoffIndex).toBeGreaterThan(certificateIndex);
-      expect(windowsSteps).toContain("-Filter '*-setup.exe'");
-      expect(windowsSteps).toContain("Get-ChildItem -LiteralPath 'app/src-tauri/target' -Recurse");
-      expect(windowsSteps).toContain('app/src-tauri/target/**/bundle/nsis');
-      expect(windowsSteps).not.toContain("-LiteralPath 'app/src-tauri/target/release/bundle/nsis'");
-      expect(windowsSteps).toContain('--bundles nsis');
-      expect(windowsSteps).not.toContain('bundle/msi');
-      expect(windowsSteps).toContain('npm ci --prefix app --ignore-scripts');
-      expect(windowsSteps).toContain('run: npm ci');
-      expect(windowsSteps).toContain('node node_modules/@tauri-apps/cli/tauri.js build');
-      expect(windowsSteps).not.toContain('npx --yes @tauri-apps/cli@2');
-      expect(windowsSteps).toContain('toolchain: 1.94.0');
-      expect(windowsSteps).toContain('persist-credentials: false');
-      expect(windowsSteps).toContain('-ExpectedSourceRevision $env:GITHUB_SHA');
-      expect(handoffStep).not.toContain('if: always()');
-      if (name === 'release.yml') {
-        expect(windowsSteps.slice(0, certificateIndex)).not.toContain('tagName:');
-        expect(windowsSteps.slice(0, certificateIndex)).not.toContain('releaseDraft:');
-        expect(handoffStep).toContain('if: success()');
-        expect(handoffStep).toContain(
-          'run: ./scripts/publish-windows-release.ps1 -Mode upgrade',
-        );
-    expect(publisher).toContain('Get-FileHash');
-    expect(publisher).toContain('receiptData.installer.sha256');
-    expect(publisher).toContain('Assert-ReceiptSourceHashes $receiptDataSet $installer $sourceRevision');
-    expect(publisher).toContain('evidence.sidecarBundleSha256');
-    expect(publisher).toContain('evidence.sidecarProvenanceSha256');
-    expect(publisher).toContain('evidence.sidecarSourceRevision');
-    expect([...publisher.matchAll(/'sidecarSourceProvenance'/g)]).toHaveLength(2);
-        expect(workflow).not.toContain('workflow_dispatch:');
-        expect(windowsSteps).toContain('environment: production-windows-signing');
-        expect(windowsSteps).toContain('Validate release tag and app version');
-        expect(windowsSteps).toContain("$expectedTag = \"v$version\"");
-        expect(windowsSteps).toContain('git merge-base --is-ancestor $env:GITHUB_SHA origin/main');
-        expect(workflow).toContain('group: release-${{ github.ref }}');
-        expect(windowsSteps).toContain('Attest bootstrap Windows artifacts');
-        expect(windowsSteps).toContain('Attest upgrade Windows artifacts');
-        expect(windowsSteps).toContain('attest-build-provenance@');
-        expect(windowsSteps).toContain('WINDOWS_CODESIGN_PFX_BASE64');
-        expect(windowsSteps).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
-        expect(windowsSteps).toContain('Import-PfxCertificate');
-        expect(windowsSteps).toContain('WAGGLE_IMPORTED_CERT_THUMBPRINTS');
-        expect(windowsSteps).toContain('X509EnhancedKeyUsageExtension');
-        expect(windowsSteps).toContain('apply-signing-config.mjs');
-        expect(windowsSteps).toContain('tauri.build-override.conf.json');
-        expect(windowsSteps).toContain('-RequireAuthenticodeSignature');
-        expect(windowsSteps).toContain('-ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT');
-        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_TAG');
-        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_ASSET_NAME');
-        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_SHA256');
-        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_COMMIT');
-        expect(windowsSteps).toContain('Download signed Windows upgrade baseline');
-        expect(windowsSteps).toContain('gh release view $baseTag');
-        expect(windowsSteps).toContain('isPrerelease');
-        expect(windowsSteps).toContain('gh release download $baseTag');
-        expect(windowsSteps).toContain('WAGGLE_UPGRADE_BASE_INSTALLER_PATH');
-        expect(windowsSteps).toContain('WAGGLE_UPGRADE_BASE_VERSION');
-        expect(windowsSteps).toContain('WAGGLE_UPGRADE_BASE_COMMIT');
-        expect(windowsSteps).toContain('git merge-base --is-ancestor $baseCommit $env:GITHUB_SHA');
-        expect(windowsSteps).toContain('WINDOWS_UPGRADE_BASE_COMMIT must be exactly 40 hexadecimal characters');
-        expect(windowsSteps).toContain('Protected Windows upgrade baseline tag does not resolve to WINDOWS_UPGRADE_BASE_COMMIT');
-        expect(windowsSteps).toContain('-RequireVersionToVersionUpgrade');
-        expect(windowsSteps).toContain('-PreviousInstallerPath $env:WAGGLE_UPGRADE_BASE_INSTALLER_PATH');
-        expect(windowsSteps).toContain('-ExpectedPreviousInstallerSha256 $env:WINDOWS_UPGRADE_BASE_SHA256');
-        expect(windowsSteps).toContain('-ExpectedPreviousVersion $env:WAGGLE_UPGRADE_BASE_VERSION');
-        expect(windowsSteps).toContain('-ExpectedPreviousSourceRevision $env:WAGGLE_UPGRADE_BASE_COMMIT');
-        expect(windowsSteps).toContain('-ExpectedCandidateInstallerSha256 $candidateSha256');
-        expect(windowsSteps).toContain('-ExpectedCandidateVersion $candidateVersion');
-        expect(windowsSteps).toContain('-VerifyManagedModel');
-        expect([...windowsSteps.matchAll(/-VerifyManagedModel/g)]).toHaveLength(2);
-        expect(windowsSteps).toContain('windows-installer-upgrade-certificate.json');
-        expect([...windowsSteps.matchAll(/& \.\/scripts\/certify-windows-installer\.ps1/g)])
-          .toHaveLength(2);
-        expect(windowsSteps).toContain('Refusing to prune outside the Tauri target');
-        expect(windowsSteps).toContain('$minimumFreeBytes = 8GB');
-        expect(publisher).toContain('isDraft');
-        expect(publisher).toContain('Refusing to use a pre-existing release');
-        expect(publisher).toContain('Assert-PassingWindowsCertificateReceipt');
-        expect(publisher).toContain('$Receipt.certificationMode');
-        expect(publisher).toContain('$ExpectedMode');
-        expect(publisher).toContain("$cleanReceiptData 'same-version-repair'");
-        expect(publisher).toContain("$receiptData 'version-to-version-upgrade'");
-        expect(publisher).toContain('$Receipt.managedModelVerified');
-        expect(publisher).toContain('$Receipt.certifiedTier');
-        expect(publisher).toContain("'soloTier'");
-        expect(publisher).toContain("'previousSoloTier'");
-        expect(publisher).toContain("'repairSoloTier'");
-        expect(publisher).toContain("'managedModelProxyRestartChat'");
-        expect(publisher).toContain("'previousManagedModelSeeded'");
-        expect(publisher).toContain("'upgradeManagedModelPreserved'");
-        expect(publisher).toContain("'repairManagedModelDigestPreserved'");
-        expect(publisher).toContain('upgrade.managedModelDigest');
-        expect([...publisher.matchAll(/'managedModelProxyRestartChat'/g)]).toHaveLength(2);
-        expect(publisher).toContain('windows-installer-upgrade-certificate.json');
-        expect(publisher).toContain('previousInstaller.sha256');
-        expect(publisher).toContain('previousInstalledApp.authenticodeStatus');
-        expect(publisher).toContain('upgrade.previousVersion');
-        expect(publisher).toContain('upgrade.candidateVersion');
-        expect(publisher).toContain('upgrade.previousSourceRevision');
-        expect(publisher).toContain('Assert-PublicationTagBindings');
-        expect(publisher).toContain('WAGGLE_UPGRADE_BASE_COMMIT');
-        expect(publisher).toContain('WINDOWS_UPGRADE_BASE_COMMIT');
-        expect(publisher).toContain(
-          'Certified Windows upgrade baseline commit no longer matches the protected commit',
-        );
-        expect(publisher).toContain('Assert-ExpectedAuthenticodeSignature $installer');
-        expect(publisher).toContain('Assert-ExpectedAuthenticodeSignature $baseInstaller');
-        expect(publisher).toContain('WINDOWS_CODESIGN_APPROVED_SUBJECT');
-        expect(publisher).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
-        expect(publisher).toContain('Exactly one protected publication signer identity must be configured');
-        expect(publisher).toContain('function Assert-ReceiptSignerIdentity');
-        expect(publisher).toContain('function Assert-LifecycleReceiptSignerIdentities');
-        expect([
-          ...publisher.matchAll(/^\s+Assert-LifecycleReceiptSignerIdentities `$/gm),
-        ]).toHaveLength(1);
-        expect(publisher).toContain('signerSubject');
-        expect(publisher).toContain("SignatureType -ne 'Authenticode'");
-        expect(publisher).not.toContain(
-          'CN=EGZAKTA DOO BEOGRAD, O=EGZAKTA DOO BEOGRAD, L=Amsterdam, C=NL',
-        );
-        expect(publisher).toContain('$env:GITHUB_REF_NAME');
-        expect(publisher).not.toContain("$tag = '${{ github.ref_name }}'");
-        expect(publisher).toContain('versionToVersionUpgrade');
-        expect(publisher).toContain('upgradeConfiguredDataPreserved');
-        expect(publisher).toContain('upgradeProfileDataPreserved');
-        expect(publisher).toContain('upgradeVaultKeyPreserved');
-        expect(publisher).toContain('installedApp.authenticodeStatus');
-        expect(publisher).toContain("signatureType -ne 'Authenticode'");
-        expect(publisher).toContain('nonPassingChecks');
-        expect(publisher).toContain('generatedInstallerScriptSha256');
-        expect(publisher).toContain('managedModelVerified');
-        expect(publisher).toContain('managedModelDigest');
-        expect(publisher).toContain('noModelChatSetupRequired');
-        expect(publisher).toContain('windowsInboxTools');
-        expect(publisher).toContain('dockerIndependentRuntimePrerequisites');
-        expect(publisher).toContain('managedModelChat');
-        expect(publisher).toContain('managedRuntimeCleanup');
-        expect(publisher).toContain('git ls-remote --tags origin');
-        expect(publisher).toContain('--verify-tag');
-        expect(publisher).not.toContain('--clobber');
-      } else {
-        expect(windowsSteps).not.toContain('-RequireAuthenticodeSignature');
-        expect(windowsSteps).not.toContain('-VerifyManagedModel');
-        expect(windowsSteps).not.toContain('-RequireVersionToVersionUpgrade');
-        expect(windowsSteps).not.toContain('-PreviousInstallerPath');
-      }
-    }
+  it('PR Windows workflow certifies the locally built NSIS lifecycle before upload', () => {
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'tauri-build-pr.yml'),
+      'utf-8',
+    );
+    const windowsStart = workflow.indexOf('  verify-windows:');
+    const macStart = workflow.indexOf('\n  verify-macos:', windowsStart);
+    expect(windowsStart).toBeGreaterThanOrEqual(0);
+    expect(macStart).toBeGreaterThan(windowsStart);
+    const windowsSteps = workflow.slice(windowsStart, macStart);
+    const buildIndex = windowsSteps.indexOf('Build Tauri (Windows)');
+    const certificateIndex = windowsSteps.indexOf('Certify Windows Solo installer lifecycle');
+    const uploadIndex = windowsSteps.indexOf('Upload Windows artifacts');
+    expect(buildIndex).toBeGreaterThanOrEqual(0);
+    expect(certificateIndex).toBeGreaterThan(buildIndex);
+    expect(uploadIndex).toBeGreaterThan(certificateIndex);
+    expect(windowsSteps).toContain('--bundles nsis');
+    expect(windowsSteps).toContain('npm ci --prefix app --ignore-scripts');
+    expect(windowsSteps).toContain('node node_modules/@tauri-apps/cli/tauri.js build');
+    expect(windowsSteps).toContain('-ExpectedSourceRevision $env:GITHUB_SHA');
+    expect(windowsSteps).not.toContain('-RequireAuthenticodeSignature');
+    expect(windowsSteps).not.toContain('-VerifyManagedModel');
+    expect(windowsSteps).not.toContain('-RequireVersionToVersionUpgrade');
+    expect(windowsSteps).not.toContain('-PreviousInstallerPath');
   });
 
   it('PR desktop verification runs when either Windows workflow changes', () => {

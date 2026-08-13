@@ -21,6 +21,24 @@ param(
   [AllowEmptyString()]
   [string]$BuildReceiptSha256 = '',
 
+  [AllowEmptyString()]
+  [string]$PortableToolchainRoot = '',
+
+  [AllowEmptyString()]
+  [string]$PortableNodePath = '',
+
+  [AllowEmptyString()]
+  [string]$PortableGitPath = '',
+
+  [AllowEmptyString()]
+  [string]$PortableSevenZipPath = '',
+
+  [AllowEmptyString()]
+  [string]$PortableToolchainReceiptPath = '',
+
+  [AllowEmptyString()]
+  [string]$PortableToolchainReceiptSha256 = '',
+
   [switch]$TrustedPowerShellHost
 )
 
@@ -78,6 +96,9 @@ $ErrorActionPreference = 'Stop'
 
 $MicrosoftPublisher = 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
 $MicrosoftWindowsPublisher = 'CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
+$DotNetPublisher = 'CN=.NET, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'
+$NodePublisher = 'CN=OpenJS Foundation, O=OpenJS Foundation, L=San Francisco, S=California, C=US'
+$GitPublisher = 'CN=Johannes Schindelin, O=Johannes Schindelin, S=Nordrhein-Westfalen, C=DE'
 $ArtifactSigningEndpoint = 'https://weu.codesigning.azure.net/'
 $ArtifactSigningAccount = 'waggleos-egzakta-signing'
 $ArtifactSigningProfile = 'waggleos-public-trust'
@@ -96,10 +117,17 @@ $TauriNativeBinarySha256 = 'F7289148FDF4CE6CE527D34C63A0055C87DE4FFE0A98475F3998
 $MakensisSha256 = '42850802704ECB11163F7E0329D35EE54BD288953200D4966E226D572848CFC5'
 $NsisClosureSha256 = '1FC822D1A183552A80ADEA01B0BF456F462B90518256EF1FE9EDFA22D76CD85A'
 $GitSha256 = '34A408843194BE320D8A87A3C12CD5C7D2E08D03B24567A41DB32E21D12569D2'
+$GitRuntimeSha256 = '755D4896D35663D0FF08924F84507F35236B83D240635B512C519BF43CC71A87'
 $NodePath = 'C:\Program Files\nodejs\node.exe'
 $NodeSha256 = 'AE1A50511BE58E987483FDBC12125407443926D2D394669ADE2352776E920DD3'
 $SevenZipPath = 'C:\Program Files\7-Zip\7z.exe'
 $SevenZipSha256 = '4CD7D776C686427226A151789D2D61F0B2ED2C392148CC4E69C0238362FAFECF'
+$SevenZipDllSha256 = '5BD20FB38499D95C39594F41D4781B6181B3304B7F1F4D06B0182F514E7EAA74'
+$NodeArchiveSha256 = '7C93E9D92BF68C07182B471AA187E35EE6CD08EF0F24AB060DFFF605FCC1C57C'
+$GitArchiveSha256 = 'C2C955A21FA99889D83F485F24FA5D9A38FFFC2D509D4022385510E11C26B250'
+$SevenZipArchiveSha256 = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
+$PortableToolchainFileCount = 2495
+$PortableToolchainInventorySha256 = 'D64F897D4E1A7F07FE9BA62D6AF062EF9F0E41C595CDAF2F3C4F73991BBEA0F5'
 $ApprovedPublisher = 'CN=EGZAKTA DOO BEOGRAD, O=EGZAKTA DOO BEOGRAD, L=Amsterdam, C=NL'
 $CodeSigningOid = '1.3.6.1.5.5.7.3.3'
 $SystemPowerShellPath = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -268,12 +296,12 @@ function Assert-MsiFile {
   }
 }
 
-function Assert-MicrosoftAuthenticodeFile {
+function Assert-ApprovedAuthenticodeFile {
   param(
     [Parameter(Mandatory = $true)] [string]$Path,
     [Parameter(Mandatory = $true)] [string]$Label,
     [AllowNull()] [string]$ExpectedSha256,
-    [string]$ExpectedPublisher = $MicrosoftPublisher,
+    [Parameter(Mandatory = $true)] [string]$ExpectedPublisher,
     [switch]$AllowCatalog
   )
 
@@ -289,7 +317,7 @@ function Assert-MicrosoftAuthenticodeFile {
         $ExpectedPublisher,
         [StringComparison]::Ordinal
       )) {
-    throw "$Label is not validly Authenticode-signed by Microsoft."
+    throw "$Label is not validly Authenticode-signed by the approved publisher."
   }
 
   $hasCodeSigningEku = @(
@@ -306,6 +334,19 @@ function Assert-MicrosoftAuthenticodeFile {
       throw "$Label does not match the pinned SHA-256 digest."
     }
   }
+}
+
+function Assert-MicrosoftAuthenticodeFile {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Path,
+    [Parameter(Mandatory = $true)] [string]$Label,
+    [AllowNull()] [string]$ExpectedSha256,
+    [string]$ExpectedPublisher = $MicrosoftPublisher,
+    [switch]$AllowCatalog
+  )
+
+  Assert-ApprovedAuthenticodeFile `
+    $Path $Label $ExpectedSha256 $ExpectedPublisher -AllowCatalog:$AllowCatalog
 }
 
 function Assert-ApprovedPowerShell7Path {
@@ -373,7 +414,13 @@ function Invoke-TrustedPowerShellRelaunch {
   param(
     [Parameter(Mandatory = $true)] [ValidateSet('Callback', 'Package')] [string]$LaunchMode,
     [string]$Path = '',
-    [string]$PackageSource = ''
+    [string]$PackageSource = '',
+    [string]$ToolchainRoot = '',
+    [string]$Node = '',
+    [string]$Git = '',
+    [string]$SevenZip = '',
+    [string]$ToolchainReceipt = '',
+    [string]$ToolchainReceiptSha256 = ''
   )
 
   $systemHost = Get-TrustedPath $SystemPowerShellPath 'Windows PowerShell bootstrap' -AllowHardLink
@@ -400,7 +447,13 @@ function Invoke-TrustedPowerShellRelaunch {
         @('-SigningInputRoot', $SigningInputRoot),
         @('-BuildReceiptPath', $BuildReceiptPath),
         @('-BuildReceiptSha256', $BuildReceiptSha256),
-        @('-ArtifactSigningPackageSource', $PackageSource)
+        @('-ArtifactSigningPackageSource', $PackageSource),
+        @('-PortableToolchainRoot', $ToolchainRoot),
+        @('-PortableNodePath', $Node),
+        @('-PortableGitPath', $Git),
+        @('-PortableSevenZipPath', $SevenZip),
+        @('-PortableToolchainReceiptPath', $ToolchainReceipt),
+        @('-PortableToolchainReceiptSha256', $ToolchainReceiptSha256)
       )) {
       if (-not [string]::IsNullOrWhiteSpace([string]$pair[1])) {
         $arguments += @([string]$pair[0], [string]$pair[1])
@@ -1077,7 +1130,442 @@ function Assert-PrivateDirectoryAcl {
   return $directory
 }
 
+function Assert-WagglePinnedToolFile {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Path,
+    [Parameter(Mandatory = $true)] [string]$Label,
+    [Parameter(Mandatory = $true)] [string]$ExpectedSha256,
+    [AllowNull()] [string]$ExpectedPublisher,
+    [switch]$AllowCatalog,
+    [switch]$AllowHardLink
+  )
+
+  $trustedPath = Get-TrustedPath $Path $Label -AllowHardLink:$AllowHardLink
+  if ([string]::IsNullOrEmpty($ExpectedPublisher)) {
+    if ((Get-FileHash -LiteralPath $trustedPath -Algorithm SHA256).Hash -cne
+        $ExpectedSha256) {
+      throw "$Label does not match the pinned SHA-256 digest."
+    }
+  } else {
+    Assert-ApprovedAuthenticodeFile `
+      $trustedPath $Label $ExpectedSha256 $ExpectedPublisher `
+      -AllowCatalog:$AllowCatalog
+  }
+  return $trustedPath
+}
+
+function Open-WagglePortableToolchainReceipt {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Root,
+    [Parameter(Mandatory = $true)] [string]$ReceiptPath,
+    [Parameter(Mandatory = $true)] [string]$ReceiptSha256,
+    [string[]]$DisallowedRoots = @()
+  )
+
+  if ($ReceiptSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+    throw 'Portable signing toolchain receipt SHA-256 is invalid.'
+  }
+  $trustedRoot = Assert-PrivateDirectoryAcl $Root 'Portable signing toolchain root'
+  $trustedReceipt = Get-TrustedPath $ReceiptPath 'Portable signing toolchain receipt'
+  if (Test-WagglePathsOverlap $trustedRoot $trustedReceipt) {
+    throw 'Portable signing toolchain receipt must be outside its toolchain root.'
+  }
+  foreach ($disallowedRoot in @($DisallowedRoots | Where-Object {
+      -not [string]::IsNullOrWhiteSpace([string]$_)
+    })) {
+    if (Test-WagglePathsOverlap $trustedReceipt ([string]$disallowedRoot)) {
+      throw 'Portable signing toolchain receipt overlaps a protected signing boundary.'
+    }
+  }
+  $locks = [Collections.Generic.List[IDisposable]]::new()
+  try {
+    $receiptLock = Open-ReadLock $trustedReceipt
+    $locks.Add($receiptLock)
+    if (-not [string]::Equals(
+        (Get-FileHash -LiteralPath $trustedReceipt -Algorithm SHA256).Hash,
+        $ReceiptSha256,
+        [StringComparison]::OrdinalIgnoreCase
+      )) {
+      throw 'Portable signing toolchain receipt does not match its handoff SHA-256.'
+    }
+    try {
+      $receipt = Get-Content -Raw -LiteralPath $trustedReceipt |
+        ConvertFrom-Json -Depth 32 -DateKind String
+    } catch {
+      throw 'Portable signing toolchain receipt is not valid JSON.'
+    }
+    if ([int](Get-RequiredPropertyValue `
+        $receipt 'schemaVersion' 'Portable signing toolchain receipt') -ne 1) {
+      throw 'Portable signing toolchain receipt schemaVersion must be 1.'
+    }
+    Assert-ExactCanonicalPathValue `
+      ([string](Get-RequiredPropertyValue `
+        $receipt 'portableToolchainRoot' 'Portable signing toolchain receipt')) `
+      $trustedRoot 'Portable signing toolchain receipt root'
+
+    $archives = Get-RequiredPropertyValue `
+      $receipt 'archives' 'Portable signing toolchain receipt'
+    $archiveBindings = @(
+      @('node', $NodeArchiveSha256),
+      @('git', $GitArchiveSha256),
+      @('sevenZip', $SevenZipArchiveSha256)
+    )
+    $archivePaths = [Collections.Generic.HashSet[string]]::new(
+      [StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($binding in $archiveBindings) {
+      $archive = Get-RequiredPropertyValue `
+        $archives ([string]$binding[0]) 'Portable toolchain archives'
+      $archivePath = Get-TrustedPath `
+        ([string](Get-RequiredPropertyValue `
+          $archive 'path' 'Portable toolchain vendor archive')) `
+        'Portable toolchain vendor archive'
+      $archiveHash = [string](Get-RequiredPropertyValue `
+        $archive 'sha256' 'Portable toolchain vendor archive')
+      if ($archiveHash -cne [string]$binding[1] -or
+          -not $archivePaths.Add($archivePath) -or
+          (Test-WagglePathsOverlap $trustedRoot $archivePath) -or
+          [string]::Equals(
+            $trustedReceipt, $archivePath, [StringComparison]::OrdinalIgnoreCase
+          )) {
+        throw 'Portable toolchain vendor archives are not the exact distinct repository-pinned handoff.'
+      }
+      foreach ($disallowedRoot in @($DisallowedRoots | Where-Object {
+          -not [string]::IsNullOrWhiteSpace([string]$_)
+        })) {
+        if (Test-WagglePathsOverlap $archivePath ([string]$disallowedRoot)) {
+          throw 'Portable toolchain vendor archive overlaps a protected signing boundary.'
+        }
+      }
+      $archiveLock = Open-ReadLock $archivePath
+      if ((Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash -cne
+          $archiveHash) {
+        $archiveLock.Dispose()
+        throw 'Portable toolchain vendor archive does not match its pinned SHA-256.'
+      }
+      $locks.Add($archiveLock)
+    }
+
+    $inventory = Get-RequiredPropertyValue `
+      $receipt 'inventory' 'Portable signing toolchain receipt'
+    $inventoryEntries = @((Get-RequiredPropertyValue `
+      $inventory 'entries' 'Portable signing toolchain inventory'))
+    $inventoryHash = [string](Get-RequiredPropertyValue `
+      $inventory 'sha256' 'Portable signing toolchain inventory')
+    if ($inventoryEntries.Count -ne $PortableToolchainFileCount -or
+        $inventoryHash -cne $PortableToolchainInventorySha256) {
+      throw 'Portable signing toolchain inventory does not match the repository-pinned full closure.'
+    }
+    $treeLease = Open-WaggleValidatedPrebuiltTree `
+      $trustedRoot $inventory 'Portable signing toolchain full closure' `
+      ($DisallowedRoots + @($trustedReceipt) + @($archivePaths))
+    foreach ($treeLock in $treeLease.Locks) { $locks.Add($treeLock) }
+    $treeLease.Locks.Clear()
+    return [pscustomobject]@{
+      Receipt = $receipt
+      ReceiptPath = $trustedReceipt
+      ReceiptSha256 = $ReceiptSha256.ToUpperInvariant()
+      Inventory = $inventory
+      InventorySha256 = $inventoryHash
+      Locks = $locks
+    }
+  } catch {
+    foreach ($lock in $locks) { $lock.Dispose() }
+    throw
+  }
+}
+
+function Get-WagglePortableToolchain {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Root,
+    [Parameter(Mandatory = $true)] [string]$Node,
+    [Parameter(Mandatory = $true)] [string]$Git,
+    [Parameter(Mandatory = $true)] [string]$SevenZip,
+    [Parameter(Mandatory = $true)] [string]$ReceiptPath,
+    [Parameter(Mandatory = $true)] [string]$ReceiptSha256,
+    [string[]]$DisallowedRoots = @()
+  )
+
+  $trustedRoot = Assert-PrivateDirectoryAcl $Root 'Portable signing toolchain root'
+  foreach ($disallowedRoot in @($DisallowedRoots | Where-Object {
+      -not [string]::IsNullOrWhiteSpace([string]$_)
+    })) {
+    if (Test-WagglePathsOverlap $trustedRoot ([string]$disallowedRoot)) {
+      throw 'Portable signing toolchain root overlaps a repository, prebuilt, receipt, or signing-temp boundary.'
+    }
+  }
+
+  $receiptLease = Open-WagglePortableToolchainReceipt `
+    $trustedRoot $ReceiptPath $ReceiptSha256 -DisallowedRoots $DisallowedRoots
+  $receiptLeaseTransferred = $false
+  try {
+  $rootItems = @(Get-ChildItem -LiteralPath $trustedRoot -Force -Recurse)
+  $rootFiles = @($rootItems | Where-Object { -not $_.PSIsContainer })
+  $rootBytes = [long](($rootFiles | Measure-Object -Property Length -Sum).Sum)
+  if ($rootItems.Count -gt 20000 -or $rootBytes -gt 1GB) {
+    throw 'Portable signing toolchain root exceeds the bounded 20,000-item or 1-GiB trust envelope.'
+  }
+  foreach ($item in $rootItems) {
+    $linkProperty = $item.PSObject.Properties['LinkType']
+    $linkType = if ($null -eq $linkProperty) { '' } else { [string]$linkProperty.Value }
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        -not [string]::IsNullOrEmpty($linkType)) {
+      throw 'Portable signing toolchain root contains a linked or reparse filesystem object.'
+    }
+  }
+
+  $requestedTools = [ordered]@{
+    Node = @($Node, 'Portable Node.js runtime')
+    Git = @($Git, 'Portable Git executable')
+    SevenZip = @($SevenZip, 'Portable 7-Zip inventory tool')
+  }
+  $trustedTools = @{}
+  $uniquePaths = [Collections.Generic.HashSet[string]]::new(
+    [StringComparer]::OrdinalIgnoreCase
+  )
+  foreach ($entry in $requestedTools.GetEnumerator()) {
+    $trustedPath = Get-TrustedPath ([string]$entry.Value[0]) ([string]$entry.Value[1])
+    $relativePath = Get-ContainedRelativePath $trustedPath $trustedRoot
+    if ([string]::IsNullOrEmpty($relativePath)) {
+      throw "$($entry.Value[1]) must be a regular non-reparse file contained by the private portable toolchain root."
+    }
+    if (-not $uniquePaths.Add($trustedPath)) {
+      throw 'Portable signing tool paths must be distinct regular files.'
+    }
+    $trustedTools[[string]$entry.Key] = $trustedPath
+  }
+
+  $sevenZipDll = Get-TrustedPath `
+    (Join-Path (Split-Path $trustedTools.SevenZip -Parent) '7z.dll') `
+    'Portable 7-Zip runtime library'
+  $sevenZipDllRelative = Get-ContainedRelativePath $sevenZipDll $trustedRoot
+  if ([string]::IsNullOrEmpty($sevenZipDllRelative) -or
+      -not $uniquePaths.Add($sevenZipDll)) {
+    throw 'Portable 7-Zip runtime library must be a distinct regular file contained by the private portable toolchain root.'
+  }
+  $gitRuntime = Get-TrustedPath `
+    (Join-Path (Split-Path (Split-Path $trustedTools.Git -Parent) -Parent) `
+      'mingw64\bin\git.exe') `
+    'Portable Git runtime'
+  $gitRuntimeRelative = Get-ContainedRelativePath $gitRuntime $trustedRoot
+  if ([string]::IsNullOrEmpty($gitRuntimeRelative) -or
+      -not $uniquePaths.Add($gitRuntime)) {
+    throw 'Portable Git runtime must be a distinct regular file contained by the private portable toolchain root.'
+  }
+
+  $trustedTools.Node = Assert-WagglePinnedToolFile `
+    $trustedTools.Node 'Portable Node.js runtime' $NodeSha256 $NodePublisher
+  $trustedTools.Git = Assert-WagglePinnedToolFile `
+    $trustedTools.Git 'Portable Git executable' $GitSha256 $GitPublisher
+  $gitRuntime = Assert-WagglePinnedToolFile `
+    $gitRuntime 'Portable Git runtime' $GitRuntimeSha256 $GitPublisher
+  $trustedTools.SevenZip = Assert-WagglePinnedToolFile `
+    $trustedTools.SevenZip 'Portable 7-Zip inventory tool' $SevenZipSha256 $null
+  $sevenZipDll = Assert-WagglePinnedToolFile `
+    $sevenZipDll 'Portable 7-Zip runtime library' $SevenZipDllSha256 $null
+
+  $result = [pscustomobject]@{
+    PortableToolchainRoot = $trustedRoot
+    NodePath = $trustedTools.Node
+    GitPath = $trustedTools.Git
+    GitRuntimePath = $gitRuntime
+    SevenZipPath = $trustedTools.SevenZip
+    SevenZipDllPath = $sevenZipDll
+    ReceiptPath = $receiptLease.ReceiptPath
+    ReceiptSha256 = $receiptLease.ReceiptSha256
+    InventorySha256 = $receiptLease.InventorySha256
+    Locks = $receiptLease.Locks
+  }
+  $receiptLeaseTransferred = $true
+  return $result
+  } finally {
+    if (-not $receiptLeaseTransferred) {
+      foreach ($lock in $receiptLease.Locks) { $lock.Dispose() }
+    }
+  }
+}
+
+function Get-WaggleSigningToolchain {
+  param(
+    [string[]]$DisallowedRoots = @(),
+    [switch]$AllowPortableBeforeManifest
+  )
+
+  $portableValues = [ordered]@{
+    Root = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT')
+    Node = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_NODE_PATH')
+    Git = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_GIT_PATH')
+    SevenZip = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH')
+    Receipt = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH')
+    ReceiptSha256 = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256')
+  }
+  $providedCount = @($portableValues.Values | Where-Object {
+      -not [string]::IsNullOrWhiteSpace([string]$_)
+    }).Count
+  if ($providedCount -ne 0) {
+    if ($providedCount -ne $portableValues.Count) {
+      throw 'Portable signing toolchain environment must provide the exact root, Node, Git, 7-Zip, receipt path, and receipt SHA-256.'
+    }
+    if (-not $AllowPortableBeforeManifest -and
+        ([Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_PATH') -notmatch
+          '^[A-Za-z]:[\\/]' -or
+         [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_SHA256') -notmatch
+          '^[0-9A-Fa-f]{64}$')) {
+      throw 'Portable signing tools are valid only inside an active receipt-bound signing session.'
+    }
+    return Get-WagglePortableToolchain `
+      $portableValues.Root $portableValues.Node $portableValues.Git `
+      $portableValues.SevenZip $portableValues.Receipt `
+      $portableValues.ReceiptSha256 -DisallowedRoots $DisallowedRoots
+  }
+
+  $systemNode = Assert-WagglePinnedToolFile `
+    $NodePath 'Node.js runtime' $NodeSha256 $NodePublisher -AllowHardLink
+  $systemGit = Assert-WagglePinnedToolFile `
+    $GitPath 'Git executable' $GitSha256 $GitPublisher -AllowHardLink
+  $systemGitRuntime = Assert-WagglePinnedToolFile `
+    (Join-Path (Split-Path (Split-Path $systemGit -Parent) -Parent) `
+      'mingw64\bin\git.exe') `
+    'Git runtime' $GitRuntimeSha256 $GitPublisher -AllowHardLink
+  $systemSevenZip = Assert-WagglePinnedToolFile `
+    $SevenZipPath '7-Zip inventory tool' $SevenZipSha256 $null
+  $systemSevenZipDll = Assert-WagglePinnedToolFile `
+    (Join-Path (Split-Path $systemSevenZip -Parent) '7z.dll') `
+    '7-Zip runtime library' $SevenZipDllSha256 $null
+  return [pscustomobject]@{
+    PortableToolchainRoot = $null
+    NodePath = $systemNode
+    GitPath = $systemGit
+    GitRuntimePath = $systemGitRuntime
+    SevenZipPath = $systemSevenZip
+    SevenZipDllPath = $systemSevenZipDll
+    ReceiptPath = $null
+    ReceiptSha256 = $null
+    InventorySha256 = $null
+    Locks = [Collections.Generic.List[IDisposable]]::new()
+  }
+}
+
+function Assert-WagglePortableToolchainEnvironment {
+  param([Parameter(Mandatory = $true)] [object]$Context)
+
+  if ($null -eq $Context.PortableToolchainRoot) { return }
+  foreach ($binding in @(
+      @('WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT', $Context.PortableToolchainRoot),
+      @('WAGGLE_SIGNING_PORTABLE_NODE_PATH', $Context.NodePath),
+      @('WAGGLE_SIGNING_PORTABLE_GIT_PATH', $Context.GitPath),
+      @('WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH', $Context.SevenZipPath),
+      @('WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH', $Context.PortableToolchainReceiptPath)
+    )) {
+    Assert-ExactCanonicalPathValue `
+      ([Environment]::GetEnvironmentVariable([string]$binding[0])) `
+      ([string]$binding[1]) ([string]$binding[0])
+  }
+  if ([Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256') -cne
+      $Context.PortableToolchainReceiptSha256) {
+    throw 'WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256 does not match the signing session.'
+  }
+}
+
+function Assert-WagglePortableSessionBootstrap {
+  param(
+    [Parameter(Mandatory = $true)] [object]$Toolchain,
+    [Parameter(Mandatory = $true)] [string]$RepoRoot,
+    [Parameter(Mandatory = $true)] [string]$TauriRoot
+  )
+
+  if ($null -eq $Toolchain.PortableToolchainRoot) { return }
+  $sessionId = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_SESSION_ID')
+  $manifestPathValue = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_PATH')
+  $manifestSha256 = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_SHA256')
+  if ($sessionId -notmatch '^[0-9a-f]{32}$' -or
+      $manifestSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+    throw 'Portable signing callback is not inside an active receipt-bound signing session.'
+  }
+  $sessionDirectory = Assert-PrivateDirectoryAcl `
+    (Join-Path $TauriRoot "target\.signing-sessions\run-$sessionId") `
+    'Portable signing callback session directory'
+  $expectedManifestPath = Join-Path $sessionDirectory 'manifest.json'
+  Assert-ExactCanonicalPathValue `
+    $manifestPathValue $expectedManifestPath 'Portable signing callback manifest path'
+  $manifestPath = Get-TrustedPath $manifestPathValue 'Portable signing callback manifest'
+  $lock = Open-ReadLock $manifestPath
+  try {
+    if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -cne
+        $manifestSha256.ToUpperInvariant()) {
+      throw 'Portable signing callback manifest does not match its session digest.'
+    }
+    try {
+      $manifest = Get-Content -Raw -LiteralPath $manifestPath |
+        ConvertFrom-Json -Depth 32 -DateKind String
+    } catch {
+      throw 'Portable signing callback manifest is not valid JSON.'
+    }
+    if ([int](Get-RequiredPropertyValue $manifest 'schemaVersion' 'Signing manifest') -ne 1 -or
+        [string](Get-RequiredPropertyValue $manifest 'mode' 'Signing manifest') -cne 'nsis' -or
+        [string](Get-RequiredPropertyValue $manifest 'sessionId' 'Signing manifest') -cne $sessionId) {
+      throw 'Portable signing callback manifest does not bind the active NSIS session.'
+    }
+    Assert-ExactCanonicalPathValue `
+      ([string](Get-RequiredPropertyValue $manifest 'repoRoot' 'Signing manifest')) `
+      $RepoRoot 'Portable signing callback repository root'
+    $sourceRevision = [string](Get-RequiredPropertyValue `
+      $manifest 'sourceRevision' 'Signing manifest')
+    $receipt = Get-RequiredPropertyValue `
+      $manifest 'buildReceipt' 'Receipt-bound signing manifest'
+    if ($sourceRevision -notmatch '^[0-9a-f]{40}$' -or
+        [int](Get-RequiredPropertyValue $receipt 'schemaVersion' 'Hosted build receipt') -ne 1 -or
+        [string](Get-RequiredPropertyValue $receipt 'repository' 'Hosted build receipt') -cne
+          'marolinik/waggle-os' -or
+        [string](Get-RequiredPropertyValue $receipt 'sourceRevision' 'Hosted build receipt') -cne
+          $sourceRevision -or
+        [string](Get-RequiredPropertyValue $receipt 'targetTriple' 'Hosted build receipt') -cne
+          'x86_64-pc-windows-msvc') {
+      throw 'Portable signing callback manifest is not bound to the approved hosted receipt.'
+    }
+    $manifestToolchain = Get-RequiredPropertyValue $manifest 'toolchain' 'Signing manifest'
+    foreach ($binding in @(
+        @('portableToolchainRoot', $Toolchain.PortableToolchainRoot),
+        @('nodePath', $Toolchain.NodePath),
+        @('gitPath', $Toolchain.GitPath),
+        @('gitRuntimePath', $Toolchain.GitRuntimePath),
+        @('sevenZipPath', $Toolchain.SevenZipPath),
+        @('sevenZipDllPath', $Toolchain.SevenZipDllPath),
+        @('portableToolchainReceiptPath', $Toolchain.ReceiptPath)
+      )) {
+      Assert-ExactCanonicalPathValue `
+        ([string](Get-RequiredPropertyValue `
+          $manifestToolchain ([string]$binding[0]) 'Signing manifest toolchain')) `
+        ([string]$binding[1]) "Portable signing callback $($binding[0])"
+    }
+    foreach ($binding in @(
+        @('nodeSha256', $NodeSha256),
+        @('gitSha256', $GitSha256),
+        @('gitRuntimeSha256', $GitRuntimeSha256),
+        @('sevenZipSha256', $SevenZipSha256),
+        @('sevenZipDllSha256', $SevenZipDllSha256),
+        @('portableToolchainReceiptSha256', $Toolchain.ReceiptSha256),
+        @('portableToolchainInventorySha256', $PortableToolchainInventorySha256)
+      )) {
+      if ([string](Get-RequiredPropertyValue `
+          $manifestToolchain ([string]$binding[0]) 'Signing manifest toolchain') -cne
+          [string]$binding[1]) {
+        throw "Portable signing callback $($binding[0]) is not repository-pinned."
+      }
+    }
+    if ([int](Get-RequiredPropertyValue `
+        $manifestToolchain 'portableToolchainFileCount' 'Signing manifest toolchain') -ne
+        $PortableToolchainFileCount) {
+      throw 'Portable signing callback full closure file count is not repository-pinned.'
+    }
+  } finally {
+    $lock.Dispose()
+  }
+}
+
 function Get-WaggleSigningContext {
+  param([switch]$AllowPortableBeforeManifest)
+
   $sessionId = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_SESSION_ID')
   if ($sessionId -notmatch '^[0-9a-f]{32}$') {
     throw 'WAGGLE_SIGNING_SESSION_ID must be one lowercase 128-bit session id.'
@@ -1142,7 +1630,17 @@ function Get-WaggleSigningContext {
   $nsisRoot = Get-TrustedPath `
     (Split-Path (Split-Path $makensisPath -Parent) -Parent) `
     'NSIS compiler root' 'Container'
-  $git = Get-TrustedPath $GitPath 'Git executable' -AllowHardLink
+  $toolchain = Get-WaggleSigningToolchain `
+    -DisallowedRoots @(
+      $repoRoot, $targetRoot, $resourcesRoot,
+      [Environment]::GetEnvironmentVariable('TEMP'),
+      [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_PATH')
+    ) `
+    -AllowPortableBeforeManifest:$AllowPortableBeforeManifest
+  if (-not $AllowPortableBeforeManifest) {
+    Assert-WagglePortableSessionBootstrap $toolchain $repoRoot $tauriRoot
+  }
+  $git = $toolchain.GitPath
   $gitLock = Open-ReadLock $git
   try {
     if ((Get-FileHash -LiteralPath $git -Algorithm SHA256).Hash -cne $GitSha256) {
@@ -1179,12 +1677,19 @@ function Get-WaggleSigningContext {
     MakensisPath = $makensisPath
     NsisRoot = $nsisRoot
     GitPath = $git
+    GitRuntimePath = $toolchain.GitRuntimePath
+    PortableToolchainRoot = $toolchain.PortableToolchainRoot
+    PortableToolchainReceiptPath = $toolchain.ReceiptPath
+    PortableToolchainReceiptSha256 = $toolchain.ReceiptSha256
+    PortableToolchainInventorySha256 = $toolchain.InventorySha256
+    PortableToolchainLocks = $toolchain.Locks
     SignToolPath = Get-TrustedPath $SignToolPath 'SignTool' -AllowHardLink
     ArtifactSigningPackagePath = Get-TrustedPath `
       (Join-Path $tauriRoot 'target\.artifact-signing-tools\Microsoft.ArtifactSigning.Client.1.0.128.nupkg') `
       'Artifact Signing package'
-    NodePath = Get-TrustedPath $NodePath 'Node.js runtime' -AllowHardLink
-    SevenZipPath = Get-TrustedPath $SevenZipPath '7-Zip inventory tool'
+    NodePath = $toolchain.NodePath
+    SevenZipPath = $toolchain.SevenZipPath
+    SevenZipDllPath = $toolchain.SevenZipDllPath
     SourceRevision = $sourceRevision
     TauriCliVersion = $TauriCliVersion
     TauriCliSha256 = $TauriCliSha256
@@ -1196,8 +1701,10 @@ function Get-WaggleSigningContext {
     MakensisSha256 = $MakensisSha256
     NsisClosureSha256 = $NsisClosureSha256
     GitSha256 = $GitSha256
+    GitRuntimeSha256 = $GitRuntimeSha256
     NodeSha256 = $NodeSha256
     SevenZipSha256 = $SevenZipSha256
+    SevenZipDllSha256 = $SevenZipDllSha256
     SignToolSha256 = $SignToolSha256
     ArtifactSigningPackageSha256 = $ArtifactSigningPackageSha256
     ArtifactSigningX64ManifestSha256 = $ArtifactSigningX64ManifestSha256
@@ -1349,6 +1856,7 @@ function Assert-WaggleSigningOverrideContract {
 function Get-WaggleSigningSession {
   param([Parameter(Mandatory = $true)] [object]$Context)
 
+  Assert-WagglePortableToolchainEnvironment $Context
   $manifestPathValue = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_PATH')
   $manifestSha256 = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_SHA256')
   $sessionId = [Environment]::GetEnvironmentVariable('WAGGLE_SIGNING_SESSION_ID')
@@ -1372,6 +1880,13 @@ function Get-WaggleSigningSession {
   $manifestPath = Get-TrustedPath $manifestPathValue 'Signing manifest'
 
   $locks = [Collections.Generic.List[IDisposable]]::new()
+  $portableLocksProperty = $Context.PSObject.Properties['PortableToolchainLocks']
+  if ($null -ne $portableLocksProperty -and $null -ne $portableLocksProperty.Value) {
+    foreach ($portableLock in @($portableLocksProperty.Value)) {
+      $locks.Add($portableLock)
+    }
+    $portableLocksProperty.Value.Clear()
+  }
   try {
     $manifestLock = Open-ReadLock $manifestPath
     $locks.Add($manifestLock)
@@ -1401,6 +1916,19 @@ function Get-WaggleSigningSession {
     if ([string](Get-RequiredPropertyValue $manifest 'sourceRevision' 'Signing manifest') -cne
         [string]$Context.SourceRevision) {
       throw 'Signing manifest source revision does not match the clean repository HEAD.'
+    }
+    if ($null -ne $Context.PortableToolchainRoot) {
+      $buildReceipt = Get-RequiredPropertyValue `
+        $manifest 'buildReceipt' 'Receipt-bound signing manifest'
+      if ([int](Get-RequiredPropertyValue $buildReceipt 'schemaVersion' 'Hosted build receipt') -ne 1 -or
+          [string](Get-RequiredPropertyValue $buildReceipt 'repository' 'Hosted build receipt') -cne
+            'marolinik/waggle-os' -or
+          [string](Get-RequiredPropertyValue $buildReceipt 'sourceRevision' 'Hosted build receipt') -cne
+            [string]$Context.SourceRevision -or
+          [string](Get-RequiredPropertyValue $buildReceipt 'targetTriple' 'Hosted build receipt') -cne
+            'x86_64-pc-windows-msvc') {
+        throw 'Portable signing callback is not bound to the approved hosted build receipt.'
+      }
     }
 
     $createdAt = [DateTimeOffset]::MinValue
@@ -1484,6 +2012,7 @@ function Get-WaggleSigningSession {
       @('tauriNativeBinaryPath', 'tauriNativeBinarySha256', $Context.TauriNativeBinaryPath, $Context.TauriNativeBinarySha256, 'Tauri native CLI binary', $false),
       @('makensisPath', 'makensisSha256', $Context.MakensisPath, $Context.MakensisSha256, 'makensis', $false),
       @('gitPath', 'gitSha256', $Context.GitPath, $Context.GitSha256, 'Git executable', $true),
+      @('gitRuntimePath', 'gitRuntimeSha256', $Context.GitRuntimePath, $Context.GitRuntimeSha256, 'Git runtime', $true),
       @('nodePath', 'nodeSha256', $Context.NodePath, $Context.NodeSha256, 'Node.js runtime', $true),
       @('sevenZipPath', 'sevenZipSha256', $Context.SevenZipPath, $Context.SevenZipSha256, '7-Zip inventory tool', $false),
       @('signToolPath', 'signToolSha256', $Context.SignToolPath, $Context.SignToolSha256, 'SignTool', $true),
@@ -1499,6 +2028,40 @@ function Get-WaggleSigningSession {
       Add-ValidatedSessionFileLock `
         $locks ([string]$binding[2]) $manifestToolHash ([string]$binding[4]) `
         -AllowHardLink:([bool]$binding[5]) | Out-Null
+    }
+    if ($null -ne $Context.PortableToolchainRoot) {
+      Assert-ExactCanonicalPathValue `
+        ([string](Get-RequiredPropertyValue `
+          $toolchain 'portableToolchainRoot' 'Signing manifest toolchain')) `
+        $Context.PortableToolchainRoot 'Portable signing toolchain root'
+      $sevenZipDllPath = [string](Get-RequiredPropertyValue `
+        $toolchain 'sevenZipDllPath' 'Signing manifest toolchain')
+      $sevenZipDllHash = [string](Get-RequiredPropertyValue `
+        $toolchain 'sevenZipDllSha256' 'Signing manifest toolchain')
+      Assert-ExactCanonicalPathValue `
+        $sevenZipDllPath $Context.SevenZipDllPath '7-Zip runtime library path'
+      if ($sevenZipDllHash -cne $Context.SevenZipDllSha256) {
+        throw '7-Zip runtime library manifest SHA-256 is not the repository-pinned digest.'
+      }
+      Add-ValidatedSessionFileLock `
+        $locks $Context.SevenZipDllPath $sevenZipDllHash `
+        '7-Zip runtime library' | Out-Null
+      Assert-ExactCanonicalPathValue `
+        ([string](Get-RequiredPropertyValue `
+          $toolchain 'portableToolchainReceiptPath' 'Signing manifest toolchain')) `
+        $Context.PortableToolchainReceiptPath `
+        'Portable signing toolchain receipt path'
+      if ([string](Get-RequiredPropertyValue `
+          $toolchain 'portableToolchainReceiptSha256' 'Signing manifest toolchain') -cne
+            $Context.PortableToolchainReceiptSha256 -or
+          [string](Get-RequiredPropertyValue `
+          $toolchain 'portableToolchainInventorySha256' 'Signing manifest toolchain') -cne
+            $PortableToolchainInventorySha256 -or
+          [int](Get-RequiredPropertyValue `
+          $toolchain 'portableToolchainFileCount' 'Signing manifest toolchain') -ne
+            $PortableToolchainFileCount) {
+        throw 'Portable signing toolchain manifest does not bind the repository-pinned full closure.'
+      }
     }
     if ([string](Get-RequiredPropertyValue $toolchain 'tauriCliVersion' 'Signing manifest toolchain') -cne
         [string]$Context.TauriCliVersion) {
@@ -2550,7 +3113,7 @@ function Expand-PinnedArtifactSigningPackage {
 
 function Assert-DotNet8X64Runtime {
   $dotnet = Get-TrustedPath 'C:\Program Files\dotnet\dotnet.exe' '.NET host' -AllowHardLink
-  Assert-MicrosoftAuthenticodeFile $dotnet '.NET host' $null
+  Assert-MicrosoftAuthenticodeFile $dotnet '.NET host' $null $DotNetPublisher
   $dotnetLock = Open-ReadLock $dotnet
   try {
     $runtimes = @(& $dotnet --list-runtimes)
@@ -3107,6 +3670,8 @@ function New-WaggleSigningManifest {
     makensisSha256 = $Context.MakensisSha256
     gitPath = $Context.GitPath
     gitSha256 = $Context.GitSha256
+    gitRuntimePath = $Context.GitRuntimePath
+    gitRuntimeSha256 = $Context.GitRuntimeSha256
     nodePath = $Context.NodePath
     nodeSha256 = $Context.NodeSha256
     sevenZipPath = $Context.SevenZipPath
@@ -3116,6 +3681,15 @@ function New-WaggleSigningManifest {
     artifactSigningPackagePath = $Context.ArtifactSigningPackagePath
     artifactSigningPackageSha256 = $Context.ArtifactSigningPackageSha256
     artifactSigningX64ManifestSha256 = $Context.ArtifactSigningX64ManifestSha256
+  }
+  if ($null -ne $Context.PortableToolchainRoot) {
+    $toolchain.portableToolchainRoot = $Context.PortableToolchainRoot
+    $toolchain.sevenZipDllPath = $Context.SevenZipDllPath
+    $toolchain.sevenZipDllSha256 = $Context.SevenZipDllSha256
+    $toolchain.portableToolchainReceiptPath = $Context.PortableToolchainReceiptPath
+    $toolchain.portableToolchainReceiptSha256 = $Context.PortableToolchainReceiptSha256
+    $toolchain.portableToolchainInventorySha256 = $PortableToolchainInventorySha256
+    $toolchain.portableToolchainFileCount = $PortableToolchainFileCount
   }
   $now = [DateTimeOffset]::UtcNow
   $manifest = [pscustomobject][ordered]@{
@@ -3387,6 +3961,7 @@ function Open-WagglePackageToolchainLocks {
     @($Context.WrapperPath, (Get-FileHash -LiteralPath $Context.WrapperPath -Algorithm SHA256).Hash, 'Signing wrapper'),
     @($Context.NodePath, $Context.NodeSha256, 'Node.js runtime'),
     @($Context.SevenZipPath, $Context.SevenZipSha256, '7-Zip'),
+    @($Context.SevenZipDllPath, $Context.SevenZipDllSha256, '7-Zip runtime library'),
     @($Context.TauriCliPath, $Context.TauriCliSha256, 'Tauri CLI'),
     @($Context.TauriCliPackagePath, $Context.TauriCliPackageSha256, 'Tauri CLI package'),
     @($Context.TauriCliMainPath, $Context.TauriCliMainSha256, 'Tauri CLI main module'),
@@ -3395,11 +3970,16 @@ function Open-WagglePackageToolchainLocks {
     @($Context.TauriNativeBinaryPath, $Context.TauriNativeBinarySha256, 'Tauri native binary'),
     @($Context.MakensisPath, $Context.MakensisSha256, 'makensis'),
     @($Context.GitPath, $Context.GitSha256, 'Git executable'),
+    @($Context.GitRuntimePath, $Context.GitRuntimeSha256, 'Git runtime'),
     @($Context.SignToolPath, $Context.SignToolSha256, 'SignTool'),
     @($Context.ArtifactSigningPackagePath, $Context.ArtifactSigningPackageSha256, 'Artifact Signing package')
   )
   $locks = [Collections.Generic.List[IDisposable]]::new()
   try {
+    foreach ($portableLock in @($Context.PortableToolchainLocks)) {
+      $locks.Add($portableLock)
+    }
+    $Context.PortableToolchainLocks.Clear()
     $trackedBundleInputs = @(
       'app/src-tauri/tauri.conf.json',
       'app/src-tauri/Cargo.toml',
@@ -3624,25 +4204,46 @@ function Invoke-WaggleSigningPackage {
 
   $scriptPath = Get-TrustedPath $PSCommandPath 'Signing wrapper'
   $appRoot = Split-Path (Split-Path $scriptPath -Parent) -Parent
+  $repoRoot = Get-TrustedPath (Split-Path $appRoot -Parent) 'Repository root' 'Container'
   $tauriRoot = Get-TrustedPath (Join-Path $appRoot 'src-tauri') 'Tauri root' 'Container'
-  $git = Get-TrustedPath $GitPath 'Git executable' -AllowHardLink
-  $sourceRevision = [string](& $git -C (Split-Path $appRoot -Parent) rev-parse --verify HEAD)
-  if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-f]{40}$') {
-    throw 'Could not resolve the exact repository source revision.'
+  if (@(
+      $UnsignedInputRoot, $SigningInputRoot, $BuildReceiptPath, $BuildReceiptSha256,
+      $PortableToolchainRoot, $PortableNodePath, $PortableGitPath,
+      $PortableSevenZipPath, $PortableToolchainReceiptPath,
+      $PortableToolchainReceiptSha256 |
+      Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }
+    ).Count -ne 0) {
+    throw 'Hosted Package mode requires both prebuilt roots, the exact build receipt, and the complete portable toolchain handoff.'
+  }
+  $unsignedSourceRoot = Get-TrustedPath `
+    $UnsignedInputRoot 'Unsigned prebuilt input root' 'Container'
+  $signingSourceRoot = Get-TrustedPath `
+    $SigningInputRoot 'Signing prebuilt input root' 'Container'
+  $portableToolchain = Get-WagglePortableToolchain `
+    $PortableToolchainRoot $PortableNodePath $PortableGitPath `
+    $PortableSevenZipPath $PortableToolchainReceiptPath `
+    $PortableToolchainReceiptSha256 `
+    -DisallowedRoots @(
+      $repoRoot, $unsignedSourceRoot, $signingSourceRoot,
+      $BuildReceiptPath, $ArtifactSigningPackageSource
+    )
+  $portableBootstrapLocks = $portableToolchain.Locks
+  try {
+  $gitLock = Open-ReadLock $portableToolchain.GitPath
+  try {
+    $sourceRevision = [string](& $portableToolchain.GitPath `
+      -C $repoRoot rev-parse --verify HEAD)
+    if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-f]{40}$') {
+      throw 'Could not resolve the exact repository source revision.'
+    }
+  } finally {
+    $gitLock.Dispose()
   }
   $appVersion = [string](
     Get-Content -Raw -LiteralPath (Join-Path $tauriRoot 'tauri.conf.json') |
       ConvertFrom-Json
   ).version
   Assert-WaggleHostedSigningBoundary $sourceRevision $appVersion
-  if (@($UnsignedInputRoot, $SigningInputRoot, $BuildReceiptPath, $BuildReceiptSha256 |
-      Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count -ne 0) {
-    throw 'Hosted Package mode requires both prebuilt roots and the exact build receipt handoff.'
-  }
-  $unsignedSourceRoot = Get-TrustedPath `
-    $UnsignedInputRoot 'Unsigned prebuilt input root' 'Container'
-  $signingSourceRoot = Get-TrustedPath `
-    $SigningInputRoot 'Signing prebuilt input root' 'Container'
   foreach ($pair in @(
       @($unsignedSourceRoot, $signingSourceRoot),
       @($unsignedSourceRoot, $BuildReceiptPath),
@@ -3657,6 +4258,10 @@ function Invoke-WaggleSigningPackage {
   $receiptLease = Get-WaggleHostedBuildReceipt `
     $BuildReceiptPath $BuildReceiptSha256 $sourceRevision
   $receipt = $receiptLease.Receipt
+  } catch {
+    foreach ($lock in $portableBootstrapLocks) { $lock.Dispose() }
+    throw
+  }
   $sessionId = [Guid]::NewGuid().ToString('N')
   $sessionDirectory = New-PrivateDirectory `
     (Join-Path $tauriRoot "target\.signing-sessions\run-$sessionId")
@@ -3668,6 +4273,12 @@ function Invoke-WaggleSigningPackage {
     'WAGGLE_SIGNING_SESSION_ID', 'WAGGLE_SIGNING_MANIFEST_PATH',
     'WAGGLE_SIGNING_MANIFEST_SHA256', 'CARGO_TARGET_DIR', 'TEMP', 'TMP',
     'WAGGLE_NSIS_SIGNING_TEMP_ROOT', 'WAGGLE_SIGNING_RESOURCES_ROOT',
+    'WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT',
+    'WAGGLE_SIGNING_PORTABLE_NODE_PATH',
+    'WAGGLE_SIGNING_PORTABLE_GIT_PATH',
+    'WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH',
+    'WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH',
+    'WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256',
     'NODE_OPTIONS', 'NODE_PATH',
     'NAPI_RS_NATIVE_LIBRARY_PATH', 'NAPI_RS_FORCE_WASI',
     'npm_config_node_options', 'TARGET_ARCH'
@@ -3692,6 +4303,24 @@ function Invoke-WaggleSigningPackage {
     [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_SESSION_ID', $sessionId)
     [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_PATH', $null)
     [Environment]::SetEnvironmentVariable('WAGGLE_SIGNING_MANIFEST_SHA256', $null)
+    [Environment]::SetEnvironmentVariable(
+      'WAGGLE_SIGNING_PORTABLE_TOOLCHAIN_ROOT', $portableToolchain.PortableToolchainRoot
+    )
+    [Environment]::SetEnvironmentVariable(
+      'WAGGLE_SIGNING_PORTABLE_NODE_PATH', $portableToolchain.NodePath
+    )
+    [Environment]::SetEnvironmentVariable(
+      'WAGGLE_SIGNING_PORTABLE_GIT_PATH', $portableToolchain.GitPath
+    )
+    [Environment]::SetEnvironmentVariable(
+      'WAGGLE_SIGNING_PORTABLE_SEVEN_ZIP_PATH', $portableToolchain.SevenZipPath
+    )
+    [Environment]::SetEnvironmentVariable(
+      'WAGGLE_SIGNING_PORTABLE_RECEIPT_PATH', $portableToolchain.ReceiptPath
+    )
+    [Environment]::SetEnvironmentVariable(
+      'WAGGLE_SIGNING_PORTABLE_RECEIPT_SHA256', $portableToolchain.ReceiptSha256
+    )
     [Environment]::SetEnvironmentVariable('TEMP', $tempRoot)
     [Environment]::SetEnvironmentVariable('TMP', $tempRoot)
     [Environment]::SetEnvironmentVariable('WAGGLE_NSIS_SIGNING_TEMP_ROOT', $tempRoot)
@@ -3753,14 +4382,8 @@ function Invoke-WaggleSigningPackage {
     [Environment]::SetEnvironmentVariable(
       'WAGGLE_SIGNING_RESOURCES_ROOT', $unsignedResourcesRoot
     )
-    $context = Get-WaggleSigningContext
+    $context = Get-WaggleSigningContext -AllowPortableBeforeManifest
     $packageLocks = Open-WagglePackageToolchainLocks $context
-    $nodeSignature = Get-AuthenticodeSignature -LiteralPath $context.NodePath
-    if ($nodeSignature.Status -ne [Management.Automation.SignatureStatus]::Valid -or
-        [string]$nodeSignature.SignerCertificate.Subject -cne
-          'CN=OpenJS Foundation, O=OpenJS Foundation, L=San Francisco, S=California, C=US') {
-      throw 'Pinned Node.js runtime lacks the approved OpenJS Authenticode signature.'
-    }
 
     $unsignedOverrideLock = Open-ReadLock $overridePath
     try {
@@ -3828,7 +4451,7 @@ function Invoke-WaggleSigningPackage {
     [Environment]::SetEnvironmentVariable(
       'WAGGLE_SIGNING_RESOURCES_ROOT', $signingResourcesRoot
     )
-    $context = Get-WaggleSigningContext
+    $context = Get-WaggleSigningContext -AllowPortableBeforeManifest
     $session = New-WaggleSigningManifest `
       $context $payloads $preflightEvidenceRoot $receipt
     Remove-Item -LiteralPath $preflightEvidenceRoot -Recurse -Force
@@ -3869,6 +4492,7 @@ function Invoke-WaggleSigningPackage {
       foreach ($sessionLock in $session.Locks) { $sessionLock.Dispose() }
     }
     if ($null -ne $packageLocks) { foreach ($lock in $packageLocks) { $lock.Dispose() } }
+    foreach ($lock in $portableBootstrapLocks) { $lock.Dispose() }
     foreach ($lease in @(
         $unsignedWorkLease, $signingWorkLease,
         $unsignedSourceLease, $signingSourceLease
@@ -4063,6 +4687,11 @@ if ($MyInvocation.InvocationName -ne '.') {
     }
   } else {
     Invoke-TrustedPowerShellRelaunch `
-      -LaunchMode $Mode -Path $ArtifactPath -PackageSource $ArtifactSigningPackageSource
+      -LaunchMode $Mode -Path $ArtifactPath `
+      -PackageSource $ArtifactSigningPackageSource `
+      -ToolchainRoot $PortableToolchainRoot `
+      -Node $PortableNodePath -Git $PortableGitPath -SevenZip $PortableSevenZipPath `
+      -ToolchainReceipt $PortableToolchainReceiptPath `
+      -ToolchainReceiptSha256 $PortableToolchainReceiptSha256
   }
 }
