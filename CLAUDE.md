@@ -74,9 +74,10 @@ WaggleDance, governance) is the upgrade trigger.
 ### Current Windows Solo internal RC evidence (2026-08-14)
 
 The frozen internal runtime/binary evidence revision is
-`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. A later Markdown-only release-record
-commit is a bounded no-impact descendant; it changes no shipped runtime surface and
-must not relabel the `d4f1dae3` installer or receipts as exact evidence for that later HEAD.
+`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. Release-control hardening through
+`d455aa80f0c88b50610667a52787c3f4058bd9bb` and later Markdown-only release-record
+commits are bounded no-impact descendants; they change no shipped runtime surface and
+must not relabel the `d4f1dae3` installer or receipts as exact evidence for a later HEAD.
 
 - Persona acceptance: the `692c69b9` seal remains valid after scoped diff review;
   30/30 accepted receipts across ten launch personas x3, every selected receipt
@@ -90,7 +91,7 @@ must not relabel the `d4f1dae3` installer or receipts as exact evidence for that
   remain valid after scoped diff review; they read/copied zero auth files. Local receipt
   SHA-256: `2D27609067E4703969F0AD6055F5A0414B00E9F3B271CE3B917E0860E4393ABD`.
 - Broad regression: at `af19b387`, 714 test files and 11,586 tests passed, with
-  five tests skipped. Changes through `d4f1dae3` are confined to release, signing,
+  five tests skipped. Changes through `d455aa80` are confined to release, signing,
   certification, and their tests. Log SHA-256:
   `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E`.
 - Exact-`d4f1dae3` installer: the unsigned NSIS is 98,686,269 bytes, SHA-256
@@ -98,9 +99,9 @@ must not relabel the `d4f1dae3` installer or receipts as exact evidence for that
   and passed 59/59 clean-profile lifecycle, managed-model, proxy-restart, repair,
   data-preservation, and uninstall checks. Receipt SHA-256:
   `07C0B3D1E24801DE2006A998CDF1F10D40EBF03354003E58EACCFAE4BF3C4DCF`.
-- Exact-`d4f1dae3` signing workflow: 248/248 PowerShell policy tests and 85/85 workflow/Tauri
-  tests passed, together with app/agent/server typechecks, full lint, YAML and dual
-  PowerShell parsing, and three independent no-P0-P2 approvals.
+- Signing workflow hardened through `d455aa80`: 266/266 PowerShell policy tests and
+  86/86 workflow/Tauri tests passed, together with app/server typechecks, targeted
+  lint, YAML and PowerShell 7/5.1 parsing, and three independent no-P0-P2 approvals.
 - A live `d4f1dae3` dependency audit refreshed on 2026-08-14 is recorded in the current
   launch recommendation: full and production-only trees both contain zero Critical and
   zero High advisories. Moderate advisories remain and are tracked as maintenance.
@@ -131,7 +132,7 @@ receipts into a GO or overall 9.5/10 claim early.
 | Tests | Vitest (unit) + Playwright (E2E) |
 | Deploy | Windows Tauri installer release contract; optional Dockerfile + docker-compose.production.yml + render.yaml for server/team deployment |
 
-Package manager: npm (root) with `bun.lock` also present. Source development requires Node
+Package manager: npm with the root `package-lock.json`. Source development requires Node
 `^20.19.0 || >=22.12.0`; the packaged Windows desktop runtime is pinned to Node `22.23.2`.
 
 ---

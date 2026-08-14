@@ -17,9 +17,10 @@ Release status, revision-bound receipts, and any bounded carry-forward attestati
 ### Current Windows Solo internal RC evidence — 2026-08-14
 
 The frozen internal runtime/binary evidence revision is
-`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. This Markdown release-record update
-is a no-impact descendant: it changes no shipped runtime surface and does not relabel
-the installer or receipts as if they had been produced from the documentation commit.
+`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. Release-control hardening through
+`d455aa80f0c88b50610667a52787c3f4058bd9bb` and this Markdown release-record
+update are bounded no-impact descendants: they change no shipped runtime surface and
+do not relabel the installer or receipts as if they had been produced from a later commit.
 
 - Paid ten-persona acceptance is carried forward after a scoped no-impact diff review:
   **30/30 accepted across ten personas x3, all selected receipts 100/100**.
@@ -29,16 +30,17 @@ the installer or receipts as if they had been produced from the documentation co
   with a managed local runtime and without Docker; the auth harness read/copied zero
   authentication files.
 - The application-runtime regression at `af19b387` passed **714 test files and 11,586
-  tests**. Changes from that revision through `d4f1dae3` are confined to
+  tests**. Changes from that revision through `d455aa80` are confined to
   release, signing, certification, and their tests and are covered by focused
-  `d4f1dae3` gates.
+  release-control gates.
 - The exact-`d4f1dae3` unsigned NSIS installer is 98,686,269 bytes with SHA-256
   `B5B427B7D4828BF18FC639CA475D7B21D6E007F3095285859AA67164D9C7DC7D`.
   It passed **59/59** clean-profile lifecycle, Docker-independent Solo, managed-model,
   proxy-restart, repair, data-preservation, and uninstall checks.
-- The exact-`d4f1dae3` hosted-signing implementation passed **248/248** PowerShell policy tests,
-  **85/85** workflow/Tauri tests, app/agent/server typechecks, lint, YAML/PowerShell
-  parsing, and three independent reviews with no P0-P2 finding.
+- The hosted-signing implementation hardened through `d455aa80` passed **266/266**
+  PowerShell policy tests, **86/86** workflow/Tauri tests, app/server typechecks,
+  targeted lint, YAML plus PowerShell 7/5.1 parsing, and three independent reviews
+  with no P0-P2 finding. The shipped runtime remains the exact `d4f1dae3` candidate.
 
 Detailed local receipt paths and SHA-256 digests are recorded in the current
 [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md); the
@@ -110,11 +112,16 @@ The monorepo has **28 packages** under `packages/`. They split into two groups.
 
 Use only the signed Windows installer and SHA-256 identified by a **GO** [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If that recommendation is not GO, no packaged desktop artifact is release-approved; use the source-development instructions below.
 
-### Self-host in one line (Linux / macOS)
+### Self-host from the private repository (Linux / macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/marolinik/waggle-os/main/install.sh | bash
+gh repo clone marolinik/waggle-os
+cd waggle-os
+bash install.sh
 ```
+
+This path is for maintainers with authenticated access to the private repository.
+Do not publish an anonymous raw-file installer until the source/licensing decision is explicit.
 
 Best for a VPS or homelab — this runs a headless Waggle server (no desktop shell):
 
