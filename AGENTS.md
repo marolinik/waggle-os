@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-04)
+### Current Release Qualification Contract (2026-08-14)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -57,6 +57,12 @@ WaggleDance, governance) is the upgrade trigger.
 - Persona release evidence requires a valid 10-persona x 3-run seal plus a final-HEAD no-impact
   attestation, or a fresh 30/30 rerun when intervening behavior changed.
 - Do not claim release approval until the current launch recommendation's exact-HEAD gates pass.
+- The frozen internal runtime candidate is `d4f1dae3`: its unsigned NSIS passed 59/59 clean-profile
+  checks. Release-control hardening through `d455aa80` passed 266/266 signing-policy and 86/86
+  workflow/Tauri tests; later documentation descendants do not relabel the runtime receipt.
+- Public GO still requires a publicly trusted Authenticode artifact and a sealed managed Deep
+  Security report for the exact approved release-tag commit, with no unresolved Critical/High.
+- The repository remains private until an explicit open-source and licensing decision is made.
 
 ### Key Technology Facts (Verified August 2026)
 
@@ -74,7 +80,7 @@ WaggleDance, governance) is the upgrade trigger.
 | Tests | Vitest (unit) + Playwright (E2E) |
 | Deploy | Windows Tauri installer; optional Dockerfile + docker-compose.production.yml + render.yaml |
 
-Package manager: npm (root) with `bun.lock` also present. Source development requires Node
+Package manager: npm with the root `package-lock.json`. Source development requires Node
 `^20.19.0 || >=22.12.0`; the packaged Windows desktop runtime is pinned to Node `22.23.2`.
 
 ---
