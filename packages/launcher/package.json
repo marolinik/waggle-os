@@ -34,10 +34,10 @@
   "author": "Marko Markovic",
   "license": "MIT",
   "dependencies": {
-    "@clerk/fastify": "^3.0.0",
+    "@clerk/fastify": "^3.1.65",
     "@fastify/cors": "^10.0.0",
     "@fastify/static": "^9.0.0",
-    "@fastify/websocket": "^11.0.0",
+    "@fastify/websocket": "^11.3.0",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "archiver": "^7.0.1",
     "better-sqlite3": "^12.6.2",
@@ -46,20 +46,20 @@
     "docx": "^9.6.1",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
-    "fastify": "^5.3.0",
+    "fastify": "^5.11.3",
     "fastify-plugin": "^5.0.0",
     "glob": "^13.0.6",
     "ioredis": "^5.4.0",
-    "mammoth": "^1.11.0",
+    "mammoth": "^1.12.1",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.0",
     "sqlite-vec": "^0.1.7-alpha.2",
     "stripe": "^21.0.1",
-    "ws": "^8.21.0",
+    "ws": "^8.21.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0"
+    "tsx": "^4.23.12"
   }
 }
