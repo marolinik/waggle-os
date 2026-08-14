@@ -306,14 +306,67 @@ if ($wrapperSource -notmatch 'Restore-WaggleReplacedArtifact\s+`?\s*-ArtifactPat
 }
 $passed++
 foreach ($hostBoundaryName in @(
-    'GITHUB_ACTIONS', 'RUNNER_ENVIRONMENT', 'GITHUB_REPOSITORY',
-    'GITHUB_SHA', 'GITHUB_REF_TYPE', 'GITHUB_REF_NAME',
-    'WAGGLE_PROTECTED_SIGNING_ENVIRONMENT'
+    'GITHUB_ACTIONS', 'GITHUB_EVENT_NAME', 'RUNNER_ENVIRONMENT',
+    'GITHUB_REPOSITORY', 'GITHUB_SHA', 'GITHUB_REF',
+    'GITHUB_REF_TYPE', 'GITHUB_REF_NAME', 'GITHUB_WORKFLOW_REF',
+    'GITHUB_WORKFLOW_SHA'
   )) {
   if ($wrapperSource -notmatch [Regex]::Escape($hostBoundaryName)) {
     throw "Hosted Package mode does not bind $hostBoundaryName."
   }
   $passed++
+}
+foreach ($hostBoundaryPattern in @(
+    "GITHUB_EVENT_NAME\s*=\s*'push'",
+    'GITHUB_REF\s*=\s*\$expectedRef',
+    'GITHUB_WORKFLOW_REF\s*=\s*\$expectedWorkflowRef',
+    'GITHUB_WORKFLOW_SHA\s*=\s*\$ExpectedRevision'
+  )) {
+  if ($wrapperSource -notmatch $hostBoundaryPattern) {
+    throw "Hosted Package mode lacks exact boundary binding: $hostBoundaryPattern"
+  }
+  $passed++
+}
+$validBoundaryRevision = '0123456789abcdef0123456789abcdef01234567'
+$validBoundaryVersion = '0.2.0'
+$validHostedBoundary = [ordered]@{
+  GITHUB_ACTIONS = 'true'
+  GITHUB_EVENT_NAME = 'push'
+  RUNNER_ENVIRONMENT = 'github-hosted'
+  GITHUB_REPOSITORY = 'marolinik/waggle-os'
+  GITHUB_SHA = $validBoundaryRevision
+  GITHUB_REF = 'refs/tags/v0.2.0'
+  GITHUB_REF_TYPE = 'tag'
+  GITHUB_REF_NAME = 'v0.2.0'
+  GITHUB_WORKFLOW_REF = 'marolinik/waggle-os/.github/workflows/release.yml@refs/tags/v0.2.0'
+  GITHUB_WORKFLOW_SHA = $validBoundaryRevision
+}
+$savedHostedBoundary = @{}
+foreach ($name in $validHostedBoundary.Keys) {
+  $savedHostedBoundary[$name] = [Environment]::GetEnvironmentVariable($name)
+}
+try {
+  foreach ($name in $validHostedBoundary.Keys) {
+    [Environment]::SetEnvironmentVariable($name, $validHostedBoundary[$name])
+  }
+  Assert-WaggleHostedSigningBoundary `
+    -ExpectedRevision $validBoundaryRevision `
+    -ExpectedVersion $validBoundaryVersion
+  $passed++
+  foreach ($name in $validHostedBoundary.Keys) {
+    [Environment]::SetEnvironmentVariable($name, "invalid-$name")
+    Assert-Throws {
+      Assert-WaggleHostedSigningBoundary `
+        -ExpectedRevision $validBoundaryRevision `
+        -ExpectedVersion $validBoundaryVersion
+    } "exact $([Regex]::Escape($name)) boundary evidence" `
+      "hosted signing rejects mutated $name"
+    [Environment]::SetEnvironmentVariable($name, $validHostedBoundary[$name])
+  }
+} finally {
+  foreach ($name in $validHostedBoundary.Keys) {
+    [Environment]::SetEnvironmentVariable($name, $savedHostedBoundary[$name])
+  }
 }
 $wrapperTokens = $null
 $wrapperParseErrors = $null

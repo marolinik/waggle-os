@@ -4173,23 +4173,30 @@ function Assert-WaggleHostedSigningBoundary {
     [Parameter(Mandatory = $true)] [string]$ExpectedVersion
   )
 
+  if ($ExpectedRevision -notmatch '^[0-9a-f]{40}$' -or
+      $ExpectedVersion -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+    throw 'Hosted Package mode requires exact revision and app-version inputs.'
+  }
+  $expectedTag = "v$ExpectedVersion"
+  $expectedRef = "refs/tags/$expectedTag"
+  $expectedWorkflowRef = "marolinik/waggle-os/.github/workflows/release.yml@$expectedRef"
+
   $expected = [ordered]@{
     GITHUB_ACTIONS = 'true'
+    GITHUB_EVENT_NAME = 'push'
     RUNNER_ENVIRONMENT = 'github-hosted'
     GITHUB_REPOSITORY = 'marolinik/waggle-os'
     GITHUB_SHA = $ExpectedRevision
+    GITHUB_REF = $expectedRef
     GITHUB_REF_TYPE = 'tag'
-    WAGGLE_PROTECTED_SIGNING_ENVIRONMENT = 'production-windows-signing'
+    GITHUB_REF_NAME = $expectedTag
+    GITHUB_WORKFLOW_REF = $expectedWorkflowRef
+    GITHUB_WORKFLOW_SHA = $ExpectedRevision
   }
   foreach ($entry in $expected.GetEnumerator()) {
     if ([Environment]::GetEnvironmentVariable([string]$entry.Key) -cne [string]$entry.Value) {
       throw "Hosted Package mode requires exact $($entry.Key) boundary evidence."
     }
-  }
-  $expectedTag = "v$ExpectedVersion"
-  if ($ExpectedVersion -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$' -or
-      [Environment]::GetEnvironmentVariable('GITHUB_REF_NAME') -cne $expectedTag) {
-    throw 'Hosted Package mode requires the exact app-version release tag.'
   }
 }
 

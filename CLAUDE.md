@@ -106,12 +106,14 @@ must not relabel the `d4f1dae3` installer or receipts as exact evidence for that
   zero High advisories. Moderate advisories remain and are tracked as maintenance.
 
 This qualifies the `d4f1dae3` internal Windows Solo runtime RC. It does not qualify a
-public release: the installer is `NotSigned`, the protected hosted signing environment
-has not executed, and no current managed Codex Security Deep Scan has produced a sealed
-report. Public source publication also requires the final Hive Mind drift/exclusion and
-repository hygiene gates. The eventual hosted artifact must be rebuilt from and name
-the exact approved release-tag commit. Never convert these receipts into a GO or overall
-9.5/10 claim early.
+release: the installer is `NotSigned`, exact-tag hosted signing has not executed, and no
+current managed Codex Security Deep Scan has produced a sealed report. The repository
+remains private until an explicit open-source and licensing decision is made. Public
+source or release publication is disabled unless the repository is public and
+`WINDOWS_PUBLIC_RELEASE_AUTHORIZED` is explicitly `true`; final Hive Mind
+drift/exclusion and repository hygiene gates still apply. The eventual hosted artifact
+must be rebuilt from and name the exact approved release-tag commit. Never convert these
+receipts into a GO or overall 9.5/10 claim early.
 
 ### Key Technology Facts (Verified August 2026)
 
@@ -318,12 +320,21 @@ Production signing is hosted-only. Do not run `new-windows-signing-handoff.ps1`,
 `sign-windows-artifact.ps1`, or a local thumbprint-signing substitute to create a
 release artifact. `.github/workflows/release.yml` is authoritative and must run from
 an approved exact release tag. Its Windows chain is `build-windows-prebuilt` ->
-`sign-windows` -> `certify-windows` -> `attest-windows` -> `publish-windows`.
-`sign-windows` requires the protected `production-windows-signing` environment,
-Azure Artifact Signing OIDC variables, an environment-scoped federated credential,
-and the least-privilege certificate-profile signer role. It must verify the approved
-signer subject and timestamp before the credential-free certification and attestation
-jobs may publish. Never treat the local certification command as signed.
+`prepare-windows-signing` -> `sign-windows` -> `certify-windows` ->
+`attest-windows` -> `publish-windows`.
+`sign-windows` requires Azure Artifact Signing OIDC variables, a federated credential
+scoped to the exact approved tag ref, and the least-privilege certificate-profile signer
+role. Before Azure authentication, it must bind the push event, repository, tag,
+workflow ref/SHA, clean checkout, and fresh `origin/main` ancestry. Signing may produce
+private Actions artifacts, but public attestation and `publish-windows` remain disabled
+while the repository is private; publication additionally requires
+`WINDOWS_PUBLIC_RELEASE_AUTHORIZED` to be explicitly `true`. The existing `production`
+environment isolates public-attestation OIDC claims from the exact-tag Azure signer.
+Private repositories require GitHub Enterprise Cloud for GitHub artifact attestations,
+so the sealed certified artifact is the terminal private-repository output. The approved
+signer subject and timestamp must still pass before credential-free certification.
+Never treat the local certification command as signed or change repository visibility
+without an explicit OSS/licensing decision.
 The certified installed desktop must not depend on developer Node.js, Python,
 Docker, external LiteLLM, or a separately installed Ollama.
 

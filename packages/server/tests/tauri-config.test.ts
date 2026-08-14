@@ -1881,6 +1881,22 @@ Expect-Rejection {
     const publisherPath = path.join(ROOT, 'scripts', 'publish-windows-release.ps1');
     expect(fs.existsSync(publisherPath)).toBe(true);
     const publisher = fs.readFileSync(publisherPath, 'utf-8');
+    const parsedWorkflow = parseYaml(workflow) as {
+      jobs?: Record<
+        string,
+        {
+          environment?: unknown;
+          if?: unknown;
+          steps?: Array<{
+            name?: string;
+            uses?: string;
+            with?: Record<string, unknown>;
+            if?: unknown;
+            'continue-on-error'?: unknown;
+          }>;
+        }
+      >;
+    };
     const job = (name: string, nextName: string) => {
       const marker = `  ${name}:`;
       const nextMarker = `\n  ${nextName}:`;
@@ -1899,11 +1915,32 @@ Expect-Rejection {
       const end = jobSource.indexOf('\n      - name:', start + 1);
       return jobSource.slice(start, end >= 0 ? end : undefined);
     };
-    const buildJob = job('build-windows-prebuilt', 'sign-windows');
+    const buildJob = job('build-windows-prebuilt', 'prepare-windows-signing');
+    const preparationJob = job('prepare-windows-signing', 'sign-windows');
     const signingJob = job('sign-windows', 'certify-windows');
     const certificationJob = job('certify-windows', 'attest-windows');
     const attestationJob = job('attest-windows', 'publish-windows');
     const publicationJob = job('publish-windows', 'build-macos');
+    const parsedSigningJob = parsedWorkflow.jobs?.['sign-windows'];
+    const parsedAttestationJob = parsedWorkflow.jobs?.['attest-windows'];
+    const parsedPublicationJob = parsedWorkflow.jobs?.['publish-windows'];
+
+    expect(parsedSigningJob).toBeDefined();
+    expect(parsedSigningJob).not.toHaveProperty('environment');
+    expect(parsedPublicationJob?.if).toBe(
+      "vars.WINDOWS_PUBLIC_RELEASE_AUTHORIZED == 'true' && github.event.repository.private == false && startsWith(github.ref, 'refs/tags/v')",
+    );
+    expect(workflow).toContain('WINDOWS_SIGNING_TRANSPORT_MAX_ITEMS: 60000');
+    expect([
+      ...workflow.matchAll(
+        /\$maxItems = \[int\]\$env:WINDOWS_SIGNING_TRANSPORT_MAX_ITEMS/g,
+      ),
+    ]).toHaveLength(2);
+    expect([...workflow.matchAll(/\$items\.Count -gt \$maxItems/g)]).toHaveLength(2);
+    expect(workflow).not.toMatch(/\bgit\s+(?:fetch|ls-remote)\b/);
+    expect(workflow).toContain(
+      '$baseCommit = (git rev-parse --verify "refs/tags/$baseTag^{}").Trim().ToLowerInvariant()',
+    );
 
     expect(buildJob).toContain('permissions:\n      contents: read');
     expect(buildJob).not.toMatch(/^ {4}environment:/m);
@@ -1913,8 +1950,14 @@ Expect-Rejection {
     expect(buildJob).not.toContain('azure/login@');
     expect(buildJob).not.toContain('GH_TOKEN:');
 
-    expect(signingJob).toContain('needs: build-windows-prebuilt');
-    expect(signingJob).toContain('environment: production-windows-signing');
+    expect(preparationJob).toContain('needs: build-windows-prebuilt');
+    expect(preparationJob).toContain('permissions:\n      contents: read');
+    expect(preparationJob).not.toContain('id-token: write');
+    expect(preparationJob).not.toContain('azure/login@');
+    expect(signingJob).toContain(
+      'needs: [build-windows-prebuilt, prepare-windows-signing]',
+    );
+    expect(signingJob).not.toMatch(/^ {4}environment:/m);
     expect(signingJob).toContain('permissions:\n      contents: read');
     expect(signingJob).not.toContain('attestations: write');
     expect(signingJob).toContain('id-token: write');
@@ -1927,6 +1970,8 @@ Expect-Rejection {
     expect(certificationJob).not.toContain('id-token: write');
     expect(certificationJob).not.toContain('azure/login@');
     expect(attestationJob).toContain('needs: certify-windows');
+    expect(parsedAttestationJob?.if).toBe('github.event.repository.private == false');
+    expect(parsedAttestationJob?.environment).toBe('production');
     expect(attestationJob).toContain('runs-on: ubuntu-latest');
     expect(attestationJob).toContain('attestations: write');
     expect(attestationJob).toContain('id-token: write');
@@ -1962,10 +2007,80 @@ Expect-Rejection {
     expect(signingJob).toContain('audience: api://AzureADTokenExchange');
     expect(workflow).not.toContain('[checked]');
 
-    const capacityIndex = signingJob.indexOf(
+    const boundaryStep = step(signingJob, 'Validate exact hosted OIDC release boundary');
+    expect(boundaryStep).toContain("$env:GITHUB_EVENT_NAME -cne 'push'");
+    expect(boundaryStep).toContain("$env:GITHUB_REPOSITORY -cne 'marolinik/waggle-os'");
+    expect(boundaryStep).toContain("$env:GITHUB_REF_TYPE -cne 'tag'");
+    expect(boundaryStep).toContain('$env:GITHUB_REF -cne "refs/tags/v$version"');
+    expect(boundaryStep).toContain('$env:GITHUB_REF_NAME -cne "v$version"');
+    expect(boundaryStep).toContain(
+      '$env:GITHUB_WORKFLOW_REF -cne "marolinik/waggle-os/.github/workflows/release.yml@$env:GITHUB_REF"',
+    );
+    expect(boundaryStep).toContain('$env:GITHUB_WORKFLOW_SHA -cne $env:GITHUB_SHA');
+
+    const refreshStep = step(signingJob, 'Refresh exact signing repository refs');
+    expect(refreshStep).toContain(
+      'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
+    );
+    expect(refreshStep).toContain('ref: ${{ github.ref }}');
+    expect(refreshStep).toContain('fetch-depth: 0');
+    expect(refreshStep).toContain('persist-credentials: false');
+    expect(refreshStep).toContain('clean: false');
+
+    const parsedSigningSteps = parsedSigningJob?.steps ?? [];
+    const parsedRefreshIndex = parsedSigningSteps.findIndex(
+      ({ name }) => name === 'Refresh exact signing repository refs',
+    );
+    const parsedRevalidationIndex = parsedSigningSteps.findIndex(
+      ({ name }) => name === 'Revalidate exact signing revision against fresh origin main',
+    );
+    const parsedAzureIndex = parsedSigningSteps.findIndex(
+      ({ name }) => name === 'Authenticate Azure Artifact Signing with OIDC',
+    );
+    expect(parsedRefreshIndex).toBeGreaterThanOrEqual(0);
+    expect(parsedRevalidationIndex).toBe(parsedRefreshIndex + 1);
+    expect(parsedAzureIndex).toBe(parsedRevalidationIndex + 1);
+    expect(parsedSigningSteps[parsedRefreshIndex]).toMatchObject({
+      uses: 'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
+      with: {
+        repository: 'marolinik/waggle-os',
+        ref: '${{ github.ref }}',
+        'fetch-depth': 0,
+        'persist-credentials': false,
+        clean: false,
+      },
+    });
+    expect(parsedSigningSteps[parsedAzureIndex]?.uses).toBe(
+      'azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca',
+    );
+    for (const index of [parsedRefreshIndex, parsedRevalidationIndex, parsedAzureIndex]) {
+      expect(parsedSigningSteps[index]).not.toHaveProperty('if');
+      expect(parsedSigningSteps[index]).not.toHaveProperty('continue-on-error');
+    }
+
+    const revalidationStep = step(
+      signingJob,
+      'Revalidate exact signing revision against fresh origin main',
+    );
+    expect(revalidationStep).toContain(
+      'git merge-base --is-ancestor $env:GITHUB_SHA refs/remotes/origin/main',
+    );
+    expect(revalidationStep).toContain('$checkedOutRevision -cne $env:GITHUB_SHA');
+    expect(revalidationStep).toContain('$env:GITHUB_WORKFLOW_SHA -cne $env:GITHUB_SHA');
+    expect(signingJob.indexOf('Refresh exact signing repository refs'))
+      .toBeLessThan(signingJob.indexOf('Revalidate exact signing revision against fresh origin main'));
+    expect(signingJob.indexOf('Revalidate exact signing revision against fresh origin main'))
+      .toBeLessThan(signingJob.indexOf('Authenticate Azure Artifact Signing with OIDC'));
+
+    expect(publicationJob).toContain(
+      "vars.WINDOWS_PUBLIC_RELEASE_AUTHORIZED == 'true'",
+    );
+    expect(publicationJob).toContain('github.event.repository.private == false');
+
+    const capacityIndex = preparationJob.indexOf(
       'Validate capacity before duplicate handoff extraction',
     );
-    const setupNodeIndex = signingJob.indexOf(
+    const setupNodeIndex = preparationJob.indexOf(
       'Setup Node.js for protected packaging',
     );
     const rootDependenciesIndex = certificationJob.indexOf(
@@ -1974,7 +2089,7 @@ Expect-Rejection {
     const certificationSetupNodeIndex = certificationJob.indexOf(
       'Setup Node.js for source-bound certification',
     );
-    const appDependenciesIndex = signingJob.indexOf(
+    const appDependenciesIndex = preparationJob.indexOf(
       'Install locked Tauri packaging CLI',
     );
     const certificationIndex = certificationJob.indexOf(
@@ -1988,7 +2103,7 @@ Expect-Rejection {
     expect(rootDependenciesIndex).toBeGreaterThanOrEqual(0);
     expect(certificationIndex).toBeGreaterThan(rootDependenciesIndex);
 
-    const resolverStep = step(signingJob, 'Resolve Windows release mode');
+    const resolverStep = step(preparationJob, 'Resolve Windows release mode');
     expect(resolverStep).toContain('id: release-mode');
     expect(resolverStep).toContain(
       '-CandidateVersion $candidateVersion `',
@@ -2214,15 +2329,19 @@ Expect-Rejection {
       return workflow.slice(start, end);
     };
     const signingJob = job('sign-windows', 'certify-windows');
+    const preparationJob = job('prepare-windows-signing', 'sign-windows');
     const certificationJob = job('certify-windows', 'attest-windows');
     const attestationJob = job('attest-windows', 'publish-windows');
     const publicationJob = job('publish-windows', 'build-macos');
 
-    expect(signingJob).toContain('needs: build-windows-prebuilt');
-    expect(signingJob).toContain('environment: production-windows-signing');
+    expect(preparationJob).toContain('needs: build-windows-prebuilt');
+    expect(signingJob).toContain(
+      'needs: [build-windows-prebuilt, prepare-windows-signing]',
+    );
+    expect(signingJob).not.toMatch(/^ {4}environment:/m);
     expect(signingJob).toContain('id-token: write');
     expect(signingJob).toContain('azure/login@');
-    expect(signingJob).toContain('Package and sign from immutable prebuilt roots');
+    expect(signingJob).toContain('Package and sign from immutable prepared inputs');
     expect(signingJob).not.toContain('certify-windows-installer.ps1');
     expect(signingJob).not.toContain('attest-build-provenance@');
     expect(signingJob).not.toContain('GH_TOKEN:');
@@ -2240,10 +2359,11 @@ Expect-Rejection {
       .toBeLessThan(certificationJob.indexOf('Certify Windows Solo installer lifecycle'));
 
     expect(attestationJob).toContain('needs: certify-windows');
+    expect(attestationJob).toContain('if: github.event.repository.private == false');
     expect(attestationJob).toContain('runs-on: ubuntu-latest');
     expect(attestationJob).toContain('attestations: write');
     expect(attestationJob).toContain('id-token: write');
-    expect(attestationJob).not.toMatch(/^ {4}environment:/m);
+    expect(attestationJob).toContain('environment: production');
     expect(attestationJob).not.toContain('azure/login@');
     expect(attestationJob).not.toContain('certify-windows-installer.ps1');
     expect(attestationJob).not.toContain('Start-Process');
@@ -2253,9 +2373,187 @@ Expect-Rejection {
     expect(publicationJob).not.toContain('id-token: write');
     expect(publicationJob).not.toContain('azure/login@');
     expect(workflow).toContain('artifact-ids: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}');
+    expect(workflow).toContain('artifact-ids: ${{ needs.prepare-windows-signing.outputs.artifact_id }}');
     expect(workflow).toContain('artifact-ids: ${{ needs.sign-windows.outputs.artifact_id }}');
     expect(workflow).toContain('artifact-ids: ${{ needs.certify-windows.outputs.artifact_id }}');
     expect(workflow).not.toMatch(/^\s+[a-z_]*path:\s*\$\{\{\s*steps\.[^\n]+outputs\.[^\n]+\}\}/m);
+  });
+
+  it('confines OIDC to a minimal receipt-bound Windows signing job', () => {
+    const workflow = parseYaml(
+      fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8'),
+    ) as {
+      jobs?: Record<
+        string,
+        {
+          needs?: unknown;
+          permissions?: Record<string, string>;
+          if?: unknown;
+          environment?: unknown;
+          outputs?: Record<string, string>;
+          steps?: Array<{
+            name?: string;
+            uses?: string;
+            id?: string;
+            env?: Record<string, string>;
+            with?: Record<string, unknown>;
+            run?: string;
+            if?: unknown;
+            'continue-on-error'?: unknown;
+          }>;
+        }
+      >;
+    };
+    const jobs = workflow.jobs ?? {};
+    const preparationJob = jobs['prepare-windows-signing'];
+    const signingJob = jobs['sign-windows'];
+
+    expect(preparationJob).toBeDefined();
+    expect(preparationJob?.needs).toBe('build-windows-prebuilt');
+    expect(preparationJob?.permissions).toEqual({ contents: 'read' });
+    expect(preparationJob).not.toHaveProperty('environment');
+    expect(JSON.stringify(preparationJob)).not.toContain('id-token');
+    expect(JSON.stringify(preparationJob)).not.toContain('azure/login@');
+    expect(JSON.stringify(preparationJob)).not.toContain('contents":"write');
+    expect(preparationJob?.outputs).toMatchObject({
+      preparation_receipt_sha256: '${{ steps.stage-prepared.outputs.receipt_sha256 }}',
+      preparation_size_bytes: '${{ steps.stage-prepared.outputs.size_bytes }}',
+      artifact_id: '${{ steps.upload-prepared.outputs.artifact-id }}',
+      artifact_digest: '${{ steps.upload-prepared.outputs.artifact-digest }}',
+    });
+
+    expect(signingJob?.needs).toEqual([
+      'build-windows-prebuilt',
+      'prepare-windows-signing',
+    ]);
+    expect(signingJob?.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
+    expect(signingJob).not.toHaveProperty('environment');
+    const signingSteps = signingJob?.steps ?? [];
+    expect(signingSteps.map(({ name, uses }) => name ?? uses)).toEqual([
+      'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
+      'Validate exact hosted OIDC release boundary',
+      'Validate initial signing revision on fresh origin main',
+      'Download immutable prepared Windows signing handoff',
+      'Verify and restore immutable prepared Windows signing handoff',
+      'Refresh exact signing repository refs',
+      'Revalidate exact signing revision against fresh origin main',
+      'Authenticate Azure Artifact Signing with OIDC',
+      'Package and sign from immutable prepared inputs',
+      'Stage exact signed handoff',
+      'Upload immutable signed Windows handoff',
+    ]);
+    expect(JSON.stringify(signingJob)).not.toMatch(
+      /actions\/setup-node@|npm ci|Invoke-WebRequest|Invoke-RestMethod|Provision pinned|Resolve Windows release mode|Validate protected signer subject|Validate capacity before/,
+    );
+    for (const step of signingSteps) {
+      expect(step).not.toHaveProperty('if');
+      expect(step).not.toHaveProperty('continue-on-error');
+    }
+    const signingRunBodies = signingSteps.map(({ run }) => run ?? '').join('\n');
+    expect(signingRunBodies).not.toMatch(
+      /\b(?:curl(?:\.exe)?|wget(?:\.exe)?|Start-BitsTransfer|winget|choco|scoop|npm|npx|pnpm|yarn|pip|nuget)\b|\bgh\s+(?:api|release)\b|Invoke-(?:WebRequest|RestMethod)/i,
+    );
+    expect([...signingRunBodies.matchAll(/\bgit fetch\b/g)]).toHaveLength(0);
+
+    const preparedDownload = signingSteps.find(
+      ({ name }) => name === 'Download immutable prepared Windows signing handoff',
+    );
+    expect(preparedDownload).toMatchObject({
+      uses: 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+      with: {
+        'artifact-ids': '${{ needs.prepare-windows-signing.outputs.artifact_id }}',
+        path: '${{ runner.temp }}\\waggle-windows-signing-prepared',
+        'merge-multiple': true,
+      },
+    });
+    const preparedVerification = signingSteps.find(
+      ({ name }) => name === 'Verify and restore immutable prepared Windows signing handoff',
+    );
+    expect(preparedVerification?.env).toMatchObject({
+      EXPECTED_PREPARATION_RECEIPT_SHA256:
+        '${{ needs.prepare-windows-signing.outputs.preparation_receipt_sha256 }}',
+      EXPECTED_PREPARATION_ARTIFACT_ID:
+        '${{ needs.prepare-windows-signing.outputs.artifact_id }}',
+      EXPECTED_PREPARATION_ARTIFACT_DIGEST:
+        '${{ needs.prepare-windows-signing.outputs.artifact_digest }}',
+    });
+    expect(preparedVerification?.run).toContain('Get-FileHash');
+    expect(preparedVerification?.run).toContain('$env:EXPECTED_PREPARATION_RECEIPT_SHA256');
+    expect(preparedVerification?.run).toContain('$env:EXPECTED_PREPARATION_ARTIFACT_ID');
+    expect(preparedVerification?.run).toContain('$env:EXPECTED_PREPARATION_ARTIFACT_DIGEST');
+
+    const preparationSteps = preparationJob?.steps ?? [];
+    const preparedStage = preparationSteps.find(
+      ({ name }) => name === 'Stage fully inventoried Windows signing preparation',
+    );
+    const assertPreparedHandoffContract = (stageSource: string, verifySource: string) => {
+      for (const required of [
+        'Assert-WagglePreparedTree $payloadRoot',
+        'Windows signing preparation contains a non-allowlisted payload path',
+        '[IO.FileAttributes]::ReparsePoint',
+        'Get-Item -LiteralPath $item.FullName -Stream *',
+      ]) {
+        if (!stageSource.includes(required)) throw new Error(`missing preparation guard: ${required}`);
+      }
+      for (const required of [
+        'Assert-WaggleTransportTree $preparedRoot',
+        '$actualSizeBytes -ne [long]$env:EXPECTED_PREPARATION_SIZE_BYTES',
+        'Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256',
+        "Assert-WaggleExactValue $receipt.build.artifactId",
+        "Assert-WaggleExactValue $receipt.build.artifactDigest",
+        "Assert-WaggleExactValue $receipt.release.mode",
+        "Assert-WaggleExactValue $receipt.signerSubject",
+        "Assert-WaggleExactValue $receipt.azure.clientId",
+        '$actualPayloadInventory | ConvertTo-Json -Depth 32 -Compress',
+        'Get-TrustedPath',
+        '$destination.StartsWith($canonicalPrefix',
+      ]) {
+        if (!verifySource.includes(required)) throw new Error(`missing verification guard: ${required}`);
+      }
+    };
+    const stageSource = preparedStage?.run ?? '';
+    const verificationSource = preparedVerification?.run ?? '';
+    expect(() => assertPreparedHandoffContract(stageSource, verificationSource)).not.toThrow();
+    for (const marker of [
+      'Assert-WagglePreparedTree $payloadRoot',
+      'Windows signing preparation contains a non-allowlisted payload path',
+      '[IO.FileAttributes]::ReparsePoint',
+      'Get-Item -LiteralPath $item.FullName -Stream *',
+    ]) {
+      expect(() => assertPreparedHandoffContract(stageSource.split(marker).join(''), verificationSource))
+        .toThrow();
+    }
+    for (const marker of [
+      'Assert-WaggleTransportTree $preparedRoot',
+      '$actualSizeBytes -ne [long]$env:EXPECTED_PREPARATION_SIZE_BYTES',
+      'Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256',
+      'Assert-WaggleExactValue $receipt.build.artifactId',
+      'Assert-WaggleExactValue $receipt.build.artifactDigest',
+      'Assert-WaggleExactValue $receipt.release.mode',
+      'Assert-WaggleExactValue $receipt.signerSubject',
+      'Assert-WaggleExactValue $receipt.azure.clientId',
+      '$actualPayloadInventory | ConvertTo-Json -Depth 32 -Compress',
+      'Get-TrustedPath',
+      '$destination.StartsWith($canonicalPrefix',
+    ]) {
+      expect(() => assertPreparedHandoffContract(stageSource, verificationSource.split(marker).join('')))
+        .toThrow();
+    }
+
+    expect(signingJob?.outputs).toMatchObject({
+      release_mode: '${{ needs.prepare-windows-signing.outputs.release_mode }}',
+      bootstrap_identity: '${{ needs.prepare-windows-signing.outputs.bootstrap_identity }}',
+      signer_subject: '${{ needs.prepare-windows-signing.outputs.signer_subject }}',
+      candidate_sha256: '${{ steps.stage-signed.outputs.candidate_sha256 }}',
+      handoff_receipt_sha256: '${{ steps.stage-signed.outputs.receipt_sha256 }}',
+      artifact_id: '${{ steps.upload-signed.outputs.artifact-id }}',
+      artifact_digest: '${{ steps.upload-signed.outputs.artifact-digest }}',
+    });
+    expect(jobs['certify-windows']?.needs).toBe('sign-windows');
+    expect(jobs['attest-windows']?.needs).toBe('certify-windows');
+    expect(jobs['attest-windows']?.if).toBe('github.event.repository.private == false');
+    expect(jobs['attest-windows']?.environment).toBe('production');
+    expect(jobs['publish-windows']?.needs).toEqual(['certify-windows', 'attest-windows']);
   });
 
   it('flattens every immutable artifact-ID download into its exact configured root', () => {
@@ -2291,17 +2589,24 @@ Expect-Rejection {
 
     expect(idDownloads).toEqual([
       {
-        jobName: 'sign-windows',
+        jobName: 'prepare-windows-signing',
         name: 'Download immutable prebuilt handoff for unsigned verification',
         artifactIds: '${{ needs.build-windows-prebuilt.outputs.artifact_id }}',
         path: '${{ runner.temp }}\\waggle-prebuilt-unsigned',
         mergeMultiple: true,
       },
       {
-        jobName: 'sign-windows',
+        jobName: 'prepare-windows-signing',
         name: 'Download immutable prebuilt handoff for signed packaging',
         artifactIds: '${{ needs.build-windows-prebuilt.outputs.artifact_id }}',
         path: '${{ runner.temp }}\\waggle-prebuilt-signing',
+        mergeMultiple: true,
+      },
+      {
+        jobName: 'sign-windows',
+        name: 'Download immutable prepared Windows signing handoff',
+        artifactIds: '${{ needs.prepare-windows-signing.outputs.artifact_id }}',
+        path: '${{ runner.temp }}\\waggle-windows-signing-prepared',
         mergeMultiple: true,
       },
       {
@@ -2613,12 +2918,15 @@ Expect-Rejection {
       .readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8')
       .replace(/\r\n/g, '\n');
     const buildStart = workflow.indexOf('  build-windows-prebuilt:');
-    const signingStart = workflow.indexOf('\n  sign-windows:', buildStart);
+    const preparationStart = workflow.indexOf('\n  prepare-windows-signing:', buildStart);
+    const signingStart = workflow.indexOf('\n  sign-windows:', preparationStart);
     const certificationStart = workflow.indexOf('\n  certify-windows:', signingStart);
     expect(buildStart).toBeGreaterThanOrEqual(0);
-    expect(signingStart).toBeGreaterThan(buildStart);
+    expect(preparationStart).toBeGreaterThan(buildStart);
+    expect(signingStart).toBeGreaterThan(preparationStart);
     expect(certificationStart).toBeGreaterThan(signingStart);
-    const buildJob = workflow.slice(buildStart, signingStart);
+    const buildJob = workflow.slice(buildStart, preparationStart);
+    const preparationJob = workflow.slice(preparationStart, signingStart);
     const signingJob = workflow.slice(signingStart, certificationStart);
 
     const buildIndex = buildJob.indexOf('Build full unsigned Tauri NSIS package');
@@ -2635,37 +2943,37 @@ Expect-Rejection {
     expect(buildJob).toContain('include-hidden-files: true');
 
     expect([
-      ...signingJob.matchAll(/artifact-ids: \$\{\{ needs\.build-windows-prebuilt\.outputs\.artifact_id \}\}/g),
+      ...preparationJob.matchAll(/artifact-ids: \$\{\{ needs\.build-windows-prebuilt\.outputs\.artifact_id \}\}/g),
     ]).toHaveLength(2);
-    expect(signingJob).toContain('waggle-prebuilt-unsigned');
-    expect(signingJob).toContain('waggle-prebuilt-signing');
-    expect(signingJob).toContain(
+    expect(preparationJob).toContain('waggle-prebuilt-unsigned');
+    expect(preparationJob).toContain('waggle-prebuilt-signing');
+    expect(preparationJob).toContain(
       'EXPECTED_BUILD_RECEIPT_SHA256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}',
     );
-    expect(signingJob).toContain('foreach ($path in @($unsignedReceipt, $signingReceipt))');
-    expect(signingJob).toContain('build-receipt.package.json');
-    expect(signingJob).toContain(
+    expect(preparationJob).toContain('foreach ($path in @($unsignedReceipt, $signingReceipt))');
+    expect(preparationJob).toContain('build-receipt.package.json');
+    expect(preparationJob).toContain(
       "@($receipt.nsisInventory.entries).Count -ne 442",
     );
-    expect(signingJob).toContain(
+    expect(preparationJob).toContain(
       "1FC822D1A183552A80ADEA01B0BF456F462B90518256EF1FE9EDFA22D76CD85A",
     );
-    expect(signingJob).toContain("Join-Path $env:LOCALAPPDATA 'tauri\\NSIS'");
-    expect(signingJob).toContain(
+    expect(preparationJob).toContain("Join-Path $env:LOCALAPPDATA 'tauri\\NSIS'");
+    expect(preparationJob).toContain(
       'Fresh protected signer runner unexpectedly already contains a Tauri NSIS closure.',
     );
-    expect(signingJob).toContain('[IO.Directory]::Move($temporaryNsisRoot, $installedNsisRoot)');
-    expect(signingJob).toContain(
+    expect(preparationJob).toContain('[IO.Directory]::Move($temporaryNsisRoot, $installedNsisRoot)');
+    expect(preparationJob).toContain(
       '($receipt.nsisInventory | ConvertTo-Json -Depth 8 -Compress)',
     );
-    expect(signingJob).toContain('Assert-WaggleCanonicalInventoryEntries $resourceEntries');
-    expect(signingJob).toContain(
+    expect(preparationJob).toContain('Assert-WaggleCanonicalInventoryEntries $resourceEntries');
+    expect(preparationJob).toContain(
       'Materialized canonical repository resources differ from the hosted build receipt.',
     );
     for (const argument of [
-      "-UnsignedInputRoot '${{ steps.verify-handoff.outputs.unsigned_root }}'",
-      "-SigningInputRoot '${{ steps.verify-handoff.outputs.signing_root }}'",
-      "-BuildReceiptPath '${{ steps.verify-handoff.outputs.receipt_path }}'",
+      "-UnsignedInputRoot '${{ steps.verify-prepared.outputs.unsigned_root }}'",
+      "-SigningInputRoot '${{ steps.verify-prepared.outputs.signing_root }}'",
+      "-BuildReceiptPath '${{ steps.verify-prepared.outputs.build_receipt_path }}'",
       '-BuildReceiptSha256 $env:EXPECTED_BUILD_RECEIPT_SHA256',
     ]) {
       expect(signingJob).toContain(argument);
@@ -2685,8 +2993,10 @@ Expect-Rejection {
       'utf-8',
     );
     const signingStart = workflow.indexOf('  sign-windows:');
+    const preparationStart = workflow.indexOf('  prepare-windows-signing:');
     const certificationStart = workflow.indexOf('\n  certify-windows:', signingStart);
     const signingJob = workflow.slice(signingStart, certificationStart);
+    const preparationJob = workflow.slice(preparationStart, signingStart);
 
     for (const expected of [
       'https://nodejs.org/dist/v22.22.2/node-v22.22.2-win-x64.zip',
@@ -2709,15 +3019,15 @@ Expect-Rejection {
       'receipt_path=$receiptPath',
       'receipt_sha256=$receiptSha256',
     ]) {
-      expect(signingJob).toContain(expected);
+      expect(preparationJob).toContain(expected);
     }
     for (const argument of [
-      "-PortableToolchainRoot '${{ steps.portable-toolchain.outputs.root }}'",
-      "-PortableToolchainReceiptPath '${{ steps.portable-toolchain.outputs.receipt_path }}'",
-      "-PortableToolchainReceiptSha256 '${{ steps.portable-toolchain.outputs.receipt_sha256 }}'",
-      "-PortableNodePath '${{ steps.portable-toolchain.outputs.node_path }}'",
-      "-PortableGitPath '${{ steps.portable-toolchain.outputs.git_path }}'",
-      "-PortableSevenZipPath '${{ steps.portable-toolchain.outputs.sevenzip_path }}'",
+      "-PortableToolchainRoot '${{ steps.verify-prepared.outputs.portable_root }}'",
+      "-PortableToolchainReceiptPath '${{ steps.verify-prepared.outputs.portable_receipt_path }}'",
+      "-PortableToolchainReceiptSha256 '${{ steps.verify-prepared.outputs.portable_receipt_sha256 }}'",
+      "-PortableNodePath '${{ steps.verify-prepared.outputs.portable_node }}'",
+      "-PortableGitPath '${{ steps.verify-prepared.outputs.portable_git }}'",
+      "-PortableSevenZipPath '${{ steps.verify-prepared.outputs.portable_sevenzip }}'",
     ]) {
       expect(signingJob).toContain(argument);
     }

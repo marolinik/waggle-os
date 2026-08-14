@@ -17,6 +17,9 @@ on:
 permissions:
   contents: read
 
+env:
+  WINDOWS_SIGNING_TRANSPORT_MAX_ITEMS: 60000
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -57,9 +60,11 @@ jobs:
           if ($env:GITHUB_REF -ne "refs/tags/$expectedTag" -or $env:GITHUB_REF_NAME -ne $expectedTag) {
             throw "Release tag $env:GITHUB_REF_NAME does not exactly match app version $version"
           }
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if ($LASTEXITCODE -ne 0) { throw 'Could not fetch canonical origin/main for release ancestry validation' }
-          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          $remoteMainRevision = (git rev-parse --verify refs/remotes/origin/main).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $remoteMainRevision -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'Fresh checkout did not provide canonical origin/main for release ancestry validation'
+          }
+          git merge-base --is-ancestor $env:GITHUB_SHA refs/remotes/origin/main
           if ($LASTEXITCODE -ne 0) { throw 'Release tag commit is not an ancestor of canonical origin/main' }
 
       - name: Setup Node.js
@@ -168,55 +173,50 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-  sign-windows:
+  prepare-windows-signing:
     needs: build-windows-prebuilt
     runs-on: windows-latest
-    environment: production-windows-signing
     permissions:
       contents: read
-      id-token: write
     outputs:
       release_mode: ${{ steps.release-mode.outputs.mode }}
-      candidate_sha256: ${{ steps.stage-signed.outputs.candidate_sha256 }}
-      candidate_version: ${{ steps.stage-signed.outputs.candidate_version }}
+      candidate_version: ${{ steps.release-mode.outputs.candidate_version }}
       bootstrap_identity: ${{ steps.release-mode.outputs.bootstrap_identity }}
       upgrade_base_tag: ${{ steps.release-mode.outputs.upgrade_base_tag }}
       upgrade_base_asset_name: ${{ steps.release-mode.outputs.upgrade_base_asset_name }}
       upgrade_base_sha256: ${{ steps.release-mode.outputs.upgrade_base_sha256 }}
       upgrade_base_commit: ${{ steps.release-mode.outputs.upgrade_base_commit }}
       signer_subject: ${{ steps.signer-identity.outputs.subject }}
-      build_receipt_sha256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}
-      build_artifact_id: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}
-      build_artifact_digest: ${{ needs.build-windows-prebuilt.outputs.artifact_digest }}
-      handoff_receipt_sha256: ${{ steps.stage-signed.outputs.receipt_sha256 }}
-      artifact_id: ${{ steps.upload-signed.outputs.artifact-id }}
-      artifact_digest: ${{ steps.upload-signed.outputs.artifact-digest }}
-    env:
-      WAGGLE_PROTECTED_SIGNING_ENVIRONMENT: production-windows-signing
+      preparation_receipt_sha256: ${{ steps.stage-prepared.outputs.receipt_sha256 }}
+      preparation_size_bytes: ${{ steps.stage-prepared.outputs.size_bytes }}
+      artifact_id: ${{ steps.upload-prepared.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload-prepared.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate protected hosted signing boundary
+      - name: Validate exact hosted signing preparation boundary
         shell: pwsh
         run: |
-          if ($env:GITHUB_REPOSITORY -cne 'marolinik/waggle-os' -or
+          $version = [string](Get-Content -Raw -LiteralPath 'app/src-tauri/tauri.conf.json' | ConvertFrom-Json).version
+          if ($env:GITHUB_ACTIONS -cne 'true' -or
+              $env:GITHUB_EVENT_NAME -cne 'push' -or
+              $env:GITHUB_REPOSITORY -cne 'marolinik/waggle-os' -or
               $env:GITHUB_REF_TYPE -cne 'tag' -or
+              $env:GITHUB_REF -cne "refs/tags/v$version" -or
+              $env:GITHUB_REF_NAME -cne "v$version" -or
+              $env:GITHUB_WORKFLOW_REF -cne "marolinik/waggle-os/.github/workflows/release.yml@$env:GITHUB_REF" -or
+              $env:GITHUB_WORKFLOW_SHA -cne $env:GITHUB_SHA -or
               $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or
-              $env:WAGGLE_PROTECTED_SIGNING_ENVIRONMENT -cne 'production-windows-signing' -or
               $env:GITHUB_SHA -cnotmatch '^[0-9a-f]{40}$') {
-            throw 'Protected Windows signing requires the exact hosted repository, tag, and environment boundary.'
+            throw 'Windows signing preparation requires the exact hosted push, repository, tag, workflow, and revision boundary.'
           }
           $checkedOutRevision = (git rev-parse --verify HEAD).Trim().ToLowerInvariant()
           if ($LASTEXITCODE -ne 0 -or $checkedOutRevision -cne $env:GITHUB_SHA -or
               @(git status --porcelain=v1 --untracked-files=all).Count -ne 0) {
-            throw 'Protected Windows signing checkout is not the clean GITHUB_SHA revision.'
-          }
-          $version = [string](Get-Content -Raw -LiteralPath 'app/src-tauri/tauri.conf.json' | ConvertFrom-Json).version
-          if ($env:GITHUB_REF -cne "refs/tags/v$version" -or $env:GITHUB_REF_NAME -cne "v$version") {
-            throw 'Protected Windows signing tag does not exactly match the app version.'
+            throw 'Windows signing preparation checkout is not the clean GITHUB_SHA revision.'
           }
 
       - name: Resolve Windows release mode
@@ -311,6 +311,7 @@ jobs:
             -BaseSha256 $baseSha256 `
             -BaseCommit $baseCommit
           "mode=$releaseMode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "candidate_version=$candidateVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "bootstrap_identity=$bootstrapIdentity" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "upgrade_base_tag=$baseTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "upgrade_base_asset_name=$baseAssetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -694,6 +695,673 @@ jobs:
           "receipt_path=$receiptPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "receipt_sha256=$receiptSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+      - name: Stage fully inventoried Windows signing preparation
+        id: stage-prepared
+        shell: pwsh
+        env:
+          WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}
+          WAGGLE_CANDIDATE_VERSION: ${{ steps.release-mode.outputs.candidate_version }}
+          WINDOWS_BOOTSTRAP_RELEASE_IDENTITY: ${{ steps.release-mode.outputs.bootstrap_identity }}
+          WINDOWS_UPGRADE_BASE_TAG: ${{ steps.release-mode.outputs.upgrade_base_tag }}
+          WINDOWS_UPGRADE_BASE_ASSET_NAME: ${{ steps.release-mode.outputs.upgrade_base_asset_name }}
+          WINDOWS_UPGRADE_BASE_SHA256: ${{ steps.release-mode.outputs.upgrade_base_sha256 }}
+          WINDOWS_UPGRADE_BASE_COMMIT: ${{ steps.release-mode.outputs.upgrade_base_commit }}
+          WINDOWS_CODESIGN_APPROVED_SUBJECT: ${{ steps.signer-identity.outputs.subject }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          EXPECTED_BUILD_RECEIPT_SHA256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}
+          EXPECTED_BUILD_ARTIFACT_ID: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}
+          EXPECTED_BUILD_ARTIFACT_DIGEST: ${{ needs.build-windows-prebuilt.outputs.artifact_digest }}
+          EXPECTED_BUILD_HANDOFF_SIZE_BYTES: ${{ needs.build-windows-prebuilt.outputs.handoff_size_bytes }}
+        run: |
+          function Write-WaggleJsonNoBom {
+            param([string]$Path, [object]$Value)
+            [IO.File]::WriteAllText(
+              $Path,
+              ($Value | ConvertTo-Json -Depth 32),
+              [Text.UTF8Encoding]::new($false)
+            )
+          }
+
+          function Copy-WagglePreparedItem {
+            param([string]$Source, [string]$Destination, [string]$Kind = 'Leaf')
+            if (-not (Test-Path -LiteralPath $Source -PathType $Kind) -or
+                (Test-Path -LiteralPath $Destination)) {
+              throw "Signing preparation source is missing or destination already exists: $Destination"
+            }
+            [IO.Directory]::CreateDirectory((Split-Path $Destination -Parent)) | Out-Null
+            Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -ErrorAction Stop
+          }
+
+          function Assert-WagglePreparedTree {
+            param([string]$Root, [string]$Label)
+            $trustedRoot = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $Root).Path)
+            $items = @(Get-ChildItem -LiteralPath $trustedRoot -Recurse -Force)
+            $maxItems = [int]$env:WINDOWS_SIGNING_TRANSPORT_MAX_ITEMS
+            if ($items.Count -gt $maxItems) {
+              throw "$Label exceeds the bounded $maxItems-item transport envelope."
+            }
+            foreach ($item in $items) {
+              $linkProperty = $item.PSObject.Properties['LinkType']
+              $linkType = if ($null -eq $linkProperty) { '' } else { [string]$linkProperty.Value }
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                  -not [string]::IsNullOrEmpty($linkType)) {
+                throw "$Label contains a linked or reparse filesystem object."
+              }
+              if (-not $item.PSIsContainer -and
+                  @(Get-Item -LiteralPath $item.FullName -Stream *).Count -ne 1) {
+                throw "$Label contains a file with an alternate data stream."
+              }
+            }
+          }
+
+          foreach ($digest in @(
+            [string]$env:EXPECTED_BUILD_RECEIPT_SHA256,
+            [string]$env:EXPECTED_BUILD_ARTIFACT_DIGEST
+          )) {
+            if ($digest -cnotmatch '^[0-9A-Fa-f]{64}$') {
+              throw 'Signing preparation received an invalid upstream digest.'
+            }
+          }
+          if ($env:EXPECTED_BUILD_ARTIFACT_ID -cnotmatch '^[1-9][0-9]*$' -or
+              $env:EXPECTED_BUILD_HANDOFF_SIZE_BYTES -cnotmatch '^[1-9][0-9]*$') {
+            throw 'Signing preparation received an invalid upstream artifact identity or size.'
+          }
+
+          . ./app/scripts/sign-windows-artifact.ps1
+          $preparedRoot = Join-Path $env:RUNNER_TEMP 'waggle-windows-signing-preparation'
+          $payloadRoot = Join-Path $preparedRoot 'payload'
+          if (Test-Path -LiteralPath $preparedRoot) {
+            throw 'Windows signing preparation root already exists.'
+          }
+          [IO.Directory]::CreateDirectory($payloadRoot) | Out-Null
+
+          foreach ($variant in @('unsigned', 'signing')) {
+            $sourceRoot = Join-Path $env:RUNNER_TEMP "waggle-prebuilt-$variant"
+            $destinationRoot = Join-Path $payloadRoot "raw\$variant"
+            foreach ($relative in @('build-receipt.json', 'prebuilt', 'nsis-toolchain')) {
+              $kind = if ($relative -eq 'build-receipt.json') { 'Leaf' } else { 'Container' }
+              Copy-WagglePreparedItem `
+                (Join-Path $sourceRoot $relative) (Join-Path $destinationRoot $relative) $kind
+            }
+          }
+
+          $artifactSigningDestination = Join-Path $payloadRoot `
+            'artifact-signing\Microsoft.ArtifactSigning.Client.1.0.128.nupkg'
+          Copy-WagglePreparedItem `
+            '${{ steps.artifact-signing-package.outputs.package_path }}' `
+            $artifactSigningDestination
+          if ((Get-FileHash -LiteralPath $artifactSigningDestination -Algorithm SHA256).Hash -cne
+              '74BD7D27E6CE1051409C38D9B46BC8DF0400ECD643D51FFBF2AC00869061E40B') {
+            throw 'Staged Artifact Signing package differs from its pinned identity.'
+          }
+
+          $portableSourceRoot = '${{ steps.portable-toolchain.outputs.root }}'
+          $portableSourceReceiptPath = '${{ steps.portable-toolchain.outputs.receipt_path }}'
+          $portableSourceReceipt = Get-Content -Raw -LiteralPath $portableSourceReceiptPath |
+            ConvertFrom-Json -Depth 32
+          if ([int]$portableSourceReceipt.schemaVersion -ne 1 -or
+              [string]$portableSourceReceipt.portableToolchainRoot -cne
+                [IO.Path]::GetFullPath($portableSourceRoot) -or
+              @($portableSourceReceipt.inventory.entries).Count -ne 2495 -or
+              [string]$portableSourceReceipt.inventory.sha256 -cne
+                'D64F897D4E1A7F07FE9BA62D6AF062EF9F0E41C595CDAF2F3C4F73991BBEA0F5') {
+            throw 'Portable signing toolchain source receipt is not the pinned semantic closure.'
+          }
+          Copy-WagglePreparedItem `
+            $portableSourceRoot (Join-Path $payloadRoot 'portable\toolchain') 'Container'
+          $portableDownloadsSource = Join-Path (Split-Path $portableSourceRoot -Parent) 'downloads'
+          Copy-WagglePreparedItem `
+            $portableDownloadsSource (Join-Path $payloadRoot 'portable\downloads') 'Container'
+          $relativePortableReceipt = [ordered]@{
+            schemaVersion = 1
+            portableToolchainRoot = 'portable\toolchain'
+            archives = [ordered]@{
+              node = [ordered]@{
+                path = 'portable\downloads\node.zip'
+                sha256 = '7C93E9D92BF68C07182B471AA187E35EE6CD08EF0F24AB060DFFF605FCC1C57C'
+              }
+              git = [ordered]@{
+                path = 'portable\downloads\mingit.zip'
+                sha256 = 'C2C955A21FA99889D83F485F24FA5D9A38FFFC2D509D4022385510E11C26B250'
+              }
+              sevenZip = [ordered]@{
+                path = 'portable\downloads\sevenzip.exe'
+                sha256 = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
+              }
+            }
+            inventory = $portableSourceReceipt.inventory
+          }
+          Write-WaggleJsonNoBom `
+            (Join-Path $payloadRoot 'portable\portable-toolchain-receipt.json') `
+            $relativePortableReceipt
+
+          $tauriDestination = Join-Path $payloadRoot 'tauri\node_modules\@tauri-apps'
+          foreach ($packageName in @('cli', 'cli-win32-x64-msvc')) {
+            $sourcePackage = Join-Path 'app\node_modules\@tauri-apps' $packageName
+            $package = Get-Content -Raw -LiteralPath (Join-Path $sourcePackage 'package.json') |
+              ConvertFrom-Json
+            if ([string]$package.name -cne "@tauri-apps/$packageName" -or
+                [string]$package.version -cne '2.10.1') {
+              throw "Prepared Tauri package is not the locked Windows package: $packageName"
+            }
+            Copy-WagglePreparedItem `
+              $sourcePackage (Join-Path $tauriDestination $packageName) 'Container'
+          }
+
+          Assert-WagglePreparedTree $payloadRoot 'Windows signing preparation payload'
+          $payloadInventory = New-WagglePrebuiltInventory -Root $payloadRoot
+          $allowedPrefixes = @(
+            'raw\unsigned\',
+            'raw\signing\',
+            'portable\toolchain\',
+            'portable\downloads\',
+            'tauri\node_modules\@tauri-apps\cli\',
+            'tauri\node_modules\@tauri-apps\cli-win32-x64-msvc\'
+          )
+          $allowedExact = @(
+            'artifact-signing\Microsoft.ArtifactSigning.Client.1.0.128.nupkg',
+            'portable\portable-toolchain-receipt.json'
+          )
+          foreach ($entry in @($payloadInventory.entries)) {
+            $relative = [string]$entry.path
+            $allowed = $allowedExact -ccontains $relative
+            foreach ($prefix in $allowedPrefixes) {
+              if ($relative.StartsWith($prefix, [StringComparison]::Ordinal)) {
+                $allowed = $true
+                break
+              }
+            }
+            if (-not $allowed) {
+              throw "Windows signing preparation contains a non-allowlisted payload path: $relative"
+            }
+          }
+
+          $preparationReceipt = [ordered]@{
+            schemaVersion = 1
+            repository = 'marolinik/waggle-os'
+            sourceRevision = $env:GITHUB_SHA
+            candidateTag = $env:GITHUB_REF_NAME
+            candidateVersion = $env:WAGGLE_CANDIDATE_VERSION
+            workflowRef = $env:GITHUB_WORKFLOW_REF
+            workflowSha = $env:GITHUB_WORKFLOW_SHA
+            release = [ordered]@{
+              mode = $env:WAGGLE_RELEASE_MODE
+              bootstrapIdentity = $env:WINDOWS_BOOTSTRAP_RELEASE_IDENTITY
+              upgradeBaseTag = $env:WINDOWS_UPGRADE_BASE_TAG
+              upgradeBaseAssetName = $env:WINDOWS_UPGRADE_BASE_ASSET_NAME
+              upgradeBaseSha256 = $env:WINDOWS_UPGRADE_BASE_SHA256
+              upgradeBaseCommit = $env:WINDOWS_UPGRADE_BASE_COMMIT
+            }
+            signerSubject = $env:WINDOWS_CODESIGN_APPROVED_SUBJECT
+            build = [ordered]@{
+              receiptSha256 = $env:EXPECTED_BUILD_RECEIPT_SHA256.ToUpperInvariant()
+              artifactId = $env:EXPECTED_BUILD_ARTIFACT_ID
+              artifactDigest = $env:EXPECTED_BUILD_ARTIFACT_DIGEST.ToUpperInvariant()
+              handoffSizeBytes = $env:EXPECTED_BUILD_HANDOFF_SIZE_BYTES
+            }
+            azure = [ordered]@{
+              clientId = $env:AZURE_CLIENT_ID
+              tenantId = $env:AZURE_TENANT_ID
+              subscriptionId = $env:AZURE_SUBSCRIPTION_ID
+              audience = 'api://AzureADTokenExchange'
+            }
+            payloadInventory = $payloadInventory
+          }
+          $preparationReceiptPath = Join-Path $preparedRoot 'preparation-receipt.json'
+          Write-WaggleJsonNoBom $preparationReceiptPath $preparationReceipt
+          Assert-WagglePreparedTree $preparedRoot 'Windows signing preparation artifact'
+          $receiptSha256 = (Get-FileHash -LiteralPath $preparationReceiptPath -Algorithm SHA256).Hash
+          $sizeBytes = [long](
+            Get-ChildItem -LiteralPath $preparedRoot -Recurse -Force -File |
+              Measure-Object -Property Length -Sum
+          ).Sum
+          if ($receiptSha256 -cnotmatch '^[0-9A-F]{64}$' -or $sizeBytes -le 0) {
+            throw 'Windows signing preparation receipt or aggregate size is invalid.'
+          }
+          "receipt_sha256=$receiptSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "size_bytes=$sizeBytes" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload immutable prepared Windows signing handoff
+        id: upload-prepared
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: waggle-windows-signing-prepared-${{ github.sha }}
+          path: ${{ runner.temp }}\waggle-windows-signing-preparation
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+
+  sign-windows:
+    needs: [build-windows-prebuilt, prepare-windows-signing]
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      release_mode: ${{ needs.prepare-windows-signing.outputs.release_mode }}
+      candidate_sha256: ${{ steps.stage-signed.outputs.candidate_sha256 }}
+      candidate_version: ${{ steps.stage-signed.outputs.candidate_version }}
+      bootstrap_identity: ${{ needs.prepare-windows-signing.outputs.bootstrap_identity }}
+      upgrade_base_tag: ${{ needs.prepare-windows-signing.outputs.upgrade_base_tag }}
+      upgrade_base_asset_name: ${{ needs.prepare-windows-signing.outputs.upgrade_base_asset_name }}
+      upgrade_base_sha256: ${{ needs.prepare-windows-signing.outputs.upgrade_base_sha256 }}
+      upgrade_base_commit: ${{ needs.prepare-windows-signing.outputs.upgrade_base_commit }}
+      signer_subject: ${{ needs.prepare-windows-signing.outputs.signer_subject }}
+      build_receipt_sha256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}
+      build_artifact_id: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}
+      build_artifact_digest: ${{ needs.build-windows-prebuilt.outputs.artifact_digest }}
+      handoff_receipt_sha256: ${{ steps.stage-signed.outputs.receipt_sha256 }}
+      artifact_id: ${{ steps.upload-signed.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload-signed.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate exact hosted OIDC release boundary
+        shell: pwsh
+        run: |
+          $version = [string](Get-Content -Raw -LiteralPath 'app/src-tauri/tauri.conf.json' | ConvertFrom-Json).version
+          if ($env:GITHUB_ACTIONS -cne 'true' -or
+              $env:GITHUB_EVENT_NAME -cne 'push' -or
+              $env:GITHUB_REPOSITORY -cne 'marolinik/waggle-os' -or
+              $env:GITHUB_REF_TYPE -cne 'tag' -or
+              $env:GITHUB_REF -cne "refs/tags/v$version" -or
+              $env:GITHUB_REF_NAME -cne "v$version" -or
+              $env:GITHUB_WORKFLOW_REF -cne "marolinik/waggle-os/.github/workflows/release.yml@$env:GITHUB_REF" -or
+              $env:GITHUB_WORKFLOW_SHA -cne $env:GITHUB_SHA -or
+              $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or
+              $env:GITHUB_SHA -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'Windows signing requires the exact hosted push, repository, tag, workflow, and revision boundary.'
+          }
+          $checkedOutRevision = (git rev-parse --verify HEAD).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $checkedOutRevision -cne $env:GITHUB_SHA -or
+              @(git status --porcelain=v1 --untracked-files=all).Count -ne 0) {
+            throw 'Windows signing checkout is not the clean GITHUB_SHA revision.'
+          }
+
+      - name: Validate initial signing revision on fresh origin main
+        shell: pwsh
+        run: |
+          $checkedOutRevision = (git rev-parse --verify HEAD).Trim().ToLowerInvariant()
+          $remoteMainRevision = (git rev-parse --verify refs/remotes/origin/main).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or
+              $checkedOutRevision -cne $env:GITHUB_SHA -or
+              $env:GITHUB_WORKFLOW_SHA -cne $env:GITHUB_SHA -or
+              $remoteMainRevision -cnotmatch '^[0-9a-f]{40}$' -or
+              @(git status --porcelain=v1 --untracked-files=all).Count -ne 0) {
+            throw 'Initial signing checkout, workflow, or origin/main revision evidence is invalid.'
+          }
+          git merge-base --is-ancestor $env:GITHUB_SHA refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The exact signing revision is not contained by initial fresh origin/main.'
+          }
+
+      - name: Download immutable prepared Windows signing handoff
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.prepare-windows-signing.outputs.artifact_id }}
+          path: ${{ runner.temp }}\waggle-windows-signing-prepared
+          merge-multiple: true
+
+      - name: Verify and restore immutable prepared Windows signing handoff
+        id: verify-prepared
+        shell: pwsh
+        env:
+          EXPECTED_PREPARATION_RECEIPT_SHA256: ${{ needs.prepare-windows-signing.outputs.preparation_receipt_sha256 }}
+          EXPECTED_PREPARATION_ARTIFACT_ID: ${{ needs.prepare-windows-signing.outputs.artifact_id }}
+          EXPECTED_PREPARATION_ARTIFACT_DIGEST: ${{ needs.prepare-windows-signing.outputs.artifact_digest }}
+          EXPECTED_PREPARATION_SIZE_BYTES: ${{ needs.prepare-windows-signing.outputs.preparation_size_bytes }}
+          EXPECTED_RELEASE_MODE: ${{ needs.prepare-windows-signing.outputs.release_mode }}
+          EXPECTED_CANDIDATE_VERSION: ${{ needs.prepare-windows-signing.outputs.candidate_version }}
+          EXPECTED_BOOTSTRAP_IDENTITY: ${{ needs.prepare-windows-signing.outputs.bootstrap_identity }}
+          EXPECTED_UPGRADE_BASE_TAG: ${{ needs.prepare-windows-signing.outputs.upgrade_base_tag }}
+          EXPECTED_UPGRADE_BASE_ASSET_NAME: ${{ needs.prepare-windows-signing.outputs.upgrade_base_asset_name }}
+          EXPECTED_UPGRADE_BASE_SHA256: ${{ needs.prepare-windows-signing.outputs.upgrade_base_sha256 }}
+          EXPECTED_UPGRADE_BASE_COMMIT: ${{ needs.prepare-windows-signing.outputs.upgrade_base_commit }}
+          EXPECTED_SIGNER_SUBJECT: ${{ needs.prepare-windows-signing.outputs.signer_subject }}
+          EXPECTED_BUILD_RECEIPT_SHA256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}
+          EXPECTED_BUILD_ARTIFACT_ID: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}
+          EXPECTED_BUILD_ARTIFACT_DIGEST: ${{ needs.build-windows-prebuilt.outputs.artifact_digest }}
+          EXPECTED_BUILD_HANDOFF_SIZE_BYTES: ${{ needs.build-windows-prebuilt.outputs.handoff_size_bytes }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          function Write-WaggleJsonNoBom {
+            param([string]$Path, [object]$Value)
+            [IO.File]::WriteAllText(
+              $Path,
+              ($Value | ConvertTo-Json -Depth 32),
+              [Text.UTF8Encoding]::new($false)
+            )
+          }
+
+          function Assert-WaggleTransportTree {
+            param([string]$Root, [string]$Label)
+            $items = @(Get-ChildItem -LiteralPath $Root -Recurse -Force)
+            $maxItems = [int]$env:WINDOWS_SIGNING_TRANSPORT_MAX_ITEMS
+            if ($items.Count -gt $maxItems) {
+              throw "$Label exceeds the bounded $maxItems-item transport envelope."
+            }
+            foreach ($item in $items) {
+              $linkProperty = $item.PSObject.Properties['LinkType']
+              $linkType = if ($null -eq $linkProperty) { '' } else { [string]$linkProperty.Value }
+              if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                  -not [string]::IsNullOrEmpty($linkType)) {
+                throw "$Label contains a linked or reparse filesystem object."
+              }
+              if (-not $item.PSIsContainer -and
+                  @(Get-Item -LiteralPath $item.FullName -Stream *).Count -ne 1) {
+                throw "$Label contains a file with an alternate data stream."
+              }
+            }
+          }
+
+          function Assert-WaggleExactValue {
+            param([object]$Actual, [string]$Expected, [string]$Label)
+            if ([string]$Actual -cne $Expected) {
+              throw "Prepared Windows signing binding differs: $Label"
+            }
+          }
+
+          $preparedRoot = [IO.Path]::GetFullPath(
+            (Resolve-Path -LiteralPath (Join-Path $env:RUNNER_TEMP 'waggle-windows-signing-prepared')).Path
+          )
+          $payloadRoot = Join-Path $preparedRoot 'payload'
+          $receiptPath = Join-Path $preparedRoot 'preparation-receipt.json'
+          foreach ($digest in @(
+            [string]$env:EXPECTED_PREPARATION_RECEIPT_SHA256,
+            [string]$env:EXPECTED_PREPARATION_ARTIFACT_DIGEST,
+            [string]$env:EXPECTED_BUILD_RECEIPT_SHA256,
+            [string]$env:EXPECTED_BUILD_ARTIFACT_DIGEST
+          )) {
+            if ($digest -cnotmatch '^[0-9A-Fa-f]{64}$') {
+              throw 'Prepared Windows signing digest binding is invalid.'
+            }
+          }
+          if ($env:EXPECTED_PREPARATION_ARTIFACT_ID -cnotmatch '^[1-9][0-9]*$' -or
+              $env:EXPECTED_BUILD_ARTIFACT_ID -cnotmatch '^[1-9][0-9]*$' -or
+              $env:EXPECTED_PREPARATION_SIZE_BYTES -cnotmatch '^[1-9][0-9]*$') {
+            throw 'Prepared Windows signing artifact identity or size binding is invalid.'
+          }
+          Assert-WaggleTransportTree $preparedRoot 'Prepared Windows signing artifact'
+          $actualSizeBytes = [long](
+            Get-ChildItem -LiteralPath $preparedRoot -Recurse -Force -File |
+              Measure-Object -Property Length -Sum
+          ).Sum
+          if (-not (Test-Path -LiteralPath $payloadRoot -PathType Container) -or
+              -not (Test-Path -LiteralPath $receiptPath -PathType Leaf) -or
+              $actualSizeBytes -ne [long]$env:EXPECTED_PREPARATION_SIZE_BYTES -or
+              (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash -cne
+                $env:EXPECTED_PREPARATION_RECEIPT_SHA256.ToUpperInvariant()) {
+            throw 'Prepared Windows signing artifact differs from its immutable receipt or size.'
+          }
+
+          . ./app/scripts/sign-windows-artifact.ps1
+          $receipt = Get-Content -Raw -LiteralPath $receiptPath | ConvertFrom-Json -Depth 32
+          if ([int]$receipt.schemaVersion -ne 1) {
+            throw 'Prepared Windows signing receipt schema is invalid.'
+          }
+          Assert-WaggleExactValue $receipt.repository 'marolinik/waggle-os' 'repository'
+          Assert-WaggleExactValue $receipt.sourceRevision $env:GITHUB_SHA 'sourceRevision'
+          Assert-WaggleExactValue $receipt.candidateTag $env:GITHUB_REF_NAME 'candidateTag'
+          Assert-WaggleExactValue $receipt.candidateVersion $env:EXPECTED_CANDIDATE_VERSION 'candidateVersion'
+          Assert-WaggleExactValue $receipt.workflowRef $env:GITHUB_WORKFLOW_REF 'workflowRef'
+          Assert-WaggleExactValue $receipt.workflowSha $env:GITHUB_WORKFLOW_SHA 'workflowSha'
+          Assert-WaggleExactValue $receipt.release.mode $env:EXPECTED_RELEASE_MODE 'release.mode'
+          Assert-WaggleExactValue $receipt.release.bootstrapIdentity $env:EXPECTED_BOOTSTRAP_IDENTITY 'release.bootstrapIdentity'
+          Assert-WaggleExactValue $receipt.release.upgradeBaseTag $env:EXPECTED_UPGRADE_BASE_TAG 'release.upgradeBaseTag'
+          Assert-WaggleExactValue $receipt.release.upgradeBaseAssetName $env:EXPECTED_UPGRADE_BASE_ASSET_NAME 'release.upgradeBaseAssetName'
+          Assert-WaggleExactValue $receipt.release.upgradeBaseSha256 $env:EXPECTED_UPGRADE_BASE_SHA256 'release.upgradeBaseSha256'
+          Assert-WaggleExactValue $receipt.release.upgradeBaseCommit $env:EXPECTED_UPGRADE_BASE_COMMIT 'release.upgradeBaseCommit'
+          Assert-WaggleExactValue $receipt.signerSubject $env:EXPECTED_SIGNER_SUBJECT 'signerSubject'
+          Assert-WaggleExactValue $receipt.build.receiptSha256 $env:EXPECTED_BUILD_RECEIPT_SHA256.ToUpperInvariant() 'build.receiptSha256'
+          Assert-WaggleExactValue $receipt.build.artifactId $env:EXPECTED_BUILD_ARTIFACT_ID 'build.artifactId'
+          Assert-WaggleExactValue $receipt.build.artifactDigest $env:EXPECTED_BUILD_ARTIFACT_DIGEST.ToUpperInvariant() 'build.artifactDigest'
+          Assert-WaggleExactValue $receipt.build.handoffSizeBytes $env:EXPECTED_BUILD_HANDOFF_SIZE_BYTES 'build.handoffSizeBytes'
+          Assert-WaggleExactValue $receipt.azure.clientId $env:AZURE_CLIENT_ID 'azure.clientId'
+          Assert-WaggleExactValue $receipt.azure.tenantId $env:AZURE_TENANT_ID 'azure.tenantId'
+          Assert-WaggleExactValue $receipt.azure.subscriptionId $env:AZURE_SUBSCRIPTION_ID 'azure.subscriptionId'
+          Assert-WaggleExactValue $receipt.azure.audience 'api://AzureADTokenExchange' 'azure.audience'
+
+          $actualPayloadInventory = New-WagglePrebuiltInventory -Root $payloadRoot
+          if (($actualPayloadInventory | ConvertTo-Json -Depth 32 -Compress) -cne
+              ($receipt.payloadInventory | ConvertTo-Json -Depth 32 -Compress)) {
+            throw 'Prepared Windows signing payload differs from its canonical inventory.'
+          }
+
+          $unsignedRoot = Get-TrustedPath `
+            (Join-Path $payloadRoot 'raw\unsigned\prebuilt') 'Prepared unsigned root' 'Container'
+          $signingRoot = Get-TrustedPath `
+            (Join-Path $payloadRoot 'raw\signing\prebuilt') 'Prepared signing root' 'Container'
+          $unsignedReceipt = Get-TrustedPath `
+            (Join-Path $payloadRoot 'raw\unsigned\build-receipt.json') 'Prepared unsigned build receipt'
+          $signingReceipt = Get-TrustedPath `
+            (Join-Path $payloadRoot 'raw\signing\build-receipt.json') 'Prepared signing build receipt'
+          foreach ($buildReceiptPath in @($unsignedReceipt, $signingReceipt)) {
+            if ((Get-FileHash -LiteralPath $buildReceiptPath -Algorithm SHA256).Hash -cne
+                $env:EXPECTED_BUILD_RECEIPT_SHA256.ToUpperInvariant()) {
+              throw 'Prepared raw handoff receipt differs from the immutable build receipt.'
+            }
+          }
+          $buildReceipt = Get-Content -Raw -LiteralPath $unsignedReceipt | ConvertFrom-Json -Depth 32
+          foreach ($rawRoot in @($unsignedRoot, $signingRoot)) {
+            $rawInventory = New-WagglePrebuiltInventory -Root $rawRoot
+            if (($rawInventory | ConvertTo-Json -Depth 32 -Compress) -cne
+                ($buildReceipt.targetInventory | ConvertTo-Json -Depth 32 -Compress)) {
+              throw 'Prepared raw prebuilt root differs from the hosted build receipt.'
+            }
+          }
+          $expectedNsisAggregate = '1FC822D1A183552A80ADEA01B0BF456F462B90518256EF1FE9EDFA22D76CD85A'
+          foreach ($nsisRoot in @(
+            (Join-Path $payloadRoot 'raw\unsigned\nsis-toolchain'),
+            (Join-Path $payloadRoot 'raw\signing\nsis-toolchain')
+          )) {
+            $nsisInventory = New-WagglePrebuiltInventory -Root $nsisRoot
+            if (@($nsisInventory.entries).Count -ne 442 -or
+                [string]$nsisInventory.sha256 -cne $expectedNsisAggregate -or
+                ($nsisInventory | ConvertTo-Json -Depth 8 -Compress) -cne
+                  ($buildReceipt.nsisInventory | ConvertTo-Json -Depth 8 -Compress)) {
+              throw 'Prepared NSIS toolchain differs from the hosted build receipt.'
+            }
+          }
+
+          $installedNsisRoot = Join-Path $env:LOCALAPPDATA 'tauri\NSIS'
+          if (Test-Path -LiteralPath $installedNsisRoot) {
+            throw 'Fresh OIDC signer unexpectedly already contains a Tauri NSIS closure.'
+          }
+          [IO.Directory]::CreateDirectory((Split-Path $installedNsisRoot -Parent)) | Out-Null
+          Copy-Item -LiteralPath (Join-Path $payloadRoot 'raw\unsigned\nsis-toolchain') `
+            -Destination $installedNsisRoot -Recurse -ErrorAction Stop
+          $installedNsisInventory = New-WagglePrebuiltInventory -Root $installedNsisRoot
+          if (($installedNsisInventory | ConvertTo-Json -Depth 8 -Compress) -cne
+              ($buildReceipt.nsisInventory | ConvertTo-Json -Depth 8 -Compress)) {
+            throw 'Restored signer NSIS closure differs from the hosted build receipt.'
+          }
+
+          $resourceEntries = @($buildReceipt.resourcesInventory.entries)
+          Assert-WaggleCanonicalInventoryEntries $resourceEntries 'Prepared resources inventory'
+          $sourceResourcesRoot = Get-TrustedPath `
+            (Join-Path $unsignedRoot 'resources') 'Prepared source resources' 'Container'
+          $signingResourcesRoot = Get-TrustedPath `
+            (Join-Path $signingRoot 'resources') 'Prepared signing resources' 'Container'
+          $canonicalResourcesRoot = Get-TrustedPath `
+            ([IO.Path]::GetFullPath('app/src-tauri/resources')) 'Canonical repository resources' 'Container'
+          $canonicalPrefix = $canonicalResourcesRoot.TrimEnd('\') + '\'
+          $materializedEntries = [Collections.Generic.List[object]]::new()
+          foreach ($entry in $resourceEntries) {
+            $relative = [string]$entry.path
+            $sourcePath = Get-TrustedPath `
+              (Join-Path $sourceResourcesRoot $relative) 'Prepared resource file' -AllowHardLink
+            $signingPath = Get-TrustedPath `
+              (Join-Path $signingResourcesRoot $relative) 'Prepared signing resource file' -AllowHardLink
+            foreach ($path in @($sourcePath, $signingPath)) {
+              $item = Get-Item -LiteralPath $path -Force
+              if ([long]$item.Length -ne [long]$entry.size -or
+                  (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -cne [string]$entry.sha256) {
+                throw 'Prepared resource file differs from its hosted receipt.'
+              }
+            }
+            $destination = [IO.Path]::GetFullPath((Join-Path $canonicalResourcesRoot $relative))
+            if (-not $destination.StartsWith($canonicalPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'Prepared resource destination escaped the canonical repository root.'
+            }
+            [IO.Directory]::CreateDirectory((Split-Path $destination -Parent)) | Out-Null
+            if (Test-Path -LiteralPath $destination) {
+              if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -cne
+                  [string]$entry.sha256) {
+                throw 'Canonical repository resource differs from the prepared receipt.'
+              }
+            } else {
+              [IO.File]::Copy($sourcePath, $destination, $false)
+            }
+            $materialized = Get-Item -LiteralPath $destination -Force
+            $materializedEntries.Add([pscustomobject][ordered]@{
+              path = $relative
+              size = [long]$materialized.Length
+              sha256 = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+            })
+          }
+          if ((Get-WaggleInventorySha256 @($materializedEntries)) -cne
+              [string]$buildReceipt.resourcesInventory.sha256) {
+            throw 'Restored canonical resources differ from the prepared build receipt.'
+          }
+
+          $tauriSource = Join-Path $payloadRoot 'tauri\node_modules\@tauri-apps'
+          $tauriDestination = [IO.Path]::GetFullPath('app\node_modules\@tauri-apps')
+          if (Test-Path -LiteralPath (Split-Path $tauriDestination -Parent)) {
+            throw 'Fresh OIDC signer unexpectedly already contains app node_modules.'
+          }
+          [IO.Directory]::CreateDirectory($tauriDestination) | Out-Null
+          foreach ($packageName in @('cli', 'cli-win32-x64-msvc')) {
+            Copy-Item -LiteralPath (Join-Path $tauriSource $packageName) `
+              -Destination $tauriDestination -Recurse -ErrorAction Stop
+          }
+          $restoredPackages = @(
+            Get-ChildItem -LiteralPath $tauriDestination -Force -Directory |
+              ForEach-Object { $_.Name } | Sort-Object
+          )
+          if ([string]::Join("`n", $restoredPackages) -cne
+              [string]::Join("`n", @('cli', 'cli-win32-x64-msvc'))) {
+            throw 'OIDC signer restored more than the two approved Tauri CLI packages.'
+          }
+
+          $portableRelativeReceiptPath = Join-Path $payloadRoot `
+            'portable\portable-toolchain-receipt.json'
+          $portableRelativeReceipt = Get-Content -Raw -LiteralPath $portableRelativeReceiptPath |
+            ConvertFrom-Json -Depth 32
+          if ([int]$portableRelativeReceipt.schemaVersion -ne 1 -or
+              [string]$portableRelativeReceipt.portableToolchainRoot -cne 'portable\toolchain' -or
+              [string]$portableRelativeReceipt.archives.node.path -cne 'portable\downloads\node.zip' -or
+              [string]$portableRelativeReceipt.archives.git.path -cne 'portable\downloads\mingit.zip' -or
+              [string]$portableRelativeReceipt.archives.sevenZip.path -cne 'portable\downloads\sevenzip.exe' -or
+              @($portableRelativeReceipt.inventory.entries).Count -ne 2495 -or
+              [string]$portableRelativeReceipt.inventory.sha256 -cne
+                'D64F897D4E1A7F07FE9BA62D6AF062EF9F0E41C595CDAF2F3C4F73991BBEA0F5') {
+            throw 'Prepared portable toolchain receipt is not path-relative and repository-pinned.'
+          }
+          $portablePayloadRoot = Get-TrustedPath `
+            (Join-Path $payloadRoot 'portable\toolchain') 'Prepared portable toolchain' 'Container'
+          $portableDownloads = Get-TrustedPath `
+            (Join-Path $payloadRoot 'portable\downloads') 'Restored portable downloads' 'Container'
+          $portableActualInventory = New-WagglePrebuiltInventory -Root $portablePayloadRoot
+          if (($portableActualInventory | ConvertTo-Json -Depth 32 -Compress) -cne
+              ($portableRelativeReceipt.inventory | ConvertTo-Json -Depth 32 -Compress)) {
+            throw 'Restored portable toolchain differs from its path-relative receipt.'
+          }
+          $relocatedReceiptRoot = Join-Path $env:RUNNER_TEMP 'waggle-portable-signing-restored'
+          if (Test-Path -LiteralPath $relocatedReceiptRoot) {
+            throw 'Relocated portable receipt root already exists.'
+          }
+          $relocatedReceiptRoot = New-PrivateDirectory $relocatedReceiptRoot
+          $portableRoot = New-PrivateDirectory (Join-Path $relocatedReceiptRoot 'toolchain')
+          foreach ($entry in @($portableRelativeReceipt.inventory.entries)) {
+            $relative = [string]$entry.path
+            $source = Get-TrustedPath `
+              (Join-Path $portablePayloadRoot $relative) 'Prepared portable toolchain file'
+            $destination = Join-Path $portableRoot $relative
+            [IO.Directory]::CreateDirectory((Split-Path $destination -Parent)) | Out-Null
+            [IO.File]::Copy($source, $destination, $false)
+          }
+          $restoredPortableInventory = New-WagglePrebuiltInventory -Root $portableRoot
+          if (($restoredPortableInventory | ConvertTo-Json -Depth 32 -Compress) -cne
+              ($portableRelativeReceipt.inventory | ConvertTo-Json -Depth 32 -Compress)) {
+            throw 'Private restored portable toolchain differs from its path-relative receipt.'
+          }
+          $relocatedReceiptPath = Join-Path $relocatedReceiptRoot 'portable-toolchain-receipt.json'
+          $relocatedReceipt = [ordered]@{
+            schemaVersion = 1
+            portableToolchainRoot = [IO.Path]::GetFullPath($portableRoot)
+            archives = [ordered]@{
+              node = [ordered]@{
+                path = [IO.Path]::GetFullPath((Join-Path $portableDownloads 'node.zip'))
+                sha256 = '7C93E9D92BF68C07182B471AA187E35EE6CD08EF0F24AB060DFFF605FCC1C57C'
+              }
+              git = [ordered]@{
+                path = [IO.Path]::GetFullPath((Join-Path $portableDownloads 'mingit.zip'))
+                sha256 = 'C2C955A21FA99889D83F485F24FA5D9A38FFFC2D509D4022385510E11C26B250'
+              }
+              sevenZip = [ordered]@{
+                path = [IO.Path]::GetFullPath((Join-Path $portableDownloads 'sevenzip.exe'))
+                sha256 = '78AFA2A1C773CAF3CF7EDF62F857D2A8A5DA55FB0FFF5DA416074C0D28B2B55F'
+              }
+            }
+            inventory = $portableRelativeReceipt.inventory
+          }
+          Write-WaggleJsonNoBom $relocatedReceiptPath $relocatedReceipt
+          $relocatedReceiptSha256 = (Get-FileHash -LiteralPath $relocatedReceiptPath -Algorithm SHA256).Hash
+
+          $artifactSigningPackage = Get-TrustedPath `
+            (Join-Path $payloadRoot 'artifact-signing\Microsoft.ArtifactSigning.Client.1.0.128.nupkg') `
+            'Prepared Artifact Signing package'
+          if ((Get-FileHash -LiteralPath $artifactSigningPackage -Algorithm SHA256).Hash -cne
+              '74BD7D27E6CE1051409C38D9B46BC8DF0400ECD643D51FFBF2AC00869061E40B') {
+            throw 'Prepared Artifact Signing package differs from its pinned SHA-256.'
+          }
+          "unsigned_root=$unsignedRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "signing_root=$signingRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "build_receipt_path=$signingReceipt" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_signing_package=$artifactSigningPackage" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable_root=$portableRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable_node=$([IO.Path]::GetFullPath((Join-Path $portableRoot 'node\node-v22.22.2-win-x64\node.exe')))" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable_git=$([IO.Path]::GetFullPath((Join-Path $portableRoot 'git\cmd\git.exe')))" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable_sevenzip=$([IO.Path]::GetFullPath((Join-Path $portableRoot 'sevenzip\7z.exe')))" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable_receipt_path=$relocatedReceiptPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "portable_receipt_sha256=$relocatedReceiptSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Refresh exact signing repository refs
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: marolinik/waggle-os
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+          clean: false
+
+      - name: Revalidate exact signing revision against fresh origin main
+        shell: pwsh
+        run: |
+          $checkedOutRevision = (git rev-parse --verify HEAD).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not resolve the exact signing checkout after refreshing repository refs.'
+          }
+          $remoteMainRevision = (git rev-parse --verify refs/remotes/origin/main).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or
+              $checkedOutRevision -cne $env:GITHUB_SHA -or
+              $env:GITHUB_WORKFLOW_SHA -cne $env:GITHUB_SHA -or
+              $remoteMainRevision -cnotmatch '^[0-9a-f]{40}$' -or
+              @(git status --porcelain=v1 --untracked-files=all).Count -ne 0) {
+            throw 'Fresh signing checkout, workflow, or origin/main revision evidence is invalid.'
+          }
+          git merge-base --is-ancestor $env:GITHUB_SHA refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The exact signing revision is not contained by fresh origin/main.'
+          }
+
       - name: Authenticate Azure Artifact Signing with OIDC
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
         with:
@@ -702,28 +1370,28 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           audience: api://AzureADTokenExchange
 
-      - name: Package and sign from immutable prebuilt roots
+      - name: Package and sign from immutable prepared inputs
         id: sign-windows
         shell: pwsh
         env:
-          WINDOWS_CODESIGN_APPROVED_SUBJECT: ${{ steps.signer-identity.outputs.subject }}
+          WINDOWS_CODESIGN_APPROVED_SUBJECT: ${{ needs.prepare-windows-signing.outputs.signer_subject }}
           EXPECTED_BUILD_RECEIPT_SHA256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}
         run: |
           & 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
             -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
             -File ./app/scripts/sign-windows-artifact.ps1 `
             -Mode Package `
-            -UnsignedInputRoot '${{ steps.verify-handoff.outputs.unsigned_root }}' `
-            -SigningInputRoot '${{ steps.verify-handoff.outputs.signing_root }}' `
-            -BuildReceiptPath '${{ steps.verify-handoff.outputs.receipt_path }}' `
+            -UnsignedInputRoot '${{ steps.verify-prepared.outputs.unsigned_root }}' `
+            -SigningInputRoot '${{ steps.verify-prepared.outputs.signing_root }}' `
+            -BuildReceiptPath '${{ steps.verify-prepared.outputs.build_receipt_path }}' `
             -BuildReceiptSha256 $env:EXPECTED_BUILD_RECEIPT_SHA256 `
-            -ArtifactSigningPackageSource '${{ steps.artifact-signing-package.outputs.package_path }}' `
-            -PortableToolchainRoot '${{ steps.portable-toolchain.outputs.root }}' `
-            -PortableToolchainReceiptPath '${{ steps.portable-toolchain.outputs.receipt_path }}' `
-            -PortableToolchainReceiptSha256 '${{ steps.portable-toolchain.outputs.receipt_sha256 }}' `
-            -PortableNodePath '${{ steps.portable-toolchain.outputs.node_path }}' `
-            -PortableGitPath '${{ steps.portable-toolchain.outputs.git_path }}' `
-            -PortableSevenZipPath '${{ steps.portable-toolchain.outputs.sevenzip_path }}'
+            -ArtifactSigningPackageSource '${{ steps.verify-prepared.outputs.artifact_signing_package }}' `
+            -PortableToolchainRoot '${{ steps.verify-prepared.outputs.portable_root }}' `
+            -PortableToolchainReceiptPath '${{ steps.verify-prepared.outputs.portable_receipt_path }}' `
+            -PortableToolchainReceiptSha256 '${{ steps.verify-prepared.outputs.portable_receipt_sha256 }}' `
+            -PortableNodePath '${{ steps.verify-prepared.outputs.portable_node }}' `
+            -PortableGitPath '${{ steps.verify-prepared.outputs.portable_git }}' `
+            -PortableSevenZipPath '${{ steps.verify-prepared.outputs.portable_sevenzip }}'
           if ($LASTEXITCODE -ne 0) { throw 'Protected Artifact Signing package failed.' }
           $receipts = @(Get-ChildItem -LiteralPath 'app/src-tauri/target/.signing-sessions' -Recurse -Filter 'provenance-receipt.json' -File)
           if ($receipts.Count -ne 1) { throw "Expected exactly one sealed signing receipt, found $($receipts.Count)." }
@@ -754,16 +1422,19 @@ jobs:
         id: stage-signed
         shell: pwsh
         env:
-          WAGGLE_RELEASE_MODE: ${{ steps.release-mode.outputs.mode }}
-          WINDOWS_BOOTSTRAP_RELEASE_IDENTITY: ${{ steps.release-mode.outputs.bootstrap_identity }}
-          WINDOWS_UPGRADE_BASE_TAG: ${{ steps.release-mode.outputs.upgrade_base_tag }}
-          WINDOWS_UPGRADE_BASE_ASSET_NAME: ${{ steps.release-mode.outputs.upgrade_base_asset_name }}
-          WINDOWS_UPGRADE_BASE_SHA256: ${{ steps.release-mode.outputs.upgrade_base_sha256 }}
-          WINDOWS_UPGRADE_BASE_COMMIT: ${{ steps.release-mode.outputs.upgrade_base_commit }}
-          WINDOWS_CODESIGN_APPROVED_SUBJECT: ${{ steps.signer-identity.outputs.subject }}
+          WAGGLE_RELEASE_MODE: ${{ needs.prepare-windows-signing.outputs.release_mode }}
+          WINDOWS_BOOTSTRAP_RELEASE_IDENTITY: ${{ needs.prepare-windows-signing.outputs.bootstrap_identity }}
+          WINDOWS_UPGRADE_BASE_TAG: ${{ needs.prepare-windows-signing.outputs.upgrade_base_tag }}
+          WINDOWS_UPGRADE_BASE_ASSET_NAME: ${{ needs.prepare-windows-signing.outputs.upgrade_base_asset_name }}
+          WINDOWS_UPGRADE_BASE_SHA256: ${{ needs.prepare-windows-signing.outputs.upgrade_base_sha256 }}
+          WINDOWS_UPGRADE_BASE_COMMIT: ${{ needs.prepare-windows-signing.outputs.upgrade_base_commit }}
+          WINDOWS_CODESIGN_APPROVED_SUBJECT: ${{ needs.prepare-windows-signing.outputs.signer_subject }}
           EXPECTED_BUILD_RECEIPT_SHA256: ${{ needs.build-windows-prebuilt.outputs.build_receipt_sha256 }}
           EXPECTED_BUILD_ARTIFACT_ID: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}
           EXPECTED_BUILD_ARTIFACT_DIGEST: ${{ needs.build-windows-prebuilt.outputs.artifact_digest }}
+          EXPECTED_PREPARATION_RECEIPT_SHA256: ${{ needs.prepare-windows-signing.outputs.preparation_receipt_sha256 }}
+          EXPECTED_PREPARATION_ARTIFACT_ID: ${{ needs.prepare-windows-signing.outputs.artifact_id }}
+          EXPECTED_PREPARATION_ARTIFACT_DIGEST: ${{ needs.prepare-windows-signing.outputs.artifact_digest }}
         run: |
           $signedRoot = Join-Path $env:RUNNER_TEMP 'waggle-windows-signed'
           if (Test-Path -LiteralPath $signedRoot) { throw 'Signed handoff root already exists.' }
@@ -830,6 +1501,11 @@ jobs:
           if ($env:EXPECTED_BUILD_ARTIFACT_ID -cnotmatch '^[1-9][0-9]*$') {
             throw 'Signed handoff build artifact ID is invalid.'
           }
+          if ($env:EXPECTED_PREPARATION_RECEIPT_SHA256 -cnotmatch '^[0-9A-Fa-f]{64}$' -or
+              $env:EXPECTED_PREPARATION_ARTIFACT_DIGEST -cnotmatch '^[0-9A-Fa-f]{64}$' -or
+              $env:EXPECTED_PREPARATION_ARTIFACT_ID -cnotmatch '^[1-9][0-9]*$') {
+            throw 'Signed handoff preparation artifact binding is invalid.'
+          }
           $handoffReceipt = [ordered]@{
             schemaVersion = 1
             sourceRevision = $env:GITHUB_SHA
@@ -846,6 +1522,9 @@ jobs:
             buildReceiptSha256 = $env:EXPECTED_BUILD_RECEIPT_SHA256.ToUpperInvariant()
             buildArtifactId = $env:EXPECTED_BUILD_ARTIFACT_ID
             buildArtifactDigest = $env:EXPECTED_BUILD_ARTIFACT_DIGEST.ToUpperInvariant()
+            preparationReceiptSha256 = $env:EXPECTED_PREPARATION_RECEIPT_SHA256.ToUpperInvariant()
+            preparationArtifactId = $env:EXPECTED_PREPARATION_ARTIFACT_ID
+            preparationArtifactDigest = $env:EXPECTED_PREPARATION_ARTIFACT_DIGEST.ToUpperInvariant()
             timestampPolicy = 'fresh-certification-monotonic-v1'
             inventory = $inventory
           }
@@ -1124,21 +1803,13 @@ jobs:
             throw 'The protected Windows upgrade baseline must be older than the candidate'
           }
 
-          $remoteTagLines = @(git ls-remote --tags origin "refs/tags/$baseTag" "refs/tags/$baseTag^{}")
-          if ($LASTEXITCODE -ne 0 -or $remoteTagLines.Count -eq 0) {
-            throw "Could not resolve protected upgrade baseline tag $baseTag"
-          }
-          $resolvedTagLine = @($remoteTagLines | Where-Object { $_ -match '\^\{\}$' } | Select-Object -First 1)
-          if ($resolvedTagLine.Count -eq 0) { $resolvedTagLine = @($remoteTagLines | Select-Object -First 1) }
-          $baseCommit = ([regex]::Split(([string]$resolvedTagLine[0]).Trim(), '\s+'))[0].ToLowerInvariant()
-          if ($baseCommit -notmatch '^[0-9a-f]{40}$') {
-            throw 'Could not resolve the protected upgrade baseline commit'
+          $baseCommit = (git rev-parse --verify "refs/tags/$baseTag^{}").Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $baseCommit -notmatch '^[0-9a-f]{40}$') {
+            throw "Fresh checkout could not resolve protected upgrade baseline tag $baseTag"
           }
           if (-not [string]::Equals($baseCommit, $expectedBaseCommit, [System.StringComparison]::Ordinal)) {
             throw 'Protected Windows upgrade baseline tag does not resolve to WINDOWS_UPGRADE_BASE_COMMIT'
           }
-          git fetch --no-tags origin "refs/tags/$baseTag"
-          if ($LASTEXITCODE -ne 0) { throw "Could not fetch protected upgrade baseline tag $baseTag" }
           git merge-base --is-ancestor $baseCommit $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) {
             throw 'The protected Windows upgrade baseline is not an ancestor of the candidate release'
@@ -1384,6 +2055,8 @@ jobs:
 
   attest-windows:
     needs: certify-windows
+    if: github.event.repository.private == false
+    environment: production
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1534,6 +2207,10 @@ jobs:
 
   publish-windows:
     needs: [certify-windows, attest-windows]
+    if: >-
+      vars.WINDOWS_PUBLIC_RELEASE_AUTHORIZED == 'true' &&
+      github.event.repository.private == false &&
+      startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     permissions:
       contents: write
