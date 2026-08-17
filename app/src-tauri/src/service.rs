@@ -1,7 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
+#[cfg(windows)]
+use std::fs::{File, OpenOptions};
+#[cfg(windows)]
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::process::Stdio;
 use std::process::{Child, Command};
+#[cfg(windows)]
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -10,6 +18,80 @@ use uuid::Uuid;
 const WATCHDOG_FAILURE_THRESHOLD: u32 = 3;
 const WATCHDOG_INITIAL_STARTUP_GRACE: Duration = Duration::from_secs(600);
 const READY_RECORD_MAX_BYTES: u64 = 16 * 1024;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+#[cfg(windows)]
+const MAX_SERVICE_LOG_BYTES: u64 = 5 * 1024 * 1024;
+#[cfg(windows)]
+const SERVICE_LOG_DIR_ENV: &str = "WAGGLE_DESKTOP_SERVICE_LOG_DIR";
+
+#[cfg(windows)]
+#[derive(Debug)]
+struct KillOnCloseJob(windows_sys::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+unsafe impl Send for KillOnCloseJob {}
+
+#[cfg(windows)]
+impl Drop for KillOnCloseJob {
+    fn drop(&mut self) {
+        unsafe {
+            windows_sys::Win32::Foundation::CloseHandle(self.0);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn create_kill_on_close_job() -> Result<KillOnCloseJob, String> {
+    use windows_sys::Win32::System::JobObjects::{
+        CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+    };
+
+    let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+    if job.is_null() {
+        return Err(format!(
+            "Unable to create the managed service job: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let job = KillOnCloseJob(job);
+    let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+    limits.BasicLimitInformation.LimitFlags =
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
+    let configured = unsafe {
+        SetInformationJobObject(
+            job.0,
+            JobObjectExtendedLimitInformation,
+            std::ptr::from_ref(&limits).cast(),
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        )
+    };
+    if configured == 0 {
+        return Err(format!(
+            "Unable to configure the managed service job: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(job)
+}
+
+#[cfg(windows)]
+fn assign_child_to_job(job: &KillOnCloseJob, child: &Child) -> Result<(), String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::HANDLE;
+    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+
+    let assigned = unsafe { AssignProcessToJobObject(job.0, child.as_raw_handle() as HANDLE) };
+    if assigned == 0 {
+        return Err(format!(
+            "Unable to bind the service lifetime to Waggle: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -142,8 +224,10 @@ fn listener_is_owned_by_pid(port: u16, pid: u32) -> Result<bool, String> {
     if !netstat.is_file() {
         return Err("Unable to locate the Windows TCP ownership verifier".to_string());
     }
-    let output = Command::new(netstat)
-        .args(["-ano", "-p", "tcp"])
+    let mut command = Command::new(netstat);
+    command.args(["-ano", "-p", "tcp"]);
+    hide_windows_console(&mut command);
+    let output = command
         .output()
         .map_err(|error| format!("Unable to inspect Windows TCP ownership: {error}"))?;
     if !output.status.success() {
@@ -163,6 +247,8 @@ fn listener_is_owned_by_pid(_port: u16, _pid: u32) -> Result<bool, String> {
 struct ManagedLaunch {
     generation: u64,
     child: Child,
+    #[cfg(windows)]
+    _job: KillOnCloseJob,
     config: ManagedLaunchConfig,
     endpoint: Option<ServiceEndpoint>,
     started_at: Instant,
@@ -273,6 +359,7 @@ struct ServiceScript {
 
 #[derive(Debug, PartialEq, Eq)]
 struct BundledNpmEnvironment {
+    data_dir: PathBuf,
     path: std::ffi::OsString,
     npm_exec_path: PathBuf,
     npm_prefix: PathBuf,
@@ -309,6 +396,7 @@ fn bundled_npm_environment(
     }
 
     Ok(BundledNpmEnvironment {
+        data_dir,
         path,
         npm_exec_path: runtime_dir
             .join("node_modules")
@@ -318,6 +406,161 @@ fn bundled_npm_environment(
         npm_prefix: npm_root.join("prefix"),
         npm_cache: npm_root.join("cache"),
     })
+}
+
+#[cfg(windows)]
+fn hide_windows_console(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(windows)]
+fn rotate_service_log(log_path: &Path) -> Result<(), String> {
+    let metadata = match std::fs::symlink_metadata(log_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("Unable to inspect service log: {error}")),
+    };
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err("Service log path is not a regular file".to_string());
+    }
+    if metadata.len() < MAX_SERVICE_LOG_BYTES {
+        return Ok(());
+    }
+
+    let previous_path = log_path.with_file_name("service.log.1");
+    if previous_path.exists() {
+        std::fs::remove_file(&previous_path)
+            .map_err(|error| format!("Unable to replace previous service log: {error}"))?;
+    }
+    std::fs::rename(log_path, previous_path)
+        .map_err(|error| format!("Unable to rotate service log: {error}"))
+}
+
+#[cfg(windows)]
+struct ServiceLogWriter {
+    file: Option<File>,
+    length: u64,
+    path: PathBuf,
+}
+
+#[cfg(windows)]
+impl ServiceLogWriter {
+    fn open(data_dir: &Path) -> Result<Self, String> {
+        let log_dir = data_dir.join("logs");
+        std::fs::create_dir_all(&log_dir)
+            .map_err(|error| format!("Unable to create service log directory: {error}"))?;
+        let path = log_dir.join("service.log");
+        rotate_service_log(&path)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|error| format!("Unable to open service log: {error}"))?;
+        let length = file
+            .metadata()
+            .map_err(|error| format!("Unable to inspect service log: {error}"))?
+            .len();
+        Ok(Self {
+            file: Some(file),
+            length,
+            path,
+        })
+    }
+
+    fn rotate(&mut self) -> Result<(), String> {
+        if let Some(mut file) = self.file.take() {
+            file.flush()
+                .map_err(|error| format!("Unable to flush service log: {error}"))?;
+        }
+        rotate_service_log(&self.path)?;
+        self.file = Some(
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)
+                .map_err(|error| format!("Unable to reopen service log: {error}"))?,
+        );
+        self.length = 0;
+        Ok(())
+    }
+
+    fn write_capped(&mut self, mut bytes: &[u8]) -> Result<(), String> {
+        while !bytes.is_empty() {
+            if self.length >= MAX_SERVICE_LOG_BYTES {
+                self.rotate()?;
+            }
+            let available = (MAX_SERVICE_LOG_BYTES - self.length) as usize;
+            let count = available.min(bytes.len());
+            let file = self
+                .file
+                .as_mut()
+                .ok_or_else(|| "Service log is unavailable".to_string())?;
+            file.write_all(&bytes[..count])
+                .map_err(|error| format!("Unable to write service log: {error}"))?;
+            file.flush()
+                .map_err(|error| format!("Unable to flush service log: {error}"))?;
+            self.length += count as u64;
+            bytes = &bytes[count..];
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn pump_service_log<R: Read + Send + 'static>(mut input: R, output: Arc<Mutex<ServiceLogWriter>>) {
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 8192];
+        loop {
+            let count = match input.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => count,
+            };
+            let Ok(mut writer) = output.lock() else {
+                break;
+            };
+            if writer.write_capped(&buffer[..count]).is_err() {
+                break;
+            }
+        }
+    });
+}
+
+#[cfg(windows)]
+fn start_service_log_capture(child: &mut Child, data_dir: &Path) -> Result<(), String> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Managed service stdout pipe is unavailable".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Managed service stderr pipe is unavailable".to_string())?;
+    let writer = Arc::new(Mutex::new(ServiceLogWriter::open(data_dir)?));
+    pump_service_log(stdout, Arc::clone(&writer));
+    pump_service_log(stderr, writer);
+    Ok(())
+}
+
+#[cfg(windows)]
+fn configured_service_log_dir(command: &Command) -> Option<PathBuf> {
+    command
+        .get_envs()
+        .find(|(name, _)| *name == OsStr::new(SERVICE_LOG_DIR_ENV))
+        .and_then(|(_, value)| value)
+        .map(PathBuf::from)
+}
+
+#[cfg(windows)]
+fn configure_bundled_windows_process(command: &mut Command, data_dir: &Path) -> Result<(), String> {
+    ServiceLogWriter::open(data_dir)?;
+    hide_windows_console(command);
+    command
+        .env(SERVICE_LOG_DIR_ENV, data_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    Ok(())
 }
 
 fn find_dev_service_script(current_dir: &Path) -> Option<PathBuf> {
@@ -420,6 +663,8 @@ fn build_service_command(
             cmd.env("NPM_EXECPATH", &npm_environment.npm_exec_path);
             cmd.env("NPM_CONFIG_PREFIX", &npm_environment.npm_prefix);
             cmd.env("NPM_CONFIG_CACHE", &npm_environment.npm_cache);
+            #[cfg(windows)]
+            configure_bundled_windows_process(&mut cmd, &npm_environment.data_dir)?;
 
             // NODE_PATH must include the staged production deps
             // (resources/node_modules — better-sqlite3, @fastify/static,
@@ -809,6 +1054,7 @@ mod tests {
         );
         assert_eq!(environment.npm_prefix, data_dir.join("npm").join("prefix"));
         assert_eq!(environment.npm_cache, data_dir.join("npm").join("cache"));
+        assert_eq!(environment.data_dir, data_dir);
         let mut expected_path_entries = vec![
             resources
                 .join("node_modules")
@@ -843,6 +1089,7 @@ mod tests {
             environment.npm_cache,
             home.join(".waggle").join("npm").join("cache")
         );
+        assert_eq!(environment.data_dir, home.join(".waggle"));
     }
 
     #[test]
@@ -852,6 +1099,165 @@ mod tests {
             result,
             Err("Unable to resolve writable npm data directory".to_string())
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn oversized_service_log_is_rotated_before_launch() {
+        let root = std::env::temp_dir().join(format!(
+            "waggle-service-log-{}-{}",
+            std::process::id(),
+            Uuid::new_v4()
+        ));
+        let log_dir = root.join("logs");
+        std::fs::create_dir_all(&log_dir).expect("creates log directory");
+        let log_path = log_dir.join("service.log");
+        std::fs::write(&log_path, vec![b'x'; MAX_SERVICE_LOG_BYTES as usize])
+            .expect("writes oversized service log");
+
+        rotate_service_log(&log_path).expect("rotates service log");
+
+        assert!(!log_path.exists());
+        assert_eq!(
+            std::fs::metadata(log_dir.join("service.log.1"))
+                .expect("reads rotated log")
+                .len(),
+            MAX_SERVICE_LOG_BYTES
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn service_log_writer_caps_current_and_retained_logs() {
+        let root = std::env::temp_dir().join(format!(
+            "waggle-service-log-cap-{}-{}",
+            std::process::id(),
+            Uuid::new_v4()
+        ));
+        let mut writer = ServiceLogWriter::open(&root).expect("opens service log writer");
+        writer
+            .write_capped(&vec![b'x'; MAX_SERVICE_LOG_BYTES as usize + 1024])
+            .expect("writes oversized diagnostics");
+        writer
+            .write_capped(&vec![b'y'; MAX_SERVICE_LOG_BYTES as usize])
+            .expect("rolls diagnostics during one process lifetime");
+        drop(writer);
+
+        let log_dir = root.join("logs");
+        let current = std::fs::metadata(log_dir.join("service.log"))
+            .expect("reads current service log")
+            .len();
+        let retained = std::fs::metadata(log_dir.join("service.log.1"))
+            .expect("reads retained service log")
+            .len();
+        assert!(current <= MAX_SERVICE_LOG_BYTES);
+        assert!(retained <= MAX_SERVICE_LOG_BYTES);
+        assert!(current + retained <= MAX_SERVICE_LOG_BYTES * 2);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn closing_the_service_job_terminates_its_child() {
+        let mut child = long_lived_command().spawn().expect("starts service child");
+        let job = create_kill_on_close_job().expect("creates kill-on-close job");
+        assign_child_to_job(&job, &child).expect("assigns service child to job");
+
+        drop(job);
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if child.try_wait().expect("inspects service child").is_some() {
+                break;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("service child survived closing the kill-on-close job");
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn closing_the_service_job_preserves_a_user_detached_descendant() {
+        use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+
+        let root = std::env::temp_dir().join(format!(
+            "waggle-detached-job-{}-{}",
+            std::process::id(),
+            Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).expect("creates detached-job fixture");
+        let marker = root.join("pid.txt");
+        let escaped_marker = marker.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "$child = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\ping.exe') -ArgumentList '-t','127.0.0.1' -WindowStyle Hidden -PassThru; Set-Content -LiteralPath '{escaped_marker}' -Value $child.Id -NoNewline; Start-Sleep -Seconds 30"
+        );
+        let mut command = Command::new("powershell.exe");
+        command.args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &script,
+        ]);
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        hide_windows_console(&mut command);
+
+        let mut parent = command.spawn().expect("starts detached-session fixture");
+        let job = create_kill_on_close_job().expect("creates service job");
+        assign_child_to_job(&job, &parent).expect("assigns service fixture to job");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !marker.exists() {
+            if Instant::now() >= deadline {
+                let _ = parent.kill();
+                let _ = parent.wait();
+                panic!("detached-session fixture did not publish its pid");
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        let detached_pid = std::fs::read_to_string(&marker)
+            .expect("reads detached pid")
+            .trim()
+            .parse::<u32>()
+            .expect("parses detached pid");
+
+        drop(job);
+        let _ = parent.wait();
+        const SYNCHRONIZE_ACCESS: u32 = 0x00100000;
+        let detached = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE_ACCESS,
+                0,
+                detached_pid,
+            )
+        };
+        let survived = !detached.is_null()
+            && unsafe { WaitForSingleObject(detached, 0) } == WAIT_TIMEOUT;
+        if !detached.is_null() {
+            unsafe { CloseHandle(detached) };
+        }
+        let mut cleanup = Command::new("taskkill");
+        cleanup
+            .args(["/PID", &detached_pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        hide_windows_console(&mut cleanup);
+        let _ = cleanup.status();
+        let _ = std::fs::remove_dir_all(root);
+
+        assert!(survived, "user-owned detached session died with the service job");
     }
 
     #[test]
@@ -1091,12 +1497,33 @@ fn spawn_locked(
     let generation = runtime.next_generation;
     runtime.next_generation = runtime.next_generation.saturating_add(1);
     let mut command = build_command(preferred_port, &config)?;
-    let child = command
+    #[cfg(windows)]
+    let log_dir = configured_service_log_dir(&command);
+    #[cfg(windows)]
+    let job = create_kill_on_close_job()?;
+    let mut child = command
         .spawn()
         .map_err(|error| format!("Failed to start service: {error}"))?;
+    #[cfg(windows)]
+    {
+        if let Err(error) = assign_child_to_job(&job, &child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+        if let Some(log_dir) = log_dir {
+            if let Err(error) = start_service_log_capture(&mut child, &log_dir) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error);
+            }
+        }
+    }
     runtime.active = Some(ManagedLaunch {
         generation,
         child,
+        #[cfg(windows)]
+        _job: job,
         config,
         endpoint: None,
         started_at: Instant::now(),
