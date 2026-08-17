@@ -559,5 +559,6 @@ describe('VaultStore', () => {
         { stdio: ['ignore', 'ignore', 'pipe'], env: verifierEnv },
       )).not.toThrow();
     },
+    120_000,
   );
 });

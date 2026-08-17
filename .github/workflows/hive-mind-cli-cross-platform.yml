@@ -19,6 +19,9 @@ on:
       - 'packages/hive-mind-mcp-server/**'
       - 'packages/hive-mind-wiki-compiler/**'
       - 'packages/hive-mind-hooks-claude-code/**'
+      - 'vendor/pptxgenjs/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/hive-mind-cli-cross-platform.yml'
   pull_request:
     branches: [main]
@@ -26,6 +29,10 @@ on:
       - 'packages/hive-mind-cli/**'
       - 'packages/hive-mind-shim-core/**'
       - 'packages/hive-mind-core/**'
+      - 'vendor/pptxgenjs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/hive-mind-cli-cross-platform.yml'
 
 jobs:
   install-and-smoke:
@@ -47,7 +54,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install workspace deps
-        run: npm install
+        run: npm ci
 
       # hive-mind-core imports @waggle/shared, whose dist/ is gitignored and so
       # absent on a clean checkout. hive-mind-core/tsconfig declares no project

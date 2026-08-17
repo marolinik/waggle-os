@@ -1832,6 +1832,63 @@ describe('Tauri Production Configuration', () => {
 });
 
 describe('CI/CD Configuration', () => {
+  it('clean-checkout CI resolves vendored PPTX and uses the locked dependency graph', () => {
+    const rootPackage = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'),
+    ) as { dependencies?: Record<string, string> };
+    const packageLock = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf-8'),
+    ) as {
+      packages?: Record<
+        string,
+        { dependencies?: Record<string, string>; resolved?: string; link?: boolean; version?: string }
+      >;
+    };
+    const vendorPackage = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'vendor', 'pptxgenjs', 'package.json'), 'utf-8'),
+    ) as { name?: string; version?: string };
+    const workflow = parseYaml(fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'hive-mind-cli-cross-platform.yml'),
+      'utf-8',
+    )) as {
+      on?: { pull_request?: { paths?: string[] } };
+      jobs?: Record<string, { steps?: Array<{ name?: string; run?: string }> }>;
+    };
+    const vaultTests = fs.readFileSync(
+      path.join(ROOT, 'packages', 'core', 'tests', 'vault.test.ts'),
+      'utf-8',
+    );
+
+    expect(rootPackage.dependencies?.pptxgenjs).toBe('file:vendor/pptxgenjs');
+    expect(packageLock.packages?.['']?.dependencies?.pptxgenjs).toBe(
+      'file:vendor/pptxgenjs',
+    );
+    expect(packageLock.packages?.['node_modules/pptxgenjs']).toMatchObject({
+      resolved: 'vendor/pptxgenjs',
+      link: true,
+    });
+    expect(packageLock.packages?.['vendor/pptxgenjs']?.version).toBe(
+      vendorPackage.version,
+    );
+    expect(vendorPackage).toMatchObject({ name: 'pptxgenjs', version: '4.0.1-waggle.0' });
+
+    const installStep = workflow.jobs?.['install-and-smoke']?.steps?.find(
+      (step) => step.name === 'Install workspace deps',
+    );
+    expect(installStep?.run).toBe('npm ci');
+    expect(workflow.on?.pull_request?.paths).toEqual(
+      expect.arrayContaining([
+        'vendor/pptxgenjs/**',
+        'package.json',
+        'package-lock.json',
+        '.github/workflows/hive-mind-cli-cross-platform.yml',
+      ]),
+    );
+    expect(vaultTests).toMatch(
+      /removes a pre-existing explicit Everyone allow ACE[\s\S]*?\n\s*120_000,\n\s*\);/,
+    );
+  });
+
   it('release workflow exists for Windows + macOS builds', () => {
     const workflow = path.join(ROOT, '.github', 'workflows', 'release.yml');
     expect(fs.existsSync(workflow)).toBe(true);
