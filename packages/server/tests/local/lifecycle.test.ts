@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,6 +26,9 @@ vi.mock('node:fs', async (importOriginal) => ({
 }));
 
 import { startLiteLLM, stopLiteLLM } from '../../src/local/lifecycle.js';
+
+const TEST_CONFIG_PATH = path.resolve('waggle-test', 'litellm.runtime.json');
+const TEST_CONFIG_DIR = path.dirname(TEST_CONFIG_PATH);
 
 function exitedChild(): ChildProcess {
   const child = new EventEmitter() as ChildProcess;
@@ -92,25 +96,9 @@ describe('managed LiteLLM process ownership', () => {
   it('starts LiteLLM through the sidecar-owned process boundary', async () => {
     const child = exitedChild();
     processMocks.spawnSidecarOwnedProcess.mockReturnValue(child);
-    const start = startLiteLLM(43111, 'C:\\waggle-test\\litellm.runtime.json');
+    const start = startLiteLLM(43111, TEST_CONFIG_PATH);
     await Promise.resolve();
     await Promise.resolve();
-
-    expect(processMocks.spawnSidecarOwnedProcess).toHaveBeenCalledWith(
-      'C:\\Python\\python.exe',
-      [
-        '-m',
-        'litellm.proxy.proxy_cli',
-        '--config',
-        'C:\\waggle-test\\litellm.runtime.json',
-        '--port',
-        '43111',
-      ],
-      expect.objectContaining({
-        cwd: 'C:\\waggle-test',
-        windowsHide: true,
-      }),
-    );
 
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(start).resolves.toMatchObject({
@@ -118,6 +106,21 @@ describe('managed LiteLLM process ownership', () => {
       port: 43111,
       status: 'error',
     });
+    expect(processMocks.spawnSidecarOwnedProcess).toHaveBeenCalledWith(
+      'C:\\Python\\python.exe',
+      [
+        '-m',
+        'litellm.proxy.proxy_cli',
+        '--config',
+        TEST_CONFIG_PATH,
+        '--port',
+        '43111',
+      ],
+      expect.objectContaining({
+        cwd: TEST_CONFIG_DIR,
+        windowsHide: true,
+      }),
+    );
     await stopLiteLLM();
   });
 
@@ -128,7 +131,7 @@ describe('managed LiteLLM process ownership', () => {
       .mockRejectedValueOnce(new TypeError('offline'))
       .mockResolvedValueOnce({ ok: true } as Response);
 
-    const start = startLiteLLM(43112, 'C:\\waggle-test\\litellm.runtime.json');
+    const start = startLiteLLM(43112, TEST_CONFIG_PATH);
     await Promise.resolve();
     await Promise.resolve();
     await vi.advanceTimersByTimeAsync(1_000);
@@ -147,7 +150,7 @@ describe('managed LiteLLM process ownership', () => {
       .mockRejectedValueOnce(new TypeError('offline'))
       .mockResolvedValueOnce({ ok: true } as Response);
 
-    const start = startLiteLLM(43113, 'C:\\waggle-test\\litellm.runtime.json');
+    const start = startLiteLLM(43113, TEST_CONFIG_PATH);
     await Promise.resolve();
     await Promise.resolve();
     await vi.advanceTimersByTimeAsync(1_000);

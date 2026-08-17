@@ -23,6 +23,7 @@ import {
   join,
   relative,
   resolve,
+  win32,
 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -1709,7 +1710,7 @@ async function runValidationSelfTest() {
     );
     cases += 1;
     assert(
-      join('C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+      win32.join('C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
         === 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
       'package-command Windows PowerShell spelling fixture failed',
     );
