@@ -553,6 +553,7 @@ export {
   type HookRuntimePaths,
   type WaggleRuntimePaths,
 } from './tool-launcher.js';
+export { spawnSidecarOwnedProcess } from './sidecar-owned-process.js';
 export {
   ToolProcessTracker,
   type TrackedProcess,
