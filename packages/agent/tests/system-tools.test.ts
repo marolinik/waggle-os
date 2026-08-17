@@ -598,7 +598,7 @@ describe('createSystemTools', () => {
       expect(result).toContain('--- error ---');
     }, 10_000);
 
-    it.runIf(process.platform === 'win32')('kills descendant processes when execution times out', async () => {
+    it('kills descendant processes when execution times out', async () => {
       const ready = path.join(workspace, 'descendant-timeout-ready.txt');
       const heartbeat = path.join(workspace, 'descendant-timeout-heartbeat.txt');
       const childCode = boundedHeartbeatChildCode(ready, heartbeat);
@@ -614,7 +614,7 @@ describe('createSystemTools', () => {
       await expectDescendantStopped(ready, heartbeat);
     }, 10_000);
 
-    it.runIf(process.platform === 'win32')('enforces descendant timeout while the main event loop is blocked', async () => {
+    it('enforces descendant timeout while the main event loop is blocked', async () => {
       const ready = path.join(workspace, 'descendant-ready.txt');
       const heartbeat = path.join(workspace, 'starved-timeout-heartbeat.txt');
       const childCode = boundedHeartbeatChildCode(ready, heartbeat);
@@ -654,7 +654,7 @@ describe('createSystemTools', () => {
       await expectDescendantStopped(ready, heartbeat);
     }, 20_000);
 
-    it.runIf(process.platform === 'win32')('does not time out a process that exits while the main event loop is blocked', async () => {
+    it('does not time out a process that exits while the main event loop is blocked', async () => {
       const ready = path.join(workspace, 'completion-ready.txt');
       const finished = path.join(workspace, 'completion-finished.txt');
       const code = [
@@ -685,7 +685,7 @@ describe('createSystemTools', () => {
       expect(result.toLowerCase()).not.toContain('timed out');
     }, 15_000);
 
-    it.runIf(process.platform === 'win32')('starts a cold process supervisor while the main event loop is blocked', async () => {
+    it('starts a cold process supervisor while the main event loop is blocked', async () => {
       const finished = path.join(workspace, 'cold-supervisor-finished.txt');
       const code = [
         `const fs = require('node:fs')`,
@@ -709,7 +709,7 @@ describe('createSystemTools', () => {
       expect(result.toLowerCase()).not.toContain('timed out');
     }, 15_000);
 
-    it.runIf(process.platform === 'win32')('enforces timeout from a cold supervisor while the main event loop is blocked', async () => {
+    it('enforces timeout from a cold supervisor while the main event loop is blocked', async () => {
       const rootReady = path.join(workspace, 'cold-timeout-root-ready.txt');
       const descendantReady = path.join(workspace, 'cold-timeout-descendant-ready.txt');
       const heartbeat = path.join(workspace, 'cold-timeout-heartbeat.txt');
@@ -749,9 +749,11 @@ describe('createSystemTools', () => {
       await expectDescendantStopped(descendantReady, heartbeat);
     }, 20_000);
 
-    it.runIf(process.platform === 'win32')('does not target a reused PID after the root exits with inherited output open', async () => {
+    it('does not target a reused PID after the root exits with inherited output open', async () => {
+      const descendantReady = path.join(workspace, 'reused-pid-descendant-ready.txt');
       const descendantCode = [
-        "setTimeout(() => process.stdout.write('x'.repeat(2 * 1024 * 1024)), 200)",
+        `require('node:fs').writeFileSync(${JSON.stringify(descendantReady)}, String(process.pid))`,
+        "setTimeout(() => process.stdout.write('inherited-output'), 200)",
         'setTimeout(() => {}, 2500)',
       ].join(';');
       const code = [
@@ -766,10 +768,67 @@ describe('createSystemTools', () => {
         timeout: 1000,
       });
 
-      expect(result.toLowerCase()).not.toContain('timed out');
+      if (process.platform === 'win32') expect(result.toLowerCase()).not.toContain('timed out');
+      else expect(result.toLowerCase()).toContain('timed out');
       expect(result).not.toContain('maxBuffer');
-      expect(result).toContain('descendant processes may still be running');
-      await new Promise((resolve) => setTimeout(resolve, 700));
+      expect(result).toMatch(/descendant(?: processes|s) may still be running/);
+      expect(fs.existsSync(descendantReady)).toBe(true);
+      const descendantPid = Number(fs.readFileSync(descendantReady, 'utf8'));
+      expect(Number.isSafeInteger(descendantPid) && descendantPid > 0).toBe(true);
+      if (process.platform !== 'win32') expect(isProcessAlive(descendantPid)).toBe(true);
+      const exitDeadline = Date.now() + 5_000;
+      while (isProcessAlive(descendantPid) && Date.now() < exitDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(isProcessAlive(descendantPid)).toBe(false);
+    }, 10_000);
+
+    it.runIf(process.platform !== 'win32')('kills same-group descendants after the managed root exits without inherited pipes', async () => {
+      const ready = path.join(workspace, 'root-exit-descendant-ready.txt');
+      const heartbeat = path.join(workspace, 'root-exit-descendant-heartbeat.txt');
+      const childCode = boundedHeartbeatChildCode(ready, heartbeat);
+      const code = [
+        `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' })`,
+        'child.unref()',
+      ].join(';');
+      const runCode = getTool('run_code');
+      const execution = Promise.resolve(runCode.execute({ language: 'javascript', code, timeout: 1000 }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      const result = await execution;
+      expect(result.toLowerCase()).toContain('timed out');
+      await expectDescendantStopped(ready, heartbeat);
+    }, 10_000);
+
+    it.runIf(process.platform !== 'win32')('kills same-group descendants when output exceeds the limit after root exit', async () => {
+      const ready = path.join(workspace, 'root-exit-maxbuffer-ready.txt');
+      const heartbeat = path.join(workspace, 'root-exit-maxbuffer-heartbeat.txt');
+      const childCode = [
+        boundedHeartbeatChildCode(ready, heartbeat),
+        "process.stdout.write('x'.repeat(4096))",
+      ].join(';');
+      const code = [
+        `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: ['ignore', 'inherit', 'inherit'] })`,
+        'child.unref()',
+      ].join(';');
+      const execution = execFileWithTreeTimeout(process.execPath, ['-e', code], {
+        cwd: workspace,
+        env: createSanitizedEnv(),
+        maxBuffer: 1024,
+        windowsHide: true,
+      }, 10_000);
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      const result = await execution;
+      expect(result.errorCode).toBe('ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+      expect(result.cleanupDegraded).toBe(true);
+      await expectDescendantStopped(ready, heartbeat);
     }, 10_000);
 
     it.runIf(process.platform === 'win32')('surfaces degraded cleanup when taskkill is unavailable', async () => {

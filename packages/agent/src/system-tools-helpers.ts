@@ -1,4 +1,4 @@
-import { execFile, execFileSync, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
@@ -414,6 +414,101 @@ void (async () => {
 });
 `;
 
+const POSIX_PROCESS_SUPERVISOR_SOURCE = String.raw`
+const { execFileSync, spawn } = require('node:child_process');
+const fs = require('node:fs');
+
+const report = (message) => {
+  try { fs.writeSync(3, JSON.stringify(message) + '\n'); } catch { /* parent may already be gone */ }
+};
+
+const deadlineAt = Number(process.argv[1]);
+const executable = process.argv[2];
+const args = process.argv.slice(3);
+let deadlineTimer;
+let managed;
+let spawnFailed = false;
+let timedOut = false;
+
+const groupMembersRemain = () => {
+  const listing = execFileSync('/bin/sh', [
+    '-c',
+    'printf "%s\\n" "$$"; exec ps -A -o pid= -o pgid=',
+  ], {
+    encoding: 'utf8',
+    env: process.env,
+    maxBuffer: 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 1000,
+  });
+  const lines = listing.trim().split(/\r?\n/);
+  const probePid = Number(lines.shift());
+  return lines.some((line) => {
+    const [pidText, pgidText] = line.trim().split(/\s+/);
+    const pid = Number(pidText);
+    const pgid = Number(pgidText);
+    return pgid === process.pid && pid !== process.pid && pid !== probePid;
+  });
+};
+
+const enforceTimeout = () => {
+  timedOut = true;
+  report({ type: 'timeout' });
+  try {
+    process.kill(-process.pid, 'SIGKILL');
+  } catch {
+    try { managed?.kill('SIGKILL'); } catch { /* managed root may already be gone */ }
+    process.exitCode = 124;
+  }
+};
+
+try {
+  managed = spawn(executable, args, {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const remainingMs = Number.isFinite(deadlineAt) ? Math.max(0, deadlineAt - Date.now()) : 0;
+  deadlineTimer = setTimeout(enforceTimeout, remainingMs);
+} catch (error) {
+  report({ type: 'spawn-error', code: error?.code ?? null, message: error?.message ?? String(error) });
+  process.exitCode = 1;
+}
+
+if (managed) {
+  managed.stdout.pipe(process.stdout);
+  managed.stderr.pipe(process.stderr);
+  managed.once('error', (error) => {
+    spawnFailed = true;
+    report({ type: 'spawn-error', code: error.code ?? null, message: error.message });
+    process.exitCode = 1;
+  });
+  managed.once('close', (code) => {
+    if (timedOut) {
+      process.exitCode = 124;
+      return;
+    }
+    const managedExitCode = spawnFailed ? 1 : (typeof code === 'number' ? code : 1);
+    const waitForGroupToSettle = () => {
+      let membersRemain;
+      try {
+        membersRemain = groupMembersRemain();
+      } catch (error) {
+        report({ type: 'group-probe-failed', message: error?.message ?? String(error) });
+        return;
+      }
+      if (membersRemain) {
+        setTimeout(waitForGroupToSettle, 100);
+        return;
+      }
+      if (deadlineTimer) clearTimeout(deadlineTimer);
+      process.exitCode = managedExitCode;
+    };
+    waitForGroupToSettle();
+  });
+}
+`;
+
 function execFileWithMainThreadTimeout(
   executable: string,
   args: string[],
@@ -421,41 +516,185 @@ function execFileWithMainThreadTimeout(
   timeoutMs: number,
 ): Promise<TimedProcessResult> {
   return new Promise((resolve) => {
+    const requestedMaxBuffer = Math.max(1, options.maxBuffer);
+    const outputState = {
+      stdout: { chunks: [] as Buffer[], capturedBytes: 0, totalBytes: 0 },
+      stderr: { chunks: [] as Buffer[], capturedBytes: 0, totalBytes: 0 },
+    };
+    const { maxBuffer: _maxBuffer, ...spawnOptions } = options;
+    const child = spawn(process.execPath, [
+      '-e',
+      POSIX_PROCESS_SUPERVISOR_SOURCE,
+      String(Date.now() + Math.max(0, timeoutMs)),
+      executable,
+      ...args,
+    ], {
+      ...spawnOptions,
+      // The supervisor stays alive as the owned POSIX process-group leader
+      // until the managed command and every inherited output pipe settle.
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    });
+
+    let cleanupDegraded = false;
+    let managedSpawnError: { code: string | number | null; message: string } | undefined;
+    let outputLimitError: { code: string; message: string } | undefined;
+    let processExited = false;
+    let settled = false;
     let timedOut = false;
     const timeoutState: {
-      forceKillTimer?: ReturnType<typeof setTimeout>;
-      timer?: ReturnType<typeof setTimeout>;
+      settlementTimer?: ReturnType<typeof setTimeout>;
     } = {};
-    const child = execFile(executable, args, {
-      ...options,
-      encoding: 'utf8',
-    }, (error, stdout, stderr) => {
-      if (timeoutState.timer) clearTimeout(timeoutState.timer);
-      if (timeoutState.forceKillTimer) clearTimeout(timeoutState.forceKillTimer);
+
+    const capturedOutput = (streamName: 'stdout' | 'stderr') => (
+      Buffer.concat(outputState[streamName].chunks).toString('utf8')
+    );
+    const finish = (
+      errorCode: string | number | null,
+      errorMessage: string | null,
+      includeOutput = true,
+    ) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutState.settlementTimer) clearTimeout(timeoutState.settlementTimer);
       resolve({
-        cleanupDegraded: false,
-        errorCode: error?.code ?? null,
-        errorMessage: error?.message ?? null,
-        stdout,
-        stderr,
+        cleanupDegraded,
+        errorCode,
+        errorMessage,
+        stdout: includeOutput ? capturedOutput('stdout') : '',
+        stderr: includeOutput ? capturedOutput('stderr') : '',
         timedOut,
       });
-    });
-    timeoutState.timer = setTimeout(() => {
-      timedOut = true;
-      terminateProcessTree(child);
-      timeoutState.forceKillTimer = setTimeout(() => {
-        if (child.exitCode !== null || child.signalCode !== null) return;
-        try { child.kill('SIGKILL'); } catch { /* process already exited */ }
+    };
+    const killOwnedProcessGroup = (): 'tree' | 'root' | 'none' => {
+      if (processExited || child.exitCode !== null || child.signalCode !== null) return 'none';
+      const pid = child.pid;
+      if (pid && pid > 0 && pid !== process.pid) {
+        try {
+          process.kill(-pid, 'SIGKILL');
+          return 'tree';
+        } catch {
+          // The process group may already have settled; try the root handle.
+        }
+      }
+      try {
+        return child.kill('SIGKILL') ? 'root' : 'none';
+      } catch {
+        return 'none';
+      }
+    };
+    const finishIfStreamsDoNotClose = (errorMessage: string | null) => {
+      if (timeoutState.settlementTimer) clearTimeout(timeoutState.settlementTimer);
+      timeoutState.settlementTimer = setTimeout(() => {
+        cleanupDegraded = true;
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        finish(outputLimitError?.code ?? null, outputLimitError?.message ?? errorMessage);
       }, 2000);
-    }, timeoutMs);
+    };
+    const captureOutput = (streamName: 'stdout' | 'stderr', chunk: Buffer) => {
+      const state = outputState[streamName];
+      state.totalBytes += chunk.length;
+      const remaining = requestedMaxBuffer - state.capturedBytes;
+      if (remaining > 0) {
+        const captured = chunk.subarray(0, remaining);
+        state.chunks.push(captured);
+        state.capturedBytes += captured.length;
+      }
+      if (
+        state.totalBytes <= requestedMaxBuffer
+        || outputLimitError
+        || processExited
+        || settled
+        || timedOut
+      ) return;
+
+      outputLimitError = {
+        code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+        message: `${streamName} maxBuffer length exceeded`,
+      };
+      killOwnedProcessGroup();
+      cleanupDegraded = true;
+      finishIfStreamsDoNotClose(null);
+    };
+
+    let controlBuffer = '';
+    child.stdio[3]?.on('data', (chunk: Buffer) => {
+      controlBuffer += chunk.toString('utf8');
+      const lines = controlBuffer.split('\n');
+      controlBuffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line) continue;
+        try {
+          const message = JSON.parse(line) as {
+            code?: string | number | null;
+            message?: string;
+            type?: string;
+          };
+          if (message.type === 'timeout') {
+            timedOut = true;
+            cleanupDegraded = true;
+            finishIfStreamsDoNotClose(null);
+          }
+          if (message.type === 'group-probe-failed') cleanupDegraded = true;
+          if (message.type === 'spawn-error' && message.message) {
+            managedSpawnError = {
+              code: message.code ?? null,
+              message: message.message,
+            };
+          }
+        } catch {
+          // Ignore malformed supervisor diagnostics; normal exit still fails closed.
+        }
+      }
+    });
+    child.stdout?.on('data', (chunk: Buffer) => captureOutput('stdout', chunk));
+    child.stderr?.on('data', (chunk: Buffer) => captureOutput('stderr', chunk));
+    child.once('error', (error) => {
+      finish((error as NodeJS.ErrnoException).code ?? null, error.message);
+    });
+    child.once('exit', () => {
+      if (processExited || settled || timedOut) return;
+      processExited = true;
+      if (outputLimitError) return;
+      timeoutState.settlementTimer = setTimeout(() => {
+        cleanupDegraded = true;
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        finish(
+          null,
+          'Process exited but its output streams did not close; descendant processes may still be running',
+          false,
+        );
+      }, 2000);
+    });
+    child.once('close', (code, signal) => {
+      if (managedSpawnError) {
+        finish(managedSpawnError.code, managedSpawnError.message);
+        return;
+      }
+      if (outputLimitError) {
+        finish(outputLimitError.code, outputLimitError.message);
+        return;
+      }
+      if (timedOut) {
+        finish(null, null);
+        return;
+      }
+      if (code !== 0) {
+        const errorCode = code ?? signal ?? null;
+        finish(errorCode, `Process exited with ${signal ? `signal ${signal}` : `code ${String(code)}`}`);
+        return;
+      }
+      finish(null, null);
+    });
   });
 }
 
 /**
- * Execute a foreground process with a wall-clock timeout. On Windows the
- * worker owns both the ChildProcess handle and its deadline, so process exit
- * and timeout are ordered independently of main-event-loop starvation.
+ * Execute a foreground process with a wall-clock timeout. The POSIX child
+ * supervisor and Windows worker own their deadlines independently of caller
+ * main-event-loop starvation.
  */
 export function execFileWithTreeTimeout(
   executable: string,
