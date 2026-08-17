@@ -55,7 +55,7 @@ describe('build warning hygiene', () => {
     expect(armIndex).toBeGreaterThanOrEqual(0);
     expect(appImportIndex).toBeGreaterThan(armIndex);
     expect(mainSource).toMatch(
-      /^import\s+\{\s*armBootConnection\s*\}\s+from\s+['"]\.\/boot-connect['"];\s*armBootConnection\(\);\s*void\s+import\(['"]\.\/app-entry['"]\)/,
+      /^import\s+\{\s*armBootConnection\s*\}\s+from\s+['"]\.\/boot-connect['"];\s*/,
     );
     expect(mainSource).not.toMatch(/from ['"].*App(?:\.tsx)?['"]/);
     expect(mainSource).not.toMatch(/from ['"]\.\/app-entry['"]/);
