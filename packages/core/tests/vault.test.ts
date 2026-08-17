@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Hoisted mock for node:child_process so static imports in vault.ts are intercepted.
 // Defaults to the real implementation; individual tests override via mockImplementation.
@@ -505,60 +506,41 @@ describe('VaultStore', () => {
     'Windows key protection — removes a pre-existing explicit Everyone allow ACE',
     async () => {
       const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
-      const actualExec = actual.execFileSync as unknown as (...args: unknown[]) => unknown;
       const dir = makeTempDir();
-      const keyPath = path.join(dir, '.vault-key');
-      const systemRoot = process.env.SystemRoot!;
-      const icaclsPath = path.win32.join(systemRoot, 'System32', 'icacls.exe');
-      const powershellPath = path.win32.join(
-        systemRoot,
-        'System32',
-        'WindowsPowerShell',
-        'v1.0',
-        'powershell.exe',
-      );
-      mockExecFileSync.mockImplementation((...args: unknown[]) => actualExec(...args));
-      const createdKey = 'cd'.repeat(32);
-      fs.writeFileSync(keyPath, createdKey, { flag: 'wx' });
-      expect(createdKey).toMatch(/^[0-9a-f]{64}$/);
-      actual.execFileSync(
-        icaclsPath,
-        [keyPath, '/grant', '*S-1-1-0:R'],
-        { stdio: 'ignore' },
+      const probePath = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        'vault-acl-probe.ts',
       );
 
-      new VaultStore(dir);
-      expect(fs.readFileSync(keyPath, 'utf-8')).toBe(createdKey);
-
-      const encodedPath = Buffer.from(keyPath, 'utf-8').toString('base64');
-      const verifier = [
-        "$ErrorActionPreference = 'Stop'",
-        `$keyPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPath}'))`,
-        '$acl = Get-Acl -LiteralPath $keyPath',
-        '$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User',
-        '$rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))',
-        '$current = @($rules | Where-Object { $_.IdentityReference.Value -eq $sid.Value -and $_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow })',
-        '$full = [Security.AccessControl.FileSystemRights]::FullControl',
-        '$hasFull = @($current | Where-Object { ($_.FileSystemRights -band $full) -eq $full }).Count -eq 1',
-        'if (-not $acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or -not $hasFull) { throw "Vault ACL is not exclusive" }',
-      ].join('; ');
-      const verifierEnv: NodeJS.ProcessEnv = { SystemRoot: systemRoot, WINDIR: systemRoot };
-      for (const name of ['TEMP', 'TMP', 'ComSpec', 'SystemDrive', 'PROCESSOR_ARCHITECTURE']) {
-        const value = process.env[name];
-        if (value) verifierEnv[name] = value;
-      }
-      expect(() => actual.execFileSync(
-        powershellPath,
-        [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-EncodedCommand',
-          Buffer.from(verifier, 'utf16le').toString('base64'),
-        ],
-        { stdio: ['ignore', 'ignore', 'pipe'], env: verifierEnv },
-      )).not.toThrow();
+      await new Promise<void>((resolve, reject) => {
+        actual.execFile(
+          process.execPath,
+          [
+            path.resolve('node_modules/vite-node/vite-node.mjs'),
+            '--root',
+            process.cwd(),
+            '--config',
+            path.resolve('vitest.config.ts'),
+            '--script',
+            probePath,
+          ],
+          {
+            cwd: process.cwd(),
+            env: { ...process.env, WAGGLE_VAULT_TEST_DIR: dir },
+            encoding: 'utf-8',
+            timeout: 180_000,
+            windowsHide: true,
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              reject(new Error(`Windows ACL probe failed: ${stderr || stdout || error.message}`));
+            } else {
+              resolve();
+            }
+          },
+        );
+      });
     },
-    120_000,
+    210_000,
   );
 });
