@@ -5627,6 +5627,21 @@ if ($arguments.Contains('test-results')) { throw 'Playwright default output dire
     );
   });
 
+  it('Windows installer shutdown checks listeners instead of rejecting TCP TIME_WAIT', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf8',
+    );
+    const shutdownHelper = script.match(
+      /function Wait-ForInstalledRuntimeStop \{([\s\S]*?)\r?\n\}/,
+    )?.[1];
+
+    expect(shutdownHelper).toBeDefined();
+    expect(script).toContain('function Test-TcpPortHasListener');
+    expect(shutdownHelper).toContain('Test-TcpPortHasListener $_');
+    expect(shutdownHelper).not.toContain('Test-TcpPortAvailable $_');
+  });
+
   it('keeps the three-agent live collaboration contract regression-locked', () => {
     const liveSpec = fs.readFileSync(
       path.join(ROOT, 'tests', 'integration', 'external-agent-collaboration.live.test.ts'),

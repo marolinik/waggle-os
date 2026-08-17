@@ -381,6 +381,15 @@ function Remove-CertificationControlEnvironment {
   }
 }
 
+function Test-TcpPortHasListener {
+  param([Parameter(Mandatory = $true)] [int]$Port)
+
+  return @(
+    [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
+      Where-Object { $_.Port -eq $Port }
+  ).Count -gt 0
+}
+
 function Invoke-RawProcess {
   param(
     [Parameter(Mandatory = $true)] [string]$FilePath,
@@ -1234,7 +1243,7 @@ function Wait-ForInstalledRuntimeStop {
     $ownedProcessIds = @(
       Get-InstalledProcessIds $AppExecutable $ServiceScript $ManagedRuntimeRoot
     )
-    $busyPorts = @($ports | Where-Object { -not (Test-TcpPortAvailable $_) })
+    $busyPorts = @($ports | Where-Object { Test-TcpPortHasListener $_ })
     if ($ownedProcessIds.Count -eq 0 -and $busyPorts.Count -eq 0) {
       $consecutiveAvailableProbes++
       if ($consecutiveAvailableProbes -ge 2) { return }
@@ -1247,7 +1256,7 @@ function Wait-ForInstalledRuntimeStop {
   $remainingProcessIds = @(
     Get-InstalledProcessIds $AppExecutable $ServiceScript $ManagedRuntimeRoot
   )
-  $remainingBusyPorts = @($ports | Where-Object { -not (Test-TcpPortAvailable $_) })
+  $remainingBusyPorts = @($ports | Where-Object { Test-TcpPortHasListener $_ })
   throw "Installed runtime did not stop cleanly; owned PIDs=$($remainingProcessIds -join ',') ports=$($remainingBusyPorts -join ',')"
 }
 
