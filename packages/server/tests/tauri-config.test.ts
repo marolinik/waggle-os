@@ -260,6 +260,17 @@ describe('Tauri Production Configuration', () => {
     expect(service).toContain('MAX_SERVICE_LOG_BYTES');
     expect(service).toContain('rotate_service_log');
     expect(certifier).toContain('function Assert-NoVisibleConsoleDescendant');
+    const consoleCheck = certifier.slice(
+      certifier.indexOf('function Assert-NoVisibleConsoleDescendant'),
+      certifier.indexOf('function Wait-ForInstalledRuntimeStop'),
+    );
+    expect(consoleCheck).not.toHaveLength(0);
+    expect(consoleCheck).toContain('MainWindowHandle');
+    expect(consoleCheck).toContain('[IntPtr]::Zero');
+    expect(consoleCheck).toContain('[WaggleInstallerWindowProbe]::IsWindowVisible');
+    expect(consoleCheck).toMatch(
+      /catch \{[\s\S]*Get-Process -Id \$consoleProcessId[\s\S]*throw/,
+    );
     expect(certifier).toContain("$receipt.checks['firstBootHiddenService']");
     expect(certifier).toContain("$receipt.checks['repairHiddenService']");
   });

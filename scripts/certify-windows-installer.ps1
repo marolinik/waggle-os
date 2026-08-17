@@ -1199,6 +1199,20 @@ function Get-InstalledProcessIds {
 function Assert-NoVisibleConsoleDescendant {
   param([Parameter(Mandatory = $true)] [int]$RootProcessId)
 
+  if ($null -eq ('WaggleInstallerWindowProbe' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class WaggleInstallerWindowProbe
+{
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+}
+'@
+  }
+
   $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop)
   $descendantIds = [System.Collections.Generic.HashSet[int]]::new()
   $frontier = @($RootProcessId)
@@ -1212,14 +1226,31 @@ function Assert-NoVisibleConsoleDescendant {
     }
     $frontier = $next
   }
-  $visibleConsoles = @(
+  $consoleHosts = @(
     $processes | Where-Object {
-      $descendantIds.Contains([int]$_.ProcessId) -and
-      [string]::Equals(
+      $descendantIds.Contains([int]$_.ProcessId) -and [string]::Equals(
         [string]$_.Name,
         'conhost.exe',
         [System.StringComparison]::OrdinalIgnoreCase
       )
+    }
+  )
+  $visibleConsoles = @(
+    $consoleHosts | Where-Object {
+      $consoleProcessId = [int]$_.ProcessId
+      $consoleProcess = Get-Process -Id $consoleProcessId -ErrorAction SilentlyContinue
+      if ($null -eq $consoleProcess) { return $false }
+      try {
+        $consoleProcess.Refresh()
+        $windowHandle = $consoleProcess.MainWindowHandle
+        return $windowHandle -ne [IntPtr]::Zero -and
+          [WaggleInstallerWindowProbe]::IsWindowVisible($windowHandle)
+      } catch {
+        if ($null -ne (Get-Process -Id $consoleProcessId -ErrorAction SilentlyContinue)) {
+          throw
+        }
+        return $false
+      }
     }
   )
   Assert-True ($visibleConsoles.Count -eq 0) `
