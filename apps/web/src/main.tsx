@@ -30,8 +30,8 @@ const showStartupFailure = (error: unknown) => {
 };
 
 try {
-  armBootConnection();
-  void import('./app-entry')
+  void armBootConnection()
+    .then(() => import('./app-entry'))
     .then(({ mountApp }) => mountApp())
     .catch((error) => showStartupFailure(error));
 } catch (error) {
