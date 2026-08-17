@@ -1886,8 +1886,9 @@ describe('CI/CD Configuration', () => {
       ]),
     );
     expect(vaultTests).toMatch(
-      /removes a pre-existing explicit Everyone allow ACE[\s\S]*?\n\s*120_000,\n\s*\);/,
+      /removes a pre-existing explicit Everyone allow ACE[\s\S]*?node_modules\/vite-node\/vite-node\.mjs[\s\S]*?'--config'[\s\S]*?probePath[\s\S]*?\r?\n\s*210_000,\r?\n\s*\);/,
     );
+    expect(vaultTests).not.toContain("'--script'");
   });
 
   it('release workflow exists for Windows + macOS builds', () => {

@@ -54,3 +54,4 @@ execFileSync(
   ],
   { stdio: ['ignore', 'ignore', 'pipe'], env: verifierEnv },
 );
+fs.writeFileSync(path.join(dir, '.acl-probe-ok'), 'acl-remediated\n', { flag: 'wx' });

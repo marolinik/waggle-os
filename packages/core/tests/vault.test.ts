@@ -511,6 +511,7 @@ describe('VaultStore', () => {
         path.dirname(fileURLToPath(import.meta.url)),
         'vault-acl-probe.ts',
       );
+      const probeMarkerPath = path.join(dir, '.acl-probe-ok');
 
       await new Promise<void>((resolve, reject) => {
         actual.execFile(
@@ -521,7 +522,6 @@ describe('VaultStore', () => {
             process.cwd(),
             '--config',
             path.resolve('vitest.config.ts'),
-            '--script',
             probePath,
           ],
           {
@@ -534,6 +534,11 @@ describe('VaultStore', () => {
           (error, stdout, stderr) => {
             if (error) {
               reject(new Error(`Windows ACL probe failed: ${stderr || stdout || error.message}`));
+            } else if (
+              !fs.existsSync(probeMarkerPath)
+              || fs.readFileSync(probeMarkerPath, 'utf-8') !== 'acl-remediated\n'
+            ) {
+              reject(new Error('Windows ACL probe exited without a verified completion marker'));
             } else {
               resolve();
             }
