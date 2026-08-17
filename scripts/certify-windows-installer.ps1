@@ -466,7 +466,8 @@ function Get-CertificateSessionHeaders {
     [Parameter(Mandatory = $true)] [string]$BaseUrl,
     [Parameter(Mandatory = $true)] [string]$NodeExecutable,
     [Parameter(Mandatory = $true)] [string]$BootstrapHelperPath,
-    [ValidateRange(1024, 65535)] [int]$DebugPort
+    [ValidateRange(1024, 65535)] [int]$DebugPort,
+    [switch]$AllowLegacyUi
   )
 
   Assert-True (Test-Path -LiteralPath $BootstrapHelperPath -PathType Leaf) `
@@ -475,8 +476,16 @@ function Get-CertificateSessionHeaders {
     "waggle-bootstrap-token-$([Guid]::NewGuid().ToString('N')).stderr.log"
   $tokenResponse = $null
   try {
-    $tokenJson = & $NodeExecutable --experimental-websocket $BootstrapHelperPath `
-      --port $DebugPort --timeout-ms 60000 2> $stderrPath
+    $helperArguments = @(
+      '--experimental-websocket',
+      $BootstrapHelperPath,
+      '--port',
+      [string]$DebugPort,
+      '--timeout-ms',
+      '60000'
+    )
+    if ($AllowLegacyUi) { $helperArguments += '--allow-legacy-ui' }
+    $tokenJson = & $NodeExecutable @helperArguments 2> $stderrPath
     $tokenExitCode = $LASTEXITCODE
     $tokenErrorRaw = if (Test-Path -LiteralPath $stderrPath) {
       Get-Content -Raw -LiteralPath $stderrPath
@@ -500,6 +509,32 @@ function Get-CertificateSessionHeaders {
     $bootstrapTokenProperty = $tokenPayload.PSObject.Properties['bootstrapToken']
     Assert-True ($null -ne $bootstrapTokenProperty) `
       'Tauri bootstrap IPC helper returned no credential field.'
+    $uiReadyProperty = $tokenPayload.PSObject.Properties['uiReady']
+    $uiStartupStateProperty = $tokenPayload.PSObject.Properties['uiStartupState']
+    $uiPathProperty = $tokenPayload.PSObject.Properties['uiPath']
+    $uiTextLengthProperty = $tokenPayload.PSObject.Properties['uiTextLength']
+    Assert-True (
+      $null -ne $uiReadyProperty -and
+      $uiReadyProperty.Value -is [bool] -and
+      $uiReadyProperty.Value
+    ) 'Installed Waggle WebView did not render its application shell.'
+    Assert-True (
+      $null -ne $uiStartupStateProperty -and
+      $uiStartupStateProperty.Value -is [string] -and
+      [string]$uiStartupStateProperty.Value -ceq $(
+        if ($AllowLegacyUi) { 'legacy-ready' } else { 'ready' }
+      )
+    ) 'Installed Waggle WebView did not commit its application shell.'
+    Assert-True (
+      $null -ne $uiPathProperty -and
+      $uiPathProperty.Value -is [string] -and
+      ([string]$uiPathProperty.Value).StartsWith('/')
+    ) 'Installed Waggle WebView returned an invalid application route.'
+    Assert-True (
+      $null -ne $uiTextLengthProperty -and
+      ($uiTextLengthProperty.Value -is [int] -or $uiTextLengthProperty.Value -is [long]) -and
+      [long]$uiTextLengthProperty.Value -gt 0
+    ) 'Installed Waggle WebView rendered no visible application content.'
     $bootstrapToken = [string]$bootstrapTokenProperty.Value
     Assert-True ($bootstrapToken.Length -ge 32 -and $bootstrapToken.Length -le 200) `
       'Tauri bootstrap IPC helper returned an invalid credential.'
@@ -1150,6 +1185,36 @@ function Get-InstalledProcessIds {
     }
   }
   return @($ids)
+}
+
+function Assert-NoVisibleConsoleDescendant {
+  param([Parameter(Mandatory = $true)] [int]$RootProcessId)
+
+  $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+  $descendantIds = [System.Collections.Generic.HashSet[int]]::new()
+  $frontier = @($RootProcessId)
+  while ($frontier.Count -gt 0) {
+    $next = @()
+    foreach ($process in $processes) {
+      if ($frontier -contains [int]$process.ParentProcessId -and
+          $descendantIds.Add([int]$process.ProcessId)) {
+        $next += [int]$process.ProcessId
+      }
+    }
+    $frontier = $next
+  }
+  $visibleConsoles = @(
+    $processes | Where-Object {
+      $descendantIds.Contains([int]$_.ProcessId) -and
+      [string]::Equals(
+        [string]$_.Name,
+        'conhost.exe',
+        [System.StringComparison]::OrdinalIgnoreCase
+      )
+    }
+  )
+  Assert-True ($visibleConsoles.Count -eq 0) `
+    'Installed Waggle spawned a visible console host.'
 }
 
 function Wait-ForInstalledRuntimeStop {
@@ -1964,29 +2029,12 @@ try {
     $repositoryRevision = ([string]$revisionOutput[0]).Trim().ToLowerInvariant()
     Assert-True ($repositoryRevision -eq $normalizedExpectedSourceRevision) `
       "Repository revision $repositoryRevision does not match expected source $normalizedExpectedSourceRevision."
-    $trackedSourcePaths = @(
-      'scripts/build-sidecar.mjs',
-      'scripts/bundle-node.mjs',
-      'scripts/certify-windows-installer.ps1',
-      'scripts/read-tauri-bootstrap-token.mjs',
-      'scripts/check-sidecar-resources.mjs',
-      'scripts/stage-sidecar-deps.mjs',
-      'packages/server/src/local/index.ts',
-      'packages/marketplace/marketplace.db',
-      'app/src-tauri/src/service.rs',
-      'app/src-tauri/nsis/installer.nsi'
+    $sourceStatus = @(
+      & $gitCommand.Source -C $repositoryRoot status --porcelain=v1 --untracked-files=all
     )
-    foreach ($trackedSourcePath in $trackedSourcePaths) {
-      & $gitCommand.Source -C $repositoryRoot ls-files --error-unmatch -- $trackedSourcePath 2>$null | Out-Null
-      Assert-True ($LASTEXITCODE -eq 0) "Certification source is not tracked: $trackedSourcePath"
-      & $gitCommand.Source -C $repositoryRoot cat-file -e "${repositoryRevision}:$trackedSourcePath" 2>$null
-      Assert-True ($LASTEXITCODE -eq 0) `
-        "Certification source is absent from expected revision: $trackedSourcePath"
-    }
-    $diffArguments = @('-C', $repositoryRoot, 'diff', '--quiet', $repositoryRevision, '--') + $trackedSourcePaths
-    & $gitCommand.Source @diffArguments
-    Assert-True ($LASTEXITCODE -eq 0) `
-      'Installer certification source files differ from the expected revision.'
+    Assert-True ($LASTEXITCODE -eq 0) 'Could not inspect the repository source state.'
+    Assert-True ($sourceStatus.Count -eq 0) `
+      'Installer certification requires the complete repository worktree to match the expected revision.'
     $receipt.evidence.sourceRevision = $repositoryRevision
     $receipt.checks['sourceRevision'] = $true
     $receipt.checks['sourceFilesClean'] = $true
@@ -2271,7 +2319,9 @@ try {
       Assert-True (Test-Path -LiteralPath $profileDataMarker -PathType Leaf) `
         'Previous launch removed the profile preservation marker.'
       $previousHeaders = Get-CertificateSessionHeaders `
-        $previousBaseUrl $nodeCommand.Source $bootstrapHelperPath $webViewDebugPort
+        $previousBaseUrl $nodeCommand.Source $bootstrapHelperPath $webViewDebugPort `
+        -AllowLegacyUi
+      $receipt.checks['previousUi'] = $true
       $previousTier = Invoke-JsonRequest "$previousBaseUrl/api/tier" $previousHeaders
       Assert-True ([string]$previousTier.tier -ceq 'FREE') `
         "The protected previous release reported an unexpected effective tier: $($previousTier.tier)"
@@ -2620,6 +2670,12 @@ try {
     $health = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $firstProcess.Refresh()
     Assert-True (-not $firstProcess.HasExited) 'The installed desktop process exited during first boot'
+    Assert-NoVisibleConsoleDescendant $firstProcess.Id
+    $serviceLogPath = Join-Path $dataDir 'logs\service.log'
+    Assert-True (Test-Path -LiteralPath $serviceLogPath -PathType Leaf) `
+      'Hidden sidecar did not create its diagnostic service log.'
+    $receipt.checks['firstBootHiddenService'] = $true
+    $receipt.checks['serviceLog'] = $true
     $sidecarNpmPrefix = Join-Path $dataDir 'npm\prefix'
     $sidecarNpmCache = Join-Path $dataDir 'npm\cache'
     Assert-True (Test-Path -LiteralPath $sidecarNpmPrefix -PathType Container) `
@@ -2652,6 +2708,7 @@ try {
     $receipt.checks['unauthenticatedProtectedRoute'] = $true
     $headers = Get-CertificateSessionHeaders `
       $baseUrl $nodeCommand.Source $bootstrapHelperPath $webViewDebugPort
+    $receipt.checks['firstBootUi'] = $true
     $tier = Invoke-JsonRequest "$baseUrl/api/tier" $headers
     Assert-True ([string]$tier.tier -ceq 'FREE') `
       "A clean Solo install reported an unexpected effective tier: $($tier.tier)"
@@ -2949,8 +3006,11 @@ try {
     $null = Wait-ForHealth $baseUrl $StartupTimeoutSeconds
     $secondProcess.Refresh()
     Assert-True (-not $secondProcess.HasExited) 'The installed desktop process exited after repair'
+    Assert-NoVisibleConsoleDescendant $secondProcess.Id
+    $receipt.checks['repairHiddenService'] = $true
     $repairHeaders = Get-CertificateSessionHeaders `
       $baseUrl $nodeCommand.Source $bootstrapHelperPath $webViewDebugPort
+    $receipt.checks['repairUi'] = $true
     $repairTier = Invoke-JsonRequest "$baseUrl/api/tier" $repairHeaders
     Assert-True ([string]$repairTier.tier -ceq 'FREE') `
       "The repaired Solo install reported an unexpected effective tier: $($repairTier.tier)"

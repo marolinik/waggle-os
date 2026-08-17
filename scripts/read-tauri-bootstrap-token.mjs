@@ -13,11 +13,20 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const options = { port: null, timeoutMs: DEFAULT_TIMEOUT_MS, selfTest: false };
+  const options = {
+    port: null,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    selfTest: false,
+    allowLegacyUi: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--self-test') {
       options.selfTest = true;
+      continue;
+    }
+    if (argument === '--allow-legacy-ui') {
+      options.allowLegacyUi = true;
       continue;
     }
     if (argument === '--port' || argument === '--timeout-ms') {
@@ -54,6 +63,16 @@ function isValidEndpoint(value) {
     && value.bootstrapToken.length <= MAX_TOKEN_LENGTH;
 }
 
+function isValidDesktopRuntime(value, allowLegacyUi = false) {
+  return isValidEndpoint(value)
+    && value.uiReady === true
+    && value.uiStartupState === (allowLegacyUi ? 'legacy-ready' : 'ready')
+    && typeof value.uiPath === 'string'
+    && value.uiPath.startsWith('/')
+    && Number.isInteger(value.uiTextLength)
+    && value.uiTextLength > 0;
+}
+
 async function fetchTargets(port) {
   const response = await fetch(`http://127.0.0.1:${port}/json/list`);
   if (!response.ok) throw new Error(`WebView debug endpoint returned HTTP ${response.status}`);
@@ -62,7 +81,7 @@ async function fetchTargets(port) {
   return targets.filter((target) => target?.type === 'page' && typeof target.webSocketDebuggerUrl === 'string');
 }
 
-async function evaluateEnsureService(webSocketUrl, timeoutMs) {
+async function evaluateEnsureService(webSocketUrl, timeoutMs, allowLegacyUi) {
   const socket = new WebSocket(webSocketUrl);
   let nextId = 1;
   const pending = new Map();
@@ -113,7 +132,39 @@ async function evaluateEnsureService(webSocketUrl, timeoutMs) {
             (async () => {
               const invoke = globalThis.__TAURI_INTERNALS__?.invoke;
               if (typeof invoke !== 'function') throw new Error('Tauri IPC is unavailable');
-              return await invoke('ensure_service');
+              const endpoint = await invoke('ensure_service');
+              const deadline = Date.now() + 10_000;
+              for (;;) {
+                const root = document.getElementById('root');
+                const startup = root?.querySelector('[data-waggle-startup]');
+                const startupState = startup?.getAttribute('data-waggle-startup') ?? null;
+                const readyState = root?.getAttribute('data-waggle-ui-ready') ?? null;
+                const uiTextLength = root?.innerText?.trim().length ?? 0;
+                const strictUiReady = Boolean(
+                  root
+                  && root.childElementCount > 0
+                  && !startup
+                  && readyState === 'ready'
+                  && uiTextLength > 0
+                );
+                const legacyUiReady = Boolean(
+                  root
+                  && root.childElementCount > 0
+                  && !startup
+                  && uiTextLength > 0
+                );
+                const uiReady = ${allowLegacyUi ? 'legacyUiReady' : 'strictUiReady'};
+                if (uiReady || startupState === 'failed' || Date.now() >= deadline) {
+                  return {
+                    ...endpoint,
+                    uiPath: globalThis.location?.pathname ?? '',
+                    uiReady,
+                    uiStartupState: ${allowLegacyUi ? "uiReady ? 'legacy-ready' : (readyState ?? startupState)" : 'readyState ?? startupState'},
+                    uiTextLength,
+                  };
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
             })()
           `,
         },
@@ -121,14 +172,23 @@ async function evaluateEnsureService(webSocketUrl, timeoutMs) {
     });
     const remote = result?.result?.value;
     if (!isValidEndpoint(remote)) throw new Error('Tauri returned an invalid service endpoint');
-    return remote.bootstrapToken;
+    if (!isValidDesktopRuntime(remote, allowLegacyUi)) {
+      throw new Error('Waggle UI did not render its application shell');
+    }
+    return {
+      bootstrapToken: remote.bootstrapToken,
+      uiPath: remote.uiPath,
+      uiReady: remote.uiReady,
+      uiStartupState: remote.uiStartupState,
+      uiTextLength: remote.uiTextLength,
+    };
   } finally {
     clearTimeout(timer);
     socket.close();
   }
 }
 
-async function resolveToken(port, timeoutMs) {
+async function resolveToken(port, timeoutMs, allowLegacyUi) {
   const deadline = Date.now() + timeoutMs;
   let lastError = 'WebView target not ready';
   while (Date.now() < deadline) {
@@ -136,7 +196,11 @@ async function resolveToken(port, timeoutMs) {
       const targets = await fetchTargets(port);
       for (const target of targets) {
         try {
-          return await evaluateEnsureService(target.webSocketDebuggerUrl, Math.min(5_000, deadline - Date.now()));
+          return await evaluateEnsureService(
+            target.webSocketDebuggerUrl,
+            Math.min(15_000, deadline - Date.now()),
+            allowLegacyUi,
+          );
         } catch (error) {
           lastError = error instanceof Error ? error.message : 'CDP evaluation failed';
         }
@@ -159,12 +223,40 @@ async function main() {
     if (isValidEndpoint({ port: 3333, instanceId: 'test-instance', bootstrapToken: 'short' })) {
       throw new Error('short token fixture accepted');
     }
-    console.log(JSON.stringify({ pass: true, cases: 2 }));
+    const validRuntime = {
+      port: 3333,
+      instanceId: 'test-instance',
+      bootstrapToken: valid,
+      uiPath: '/home',
+      uiReady: true,
+      uiStartupState: 'ready',
+      uiTextLength: 10,
+    };
+    if (!isValidDesktopRuntime(validRuntime)) throw new Error('valid desktop runtime rejected');
+    if (isValidDesktopRuntime({ ...validRuntime, uiReady: false })) {
+      throw new Error('blank desktop runtime accepted');
+    }
+    if (isValidDesktopRuntime({ ...validRuntime, uiTextLength: 0 })) {
+      throw new Error('empty desktop runtime accepted');
+    }
+    if (isValidDesktopRuntime({ ...validRuntime, uiStartupState: 'loading' })) {
+      throw new Error('loading desktop runtime accepted');
+    }
+    if (isValidDesktopRuntime({ ...validRuntime, uiStartupState: 'failed' })) {
+      throw new Error('failed desktop runtime accepted');
+    }
+    if (!isValidDesktopRuntime({ ...validRuntime, uiStartupState: 'legacy-ready' }, true)) {
+      throw new Error('valid legacy desktop runtime rejected');
+    }
+    if (isValidDesktopRuntime({ ...validRuntime, uiReady: false, uiStartupState: 'legacy-ready' }, true)) {
+      throw new Error('blank legacy desktop runtime accepted');
+    }
+    console.log(JSON.stringify({ pass: true, cases: 9 }));
     return;
   }
   const options = parseArgs(process.argv.slice(2));
-  const token = await resolveToken(options.port, options.timeoutMs);
-  console.log(JSON.stringify({ bootstrapToken: token }));
+  const runtime = await resolveToken(options.port, options.timeoutMs, options.allowLegacyUi);
+  console.log(JSON.stringify(runtime));
 }
 
 main().catch((error) => fail(error instanceof Error ? error.message : 'unknown failure'));

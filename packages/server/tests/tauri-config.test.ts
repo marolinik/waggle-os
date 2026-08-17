@@ -213,10 +213,19 @@ describe('Tauri Production Configuration', () => {
     expect(conf.plugins?.updater).toBeUndefined();
   });
 
-  it('tauri.conf.json has tray icon configured', () => {
+  it('creates exactly one tray icon from Rust so the context menu is always attached', () => {
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
-    expect(conf.app.trayIcon).toBeDefined();
-    expect(conf.app.trayIcon.tooltip).toBe('Waggle - AI Agent Swarm');
+    expect(conf.app.trayIcon).toBeUndefined();
+
+    const tray = fs.readFileSync(path.join(TAURI_DIR, 'src', 'tray.rs'), 'utf-8');
+    expect(tray).toContain('TrayIconBuilder::new()');
+    expect(tray).toContain('.menu(&menu)');
+
+    const certifier = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    expect(certifier).toContain('status --porcelain=v1 --untracked-files=all');
   });
 
   it('tray menu exposes only implemented desktop actions', () => {
@@ -225,6 +234,9 @@ describe('Tauri Production Configuration', () => {
     expect(tray).toContain('"Settings"');
     expect(tray).toContain('"Quit Waggle"');
     expect(tray).toContain('app.exit(0)');
+    expect(tray).toContain('.show_menu_on_left_click(false)');
+    expect(tray).toContain('button: MouseButton::Left');
+    expect(tray).toContain('button_state: MouseButtonState::Up');
     expect(tray).toContain('"waggle://navigate"');
     expect(tray).toContain('"/settings"');
 
@@ -233,6 +245,35 @@ describe('Tauri Production Configuration', () => {
     expect(tray).not.toContain('"waggle://pause-agents"');
     expect(tray).not.toContain('"waggle://quit"');
     expect(tray).not.toContain('"/about"');
+  });
+
+  it('packaged Windows sidecar stays hidden and writes bounded diagnostics', () => {
+    const service = fs.readFileSync(path.join(TAURI_DIR, 'src', 'service.rs'), 'utf-8');
+    const certifier = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+
+    expect(service).toContain('const CREATE_NO_WINDOW: u32 = 0x08000000');
+    expect(service).toContain('command.creation_flags(CREATE_NO_WINDOW)');
+    expect(service).toContain('service.log');
+    expect(service).toContain('MAX_SERVICE_LOG_BYTES');
+    expect(service).toContain('rotate_service_log');
+    expect(certifier).toContain('function Assert-NoVisibleConsoleDescendant');
+    expect(certifier).toContain("$receipt.checks['firstBootHiddenService']");
+    expect(certifier).toContain("$receipt.checks['repairHiddenService']");
+  });
+
+  it('preserves detached user sessions while IPC-supervising owned service runtimes', () => {
+    const service = fs.readFileSync(path.join(TAURI_DIR, 'src', 'service.rs'), 'utf-8');
+    const lifecycle = fs.readFileSync(
+      path.join(ROOT, 'packages', 'server', 'src', 'local', 'lifecycle.ts'),
+      'utf-8',
+    );
+
+    expect(service).toContain('JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK');
+    expect(lifecycle).toContain('spawnSidecarOwnedProcess');
+    expect(lifecycle).not.toMatch(/litellmProcess\s*=\s*spawn\(/);
   });
 
   it('web app mounts the Tauri desktop navigation bridge', () => {
@@ -247,6 +288,81 @@ describe('Tauri Production Configuration', () => {
     const csp = conf.app.security.csp;
     expect(csp).toContain('http://localhost:*');
     expect(csp).toContain('ws://localhost:*');
+  });
+
+  it('desktop startup remains visible when the app bundle cannot mount', () => {
+    const main = fs.readFileSync(
+      path.join(ROOT, 'apps', 'web', 'src', 'main.tsx'),
+      'utf-8',
+    );
+    const css = fs.readFileSync(
+      path.join(ROOT, 'apps', 'web', 'src', 'index.css'),
+      'utf-8',
+    );
+    const appEntry = fs.readFileSync(
+      path.join(ROOT, 'apps', 'web', 'src', 'app-entry.tsx'),
+      'utf-8',
+    );
+
+    expect(main).toContain("document.getElementById('root')");
+    expect(main).toContain('Starting Waggle');
+    expect(main).toContain("startup.dataset.waggleStartup = 'loading'");
+    expect(main).toContain("import('./app-entry')");
+    expect(main).toContain('.catch((error) =>');
+    expect(main).toContain('Waggle could not start');
+    expect(appEntry).toContain("dataset.waggleUiReady = 'ready'");
+    expect(css).not.toMatch(/@import\s+(?:url\()?['"]?https?:\/\//i);
+  });
+
+  it('desktop CSP permits only the local Tauri IPC bridge', () => {
+    const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
+    const csp = conf.app.security.csp;
+
+    expect(csp).toContain('ipc:');
+    expect(csp).toContain('http://ipc.localhost');
+    expect(csp).not.toContain('https://fonts.googleapis.com');
+  });
+
+  it('installer certification fails closed on a blank desktop WebView', () => {
+    const helperPath = path.join(ROOT, 'scripts', 'read-tauri-bootstrap-token.mjs');
+    const result = spawnSync(process.execPath, [helperPath, '--self-test'], {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      timeout: 30_000,
+      windowsHide: true,
+    });
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ pass: true, cases: 9 });
+
+    const certifier = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    expect(certifier).toContain("$tokenPayload.PSObject.Properties['uiReady']");
+    expect(certifier).toContain('Installed Waggle WebView did not render its application shell.');
+    expect(certifier).toContain("$receipt.checks['firstBootUi']");
+    expect(certifier).toContain("$receipt.checks['repairUi']");
+  });
+
+  it('keeps candidate-only desktop gates compatible with the protected previous release', () => {
+    const helper = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'read-tauri-bootstrap-token.mjs'),
+      'utf-8',
+    );
+    const certifier = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    const previousReleaseBlock = certifier.slice(
+      certifier.indexOf('$previousProcess = Start-InstalledApp'),
+      certifier.indexOf('$previousTier = Invoke-JsonRequest'),
+    );
+
+    expect(helper).toContain("argument === '--allow-legacy-ui'");
+    expect(certifier).toContain('[switch]$AllowLegacyUi');
+    expect(previousReleaseBlock).toContain('-AllowLegacyUi');
+    expect(previousReleaseBlock).not.toContain('Assert-NoVisibleConsoleDescendant');
+    expect(previousReleaseBlock).not.toContain("$receipt.checks['previousHiddenService']");
   });
 
   it('Cargo.toml has updater plugin dependency', () => {
@@ -4128,9 +4244,7 @@ Expect-Rejection {
     expect(managedModelProxyRestartIndex).toBeLessThan(uninstallIndex);
     expect(uninstallIndex).toBeGreaterThan(candidateRepairIndex);
     expect(script).toContain('sourceFilesClean');
-    expect(script).toContain("'scripts/build-sidecar.mjs'");
-    expect(script).toContain("'packages/server/src/local/index.ts'");
-    expect(script).toContain("'packages/marketplace/marketplace.db'");
+    expect(script).toContain('status --porcelain=v1 --untracked-files=all');
     expect(script).toMatch(
       /\$gitCommand\s*=\s*Get-Command git -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1/,
     );

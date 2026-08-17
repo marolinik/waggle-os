@@ -1,7 +1,7 @@
 use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder},
     AppHandle, Emitter, Manager,
 };
 
@@ -50,6 +50,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
+        .show_menu_on_left_click(false)
         .tooltip("Waggle Agent Service")
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => {
@@ -65,7 +66,12 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let tauri::tray::TrayIconEvent::Click { .. } = event {
+            if let tauri::tray::TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 show_main_window(tray.app_handle());
             }
         })
