@@ -518,8 +518,8 @@ describe('VaultStore', () => {
         'powershell.exe',
       );
       mockExecFileSync.mockImplementation((...args: unknown[]) => actualExec(...args));
-      new VaultStore(dir);
-      const createdKey = fs.readFileSync(keyPath, 'utf-8');
+      const createdKey = 'cd'.repeat(32);
+      fs.writeFileSync(keyPath, createdKey, { flag: 'wx' });
       expect(createdKey).toMatch(/^[0-9a-f]{64}$/);
       actual.execFileSync(
         icaclsPath,
