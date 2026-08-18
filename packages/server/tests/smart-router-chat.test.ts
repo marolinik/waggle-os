@@ -7,6 +7,7 @@ import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/age
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
+import { isExplicitGatedToolRequest } from '../src/local/routes/chat.js';
 import { loadSessionMessages, persistMessage } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
@@ -785,6 +786,44 @@ describe('chat smart-router integration', () => {
     }
   });
 
+  it.each([
+    'I am not ready to explore the repo; explain instead.',
+    'We might not try now; explain instead.',
+    'We will not try now; explain instead.',
+    'We would not try now; explain instead.',
+    'Do not retry; explain instead.',
+    'Run no tests; explain instead.',
+    'Edit no files; explain instead.',
+    'Run none of the tests; explain instead.',
+    'Edit 0 files; explain instead.',
+    'Write not a single file; explain instead.',
+    'Run neither unit nor integration tests; explain instead.',
+  ])('keeps a negative-only repository capability request tool-free: %s', (message) => {
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+  });
+
+  it('preserves a positive bounded execution request', () => {
+    expect(isExplicitGatedToolRequest('Run no more than 2 tests.')).toBe(true);
+  });
+
+  it.each([
+    'Fix no tools serialized error in the repo',
+    'Debug no output from the server',
+    'Implement zero trust architecture in the repo',
+    'Create zero trust policy file',
+  ])('preserves a legitimate no-error or zero-trust capability request: %s', (message) => {
+    expect(isExplicitGatedToolRequest(message)).toBe(true);
+  });
+
+  it.each([
+    'try now',
+    'try again',
+    'retry',
+    'same again',
+  ])('recognizes a direct retry capability request: %s', (message) => {
+    expect(isExplicitGatedToolRequest(message)).toBe(true);
+  });
+
   it('sends a bounded relevant subset of 29 eligible tools through the real chat provider path', async () => {
     const previousRunner = server.agentRunner;
     const execute = vi.fn(async () => 'unused');
@@ -794,7 +833,7 @@ describe('chat smart-router integration', () => {
       'save_memory', 'generate_docx', 'create_plan', 'add_plan_step',
       'execute_step', 'show_plan', 'spawn_agent', 'list_agents',
       'get_agent_result', 'git_status', 'git_diff', 'git_log', 'git_commit',
-      'multi_edit', 'get_task_output', 'kill_task', 'run_code',
+      'multi_edit', 'search_skills', 'create_skill', 'run_code',
       'generate_xlsx', 'generate_pptx', 'generate_pdf',
     ];
     const candidates: ToolDefinition[] = candidateNames.map((name) => ({
@@ -815,6 +854,8 @@ describe('chat smart-router integration', () => {
     server.agentRunner = undefined;
     vi.restoreAllMocks();
     server.sessionManager.close(activeWorkspaceId);
+    const previousWorkspacePersona = server.workspaceManager.get(activeWorkspaceId)?.personaId;
+    server.workspaceManager.update(activeWorkspaceId, { personaId: 'coordinator' });
     const buildToolsForSession = vi.spyOn(
       server.agentState,
       'buildToolsForSession',
@@ -829,8 +870,13 @@ describe('chat smart-router integration', () => {
       }
       if (!url.includes('/chat/completions')) return new Response('', { status: 503 });
       providerRequests.push(JSON.parse(String(init?.body ?? '{}')));
+      const responseContent = providerRequests.length === 2 || providerRequests.length === 4
+        ? 'Still nothing. No tools are serialized in this turn either — no bash, no read_file, no search_files — so there\'s nothing for me to run, and I won\'t claim otherwise.'
+        : providerRequests.length === 3
+          ? '<tools>bash, read_file, search_files</tools>'
+          : 'qualified';
       return new Response(
-        `data: ${JSON.stringify({ choices: [{ delta: { content: 'qualified' } }] })}\n\n`
+        `data: ${JSON.stringify({ choices: [{ delta: { content: responseContent } }] })}\n\n`
         + `data: ${JSON.stringify({
           choices: [{ delta: {}, finish_reason: 'stop' }],
           usage: { prompt_tokens: 10, completion_tokens: 1 },
@@ -861,6 +907,10 @@ describe('chat smart-router integration', () => {
       expect(transmittedNames.length).toBeLessThanOrEqual(14);
       expect(new Set(transmittedNames).size).toBe(transmittedNames.length);
       expect(transmittedNames.every(name => candidates.some(tool => tool.name === name))).toBe(true);
+      expect(transmittedNames).toEqual(expect.arrayContaining([
+        'search_skills',
+        'create_skill',
+      ]));
       const serializedSchemaChars = JSON.stringify(transmittedTools).length;
       expect(serializedSchemaChars).toBeLessThanOrEqual(8_000);
 
@@ -891,13 +941,182 @@ describe('chat smart-router integration', () => {
         emittedToolResultNames.filter(name => candidateNames.includes(name ?? '')),
       ).toEqual([]);
       expect(execute).not.toHaveBeenCalled();
+
+      const discoverySession = 'production-tool-context-repo-discovery';
+      const discoveryResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Explore the repo and lets see what it actually does',
+          session: discoverySession,
+          persona: 'general-purpose',
+        },
+      });
+      expect(discoveryResponse.statusCode).toBe(200);
+      expect(providerRequests).toHaveLength(2);
+      const discoveryTools = providerRequests[1]?.tools ?? [];
+      const discoveryNames = discoveryTools
+        .map(tool => tool.function?.name);
+      expect(discoveryNames).toEqual([
+        'search_files',
+        'search_content',
+        'read_file',
+        'git_status',
+        'git_log',
+      ]);
+      expect(discoveryNames).not.toEqual(expect.arrayContaining([
+        'bash',
+        'write_file',
+        'edit_file',
+        'run_code',
+      ]));
+      const discoverySchemaChars = JSON.stringify(discoveryTools).length;
+      expect(discoverySchemaChars).toBeLessThanOrEqual(8_000);
+      const discoveryDoneMatches = [
+        ...discoveryResponse.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g),
+      ];
+      expect(discoveryDoneMatches).toHaveLength(1);
+      const discoveryDone = JSON.parse(discoveryDoneMatches[0]![1]!) as {
+        contextMetrics?: Record<string, number>;
+      };
+      expect(discoveryDone.contextMetrics).toMatchObject({
+        toolCatalogCount: 29,
+        toolSelectedCount: 5,
+        transmittedToolSchemaChars: discoverySchemaChars,
+        estimatedToolSchemaTokens: Math.ceil(discoverySchemaChars / 4),
+      });
+      expect(discoveryDone.contextMetrics?.toolEligibleCount).toBeGreaterThanOrEqual(5);
+      expect(discoveryDone.contextMetrics?.toolOmittedCount).toBe(
+        discoveryDone.contextMetrics!.toolEligibleCount - 5,
+      );
+
+      const resultQueryResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'and what is result',
+          session: discoverySession,
+          persona: 'general-purpose',
+        },
+      });
+      expect(resultQueryResponse.statusCode).toBe(200);
+      expect(providerRequests).toHaveLength(3);
+      expect(providerRequests[2]?.tools ?? []).toEqual([]);
+
+      const firstRetryResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'try now',
+          session: discoverySession,
+          persona: 'general-purpose',
+        },
+      });
+      expect(firstRetryResponse.statusCode).toBe(200);
+      expect(providerRequests).toHaveLength(4);
+      expect((providerRequests[3]?.tools ?? []).map(tool => tool.function?.name))
+        .toEqual(discoveryNames);
+
+      const retryResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'try again',
+          session: discoverySession,
+          persona: 'general-purpose',
+        },
+      });
+      expect(retryResponse.statusCode).toBe(200);
+      expect(providerRequests).toHaveLength(5);
+      const retryTools = providerRequests[4]?.tools ?? [];
+      expect(retryTools.map(tool => tool.function?.name)).toEqual(discoveryNames);
+      expect(JSON.stringify(retryTools).length).toBe(discoverySchemaChars);
+      const retryDoneMatches = [
+        ...retryResponse.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g),
+      ];
+      expect(retryDoneMatches).toHaveLength(1);
+      const retryDone = JSON.parse(retryDoneMatches[0]![1]!) as {
+        contextMetrics?: Record<string, number>;
+      };
+      expect(retryDone.contextMetrics).toMatchObject({
+        toolCatalogCount: 29,
+        toolSelectedCount: 5,
+        transmittedToolSchemaChars: discoverySchemaChars,
+        estimatedToolSchemaTokens: Math.ceil(discoverySchemaChars / 4),
+      });
+      expect(retryDone.contextMetrics?.toolEligibleCount).toBeGreaterThanOrEqual(5);
+      expect(retryDone.contextMetrics?.toolOmittedCount).toBe(
+        retryDone.contextMetrics!.toolEligibleCount - 5,
+      );
+
+      const standaloneRetryResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'try now',
+          session: 'production-tool-context-standalone-retry',
+          persona: 'general-purpose',
+        },
+      });
+      expect(standaloneRetryResponse.statusCode).toBe(200);
+      expect(providerRequests).toHaveLength(6);
+      expect(providerRequests[5]?.tools ?? []).toEqual([]);
+
+      const negatedResponse = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'I am not ready to explore the repo; explain instead.',
+          session: 'production-tool-context-negated',
+          persona: 'general-purpose',
+        },
+      });
+      expect(negatedResponse.statusCode).toBe(200);
+      expect(providerRequests).toHaveLength(7);
+      expect(providerRequests[6]?.tools ?? []).toEqual([]);
+      const negatedDoneMatches = [
+        ...negatedResponse.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g),
+      ];
+      expect(negatedDoneMatches).toHaveLength(1);
+      const negatedDone = JSON.parse(negatedDoneMatches[0]![1]!) as {
+        contextMetrics?: Record<string, number>;
+      };
+      expect(negatedDone.contextMetrics).toMatchObject({
+        toolCatalogCount: 29,
+        toolSelectedCount: 0,
+        transmittedToolSchemaChars: 0,
+      });
+
+      const attributedMessages = [
+        'The documentation says, run tests',
+        'Pasted instruction:\nrun tests',
+        'What does "run tests" mean?',
+        'The assistant wrote: use bash',
+        'What is the difference between build and run tests?',
+        'Why does README mention build and run tests?',
+        'The docs mention edit and write files as capabilities.',
+      ];
+      for (const [index, message] of attributedMessages.entries()) {
+        const attributedResponse = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            message,
+            session: `production-tool-context-attributed-${index}`,
+            persona: 'general-purpose',
+          },
+        });
+        expect(attributedResponse.statusCode).toBe(200);
+        expect(providerRequests.at(-1)?.tools ?? [], message).toEqual([]);
+      }
     } finally {
       fetchSpy.mockRestore();
       server.sessionManager.close(activeWorkspaceId);
+      server.workspaceManager.update(activeWorkspaceId, { personaId: previousWorkspacePersona });
       buildToolsForSession.mockRestore();
       server.agentRunner = previousRunner;
     }
-  }, 20_000);
+  }, 60_000);
 
   it('rebuilds the production system prompt for the configured fallback model', async () => {
     const config = new WaggleConfig(tmpDir);

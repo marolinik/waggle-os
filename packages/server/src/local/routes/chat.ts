@@ -239,10 +239,10 @@ export function hasRegulatedDisclaimer(content: string, personaId: string): bool
   return false;
 }
 
-const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
+const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|explore|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
 const AMBIGUOUS_GATED_ACTION_VERB_SOURCE = String.raw`(?:message|share|post|update)`;
-const NEGATABLE_CAPABILITY_VERB_SOURCE = String.raw`(?:${EXPLICIT_GATED_ACTION_VERB_SOURCE}|${AMBIGUOUS_GATED_ACTION_VERB_SOURCE}|use|call|invoke|search|research|investigate)`;
-const CAPABILITY_GERUND_SOURCE = String.raw`(?:writing|reading|editing|modifying|creating|generating|exporting|downloading|committing|pushing|pulling|merging|branching|running|executing|installing|deleting|removing|inspecting|reviewing|analy[sz]ing|fixing|debugging|testing|validating|verifying|checking|building|compiling|typechecking|linting|refactoring|implementing|drafting|preparing|scheduling|sending|emailing|messaging|sharing|publishing|uploading|updating|posting|delegating|coordinating|orchestrating|browsing|navigating|opening|clicking|filling|querying|calculating|computing|using|calling|invoking|searching|researching|investigating)`;
+const NEGATABLE_CAPABILITY_VERB_SOURCE = String.raw`(?:${EXPLICIT_GATED_ACTION_VERB_SOURCE}|${AMBIGUOUS_GATED_ACTION_VERB_SOURCE}|use|call|invoke|search|research|investigate|try|retry)`;
+const CAPABILITY_GERUND_SOURCE = String.raw`(?:writing|reading|editing|modifying|creating|generating|exporting|downloading|committing|pushing|pulling|merging|branching|running|executing|installing|deleting|removing|inspecting|exploring|reviewing|analy[sz]ing|fixing|debugging|testing|validating|verifying|checking|building|compiling|typechecking|linting|refactoring|implementing|drafting|preparing|scheduling|sending|emailing|messaging|sharing|publishing|uploading|updating|posting|delegating|coordinating|orchestrating|browsing|navigating|opening|clicking|filling|querying|calculating|computing|using|calling|invoking|searching|researching|investigating|trying|retrying)`;
 const NEGATABLE_CAPABILITY_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|shell|browser|web|internet)`;
 const NEGATED_CAPABILITY_RESUME_SOURCE = String.raw`(?:\b(?:but|however|yet|instead|then)\b|[:\u2013\u2014]\s*(?=(?:please\s+)?${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
 const WITHOUT_CAPABILITY_RESUME_SOURCE = String.raw`(?:${NEGATED_CAPABILITY_RESUME_SOURCE}|\band\s+(?=${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
@@ -250,12 +250,26 @@ const NEGATED_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${NEGATED_CAPABILITY_RES
 const DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${NEGATED_CAPABILITY_RESUME_SOURCE})[^.;!?\r\n])*(?=${NEGATED_CAPABILITY_RESUME_SOURCE}|[.;!?\r\n]|$)`;
 const WITHOUT_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${WITHOUT_CAPABILITY_RESUME_SOURCE})[^,.;!?\r\n])*(?=${WITHOUT_CAPABILITY_RESUME_SOURCE}|[,.;!?\r\n]|$)`;
 const EXPLICIT_GATED_ACTION_PATTERN = new RegExp(String.raw`\b${EXPLICIT_GATED_ACTION_VERB_SOURCE}\b`, 'i');
+const RETRY_GATED_ACTION_PATTERN = /^\s*(?:(?:ok(?:ay)?|yes)[,\s]+)?(?:(?:please\s+)|(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?))?(?:try\s+(?:now|again)|retry|same\s+again)\b/i;
+const DIRECT_CAPABILITY_LEAD_SOURCE = String.raw`(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+you\s+(?:please(?:,\s*|\s+))?(?:(?:be\s+able\s+to\s+)|(?:help\s+(?:me|us)\s+(?:to\s+)?)))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want|would\s+like)\s+you\s+to\s+)|(?:(?:please(?:,\s*|\s+))?go\s+ahead\s+and\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?`;
+const DIRECT_CAPABILITY_ACTION_PATTERN = new RegExp(
+  String.raw`^\s*${DIRECT_CAPABILITY_LEAD_SOURCE}${NEGATABLE_CAPABILITY_VERB_SOURCE}\b`,
+  'i',
+);
+const READ_ONLY_REPOSITORY_DISCOVERY_PATTERN = /(?:^|[.;:!?\r\n]\s*|\b(?:and|but|then)\s+)(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want)\s+you\s+to\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?(?:(?:explore|examine|understand|look\s+(?:through|at))\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|code|project|workspace)\b|inspect\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|workspace)\b)/i;
+const REPOSITORY_EXECUTION_OR_MUTATION_PATTERN = /(?:^|[.;:!?\r\n]\s*|\b(?:and|but|then)\s+)(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want)\s+you\s+to\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?(?:run|execute|test|fix|debug|edit|modify|write|create|implement|compile|lint|refactor|commit|push|pull|merge|delete|remove)\b|\b(?:use|using)\s+(?:bash|terminal|shell)\b/i;
+const NEGATED_CAPABILITY_DIRECTIVE_SOURCE = String.raw`(?:do\s+not|don['\u2019]t|(?:do\s+not|don['\u2019]t)\s+want\s+to|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|may\s+not|might\s+not|cannot|can\s+not|can['\u2019]t|will\s+not|won['\u2019]t|would\s+not|wouldn['\u2019]t|(?:am|are|is|['\u2019](?:m|re|s))\s+not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?|(?:aren['\u2019]t|isn['\u2019]t)\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to)|there\s+(?:is|['\u2019]s)\s+no\s+need\s+to|not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?)`;
 const DIRECT_NEGATED_CAPABILITY_PATTERN = new RegExp(
-  String.raw`\b(?:do\s+not|don['\u2019]t|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|may\s+not|cannot|can\s+not|can['\u2019]t)\s+${NEGATABLE_CAPABILITY_VERB_SOURCE}\b${DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  String.raw`\b${NEGATED_CAPABILITY_DIRECTIVE_SOURCE}\s+${NEGATABLE_CAPABILITY_VERB_SOURCE}\b${DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE}`,
   'gi',
 );
 const WITHOUT_CAPABILITY_PATTERN = new RegExp(
   String.raw`\bwithout\s+(?:${CAPABILITY_GERUND_SOURCE}\b|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b|(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b)${WITHOUT_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE = String.raw`(?:(?:no(?!\s+more\s+than\b)|zero|0|not\s+(?:one|a\s+single|any))\s+|(?:none|neither)(?:\s+of)?\s+(?:the\s+)?)`;
+const POST_VERBAL_NEGATED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b(?:(?:run|execute|test)\s+(?:${POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE}(?:tests?|commands?|scripts?|tasks?|checks?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:tests?|commands?|scripts?|tasks?|checks?)\b)|(?:edit|modify|write|create|delete|remove)\s+(?:${POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE}(?:files?|documents?|artifacts?|changes?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:files?|documents?|artifacts?|changes?)\b)|(?:commit|push|pull|merge)\s+(?:${POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE}(?:changes?|commits?|branches?|files?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:changes?|commits?|branches?|files?)\b))[^.;!?\r\n]*`,
   'gi',
 );
 const NOMINAL_NEGATED_CAPABILITY_PATTERN = new RegExp(
@@ -279,6 +293,7 @@ function stripNegatedCapabilityClauses(message: string): string {
   return message
     .replace(DIRECT_NEGATED_CAPABILITY_PATTERN, ' ')
     .replace(WITHOUT_CAPABILITY_PATTERN, ' ')
+    .replace(POST_VERBAL_NEGATED_CAPABILITY_PATTERN, ' ')
     .replace(NOMINAL_NEGATED_CAPABILITY_PATTERN, ' ')
     .replace(NO_NEED_CAPABILITY_PATTERN, ' ')
     .replace(NOT_IN_CAPABILITY_PATTERN, ' ');
@@ -286,6 +301,7 @@ function stripNegatedCapabilityClauses(message: string): string {
 
 function hasExplicitGatedToolIntent(message: string): boolean {
   return EXPLICIT_GATED_ACTION_PATTERN.test(message)
+    || RETRY_GATED_ACTION_PATTERN.test(message)
     || AMBIGUOUS_GATED_ACTION_PATTERN.test(message)
     || /\b(file|docx|document|artifact|workbook|spreadsheet|xlsx|terminal|shell|bash|command|calculator|cross-workspace|other workspace)\b/i.test(message)
     || /\b(?:use|using|call|invoke|run)\s+(?:(?:the|a|an)\s+)?(?:calculator|python|code|spreadsheet|workbook|xlsx)\b/i.test(message)
@@ -309,6 +325,18 @@ export function isExplicitGatedToolRequest(message: string): boolean {
   if (isInlineTextOnlyDraftRequest(actionableMessage)) return false;
   if (isInlineSelfContainedCalculationRequest(actionableMessage)) return false;
   return hasExplicitGatedToolIntent(actionableMessage);
+}
+
+function shouldRequireCapabilityAcquisitionTools(message: string): boolean {
+  const actionableMessage = stripNegatedCapabilityClauses(message);
+  if (RETRY_GATED_ACTION_PATTERN.test(actionableMessage)) return false;
+  if (!DIRECT_CAPABILITY_ACTION_PATTERN.test(actionableMessage)) return false;
+  if (/\bexplor(?:e|ing)\b/i.test(actionableMessage)) return false;
+  if (READ_ONLY_REPOSITORY_DISCOVERY_PATTERN.test(actionableMessage)
+    && !REPOSITORY_EXECUTION_OR_MUTATION_PATTERN.test(actionableMessage)) {
+    return false;
+  }
+  return isExplicitGatedToolRequest(message);
 }
 
 function isInlineSelfContainedCalculationRequest(message: string): boolean {
@@ -2666,7 +2694,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? history
               .slice(0, -1)
               .filter(entry => entry.role === 'user' || entry.role === 'assistant')
-              .slice(-4)
+              .slice(-8)
               .map(entry => ({ role: entry.role, content: entry.content }))
             : [];
           const selectorStartedAt = performance.now();
@@ -2677,7 +2705,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             preferredToolNames: activePersona?.tools ?? [],
             mandatoryToolNames: [
               ...(isExplicitMemoryRecallRequest(agentMessage) ? ['search_memory'] : []),
-              ...(isExplicitGatedToolRequest(agentMessage)
+              ...(shouldRequireCapabilityAcquisitionTools(agentMessage)
                 && !turnMutationPolicy.denyAllMutations
                 && !activePersona?.isReadOnly
                 ? ['search_skills', 'create_skill']
