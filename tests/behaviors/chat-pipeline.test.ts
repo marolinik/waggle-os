@@ -345,6 +345,7 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
       body: JSON.stringify({ message: 'hello waggle', workspace: 'default' }),
     });
     expect(res.headers.get('content-type')).toContain('text/event-stream');
+    await res.text();
   });
 
   it('emits token events and a done event with correct content', async () => {

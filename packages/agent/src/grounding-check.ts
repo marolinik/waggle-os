@@ -416,8 +416,10 @@ function moneyCurrencyAt(text: string, start: number, end: number): string | und
 }
 
 function moneyNumber(text: string, start: number, raw: string): string {
-  const before = text.slice(Math.max(0, start - 16), start);
   const parsed = num(raw);
+  if (!parsed.startsWith('-')) return parsed;
+
+  const before = text.slice(Math.max(0, start - 16), start);
   const lineBefore = text.slice(text.lastIndexOf('\n', start - 1) + 1, start);
   const pricingPlanSeparator = /\b(?:prices?|pricing)\s*:\s*[^:]{1,40}$/i.test(lineBefore);
   if (parsed.startsWith('-') && /^\s*[-−](?=[$€£¥₹₽₩])/.test(raw)
@@ -433,7 +435,7 @@ function moneyNumber(text: string, start: number, raw: string): string {
       return parsed.slice(1);
     }
   }
-  if (!parsed.startsWith('-') || !/^\s*\(/.test(raw)) return parsed;
+  if (!/^\s*\(/.test(raw)) return parsed;
   if (/^\s*\(\s*(?:[-−]\s*\$|\$[ \t]*[-−])/.test(raw)) return parsed;
 
   const after = text.slice(start + raw.length, Math.min(text.length, start + raw.length + 24));
