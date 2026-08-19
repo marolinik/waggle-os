@@ -50,6 +50,24 @@ function Assert-True {
   if (-not $Condition) { throw $Message }
 }
 
+function Assert-CleanRepositoryWorktree {
+  param(
+    [Parameter(Mandatory = $true)] [string]$GitExecutable,
+    [Parameter(Mandatory = $true)] [string]$RepositoryRoot
+  )
+
+  $sourceStatus = @(
+    & $GitExecutable -C $RepositoryRoot status --porcelain=v1 --untracked-files=all
+  )
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Could not inspect the repository source state.'
+  }
+  if ($sourceStatus.Count -ne 0) {
+    $sourceDetails = ($sourceStatus | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+    throw "Installer certification requires the complete repository worktree to match the expected revision.$([Environment]::NewLine)$sourceDetails"
+  }
+}
+
 function Test-CertificateTimestamp {
   param([AllowNull()] [object]$Value)
 
@@ -2069,12 +2087,9 @@ try {
     $repositoryRevision = ([string]$revisionOutput[0]).Trim().ToLowerInvariant()
     Assert-True ($repositoryRevision -eq $normalizedExpectedSourceRevision) `
       "Repository revision $repositoryRevision does not match expected source $normalizedExpectedSourceRevision."
-    $sourceStatus = @(
-      & $gitCommand.Source -C $repositoryRoot status --porcelain=v1 --untracked-files=all
-    )
-    Assert-True ($LASTEXITCODE -eq 0) 'Could not inspect the repository source state.'
-    Assert-True ($sourceStatus.Count -eq 0) `
-      'Installer certification requires the complete repository worktree to match the expected revision.'
+    Assert-CleanRepositoryWorktree `
+      -GitExecutable $gitCommand.Source `
+      -RepositoryRoot $repositoryRoot
     $receipt.evidence.sourceRevision = $repositoryRevision
     $receipt.checks['sourceRevision'] = $true
     $receipt.checks['sourceFilesClean'] = $true

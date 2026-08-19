@@ -107,7 +107,18 @@ jobs:
       - name: Build frontend
         run: cd apps/web && npx vite build
 
+      - name: Verify repository cleanliness before Tauri build
+        shell: pwsh
+        run: |
+          $sourceStatus = @(& git status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect repository source state before Tauri build.' }
+          if ($sourceStatus.Count -ne 0) {
+            $sourceDetails = $sourceStatus -join [Environment]::NewLine
+            throw "Repository must be clean before Windows Tauri build.$([Environment]::NewLine)$sourceDetails"
+          }
+
       - name: Build Tauri (Windows)
+        id: tauri-build-windows
         # app/package-lock.json pins the CLI and platform binary. Invoke that
         # local copy so verification builds cannot drift to a newer 2.x release.
         run: cd app && node node_modules/@tauri-apps/cli/tauri.js build --bundles nsis
@@ -116,6 +127,17 @@ jobs:
           # only on tag push.
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
+
+      - name: Report repository changes after Tauri build
+        if: ${{ always() && steps.tauri-build-windows.outcome != 'skipped' }}
+        shell: pwsh
+        run: |
+          $sourceStatus = @(& git status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect repository source state after Tauri build.' }
+          if ($sourceStatus.Count -ne 0) {
+            $sourceDetails = $sourceStatus -join [Environment]::NewLine
+            throw "Windows Tauri build mutated repository worktree.$([Environment]::NewLine)$sourceDetails"
+          }
 
       - name: Certify Windows Solo installer lifecycle
         shell: pwsh

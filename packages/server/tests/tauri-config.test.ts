@@ -3943,6 +3943,153 @@ Expect-Rejection {
     expect(windowsSteps).not.toContain('-PreviousInstallerPath');
   });
 
+  it('PR Windows workflow reports the exact worktree mutation boundary around Tauri', () => {
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'tauri-build-pr.yml'),
+      'utf-8',
+    );
+    const parsedWorkflow = parseYaml(workflow) as {
+      jobs?: Record<
+        string,
+        {
+          steps?: Array<{
+            name?: string;
+            id?: string;
+            if?: unknown;
+            run?: string;
+            'continue-on-error'?: unknown;
+          }>;
+        }
+      >;
+    };
+    const windowsSteps = parsedWorkflow.jobs?.['verify-windows']?.steps ?? [];
+    const namedStep = (name: string) => {
+      const matches = windowsSteps.filter((step) => step.name === name);
+      expect(matches).toHaveLength(1);
+      return matches[0]!;
+    };
+    const preBuild = namedStep('Verify repository cleanliness before Tauri build');
+    const build = namedStep('Build Tauri (Windows)');
+    const postBuild = namedStep('Report repository changes after Tauri build');
+    const certificate = namedStep('Certify Windows Solo installer lifecycle');
+
+    expect(windowsSteps.indexOf(preBuild)).toBeLessThan(windowsSteps.indexOf(build));
+    expect(windowsSteps.indexOf(build)).toBeLessThan(windowsSteps.indexOf(postBuild));
+    expect(windowsSteps.indexOf(postBuild)).toBeLessThan(windowsSteps.indexOf(certificate));
+    expect(build.id).toBe('tauri-build-windows');
+    expect(postBuild.if).toBe(
+      "${{ always() && steps.tauri-build-windows.outcome != 'skipped' }}",
+    );
+
+    for (const diagnosticStep of [preBuild, postBuild]) {
+      const run = diagnosticStep.run ?? '';
+      expect([
+        ...run.matchAll(/git status --porcelain=v1 --untracked-files=all/g),
+      ]).toHaveLength(1);
+      expect(run).toContain('if ($LASTEXITCODE -ne 0)');
+      expect(run).toContain('if ($sourceStatus.Count -ne 0)');
+      expect(run).not.toMatch(/git\s+(?:reset|clean|checkout|restore|stash)\b/i);
+      expect(run).not.toMatch(/\b(?:Remove-Item|Clear-Content|Set-Content)\b/i);
+      expect(diagnosticStep['continue-on-error']).toBeUndefined();
+    }
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'installer certifier reports every dirty tracked and untracked path without mutation',
+    () => {
+      const certifier = fs
+        .readFileSync(path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'), 'utf-8')
+        .replace(/\r\n/g, '\n');
+      const helperStart = certifier.indexOf('function Assert-CleanRepositoryWorktree {');
+      const helperEnd = certifier.indexOf(
+        '\nfunction Test-CertificateTimestamp {',
+        helperStart,
+      );
+      expect(helperStart).toBeGreaterThanOrEqual(0);
+      expect(helperEnd).toBeGreaterThan(helperStart);
+
+      const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-source-clean-'));
+      const repositoryRoot = path.join(probeRoot, 'repository');
+      const probePath = path.join(probeRoot, 'probe.ps1');
+      const runGit = (args: string[]) => spawnSync('git', args, {
+        cwd: repositoryRoot,
+        encoding: 'utf-8',
+        timeout: 30_000,
+        windowsHide: true,
+      });
+      const status = () => runGit([
+        'status',
+        '--porcelain=v1',
+        '--untracked-files=all',
+      ]);
+
+      try {
+        fs.mkdirSync(repositoryRoot, { recursive: true });
+        expect(runGit(['init']).status).toBe(0);
+        fs.writeFileSync(path.join(repositoryRoot, 'tracked.txt'), 'clean\n', 'utf-8');
+        expect(runGit(['add', 'tracked.txt']).status).toBe(0);
+        expect(runGit([
+          '-c',
+          'user.name=Waggle Fixture',
+          '-c',
+          'user.email=fixture@waggle.invalid',
+          'commit',
+          '-m',
+          'fixture',
+        ]).status).toBe(0);
+
+        fs.writeFileSync(
+          probePath,
+          `${certifier.slice(helperStart, helperEnd)}\nAssert-CleanRepositoryWorktree -GitExecutable 'git' -RepositoryRoot $args[0]\n`,
+          'utf-8',
+        );
+        const cleanResult = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath, repositoryRoot],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        expect(cleanResult.status, cleanResult.stderr || cleanResult.stdout).toBe(0);
+
+        fs.writeFileSync(path.join(repositoryRoot, 'tracked.txt'), 'dirty\n', 'utf-8');
+        fs.mkdirSync(path.join(repositoryRoot, 'nested'), { recursive: true });
+        fs.writeFileSync(
+          path.join(repositoryRoot, 'nested', 'untracked.txt'),
+          'untracked\n',
+          'utf-8',
+        );
+        const before = status();
+        expect(before.status, before.stderr || before.stdout).toBe(0);
+        const trackedBefore = fs.readFileSync(path.join(repositoryRoot, 'tracked.txt'));
+        const untrackedBefore = fs.readFileSync(
+          path.join(repositoryRoot, 'nested', 'untracked.txt'),
+        );
+
+        const dirtyResult = spawnSync(
+          powershellProbeExecutable(),
+          ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath, repositoryRoot],
+          { encoding: 'utf-8', timeout: 30_000, windowsHide: true },
+        );
+        const dirtyOutput = `${dirtyResult.stdout ?? ''}\n${dirtyResult.stderr ?? ''}`;
+        expect(dirtyResult.status).not.toBe(0);
+        expect(dirtyOutput).toContain(' M tracked.txt');
+        expect(dirtyOutput).toContain('?? nested/untracked.txt');
+
+        const after = status();
+        expect(after.status, after.stderr || after.stdout).toBe(0);
+        expect(after.stdout).toBe(before.stdout);
+        expect(fs.readFileSync(path.join(repositoryRoot, 'tracked.txt'))).toEqual(
+          trackedBefore,
+        );
+        expect(
+          fs.readFileSync(path.join(repositoryRoot, 'nested', 'untracked.txt')),
+        ).toEqual(untrackedBefore);
+      } finally {
+        fs.rmSync(probeRoot, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+
   it('PR desktop verification runs when either Windows workflow changes', () => {
     const workflow = fs.readFileSync(
       path.join(ROOT, '.github', 'workflows', 'tauri-build-pr.yml'),
