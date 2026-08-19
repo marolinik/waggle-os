@@ -616,7 +616,7 @@ describe('SSE Stream Resilience', () => {
           persona: 'project-manager',
           model: 'ollama/local-a',
           autonomy: { level: 'yolo' },
-          message: 'SESSION_A: use create_plan, then add_plan_step with A_ONLY.',
+          message: 'Use create_plan, then add_plan_step with A_ONLY. Correlation: SESSION_A.',
         },
       }).then(response => {
         completionOrder.push('A');
@@ -631,7 +631,7 @@ describe('SSE Stream Resilience', () => {
           persona: 'project-manager',
           model: 'ollama/local-b',
           autonomy: { level: 'yolo' },
-          message: 'SESSION_B: execute create_plan for Plan B, then execute show_plan immediately.',
+          message: 'Execute create_plan for Plan B, then execute show_plan immediately. Correlation: SESSION_B.',
         },
       }).then(response => {
         completionOrder.push('B');
@@ -855,7 +855,7 @@ describe('SSE Stream Resilience', () => {
           persona: 'coder',
           model: 'ollama/local-queue',
           autonomy: { level: 'yolo' },
-          message: 'QUEUE_SESSION_A: read shared.txt, then edit_file from v0 to v1.',
+          message: 'Read shared.txt, then edit_file from v0 to v1. Correlation: QUEUE_SESSION_A.',
         },
       });
       let requestB: ReturnType<typeof injectWithAuth> | undefined;
@@ -880,7 +880,7 @@ describe('SSE Stream Resilience', () => {
             persona: 'coder',
             model: 'ollama/local-queue',
             autonomy: { level: 'yolo' },
-            message: 'QUEUE_SESSION_B: read shared.txt, then edit_file from v1 to v2.',
+            message: 'Read shared.txt, then edit_file from v1 to v2. Correlation: QUEUE_SESSION_B.',
           },
         });
         requestC = injectWithAuth(server, {
@@ -890,7 +890,7 @@ describe('SSE Stream Resilience', () => {
             workspace: workspaceId,
             session: 'queue-session-c',
             model: 'ollama/local-queue',
-            message: 'QUEUE_SESSION_C: search my memory for SSE resilience frame, then summarize it.',
+            message: 'Search my memory for SSE resilience frame, then summarize it. Correlation: QUEUE_SESSION_C.',
           },
         });
 
@@ -1076,7 +1076,7 @@ describe('SSE Stream Resilience', () => {
           persona: 'coder',
           model: 'ollama/local-legacy-queue',
           autonomy: { level: 'yolo' },
-          message: 'LEGACY_ALIAS_SESSION_A: read shared.txt, then edit_file from v0 to v1.',
+          message: 'Read shared.txt, then edit_file from v0 to v1. Correlation: LEGACY_ALIAS_SESSION_A.',
         },
       });
       let requestB: ReturnType<typeof injectWithAuth> | undefined;
@@ -1100,7 +1100,7 @@ describe('SSE Stream Resilience', () => {
             persona: 'coder',
             model: 'ollama/local-legacy-queue',
             autonomy: { level: 'yolo' },
-            message: 'LEGACY_PATH_SESSION_B: read shared.txt, then edit_file from v1 to v2.',
+            message: 'Read shared.txt, then edit_file from v1 to v2. Correlation: LEGACY_PATH_SESSION_B.',
           },
         });
 

@@ -454,7 +454,7 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
           persona: 'project-manager',
           model: 'ollama/solo-local',
           autonomy: { level: 'yolo' },
-          message: `${markerA}: use create_plan, then add_plan_step with A_ONLY.`,
+          message: `Use create_plan, then add_plan_step with A_ONLY. Correlation: ${markerA}.`,
         },
       });
       await Promise.race([
@@ -471,7 +471,7 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
           persona: 'project-manager',
           model: 'ollama/solo-local',
           autonomy: { level: 'yolo' },
-          message: `${markerB}: execute create_plan for Plan B, then execute show_plan immediately.`,
+          message: `Execute create_plan for Plan B, then execute show_plan immediately. Correlation: ${markerB}.`,
         },
       });
       let bCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -512,12 +512,12 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       expect(bShowResult).not.toContain('A_ONLY');
       expect(server.agentState.sessionHistories.get(chatSessionStateKey(workspaceId!, sessionA)))
         .toEqual([
-          { role: 'user', content: `${markerA}: use create_plan, then add_plan_step with A_ONLY.` },
+          { role: 'user', content: `Use create_plan, then add_plan_step with A_ONLY. Correlation: ${markerA}.` },
           expect.objectContaining({ role: 'assistant', content: `${markerA} complete` }),
         ]);
       expect(server.agentState.sessionHistories.get(chatSessionStateKey(workspaceId!, sessionB)))
         .toEqual([
-          { role: 'user', content: `${markerB}: execute create_plan for Plan B, then execute show_plan immediately.` },
+          { role: 'user', content: `Execute create_plan for Plan B, then execute show_plan immediately. Correlation: ${markerB}.` },
           expect.objectContaining({ role: 'assistant', content: `${markerB} complete` }),
         ]);
 

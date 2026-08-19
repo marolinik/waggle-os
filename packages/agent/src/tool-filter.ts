@@ -147,6 +147,10 @@ const POST_VERBAL_NEGATED_TOOL_CLAUSE_PATTERN = new RegExp(
   String.raw`\b(?:(?:run|execute|test)\s+(?:${POST_VERBAL_NEGATIVE_COUNT_SOURCE}(?:tests?|commands?|scripts?|tasks?|checks?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:tests?|commands?|scripts?|tasks?|checks?)\b)|(?:edit|modify|write|create|delete|remove)\s+(?:${POST_VERBAL_NEGATIVE_COUNT_SOURCE}(?:files?|documents?|artifacts?|changes?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:files?|documents?|artifacts?|changes?)\b)|(?:commit|push|pull|merge)\s+(?:${POST_VERBAL_NEGATIVE_COUNT_SOURCE}(?:changes?|commits?|branches?|files?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:changes?|commits?|branches?|files?)\b))[^.;!?\r\n]*`,
   'giu',
 );
+const LEADING_NEGATED_TOOL_CLAUSE_PATTERN = new RegExp(
+  String.raw`^\s*(?:${NEGATED_TOOL_CLAUSE_PATTERN.source}|${POST_VERBAL_NEGATED_TOOL_CLAUSE_PATTERN.source})`,
+  'iu',
+);
 const DIRECT_CALCULATION_PATTERN = /\b(?:calculate|compute)\b/i;
 const CALCULATION_RELATION_PATTERN = /\b(?:divided by|multiplied by|plus|minus|times|sum of|difference between|ratio of|percent(?:age)? of)\b/i;
 const RESEARCH_INTENT_PATTERN = /\b(research|investigate|find information|source|sources|citation|cite|current|latest|docs?|documentation|web|internet|online|benchmark)\b/i;
@@ -246,10 +250,15 @@ function overlapCount(left: ReadonlySet<string>, right: ReadonlySet<string>): nu
 }
 
 function positiveIntentText(value: string): string {
-  return value
+  const startsWithNegatedClause = LEADING_NEGATED_TOOL_CLAUSE_PATTERN.test(value);
+  let positiveText = value
     .replace(NEGATED_TOOL_CLAUSE_PATTERN, ' ')
     .replace(POST_VERBAL_NEGATED_TOOL_CLAUSE_PATTERN, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/\s+/g, ' ');
+  if (startsWithNegatedClause) {
+    positiveText = positiveText.replace(/^\s*[.;!?]\s*/, '');
+  }
+  return positiveText
     .replace(/^\s*(?:(?:i|we|you|they|he|she|it)\s*)?[,;:]?\s*(?:and|but|however|instead|then)\s+/i, '')
     .trim();
 }

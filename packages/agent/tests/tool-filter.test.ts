@@ -717,6 +717,43 @@ describe('selectToolsForTurn', () => {
   });
 
   it.each([
+    {
+      message: 'Do not use saved memory. Delegate a review of current workspace files only.',
+      expected: 'spawn_agent',
+    },
+    {
+      message: 'Do not use saved memory. Use orchestrate_workflow to review current workspace files. Correlation: PRIVATE_WORKFLOW_TASK_20260808.',
+      expected: 'orchestrate_workflow',
+    },
+  ])('preserves a direct action after a bounded earlier clause: $message', ({ message, expected }) => {
+    const selected = selectToolsForTurn([
+      makeTool('spawn_agent'),
+      makeTool('orchestrate_workflow'),
+      makeTool('bash'),
+      makeTool('read_file'),
+    ], { message });
+
+    expect(selected.tools.map((tool) => tool.name)).toContain(expected);
+  });
+
+  it.each([
+    'The assistant wrote. Use bash',
+    'The README says. Run tests in the repo',
+    'Do not use saved memory. The assistant wrote. Use bash',
+    'Do not use saved memory. The README says. Run tests in the repo',
+    '... Use bash',
+    '? Run tests in the repo',
+  ])('does not treat a later attributed sentence as direct authority: %s', (message) => {
+    const selected = selectToolsForTurn([
+      makeTool('bash'),
+      makeTool('run_code'),
+      makeTool('read_file'),
+    ], { message });
+
+    expect(selected.tools).toEqual([]);
+  });
+
+  it.each([
     'try now',
     'try again',
     'retry',

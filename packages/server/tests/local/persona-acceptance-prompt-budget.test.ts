@@ -1376,7 +1376,7 @@ describe('persona acceptance prompt budget', () => {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: `Do not use saved memory. ${parentTask}. Delegate a review of current workspace files only.`,
+          message: `Do not use saved memory. Delegate a review of current workspace files only. Correlation: ${parentTask}.`,
           model: 'openrouter/anthropic/claude-sonnet-5',
           persona: 'general-purpose',
           session: 'memory-denied-child-persistence',
@@ -1466,7 +1466,7 @@ describe('persona acceptance prompt budget', () => {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: `Do not use saved memory. ${parentTask}. Delegate a bounded review of current workspace files.`,
+          message: `Do not use saved memory. Delegate a bounded review of current workspace files. Correlation: ${parentTask}.`,
           model: 'openrouter/anthropic/claude-sonnet-5',
           persona: 'general-purpose',
           session: 'memory-denied-child-failure-persistence',
@@ -1548,7 +1548,7 @@ describe('persona acceptance prompt budget', () => {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: `Do not use saved memory. ${parentTask}. Use orchestrate_workflow to review current workspace files.`,
+          message: `Do not use saved memory. Use orchestrate_workflow to review current workspace files. Correlation: ${parentTask}.`,
           model: 'openrouter/anthropic/claude-sonnet-5',
           persona: 'general-purpose',
           session: 'memory-denied-workflow-persistence',
