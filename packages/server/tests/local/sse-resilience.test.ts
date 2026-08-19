@@ -928,7 +928,9 @@ describe('SSE Stream Resilience', () => {
     }, 30_000);
 
     it('serializes default-alias and path-only chat turns over the same checkout', async () => {
-      const workspaceRoot = path.join(tmpDir, 'legacy-shared-coder-workspace');
+      const activeWorkspaceId = server.agentState.activeWorkspaceId;
+      expect(activeWorkspaceId).toBeTruthy();
+      const workspaceRoot = path.join(server.localConfig.dataDir, 'workspaces', activeWorkspaceId!, 'files');
       fs.mkdirSync(workspaceRoot, { recursive: true });
       const sharedFile = path.join(workspaceRoot, 'shared.txt');
       fs.writeFileSync(sharedFile, 'v0', 'utf-8');

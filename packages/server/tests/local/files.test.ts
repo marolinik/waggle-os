@@ -4,7 +4,7 @@
  * Tests the /api/workspaces/:workspaceId/files/* endpoints
  * for virtual storage mode (filesystem-backed).
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -654,6 +654,83 @@ describe('FsStorageProvider', () => {
       expect((await provider.read('/alias/new/deep/file.txt')).toString()).toBe('inside');
       expect(fs.readFileSync(path.join(real, 'new', 'deep', 'file.txt'), 'utf8')).toBe('inside');
     } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('allows destination creation operations through an in-root junction', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-inroot-dest-'));
+    const real = path.join(root, 'real');
+    const link = path.join(root, 'alias');
+    fs.mkdirSync(real);
+    fs.writeFileSync(path.join(root, 'move-source.txt'), 'move');
+    fs.writeFileSync(path.join(root, 'copy-source.txt'), 'copy');
+
+    try {
+      try {
+        fs.symlinkSync(real, link, 'junction');
+      } catch {
+        return;
+      }
+
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+
+      const created = await provider.mkdir('/alias/made/deep');
+      expect(created.path).toBe('/alias/made/deep');
+      expect(fs.statSync(path.join(real, 'made', 'deep')).isDirectory()).toBe(true);
+
+      const moved = await provider.move('/move-source.txt', '/alias/moved/deep/file.txt');
+      expect(moved.path).toBe('/alias/moved/deep/file.txt');
+      expect(fs.readFileSync(path.join(real, 'moved', 'deep', 'file.txt'), 'utf8')).toBe('move');
+
+      const copied = await provider.copy('/copy-source.txt', '/alias/copied/deep/file.txt');
+      expect(copied.path).toBe('/alias/copied/deep/file.txt');
+      expect(fs.readFileSync(path.join(real, 'copied', 'deep', 'file.txt'), 'utf8')).toBe('copy');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('moves and copies onto lexical leaves without overwriting their resolved targets', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fsprovider-move-link-'));
+    const moveTarget = path.join(root, 'move-target.txt');
+    const moveLink = path.join(root, 'move-alias.txt');
+    const copyTarget = path.join(root, 'copy-target.txt');
+    const copyLink = path.join(root, 'copy-alias.txt');
+    fs.writeFileSync(moveTarget, 'move-target');
+    fs.writeFileSync(moveLink, 'move-placeholder');
+    fs.writeFileSync(path.join(root, 'move-source.txt'), 'move-source');
+    fs.writeFileSync(copyTarget, 'copy-target');
+    fs.writeFileSync(copyLink, 'copy-placeholder');
+    fs.writeFileSync(path.join(root, 'copy-source.txt'), 'copy-source');
+    const resolvedLeaves = new Map([
+      [moveLink, moveTarget],
+      [copyLink, copyTarget],
+    ]);
+    const originalRealpath = fs.realpathSync.bind(fs);
+    const realpathSpy = vi.spyOn(fs, 'realpathSync').mockImplementation(((candidate: fs.PathLike) => {
+      const replacement = resolvedLeaves.get(path.resolve(candidate.toString()));
+      if (replacement) return replacement;
+      return originalRealpath(candidate);
+    }) as typeof fs.realpathSync);
+
+    try {
+      const { FsStorageProvider } = await import('../../src/local/storage/fs-provider.js');
+      const provider = new FsStorageProvider(root, { denySensitive: true });
+      const moved = await provider.move('/move-source.txt', '/move-alias.txt');
+      const copied = await provider.copy('/copy-source.txt', '/copy-alias.txt');
+
+      expect(moved.path).toBe('/move-alias.txt');
+      expect(copied.path).toBe('/copy-alias.txt');
+      expect(realpathSpy.mock.calls.some(([candidate]) => path.resolve(candidate.toString()) === moveLink)).toBe(true);
+      expect(realpathSpy.mock.calls.some(([candidate]) => path.resolve(candidate.toString()) === copyLink)).toBe(true);
+      expect(fs.readFileSync(moveTarget, 'utf8')).toBe('move-target');
+      expect(fs.readFileSync(moveLink, 'utf8')).toBe('move-source');
+      expect(fs.readFileSync(copyTarget, 'utf8')).toBe('copy-target');
+      expect(fs.readFileSync(copyLink, 'utf8')).toBe('copy-source');
+    } finally {
+      realpathSpy.mockRestore();
       fs.rmSync(root, { recursive: true, force: true });
     }
   });

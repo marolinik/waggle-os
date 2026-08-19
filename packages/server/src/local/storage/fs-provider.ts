@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { lookup } from '../utils/mime.js';
-import { safePath, toRelativePath, type SafePathOptions } from './security.js';
+import { resolveSafePath, safePath, toRelativePath, type SafePathOptions } from './security.js';
 import type { StorageProvider, FileEntry } from './types.js';
 import { STANDARD_DIRS } from './types.js';
 
@@ -19,6 +19,21 @@ export class FsStorageProvider implements StorageProvider {
 
   private resolve(userPath: string): string {
     return safePath(this.root, userPath, this.pathOptions);
+  }
+
+  private resolveForOperation(userPath: string) {
+    return resolveSafePath(this.root, userPath, this.pathOptions);
+  }
+
+  /** Canonicalize the parent but preserve replacement semantics for an existing leaf link. */
+  private resolveEntryDestination(userPath: string) {
+    const { lexicalPath } = this.resolveForOperation(userPath);
+    const relativeParent = path.relative(this.root, path.dirname(lexicalPath));
+    const { operationPath: operationParent } = this.resolveForOperation(relativeParent);
+    return {
+      lexicalPath,
+      operationPath: path.join(operationParent, path.basename(lexicalPath)),
+    };
   }
 
   /** Validate every descendant before a recursive filesystem operation. */
@@ -103,16 +118,16 @@ export class FsStorageProvider implements StorageProvider {
   }
 
   async write(filePath: string, data: Buffer, _mime?: string): Promise<FileEntry> {
-    const resolved = this.resolve(filePath);
-    const dir = path.dirname(resolved);
+    const { lexicalPath, operationPath } = this.resolveForOperation(filePath);
+    const dir = path.dirname(operationPath);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(resolved, data);
+    fs.writeFileSync(operationPath, data);
 
-    const stat = fs.statSync(resolved);
-    const name = path.basename(resolved);
+    const stat = fs.statSync(operationPath);
+    const name = path.basename(lexicalPath);
     return {
       name,
-      path: toRelativePath(this.root, resolved),
+      path: toRelativePath(this.root, lexicalPath),
       type: 'file',
       size: stat.size,
       mimeType: lookup(name),
@@ -132,17 +147,17 @@ export class FsStorageProvider implements StorageProvider {
 
   async move(from: string, to: string): Promise<FileEntry> {
     const resolvedFrom = this.resolve(from);
-    const resolvedTo = this.resolve(to);
+    const { lexicalPath: resolvedTo, operationPath: operationTo } = this.resolveEntryDestination(to);
 
     if (!fs.existsSync(resolvedFrom)) throw new Error(`Source not found: ${from}`);
     if (this.pathOptions.denySensitive && fs.statSync(resolvedFrom).isDirectory()) {
       this.assertTreeSafe(resolvedFrom);
     }
 
-    fs.mkdirSync(path.dirname(resolvedTo), { recursive: true });
-    fs.renameSync(resolvedFrom, resolvedTo);
+    fs.mkdirSync(path.dirname(operationTo), { recursive: true });
+    fs.renameSync(resolvedFrom, operationTo);
 
-    const stat = fs.statSync(resolvedTo);
+    const stat = fs.statSync(operationTo);
     const name = path.basename(resolvedTo);
     return {
       name,
@@ -157,16 +172,16 @@ export class FsStorageProvider implements StorageProvider {
 
   async copy(from: string, to: string): Promise<FileEntry> {
     const resolvedFrom = this.resolve(from);
-    const resolvedTo = this.resolve(to);
+    const { lexicalPath: resolvedTo, operationPath: operationTo } = this.resolveEntryDestination(to);
 
     if (!fs.existsSync(resolvedFrom)) throw new Error(`Source not found: ${from}`);
     this.assertTreeSafe(resolvedFrom);
     if (fs.existsSync(resolvedTo)) this.assertTreeSafe(resolvedTo);
 
-    fs.mkdirSync(path.dirname(resolvedTo), { recursive: true });
-    fs.cpSync(resolvedFrom, resolvedTo, { recursive: true });
+    fs.mkdirSync(path.dirname(operationTo), { recursive: true });
+    fs.cpSync(resolvedFrom, operationTo, { recursive: true });
 
-    const stat = fs.statSync(resolvedTo);
+    const stat = fs.statSync(operationTo);
     const name = path.basename(resolvedTo);
     return {
       name,
@@ -180,12 +195,12 @@ export class FsStorageProvider implements StorageProvider {
   }
 
   async mkdir(dirPath: string): Promise<FileEntry> {
-    const resolved = this.resolve(dirPath);
-    fs.mkdirSync(resolved, { recursive: true });
-    const stat = fs.statSync(resolved);
+    const { lexicalPath, operationPath } = this.resolveForOperation(dirPath);
+    fs.mkdirSync(operationPath, { recursive: true });
+    const stat = fs.statSync(operationPath);
     return {
-      name: path.basename(resolved),
-      path: toRelativePath(this.root, resolved),
+      name: path.basename(lexicalPath),
+      path: toRelativePath(this.root, lexicalPath),
       type: 'directory',
       modifiedAt: stat.mtime.toISOString(),
     };

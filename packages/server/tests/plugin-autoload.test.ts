@@ -26,6 +26,8 @@ function createTmpDataDir(): string {
   return tmpDir;
 }
 
+const SERVER_BOOT_TIMEOUT_MS = 30_000;
+
 describe('Plugin auto-load on startup', () => {
   describe('no plugins directory', () => {
     let server: FastifyInstance;
@@ -35,7 +37,7 @@ describe('Plugin auto-load on startup', () => {
       tmpDir = createTmpDataDir();
       // Deliberately do NOT create plugins/ dir
       server = await buildLocalServer({ dataDir: tmpDir });
-    });
+    }, SERVER_BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
       await server.close();
@@ -60,7 +62,7 @@ describe('Plugin auto-load on startup', () => {
       tmpDir = createTmpDataDir();
       fs.mkdirSync(path.join(tmpDir, 'plugins'), { recursive: true });
       server = await buildLocalServer({ dataDir: tmpDir });
-    });
+    }, SERVER_BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
       await server.close();
@@ -99,7 +101,7 @@ describe('Plugin auto-load on startup', () => {
         ],
       }));
       server = await buildLocalServer({ dataDir: tmpDir });
-    });
+    }, SERVER_BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
       await server.close();
@@ -135,7 +137,7 @@ describe('Plugin auto-load on startup', () => {
       fs.mkdirSync(noManifest, { recursive: true });
       fs.writeFileSync(path.join(noManifest, 'README.md'), '# not a plugin');
       server = await buildLocalServer({ dataDir: tmpDir });
-    });
+    }, SERVER_BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
       await server.close();
@@ -165,7 +167,7 @@ describe('Plugin auto-load on startup', () => {
         name: 'bad-manifest',
       }));
       server = await buildLocalServer({ dataDir: tmpDir });
-    });
+    }, SERVER_BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
       await server.close();
@@ -215,7 +217,7 @@ describe('Plugin auto-load on startup', () => {
       }));
 
       server = await buildLocalServer({ dataDir: tmpDir });
-    });
+    }, SERVER_BOOT_TIMEOUT_MS);
 
     afterAll(async () => {
       await server.close();

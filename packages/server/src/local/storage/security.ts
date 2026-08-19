@@ -6,6 +6,11 @@ export interface SafePathOptions {
   denySensitive?: boolean;
 }
 
+export interface SafePathResolution {
+  lexicalPath: string;
+  operationPath: string;
+}
+
 function isWithin(root: string, target: string): boolean {
   return target === root || target.startsWith(root + path.sep);
 }
@@ -33,10 +38,14 @@ function deepestExisting(target: string): string {
 
 /**
  * Normalize and validate a user-supplied path to prevent path traversal attacks.
- * Returns the safe, resolved subpath relative to the storage root.
+ * Returns both the lexical API path and the canonical path used for filesystem operations.
  * Throws if the path attempts to escape the root.
  */
-export function safePath(root: string, userPath: string, options: SafePathOptions = {}): string {
+export function resolveSafePath(
+  root: string,
+  userPath: string,
+  options: SafePathOptions = {},
+): SafePathResolution {
   // Normalize separators and remove leading/trailing slashes
   const cleaned = userPath.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
 
@@ -59,28 +68,34 @@ export function safePath(root: string, userPath: string, options: SafePathOption
   // Node's filesystem APIs follow symlinks and Windows junctions. Validate the
   // deepest existing ancestor so a new file under an escaping link is denied too.
   let realRoot = resolvedRoot;
-  let realTarget = resolvedRoot;
+  let operationPath = resolved;
   if (pathEntryExists(resolvedRoot)) {
     try {
       realRoot = fs.realpathSync(resolvedRoot);
-      realTarget = fs.realpathSync(deepestExisting(resolved));
+      const existingTarget = deepestExisting(resolved);
+      const realTarget = fs.realpathSync(existingTarget);
+      operationPath = path.resolve(realTarget, path.relative(existingTarget, resolved));
     } catch {
       throw new Error(`Invalid path: "${userPath}" contains an unresolved filesystem link`);
     }
-    if (!isWithin(realRoot, realTarget)) {
+    if (!isWithin(realRoot, operationPath)) {
       throw new Error(`Invalid path: "${userPath}" escapes workspace root through symlink`);
     }
   }
 
   if (options.denySensitive) {
     const lexicalRelative = path.relative(resolvedRoot, resolved);
-    const realRelative = path.relative(realRoot, realTarget);
+    const realRelative = path.relative(realRoot, operationPath);
     if (isSensitiveFilePath(lexicalRelative) || isSensitiveFilePath(realRelative)) {
       throw new Error(`Invalid path: access to sensitive file denied: ${userPath}`);
     }
   }
 
-  return resolved;
+  return { lexicalPath: resolved, operationPath };
+}
+
+export function safePath(root: string, userPath: string, options: SafePathOptions = {}): string {
+  return resolveSafePath(root, userPath, options).lexicalPath;
 }
 
 /** Convert an absolute path back to a workspace-relative path (e.g., /attachments/file.pdf) */
