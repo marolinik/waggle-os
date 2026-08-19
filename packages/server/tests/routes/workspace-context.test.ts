@@ -148,6 +148,7 @@ describe('workspace-context', () => {
     const wsManager = makeManager(new Map([
       ['rich-ws', { id: 'rich-ws', name: 'Rich Workspace' }],
     ]));
+    const activateWorkspaceMind = vi.fn(() => true);
 
     setupWorkspace('rich-ws', {
       frames: [
@@ -170,10 +171,11 @@ describe('workspace-context', () => {
       dataDir: tmpDir,
       workspaceId: 'rich-ws',
       wsManager,
-      activateWorkspaceMind: noopActivate,
+      activateWorkspaceMind,
     });
 
     expect(result).not.toBeNull();
+    expect(activateWorkspaceMind).not.toHaveBeenCalled();
     expect(result!.workspaceName).toBe('Rich Workspace');
     expect(result!.summary).toBeTruthy();
     expect(result!.summary.length).toBeGreaterThan(10);

@@ -224,11 +224,12 @@ export function buildWorkspaceNowBlock(opts: {
   dataDir: string;
   workspaceId: string;
   wsManager: WsManagerLike;
-  activateWorkspaceMind: (id: string) => boolean;
+  /** @deprecated Read-only context construction no longer mutates global workspace state. */
+  activateWorkspaceMind?: (id: string) => boolean;
   /** Optional cron schedules for upcoming schedule display */
   cronSchedules?: CronScheduleLike[];
 }): WorkspaceNowBlock | null {
-  const { dataDir, workspaceId, wsManager, activateWorkspaceMind } = opts;
+  const { dataDir, workspaceId, wsManager } = opts;
 
   // Path-traversal guard: workspaceId becomes a path segment below
   // (getMindPath + dataDir/workspaces/<workspaceId>/sessions). Reject any
@@ -241,14 +242,11 @@ export function buildWorkspaceNowBlock(opts: {
   const mindPath = wsManager.getMindPath(workspaceId);
   if (!fs.existsSync(mindPath)) return null;
 
-  activateWorkspaceMind(workspaceId);
-
   // ── Try structured state first (new path) ────────────────────
   const structuredState = buildWorkspaceState({
     dataDir,
     workspaceId,
     wsManager,
-    activateWorkspaceMind,
   });
 
   if (structuredState) {

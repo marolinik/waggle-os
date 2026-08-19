@@ -228,19 +228,18 @@ export interface BuildWorkspaceStateOpts {
   dataDir: string;
   workspaceId: string;
   wsManager: WsManagerLike;
-  activateWorkspaceMind: (id: string) => boolean;
+  /** @deprecated Read-only state construction no longer mutates global workspace state. */
+  activateWorkspaceMind?: (id: string) => boolean;
 }
 
 export function buildWorkspaceState(opts: BuildWorkspaceStateOpts): WorkspaceState | null {
-  const { dataDir, workspaceId, wsManager, activateWorkspaceMind } = opts;
+  const { dataDir, workspaceId, wsManager } = opts;
 
   const ws = wsManager.get(workspaceId);
   if (!ws) return null;
 
   const mindPath = wsManager.getMindPath(workspaceId);
   if (!fs.existsSync(mindPath)) return null;
-
-  activateWorkspaceMind(workspaceId);
 
   // ── Memory-sourced state ─────────────────────────────────────────
   let recentDecisions: StateItem[] = [];

@@ -498,7 +498,7 @@ describe('Chat Streaming API', () => {
   // it — and the 'ollama/' routing prefix must be stripped to the bare tag.
   it('routes an Ollama-selected model to the local Ollama endpoint, not LiteLLM (#4)', async () => {
     resetRateLimiter(server);
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
           status: 200,
@@ -516,16 +516,19 @@ describe('Chat Streaming API', () => {
       return { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
     };
 
-    await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: 'hi', model: 'ollama/llama3.2:latest' },
-    });
+    try {
+      await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'hi', model: 'ollama/llama3.2:latest' },
+      });
 
-    expect(capturedUrl).toMatch(/:11434\/v1$/);    // routed to Ollama, not LiteLLM
-    expect(capturedModel).toBe('llama3.2:latest');  // 'ollama/' prefix stripped
-
-    server.agentRunner = originalRunner;
+      expect(capturedUrl).toMatch(/:11434\/v1$/);    // routed to Ollama, not LiteLLM
+      expect(capturedModel).toBe('llama3.2:latest');  // 'ollama/' prefix stripped
+    } finally {
+      server.agentRunner = originalRunner;
+      fetchSpy.mockRestore();
+    }
   });
 
   // H-07 G4 · agent errors must finalize the execution trace with
@@ -1133,6 +1136,14 @@ describe('Chat Streaming API', () => {
     const originalCreateSessionOrchestrator =
       server.agentState.createSessionOrchestrator;
     const originalRunner = server.agentRunner;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
+          status: 200,
+        });
+      }
+      return new Response('', { status: 503 });
+    });
     let memoryWrite: Promise<unknown> | undefined;
     let switchedAfterAuthorization = false;
 
@@ -1184,6 +1195,7 @@ describe('Chat Streaming API', () => {
       server.agentState.createSessionOrchestrator =
         originalCreateSessionOrchestrator;
       server.agentRunner = originalRunner;
+      fetchSpy.mockRestore();
     }
   });
 
