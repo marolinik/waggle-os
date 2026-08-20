@@ -165,6 +165,31 @@ function localWorkspacePackageNames() {
 }
 
 describe('Tauri Production Configuration', () => {
+  it('pins Tauri-rewritten manifests and generated schemas to LF across platforms', () => {
+    const trackedPaths = [
+      'app/src-tauri/Cargo.toml',
+      'app/src-tauri/gen/schemas/windows-schema.json',
+      'app/src-tauri/gen/schemas/desktop-schema.json',
+    ];
+    const result = spawnSync('git', ['check-attr', '-z', 'text', 'eol', '--', ...trackedPaths], {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      windowsHide: true,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    const fields = result.stdout.split('\0').filter(Boolean);
+    const effectiveAttributes = new Map<string, string>();
+    for (let index = 0; index < fields.length; index += 3) {
+      effectiveAttributes.set(`${fields[index]}:${fields[index + 1]}`, fields[index + 2]);
+    }
+    for (const trackedPath of trackedPaths) {
+      expect(effectiveAttributes.get(`${trackedPath}:text`)).toBe('set');
+      expect(effectiveAttributes.get(`${trackedPath}:eol`)).toBe('lf');
+    }
+  });
+
   it('tauri.conf.json exists and has valid version', () => {
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
     expect(conf.productName).toBe('Waggle');
