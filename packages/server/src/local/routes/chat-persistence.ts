@@ -15,6 +15,7 @@ const LEGACY_DEFAULT_CHAT_DIR = 'legacy-chat';
 const MANAGED_DEFAULT_CHAT_STATE_ID = '\u0001managed-default';
 const CHAT_HISTORY_LAYOUT_FILE = 'chat-history-layout.json';
 const DEFAULT_CHAT_SESSION_PREFIX = 'workspaces/default/sessions/';
+const DEFAULT_WORKSPACE_CONFIG_PATH = 'workspaces/default/workspace.json';
 const CHAT_HISTORY_LAYOUT_VERSION = 1;
 
 export const CHAT_HISTORY_RECOVERY_CODE = 'CHAT_HISTORY_RECOVERY_REQUIRED';
@@ -207,7 +208,7 @@ export function planChatHistoryRestore<T extends ChatHistoryRestoreEntry>(
   const hasDefaultSessions = normalized.some(({ comparisonPath }) =>
     comparisonPath.startsWith(DEFAULT_CHAT_SESSION_PREFIX));
   const hasManagedDefaultConfig = normalized.some(({ comparisonPath }) =>
-    comparisonPath === 'workspaces/default/workspace.json');
+    comparisonPath === DEFAULT_WORKSPACE_CONFIG_PATH);
   if (!hasRecordedLayout && hasDefaultSessions && hasManagedDefaultConfig) {
     throw new Error(
       'Ambiguous markerless default chat history in backup.',
@@ -226,9 +227,12 @@ export function planChatHistoryRestore<T extends ChatHistoryRestoreEntry>(
     const defaultSessionPath = comparisonPath.startsWith(DEFAULT_CHAT_SESSION_PREFIX)
       ? `${DEFAULT_CHAT_SESSION_PREFIX}${relativePath.slice(DEFAULT_CHAT_SESSION_PREFIX.length)}`
       : null;
+    const defaultWorkspaceConfigPath = comparisonPath === DEFAULT_WORKSPACE_CONFIG_PATH
+      ? DEFAULT_WORKSPACE_CONFIG_PATH
+      : null;
     const targetPath = defaultSessionPath && !hasRecordedLayout
       ? `${LEGACY_DEFAULT_CHAT_DIR}/${defaultSessionPath}`
-      : defaultSessionPath ?? relativePath;
+      : defaultSessionPath ?? defaultWorkspaceConfigPath ?? relativePath;
     const targetKey = targetPath.toLowerCase();
     if (targetPaths.has(targetKey)) {
       throw new Error(`Invalid chat history layout: duplicate target ${targetPath}.`);

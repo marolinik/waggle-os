@@ -25,6 +25,7 @@ import { buildLocalServer } from '../src/local/index.js';
 import {
   isChatHistoryRestoreBusy,
   notifyChatHistoryRestored,
+  planChatHistoryRestore,
   registerChatHistoryRestoreParticipant,
 } from '../src/local/routes/chat-persistence.js';
 import type { FastifyInstance } from 'fastify';
@@ -299,6 +300,15 @@ describe('Backup & Restore (PM-5)', () => {
     expect(managed.json().messages).toEqual([]);
   });
 
+  it('canonicalizes managed-default workspace metadata before restore', () => {
+    const [planned] = planChatHistoryRestore([{
+      relativePath: 'WORKSPACES/DEFAULT/WORKSPACE.JSON',
+      content: Buffer.from('{}', 'utf-8').toString('base64'),
+    }]);
+
+    expect(planned.relativePath).toBe('workspaces/default/workspace.json');
+  });
+
   it('keeps marker-bearing personal and managed-default transcripts separate without replacing the live marker', async () => {
     const personalSession = `recorded-personal-${Date.now()}`;
     const managedSession = `recorded-managed-${Date.now()}`;
@@ -342,6 +352,18 @@ describe('Backup & Restore (PM-5)', () => {
     expect(personal.json().messages[0]?.content).toBe('RESTORED RECORDED PERSONAL');
     expect(managed.json().messages[0]?.content).toBe('RESTORED RECORDED MANAGED');
     expect(fs.readFileSync(markerPath, 'utf-8')).toBe(liveMarker);
+
+    const backupAgain = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/backup',
+    });
+    expect(backupAgain.statusCode).toBe(200);
+    const restoreAgain = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/restore',
+      payload: { backup: backupAgain.rawPayload.toString('base64') },
+    });
+    expect(restoreAgain.statusCode).toBe(200);
   });
 
   it('uses one restore participant identity across data-directory aliases', () => {
