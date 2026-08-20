@@ -9,6 +9,7 @@ import type { ToolDefinition } from '../src/tools.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 describe('createSystemTools', () => {
   let workspace: string;
@@ -53,12 +54,21 @@ describe('createSystemTools', () => {
     ].join(';');
   }
 
-  function isProcessAlive(pid: number): boolean {
+  function isProcessRunning(pid: number): boolean {
     try {
       process.kill(pid, 0);
-      return true;
     } catch (error) {
       return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+    }
+    if (process.platform === 'win32') return true;
+    try {
+      const state = execFileSync('/bin/ps', ['-o', 'stat=', '-p', String(pid)], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      return state.length > 0 && !/^[ZX]/.test(state);
+    } catch (error) {
+      return (error as { status?: number }).status !== 1;
     }
   }
 
@@ -66,7 +76,7 @@ describe('createSystemTools', () => {
     expect(fs.existsSync(ready)).toBe(true);
     const descendantPid = Number(fs.readFileSync(ready, 'utf8'));
     expect(Number.isSafeInteger(descendantPid) && descendantPid > 0).toBe(true);
-    expect(isProcessAlive(descendantPid)).toBe(false);
+    expect(isProcessRunning(descendantPid)).toBe(false);
     const heartbeatAtReturn = fs.readFileSync(heartbeat, 'utf8');
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(fs.readFileSync(heartbeat, 'utf8')).toBe(heartbeatAtReturn);
@@ -644,7 +654,7 @@ describe('createSystemTools', () => {
       const descendantPidValid = Number.isSafeInteger(descendantPid) && descendantPid > 0;
 
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 9_000);
-      const aliveAtUnblock = descendantPidValid && isProcessAlive(descendantPid);
+      const aliveAtUnblock = descendantPidValid && isProcessRunning(descendantPid);
       const result = await execution;
 
       expect(readyBeforeBlock).toBe(true);
@@ -738,7 +748,7 @@ describe('createSystemTools', () => {
         }
       }
       const descendantPidValid = Number.isSafeInteger(descendantPid) && descendantPid > 0;
-      const aliveAtUnblock = descendantPidValid && isProcessAlive(descendantPid);
+      const aliveAtUnblock = descendantPidValid && isProcessRunning(descendantPid);
       const result = await execution;
 
       expect(rootReadyAtUnblock).toBe(true);
@@ -775,12 +785,12 @@ describe('createSystemTools', () => {
       expect(fs.existsSync(descendantReady)).toBe(true);
       const descendantPid = Number(fs.readFileSync(descendantReady, 'utf8'));
       expect(Number.isSafeInteger(descendantPid) && descendantPid > 0).toBe(true);
-      if (process.platform !== 'win32') expect(isProcessAlive(descendantPid)).toBe(true);
+      if (process.platform !== 'win32') expect(isProcessRunning(descendantPid)).toBe(true);
       const exitDeadline = Date.now() + 5_000;
-      while (isProcessAlive(descendantPid) && Date.now() < exitDeadline) {
+      while (isProcessRunning(descendantPid) && Date.now() < exitDeadline) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      expect(isProcessAlive(descendantPid)).toBe(false);
+      expect(isProcessRunning(descendantPid)).toBe(false);
     }, 10_000);
 
     it.runIf(process.platform !== 'win32')('kills same-group descendants after the managed root exits without inherited pipes', async () => {
