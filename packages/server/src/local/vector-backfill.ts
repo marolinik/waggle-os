@@ -288,14 +288,6 @@ export async function runVectorBackfill(
       result.skipped = 'no_real_embedder';
       return result;
     }
-    const preparationProblem = await prepareProvider(embedder);
-    if (preparationProblem) {
-      result.skipped = embedder.getActiveProvider() === 'mock'
-        ? 'no_real_embedder'
-        : 'provider_degraded';
-      if (result.skipped === 'provider_degraded') result.errors.push(preparationProblem);
-      return result;
-    }
 
     const raw = db.getDatabase();
     const activeFrameCount = (raw.prepare(
@@ -303,6 +295,15 @@ export async function runVectorBackfill(
     ).get() as { n: number }).n;
     if (activeFrameCount === 0) {
       result.skipped = 'empty_mind';
+      return result;
+    }
+
+    const preparationProblem = await prepareProvider(embedder);
+    if (preparationProblem) {
+      result.skipped = embedder.getActiveProvider() === 'mock'
+        ? 'no_real_embedder'
+        : 'provider_degraded';
+      if (result.skipped === 'provider_degraded') result.errors.push(preparationProblem);
       return result;
     }
 

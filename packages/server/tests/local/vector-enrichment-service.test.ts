@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MindDB, type EmbeddingProviderInstance } from '@waggle/core';
+import {
+  MindDB,
+  type EmbeddingProviderInstance,
+  type EmbeddingProviderStatus,
+} from '@waggle/core';
 import {
   VectorEnrichmentService,
   type VectorEnrichmentRunResult,
@@ -116,5 +120,41 @@ describe('VectorEnrichmentService', () => {
     pass.resolve(backfillResult());
     await expect(stopping).resolves.toBeUndefined();
     await expect(run).resolves.toMatchObject<Partial<VectorEnrichmentRunResult>>({ mindsVisited: 1 });
+  });
+
+  it('does not let a stalled provider reprobe block shutdown for an empty mind', async () => {
+    const personal = new MindDB(':memory:');
+    dbs.push(personal);
+    const status: EmbeddingProviderStatus = {
+      activeProvider: 'mock',
+      availableProviders: ['mock'],
+      dimensions: 1024,
+      modelName: 'deterministic-mock',
+      probeTimestamp: new Date(0).toISOString(),
+    };
+    const reprobe = vi.fn(() => new Promise<EmbeddingProviderStatus>(() => undefined));
+    const stalledProvider = {
+      dimensions: 1024,
+      getActiveProvider: () => 'mock',
+      getStatus: () => status,
+      reprobe,
+    } as unknown as EmbeddingProviderInstance;
+    const service = new VectorEnrichmentService({
+      personalMind: personal,
+      embeddingProvider: stalledProvider,
+      listWorkspaceIds: () => [],
+      acquireWorkspaceMind: () => { throw new Error('not used'); },
+      releaseWorkspaceMind: () => undefined,
+    });
+
+    const run = service.runNow();
+    await Promise.resolve();
+
+    expect(reprobe).not.toHaveBeenCalled();
+    await expect(run).resolves.toMatchObject<Partial<VectorEnrichmentRunResult>>({
+      mindsVisited: 1,
+      passes: 1,
+    });
+    await expect(service.stop()).resolves.toBeUndefined();
   });
 });
