@@ -135,6 +135,47 @@ jobs:
           $sourceStatus = @(& git status --porcelain=v1 --untracked-files=all)
           if ($LASTEXITCODE -ne 0) { throw 'Could not inspect repository source state after Tauri build.' }
           if ($sourceStatus.Count -ne 0) {
+            $trackedPaths = @(& git diff --name-only --diff-filter=ACDMRTUXB)
+            if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate tracked Tauri build mutations.' }
+            foreach ($trackedPath in $trackedPaths) {
+              Write-Host "::group::Tracked mutation: $trackedPath"
+              $headBlob = @(& git rev-parse "HEAD:$trackedPath" 2>&1) -join ''
+              $headBlobExit = $LASTEXITCODE
+              $indexBlob = @(& git rev-parse ":$trackedPath" 2>&1) -join ''
+              $indexBlobExit = $LASTEXITCODE
+              if (Test-Path -LiteralPath $trackedPath -PathType Leaf) {
+                $worktreeHash = (Get-FileHash -LiteralPath $trackedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $filteredBlob = @(& git hash-object "--path=$trackedPath" -- $trackedPath 2>&1) -join ''
+                $filteredBlobExit = $LASTEXITCODE
+                $resolvedPath = (Resolve-Path -LiteralPath $trackedPath).Path
+                $bytes = [IO.File]::ReadAllBytes($resolvedPath)
+                $crlfCount = 0
+                $lfOnlyCount = 0
+                for ($index = 0; $index -lt $bytes.Length; $index += 1) {
+                  if ($bytes[$index] -ne 10) { continue }
+                  if ($index -gt 0 -and $bytes[$index - 1] -eq 13) { $crlfCount += 1 }
+                  else { $lfOnlyCount += 1 }
+                }
+              } else {
+                $worktreeHash = '<missing>'
+                $filteredBlob = '<missing>'
+                $filteredBlobExit = 0
+                $crlfCount = 0
+                $lfOnlyCount = 0
+              }
+              Write-Host "HEAD blob (exit $headBlobExit): $headBlob"
+              Write-Host "Index blob (exit $indexBlobExit): $indexBlob"
+              Write-Host "Git-filtered worktree blob (exit $filteredBlobExit): $filteredBlob"
+              Write-Host "Raw worktree SHA256: $worktreeHash; CRLF=$crlfCount; LF-only=$lfOnlyCount"
+              $changeSummary = @(& git diff --numstat -- $trackedPath)
+              $changeSummaryExit = $LASTEXITCODE
+              if ($changeSummaryExit -ne 0) {
+                Write-Host "Could not render numeric diff summary (exit $changeSummaryExit)."
+              } else {
+                Write-Host "Numeric diff summary: $($changeSummary -join '; ')"
+              }
+              Write-Host '::endgroup::'
+            }
             $sourceDetails = $sourceStatus -join [Environment]::NewLine
             throw "Windows Tauri build mutated repository worktree.$([Environment]::NewLine)$sourceDetails"
           }

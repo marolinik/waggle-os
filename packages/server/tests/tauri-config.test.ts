@@ -4102,6 +4102,20 @@ Expect-Rejection {
       expect(run).not.toMatch(/\b(?:Remove-Item|Clear-Content|Set-Content)\b/i);
       expect(diagnosticStep['continue-on-error']).toBeUndefined();
     }
+
+    const postBuildRun = postBuild.run ?? '';
+    expect(postBuildRun).toContain(
+      '$trackedPaths = @(& git diff --name-only --diff-filter=ACDMRTUXB)',
+    );
+    expect(postBuildRun).toContain('& git rev-parse "HEAD:$trackedPath"');
+    expect(postBuildRun).toContain('& git rev-parse ":$trackedPath"');
+    expect(postBuildRun).toContain('Get-FileHash -LiteralPath $trackedPath -Algorithm SHA256');
+    expect(postBuildRun).toContain('& git diff --numstat -- $trackedPath');
+    expect(postBuildRun).not.toContain('git diff --no-ext-diff');
+    expect(postBuildRun).not.toContain('$diffLines');
+    expect(postBuildRun.indexOf('$trackedPaths = @(')).toBeLessThan(
+      postBuildRun.indexOf('throw "Windows Tauri build mutated repository worktree.'),
+    );
   });
 
   it.runIf(process.platform === 'win32')(
