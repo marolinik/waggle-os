@@ -64,7 +64,8 @@ jobs:
             --exclude=packages/hive-mind-cli/tests/cli-help.test.ts \
             --exclude=packages/hive-mind-mcp-server/tests/runtime.test.ts \
             --exclude=packages/launcher/tests/cli.test.ts \
-            --exclude=packages/memory-mcp/tests/runtime.test.ts
+            --exclude=packages/memory-mcp/tests/runtime.test.ts \
+            --maxWorkers=2
 
       # These tests each create a temporary project and run npm install. Running
       # several cold installs in parallel makes individual test timeouts measure

@@ -1833,6 +1833,26 @@ describe('Tauri Production Configuration', () => {
 });
 
 describe('CI/CD Configuration', () => {
+  it('bounds the broad root Vitest lane to two workers', () => {
+    const workflow = parseYaml(
+      fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf-8'),
+    ) as {
+      jobs?: Record<string, { steps?: Array<{ name?: string; run?: string }> }>;
+    };
+    const steps = workflow.jobs?.test?.steps ?? [];
+    const matches = steps.filter(
+      (step) => step.name === 'Unit tests — packages + cross-cutting (root vitest)',
+    );
+    expect(matches).toHaveLength(1);
+    const run = matches[0]?.run ?? '';
+    const workerValues = [
+      ...run.matchAll(/--maxWorkers(?:=|\s+)([^\s\\]+)/g),
+    ].map((match) => match[1]);
+    expect(workerValues).toEqual(['2']);
+    expect(run).not.toContain('--no-file-parallelism');
+    expect(run).not.toMatch(/--fileParallelism(?:=|\s+)false\b/);
+  });
+
   it('clean-checkout CI resolves vendored PPTX and uses the locked dependency graph', () => {
     const rootPackage = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'),
