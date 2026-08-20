@@ -542,6 +542,7 @@ function execFileWithMainThreadTimeout(
     let processExited = false;
     let settled = false;
     let timedOut = false;
+    const ownedProcessGroupId = child.pid;
     const timeoutState: {
       settlementTimer?: ReturnType<typeof setTimeout>;
     } = {};
@@ -591,6 +592,53 @@ function execFileWithMainThreadTimeout(
         child.stderr?.destroy();
         finish(outputLimitError?.code ?? null, outputLimitError?.message ?? errorMessage);
       }, 2000);
+    };
+    const finishAfterOwnedProcessGroupSettles = (
+      errorCode: string | number | null,
+      errorMessage: string | null,
+    ) => {
+      if (timeoutState.settlementTimer) clearTimeout(timeoutState.settlementTimer);
+      if (!ownedProcessGroupId || ownedProcessGroupId <= 0) {
+        cleanupDegraded = true;
+        finish(errorCode, errorMessage);
+        return;
+      }
+      const deadlineAt = Date.now() + 1000;
+      const checkSettlement = () => {
+        let liveMemberRemains = true;
+        try {
+          const listing = execFileSync('/bin/ps', ['-A', '-o', 'pid=', '-o', 'pgid=', '-o', 'stat='], {
+            encoding: 'utf8',
+            env: options.env,
+            maxBuffer: 1024 * 1024,
+            stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: 250,
+          });
+          liveMemberRemains = listing.trim().split(/\r?\n/).some((line) => {
+            const [pidText, pgidText, state] = line.trim().split(/\s+/);
+            const pid = Number(pidText);
+            const pgid = Number(pgidText);
+            return pgid === ownedProcessGroupId
+              && pid !== process.pid
+              && (!state || !/^[ZX]/.test(state));
+          });
+        } catch {
+          // Retry transient probe failures until the bounded deadline, then
+          // preserve the existing degraded-cleanup warning.
+        }
+
+        if (!liveMemberRemains) {
+          finish(errorCode, errorMessage);
+          return;
+        }
+        if (Date.now() >= deadlineAt) {
+          cleanupDegraded = true;
+          finish(errorCode, errorMessage);
+          return;
+        }
+        timeoutState.settlementTimer = setTimeout(checkSettlement, 25);
+      };
+      checkSettlement();
     };
     const captureOutput = (streamName: 'stdout' | 'stderr', chunk: Buffer) => {
       const state = outputState[streamName];
@@ -674,11 +722,11 @@ function execFileWithMainThreadTimeout(
         return;
       }
       if (outputLimitError) {
-        finish(outputLimitError.code, outputLimitError.message);
+        finishAfterOwnedProcessGroupSettles(outputLimitError.code, outputLimitError.message);
         return;
       }
       if (timedOut) {
-        finish(null, null);
+        finishAfterOwnedProcessGroupSettles(null, null);
         return;
       }
       if (code !== 0) {

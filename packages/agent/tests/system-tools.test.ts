@@ -54,6 +54,17 @@ describe('createSystemTools', () => {
     ].join(';');
   }
 
+  function boundedEscapedHeartbeatChildCode(
+    ready: string,
+    heartbeat: string,
+    stop: string,
+  ): string {
+    return [
+      boundedHeartbeatChildCode(ready, heartbeat),
+      `setInterval(() => { if (fs.existsSync(${JSON.stringify(stop)})) process.exit(0) }, 25)`,
+    ].join(';');
+  }
+
   function isProcessRunning(pid: number): boolean {
     try {
       process.kill(pid, 0);
@@ -80,6 +91,36 @@ describe('createSystemTools', () => {
     const heartbeatAtReturn = fs.readFileSync(heartbeat, 'utf8');
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(fs.readFileSync(heartbeat, 'utf8')).toBe(heartbeatAtReturn);
+  }
+
+  async function expectEscapedDescendantRunningThenStop(
+    ready: string,
+    heartbeat: string,
+    stop: string,
+  ): Promise<void> {
+    let descendantPid = Number.NaN;
+    try {
+      expect(fs.existsSync(ready)).toBe(true);
+      descendantPid = Number(fs.readFileSync(ready, 'utf8'));
+      expect(Number.isSafeInteger(descendantPid) && descendantPid > 0).toBe(true);
+      expect(isProcessRunning(descendantPid)).toBe(true);
+      const heartbeatAtReturn = fs.readFileSync(heartbeat, 'utf8');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(fs.readFileSync(heartbeat, 'utf8')).not.toBe(heartbeatAtReturn);
+      expect(isProcessRunning(descendantPid)).toBe(true);
+    } finally {
+      fs.writeFileSync(stop, 'stop');
+      const stopDeadline = Date.now() + 5_000;
+      while (
+        Number.isSafeInteger(descendantPid)
+        && descendantPid > 0
+        && isProcessRunning(descendantPid)
+        && Date.now() < stopDeadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    expect(isProcessRunning(descendantPid)).toBe(false);
   }
 
   it('creates all system tools', () => {
@@ -839,6 +880,60 @@ describe('createSystemTools', () => {
       expect(result.errorCode).toBe('ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
       expect(result.cleanupDegraded).toBe(true);
       await expectDescendantStopped(ready, heartbeat);
+    }, 10_000);
+
+    it.runIf(process.platform !== 'win32')('warns when a detached descendant escapes a timed-out process group', async () => {
+      const ready = path.join(workspace, 'escaped-timeout-ready.txt');
+      const heartbeat = path.join(workspace, 'escaped-timeout-heartbeat.txt');
+      const stop = path.join(workspace, 'escaped-timeout-stop.txt');
+      const childCode = boundedEscapedHeartbeatChildCode(ready, heartbeat, stop);
+      const code = [
+        `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { detached: true, stdio: 'ignore' })`,
+        'child.unref()',
+        'setTimeout(() => {}, 30000)',
+      ].join(';');
+      const runCode = getTool('run_code');
+      const execution = Promise.resolve(runCode.execute({ language: 'javascript', code, timeout: 1000 }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      const result = await execution;
+      await expectEscapedDescendantRunningThenStop(ready, heartbeat, stop);
+      expect(result.toLowerCase()).toContain('timed out');
+      expect(result).toMatch(/descendants may still be running/i);
+    }, 10_000);
+
+    it.runIf(process.platform !== 'win32')('warns when a detached descendant escapes max-buffer cleanup', async () => {
+      const ready = path.join(workspace, 'escaped-maxbuffer-ready.txt');
+      const heartbeat = path.join(workspace, 'escaped-maxbuffer-heartbeat.txt');
+      const stop = path.join(workspace, 'escaped-maxbuffer-stop.txt');
+      const childCode = boundedEscapedHeartbeatChildCode(ready, heartbeat, stop);
+      const code = [
+        `const fs = require('node:fs')`,
+        `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { detached: true, stdio: 'ignore' })`,
+        'child.unref()',
+        'const sleeper = new Int32Array(new SharedArrayBuffer(4))',
+        `const readyDeadline = Date.now() + 5000`,
+        `while (!fs.existsSync(${JSON.stringify(ready)}) && Date.now() < readyDeadline) Atomics.wait(sleeper, 0, 0, 20)`,
+        `process.stdout.write('x'.repeat(4096))`,
+      ].join(';');
+      const execution = execFileWithTreeTimeout(process.execPath, ['-e', code], {
+        cwd: workspace,
+        env: createSanitizedEnv(),
+        maxBuffer: 1024,
+        windowsHide: true,
+      }, 10_000);
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      const result = await execution;
+      await expectEscapedDescendantRunningThenStop(ready, heartbeat, stop);
+      expect(result.errorCode).toBe('ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+      expect(result.cleanupDegraded).toBe(true);
     }, 10_000);
 
     it.runIf(process.platform === 'win32')('surfaces degraded cleanup when taskkill is unavailable', async () => {
