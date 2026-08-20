@@ -1853,6 +1853,95 @@ describe('CI/CD Configuration', () => {
     expect(run).not.toMatch(/--fileParallelism(?:=|\s+)false\b/);
   });
 
+  it('keeps Intel macOS PR verification app-only while retaining DMG release coverage', () => {
+    type MacJob = {
+      strategy?: {
+        matrix?: {
+          include?: Array<{
+            target?: string;
+            arch?: string;
+            runner?: string;
+            bundles?: string;
+            artifact_path?: string;
+          }>;
+        };
+      };
+      steps?: Array<{
+        name?: string;
+        run?: string;
+        with?: { path?: string; 'if-no-files-found'?: string };
+      }>;
+    };
+    const prWorkflow = parseYaml(
+      fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'tauri-build-pr.yml'), 'utf-8'),
+    ) as { jobs?: { 'verify-macos'?: MacJob } };
+    const prJob = prWorkflow.jobs?.['verify-macos'];
+    const matrix = prJob?.strategy?.matrix?.include ?? [];
+    expect(matrix).toEqual([
+      {
+        target: 'aarch64-apple-darwin',
+        arch: 'arm64',
+        runner: 'macos-15',
+        bundles: 'dmg',
+        artifact_path: 'app/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg',
+      },
+      {
+        target: 'x86_64-apple-darwin',
+        arch: 'x64',
+        runner: 'macos-15-intel',
+        bundles: 'app',
+        artifact_path: 'app/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app',
+      },
+    ]);
+    const prBuild = prJob?.steps?.find(
+      (step) => step.name === 'Build Tauri (macOS ${{ matrix.target }})',
+    );
+    expect(prBuild?.run).toBe(
+      'cd app && node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}',
+    );
+    const prUpload = prJob?.steps?.find((step) => step.name === 'Upload macOS artifacts');
+    expect(prUpload?.with?.path).toBe('${{ matrix.artifact_path }}');
+    expect(prUpload?.with?.['if-no-files-found']).toBe('error');
+
+    const releaseWorkflow = parseYaml(
+      fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf-8'),
+    ) as { jobs?: { 'build-macos'?: MacJob } };
+    const releaseJob = releaseWorkflow.jobs?.['build-macos'];
+    const releaseMatrix = releaseJob?.strategy?.matrix?.include ?? [];
+    expect(releaseMatrix).toEqual([
+      {
+        target: 'aarch64-apple-darwin',
+        arch: 'arm64',
+        runner: 'macos-15',
+      },
+      {
+        target: 'x86_64-apple-darwin',
+        arch: 'x64',
+        runner: 'macos-15-intel',
+      },
+    ]);
+    const releaseBuild = releaseJob?.steps?.find(
+      (step) => step.name === 'Build Tauri (macOS)',
+    );
+    expect(releaseBuild?.run).toBe(
+      'cd app && node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }}',
+    );
+    const releaseDmgUpload = releaseJob?.steps?.find(
+      (step) => step.name === 'Upload macOS DMG verification artifact',
+    );
+    expect(releaseDmgUpload?.with?.path).toBe(
+      'app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg',
+    );
+    expect(releaseDmgUpload?.with?.['if-no-files-found']).toBe('error');
+    const releaseAppUpload = releaseJob?.steps?.find(
+      (step) => step.name === 'Upload macOS app verification artifact',
+    );
+    expect(releaseAppUpload?.with?.path).toBe(
+      'app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app',
+    );
+    expect(releaseAppUpload?.with?.['if-no-files-found']).toBe('error');
+  });
+
   it('clean-checkout CI resolves vendored PPTX and uses the locked dependency graph', () => {
     const rootPackage = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'),
@@ -1918,7 +2007,8 @@ describe('CI/CD Configuration', () => {
     expect(content).toContain('build-windows');
     expect(content).toContain('build-macos');
     expect(content).not.toMatch(/uses:\s+tauri-apps\/tauri-action/);
-    expect(content).toContain('Upload macOS verification artifacts');
+    expect(content).toContain('Upload macOS DMG verification artifact');
+    expect(content).toContain('Upload macOS app verification artifact');
     expect(content).toContain('aarch64-apple-darwin');
     expect(content).toContain('x86_64-apple-darwin');
     expect(content).toContain('runner: macos-15');

@@ -2535,13 +2535,19 @@ jobs:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
 
-      - name: Upload macOS verification artifacts
+      - name: Upload macOS DMG verification artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: waggle-macos-verification-${{ matrix.target }}-${{ github.sha }}
-          path: |
-            app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
+          name: waggle-macos-dmg-verification-${{ matrix.target }}-${{ github.sha }}
+          path: app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload macOS app verification artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: waggle-macos-app-verification-${{ matrix.target }}-${{ github.sha }}
+          path: app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
           if-no-files-found: error
           retention-days: 7
 

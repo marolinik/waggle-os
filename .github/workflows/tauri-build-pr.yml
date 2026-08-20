@@ -168,9 +168,13 @@ jobs:
           - target: aarch64-apple-darwin
             arch: arm64
             runner: macos-15
+            bundles: dmg
+            artifact_path: app/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
           - target: x86_64-apple-darwin
             arch: x64
             runner: macos-15-intel
+            bundles: app
+            artifact_path: app/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
     runs-on: ${{ matrix.runner }}
     env:
       TARGET_ARCH: ${{ matrix.arch }}
@@ -227,7 +231,7 @@ jobs:
         # See verify-windows note: use the app-local lockfile-pinned CLI.
         # Built per-arch — universal is rejected by the bundle scripts
         # (per-arch native modules), matching release.yml.
-        run: cd app && node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }}
+        run: cd app && node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
@@ -236,8 +240,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: waggle-macos-${{ matrix.target }}-${{ github.sha }}
-          path: |
-            app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
-          if-no-files-found: warn
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
           retention-days: 7
