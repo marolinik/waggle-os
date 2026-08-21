@@ -1952,7 +1952,63 @@ const PRIORITIZATION_ORDERED_ITEM = /^\s*(?:[-*]\s*)?(?:\d+[.)]|(?:first|second|
 const PRIORITIZATION_ACTION_BOUNDARY = /^\s*(?:[-*]\s*)?(?:[^.!?;:\r\n]*\b(?:first|next|initial)\s+action\b|today(?:['’]s)?\s+action\b|(?:start|begin)\s+today\b|today\s*:)/i;
 const PRIORITIZATION_EXPLICIT_RATIONALE = /\b(?:justif(?:y|ication)?|rationale|decision basis|why)\b/i;
 const PRIORITIZATION_ORDER_CLAUSE = /\b(?:order|priorit(?:y|ies|ization|isation)?|plan)\b/i;
-const PRIORITIZATION_REPORTED_CLAUSE = /\b(?:quoted|illustrative|example|illustration|quote)\b|(?<!not )\bhypothetical\b|\b(?:memo|slide|note|report|document|review)\s+(?:says?|states?|claims?|asserts?)\b/i;
+const PRIORITIZATION_REPORTED_CLAUSE = /^\s*(?:(?:an?|the)\s+)?(?:analysts?|experts?|observers?|reviewers?|sources?)(?:['’]s?)?(?:\s+(?:conclusion|view|opinion|assessment))?\s*:|\b(?:quoted|illustrative|example|illustration|quote|reportedly|allegedly)\b|(?<!not )\bhypothetical\b|\baccording to\b|\bper\s+(?:(?:an?|the)\s+)?(?:analysts?|experts?|observers?|reviewers?|reports?|sources?)\b|\bin\s+(?:(?:an?|the)\s+)?(?:analysts?|experts?|observers?|reviewers?|sources?)(?:['’]s?)\s+(?:view|opinion|assessment)\b|\bin\s+(?:the\s+)?(?:view|opinion|assessment)\s+of\b|\b(?:memo|slide|note|report|document|review)\s+(?:says?|states?|claims?|asserts?)\b/i;
+const PRIORITIZATION_ATTRIBUTION_VERB = /\b(?:say|says|said|saying|report|reports|reported|reporting|state|states|stated|stating|claim|claims|claimed|claiming|assert|asserts|asserted|asserting|suggest|suggests|suggested|suggesting|indicate|indicates|indicated|indicating|note|notes|noted|noting|warn|warns|warned|warning)\b/gi;
+const PRIORITIZATION_ATTRIBUTED_REFERENCE = /^(?:it|its|this|that|these|those|they|their|them|the\s+(?:problem|problems|issue|issues|bug|bugs|leak|leaks|former|latter|same)|such\s+(?:a\s+)?(?:problem|problems|issue|issues|bug|bugs|leak|leaks))\b/i;
+const PRIORITIZATION_DIRECT_REPORT_PREDICATE = /\b(?:carr(?:y|ies)|creates?|causes?|poses?|remains?|threatens?|affects?|impacts?|drives?|degrades?|has|have|is|are)\b/i;
+const PRIORITIZATION_SINGULAR_DIRECT_REPORT_PREDICATE = /^(?:carries|creates|causes|poses|remains|threatens|affects|impacts|drives|degrades|has|is)$/;
+const PRIORITIZATION_PLURAL_DIRECT_REPORT_PREDICATE = /^(?:carry|create|cause|pose|remain|threaten|affect|impact|drive|degrade|have|are)$/;
+const PRIORITIZATION_ATTRIBUTION_COMPLEMENT = /\b(?:to|as)\b/i;
+const PRIORITIZATION_DIRECT_REPORT_RECIPIENT_EVENT = /^\s*[Tt]o\s+(?:Support|Customer Support|Customer Success|Engineering|Operations|Ops|SRE|Site Reliability|Reliability|Security|Platform|Infrastructure|Incident Response|[Tt]he\s+(?:support|customer support|customer success|engineering|operations|ops|SRE|site reliability|reliability|security|platform|infrastructure|incident response)\s+[Tt]eam)\s+(?:(?:[Oo]n\s+[A-Z][\w'’-]*)|[Tt]hat\s+(?:morning|afternoon|evening|night|day|week|month|quarter|year)|[Yy]esterday|[Tt]oday|[Ee]arlier|[Rr]ecently|[Oo]vernight)(?:\s+(?:and\s+)?still)?\s*$/;
+const PRIORITIZATION_DIRECT_REPORT_TIME = '(?:on\\s+[A-Z][\\w\'’-]*|that\\s+(?:morning|afternoon|evening|night|day|week|month|quarter|year)|(?:last|this)\\s+(?:morning|afternoon|evening|night|day|week|month|quarter|year)|yesterday|today|earlier|recently|overnight)';
+const PRIORITIZATION_DIRECT_REPORT_SUBJECT = '(?:it|they|the\\s+(?:issue|issues|bug|bugs|problem|problems|leak|leaks))';
+const PRIORITIZATION_DIRECT_REPORT_FACTUAL_MODIFIER = '(?:still|currently|now|already|directly|actively|consistently|clearly|demonstrably|measurably|actually)';
+const PRIORITIZATION_DIRECT_REPORT_EVENT_LEAD = new RegExp(
+  `^\\s*(?:${PRIORITIZATION_DIRECT_REPORT_TIME}\\s*)?(?:(?:(?:[,;]\\s*(?:(?:and|but)\\s+)?)|(?:(?:and|but)\\s+))${PRIORITIZATION_DIRECT_REPORT_SUBJECT}\\s+(?:${PRIORITIZATION_DIRECT_REPORT_FACTUAL_MODIFIER}\\s+)?|(?:[,;]\\s*)?(?:(?:and|but)\\s+)?(?:${PRIORITIZATION_DIRECT_REPORT_FACTUAL_MODIFIER}\\s+)?)$`,
+  'i',
+);
+const PRIORITIZATION_REPORT_AUXILIARY_ADVERB = '(?:already|just|now|still|often|also|ever|always|sometimes|soon|once|recently|currently|previously|newly|formally|officially|finally|earlier|promptly|duly|widely|repeatedly|frequently|consistently|actively|directly|clearly|demonstrably|measurably|actually|publicly|privately|internally|externally|successfully|properly|correctly|immediately|historically|regularly|routinely|commonly|typically|generally|occasionally)';
+const PRIORITIZATION_REPORT_GRADABLE_AUXILIARY_ADVERB = '(?:often|soon|recently|promptly|widely|frequently|consistently|actively|clearly|successfully|regularly|commonly|occasionally)';
+const PRIORITIZATION_REPORT_AUXILIARY_MODIFIER = `(?:${PRIORITIZATION_REPORT_AUXILIARY_ADVERB}|(?:very|quite)\\s+${PRIORITIZATION_REPORT_GRADABLE_AUXILIARY_ADVERB})`;
+const PRIORITIZATION_REPORT_AUXILIARY_ADVERBS = `(?:${PRIORITIZATION_REPORT_AUXILIARY_MODIFIER}\\s+){0,2}`;
+const PRIORITIZATION_REPORT_MODAL_AUXILIARY = `(?:will|would|can|could|may|might|must|shall|should)\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}(?:be\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}(?:being\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS})?|have\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}been\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS})`;
+const PRIORITIZATION_SINGULAR_REPORT_AUXILIARY = new RegExp(
+  `^[\\s,:—–-]*(?:(?:(?:is|was)\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}(?:being\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS})?|(?:has|had)\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}been\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}|${PRIORITIZATION_REPORT_MODAL_AUXILIARY}))?$`,
+);
+const PRIORITIZATION_PLURAL_REPORT_AUXILIARY = new RegExp(
+  `^[\\s,:—–-]*(?:(?:(?:are|were)\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}(?:being\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS})?|(?:have|had)\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}been\\s+${PRIORITIZATION_REPORT_AUXILIARY_ADVERBS}|${PRIORITIZATION_REPORT_MODAL_AUXILIARY}))?$`,
+);
+const PRIORITIZATION_REPORT_HEDGE = /\b(?:maybe|perhaps|may|might|could|would|possible|possibly|potential|potentially|plausible|plausibly|conceivable|conceivably|arguable|arguably|probable|probably|likely|unlikely|uncertain|uncertainty|unclear|unverified|unconfirmed|unsubstantiated|unproven|speculative|speculatively|hypothetical|hypothetically|theoretical|theoretically|putative|purported|purportedly|alleged|allegedly|apparent|apparently|ostensible|ostensibly|supposed|supposedly|presumed|presumably|seeming|seemingly|tentative|tentatively|questionable|questionably|doubtful|doubtfully|debatable|ambiguous|ambiguously|indeterminate|contingent|conditional|in\s+theory)\b/i;
+const PRIORITIZATION_REPORT_HEDGE_PHRASE = `(?:${PRIORITIZATION_REPORT_HEDGE.source}|or\\s+so\\s+(?:it\\s+)?(?:seems|appears)|(?:I|we)\\s+(?:think|believe|suspect)|as\\s+far\\s+as\\s+(?:I|we|one)\\s+(?:know|can\\s+tell)|to\\s+(?:my|our)\\s+knowledge|from\\s+what\\s+(?:I|we)\\s+can\\s+tell)`;
+const PRIORITIZATION_REPORT_VERIFICATION = '(?:verified|confirmed|substantiated|proven|validated|corroborated|established)';
+const PRIORITIZATION_REPORT_VERIFICATION_VERB = '(?:verify|confirm|substantiate|prove|validate|corroborate|establish)';
+const PRIORITIZATION_REPORT_VERIFICATION_NOUN = '(?:verification|confirmation|validation|corroboration|substantiation|proof)';
+const PRIORITIZATION_REPORT_VERIFICATION_MODIFIER = '(?:yet|independently|externally|internally|officially|formally|fully|conclusively|definitively)';
+const PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS = `(?:${PRIORITIZATION_REPORT_VERIFICATION_MODIFIER}\\s+){0,2}`;
+const PRIORITIZATION_REPORT_VERIFICATION_NOUN_MODIFIER = '(?:independent|external|internal|official|formal|full|conclusive|definitive)';
+const PRIORITIZATION_REPORT_VERIFICATION_NOUN_MODIFIERS = `(?:${PRIORITIZATION_REPORT_VERIFICATION_NOUN_MODIFIER}\\s+){0,2}`;
+const PRIORITIZATION_REPORT_NEGATED_VERIFICATION = `(?:(?:still\\s+)?not\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:is|are|was|were)\\s+(?:still\\s+)?not\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:isn['’]t|aren['’]t|wasn['’]t|weren['’]t)\\s+(?:(?:still|yet)\\s+)?${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:has|have|had)\\s+(?:still\\s+)?(?:not(?:\\s+yet)?|never)\\s+been\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:hasn['’]t|haven['’]t|hadn['’]t)\\s+(?:(?:still|yet)\\s+)?been\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:has|have|had|is|are|was|were)\\s+(?:still\\s+)?yet\\s+to\\s+be\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:cannot|can(?:not|['’]t)|could(?:\\s+not|n['’]t))\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}be\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION})`;
+const PRIORITIZATION_REPORT_OUTSTANDING_VERIFICATION = `(?:remains?\\s+(?:still\\s+)?to\\s+be\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:still\\s+)?(?:needs?|requires?|awaits?)\\s+${PRIORITIZATION_REPORT_VERIFICATION_NOUN_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_NOUN})`;
+const PRIORITIZATION_REPORT_RETRACTION_PREDICATE = `(?:(?:is|are|was|were|remains?|seems?|appears?)\\s+(?:still\\s+)?${PRIORITIZATION_REPORT_HEDGE_PHRASE}|${PRIORITIZATION_REPORT_NEGATED_VERIFICATION}|${PRIORITIZATION_REPORT_OUTSTANDING_VERIFICATION})`;
+const PRIORITIZATION_REPORT_RETRACTION_SUBJECT = `(?:(?:that|the|this)\\s+(?:risk|risks|impact|impacts|downside|exposure|threat)|it|this|that|they|these|those)`;
+const PRIORITIZATION_REPORT_RETRACTION_OBJECT = '(?:it|this|that|the\\s+(?:risk|risks|impact|impacts|downside|exposure|threat))';
+const PRIORITIZATION_REPORT_ACTIVE_RETRACTION = `(?:(?:I|we)\\s+(?:(?:cannot|can['’]t|could(?:\\s+not|n['’]t))\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_VERB}|(?:have|had)\\s+(?:not(?:\\s+yet)?|never)\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:haven['’]t|hadn['’]t)\\s+(?:yet\\s+)?${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION}|(?:have|had)\\s+yet\\s+to\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_VERB}|(?:did\\s+not|didn['’]t)\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_VERB}|(?:still\\s+)?need\\s+to\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_VERB})|(?:I\\s+(?:am|was)|we\\s+(?:are|were))\\s+unable\\s+to\\s+${PRIORITIZATION_REPORT_VERIFICATION_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_VERB})\\s+${PRIORITIZATION_REPORT_RETRACTION_OBJECT}`;
+const PRIORITIZATION_REPORT_PENDING_VERIFICATION = `(?:${PRIORITIZATION_REPORT_VERIFICATION_NOUN_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_NOUN}\\s+(?:(?:is|remains?)\\s+)?(?:pending|outstanding)|pending\\s+${PRIORITIZATION_REPORT_VERIFICATION_NOUN_MODIFIERS}${PRIORITIZATION_REPORT_VERIFICATION_NOUN})`;
+const PRIORITIZATION_REPORT_RETRACTION_CORE = `(?:(?:${PRIORITIZATION_REPORT_RETRACTION_SUBJECT}\\s+)?${PRIORITIZATION_REPORT_RETRACTION_PREDICATE}|${PRIORITIZATION_REPORT_ACTIVE_RETRACTION}|${PRIORITIZATION_REPORT_PENDING_VERIFICATION})`;
+const PRIORITIZATION_REPORT_BARE_HEDGE = `(?:(?:still\\s+)?${PRIORITIZATION_REPORT_HEDGE_PHRASE}|(?:it|this|that)\\s+(?:(?:would|may|might|could)\\s+)?(?:still\\s+)?(?:seems?|appears?)|so\\s+(?:it\\s+)?(?:seems|appears))`;
+const PRIORITIZATION_WRAPPED_REPORT_HEDGE = `(?:${PRIORITIZATION_REPORT_BARE_HEDGE}|\\(\\s*${PRIORITIZATION_REPORT_BARE_HEDGE}\\s*\\)|\\[\\s*${PRIORITIZATION_REPORT_BARE_HEDGE}\\s*\\])`;
+const PRIORITIZATION_WRAPPED_REPORT_RETRACTION = `(?:${PRIORITIZATION_REPORT_RETRACTION_CORE}|\\(\\s*${PRIORITIZATION_REPORT_RETRACTION_CORE}\\s*\\)|\\[\\s*${PRIORITIZATION_REPORT_RETRACTION_CORE}\\s*\\])`;
+const PRIORITIZATION_TRAILING_REPORT_HEDGE = new RegExp(
+  `^\\s*(?:(?:risk|risks|impact|impacts|downside|exposure|threat)\\b\\s*)?(?:[,;.!?—–:]\\s*)?(?:${PRIORITIZATION_WRAPPED_REPORT_HEDGE}|(?:(?:and|but|although|though|yet|while|whereas|except(?:\\s+that)?)\\s+|however\\s*,?\\s*)?${PRIORITIZATION_WRAPPED_REPORT_RETRACTION})`,
+  'i',
+);
+const PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION = /^\s*(?:(?:risk|risks|impact|impacts|downside|exposure|threat)\b\s*)?(?:[,;.!?—–:]\s*)?(?:(?:and|but|while|whereas)\s+)?(?:(?:I|we)\s+(?:retract|withdraw|recant|disavow)\b|(?:I|we)\s+take\s+(?:it|this|that)\s+back\b|(?:scratch|disregard)\s+(?:it|this|that)\b|correction\s*:)/i;
+const PRIORITIZATION_CORRECTION_RETRACTION_LEAD = /^(?:(?:I|we)\s+)?(?:retract|withdraw|recant|disavow)\b|^(?:I|we)\s+take\s+(?:it|this|that)\s+back\b|^(?:scratch|disregard)\b/i;
+const PRIORITIZATION_ATTRIBUTION_NOUN_PREFIX = /\b(?:a|an|the|this|that|these|those|my|our|your|their|his|her|its)\s*$/i;
+const PRIORITIZATION_TRAILING_ATTRIBUTION = /(?:[,;:(]|\[|[—–])\s*(?:so\s+)?(?:(?:[A-Za-z][\w'’-]*(?:\s+[A-Za-z][\w'’-]*){0,4})\s+(?:says?|said|saying|reports?|reported|reporting|states?|stated|stating|claims?|claimed|claiming|asserts?|asserted|asserting)(?:\s+so)?|(?:says?|said|saying|reports?|reported|reporting|states?|stated|stating|claims?|claimed|claiming|asserts?|asserted|asserting)\s+(?:(?:an?|the)\s+[A-Za-z][\w'’-]*(?:\s+[A-Za-z][\w'’-]*){0,3}|(?:analysts?|experts?|observers?|reviewers?|sources?)))\s*[\])]?[.!?]?\s*$/i;
+const PRIORITIZATION_TRAILING_SOURCE_TAG = /[[(]\s*sources?\s*(?::|—|–|-)\s*[A-Za-z][\w'’-]*(?:\s+[A-Za-z][\w'’-]*){0,4}\s*[\])][.!?]?\s*$/i;
+const PRIORITIZATION_REPORTED_SUFFIX = /(?:[,;]\s*(?:analysts?|experts?|observers?|reviewers?|sources?)\s+(?:say|says|said|report|reports|reported|state|states|stated|claim|claims|claimed|assert|asserts|asserted)\s+so|[,;]\s*(?:said|reported|stated|claimed|asserted)\s+(?:analysts?|experts?|observers?|reviewers?|sources?)|[[(]\s*sources?\s*(?::|—|–|-)\s*[A-Za-z][\w'’-]*(?:\s+[A-Za-z][\w'’-]*){0,4}\s*[\])])\s*[.!?]?\s*$/i;
+const PRIORITIZATION_TRAILING_REPORT_EVENT = /(?:[,:(]|\[|[—–])\s*(?:an?|the|this|that)\s+(?:incident|issue|bug|problem|event|case|matter|outage)\s+(?:is|are|was|were|has|have|had)\s+(?:been\s+)?reported\s*[\])]?[.!?]?\s*$/i;
 const PRIORITIZATION_REJECTION_PREFIX = /\b(?:reject(?:s|ed|ing)?|disput(?:es|ed|ing)?|den(?:y|ies|ied|ying)|refus(?:e|es|ed|ing))\b[\s\S]*$/i;
 const PRIORITIZATION_REJECTED_ASSERTION = /\b(?:assertion|claim|statement)\b[\s\S]*\b(?:is|was|has been)\s+(?:false|wrong|disproven|rejected|invalid)\b|\b(?:it|this|that)\s+(?:is|was)\s+(?:false|wrong|untrue)\s+that\b/i;
 const PRIORITIZATION_QUOTED_CLAUSE = /^\s*(?:["“]|['‘])/;
@@ -1961,7 +2017,7 @@ const PRIORITIZATION_CONDITIONAL_CLAUSE = new RegExp(
   `^\\s*(?:(?:[-*]|\\d+[.)])\\s*)?(?:and\\s+)?${PRIORITIZATION_CONDITION_MARKER.source}`,
   'i',
 );
-const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carries?|poses?|depends?|follows?|comes?|goes?|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
+const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
 const PRIORITIZATION_REMOTE_NEGATION_PREFIX = /\b(?:(?:do(?:es)?|can|could|should|would|must|may|might|will|shall)\s+not(?!\s+only\b)|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|won['’]t|shan['’]t|(?:is|are|was|were)\s+not(?!\s+only\b)|cannot|isn['’]t|aren['’]t|fails?\s+to|(?:is|are|was|were)\s+unlikely\s+to)\b[\s\S]*$/i;
 const PRIORITIZATION_LOCAL_NEGATION_PREFIX = /\b(?:has no|have no|never|without|lacks?|lack of|no)\b[\s\S]{0,32}$/i;
 const PRIORITIZATION_NEGATION_SUFFIX = /^\s*(?:(?:is|are|was|were|does|do|has|have)\s+)?(?:not|no|irrelevant|absent|unproven)\b/i;
@@ -1971,7 +2027,7 @@ const PRIORITIZATION_CONDITION_SUFFIX = new RegExp(
   'i',
 );
 const PRIORITIZATION_INDEPENDENT_BOUNDARY = new RegExp(
-  `[,;]\\s+(?:so|therefore)\\b\\s*|,\\s+(?:and|but)\\s+(?=(?:${PRIORITIZATION_CONDITION_MARKER.source}|[^,;.!?]{0,96}\\b(?:protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|decays?|carries?|poses?|depends?|has|have|is|are|can|will|must)\\b))`,
+  `[,;]\\s+(?:so|therefore)\\b\\s*|,\\s+(?:while|whereas)\\s+|,\\s+(?:and|but)\\s+(?=(?:${PRIORITIZATION_CONDITION_MARKER.source}|[^,;.!?]{0,96}\\b(?:protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|decays?|carr(?:y|ies)|poses?|depends?|has|have|is|are|can|will|must)\\b))`,
   'gi',
 );
 
@@ -2036,6 +2092,84 @@ function hasDependentPrioritizationReference(value: string): boolean {
         deictic.has(word) || possessiveDeterminers.has(word) || word === 'the'
       ));
   });
+}
+
+function hasAttributedPrioritizationBasis(
+  value: string,
+  topic: RegExp,
+  basisIndex: number,
+  basisLength: number,
+): boolean {
+  const afterBasis = value.slice(basisIndex + basisLength);
+  if ((PRIORITIZATION_TRAILING_ATTRIBUTION.test(afterBasis)
+      || PRIORITIZATION_TRAILING_SOURCE_TAG.test(afterBasis))
+    && !PRIORITIZATION_TRAILING_REPORT_EVENT.test(afterBasis)) {
+    return true;
+  }
+  const beforeBasis = value.slice(0, basisIndex);
+  const localBeforeBasis = suffixAfterLastPrioritizationBoundary(
+    beforeBasis,
+    PRIORITIZATION_INDEPENDENT_BOUNDARY,
+  );
+  const localStart = beforeBasis.length - localBeforeBasis.length;
+  for (const match of localBeforeBasis.matchAll(PRIORITIZATION_ATTRIBUTION_VERB)) {
+    const verb = match[0].toLowerCase();
+    const localPrefix = localBeforeBasis.slice(0, match.index);
+    const verbEnd = match.index + match[0].length;
+    const localTail = value.slice(localStart + verbEnd, basisIndex);
+    const attributedLead = localTail.replace(/^\s*that\b/i, '').trimStart();
+    const topicBeforeVerb = testPattern(topic, value.slice(0, localStart + match.index));
+    const topicAfterVerb = testPattern(topic, localTail);
+    const attributedReference = PRIORITIZATION_ATTRIBUTED_REFERENCE.test(attributedLead);
+    const attributionNoun = ['say', 'report', 'state', 'claim', 'assert'].includes(verb)
+      && PRIORITIZATION_ATTRIBUTION_NOUN_PREFIX.test(localPrefix);
+    if (attributionNoun
+      && !(/^\s*that\b/i.test(localTail) && (topicAfterVerb || attributedReference))) continue;
+    if (!topicBeforeVerb && !topicAfterVerb && !attributedReference) continue;
+
+    const topicFlags = [...new Set(`${topic.flags.replace(/g/g, '')}g`.split(''))].join('');
+    const lastTopicBeforeReport = [...localPrefix.matchAll(
+      new RegExp(topic.source, topicFlags),
+    )].at(-1);
+    const topicToReportSuffix = lastTopicBeforeReport === undefined
+      ? ''
+      : localPrefix.slice(lastTopicBeforeReport.index + lastTopicBeforeReport[0].length);
+    const reportTopicIsPlural = lastTopicBeforeReport !== undefined
+      && /\b(?:bugs|issues|problems|leaks)\b/i.test(lastTopicBeforeReport[0]);
+    const singularTopicBeforeReport = lastTopicBeforeReport !== undefined
+      && !reportTopicIsPlural
+      && PRIORITIZATION_SINGULAR_REPORT_AUXILIARY.test(topicToReportSuffix);
+    const pluralTopicBeforeReport = reportTopicIsPlural
+      && PRIORITIZATION_PLURAL_REPORT_AUXILIARY.test(topicToReportSuffix);
+    const directPredicate = localTail.match(PRIORITIZATION_DIRECT_REPORT_PREDICATE);
+    const directPredicateLead = directPredicate
+      ? localTail.slice(0, directPredicate.index)
+      : '';
+    const directPredicateTail = directPredicate
+      ? localTail.slice(directPredicate.index + directPredicate[0].length)
+      : '';
+    const directReportAgreement = directPredicate !== null
+      && ((singularTopicBeforeReport
+        && PRIORITIZATION_SINGULAR_DIRECT_REPORT_PREDICATE.test(directPredicate[0]))
+        || (pluralTopicBeforeReport
+          && PRIORITIZATION_PLURAL_DIRECT_REPORT_PREDICATE.test(directPredicate[0])));
+    const directReportRecipientEvent = PRIORITIZATION_DIRECT_REPORT_RECIPIENT_EVENT.test(
+      directPredicateLead,
+    );
+    const directReportLeadAllowed = directReportRecipientEvent
+      || (!PRIORITIZATION_ATTRIBUTION_COMPLEMENT.test(directPredicateLead)
+        && PRIORITIZATION_DIRECT_REPORT_EVENT_LEAD.test(directPredicateLead));
+    const directReportContinuation = verb === 'reported'
+      && topicBeforeVerb
+      && directPredicate !== null
+      && directReportAgreement
+      && directReportLeadAllowed
+      && !PRIORITIZATION_REPORT_HEDGE.test(directPredicateTail)
+      && !PRIORITIZATION_TRAILING_REPORT_HEDGE.test(afterBasis)
+      && !/^\s*that\b(?!\s+(?:morning|afternoon|evening|night|day|week|month|quarter|year)\b)/i.test(directPredicateLead);
+    if (!directReportContinuation) return true;
+  }
+  return false;
 }
 
 function prioritizationConditionScope(
@@ -2124,6 +2258,27 @@ function collectPrioritizationSegments(response: string): string[] {
   return [...new Set(segments)];
 }
 
+function splitPrioritizationClauses(segment: string, basis: RegExp): string[] {
+  const clauses: string[] = [];
+  let clauseStart = 0;
+  for (const boundary of segment.matchAll(/\n+|(?<=[.!?;])\s+/g)) {
+    const clause = segment.slice(clauseStart, boundary.index);
+    const continuation = segment.slice(boundary.index + boundary[0].length);
+    const keepsDependentRetraction = !boundary[0].includes('\n')
+      && testPattern(basis, clause)
+      && (PRIORITIZATION_TRAILING_REPORT_HEDGE.test(`risk; ${continuation}`)
+        || PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION.test(`risk; ${continuation}`)
+        || PRIORITIZATION_TRAILING_ATTRIBUTION.test(`; ${continuation}`)
+        || PRIORITIZATION_TRAILING_SOURCE_TAG.test(continuation));
+    if (keepsDependentRetraction) continue;
+    if (clause.trim()) clauses.push(clause);
+    clauseStart = boundary.index + boundary[0].length;
+  }
+  const tail = segment.slice(clauseStart);
+  if (tail.trim()) clauses.push(tail);
+  return clauses;
+}
+
 function hasAffirmedPrioritizationBasis(
   clause: string,
   basis: RegExp,
@@ -2133,6 +2288,7 @@ function hasAffirmedPrioritizationBasis(
   const normalized = clause.replace(/[*_`]/g, '').trim();
   if (prioritizationWordCount(normalized) < 4) return false;
   if (PRIORITIZATION_REPORTED_CLAUSE.test(normalized)) return false;
+  if (PRIORITIZATION_REPORTED_SUFFIX.test(normalized)) return false;
   if (PRIORITIZATION_REJECTED_ASSERTION.test(normalized)) return false;
   if (PRIORITIZATION_QUOTED_CLAUSE.test(normalized)) return false;
   if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(normalized)) return false;
@@ -2142,8 +2298,16 @@ function hasAffirmedPrioritizationBasis(
   const flags = [...new Set(`${basis.flags.replace(/g/g, '')}g`.split(''))].join('');
   const matcher = new RegExp(basis.source, flags);
   for (const match of normalized.matchAll(matcher)) {
-    const before = normalized.slice(0, match.index);
     const after = normalized.slice(match.index + match[0].length);
+    if (PRIORITIZATION_TRAILING_REPORT_HEDGE.test(after)
+      || PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION.test(after)) continue;
+    if (hasAttributedPrioritizationBasis(
+      normalized,
+      criteria[criterionIndex].topic,
+      match.index,
+      match[0].length,
+    )) continue;
+    const before = normalized.slice(0, match.index);
     const localBefore = before.split(/,\s+(?:and|but)\s+/i).at(-1) ?? before;
     const independentBefore = suffixAfterLastPrioritizationBoundary(
       before,
@@ -2251,27 +2415,101 @@ function hasAlignedExplicitRationale(
     && hasOrderedBasisAlignment(rationaleClause, topicOrder, criteria);
 }
 
+function collectPrioritizationAtomicClauses(response: string): string[] {
+  const clauses: string[] = [];
+  let insideFence = false;
+  for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
+    if (/^\s*```/.test(rawLine)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence || /^\s*>/.test(rawLine)) continue;
+    for (const clause of rawLine.split(/(?<=[.!?;])\s+/)) {
+      if (clause.trim()) clauses.push(clause);
+    }
+  }
+  return clauses;
+}
+
+function isExplicitPrioritizationCorrection(
+  clause: string,
+  topic: RegExp,
+  basis: RegExp,
+): boolean {
+  const normalized = clause.replace(/[*_`]/g, '').trim();
+  if (!/^correction\s*:/i.test(normalized) || !testPattern(topic, normalized)) return false;
+  const correctionBody = normalized.replace(/^correction\s*:\s*/i, '');
+  const independentBoundary = correctionBody.search(
+    new RegExp(PRIORITIZATION_INDEPENDENT_BOUNDARY.source, 'i'),
+  );
+  const correctionLeadScope = independentBoundary < 0
+    ? correctionBody
+    : correctionBody.slice(0, independentBoundary);
+  if (PRIORITIZATION_CORRECTION_RETRACTION_LEAD.test(correctionLeadScope)
+    && testPattern(topic, correctionLeadScope)
+    && testPattern(basis, correctionLeadScope)) return true;
+
+  const flags = [...new Set(`${basis.flags.replace(/g/g, '')}g`.split(''))].join('');
+  return [...normalized.matchAll(new RegExp(basis.source, flags))].some((match) => {
+    const before = normalized.slice(0, match.index);
+    const after = normalized.slice(match.index + match[0].length);
+    return PRIORITIZATION_TRAILING_REPORT_HEDGE.test(after)
+      || PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION.test(after)
+      || PRIORITIZATION_REMOTE_NEGATION_PREFIX.test(before)
+      || PRIORITIZATION_LOCAL_NEGATION_PREFIX.test(before)
+      || PRIORITIZATION_NEGATION_SUFFIX.test(after);
+  });
+}
+
+function hasSupersedingPrioritizationCorrection(
+  response: string,
+  criteria: readonly PrioritizationCriterion[],
+  criterionIndex: number,
+): boolean {
+  const { topic, basis } = criteria[criterionIndex];
+  let hasPriorAffirmation = false;
+  let invalidated = false;
+
+  for (const clause of collectPrioritizationAtomicClauses(response)) {
+    if (isExplicitPrioritizationCorrection(clause, topic, basis)) {
+      if (hasPriorAffirmation) invalidated = true;
+      continue;
+    }
+    if (!testPattern(topic, clause) || !hasAlignedTopicsAndBases(clause, criteria)) continue;
+    if (hasAffirmedPrioritizationBasis(clause, basis, criteria, criterionIndex)) {
+      hasPriorAffirmation = true;
+      invalidated = false;
+    }
+  }
+
+  return invalidated;
+}
+
 function hasAffirmedPrioritizationJustification(
   response: string,
   criteria: readonly PrioritizationCriterion[],
 ): boolean {
   const segments = collectPrioritizationSegments(response);
-  return criteria.every(({ topic, basis }, criterionIndex) => segments.some((segment) => {
-    if (!testPattern(topic, segment)) return false;
-    const clauses = segment.split(/\n+|(?<=[.!?;])\s+/);
-    return clauses.some((clause) => {
-      const currentTopicIsExplicit = testPattern(topic, clause);
-      const segmentLeadTopics = matchedCriterionIndices(segment.split('\n', 1)[0], criteria, 'topic');
-      const isSinglePriorityContinuation = !currentTopicIsExplicit
-        && segmentLeadTopics.length === 1
-        && segmentLeadTopics[0] === criterionIndex;
-      if (!currentTopicIsExplicit
-        && !isSinglePriorityContinuation
-        && !hasAlignedExplicitRationale(segment, clause, criteria)) return false;
-      if (!hasAlignedTopicsAndBases(clause, criteria)) return false;
-      return hasAffirmedPrioritizationBasis(clause, basis, criteria, criterionIndex);
+  return criteria.every(({ topic, basis }, criterionIndex) => {
+    const affirmed = segments.some((segment) => {
+      if (!testPattern(topic, segment)) return false;
+      const clauses = splitPrioritizationClauses(segment, basis);
+      return clauses.some((clause) => {
+        const currentTopicIsExplicit = testPattern(topic, clause);
+        const segmentLeadTopics = matchedCriterionIndices(segment.split('\n', 1)[0], criteria, 'topic');
+        const isSinglePriorityContinuation = !currentTopicIsExplicit
+          && segmentLeadTopics.length === 1
+          && segmentLeadTopics[0] === criterionIndex;
+        if (!currentTopicIsExplicit
+          && !isSinglePriorityContinuation
+          && !hasAlignedExplicitRationale(segment, clause, criteria)) return false;
+        if (!hasAlignedTopicsAndBases(clause, criteria)) return false;
+        return hasAffirmedPrioritizationBasis(clause, basis, criteria, criterionIndex);
+      });
     });
-  }));
+    return affirmed
+      && !hasSupersedingPrioritizationCorrection(response, criteria, criterionIndex);
+  });
 }
 
 function evaluateResponseRule(

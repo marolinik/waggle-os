@@ -3442,6 +3442,461 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts a plural production-issue topic while keeping its basis fail closed', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const memoryRationale = 'Unquantified production issues carry unbounded downside; a slow leak can become an outage.';
+    const response = [
+      'Priority order:',
+      '1. Investigate the production memory bug.',
+      '2. Close the customer.',
+      '3. Repair onboarding friction.',
+      '## Justification',
+      memoryRationale,
+      'The customer deal has direct, time-sensitive revenue impact.',
+      'Onboarding is structural and degrades conversion over time.',
+      'First action today: inspect production logs.',
+    ].join('\n');
+    const score = (candidate: string) => scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response: candidate,
+      persistedResponse: candidate,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(score(response)).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported that morning and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported yesterday; it still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported on Monday and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue, reported on Monday, still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue reported on Monday still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues were reported on Monday and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues reported on Monday still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported to Support on Monday and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported to Support that morning and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported to Support yesterday and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported to Support earlier and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported to the support team yesterday and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported to the SRE team overnight and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues were reported to Support yesterday and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues were reported to the support team yesterday and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues were reported to the SRE team overnight and still pose unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues were reported to Operations today and still have unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue has been reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues have been reported to Support today and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue is being reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues are being reported to Support today and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue had been reported to Support earlier and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues had been reported to Support earlier and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue has already been reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was recently reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues are currently being reported to Support today and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues have already been reported to Support today and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue has been reported today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues have been reported today and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue has often been reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue has also been reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue will be reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issues will be reported to Support today and still carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue will have been reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue has sometimes been reported to Support today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported today and currently carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported yesterday, and it still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported yesterday and is clearly an unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported yesterday and still poses a materially elevated outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported yesterday and still carries unbounded outage risk through May.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported yesterday and still carries unbounded outage risk, with a potential mitigation already identified.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue was reported yesterday and still carries unbounded outage risk, while the customer timeline remains uncertain.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue has very recently been reported today and still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'Unquantified production issues carry unbounded downside and can cause an outage, while the customer reports revenue growth.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The customer reports revenue growth, while production issues carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'Production issues carry unbounded downside and can cause an outage — the incident was reported.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'Analysts reported the issue could pose risk, but the production issue still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'Correction: the production issue outage risk is unverified. Fresh telemetry confirms the production issue carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'Experts suggest a follow-up, while production issues carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'Observers noted the release date, while production issues carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The SRE team warned users yesterday, but production issues now carry unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'Production issues carry unbounded outage risk, while experts suggest a follow-up.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue carries unbounded outage risk. Correction: I retract the customer timing claim, but the production issue still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue carries unbounded outage risk. Correction: I retract an onboarding claim, while the production issue still carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue carries unbounded outage risk.\n> Correction: the production issue outage risk is unverified.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(score(response.replace(
+      memoryRationale,
+      'The production issue carries unbounded outage risk. Mitigation work began. Correction: the production issue does not carry outage risk. Fresh telemetry confirms the production issue carries unbounded outage risk.',
+    ))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    for (const rejectedRationale of [
+      'Unquantified production issues do not carry outage risk.',
+      'If unquantified production issues carry unbounded downside, a slow leak can become an outage.',
+      'According to a report, unquantified production issues carry unbounded downside and a slow leak can become an outage.',
+      'Per analysts, production issues carry outage risk.',
+      "In analysts' view, production issues carry outage risk.",
+      'Analysts: production issues carry outage risk.',
+      'The analyst: production issues carry outage risk.',
+      "Analysts' conclusion: production issues carry outage risk.",
+      'Production issues carry outage risk; analysts claim so.',
+      'Production issues carry outage risk [source: analysts].',
+      'Production issues carry outage risk (source: analysts).',
+      'Production issues carry outage risk [source — analysts].',
+      'Production issues carry outage risk, claimed analysts.',
+      'Production issues carry outage risk, except that this is unverified.',
+      'Production issues carry outage risk, except it is unverified.',
+      'Production issues carry outage risk, except this remains unverified.',
+      'Production issues carry outage risk, it seems.',
+      'Production issues carry outage risk, it would seem.',
+      'Production issues carry outage risk, so it seems.',
+      'Experts suggest that production issues carry unbounded outage risk.',
+      'Analysts indicate that production issues carry unbounded outage risk.',
+      'Observers note that production issues carry unbounded outage risk.',
+      'The SRE team warns that production issues carry unbounded outage risk.',
+      'Production issues carry outage risk, but we retract that.',
+      'Production issues carry outage risk — correction: they do not.',
+      'It was reported that unquantified production issues carry unbounded downside and a slow leak can become an outage.',
+      'Analysts reported that unquantified production issues carry unbounded downside and a slow leak can become an outage.',
+      'Analysts report that unquantified production issues carry unbounded downside and can cause an outage.',
+      'An analyst reports that unquantified production issues carry unbounded downside and can cause an outage.',
+      'Analysts are reporting that unquantified production issues carry unbounded downside and can cause an outage.',
+      'Analysts say that unquantified production issues carry unbounded downside and can cause an outage.',
+      'Analysts report unquantified production issues carry unbounded downside and can cause an outage.',
+      'An analyst says unquantified production issues carry unbounded downside and can cause an outage.',
+      'Production issues remain unresolved; analysts report that they carry unbounded downside and can cause an outage.',
+      'Production issues remain unresolved; analysts report that their unbounded downside can cause an outage.',
+      'Production issues remain unresolved; analysts reported that the problem carries unbounded outage risk.',
+      'Production issues are reported to pose unbounded outage risk.',
+      'The production issue was reported to carry unbounded outage risk.',
+      'The production issue was reported as carrying unbounded outage risk.',
+      'The production issue was reported by analysts to carry unbounded outage risk.',
+      'The production issue was reported yesterday to pose unbounded outage risk.',
+      'The production issue was reported yesterday to cause an outage.',
+      'The production issue was reported that morning by analysts to pose unbounded outage risk.',
+      'A report that production issues create unbounded outage risk exists.',
+      'Production issues carry unbounded downside and can cause an outage, analysts report.',
+      'Production issues carry unbounded downside and can cause an outage, says an analyst.',
+      'Production issues carry unbounded downside and can cause an outage — analysts report.',
+      'Production issues carry unbounded downside and can cause an outage — so analysts say.',
+      'Production issues carry unbounded downside and can cause an outage (analysts report).',
+      'Production issues carry unbounded downside and can cause an outage, analysts are reporting.',
+      'Production issues carry unbounded downside and can cause an outage — analysts are saying.',
+      'Production issues carry unbounded downside and can cause an outage: analysts report.',
+      'Production issues carry unbounded downside and can cause an outage [analysts report].',
+      'The production issue was reported to degrade reliability and cause an outage.',
+      'The production issue was reported to Support that it carries unbounded outage risk.',
+      'The production issue was reported to Support that the issue carries unbounded outage risk.',
+      'Production issues reportedly carry unbounded downside and can cause an outage.',
+      'Reportedly, production issues carry unbounded downside and can cause an outage.',
+      'Production issues allegedly carry unbounded downside and can cause an outage.',
+      'The production issue was reported to possibly cause an outage.',
+      'The production issue was reported to potentially pose unbounded outage risk.',
+      'The production issue was reported to still cause an outage.',
+      'The production issue was reported to probably pose unbounded outage risk.',
+      'The production issue was reported to often cause an outage.',
+      'The production issue was reported to sometimes cause an outage.',
+      'The production issue was reported to maybe carry unbounded outage risk.',
+      'The production issue was reported to perhaps carry unbounded outage risk.',
+      'The production issue was reported to very likely cause an outage.',
+      'The production issue was reported to almost certainly pose unbounded outage risk.',
+      'The production issue was reported to quite possibly cause an outage.',
+      'The Production Issue Was Reported to Fail Yesterday and still Cause an Outage.',
+      'The Production Issue Was Reported to Support Yesterday and still Cause an Outage.',
+      'The Production Issues Were Reported to Support Yesterday and still Cause an Outage.',
+      'The production issues were reported to Support yesterday and still carries unbounded outage risk.',
+      'The production issues were reported to Support yesterday and still Carries unbounded outage risk.',
+      'The production issues were reported to Support yesterday and still has unbounded outage risk.',
+      'The production issue was reported to Support yesterday and still are an unbounded outage risk.',
+      'The production issues is reported to Support yesterday and still carry unbounded outage risk.',
+      'The production issue have been reported today and still carries unbounded outage risk.',
+      'The production issues has been reported today and still carry unbounded outage risk.',
+      'The production issue are being reported today and still carries unbounded outage risk.',
+      'The production issues is being reported today and still carry unbounded outage risk.',
+      'The production issue was reported today and still carry unbounded outage risk.',
+      'The production issues were reported today and still carries unbounded outage risk.',
+      'The Production Issue Has Been Reported Today and still Carries unbounded outage risk.',
+      'The production issue has being reported today and still carries unbounded outage risk.',
+      'The production issue has not been reported today and still carries unbounded outage risk.',
+      'The production issue has never been reported today and still carries unbounded outage risk.',
+      'The production issue was reported yesterday and maybe carries unbounded outage risk.',
+      'The production issues were reported yesterday and perhaps carry unbounded outage risk.',
+      'The production issue was reported yesterday and possibly carries unbounded outage risk.',
+      'The production issue was reported yesterday and probably carries unbounded outage risk.',
+      'The production issue was reported yesterday and supposedly carries unbounded outage risk.',
+      'The production issue was reported yesterday and purportedly carries unbounded outage risk.',
+      'The production issues were reported yesterday and may still carry unbounded outage risk.',
+      'The production issue was reported yesterday and conceivably carries unbounded outage risk.',
+      'The production issue was reported yesterday and presumably carries unbounded outage risk.',
+      'The production issue was reported yesterday and ostensibly carries unbounded outage risk.',
+      'The production issue was reported yesterday and arguably carries unbounded outage risk.',
+      'The production issues were reported yesterday and conceivably carry unbounded outage risk.',
+      'The production issue was reported yesterday and in theory carries unbounded outage risk.',
+      'The production issue was reported it carries unbounded outage risk.',
+      'The production issue was reported the issue carries unbounded outage risk.',
+      'The production issues were reported they carry unbounded outage risk.',
+      'The production issue was reported yesterday it carries unbounded outage risk.',
+      'The production issue was reported yesterday and is possibly an unbounded outage risk.',
+      'The production issue was reported yesterday and is conceivably an unbounded outage risk.',
+      'The production issues were reported yesterday and are presumably an unbounded outage risk.',
+      'The production issue was reported yesterday and is in theory an unbounded outage risk.',
+      'The production issue was reported yesterday and is a possible unbounded outage risk.',
+      'The production issue was reported yesterday and is a potential outage risk.',
+      'The production issue was reported yesterday and is a plausible outage risk.',
+      'The production issue was reported yesterday and is uncertain to carry unbounded outage risk.',
+      'The production issue was reported yesterday and is doubtful it carries unbounded outage risk.',
+      'The production issue was reported yesterday and remains uncertain it carries unbounded outage risk.',
+      'The production issue was reported yesterday and is unverified as an unbounded outage risk.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, possibly.',
+      'The production issue was reported yesterday and still carries unbounded outage risk in theory.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, or so it seems.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, or so it appears.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, I think.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, as far as we know.',
+      'The production issue was reported yesterday and still carries unbounded outage risk (possibly).',
+      'The production issue was reported yesterday and still carries unbounded outage risk [possibly].',
+      'The production issue was reported yesterday and still carries unbounded outage risk (that is unverified).',
+      'The production issue was reported yesterday and still carries unbounded outage risk [that is unverified].',
+      'The production issue was reported yesterday and still carries unbounded outage risk, but that risk is unverified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk that is unverified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, but that risk has not been verified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, but that risk is not verified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, but that risk is still unverified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, though it is unverified.',
+      "The production issue was reported yesterday and still carries unbounded outage risk, though it isn't verified.",
+      'The production issue was reported yesterday and still carries unbounded outage risk, though it isn’t verified.',
+      "The production issue was reported yesterday and still carries unbounded outage risk; it hasn't been confirmed.",
+      "The production issue was reported yesterday and still carries unbounded outage risk; it wasn't substantiated.",
+      "The production issues were reported yesterday and still carry unbounded outage risk; they haven't been corroborated.",
+      'The production issue was reported yesterday and still carries unbounded outage risk; it can’t be verified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it couldn’t be confirmed.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it remains unconfirmed.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. It remains unconfirmed.',
+      'The production issue was reported yesterday and still carries unbounded outage risk? It remains unconfirmed.',
+      'The production issue was reported yesterday and still carries unbounded outage risk! This is unverified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. Not verified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. Still unverified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. We cannot verify it.',
+      "The production issue was reported yesterday and still carries unbounded outage risk. We haven't verified it.",
+      'The production issue was reported yesterday and still carries unbounded outage risk. We haven’t verified it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. We have not verified it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. We did not verify it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. We are unable to verify it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. Verification pending.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it remains to be verified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. We have yet to verify it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it still needs independent verification.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it requires independent verification.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it awaits confirmation.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. We still need to verify it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; verification is outstanding.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it is not independently verified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it has not been externally confirmed.',
+      'The production issue was reported yesterday and still carries unbounded outage risk; it cannot yet be verified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. We cannot independently verify it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, but it is uncertain.',
+      'The production issue was reported yesterday and still carries unbounded outage risk — this is unverified.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, while we have yet to verify it.',
+      "The production issue was reported yesterday and still carries unbounded outage risk, whereas we haven't verified it.",
+      'The production issue was reported yesterday and still carries unbounded outage risk, while verification remains pending.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, whereas this still needs independent verification.',
+      'The production issue was reported yesterday and still carries unbounded outage risk, while we retract it.',
+      'The production issue was reported yesterday and still carries unbounded outage risk. Mitigation work began. Correction: the production issue outage risk is unverified.',
+      'The production issue carries unbounded outage risk. Mitigation work began. Logs were retained. Correction: the production issue outage risk is unverified.',
+      'The production issue carries unbounded outage risk. Customer work continued. Onboarding work continued. Mitigation work began. Logs were retained. Correction: the production issue outage risk is unverified.',
+      'The production issue carries unbounded outage risk. Correction: I retract the production issue outage risk claim.',
+      'The production issue carries unbounded outage risk. Correction: I withdraw the production issue outage risk claim.',
+      'The production issue carries unbounded outage risk. Correction: disregard the production issue outage risk claim.',
+      'The production issue carries unbounded outage risk. Mitigation work began. Correction: I take it back: the production issue outage risk claim.',
+      'The production issue carries unbounded outage risk. Mitigation work began. Correction: We take this back — the production issue outage risk claim.',
+      'The production issue carries unbounded outage risk. Mitigation work began. Correction: the production issue does not carry outage risk.',
+      'The production issue carries unbounded outage risk. Mitigation work began. Correction: the production issue carries no outage risk.',
+      'The production issue carries unbounded outage risk. Mitigation work began. Correction: the production issue is not an outage risk.',
+      'The production issue has banana been reported today and still carries unbounded outage risk.',
+      'The production issue was garbage reported today and still carries unbounded outage risk.',
+      'The production issue will banana be reported today and still carries unbounded outage risk.',
+      'The production issue has family been reported today and still carries unbounded outage risk.',
+      'The production issue was supply reported today and still carries unbounded outage risk.',
+      'The production issue has barely been reported today and still carries unbounded outage risk.',
+      'The production issue has very been reported today and still carries unbounded outage risk.',
+      'The production issue was quite reported today and still carries unbounded outage risk.',
+      'The production issue will very be reported today and still carries unbounded outage risk.',
+      'The production issue has very already been reported today and still carries unbounded outage risk.',
+      'The production issue has quite just been reported today and still carries unbounded outage risk.',
+      'The production issue has quite also been reported today and still carries unbounded outage risk.',
+      'The production issue will very just be reported today and still carries unbounded outage risk.',
+      'The production issue was quite still being reported today and still carries unbounded outage risk.',
+    ]) {
+      expect(
+        score(response.replace(memoryRationale, rejectedRationale))
+          .checks.find(check => check.id === 'justification')?.passed,
+        rejectedRationale,
+      ).toBe(false);
+    }
+  });
+
   it.each([
     [
       'an affirmed customer basis before a separately conditioned predicate',

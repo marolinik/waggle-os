@@ -142,7 +142,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
         kind: 'prioritizationJustification',
         criteria: [
           {
-            topic: /\b(?:(?:production|memory) (?:bug|issue)|memory leak)\b/i,
+            topic: /\b(?:(?:production|memory) (?:bugs?|issues?)|memory leak)\b/i,
             basis: /(?:\b(?:live|active) in production\b[^.!?\r\n]{0,220}\b(?:may|might|could|would)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,140}\b(?:degrad(?:e[ds]?|ation)|outage)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,180}\bcompounding (?:downside )?risk if delayed\b|\b(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius|unbounded downside|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b)/i,
             basisFamilies: [
               /\b(?:reliab(?:ility|le)|stabil(?:ity|ize)|trust)\b/i,
