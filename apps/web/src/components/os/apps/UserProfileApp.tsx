@@ -236,9 +236,9 @@ const UserProfileApp = () => {
   ].filter((f): f is KnownFact => Boolean(f));
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0 min-w-0 flex-col sm:flex-row">
       {/* Sidebar */}
-      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0" role="tablist" aria-label="Profile sections">
+      <div className="grid w-full shrink-0 grid-cols-2 gap-0.5 border-b border-border/50 p-2 sm:block sm:w-36 sm:border-b-0 sm:border-r sm:space-y-0.5" role="tablist" aria-label="Profile sections">
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             role="tab"
@@ -251,7 +251,7 @@ const UserProfileApp = () => {
           </button>
         ))}
         {profile?.questionnaireCompleted && (
-          <div className="mt-3 pt-3 border-t border-border/30 px-2">
+          <div className="col-span-2 mt-3 border-t border-border/30 px-2 pt-3 sm:col-span-1">
             <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--healthy)' }}>
               <CheckCircle2 className="w-3 h-3" /> Profile set up
             </div>
@@ -260,7 +260,7 @@ const UserProfileApp = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto p-3 sm:p-4" role="tabpanel">
 
         {/* ═══ IDENTITY ═══ */}
         {tab === 'identity' && (
@@ -322,7 +322,7 @@ const UserProfileApp = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="profile-name" className="text-xs text-muted-foreground block mb-1">Name</label>
                 <Input id="profile-name" name="name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Marko Markovic"
@@ -354,7 +354,7 @@ const UserProfileApp = () => {
                 className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button onClick={handleSave} disabled={saving}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
                 {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
@@ -384,7 +384,7 @@ const UserProfileApp = () => {
                       data-testid="known-fact"
                     >
                       <span className="text-[11px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">{f.label}</span>
-                      <span className="text-foreground break-words">{f.value}</span>
+                      <span className="min-w-0 break-words text-foreground">{f.value}</span>
                     </li>
                   ))}
                 </ul>
@@ -418,7 +418,7 @@ const UserProfileApp = () => {
             {ws?.analyzed && (
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-2">
                 <h4 className="text-xs font-display font-semibold text-foreground">Your Style Profile</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                   <div><span className="text-muted-foreground">Tone:</span> <span className="text-foreground capitalize">{ws.tone}</span></div>
                   <div><span className="text-muted-foreground">Sentences:</span> <span className="text-foreground capitalize">{ws.sentenceLength}</span></div>
                   <div><span className="text-muted-foreground">Vocabulary:</span> <span className="text-foreground capitalize">{ws.vocabulary}</span></div>
@@ -430,7 +430,7 @@ const UserProfileApp = () => {
 
             <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
               <h4 className="text-xs font-display font-semibold text-foreground mb-2">Communication Preference</h4>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {['brief', 'balanced', 'detailed'].map(s => (
                   <button key={s} onClick={() => { setCommStyle(s); handleSave(); }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-display transition-colors ${
@@ -455,35 +455,35 @@ const UserProfileApp = () => {
             <p className="text-[11px] text-muted-foreground">Define your brand colors and fonts. These are applied when the agent generates documents.</p>
 
             {/* Color pickers */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Primary</label>
-                <div className="flex gap-2 items-center">
+                <div className="flex min-w-0 items-center gap-2">
                   <input type="color" name="brandPrimaryColor" aria-label="Primary color picker" autoComplete="off" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
                   <Input name="brandPrimaryColorHex" aria-label="Primary color value" autoComplete="off" spellCheck={false} value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
-                    className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
+                    className="min-w-0 flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Secondary</label>
-                <div className="flex gap-2 items-center">
+                <div className="flex min-w-0 items-center gap-2">
                   <input type="color" name="brandSecondaryColor" aria-label="Secondary color picker" autoComplete="off" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
                   <Input name="brandSecondaryColorHex" aria-label="Secondary color value" autoComplete="off" spellCheck={false} value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
-                    className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
+                    className="min-w-0 flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Accent</label>
-                <div className="flex gap-2 items-center">
+                <div className="flex min-w-0 items-center gap-2">
                   <input type="color" name="brandAccentColor" aria-label="Accent color picker" autoComplete="off" value={accentColor} onChange={e => setAccentColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
                   <Input name="brandAccentColorHex" aria-label="Accent color value" autoComplete="off" spellCheck={false} value={accentColor} onChange={e => setAccentColor(e.target.value)}
-                    className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
+                    className="min-w-0 flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
             </div>
 
             {/* Fonts */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="profile-brand-heading-font" className="text-xs text-muted-foreground block mb-1">Heading Font</label>
                 <Input id="profile-brand-heading-font" name="brandHeadingFont" autoComplete="off" value={fontHeading} onChange={e => setFontHeading(e.target.value)} placeholder="Inter"
@@ -523,7 +523,7 @@ const UserProfileApp = () => {
             {/* Document template previews */}
             <div className="border-t border-border/30 pt-4">
               <h4 className="text-xs font-display font-semibold text-foreground mb-2">Document Style Previews</h4>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {[
                   { icon: FileText, label: 'Word (docx)', desc: `${fontHeading} headings, ${fontBody} body` },
                   { icon: Presentation, label: 'PowerPoint (pptx)', desc: `${primaryColor} theme` },

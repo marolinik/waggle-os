@@ -641,6 +641,18 @@ test.describe('User Journey Tests', () => {
         'button:visible, [role="tab"]:visible, [role="tabpanel"]:visible, input:visible, select:visible, textarea:visible',
       );
       expect(overflow, `${route} visible control overflow`).toEqual([]);
+
+      if (route === '/settings/profile') {
+        const profileTabs = page.getByRole('tablist', { name: 'Profile sections' });
+        for (const tabName of ['Writing Style', 'Brand & Templates', 'Interests']) {
+          await profileTabs.getByRole('tab', { name: tabName }).click();
+          const tabOverflow = await visibleHorizontalOverflow(
+            page,
+            'button:visible, [role="tab"]:visible, [role="tabpanel"]:visible, input:visible, select:visible, textarea:visible',
+          );
+          expect(tabOverflow, `/settings/profile ${tabName} visible control overflow`).toEqual([]);
+        }
+      }
     }
   });
 
