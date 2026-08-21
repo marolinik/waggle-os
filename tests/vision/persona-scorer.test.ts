@@ -3378,6 +3378,41 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts the exact paid live-production compound-risk rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '## Priority order',
+      '',
+      '1. **Investigate the production memory bug**',
+      '2. **Close the customer deal**',
+      '3. **Repair onboarding friction**',
+      '',
+      '## Justification',
+      '',
+      '**Assumption:** the memory bug is live in production (not staging) and could degrade service or cause an outage — this makes it the only item with compounding downside risk if delayed. A leak or crash gets worse under load, and if it hits the customer you\'re trying to close, it jeopardizes priority 2 as well. Fix-or-triage first.',
+      '',
+      '**Customer close is next** because it\'s time-bound and revenue-critical, but it\'s typically a discrete event (call, contract, follow-up) that doesn\'t degrade by waiting a few hours while you triage the bug — unlike the bug itself.',
+      '',
+      '**Onboarding friction is last** this week — it\'s important but diffuse and non-urgent (assumption: no specific customer is blocked by it this week). It\'s the right candidate to timebox or delegate rather than front-load.',
+      '',
+      '## First action today',
+      '',
+      'Pull the production error/monitoring logs (or APM/memory profiler output) for the bug and reproduce it locally or in staging to confirm scope and severity — this determines whether it\'s a "drop everything" fire or a "schedule a fix" item, which then tells you how much runway you have for the customer close today.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it.each([
     [
       'labels only',
@@ -3480,6 +3515,76 @@ describe('deterministic 100-point persona scorer', () => {
       [
         'Priority order:',
         '1. The production memory bug could, according to an uncertain chain of assumptions about traffic, caching, synchronization, and system pressure, create outage risk.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'conditional live-production compound-risk rationale',
+      [
+        'Priority order:',
+        '1. If the memory bug is live in production, it could degrade service or cause an outage — this makes it the only item with compounding downside risk if delayed.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'unanchored compound-risk rationale',
+      [
+        'Priority order:',
+        '1. The memory bug could degrade service or cause an outage — this makes it the only item with compounding downside risk if delayed.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'negated live-production compound-risk rationale',
+      [
+        'Priority order:',
+        '1. The memory bug is not live in production and could degrade service or cause an outage — this makes it the only item with compounding downside risk if delayed.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'negated modal compound-risk impact',
+      [
+        'Priority order:',
+        '1. The memory bug is live in production but could not degrade service or cause an outage — this makes it the only item with compounding downside risk if delayed.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'never-modal compound-risk impact',
+      [
+        'Priority order:',
+        '1. The memory bug is active in production and might never cause an outage — this makes it the only item with compounding risk if delayed.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'no-scenario compound-risk impact',
+      [
+        'Priority order:',
+        '1. The memory bug is live in production and could, under no realistic scenario, degrade service — this makes it the only item with compounding downside risk if delayed.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'negated final compound-risk assertion',
+      [
+        'Priority order:',
+        '1. The memory bug is live in production and could degrade service, but it does not carry compounding risk if delayed.',
         '2. The customer deal drives near-term revenue this week.',
         '3. Onboarding friction reduces retention and activation.',
         'First action today: open the bug report.',
