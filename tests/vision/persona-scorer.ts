@@ -1927,6 +1927,227 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
   return matched.every(Boolean);
 }
 
+const PRIORITIZATION_MARKDOWN_HEADING = /^\s{0,3}#{1,6}\s+/;
+const PRIORITIZATION_BOLD_HEADING = /^\s*\*\*[^*\r\n]+:\*\*\s*$/;
+const PRIORITIZATION_ORDERED_ITEM = /^\s*(?:[-*]\s*)?(?:\d+[.)]|(?:first|second|third)\s*[:.)—-])\s+/i;
+const PRIORITIZATION_ACTION_BOUNDARY = /^\s*(?:[-*]\s*)?(?:[^.!?;:\r\n]*\b(?:first|next|initial)\s+action\b|today(?:['’]s)?\s+action\b|(?:start|begin)\s+today\b|today\s*:)/i;
+const PRIORITIZATION_EXPLICIT_RATIONALE = /\b(?:justif(?:y|ication)?|rationale|decision basis|why)\b/i;
+const PRIORITIZATION_ORDER_CLAUSE = /\b(?:order|priorit(?:y|ies|ization|isation)?|plan)\b/i;
+const PRIORITIZATION_REPORTED_CLAUSE = /\b(?:quoted|illustrative|example|illustration|quote)\b|(?<!not )\bhypothetical\b|\b(?:memo|slide|note|report|document|review)\s+(?:says?|states?|claims?|asserts?)\b/i;
+const PRIORITIZATION_REJECTION_PREFIX = /\b(?:reject(?:s|ed|ing)?|disput(?:es|ed|ing)?|den(?:y|ies|ied|ying)|refus(?:e|es|ed|ing))\b[\s\S]*$/i;
+const PRIORITIZATION_REJECTED_ASSERTION = /\b(?:assertion|claim|statement)\b[\s\S]*\b(?:is|was|has been)\s+(?:false|wrong|disproven|rejected|invalid)\b|\b(?:it|this|that)\s+(?:is|was)\s+(?:false|wrong|untrue)\s+that\b/i;
+const PRIORITIZATION_QUOTED_CLAUSE = /^\s*(?:["“]|['‘])/;
+const PRIORITIZATION_CONDITIONAL_CLAUSE = /^\s*(?:(?:[-*]|\d+[.)])\s*)?(?:and\s+)?(?:only\s+if|if|when|whenever|whether|suppose|imagine|assuming|provided)\b/i;
+const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carries?|poses?|depends?|follows?|comes?|goes?|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
+const PRIORITIZATION_REMOTE_NEGATION_PREFIX = /\b(?:(?:do(?:es)?|can|could|should|would|must|may|might|will|shall)\s+not(?!\s+only\b)|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|won['’]t|shan['’]t|(?:is|are|was|were)\s+not(?!\s+only\b)|cannot|isn['’]t|aren['’]t|fails?\s+to|(?:is|are|was|were)\s+unlikely\s+to)\b[\s\S]*$/i;
+const PRIORITIZATION_LOCAL_NEGATION_PREFIX = /\b(?:has no|have no|never|without|lacks?|lack of|no)\b[\s\S]{0,32}$/i;
+const PRIORITIZATION_NEGATION_SUFFIX = /^\s*(?:(?:is|are|was|were|does|do|has|have)\s+)?(?:not|no|irrelevant|absent|unproven)\b/i;
+const PRIORITIZATION_MODAL_PREFIX = /\b(?:may|might|could|would)\b[\s\S]*$/i;
+const PRIORITIZATION_CONDITION_SUFFIX = /^[\s\S]*\b(?:only\s+if|if|when|whenever|unless|provided|assuming|depending on)\b/i;
+const PRIORITIZATION_INDEPENDENT_BOUNDARY = /[,;]\s+(?:so|therefore)\b\s*|,\s+(?:and|but)\s+(?=[^,;.!?]{0,96}\b(?:protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carries?|poses?|depends?|has|have|is|are|can|will|must)\b)/gi;
+
+function prioritizationWordCount(value: string): number {
+  return value.match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu)?.length ?? 0;
+}
+
+function suffixAfterLastPrioritizationBoundary(value: string, boundary: RegExp): string {
+  let suffixStart = 0;
+  for (const match of value.matchAll(boundary)) {
+    suffixStart = match.index + match[0].length;
+  }
+  return value.slice(suffixStart);
+}
+
+function inlinePrioritizationActionBoundary(line: string): number {
+  for (const match of line.matchAll(/[.!?;:]\s+/g)) {
+    const suffix = line.slice(match.index + match[0].length)
+      .replace(/^(\s*(?:[-*]\s*)?)\*\*([^*]+)\*\*(?=\s|[:—-]|$)/, '$1$2');
+    if (PRIORITIZATION_ACTION_BOUNDARY.test(suffix)) return match.index + 1;
+  }
+  return -1;
+}
+
+function collectPrioritizationSegments(response: string): string[] {
+  const segments: string[] = [];
+  let numberedBlock: string[] | null = null;
+  let insideFence = false;
+
+  const flushNumberedBlock = () => {
+    if (numberedBlock?.length) segments.push(numberedBlock.join('\n'));
+    numberedBlock = null;
+  };
+  for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
+    if (/^\s*```/.test(rawLine)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence || /^\s*>/.test(rawLine)) continue;
+
+    let line = rawLine.trimEnd();
+    if (!line.trim()) continue;
+
+    const inlineActionBoundary = inlinePrioritizationActionBoundary(line);
+    if (inlineActionBoundary >= 0) line = line.slice(0, inlineActionBoundary).trimEnd();
+
+    const unwrappedLead = line
+      .replace(PRIORITIZATION_MARKDOWN_HEADING, '')
+      .replace(/^(\s*(?:[-*]\s*)?)\*\*([^*]+)\*\*(?=\s|[:—-]|$)/, '$1$2');
+    if (PRIORITIZATION_ORDERED_ITEM.test(unwrappedLead)) {
+      flushNumberedBlock();
+      numberedBlock = [line];
+    } else if (PRIORITIZATION_ACTION_BOUNDARY.test(unwrappedLead)) {
+      flushNumberedBlock();
+    } else if (PRIORITIZATION_MARKDOWN_HEADING.test(line) || PRIORITIZATION_BOLD_HEADING.test(line)) {
+      flushNumberedBlock();
+      continue;
+    } else if (numberedBlock) {
+      numberedBlock.push(line);
+    }
+    segments.push(line);
+    if (inlineActionBoundary >= 0) flushNumberedBlock();
+  }
+
+  flushNumberedBlock();
+  return [...new Set(segments)];
+}
+
+function hasAffirmedPrioritizationBasis(clause: string, basis: RegExp): boolean {
+  const normalized = clause.replace(/[*_`]/g, '').trim();
+  if (prioritizationWordCount(normalized) < 4) return false;
+  if (PRIORITIZATION_REPORTED_CLAUSE.test(normalized)) return false;
+  if (PRIORITIZATION_REJECTED_ASSERTION.test(normalized)) return false;
+  if (PRIORITIZATION_QUOTED_CLAUSE.test(normalized)) return false;
+  if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(normalized)) return false;
+  if (!PRIORITIZATION_RATIONALE_SIGNAL.test(normalized)
+    && !PRIORITIZATION_EXPLICIT_RATIONALE.test(normalized)) return false;
+
+  const flags = [...new Set(`${basis.flags.replace(/g/g, '')}g`.split(''))].join('');
+  const matcher = new RegExp(basis.source, flags);
+  for (const match of normalized.matchAll(matcher)) {
+    const before = normalized.slice(0, match.index);
+    const after = normalized.slice(match.index + match[0].length);
+    const localBefore = before.split(/,\s+(?:and|but)\s+/i).at(-1) ?? before;
+    const independentBefore = suffixAfterLastPrioritizationBoundary(
+      before,
+      PRIORITIZATION_INDEPENDENT_BOUNDARY,
+    );
+    const rejectionBefore = suffixAfterLastPrioritizationBoundary(
+      suffixAfterLastPrioritizationBoundary(
+        before,
+        /\b(?:because|since)\b\s*|\bas\s+(?=(?:the|this|that|it|its|we|they|he|she|our|their|a|an)\b)/gi,
+      ),
+      PRIORITIZATION_INDEPENDENT_BOUNDARY,
+    );
+    if (PRIORITIZATION_REJECTION_PREFIX.test(rejectionBefore)) continue;
+    if (PRIORITIZATION_REMOTE_NEGATION_PREFIX.test(independentBefore)) continue;
+    if (PRIORITIZATION_LOCAL_NEGATION_PREFIX.test(localBefore)) continue;
+    if (PRIORITIZATION_NEGATION_SUFFIX.test(after)) continue;
+    if (PRIORITIZATION_MODAL_PREFIX.test(independentBefore)) continue;
+    if (PRIORITIZATION_CONDITION_SUFFIX.test(after)) continue;
+    return true;
+  }
+  return false;
+}
+
+function orderedCriterionIndices(
+  text: string,
+  criteria: readonly { topic: RegExp; basis: RegExp }[],
+  field: 'topic' | 'basis',
+): number[] | null {
+  const positioned = criteria.map((criterion, index) => ({
+    index,
+    position: text.search(criterion[field]),
+  }));
+  if (positioned.some(({ position }) => position < 0)) return null;
+  const positions = positioned.map(({ position }) => position);
+  if (new Set(positions).size !== positions.length) return null;
+  return positioned.sort((left, right) => left.position - right.position).map(({ index }) => index);
+}
+
+function matchedCriterionIndices(
+  text: string,
+  criteria: readonly { topic: RegExp; basis: RegExp }[],
+  field: 'topic' | 'basis',
+): number[] {
+  return criteria
+    .map((criterion, index) => ({ index, position: text.search(criterion[field]) }))
+    .filter(({ position }) => position >= 0)
+    .sort((left, right) => left.position - right.position)
+    .map(({ index }) => index);
+}
+
+function patternMatchPositions(text: string, pattern: RegExp): number[] {
+  const flags = [...new Set(`${pattern.flags.replace(/g/g, '')}g`.split(''))].join('');
+  return [...text.matchAll(new RegExp(pattern.source, flags))]
+    .map(match => match.index);
+}
+
+function hasOrderedBasisAlignment(
+  text: string,
+  criterionOrder: readonly number[],
+  criteria: readonly { topic: RegExp; basis: RegExp }[],
+): boolean {
+  let previousPosition = -1;
+  for (const criterionIndex of criterionOrder) {
+    const nextPosition = patternMatchPositions(text, criteria[criterionIndex].basis)
+      .find(position => position > previousPosition);
+    if (nextPosition === undefined) return false;
+    previousPosition = nextPosition;
+  }
+  return true;
+}
+
+function hasAlignedTopicsAndBases(
+  clause: string,
+  criteria: readonly { topic: RegExp; basis: RegExp }[],
+): boolean {
+  const topicOrder = matchedCriterionIndices(clause, criteria, 'topic');
+  const criteriaWithBases = topicOrder.filter(index => testPattern(criteria[index].basis, clause));
+  if (topicOrder.length < 2 || criteriaWithBases.length < 2) return true;
+  return hasOrderedBasisAlignment(clause, criteriaWithBases, criteria);
+}
+
+function hasAlignedExplicitRationale(
+  segment: string,
+  rationaleClause: string,
+  criteria: readonly { topic: RegExp; basis: RegExp }[],
+): boolean {
+  if (!PRIORITIZATION_EXPLICIT_RATIONALE.test(rationaleClause)) return false;
+  const clauses = segment.split(/\n+|(?<=[.!?;])\s+/);
+  const orderClause = clauses.find(clause => (
+    PRIORITIZATION_ORDER_CLAUSE.test(clause)
+    && criteria.every(({ topic }) => testPattern(topic, clause))
+  ));
+  if (!orderClause) return false;
+  const topicOrder = orderedCriterionIndices(orderClause, criteria, 'topic');
+  return topicOrder !== null
+    && criteria.every(({ basis }) => testPattern(basis, rationaleClause))
+    && hasOrderedBasisAlignment(rationaleClause, topicOrder, criteria);
+}
+
+function hasAffirmedPrioritizationJustification(
+  response: string,
+  criteria: readonly { topic: RegExp; basis: RegExp }[],
+): boolean {
+  const segments = collectPrioritizationSegments(response);
+  return criteria.every(({ topic, basis }, criterionIndex) => segments.some((segment) => {
+    if (!testPattern(topic, segment)) return false;
+    const clauses = segment.split(/\n+|(?<=[.!?;])\s+/);
+    return clauses.some((clause) => {
+      const currentTopicIsExplicit = testPattern(topic, clause);
+      const segmentLeadTopics = matchedCriterionIndices(segment.split('\n', 1)[0], criteria, 'topic');
+      const isSinglePriorityContinuation = !currentTopicIsExplicit
+        && segmentLeadTopics.length === 1
+        && segmentLeadTopics[0] === criterionIndex;
+      if (!currentTopicIsExplicit
+        && !isSinglePriorityContinuation
+        && !hasAlignedExplicitRationale(segment, clause, criteria)) return false;
+      if (!hasAlignedTopicsAndBases(clause, criteria)) return false;
+      return hasAffirmedPrioritizationBasis(clause, basis);
+    });
+  }));
+}
+
 function evaluateResponseRule(
   rule: PersonaResponseRule,
   evidence: PersonaTrialEvidence,
@@ -1952,6 +2173,8 @@ function evaluateResponseRule(
       return hasAffirmedEmptyWorkspaceResult(evidence);
     case 'boundedWorkspaceClaims':
       return hasOnlyBoundedWorkspaceClaims(evidence.response);
+    case 'prioritizationJustification':
+      return hasAffirmedPrioritizationJustification(evidence.response, rule.criteria);
     case 'allPatterns':
       return rule.patterns.every(pattern => testPattern(pattern, evidence.response));
     case 'notPattern':

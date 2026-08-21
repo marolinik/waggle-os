@@ -39,6 +39,10 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'writerReleaseFacts'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'emptyWorkspaceResult' })
   | (BaseResponseRule & { kind: 'boundedWorkspaceClaims' })
+  | (BaseResponseRule & {
+      kind: 'prioritizationJustification';
+      criteria: readonly { topic: RegExp; basis: RegExp }[];
+    })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'notPattern'; pattern: RegExp })
   | (BaseResponseRule & { kind: 'verifierContract' })
@@ -100,16 +104,6 @@ const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:(?:\d+[.)
 const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}(?:\?|\b(?:cannot|can't|do not|don't|must not|should not|never|impossible|merely reported|no longer recommend(?:ed|ing)?|(?:not|(?:is|are|was|were)n['’]t)[ \t]+(?:(?:an?|the|this|that|my|your|our|their|his|her|its)[ \t]+)?recommendations?|decid(?:e[sd]?|ing) against|not (?:advisable|feasible|possible|recommended))\b))`;
 const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:reduce|cut|lower)\b[^.\r\n]{0,60}(?:costs?|burn)`}${positiveActionSuffix}`, 'im');
 const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise|start[ \t]+generating)\b[^.\r\n]{0,80}(?:revenue|customers?|funding|cash inflows?)|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|accelerate|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?))`}${positiveActionSuffix}`, 'im');
-const memoryPriority = String.raw`memory (?:bug|issue)`;
-const memoryDecisionBasis = String.raw`(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius)`;
-const negatedUnboundedDownsidePredicate = String.raw`\b(?:(?:(?:do(?:es)?|can|could|should|would|must)\s+not|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|cannot|never)[^.;:\r\n]{0,50}(?:have|has|carr(?:y|ies)|create(?:s)?|pose(?:s)?|represent(?:s)?)\s+(?:an?\s+)?unbounded downside)\b`;
-const affirmedUnboundedDownside = String.raw`(?:(?:is|(?:it|this|that)(?:\s+is|['’]s))\s+(?:the\s+)?only\s+(?:item|priority)\s+with|(?:has|carr(?:y|ies)|creates?|poses?|represents?))\s+(?:an?\s+)?unbounded downside`;
-const generalPurposeMemoryBasisPattern = new RegExp([
-  String.raw`${memoryPriority}[\s\S]{0,220}${memoryDecisionBasis}`,
-  String.raw`${memoryDecisionBasis}[\s\S]{0,220}${memoryPriority}`,
-  String.raw`${memoryPriority}(?![^.\r\n]{0,220}${negatedUnboundedDownsidePredicate})(?:(?!\b(?:customer|deal|onboarding)\b)[^.\r\n]){0,220}${affirmedUnboundedDownside}`,
-].join('|'), 'i');
-
 const verifierPairInstructions = VERIFIER_BLOCKER_CHECK_PAIRS
   .map(([blocker, [operation, target, passCondition]]) => (
     `${blocker} => ${JSON.stringify({ operation, target, passCondition })}`
@@ -141,11 +135,20 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       {
         id: 'justification',
         description: 'Links each priority to a relevant decision basis',
-        kind: 'allPatterns',
-        patterns: [
-          generalPurposeMemoryBasisPattern,
-          /(?:(?:customer|deal)[\s\S]{0,220}(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ]value|time[- ]sensitive|external momentum|deal urgency|urgency|momentum)|(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ]value|time[- ]sensitive|external momentum|deal urgency|urgency|momentum)[\s\S]{0,220}(?:customer|deal))/i,
-          /(?:onboarding[\s\S]{0,220}(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|not urgent|structural|future throughput|support load|reliab(?:ility|le)|friction|crash|retry|user experience)|(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|not urgent|structural|future throughput|support load|reliab(?:ility|le)|friction|crash|retry|user experience)[\s\S]{0,220}onboarding)/i,
+        kind: 'prioritizationJustification',
+        criteria: [
+          {
+            topic: /\b(?:(?:production|memory) (?:bug|issue)|memory leak)\b/i,
+            basis: /\b(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius|unbounded downside|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b/i,
+          },
+          {
+            topic: /\b(?:customer|deal)s?\b/i,
+            basis: /\b(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage)|time[- ](?:sensitive|boxed)|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
+          },
+          {
+            topic: /\bonboarding\b/i,
+            basis: /\b(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|not urgent|structural|future throughput|support load|reliab(?:ility|le)|friction|crash|retry|user experience|growth)\b/i,
+          },
         ],
         points: 10,
       },

@@ -3345,6 +3345,406 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts the exact paid decision-clock prioritization rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Assumption:** The memory bug is active in production (i.e., it\'s causing measurable degradation, not just a theoretical leak), and the customer deal has a decision point falling within this week — not an open-ended timeline.',
+      '',
+      '## Order & Justification',
+      '',
+      '1. **Production memory bug — first**',
+      '   Unaddressed infrastructure risk compounds silently and can escalate into an outage. That outage would directly damage both the deal you\'re trying to close (credibility with a prospect evaluating your product) and the onboarding experience you\'re trying to fix. Containing this protects the other two priorities rather than competing with them.',
+      '',
+      '2. **Close the customer — second**',
+      '   Deals have a decision clock that doesn\'t wait for internal cleanup. Once the bug is triaged (not necessarily fully fixed — just understood and contained), this becomes the highest-leverage, time-boxed action this week.',
+      '',
+      '3. **Repair onboarding friction — third**',
+      '   Important for growth and retention, but it\'s an iterative, ongoing fix rather than a single deadline-driven event. It can absorb attention across the week without needing to go first.',
+      '',
+      '## First action today',
+      'Pull the memory profiler/logs from the affected service and confirm whether the leak is actively growing or stable under current load. That single check tells you whether this is a "drop everything" outage risk or a "schedule a fix this week" issue — and that answer determines how much bandwidth you have left today for deal work.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it.each([
+    [
+      'labels only',
+      [
+        'Priority order:',
+        '1. Memory bug — risk/reliability.',
+        '2. Customer — revenue/deadline.',
+        '3. Onboarding — retention/friction.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'headings only',
+      [
+        '## 1. Memory bug: outage risk',
+        '## 2. Customer: revenue',
+        '## 3. Onboarding: retention',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'rejected quotation',
+      [
+        'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding.',
+        '> Rejected example: the memory bug creates outage risk; the customer deal drives revenue; onboarding affects retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'negated rationale',
+      [
+        'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding.',
+        'The memory bug does not create outage risk. The customer is not time-sensitive and has no revenue impact. Onboarding does not affect retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'conditional rationale',
+      [
+        'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding.',
+        'If the memory bug creates outage risk, if the customer is time-sensitive and drives revenue, and if onboarding affects retention, this order might make sense.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'trailing and modal conditions',
+      [
+        'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding.',
+        'The memory bug creates outage risk if active. The customer could drive revenue. Onboarding affects retention if users churn.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'rejected source assertions',
+      [
+        'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding.',
+        'The rejected proposal says the memory bug creates outage risk. According to a rejected memo, the customer deal drives revenue. The quoted example says onboarding affects retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'unlinked pooled reasons',
+      [
+        '## Order and justification',
+        '1. Investigate the production memory bug.',
+        '2. Close the customer deal.',
+        '3. Repair onboarding.',
+        'Outage risk creates serious instability.',
+        'Immediate revenue drives commercial survival.',
+        'Activation improves long-term retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'compact unlinked pooled reasons',
+      'Order and justification: 1) Investigate the production memory bug, 2) close the customer deal, 3) repair onboarding. Because outage risk, revenue deadline, and retention matter. First action today: open the bug report.',
+    ],
+    [
+      'compact misaligned pooled reasons',
+      'Order: 1) production memory bug, 2) customer deal, 3) onboarding. Rationale: retention first, revenue deadline second, and outage risk third. First action today: open the bug report.',
+    ],
+    [
+      'literal quoted assertions',
+      'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding. “The memory bug creates outage risk.” “The customer drives revenue.” “Onboarding affects retention.” First action today: open the bug report.',
+    ],
+    [
+      'only-if and when conditions',
+      'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding. Only if the memory bug is active does it create outage risk. When the customer closes, it drives revenue. Only if users churn does onboarding affect retention. First action today: open the bug report.',
+    ],
+    [
+      'single-clause reordered pooled reasons',
+      'Order and justification: production memory bug, customer deal, and onboarding — retention first, outage risk second, and revenue third. First action today: open the bug report.',
+    ],
+    [
+      'distant modal rationale',
+      'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding. The memory bug could, after several unverified assumptions and a long chain of speculative operational events, create outage risk. The customer drives immediate revenue. Onboarding improves retention. First action today: open the bug report.',
+    ],
+    [
+      'distant modal rationale with an Oxford-comma uncertainty list',
+      [
+        'Priority order:',
+        '1. The production memory bug could, according to an uncertain chain of assumptions about traffic, caching, synchronization, and system pressure, create outage risk.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'distant trailing condition',
+      'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding. The memory bug creates outage risk after several unverified assumptions and a long chain of speculative operational events if it is active. The customer drives immediate revenue. Onboarding improves retention. First action today: open the bug report.',
+    ],
+    [
+      'comma-separated distant trailing condition',
+      [
+        'Priority order:',
+        '1. The production memory bug creates outage risk according to a chain of speculative assumptions about traffic, caching, synchronization, and system pressure, if it is active.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction reduces retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'rejected assertion suffixes',
+      'Priority order: 1. Memory bug, 2. Customer, 3. Onboarding. The assertion that the memory bug creates outage risk is false. The claim that the customer drives revenue is wrong. The statement that onboarding affects retention is disproven. First action today: open the bug report.',
+    ],
+    [
+      'future-negated rationale',
+      [
+        'Priority order:',
+        '1. Memory bug first because it will not create outage risk.',
+        '2. Customer second because it will not drive revenue.',
+        '3. Onboarding third because it will not improve retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'actively rejected rationale',
+      [
+        'Priority order:',
+        '1. Memory bug first; I reject the idea that it creates outage risk.',
+        '2. Customer second; I reject the idea that it drives revenue.',
+        '3. Onboarding third; I reject the idea that it improves retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'inline quoted-source rationale',
+      [
+        'Priority order:',
+        '1. Memory bug first; the memo says “it creates outage risk.”',
+        '2. Customer second; a slide says “it drives revenue.”',
+        '3. Onboarding third; a note says “it improves retention.”',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        'First action today is to restart after another crash.',
+      ].join('\n'),
+    ],
+    [
+      'same-line first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third. First action today is to restart after another crash.',
+      ].join('\n'),
+    ],
+    [
+      'same-line bold first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third. **First action today:** restart because of a crash.',
+      ].join('\n'),
+    ],
+    [
+      'same-line colon first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third: First action today: restart because of a crash.',
+      ].join('\n'),
+    ],
+    [
+      'long descriptive first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        "For everyone responsible for today's production launch, the first action is to restart after another crash.",
+      ].join('\n'),
+    ],
+    [
+      'long assigned first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        'Our clearly assigned and immediately executable first action today is restarting after another crash.',
+      ].join('\n'),
+    ],
+    [
+      'todays-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        "Today's action is to restart after another crash.",
+      ].join('\n'),
+    ],
+    [
+      'start-today rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        'Start today: the first step is restarting because of a crash.',
+      ].join('\n'),
+    ],
+    [
+      'begin-today rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        'Begin today by restarting after another crash.',
+      ].join('\n'),
+    ],
+    [
+      'today-label rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        'Today: restart after another crash.',
+      ].join('\n'),
+    ],
+    [
+      'bold first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        '**First action today:** It is necessary to restart after another crash.',
+      ].join('\n'),
+    ],
+    [
+      'fails-to rationale',
+      [
+        'Priority order:',
+        '1. Memory bug first because it fails to create outage risk.',
+        '2. Customer second because it fails to drive revenue.',
+        '3. Onboarding third because it fails to improve retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'false-that rationale',
+      [
+        'Priority order:',
+        '1. Memory bug first because it is false that it creates outage risk.',
+        '2. Customer second because it is false that it drives revenue.',
+        '3. Onboarding third because it is false that it improves retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'third-person rejected rationale',
+      [
+        'Priority order:',
+        '1. The team rejects the idea that the memory bug creates outage risk.',
+        '2. Management disputes the idea that the customer drives immediate revenue.',
+        '3. Reviewers deny the idea that onboarding improves user retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'generic attributed rationale',
+      [
+        'Priority order:',
+        '1. Memory bug first; a report says “it creates outage risk.”',
+        '2. Customer second; a document says “it drives revenue.”',
+        '3. Onboarding third; a review says “it improves retention.”',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'distant future-negated rationale',
+      [
+        'Priority order:',
+        '1. The production memory bug will not, even after prolonged peak traffic across every service and repeated cache pressure in the production environment, create outage risk.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction improves retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'todays-first-action rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        "Today's first action is to restart after another crash.",
+      ].join('\n'),
+    ],
+    [
+      'bold-label-outside-colon rationale borrowing',
+      [
+        'Priority order:',
+        '1. Memory bug first because it creates outage risk.',
+        '2. Customer second because it drives revenue.',
+        '3. Onboarding third.',
+        '**First action today**: It is necessary to restart after another crash.',
+      ].join('\n'),
+    ],
+    [
+      'refusal and unbelievable rationale',
+      [
+        'Priority order:',
+        '1. The team refuses to believe that the memory bug creates outage risk.',
+        '2. Management refuses to accept that the customer drives revenue.',
+        '3. Reviewers reject as unbelievable that onboarding improves retention.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+    [
+      'unlikely rationale',
+      [
+        'Priority order:',
+        '1. The production memory bug is unlikely to create outage risk.',
+        '2. The customer deal drives near-term revenue this week.',
+        '3. Onboarding friction improves retention and activation.',
+        'First action today: open the bug report.',
+      ].join('\n'),
+    ],
+  ])('rejects non-substantive general-purpose justification: %s', (_label, response) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+  });
+
   it('accepts live deal-signature language as a substantive prioritization basis', () => {
     const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
     const response = [
@@ -3402,6 +3802,174 @@ describe('deterministic 100-point persona scorer', () => {
       requestPersonaId: generalPurpose.id,
     }));
 
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('links ordinal priority labels to their following rationale lines', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'First: investigate the production memory bug.',
+      'Because unresolved reliability risk can become an outage.',
+      'Second: close the customer deal.',
+      'Because the external deadline controls near-term revenue.',
+      'Third: repair onboarding friction.',
+      'Because reducing friction improves activation and retention.',
+      'First action today: reproduce the memory bug under load.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it.each([
+    [
+      'Markdown numeric headings',
+      [
+        '## 1. Production memory bug',
+        'It threatens service reliability and outage risk.',
+        '## 2. Customer deal',
+        'A deadline makes the near-term revenue opportunity perishable.',
+        '## 3. Onboarding',
+        'Reducing friction improves activation and retention.',
+        'First action today: reproduce the bug.',
+      ].join('\n'),
+    ],
+    [
+      'bold numeric headings',
+      [
+        '**1. Production memory bug**',
+        'It threatens service reliability and outage risk.',
+        '**2. Customer deal**',
+        'A deadline makes the near-term revenue opportunity perishable.',
+        '**3. Onboarding**',
+        'Reducing friction improves activation and retention.',
+        'First action today: reproduce the bug.',
+      ].join('\n'),
+    ],
+    [
+      'Markdown ordinal headings',
+      [
+        '## First: Investigate the production memory bug',
+        'Because unresolved reliability risk can become an outage.',
+        '## Second: Close the customer deal',
+        'Because the external deadline controls near-term revenue.',
+        '## Third: Repair onboarding friction',
+        'Because reducing friction improves activation and retention.',
+        'First action today: reproduce the memory bug under load.',
+      ].join('\n'),
+    ],
+    [
+      'bold bulleted ordinal headings',
+      [
+        'Priority order:',
+        '- **First — production memory bug**',
+        '  Because unresolved reliability problems threaten an outage.',
+        '- **Second — customer deal**',
+        '  Because its deadline controls near-term revenue.',
+        '- **Third — onboarding friction**',
+        '  Because reducing it improves activation and retention.',
+        'First action today: reproduce the bug.',
+      ].join('\n'),
+    ],
+  ])('links priority rationale under %s', (_label, response) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it.each([
+    [
+      'unrelated no-blockers clause',
+      [
+        'Priority order:',
+        '1. Memory bug first because unresolved reliability problems can create an outage.',
+        '2. Customer second: there are no blockers, and its deadline drives near-term revenue.',
+        '3. Onboarding third because reducing friction improves activation and retention.',
+        'First action today: reproduce the memory bug.',
+      ].join('\n'),
+    ],
+    [
+      'unrelated without-discount phrase',
+      [
+        'Priority order:',
+        '1. Memory bug first because unresolved reliability problems can create an outage.',
+        '2. Customer second: without extra discount, its deadline drives near-term revenue.',
+        '3. Onboarding third because reducing friction improves activation and retention.',
+        'First action today: reproduce the memory bug.',
+      ].join('\n'),
+    ],
+    [
+      'rejected delay before an affirmed deadline basis',
+      [
+        'Priority order:',
+        '1. Memory bug first because unresolved reliability problems create outage risk.',
+        '2. Customer second: the team rejects further delay because its deadline drives near-term revenue.',
+        '3. Onboarding third because reducing friction improves activation and retention.',
+        'First action today: reproduce the memory bug.',
+      ].join('\n'),
+    ],
+    [
+      'negated adverse event before a separately affirmed revenue basis',
+      [
+        'Priority order:',
+        '1. Memory bug first because unresolved reliability problems create outage risk.',
+        '2. Customer second: it is unlikely to miss the deadline, so closing now drives near-term revenue.',
+        '3. Onboarding third because reducing friction improves activation and retention.',
+        'First action today: reproduce the memory bug.',
+      ].join('\n'),
+    ],
+    [
+      'negated adverse event before an and-joined affirmed revenue basis',
+      [
+        'Priority order:',
+        '1. Memory bug first because unresolved reliability problems create outage risk.',
+        '2. Customer second: it is unlikely to miss the deadline, and closing now drives near-term revenue.',
+        '3. Onboarding third because reducing friction improves activation and retention.',
+        'First action today: reproduce the memory bug.',
+      ].join('\n'),
+    ],
+    [
+      'rejected delay before an as-linked affirmed deadline basis',
+      [
+        'Priority order:',
+        '1. Memory bug first because unresolved reliability problems create outage risk.',
+        '2. Customer second: the team rejects further delay as its deadline drives near-term revenue.',
+        '3. Onboarding third because reducing friction improves activation and retention.',
+        'First action today: reproduce the memory bug.',
+      ].join('\n'),
+    ],
+  ])('accepts an affirmative basis after %s', (_label, response) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
