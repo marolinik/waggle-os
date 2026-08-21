@@ -2609,13 +2609,13 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     dataDir: fullConfig.dataDir,
     getLlmEndpoint: resolveOfflineManagerEndpoint,
     getLlmApiKey: () => server.agentState?.litellmApiKey ?? '',
-    checkLlmReadiness: async () => {
+    checkLlmReadiness: async (signal) => {
       const selectedModel = server.agentState.currentModel.trim();
       const selectedOllama = selectedModel.toLowerCase().startsWith('ollama/');
       const unselectedOllama = !selectedModel
         && server.agentState.llmProvider.provider === 'ollama';
       if (selectedOllama || unselectedOllama) {
-        const localModels = await listOllamaChatModelIds();
+        const localModels = await listOllamaChatModelIds(signal);
         return selectedOllama
           ? localModels.some(model => model.toLowerCase() === selectedModel.toLowerCase())
           : localModels.length > 0;
@@ -2628,7 +2628,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       const response = await fetch(`${endpoint}/health/readiness`, {
         method: 'GET',
         headers,
-        signal: AbortSignal.timeout(5_000),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
       });
       if (!response.ok) return false;
       if (server.agentState.llmProvider.provider !== 'litellm') return true;
@@ -2638,7 +2638,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       const modelsResponse = await fetch(`${endpoint}/models`, {
         method: 'GET',
         headers,
-        signal: AbortSignal.timeout(5_000),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
       });
       if (!modelsResponse.ok) return false;
       const modelsPayload = await modelsResponse.json() as {
@@ -2654,6 +2654,9 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   });
   server.addHook('onListen', async () => {
     offlineManager.start();
+  });
+  server.addHook('preClose', async () => {
+    await offlineManager.stop();
   });
   server.decorate('offlineManager', offlineManager);
 
@@ -3305,7 +3308,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     stopMarketplaceBackgroundSync();
     scheduler.stop();
     evolutionService.stop();
-    offlineManager.stop();
+    await offlineManager.stop();
     clearInterval(auditCleanupTimer);
 
     // Stop MCP servers

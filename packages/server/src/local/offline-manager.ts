@@ -33,7 +33,7 @@ export interface OfflineManagerConfig {
   /** Function that returns the API key for the LLM endpoint */
   getLlmApiKey: () => string;
   /** Provider-aware check that confirms a model can serve completions */
-  checkLlmReadiness?: () => Promise<boolean>;
+  checkLlmReadiness?: (signal: AbortSignal) => Promise<boolean>;
   /** Event bus for emitting SSE notifications */
   eventBus: EventEmitter;
 }
@@ -47,7 +47,9 @@ export class OfflineManager {
   private _checkIntervalMs: number;
   private _getLlmEndpoint: () => string;
   private _getLlmApiKey: () => string;
-  private _checkLlmReadiness: (() => Promise<boolean>) | undefined;
+  private _checkLlmReadiness: ((signal: AbortSignal) => Promise<boolean>) | undefined;
+  private _activeCheck: Promise<boolean> | null = null;
+  private _checkAbortController: AbortController | null = null;
   private _eventBus: EventEmitter;
   private _lastCheck: string = new Date().toISOString();
 
@@ -86,18 +88,21 @@ export class OfflineManager {
   start(): void {
     if (this._timer) return;
     // Run an initial check
-    this._checkHealth().catch(() => {});
+    void this._runManagedCheck().catch(() => {});
     this._timer = setInterval(() => {
-      this._checkHealth().catch(() => {});
+      void this._runManagedCheck().catch(() => {});
     }, this._checkIntervalMs);
   }
 
   /** Stop periodic health checks */
-  stop(): void {
+  async stop(): Promise<void> {
     if (this._timer) {
       clearInterval(this._timer);
       this._timer = null;
     }
+    const activeCheck = this._activeCheck;
+    this._checkAbortController?.abort();
+    if (activeCheck) await activeCheck.catch(() => false);
   }
 
   /** Queue a message for later delivery */
@@ -142,13 +147,28 @@ export class OfflineManager {
 
   // ── Internal ────────────────────────────────────────────────────
 
-  private async _checkHealth(): Promise<boolean> {
+  private _runManagedCheck(): Promise<boolean> {
+    if (this._activeCheck) return this._activeCheck;
+
+    const controller = new AbortController();
+    this._checkAbortController = controller;
+    const activeCheck = this._checkHealth(controller.signal).finally(() => {
+      if (this._activeCheck === activeCheck) {
+        this._activeCheck = null;
+        this._checkAbortController = null;
+      }
+    });
+    this._activeCheck = activeCheck;
+    return activeCheck;
+  }
+
+  private async _checkHealth(signal?: AbortSignal): Promise<boolean> {
     const wasOffline = this._offline;
     let reachable = false;
 
     try {
       if (this._checkLlmReadiness) {
-        reachable = await this._checkLlmReadiness();
+        reachable = await this._checkLlmReadiness(signal ?? new AbortController().signal);
       } else {
         const endpoint = this._getLlmEndpoint();
         const apiKey = this._getLlmApiKey();
@@ -178,7 +198,7 @@ export class OfflineManager {
           response = await fetch(probeUrl, {
             method: 'GET',
             headers,
-            signal: ac.signal,
+            signal: signal ? AbortSignal.any([signal, ac.signal]) : ac.signal,
           });
         } finally {
           clearTimeout(timer);
@@ -190,6 +210,10 @@ export class OfflineManager {
     } catch {
       reachable = false;
     }
+
+    // Shutdown cancellation is not a provider failure and must not emit a
+    // stale offline transition after the server has begun closing.
+    if (signal?.aborted) return false;
 
     this._lastCheck = new Date().toISOString();
 

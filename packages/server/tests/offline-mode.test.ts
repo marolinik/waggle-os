@@ -222,6 +222,207 @@ describe('OfflineManager', () => {
   });
 });
 
+describe('Offline shutdown lifecycle', () => {
+  it('aborts an in-flight loopback readiness check before draining the server', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-offline-close-'));
+    const nativeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    let server: FastifyInstance | undefined;
+    let closePromise: Promise<void> | undefined;
+    let markEntered!: () => void;
+    let markDisconnected!: () => void;
+    let releaseRequest!: () => void;
+    let destroyBlockedRequest: (() => void) | undefined;
+    const requestEntered = new Promise<void>((resolve) => { markEntered = resolve; });
+    const requestDisconnected = new Promise<void>((resolve) => { markDisconnected = resolve; });
+    const requestReleased = new Promise<void>((resolve) => { releaseRequest = resolve; });
+
+    try {
+      server = await buildLocalServer({
+        dataDir,
+        port: 0,
+        skipLiteLLM: true,
+        useBuiltInProxy: true,
+        manageLiteLLM: false,
+      });
+      server.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        detail: 'deterministic loopback shutdown fixture',
+        checkedAt: new Date().toISOString(),
+      };
+      fetchSpy.mockImplementation(async (input, init) => {
+        if (String(input).endsWith('/api/tags')) {
+          return new Response('{}', { status: 503 });
+        }
+        return nativeFetch(input, init);
+      });
+      server.addHook('onRequest', async (request, reply) => {
+        if (request.url !== '/v1/health/readiness') return;
+        const onDisconnect = () => {
+          markDisconnected();
+          releaseRequest();
+        };
+        request.raw.once('aborted', onDisconnect);
+        reply.raw.once('close', onDisconnect);
+        destroyBlockedRequest = () => {
+          request.raw.destroy();
+          releaseRequest();
+        };
+        markEntered();
+        await requestReleased;
+        request.raw.off('aborted', onDisconnect);
+        reply.raw.off('close', onDisconnect);
+      });
+      await server.listen({ port: 0, host: '127.0.0.1' });
+      let startTimer: ReturnType<typeof setTimeout> | undefined;
+      const started = await Promise.race([
+        requestEntered.then(() => true),
+        new Promise<false>((resolve) => {
+          startTimer = setTimeout(() => resolve(false), 5_000);
+        }),
+      ]);
+      if (startTimer) clearTimeout(startTimer);
+      expect(started).toBe(true);
+
+      closePromise = server.close();
+      let disconnectTimer: ReturnType<typeof setTimeout> | undefined;
+      const disconnectedBeforeFallback = await Promise.race([
+        requestDisconnected.then(() => true),
+        new Promise<false>((resolve) => {
+          disconnectTimer = setTimeout(() => resolve(false), 250);
+        }),
+      ]);
+      if (disconnectTimer) clearTimeout(disconnectTimer);
+      if (!disconnectedBeforeFallback) destroyBlockedRequest?.();
+      await closePromise;
+      expect(disconnectedBeforeFallback).toBe(true);
+      expect(server.offlineManager.isOffline).toBe(false);
+    } finally {
+      destroyBlockedRequest?.();
+      releaseRequest();
+      if (closePromise) {
+        await closePromise.catch(() => {});
+      } else if (server?.server.listening) {
+        await server.close();
+      }
+      fetchSpy.mockRestore();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('aborts a selected Ollama readiness probe without a stale offline transition', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-offline-ollama-close-'));
+    const nativeFetch = globalThis.fetch;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    let server: FastifyInstance | undefined;
+    let closePromise: Promise<void> | undefined;
+    let insideOfflineStart = false;
+    let startSpy: ReturnType<typeof vi.spyOn> | undefined;
+    let managedProbe: {
+      signal: AbortSignal | undefined;
+      aborted: Promise<void>;
+      release: () => void;
+    } | undefined;
+    let markProbeStarted!: () => void;
+    const probeStarted = new Promise<void>((resolve) => { markProbeStarted = resolve; });
+
+    try {
+      server = await buildLocalServer({
+        dataDir,
+        port: 0,
+        skipLiteLLM: true,
+        useBuiltInProxy: true,
+        manageLiteLLM: false,
+      });
+      server.agentState.currentModel = 'ollama/test-readiness:latest';
+      server.agentState.llmProvider = {
+        provider: 'ollama',
+        health: 'healthy',
+        detail: 'deterministic selected Ollama shutdown fixture',
+        checkedAt: new Date().toISOString(),
+      };
+      const originalStart = server.offlineManager.start.bind(server.offlineManager);
+      startSpy = vi.spyOn(server.offlineManager, 'start').mockImplementation(() => {
+        insideOfflineStart = true;
+        try {
+          originalStart();
+        } finally {
+          insideOfflineStart = false;
+        }
+      });
+      fetchSpy.mockImplementation((input, init) => {
+        if (!String(input).endsWith('/api/tags')) return nativeFetch(input, init);
+        if (!insideOfflineStart) return Promise.resolve(new Response('{}', { status: 503 }));
+
+        const signal = init?.signal ?? undefined;
+        return new Promise<Response>((resolve, reject) => {
+          let markAborted!: () => void;
+          const aborted = new Promise<void>((resolveAbort) => { markAborted = resolveAbort; });
+          const onAbort = () => {
+            signal?.removeEventListener('abort', onAbort);
+            markAborted();
+            reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+          };
+          managedProbe = {
+            signal,
+            aborted,
+            release: () => {
+              signal?.removeEventListener('abort', onAbort);
+              resolve(new Response('{}', { status: 503 }));
+            },
+          };
+          if (signal?.aborted) onAbort();
+          else signal?.addEventListener('abort', onAbort, { once: true });
+          markProbeStarted();
+        });
+      });
+
+      await server.listen({ port: 0, host: '127.0.0.1' });
+      let startTimer: ReturnType<typeof setTimeout> | undefined;
+      const started = await Promise.race([
+        probeStarted.then(() => true),
+        new Promise<false>((resolve) => {
+          startTimer = setTimeout(() => resolve(false), 5_000);
+        }),
+      ]);
+      if (startTimer) clearTimeout(startTimer);
+      expect(started).toBe(true);
+      const probe = managedProbe;
+      expect(probe).toBeDefined();
+      expect(probe?.signal).toBeInstanceOf(AbortSignal);
+      if (!probe) throw new Error('managed selected-Ollama probe was not captured');
+
+      closePromise = server.close();
+      let abortTimer: ReturnType<typeof setTimeout> | undefined;
+      const abortedBeforeFallback = await Promise.race([
+        probe.aborted.then(() => true),
+        new Promise<false>((resolve) => {
+          abortTimer = setTimeout(() => resolve(false), 250);
+        }),
+      ]);
+      if (abortTimer) clearTimeout(abortTimer);
+      if (!abortedBeforeFallback) probe.release();
+      await closePromise;
+
+      expect(abortedBeforeFallback).toBe(true);
+      expect(probe.signal?.aborted).toBe(true);
+      expect(server.offlineManager.isOffline).toBe(false);
+    } finally {
+      managedProbe?.release();
+      if (closePromise) {
+        await closePromise.catch(() => {});
+      } else if (server?.server.listening) {
+        await server.close();
+      }
+      startSpy?.mockRestore();
+      fetchSpy.mockRestore();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+});
+
 // ── REST route integration tests ────────────────────────────────────
 
 describe('Offline REST routes', () => {
@@ -241,8 +442,8 @@ describe('Offline REST routes', () => {
     frames.createIFrame(s1.gop_id, 'Test frame', 'normal');
     mind.close();
 
-    serverBuild = buildLocalServer({ dataDir: tmpDir }).then((builtServer) => {
-      builtServer.offlineManager.stop();
+    serverBuild = buildLocalServer({ dataDir: tmpDir }).then(async (builtServer) => {
+      await builtServer.offlineManager.stop();
       return builtServer;
     });
     server = await serverBuild;

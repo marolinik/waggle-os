@@ -170,12 +170,14 @@ function findBuiltInProxyFamilyFallback(
     ?? null;
 }
 
-export async function fetchOllamaRoutingModels(): Promise<OllamaRoutingModel[]> {
+export async function fetchOllamaRoutingModels(signal?: AbortSignal): Promise<OllamaRoutingModel[]> {
   const endpoint = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1500);
   try {
-    const res = await fetch(`${endpoint}/api/tags`, { signal: controller.signal });
+    const res = await fetch(`${endpoint}/api/tags`, {
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+    });
     if (!res.ok) return [];
     const data = (await res.json()) as {
       models?: Array<{ name: string; remote_host?: string }>;
@@ -193,8 +195,8 @@ export async function fetchOllamaRoutingModels(): Promise<OllamaRoutingModel[]> 
   }
 }
 
-export async function listOllamaChatModelIds(): Promise<string[]> {
-  const models = await fetchOllamaRoutingModels();
+export async function listOllamaChatModelIds(signal?: AbortSignal): Promise<string[]> {
+  const models = await fetchOllamaRoutingModels(signal);
   return models
     .filter((m) => m.source === 'local' && !isEmbeddingModel(m.id))
     .map((m) => m.id);
