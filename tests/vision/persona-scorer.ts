@@ -1778,12 +1778,39 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     && browserAffirmed;
 }
 
-const NON_AFFIRMATIVE_ACTION_SECTION = /\?|\b(?:quoted|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|questions?|not selected|not approved|not endorsed|old memo)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\bno longer recommend(?:ed|ing)?\b|\brecommend(?:ed|ing)? against\b|\bdecid(?:e[sd]?|ing) against\b|\bavoid (?:these|the|following) actions?\b|\bdo not implement\b|\b(?:not|(?:is|are|was|were)n['’]t) (?:(?:an?|the|this|that|my|your|our|their|his|her|its) )?recommendations?\b|\bfor (?:discussion|reference) only\b/i;
-const NON_AFFIRMATIVE_ACTION_LINE = /\?|\b(?:merely reported|quoted(?: from)?|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|not selected|not approved|not endorsed|old memo|consider only|no longer recommend(?:ed|ing)?|(?:not|(?:is|are|was|were)n['’]t) (?:(?:an?|the|this|that|my|your|our|their|his|her|its) )?recommendations?|decid(?:e[sd]?|ing) against|do not implement)\b|\b(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)\b|\brecommend(?:ed|ing)? against\b|\bavoid (?:these|the|following) actions?\b|\bfor (?:discussion|reference) only\b/i;
-const EXPLICIT_AFFIRMATIVE_ACTION_SECTION = /\b(?:now\s+)?recommend(?:ed|ing)?\s+(?:these|the|following)?\s*actions?\b|\b(?:approved|selected) actions?\b|\bactions? to improve runway\b/i;
+const NON_AFFIRMATIVE_ACTION_STATUS = String.raw`\b(?:merely reported|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|illustrative only|not (?:selected|approved|endorsed|accepted|chosen)|old memo|consider only|no longer recommend(?:ed|ing)?|not to be implemented|(?:this|that|it) is not an action|decid(?:e[sd]?|ing) against|do not implement)\b`;
+const NON_AFFIRMATIVE_ACTION_DECISION = String.raw`\b(?:(?:cannot|can't|do not|don't) (?:recommend|endorse|pursue)|recommend(?:ed|ing)? against|avoid (?:(?:doing (?:so|this|that)|(?:implementing|pursuing|executing|adopting|taking) (?:it|(?:this|that|the) (?:action|recommendation|step|measure))|(?:reducing|cutting|lowering)[^.|\r\n]{0,24}(?:costs?|burn)|(?:generating|increasing|growing|raising|accelerating|improving|creating|adding)[^.|\r\n]{0,24}(?:revenue|cash inflows?|funding|customers?)|(?:this|that)(?=[.!?]?(?:[ \t]*\||$))|(?:this|that|the|these|those|following) (?:action|recommendation|step|measure)s?|any attempt|it))|(?:for )?(?:discussion|reference|illustration|example) only|(?:not|(?:is|are|was|were)n['’]t) (?:(?:an?|the|this|that|my|your|our|their|his|her|its) )?recommendations?)\b`;
+const NON_AFFIRMATIVE_ACTION_INTENT = String.raw`\b(?:(?:(?:we|you|i|the team)\s+)?(?:(?:will|would|should|must)\s+not|won['’]t|wouldn['’]t|shouldn['’]t|mustn['’]t)\s+(?:implement|pursue|execute|adopt|take)|(?:we|you|i|the team)\s+(?:plan|intend)\s+not\s+to\s+(?:implement|pursue|execute|adopt|take)|(?:we|you|i|the team)\s+refuse\s+to\s+(?:implement|pursue|execute|adopt|take))\b`;
+const NON_AFFIRMATIVE_ACTION_CONDITIONAL = String.raw`\b(?:(?:if|assuming|provided(?: that)?)\s+(?:(?:the\s+)?(?:leadership|management|board|cfo)\s+)?(?:approval|approves?|approved|authorizes?|authorized|agrees?|agreed|signs? off)|(?:subject(?: to)?|pending|contingent(?: on)?|awaiting|only with)\s+(?:(?:the\s+)?(?:leadership|management|board|cfo)\s+)?approval|approval\s+(?:is\s+)?required|were\s+(?:the\s+)?(?:leadership|management|board|cfo)\s+to\s+(?:approve|authorize|agree|sign off)|suppose|imagine)\b`;
+const NON_AFFIRMATIVE_ACTION_QUOTATION = String.raw`\b(?:(?:this|that|it) is (?:a )?quotation from|(?:quotation|verbatim) from|according to|[A-Za-z][\w-]*['’]s quoted proposal)\b`;
+const NON_AFFIRMATIVE_ACTION_SHARED = [
+  NON_AFFIRMATIVE_ACTION_STATUS,
+  NON_AFFIRMATIVE_ACTION_DECISION,
+  NON_AFFIRMATIVE_ACTION_INTENT,
+  NON_AFFIRMATIVE_ACTION_CONDITIONAL,
+  NON_AFFIRMATIVE_ACTION_QUOTATION,
+].join('|');
+const NON_AFFIRMATIVE_ACTION_SECTION = new RegExp(
+  [
+    String.raw`\?`,
+    NON_AFFIRMATIVE_ACTION_SHARED,
+    String.raw`\b(?:quoted|quotes?|quotation|questions?|conditional|pending|contingent|illustrative|example)\b`,
+    String.raw`\b(?:veto(?:ed)?|denied|cancel(?:led|ed)|abandoned|scrapped)\b`,
+  ].join('|'),
+  'i',
+);
+const NON_AFFIRMATIVE_ACTION_LINE = new RegExp(
+  [
+    String.raw`\?`,
+    NON_AFFIRMATIVE_ACTION_SHARED,
+    String.raw`(?:^|\|)[ \t]*(?:quote(?:d)?(?:[ \t]+proposal)?(?:[ \t]+from\b[^|]*)?|veto(?:ed)?(?:[ \t]+by\b[^|]*)?|denied(?:[ \t]+by\b[^|]*)?|cancel(?:led|ed)(?:[ \t]+by\b[^|]*)?|abandoned(?:[ \t]+by\b[^|]*)?|scrapped(?:[ \t]+by\b[^|]*)?)[ \t]*(?:\||$)`,
+  ].join('|'),
+  'i',
+);
+const EXPLICIT_AFFIRMATIVE_ACTION_SECTION = /\b(?:now\s+)?recommend(?:ed|ing)?\s+(?:these|the|following)?\s*actions?\b|\b(?:approved|selected) actions?\b|\bactions? to (?:improve|extend) runway\b/i;
 const GENERIC_ACTION_SECTION = /^\s*(?:two|2)\s+actions?\s*:?\s*$/i;
 const RESETTABLE_SCENARIO_ACTION_SECTION = /^\s*(?:(?:hypothetical|alternative)\s+)?(?:scenario|sensitivity)(?:\s+analysis)?\s*:?\s*$|^\s*hypothetical\s*:?\s*$/i;
-const RETRACTS_ALL_ACTIONS = /\b(?:(?:both|all|the|these)\s+(?:recommendations?|actions?)\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|ruled[- ]out|not approved|not endorsed|no longer recommended)|(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the|these)\s+(?:recommendations?|actions?)|no longer recommend(?:ed|ing)?\s+(?:both|all|the|these)\s+(?:recommendations?|actions?))\b/i;
+const RETRACTS_ALL_ACTIONS = /\b(?:(?:both|all|the|these)\s+(?:recommendations?|actions?)\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|vetoed|denied|cancelled|canceled|abandoned|scrapped|illustrative|quoted|ruled[- ]out|not approved|not endorsed|no longer recommended)|(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the|these)\s+(?:recommendations?|actions?)|no longer recommend(?:ed|ing)?\s+(?:both|all|the|these)\s+(?:recommendations?|actions?))\b/i;
 
 type ActionSectionState = 'active' | 'scenario' | 'hard';
 
@@ -1819,11 +1846,13 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
   const matched = patterns.map(() => false);
   let sectionState: ActionSectionState = 'active';
   let scenarioHeadingLevel: number | null = null;
+  let explicitActionSection = false;
 
   for (const line of response.replace(/\r\n?/g, '\n').split('\n')) {
     if (RETRACTS_ALL_ACTIONS.test(line)) {
       matched.fill(false);
       sectionState = 'hard';
+      explicitActionSection = false;
       continue;
     }
     const markdownHeading = /^\s*(#{1,6})\s+(.+?)\s*$/.exec(line);
@@ -1851,6 +1880,10 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
         scenarioHeadingLevel = null;
       }
       sectionState = nextState;
+      explicitActionSection = nextState === 'active' && (
+        EXPLICIT_AFFIRMATIVE_ACTION_SECTION.test(heading)
+        || GENERIC_ACTION_SECTION.test(heading)
+      );
       continue;
     }
     const containsAction = patterns.some(pattern => testPattern(pattern, line));
@@ -1861,6 +1894,7 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
       || RESETTABLE_SCENARIO_ACTION_SECTION.test(line)
     )) {
       sectionState = transitionActionSection(sectionState, line);
+      explicitActionSection = false;
       continue;
     }
     if (!containsAction && (
@@ -1868,17 +1902,25 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
       || GENERIC_ACTION_SECTION.test(line)
     )) {
       sectionState = transitionActionSection(sectionState, line);
+      explicitActionSection = sectionState === 'active';
       continue;
     }
+    const isTableRow = /^\s*\|/.test(line);
+    const isNumberedTableRow = /^\s*\|[ \t]*\d+[ \t]*\|/.test(line);
+    const isUnnumberedTableRow = isTableRow && !isNumberedTableRow;
+    const scorableLine = isUnnumberedTableRow && explicitActionSection
+      ? line.replace(/^\s*\|[ \t]*/, '')
+      : line;
     if (NON_AFFIRMATIVE_ACTION_LINE.test(line)) {
       patterns.forEach((pattern, index) => {
-        if (testPattern(pattern, line)) matched[index] = false;
+        if (testPattern(pattern, scorableLine)) matched[index] = false;
       });
       continue;
     }
     if (sectionState !== 'active') continue;
+    if (isUnnumberedTableRow && !explicitActionSection) continue;
     patterns.forEach((pattern, index) => {
-      if (!matched[index] && testPattern(pattern, line)) matched[index] = true;
+      if (!matched[index] && testPattern(pattern, scorableLine)) matched[index] = true;
     });
   }
 

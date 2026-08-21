@@ -4516,6 +4516,29 @@ describe('deterministic 100-point persona scorer', () => {
 
     expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
 
+    const purposeClauseResponse = response.replace(
+      'Reduce monthly burn by renegotiating vendors',
+      'Reduce costs to avoid any liquidity crisis',
+    );
+    const purposeClauseResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: purposeClauseResponse,
+      persistedResponse: purposeClauseResponse,
+      requestPersonaId: finance.id,
+    }));
+    expect(purposeClauseResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+
+    const actionReferenceDenial = response
+      .replace('Reduce monthly burn by renegotiating vendors', 'Reduce costs, but avoid it')
+      .replace('Accelerate revenue generation or secure bridge financing', 'Generate revenue, but avoid doing so');
+    const actionReferenceDenialResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: actionReferenceDenial,
+      persistedResponse: actionReferenceDenial,
+      requestPersonaId: finance.id,
+    }));
+    expect(actionReferenceDenialResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+
     const deniedResponse = response
       .replace('Reduce monthly burn by renegotiating vendors', 'Do not reduce monthly burn')
       .replace('Accelerate revenue generation or secure bridge financing', 'Never accelerate revenue generation');
@@ -4726,6 +4749,245 @@ describe('deterministic 100-point persona scorer', () => {
 
     expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
   });
+
+  it('accepts affirmed finance actions in an unnumbered Markdown table', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Calculation: $40,000.00 ÷ $10,000.00 = 4.00 months.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn.',
+      'Biggest assumption: monthly burn stays flat and revenue remains zero.',
+      '## Two Actions to Extend Runway',
+      '| Action | Mechanism |',
+      '|---|---|',
+      '| Reduce monthly burn | Cutting burn from $10,000.00 to $8,000.00 extends runway to 5.00 months |',
+      '| Generate revenue | Even $2,000.00/month in revenue lowers net burn to $8,000.00 |',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const deniedResponse = response
+      .replace('Cutting burn from $10,000.00 to $8,000.00 extends runway to 5.00 months', 'Merely reported; not our recommendation')
+      .replace('Even $2,000.00/month in revenue lowers net burn to $8,000.00', 'Not approved');
+    const deniedResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: deniedResponse,
+      persistedResponse: deniedResponse,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(deniedResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+
+    for (const nonAffirmativeStatus of [
+      'We will not implement this',
+      "We won't pursue this",
+      'If leadership approves, we may revisit this',
+      'Suppose we did this',
+      'Quote from Alice',
+      'Vetoed by leadership',
+      'Cancelled by leadership',
+      'Not to be implemented',
+      'This is not an action',
+      'Quoted proposal',
+      'Quoted proposal from Alice',
+      'Veto by leadership',
+      'Denied by leadership',
+      'Not accepted',
+      'Not chosen',
+      'We plan not to implement this',
+      'I refuse to implement this',
+      'Assuming leadership approval, we may revisit this',
+      'Were leadership to approve, we might do this',
+      'If approved, we may revisit this',
+      'If the CFO approves, we may revisit this',
+      'Provided leadership approves, we may revisit this',
+      'Only with board approval',
+      'Subject to board approval',
+      'Pending leadership approval',
+      'Contingent on management approval',
+      'Awaiting leadership approval',
+      'Approval required',
+      'Imagine we did this',
+      'Illustrative only',
+      'For illustration only',
+      'For example only',
+      'Example only',
+      'This is a quotation from Alice',
+      'Quotation from Alice',
+      'Verbatim from Alice',
+      'According to Alice',
+      "Alice's quoted proposal",
+      'Avoid doing this',
+      'Avoid implementing this action',
+      'Avoid pursuing this action',
+      'Abandoned by leadership',
+      'Scrapped by leadership',
+    ]) {
+      const nonAffirmativeResponse = response
+        .replace('Cutting burn from $10,000.00 to $8,000.00 extends runway to 5.00 months', nonAffirmativeStatus)
+        .replace('Even $2,000.00/month in revenue lowers net burn to $8,000.00', nonAffirmativeStatus);
+      const nonAffirmativeResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: nonAffirmativeResponse,
+        persistedResponse: nonAffirmativeResponse,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(
+        nonAffirmativeResult.checks.find(check => check.id === 'two-actions')?.passed,
+        nonAffirmativeStatus,
+      ).toBe(false);
+    }
+
+    for (const nonAffirmativeHeading of [
+      '## Vetoed actions',
+      '## Cancelled actions',
+      '## Quoted actions',
+      '## Illustrative actions',
+      '## Two Actions to Extend Runway — Conditional on approval',
+      '## Two Actions to Extend Runway — Quotes from Alice',
+      '## Two Actions to Extend Runway — Example only',
+    ]) {
+      const nonAffirmativeSection = response.replace('## Two Actions to Extend Runway', nonAffirmativeHeading);
+      const nonAffirmativeSectionResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: nonAffirmativeSection,
+        persistedResponse: nonAffirmativeSection,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(
+        nonAffirmativeSectionResult.checks.find(check => check.id === 'two-actions')?.passed,
+        nonAffirmativeHeading,
+      ).toBe(false);
+    }
+
+    const ordinaryProcurementAction = response.replace(
+      'Cutting burn from $10,000.00 to $8,000.00 extends runway to 5.00 months',
+      'Get a quote from alternate vendors and renegotiate contracts',
+    );
+    const ordinaryProcurementResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: ordinaryProcurementAction,
+      persistedResponse: ordinaryProcurementAction,
+      requestPersonaId: finance.id,
+    }));
+    expect(ordinaryProcurementResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+
+    for (const validMechanism of [
+      'Illustrative impact: cutting burn from $10,000.00 to $8,000.00 extends runway to 5.00 months',
+      'Reduce costs enough to avoid a veto by leadership',
+    ]) {
+      const compatibleResponse = response.replace(
+        'Cutting burn from $10,000.00 to $8,000.00 extends runway to 5.00 months',
+        validMechanism,
+      );
+      const compatibleResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: compatibleResponse,
+        persistedResponse: compatibleResponse,
+        requestPersonaId: finance.id,
+      }));
+      expect(
+        compatibleResult.checks.find(check => check.id === 'two-actions')?.passed,
+        validMechanism,
+      ).toBe(true);
+    }
+
+    const unscopedTable = response.replace('## Two Actions to Extend Runway\n', '');
+    const unscopedResult = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: unscopedTable,
+      persistedResponse: unscopedTable,
+      requestPersonaId: finance.id,
+    }));
+    expect(unscopedResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+  });
+
+  it.each([
+    ['cost', 'Reduce monthly burn'],
+    ['revenue', 'Generate revenue'],
+  ])('retracts an already-matched %s action in a later unnumbered table row', (_kind, action) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Calculation: $40,000.00 ÷ $10,000.00 = 4.00 months.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn.',
+      'Biggest assumption: monthly burn stays flat and revenue remains zero.',
+      '## Two Actions to Extend Runway',
+      '| Action | Mechanism |',
+      '|---|---|',
+      '| Reduce monthly burn | Cutting burn extends runway |',
+      '| Generate revenue | Revenue lowers net monthly burn |',
+      `| ${action} | Not approved |`,
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+  });
+
+  it.each([
+    ['cost', 'Avoid reducing costs', 'Cutting burn extends runway', 'Revenue lowers net monthly burn'],
+    ['revenue', 'Avoid generating revenue', 'Cutting burn extends runway', 'Revenue lowers net monthly burn'],
+    ['cost', 'Avoid this', 'Cutting burn extends runway', 'Revenue lowers net monthly burn'],
+    ['revenue', 'Avoid that', 'Cutting burn extends runway', 'Revenue lowers net monthly burn'],
+  ])('rejects a direct %s action denial: %s', (kind, denial, costMechanism, revenueMechanism) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Calculation: $40,000.00 ÷ $10,000.00 = 4.00 months.',
+      'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn.',
+      'Biggest assumption: monthly burn stays flat and revenue remains zero.',
+      '## Two Actions to Extend Runway',
+      '| Action | Mechanism |',
+      '|---|---|',
+      `| Reduce monthly burn | ${kind === 'cost' ? denial : costMechanism} |`,
+      `| Generate revenue | ${kind === 'revenue' ? denial : revenueMechanism} |`,
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+  });
+
+  it.each(['vetoed', 'cancelled', 'illustrative', 'quoted'])(
+    'retracts both already-matched actions when a later statement marks them %s',
+    status => {
+      const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+      const response = [
+        'Calculation: $40,000.00 ÷ $10,000.00 = 4.00 months.',
+        'Formula: Runway (months) = Cash on Hand ÷ Net Monthly Burn.',
+        'Biggest assumption: monthly burn stays flat and revenue remains zero.',
+        '## Two Actions to Extend Runway',
+        '| Action | Mechanism |',
+        '|---|---|',
+        '| Reduce monthly burn | Cutting burn extends runway |',
+        '| Generate revenue | Revenue lowers net monthly burn |',
+        `Both actions were ${status}.`,
+      ].join('\n');
+      const result = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response,
+        persistedResponse: response,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+    },
+  );
 
   it('accepts browser-testing wording for an affirmed Windows failure count', () => {
     const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
