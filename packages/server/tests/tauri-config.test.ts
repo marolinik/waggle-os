@@ -1971,12 +1971,27 @@ describe('CI/CD Configuration', () => {
     const rootPackage = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'),
     ) as { dependencies?: Record<string, string> };
+    const agentPackage = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'packages', 'agent', 'package.json'), 'utf-8'),
+    ) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      bundledDependencies?: string[];
+      scripts?: Record<string, string>;
+    };
     const packageLock = JSON.parse(
       fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf-8'),
     ) as {
       packages?: Record<
         string,
-        { dependencies?: Record<string, string>; resolved?: string; link?: boolean; version?: string }
+        {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+          resolved?: string;
+          link?: boolean;
+          version?: string;
+          dev?: boolean;
+        }
       >;
     };
     const vendorPackage = JSON.parse(
@@ -1994,17 +2009,33 @@ describe('CI/CD Configuration', () => {
       'utf-8',
     );
 
-    expect(rootPackage.dependencies?.pptxgenjs).toBe('file:vendor/pptxgenjs');
-    expect(packageLock.packages?.['']?.dependencies?.pptxgenjs).toBe(
-      'file:vendor/pptxgenjs',
+    expect(rootPackage.dependencies?.pptxgenjs).toBeUndefined();
+    expect(packageLock.packages?.['']?.dependencies?.pptxgenjs).toBeUndefined();
+    expect(packageLock.packages?.['node_modules/pptxgenjs']).toBeUndefined();
+    expect(agentPackage.dependencies?.pptxgenjs).toBeUndefined();
+    expect(agentPackage.dependencies?.jszip).toBe('^3.10.1');
+    expect(agentPackage.devDependencies?.pptxgenjs).toBe('file:../../vendor/pptxgenjs');
+    expect(agentPackage.bundledDependencies).toBeUndefined();
+    expect(agentPackage.scripts).toMatchObject({
+      build: 'tsc --build --force && node ../../scripts/stage-agent-pptx-runtime.mjs',
+      prepack: 'tsc --build --force && node ../../scripts/stage-agent-pptx-runtime.mjs',
+    });
+    expect(packageLock.packages?.['packages/agent']).toMatchObject({
+      dependencies: { jszip: '^3.10.1' },
+      devDependencies: { pptxgenjs: 'file:../../vendor/pptxgenjs' },
+    });
+    expect(packageLock.packages?.['packages/agent']?.dependencies?.pptxgenjs).toBeUndefined();
+    expect(packageLock.packages?.['packages/agent']?.devDependencies?.pptxgenjs).toBe(
+      'file:../../vendor/pptxgenjs',
     );
-    expect(packageLock.packages?.['node_modules/pptxgenjs']).toMatchObject({
+    expect(packageLock.packages?.['packages/agent/node_modules/pptxgenjs']).toMatchObject({
       resolved: 'vendor/pptxgenjs',
       link: true,
     });
-    expect(packageLock.packages?.['vendor/pptxgenjs']?.version).toBe(
-      vendorPackage.version,
-    );
+    expect(packageLock.packages?.['vendor/pptxgenjs']).toMatchObject({
+      version: vendorPackage.version,
+      dev: true,
+    });
     expect(vendorPackage).toMatchObject({ name: 'pptxgenjs', version: '4.0.1-waggle.0' });
 
     const installStep = workflow.jobs?.['install-and-smoke']?.steps?.find(
