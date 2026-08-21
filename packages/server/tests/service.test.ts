@@ -161,6 +161,65 @@ describe('Agent Service', () => {
     expect(body.defaultModel).toBe('ollama/llama3.2:latest');
   });
 
+  it('does not let a pre-provider readiness probe overwrite fresh Ollama health', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const port = randomPort();
+    const litellmPort = randomPort();
+    let releaseStaleProbe!: () => void;
+    const staleProbeGate = new Promise<void>((resolve) => { releaseStaleProbe = resolve; });
+    let markInitialProbeConsumed!: () => void;
+    const initialProbeConsumed = new Promise<void>((resolve) => { markInitialProbeConsumed = resolve; });
+    let ollamaTagsCalls = 0;
+
+    clearProviderEnv();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/health/liveliness')) {
+        return { ok: false, status: 503 } as Response;
+      }
+      if (url.endsWith('/health/readiness')) {
+        await staleProbeGate;
+        return {
+          get ok() {
+            markInitialProbeConsumed();
+            return false;
+          },
+          status: 404,
+        } as Response;
+      }
+      if (url.endsWith('/api/tags')) {
+        ollamaTagsCalls += 1;
+        if (ollamaTagsCalls === 1) setImmediate(releaseStaleProbe);
+        return {
+          ok: true,
+          json: async () => {
+            if (ollamaTagsCalls > 1) markInitialProbeConsumed();
+            return { models: [{ name: 'llama3.2:latest' }] };
+          },
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+
+    const { server } = await startService({ dataDir, port, litellmPort, skipLiteLLM: true });
+    cleanups.push(async () => { await server.close(); });
+    await initialProbeConsumed;
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
+
+    const res = await server.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      status: 'ok',
+      llm: {
+        provider: 'ollama',
+        health: 'healthy',
+        reachable: true,
+      },
+      defaultModel: 'ollama/llama3.2:latest',
+    });
+  });
+
   it('reports the built-in provider proxy degraded until a configured key is verified', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);

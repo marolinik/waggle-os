@@ -221,6 +221,8 @@ export interface LocalConfig {
   managedLiteLLMPort?: number;
   /** Route all agent-loop traffic through this server's built-in provider proxy. */
   useBuiltInProxy?: boolean;
+  /** False when a managed caller must resolve provider state before health probes start. */
+  startOfflineManagerOnListen?: boolean;
 }
 
 /** Pending approval request — resolved when user approves or denies. */
@@ -2652,9 +2654,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     eventBus,
     checkIntervalMs: 30_000,
   });
-  server.addHook('onListen', async () => {
-    offlineManager.start();
-  });
+  if (fullConfig.startOfflineManagerOnListen !== false) {
+    server.addHook('onListen', async () => {
+      offlineManager.start();
+    });
+  }
   server.addHook('preClose', async () => {
     await offlineManager.stop();
   });

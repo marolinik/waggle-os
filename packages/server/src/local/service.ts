@@ -298,6 +298,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     manageLiteLLM: !skipLiteLLM,
     managedLiteLLMPort: litellmPort,
     useBuiltInProxy: !litellmReachable,
+    startOfflineManagerOnListen: false,
   });
 
   // 7. Register self-removing shutdown handlers (must add hook before listen)
@@ -418,6 +419,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     detail: providerDetail,
     checkedAt: new Date().toISOString(),
   };
+  server.offlineManager.start();
 
   emit({ phase: 'ready', message: `LLM: ${providerDetail}`, progress: 0.9 });
 
