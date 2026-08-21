@@ -41,7 +41,11 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'boundedWorkspaceClaims' })
   | (BaseResponseRule & {
       kind: 'prioritizationJustification';
-      criteria: readonly { topic: RegExp; basis: RegExp }[];
+      criteria: readonly {
+        topic: RegExp;
+        basis: RegExp;
+        basisFamilies?: readonly RegExp[];
+      }[];
     })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'notPattern'; pattern: RegExp })
@@ -140,14 +144,29 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
           {
             topic: /\b(?:(?:production|memory) (?:bug|issue)|memory leak)\b/i,
             basis: /(?:\b(?:live|active) in production\b[^.!?\r\n]{0,220}\b(?:may|might|could|would)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,140}\b(?:degrad(?:e[ds]?|ation)|outage)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,180}\bcompounding (?:downside )?risk if delayed\b|\b(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius|unbounded downside|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b)/i,
+            basisFamilies: [
+              /\b(?:reliab(?:ility|le)|stabil(?:ity|ize)|trust)\b/i,
+              /\b(?:outage|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b/i,
+              /\b(?:risk|blast radius|unbounded downside)\b/i,
+            ],
           },
           {
             topic: /\b(?:customer|deal)s?\b/i,
             basis: /\b(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date|deadline|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage)|time[- ](?:sensitive|boxed)|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
+            basisFamilies: [
+              /\b(?:revenue|cash|commercial|near[- ]term|immediate (?:payoff|value)|high(?:est)?[- ](?:value|leverage))\b/i,
+              /\b(?:pipeline|closable|proof points?|de-risk|signature|close date|deadline|time[- ](?:sensitive|boxed)|decision (?:clock|point)|external momentum|deal urgency|urgency|momentum)\b/i,
+            ],
           },
           {
             topic: /\bonboarding\b/i,
             basis: /\b(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|not urgent|structural|future throughput|support load|reliab(?:ility|le)|friction|crash|retry|user experience|growth)\b/i,
+            basisFamilies: [
+              /\b(?:conversion|activation|drop[- ]?off|sales drag|growth)\b/i,
+              /\b(?:retention|support load|friction|retry|user experience)\b/i,
+              /\b(?:reliab(?:ility|le)|crash)\b/i,
+              /\b(?:high leverage|less urgent|not urgent|structural|future throughput)\b/i,
+            ],
           },
         ],
         points: 10,

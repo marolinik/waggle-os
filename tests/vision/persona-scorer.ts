@@ -6,6 +6,11 @@ import type {
 import { segmentText } from '../../apps/web/src/components/os/apps/chat-blocks/capability-request-parser';
 import { evaluateVerifierContract } from './verifier-contract';
 
+type PrioritizationCriterion = Extract<
+  PersonaResponseRule,
+  { kind: 'prioritizationJustification' }
+>['criteria'][number];
+
 export interface CapturedSseEvent {
   event: string;
   data: unknown;
@@ -1937,14 +1942,24 @@ const PRIORITIZATION_REPORTED_CLAUSE = /\b(?:quoted|illustrative|example|illustr
 const PRIORITIZATION_REJECTION_PREFIX = /\b(?:reject(?:s|ed|ing)?|disput(?:es|ed|ing)?|den(?:y|ies|ied|ying)|refus(?:e|es|ed|ing))\b[\s\S]*$/i;
 const PRIORITIZATION_REJECTED_ASSERTION = /\b(?:assertion|claim|statement)\b[\s\S]*\b(?:is|was|has been)\s+(?:false|wrong|disproven|rejected|invalid)\b|\b(?:it|this|that)\s+(?:is|was)\s+(?:false|wrong|untrue)\s+that\b/i;
 const PRIORITIZATION_QUOTED_CLAUSE = /^\s*(?:["“]|['‘])/;
-const PRIORITIZATION_CONDITIONAL_CLAUSE = /^\s*(?:(?:[-*]|\d+[.)])\s*)?(?:and\s+)?(?:only\s+if|if|when|whenever|whether|suppose|imagine|assuming|provided)\b/i;
+const PRIORITIZATION_CONDITION_MARKER = /\b(?:only\s+(?:if|when|after|with)|if|when|whenever|whether|unless|suppose|imagine|provided(?!\s+by\b)(?:\s+that)?|assuming(?:\s+that)?|depending\s+on|contingent\s+(?:on|upon)|subject\s+to|on\s+condition\s+that|(?:as|so)\s+long\s+as|conditional\s+(?:on|upon)|dependent\s+(?:on|upon))\b/i;
+const PRIORITIZATION_CONDITIONAL_CLAUSE = new RegExp(
+  `^\\s*(?:(?:[-*]|\\d+[.)])\\s*)?(?:and\\s+)?${PRIORITIZATION_CONDITION_MARKER.source}`,
+  'i',
+);
 const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carries?|poses?|depends?|follows?|comes?|goes?|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
 const PRIORITIZATION_REMOTE_NEGATION_PREFIX = /\b(?:(?:do(?:es)?|can|could|should|would|must|may|might|will|shall)\s+not(?!\s+only\b)|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|won['’]t|shan['’]t|(?:is|are|was|were)\s+not(?!\s+only\b)|cannot|isn['’]t|aren['’]t|fails?\s+to|(?:is|are|was|were)\s+unlikely\s+to)\b[\s\S]*$/i;
 const PRIORITIZATION_LOCAL_NEGATION_PREFIX = /\b(?:has no|have no|never|without|lacks?|lack of|no)\b[\s\S]{0,32}$/i;
 const PRIORITIZATION_NEGATION_SUFFIX = /^\s*(?:(?:is|are|was|were|does|do|has|have)\s+)?(?:not|no|irrelevant|absent|unproven)\b/i;
 const PRIORITIZATION_MODAL_PREFIX = /\b(?:may|might|could|would)\b[\s\S]*$/i;
-const PRIORITIZATION_CONDITION_SUFFIX = /^[\s\S]*\b(?:only\s+if|if|when|whenever|unless|provided|assuming|depending on)\b/i;
-const PRIORITIZATION_INDEPENDENT_BOUNDARY = /[,;]\s+(?:so|therefore)\b\s*|,\s+(?:and|but)\s+(?=[^,;.!?]{0,96}\b(?:protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carries?|poses?|depends?|has|have|is|are|can|will|must)\b)/gi;
+const PRIORITIZATION_CONDITION_SUFFIX = new RegExp(
+  `^[\\s\\S]*${PRIORITIZATION_CONDITION_MARKER.source}`,
+  'i',
+);
+const PRIORITIZATION_INDEPENDENT_BOUNDARY = new RegExp(
+  `[,;]\\s+(?:so|therefore)\\b\\s*|,\\s+(?:and|but)\\s+(?=(?:${PRIORITIZATION_CONDITION_MARKER.source}|[^,;.!?]{0,96}\\b(?:protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|decays?|carries?|poses?|depends?|has|have|is|are|can|will|must)\\b))`,
+  'gi',
+);
 
 function prioritizationWordCount(value: string): number {
   return value.match(/[\p{L}\p{N}]+(?:[-'’][\p{L}\p{N}]+)*/gu)?.length ?? 0;
@@ -1956,6 +1971,90 @@ function suffixAfterLastPrioritizationBoundary(value: string, boundary: RegExp):
     suffixStart = match.index + match[0].length;
   }
   return value.slice(suffixStart);
+}
+
+function prioritizationBasisFamilyKeys(
+  value: string,
+  criteria: readonly PrioritizationCriterion[],
+  onlyCriterionIndex?: number,
+): Set<string> {
+  const keys = new Set<string>();
+  criteria.forEach((criterion, criterionIndex) => {
+    if (onlyCriterionIndex !== undefined && criterionIndex !== onlyCriterionIndex) return;
+    const families = criterion.basisFamilies?.length
+      ? criterion.basisFamilies
+      : [criterion.basis];
+    families.forEach((family, familyIndex) => {
+      if (testPattern(family, value)) keys.add(`${criterionIndex}:${familyIndex}`);
+    });
+  });
+  return keys;
+}
+
+function hasDependentPrioritizationReference(value: string): boolean {
+  const tokens = value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const deictic = new Set(['it', 'this', 'that', 'same']);
+  const possessiveDeterminers = new Set(['her', 'his', 'its', 'my', 'our', 'their', 'your']);
+  const doForms = new Set(['do', 'does', 'did', 'doing', 'done']);
+  const eventForms = new Set([
+    'happen', 'happens', 'happened', 'happening',
+    'occur', 'occurs', 'occurred', 'occurring',
+    'materialize', 'materializes', 'materialized', 'materializing',
+  ]);
+  const nominalProforms = new Set([
+    'assertion', 'claim', 'conclusion', 'idea', 'outcome',
+    'point', 'premise', 'proposition', 'result', 'statement',
+  ]);
+
+  return tokens.some((token, index) => {
+    if (index === tokens.length - 1 && ['it', 'so', 'this', 'that'].includes(token)) {
+      return true;
+    }
+    if (doForms.has(token) && ['so', 'this', 'that'].includes(tokens[index + 1] ?? '')) {
+      return true;
+    }
+    const prefix = tokens.slice(Math.max(0, index - 4), index);
+    if ((eventForms.has(token) || token === 'possible') && prefix.some(word => deictic.has(word))) {
+      return true;
+    }
+    return nominalProforms.has(token)
+      && prefix.slice(-2).some(word => (
+        deictic.has(word) || possessiveDeterminers.has(word) || word === 'the'
+      ));
+  });
+}
+
+function prioritizationConditionScope(
+  value: string,
+  criteria: readonly PrioritizationCriterion[],
+  criterionIndex: number,
+  matchedBasis: string,
+): string {
+  for (const boundary of value.matchAll(PRIORITIZATION_INDEPENDENT_BOUNDARY)) {
+    const continuation = value.slice(boundary.index + boundary[0].length);
+    const conditionIndex = continuation.search(PRIORITIZATION_CONDITION_MARKER);
+    if (conditionIndex < 0) return value.slice(0, boundary.index);
+    const conditionedPrefix = continuation.slice(0, conditionIndex);
+    const conditionedClause = suffixAfterLastPrioritizationBoundary(
+      conditionedPrefix,
+      PRIORITIZATION_INDEPENDENT_BOUNDARY,
+    );
+    if (hasDependentPrioritizationReference(conditionedClause)) return value;
+
+    const antecedentKeys = prioritizationBasisFamilyKeys(
+      `${matchedBasis} ${value.slice(0, boundary.index)}`,
+      criteria,
+      criterionIndex,
+    );
+    const continuationKeys = prioritizationBasisFamilyKeys(
+      conditionedClause,
+      criteria,
+    );
+    if (continuationKeys.size === 0
+      || [...continuationKeys].some(key => antecedentKeys.has(key))) return value;
+    return value.slice(0, boundary.index);
+  }
+  return value;
 }
 
 function inlinePrioritizationActionBoundary(line: string): number {
@@ -2011,7 +2110,12 @@ function collectPrioritizationSegments(response: string): string[] {
   return [...new Set(segments)];
 }
 
-function hasAffirmedPrioritizationBasis(clause: string, basis: RegExp): boolean {
+function hasAffirmedPrioritizationBasis(
+  clause: string,
+  basis: RegExp,
+  criteria: readonly PrioritizationCriterion[],
+  criterionIndex: number,
+): boolean {
   const normalized = clause.replace(/[*_`]/g, '').trim();
   if (prioritizationWordCount(normalized) < 4) return false;
   if (PRIORITIZATION_REPORTED_CLAUSE.test(normalized)) return false;
@@ -2031,6 +2135,12 @@ function hasAffirmedPrioritizationBasis(clause: string, basis: RegExp): boolean 
       before,
       PRIORITIZATION_INDEPENDENT_BOUNDARY,
     );
+    const independentAfter = prioritizationConditionScope(
+      after,
+      criteria,
+      criterionIndex,
+      match[0],
+    );
     const rejectionBefore = suffixAfterLastPrioritizationBoundary(
       suffixAfterLastPrioritizationBoundary(
         before,
@@ -2042,8 +2152,10 @@ function hasAffirmedPrioritizationBasis(clause: string, basis: RegExp): boolean 
     if (PRIORITIZATION_REMOTE_NEGATION_PREFIX.test(independentBefore)) continue;
     if (PRIORITIZATION_LOCAL_NEGATION_PREFIX.test(localBefore)) continue;
     if (PRIORITIZATION_NEGATION_SUFFIX.test(after)) continue;
+    if (PRIORITIZATION_CONDITION_MARKER.test(independentBefore)) continue;
+    if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(independentBefore)) continue;
     if (PRIORITIZATION_MODAL_PREFIX.test(independentBefore)) continue;
-    if (PRIORITIZATION_CONDITION_SUFFIX.test(after)) continue;
+    if (PRIORITIZATION_CONDITION_SUFFIX.test(independentAfter)) continue;
     return true;
   }
   return false;
@@ -2127,7 +2239,7 @@ function hasAlignedExplicitRationale(
 
 function hasAffirmedPrioritizationJustification(
   response: string,
-  criteria: readonly { topic: RegExp; basis: RegExp }[],
+  criteria: readonly PrioritizationCriterion[],
 ): boolean {
   const segments = collectPrioritizationSegments(response);
   return criteria.every(({ topic, basis }, criterionIndex) => segments.some((segment) => {
@@ -2143,7 +2255,7 @@ function hasAffirmedPrioritizationJustification(
         && !isSinglePriorityContinuation
         && !hasAlignedExplicitRationale(segment, clause, criteria)) return false;
       if (!hasAlignedTopicsAndBases(clause, criteria)) return false;
-      return hasAffirmedPrioritizationBasis(clause, basis);
+      return hasAffirmedPrioritizationBasis(clause, basis, criteria, criterionIndex);
     });
   }));
 }

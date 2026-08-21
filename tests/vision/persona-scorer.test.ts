@@ -3413,6 +3413,324 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts the exact paid item-scoped urgency rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Assumption (labeled):** I\'m assuming the production memory bug is active/ongoing (not a rare edge case) and could be customer-facing, since "production" bugs carry silent escalation risk — this is not confirmed, just the reasonable default given no severity info was provided.',
+      '',
+      '## Order & Justification',
+      '',
+      '1. **Production memory bug** — Unaddressed infra risk compounds silently and can undermine both the other priorities (a live outage kills a deal in progress and worsens onboarding perception). Contain/diagnose this first because it\'s the only item with unbounded downside if ignored.',
+      '2. **Close the customer** — Time-bound, revenue-critical, and the deal likely has external momentum (stakeholder attention, other options) that decays if delayed. Once the bug is triaged (not necessarily fully fixed), shift full focus here.',
+      '3. **Onboarding friction** — Important for retention/expansion but is the least time-sensitive of the three; a few days\' delay doesn\'t lose a deal or cause an outage. Sequence it last so it gets real focus rather than being squeezed between fires.',
+      '',
+      '## First Action Today',
+      '',
+      'Pull the production logs/heap dumps or memory profiler output from the last 24–48 hours and correlate against recent deploys — the goal is to confirm whether this is a leak (gradual climb), a spike (event-triggered), or noise, within the first hour. That single data point determines whether it\'s a "monitor and move on" or "drop everything" situation, and unblocks whether you can pivot to the customer close today or need to stay heads-down on the bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it.each([
+    [
+      'an affirmed customer basis before a separately conditioned predicate',
+      '2. The customer deal drives near-term revenue, and the deal has external momentum that decays if delayed.',
+      true,
+    ],
+    [
+      'a locally conditioned customer basis',
+      '2. The customer deal drives revenue if it closes.',
+      false,
+    ],
+    [
+      'a modal customer basis before a separately conditioned predicate',
+      '2. The customer deal could drive revenue, and its momentum decays if delayed.',
+      false,
+    ],
+    [
+      'an omitted-subject conditional continuation',
+      '2. The customer deal drives near-term revenue, and can only do so if it closes.',
+      false,
+    ],
+    [
+      'an anaphoric conditional continuation',
+      '2. The customer creates revenue, and it will only do so if legal approves.',
+      false,
+    ],
+    [
+      'an anaphoric possibility condition',
+      '2. The customer drives revenue, and this is possible only if the deal closes.',
+      false,
+    ],
+    [
+      'an anaphoric repeated-object condition',
+      '2. The customer drives revenue, and it will generate that revenue only if legal approves.',
+      false,
+    ],
+    [
+      'a discourse-modified anaphoric condition',
+      '2. The customer drives revenue, and in practice it will only do so if legal approves.',
+      false,
+    ],
+    [
+      'a leading only-when condition',
+      '2. The customer deal drives near-term revenue, and only when it closes can it do so.',
+      false,
+    ],
+    [
+      'an omitted-subject do-that condition',
+      '2. The customer deal drives near-term revenue, and can only do that if it closes.',
+      false,
+    ],
+    [
+      'a repeated explicit-subject do-so condition',
+      '2. The customer deal drives near-term revenue, and the customer deal can only do so if it closes.',
+      false,
+    ],
+    [
+      'a same-subject do-that condition',
+      '2. The customer deal drives near-term revenue, and the same deal can only do that if legal approves.',
+      false,
+    ],
+    [
+      'a possessive repeated-basis condition',
+      '2. The customer deal drives near-term revenue, and its revenue has value only if it closes.',
+      false,
+    ],
+    [
+      'a pronoun-led independent momentum predicate',
+      '2. The customer deal drives near-term revenue, and it has external momentum that decays if delayed.',
+      true,
+    ],
+    [
+      'a demonstrative independent momentum predicate',
+      '2. The customer deal drives near-term revenue, and this momentum decays if delayed.',
+      true,
+    ],
+    [
+      'a pronoun-led independent retention predicate',
+      '2. The customer drives revenue, and it improves retention only if onboarding succeeds.',
+      true,
+    ],
+    [
+      'a bounded long-modifier conditional continuation',
+      `2. The customer drives revenue, and will ${'really'.repeat(40)} do so only if legal approves.`,
+      false,
+    ],
+    [
+      'a definite nominal-proform condition',
+      '2. The customer drives revenue, and the claim is true only if it closes.',
+      false,
+    ],
+    [
+      'a demonstrative nominal-proform condition',
+      '2. The customer drives revenue, and this claim is true only if it closes.',
+      false,
+    ],
+    [
+      'an assertion-proform condition',
+      '2. The customer drives revenue, and the assertion is valid only if legal approves.',
+      false,
+    ],
+    [
+      'a perfect-tense do-so condition',
+      '2. The customer drives revenue, and the same deal has done so only if legal approves.',
+      false,
+    ],
+    [
+      'a perfect-tense do-that condition',
+      '2. The customer drives revenue, and the same deal has only done that if it closes.',
+      false,
+    ],
+    [
+      'a happen event-proform condition',
+      '2. The customer deal drives near-term revenue, and it can happen only if legal approves.',
+      false,
+    ],
+    [
+      'an occur event-proform condition',
+      '2. The customer deal drives near-term revenue, and it will occur only if legal approves.',
+      false,
+    ],
+    [
+      'a revenue-to-cash demonstrative condition',
+      '2. The customer generates revenue, but this cash will arrive only if the contract is signed.',
+      false,
+    ],
+    [
+      'a revenue-to-cash pronoun condition',
+      '2. The customer generates revenue, and it will produce cash only if legal approves.',
+      false,
+    ],
+    [
+      'a revenue-to-cash explicit-subject condition',
+      '2. The customer generates revenue, and the deal produces cash only if legal approves.',
+      false,
+    ],
+    [
+      'a distinct-family distractor before an anaphoric condition',
+      '2. The customer drives revenue, and despite its external momentum it can only do that if legal approves.',
+      false,
+    ],
+    [
+      'a distinct-family distractor before a demonstrative object condition',
+      '2. The customer drives revenue, and despite its external momentum it can deliver that only if legal approves.',
+      false,
+    ],
+    [
+      'a nested distinct-family distractor before a nominal reference condition',
+      '2. The customer drives revenue, and the deadline is close, but the first premise is true only if legal approves.',
+      false,
+    ],
+    [
+      'a possessive nested premise reference condition',
+      '2. The customer drives revenue, and despite deadline urgency our first premise is true only if legal approves.',
+      false,
+    ],
+    [
+      'a possessive original-claim reference condition',
+      '2. The customer drives revenue, and despite external momentum my original claim is valid only if legal approves.',
+      false,
+    ],
+    [
+      'a labeled hypothetical customer basis',
+      '2. **Close the customer** — Suppose the customer drives revenue.',
+      false,
+    ],
+    [
+      'a non-conditional provided-by source phrase',
+      '2. The customer deal creates near-term revenue provided by committed subscription fees.',
+      true,
+    ],
+    [
+      'a contingent-on condition',
+      '2. The customer drives revenue contingent on legal approval.',
+      false,
+    ],
+    [
+      'a subject-to condition',
+      '2. The customer drives revenue subject to legal approval.',
+      false,
+    ],
+    [
+      'an only-after condition',
+      '2. The customer drives revenue only after legal approves.',
+      false,
+    ],
+    [
+      'an on-condition-that condition',
+      '2. The customer drives revenue on condition that legal approves.',
+      false,
+    ],
+    [
+      'an as-long-as condition',
+      '2. The customer drives revenue as long as legal approves.',
+      false,
+    ],
+    [
+      'a dependent-upon condition',
+      '2. **Close the customer** — The customer drives revenue dependent upon legal approval.',
+      false,
+    ],
+    [
+      'an only-with condition',
+      '2. **Close the customer** — The customer drives revenue only with legal approval.',
+      false,
+    ],
+    [
+      'an and-coordinated condition before the customer basis',
+      '2. The customer is important, and if it closes, it drives near-term revenue.',
+      false,
+    ],
+    [
+      'an only-if condition before the customer basis',
+      '2. The customer matters, and only if it closes does it drive revenue.',
+      false,
+    ],
+    [
+      'a but-coordinated when condition before the customer basis',
+      '2. The customer matters, but when legal approves, it creates commercial value.',
+      false,
+    ],
+  ])('scopes customer conditions to %s', (_label, customerRationale, expected) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. The production memory bug creates outage risk.',
+      customerRationale,
+      '3. Onboarding friction reduces retention and activation.',
+      'First action today: reproduce the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(expected);
+  });
+
+  it.each([
+    [
+      'an affirmed memory reliability basis before a conditioned outage basis',
+      'The production memory bug threatens reliability, and it creates outage risk only if traffic spikes.',
+      'Onboarding friction reduces retention and activation.',
+      true,
+    ],
+    [
+      'a memory reliability basis followed by the same conditioned stability family',
+      'The production memory bug threatens reliability, and it affects stability only if traffic spikes.',
+      'Onboarding friction reduces retention and activation.',
+      false,
+    ],
+    [
+      'an affirmed onboarding activation basis before a conditioned support-load basis',
+      'The production memory bug creates outage risk.',
+      'Onboarding improves activation, and it reduces support load only if retries continue.',
+      true,
+    ],
+    [
+      'an onboarding activation basis followed by the same conditioned conversion family',
+      'The production memory bug creates outage risk.',
+      'Onboarding improves activation, and it increases conversion only if retries stop.',
+      false,
+    ],
+  ])('scopes non-customer conditions to %s', (
+    _label,
+    memoryRationale,
+    onboardingRationale,
+    expected,
+  ) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      `1. ${memoryRationale}`,
+      '2. The customer deal drives near-term revenue.',
+      `3. ${onboardingRationale}`,
+      'First action today: reproduce the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(expected);
+  });
+
   it.each([
     [
       'labels only',
