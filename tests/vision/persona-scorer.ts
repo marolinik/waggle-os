@@ -393,6 +393,7 @@ const FINANCE_SCENARIO_MARKDOWN_HEADING = /^\s*(?:scenario|hypothetical|alternat
 const FINANCE_CURRENT_SCOPE_HEADING = /^\s*(?:baseline|base\s+case|actual|current(?:\s+(?:case|estimate))?)(?:\s*:|\s*$)/i;
 const FINANCE_SCENARIO_SUFFIX = /^\s*(?:,\s*)?(?:if|when|assuming|provided|under\s+(?:(?:that|this|the|a|an)\s+)?(?:scenario|case)|in\s+(?:(?:that|this|the|a|an)\s+)?(?:scenario|case))\b/i;
 const FINANCE_NONCURRENT_PREFIX = /\b(?:target|goal|best[- ]case|(?:need|want|require)(?:\s+at\s+least)?)\s*$/i;
+const FINANCE_MARGINAL_DELTA_PREFIX = /\b(?:adds?|added|extends?|extended|increases?|increased|gains?|gained|improves?|improved)\s+(?:by\s+)?(?:approximately|about|around|roughly)?\s*(?:\d+(?:\.\d+)?\s*[-–—]\s*)?$/i;
 const FINANCE_RESULT_INVALIDATION = /\b(?:(?:that|this|the)\s+(?:figure|result|answer|calculation)\s+(?:(?:is|was|seems?)\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable)|does\s+not\s+apply)|do\s+not\s+trust\s+(?:that|this|the)\s+(?:figure|result|answer|calculation))\b/i;
 const FINANCE_DENIAL_PREFIX = /\b(?:never|no\s+longer|do\s+not\s+say|don't\s+say|it\s+(?:would|is)\s+be\s+misleading\s+to\s+say|(?:we|I)\s+(?:cannot|can't)\s+(?:conclude|determine|establish)(?:\s+that)?|(?:reject(?:ed|s|ing)?|dispute(?:d|s|ing)?|deny|denied|denies|denying)(?:\s+the)?\s+(?:claim|statement)(?:\s+of|\s+that)?|(?:incorrectly|wrongly)\s+(?:reported|claimed|stated)|it\s+is\s+(?:false|not\s+true)\s+that)\s*$/i;
 const FINANCE_DENIAL_SUFFIX = /^\s*["'”]?\s*(?:,?\s*(?:(?:which|and\s+that|but\s+this)\s+is\s+)?(?:wrong|incorrect|false|a\s+mistake|not\s+(?:correct|valid|applicable|(?:the\s+)?runway)|an?\s+example\b|cannot\s+be\s+correct|can't\s+be\s+correct)|(?:cannot|can't)\s+be\s+correct|does\s+not\s+apply|is\s+an?\s+example|is\s+a\s+mistake|is\s+incorrect|is\s+not\s+(?:correct|(?:the\s+)?runway)|is\s+false)/i;
@@ -530,8 +531,9 @@ function hasAffirmedCurrentRunway(response: string): boolean {
       const value = financeNumber(match[1]);
       const scenario = financeAssertionInScenario(clause, start, match[0], clauseScenarioScope);
       const nonCurrent = FINANCE_NONCURRENT_PREFIX.test(clause.slice(0, start));
+      const marginalDelta = FINANCE_MARGINAL_DELTA_PREFIX.test(clause.slice(0, start));
       clauseHasRunwayContext = true;
-      if (scenario || nonCurrent) continue;
+      if (scenario || nonCurrent || marginalDelta) continue;
       clauseHasCurrentRunwayContext = true;
       const denied = financeAssertionDenied(clause, start, start + match[0].length);
       if (denied) {

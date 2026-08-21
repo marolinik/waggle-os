@@ -408,6 +408,40 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('keeps a marginal runway gain separate from the affirmed current runway', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Calculation: $40,000.00 ÷ $10,000.00 = 4.00 months.',
+      'Formula: Runway (months) = Cash on Hand ÷ Monthly Net Burn.',
+      'Biggest assumption: burn stays flat at $10,000.00/month with zero revenue.',
+      '1. Reduce monthly burn. Every $1,000.00 in monthly savings adds roughly 0.4–0.5 months of runway.',
+      '2. Generate revenue to reduce net burn.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'runway')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const deltaOnly = response.replace(
+      'Calculation: $40,000.00 ÷ $10,000.00 = 4.00 months.',
+      'Savings add 4 months of runway.',
+    );
+    expect(scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: deltaOnly,
+      persistedResponse: deltaOnly,
+      requestPersonaId: finance.id,
+    })).checks.find(check => check.id === 'runway')?.passed).toBe(false);
+  });
+
   it('accepts the exact Unicode division formula returned by the paid finance trial', () => {
     const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
     const response = [
