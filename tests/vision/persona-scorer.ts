@@ -1098,6 +1098,18 @@ function hasTimedAgenda(
     const namedParticipantCount = namedParticipantList
       ? namedParticipantList.split(/,\s*|\s+and\s+/i).length
       : 0;
+    const parenthesizedParticipantList = /(?:^|:)\s*((?:product|eng(?:ineering)?|qa|support)(?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)(?:product|eng(?:ineering)?|qa|support))+)\s*\(\s*$/i.exec(allocationPrefix)?.[1];
+    const parenthesizedParticipantItems = parenthesizedParticipantList
+      ? (parenthesizedParticipantList.match(/\b(?:product|eng(?:ineering)?|qa|support)\b/gi) ?? [])
+        .map((marker) => {
+          const normalized = marker.toLowerCase();
+          return normalized === 'eng' ? 'engineering' : normalized;
+        })
+      : [];
+    const parenthesizedParticipantCount = new Set(parenthesizedParticipantItems).size
+      === parenthesizedParticipantItems.length
+      ? parenthesizedParticipantItems.length
+      : 0;
     const trailingParticipantList = /^\s+(?:each\b|per\s+(?:participant|attendee|speaker|person|team member|function|role)\b)\s*:\s*([^)|;]+)/i.exec(suffix)?.[1];
     const trailingParticipantItems = trailingParticipantList
       ? trailingParticipantList
@@ -1156,11 +1168,13 @@ function hasTimedAgenda(
           : 0;
     const strictParticipantCount = hasTrailingParticipantList
       ? trailingParticipantCount
-      : adjacentParticipantCount >= 2
-        ? adjacentParticipantCount
-        : perParticipantLabel && agendaParticipantCount >= 2
-          ? agendaParticipantCount
-          : 0;
+      : parenthesizedParticipantCount >= 2
+        ? parenthesizedParticipantCount
+        : adjacentParticipantCount >= 2
+          ? adjacentParticipantCount
+          : perParticipantLabel && agendaParticipantCount >= 2
+            ? agendaParticipantCount
+            : 0;
     const participantCount = requireKnownParticipantTarget
       ? strictParticipantCount
       : quantifiedParticipantCount > 0

@@ -5394,6 +5394,16 @@ describe('deterministic 100-point persona scorer', () => {
     })).checks.find(check => check.id === 'duration-blocks')?.passed;
 
     expect(score(response)).toBe(true);
+    const parenthesizedParticipants = response.replace(
+      'Go/No-Go status by team (3 min each: Product, Engineering, QA, Support)',
+      'Go/No-Go status by team: Product, Eng, QA, Support (3 min each)',
+    );
+    expect(score(parenthesizedParticipants)).toBe(true);
+    expect(score(parenthesizedParticipants.replace('3 min each', '4 min each'))).toBe(false);
+    expect(score(parenthesizedParticipants.replace('Support (', 'Support, Security ('))).toBe(false);
+    expect(score(parenthesizedParticipants
+      .replace('Product, Eng, QA, Support (3 min each)', 'Product, Product, QA, Support (4 min each)'))).toBe(false);
+    expect(score(parenthesizedParticipants.replace('3 min each', '3 min eachwhere'))).toBe(false);
     expect(score(response.replace(
       '3 min each: Product, Engineering, QA, Support',
       '3 min each: product, engineering, QA, support',
