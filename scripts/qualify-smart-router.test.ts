@@ -213,6 +213,12 @@ describe('qualify-smart-router helpers', () => {
     assert.equal(qualified.toolContext.toolEligibleCount, 52);
     assert.equal(qualified.toolContext.toolSelectedCount, 14);
 
+    const compacted = qualify({
+      estimatedSystemPromptTokens: 7_304,
+      providerInputTokens: 6_983,
+    });
+    assert.equal(compacted.runtimeMetrics.providerInputTokens, 6_983);
+
     assert.throws(() => qualify({ toolEligibleCount: 28, toolOmittedCount: 14 }), /at least 29 eligible/i);
     assert.throws(() => qualify({ toolSelectedCount: 15, toolOmittedCount: 37 }), /at most 14 tools/i);
     assert.throws(() => qualify({ transmittedToolSchemaChars: 8_001, estimatedToolSchemaTokens: 2_001 }), /8,000 schema characters/i);
@@ -221,9 +227,21 @@ describe('qualify-smart-router helpers', () => {
     assert.throws(() => qualify({}, Array(14).fill('calendar_tool')), /unique selected names/i);
     assert.throws(() => qualify({}, Array.from({ length: 14 }, (_, index) => `calendar_tool_${index}`)), /code-inspection relevance/i);
     assert.throws(() => qualify({ selectorLatencyMs: 251 }), /250ms/i);
-    assert.throws(() => qualify({ providerInputTokens: 2_050 }), /provider input.*7,500/i);
-    assert.throws(() => qualify({ providerInputTokens: 6_000 }), /provider input.*7,500/i);
-    assert.throws(() => qualify({ providerInputTokens: 7_499 }), /provider input.*7,500/i);
+    assert.throws(() => qualify({ providerInputTokens: 2_050 }), /provider input.*90%/i);
+    assert.throws(() => qualify({ providerInputTokens: 6_000 }), /provider input.*90%/i);
+    assert.throws(
+      () => qualify({ providerInputTokens: 6_693 }),
+      /provider input.*90%.*6,694.*received 6693/i,
+    );
+    assert.doesNotThrow(() => qualify({ providerInputTokens: 6_694 }));
+    assert.throws(
+      () => qualify({ estimatedSystemPromptTokens: 6_000, providerInputTokens: 6_499 }),
+      /provider input.*90%.*6,500.*received 6499/i,
+    );
+    assert.doesNotThrow(() => qualify({
+      estimatedSystemPromptTokens: 6_000,
+      providerInputTokens: 6_500,
+    }));
     assert.throws(() => qualify({ providerInputTokens: undefined }), /positive integer providerInputTokens/i);
     assert.throws(() => qualify({ providerOutputTokens: 0 }), /positive integer providerOutputTokens/i);
     assert.throws(

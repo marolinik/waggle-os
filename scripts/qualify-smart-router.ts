@@ -77,9 +77,12 @@ export const TOOL_CONTEXT_PROMPT = 'Inspect, test, validate, and verify this Typ
 const QUALIFICATION_DAILY_BUDGET_USD = 1;
 const QUALIFICATION_DAILY_SPEND_USD = 0.8;
 const QUALIFICATION_BUDGET_THRESHOLD = 0.8;
-// Exact-head Qwen qualification observed 8,005 tokens. Keep enough tolerance
-// for randomized session/workspace identifiers while rejecting 2,050/6K truncation.
-const QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_INPUT_TOKENS = 7_500;
+// Provider tokenizers do not exactly match the chars/4 system-prompt estimate.
+// Keep a proportional floor so context compaction can reduce the absolute input
+// size without allowing a materially truncated system prompt to qualify. The
+// absolute fallback also fails closed if the estimate itself regresses.
+const QUALIFIED_TOOL_CONTEXT_ABSOLUTE_MIN_PROVIDER_INPUT_TOKENS = 6_500;
+const QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_TO_ESTIMATED_RATIO = 0.9;
 const QUALIFIED_MAX_TIME_TO_FIRST_TOKEN_MS = 15_000;
 const QUALIFIED_MAX_AGENT_LATENCY_MS = 60_000;
 const QUALIFIED_MAX_TOTAL_SERVER_LATENCY_MS = 60_000;
@@ -366,9 +369,16 @@ export function assertQualifiedToolContextCase(input: {
   if (toolContext.selectedToolNames.filter(name => codeInspectionTools.has(name)).length < 2) {
     throw new Error('Qualified tool context must demonstrate code-inspection relevance');
   }
-  if (qualified.runtimeMetrics.providerInputTokens < QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_INPUT_TOKENS) {
+  const minimumProviderInputTokens = Math.max(
+    QUALIFIED_TOOL_CONTEXT_ABSOLUTE_MIN_PROVIDER_INPUT_TOKENS,
+    Math.ceil(
+      qualified.runtimeMetrics.estimatedSystemPromptTokens
+        * QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_TO_ESTIMATED_RATIO,
+    ),
+  );
+  if (qualified.runtimeMetrics.providerInputTokens < minimumProviderInputTokens) {
     throw new Error(
-      `Qualified tool context provider input must be at least ${QUALIFIED_TOOL_CONTEXT_MIN_PROVIDER_INPUT_TOKENS.toLocaleString('en-US')} tokens, received ${qualified.runtimeMetrics.providerInputTokens}`,
+      `Qualified tool context provider input must retain at least 90% of the estimated system prompt (${minimumProviderInputTokens.toLocaleString('en-US')} tokens), received ${qualified.runtimeMetrics.providerInputTokens}`,
     );
   }
   return { ...qualified, toolContext };
