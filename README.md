@@ -14,44 +14,42 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 
 Release status, revision-bound receipts, and any bounded carry-forward attestations are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
-### Current Windows Solo internal RC evidence — 2026-08-14
+### Current Windows Solo internal RC evidence — 2026-08-22
 
-The frozen internal runtime/binary evidence revision is
-`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. Release-control hardening through
-`d455aa80f0c88b50610667a52787c3f4058bd9bb` and this Markdown release-record
-update are bounded no-impact descendants: they change no shipped runtime surface and
-do not relabel the installer or receipts as if they had been produced from a later commit.
+The frozen internal runtime/binary candidate is
+`b9a871cced6ce43120e34e2cf2f656d21de9d3c7`. Its internally pilot-signed NSIS is
+102,920,864 bytes with SHA-256
+`9DB493F31E30DF0D252B1959B31DAE77E6499992A4E4EBEAFC72565510AF1095`.
+The exact candidate passed **64/64** clean-profile checks: bundled sidecar and npm,
+FREE/Solo first boot, in-process embeddings, Waggle-managed Ollama 0.32.3 and
+`qwen2.5:0.5b`, local-model chat, proxy restart, same-version repair, data preservation,
+cleanup, and uninstall. Docker, Python, developer Node.js, external LiteLLM, and a
+separately installed Ollama were not prerequisites.
 
-- Paid ten-persona acceptance is carried forward after a scoped no-impact diff review:
-  **30/30 accepted across ten personas x3, all selected receipts 100/100**.
-- Smart-router qualification and the Claude Code, Codex, and Hermes official-auth
-  canaries are carried forward from `692c69b9` after scoped no-impact diff review.
-  The router passed primary, compact-tool-context, durable-budget, and fallback paths
-  with a managed local runtime and without Docker; the auth harness read/copied zero
-  authentication files.
-- The application-runtime regression at `af19b387` passed **714 test files and 11,586
-  tests**. Changes from that revision through `d455aa80` are confined to
-  release, signing, certification, and their tests and are covered by focused
-  release-control gates.
-- The exact-`d4f1dae3` unsigned NSIS installer is 98,686,269 bytes with SHA-256
-  `B5B427B7D4828BF18FC639CA475D7B21D6E007F3095285859AA67164D9C7DC7D`.
-  It passed **59/59** clean-profile lifecycle, Docker-independent Solo, managed-model,
-  proxy-restart, repair, data-preservation, and uninstall checks.
-- The hosted-signing implementation hardened through `d455aa80` passed **266/266**
-  PowerShell policy tests, **86/86** workflow/Tauri tests, app/server typechecks,
-  targeted lint, YAML plus PowerShell 7/5.1 parsing, and three independent reviews
-  with no P0-P2 finding. The shipped runtime remains the exact `d4f1dae3` candidate.
+- The full and production dependency audits at this candidate contain **0 Critical and
+  0 High** findings. A newly published High advisory in `node-tar` was closed by pinning
+  the transitive runtime to 7.5.22; lower-severity maintenance remains documented.
+- Persona quality evidence at `4c712ff6` contains all ten personas x3: **30/30 are at
+  least 95/100 after two independent semantic adjudications**, with no critical failure.
+  The artifact is explicitly a non-gating collection, not a canonical deterministic
+  seal; 28 results passed deterministically and two 90-point results were adjudicated to
+  100. The bounded delta to the runtime candidate does not touch persona, chat, scorer,
+  or official-auth behavior.
+- Smart-router primary, compact-tool-context, durable-budget and fallback evidence, plus
+  the Claude Code, Codex, and Hermes official-user-auth canaries, remain scoped
+  carry-forward evidence under the reviewed no-impact rule. The auth harness read or
+  copied no credential files.
+- The historical broad regression baseline at `af19b387` passed 714 files and 11,586
+  tests. It is not relabeled as an exact-candidate run; focused tests, exact installer
+  certification and dependency audits cover subsequent changes, and final private-PR
+  CI must pass before integration.
 
-Detailed local receipt paths and SHA-256 digests are recorded in the current
-[launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md); the
-receipts themselves are intentionally not published from ignored local `output/` or
-temporary directories.
-
-The `d4f1dae3` internal Windows Solo runtime RC is qualified, but the public Windows
-binary release is **not yet approved**. The installer above is `NotSigned`; a protected
-hosted run must build the exact approved release-tag commit and produce a publicly
-trusted Authenticode signature and timestamp. A managed Codex Security Deep Scan must
-also produce a sealed report with no unresolved Critical/High findings.
+Detailed local receipt paths, hashes, limitations, and integration gates are recorded in
+the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md).
+The internal signer (`CN=Egzakta Internal Pilot`) and DigiCert timestamp prove the pilot
+pipeline but are not publicly trusted Authenticode. Public release is **not yet approved**:
+a protected hosted build with a publicly trusted signer and an exact-candidate sealed
+managed Deep Security report remain mandatory.
 
 ## Architecture
 
