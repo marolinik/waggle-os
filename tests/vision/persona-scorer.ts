@@ -2011,6 +2011,7 @@ const PRIORITIZATION_REPORTED_SUFFIX = /(?:[,;]\s*(?:analysts?|experts?|observer
 const PRIORITIZATION_TRAILING_REPORT_EVENT = /(?:[,:(]|\[|[—–])\s*(?:an?|the|this|that)\s+(?:incident|issue|bug|problem|event|case|matter|outage)\s+(?:is|are|was|were|has|have|had)\s+(?:been\s+)?reported\s*[\])]?[.!?]?\s*$/i;
 const PRIORITIZATION_REJECTION_PREFIX = /\b(?:reject(?:s|ed|ing)?|disput(?:es|ed|ing)?|den(?:y|ies|ied|ying)|refus(?:e|es|ed|ing))\b[\s\S]*$/i;
 const PRIORITIZATION_REJECTED_ASSERTION = /\b(?:assertion|claim|statement)\b[\s\S]*\b(?:is|was|has been)\s+(?:false|wrong|disproven|rejected|invalid)\b|\b(?:it|this|that)\s+(?:is|was)\s+(?:false|wrong|untrue)\s+that\b/i;
+const PRIORITIZATION_DEPENDENT_REJECTION = /(?:^|[,.!?;:—–]\s+)(?:(?:actually|no)\s*,\s*)?(?:(?:it|this|that)(?:(?:\s+(?:is|was)|['’]s)\s+(?:false|wrong|untrue|incorrect|not\s+true)|\s+(?:isn['’]t|wasn['’]t)\s+true)|I(?:\s+(?:am|was)|['’]m)\s+(?:wrong|incorrect)|(?:ignore|disregard|forget|strike)\s+(?:it|this|that))\b(?=\s*(?:[.!?;]|$))/i;
 const PRIORITIZATION_QUOTED_CLAUSE = /^\s*(?:["“]|['‘])/;
 const PRIORITIZATION_CONDITION_MARKER = /\b(?:only\s+(?:if|when|after|with)|if|when|whenever|whether|unless|suppose|imagine|provided(?!\s+by\b)(?:\s+that)?|assuming(?:\s+that)?|depending\s+on|contingent\s+(?:on|upon)|subject\s+to|on\s+condition\s+that|(?:as|so)\s+long\s+as|conditional\s+(?:on|upon)|dependent\s+(?:on|upon))\b/i;
 const PRIORITIZATION_CONDITIONAL_CLAUSE = new RegExp(
@@ -2018,6 +2019,7 @@ const PRIORITIZATION_CONDITIONAL_CLAUSE = new RegExp(
   'i',
 );
 const PRIORITIZATION_RATIONALE_SIGNAL = /\b(?:because|since|therefore|so that|protects?|improves?|reduces?|affects?|impacts?|compounds?|escalates?|drives?|creates?|causes?|supports?|limits?|damages?|threatens?|makes?|becomes?|carr(?:y|ies)|poses?|depends?|follows?|comes?|goes?|has|have|is|are|can|could|will|would|must|important|iterative|ongoing|rather than|once|highest[- ]leverage)\b/i;
+const PRIORITIZATION_BOUNDED_MOMENTUM_DECAY_RATIONALE = /\b(?:revenue\s+with\s+)?momentum\s+decays?\s+(?:fast|quickly|rapidly)\b/i;
 const PRIORITIZATION_REMOTE_NEGATION_PREFIX = /\b(?:(?:do(?:es)?|can|could|should|would|must|may|might|will|shall)\s+not(?!\s+only\b)|do(?:es)?n['’]t|can['’]t|couldn['’]t|shouldn['’]t|wouldn['’]t|mustn['’]t|won['’]t|shan['’]t|(?:is|are|was|were)\s+not(?!\s+only\b)|cannot|isn['’]t|aren['’]t|fails?\s+to|(?:is|are|was|were)\s+unlikely\s+to)\b[\s\S]*$/i;
 const PRIORITIZATION_LOCAL_NEGATION_PREFIX = /\b(?:has no|have no|never|without|lacks?|lack of|no)\b[\s\S]{0,32}$/i;
 const PRIORITIZATION_NEGATION_SUFFIX = /^\s*(?:(?:is|are|was|were|does|do|has|have)\s+)?(?:not|no|irrelevant|absent|unproven)\b/i;
@@ -2268,6 +2270,7 @@ function splitPrioritizationClauses(segment: string, basis: RegExp): string[] {
       && testPattern(basis, clause)
       && (PRIORITIZATION_TRAILING_REPORT_HEDGE.test(`risk; ${continuation}`)
         || PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION.test(`risk; ${continuation}`)
+        || PRIORITIZATION_DEPENDENT_REJECTION.test(continuation)
         || PRIORITIZATION_TRAILING_ATTRIBUTION.test(`; ${continuation}`)
         || PRIORITIZATION_TRAILING_SOURCE_TAG.test(continuation));
     if (keepsDependentRetraction) continue;
@@ -2290,14 +2293,32 @@ function hasAffirmedPrioritizationBasis(
   if (PRIORITIZATION_REPORTED_CLAUSE.test(normalized)) return false;
   if (PRIORITIZATION_REPORTED_SUFFIX.test(normalized)) return false;
   if (PRIORITIZATION_REJECTED_ASSERTION.test(normalized)) return false;
+  if (PRIORITIZATION_DEPENDENT_REJECTION.test(normalized)) return false;
   if (PRIORITIZATION_QUOTED_CLAUSE.test(normalized)) return false;
   if (PRIORITIZATION_CONDITIONAL_CLAUSE.test(normalized)) return false;
-  if (!PRIORITIZATION_RATIONALE_SIGNAL.test(normalized)
-    && !PRIORITIZATION_EXPLICIT_RATIONALE.test(normalized)) return false;
+  const boundedMomentumDecay = PRIORITIZATION_BOUNDED_MOMENTUM_DECAY_RATIONALE.exec(normalized);
+  const hasAffirmedBoundedMomentumDecay = boundedMomentumDecay !== null
+    && !PRIORITIZATION_TRAILING_REPORT_HEDGE.test(
+      normalized.slice(boundedMomentumDecay.index + boundedMomentumDecay[0].length),
+    )
+    && !PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION.test(
+      normalized.slice(boundedMomentumDecay.index + boundedMomentumDecay[0].length),
+    );
+  const hasGenericRationale = PRIORITIZATION_RATIONALE_SIGNAL.test(normalized)
+    || PRIORITIZATION_EXPLICIT_RATIONALE.test(normalized);
+  if (!hasGenericRationale
+    && !hasAffirmedBoundedMomentumDecay) return false;
 
   const flags = [...new Set(`${basis.flags.replace(/g/g, '')}g`.split(''))].join('');
   const matcher = new RegExp(basis.source, flags);
   for (const match of normalized.matchAll(matcher)) {
+    const boundedMomentumDecayEnd = boundedMomentumDecay === null
+      ? -1
+      : boundedMomentumDecay.index + boundedMomentumDecay[0].length;
+    const basisOverlapsBoundedMomentumDecay = boundedMomentumDecay !== null
+      && match.index < boundedMomentumDecayEnd
+      && match.index + match[0].length > boundedMomentumDecay.index;
+    if (!hasGenericRationale && !basisOverlapsBoundedMomentumDecay) continue;
     const after = normalized.slice(match.index + match[0].length);
     if (PRIORITIZATION_TRAILING_REPORT_HEDGE.test(after)
       || PRIORITIZATION_TRAILING_EXPLICIT_RETRACTION.test(after)) continue;

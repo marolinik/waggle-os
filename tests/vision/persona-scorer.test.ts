@@ -3442,6 +3442,168 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts the exact paid bounded uncertainty-resolution rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Assumption:** The "close one customer" deal has a live call/next-step expected this week (not yet scheduled), the memory bug is not yet confirmed as customer-impacting, and no incident is currently live in production.',
+      '',
+      '## Order & Justification',
+      '',
+      '1. **Investigate the production memory bug** (first)',
+      '   Unconfirmed production risk outranks scheduled work — if it\'s actively leaking and customer-facing, it can blow up the deal you\'re trying to close or worsen onboarding trust. A time-boxed investigation this morning tells you whether this is a slow leak (safe to schedule a real fix later) or an active risk (must escalate now). Cheap to check, expensive to ignore.',
+      '',
+      '2. **Close the customer** (second)',
+      '   Revenue with momentum decays fast — prospects go cold, budgets shift, competitors circle. Once you\'ve confirmed the bug isn\'t an active landmine, this becomes the highest-value, most time-sensitive item and should get your best energy and a clear runway (no lingering "is prod on fire?" distraction).',
+      '',
+      '3. **Repair onboarding friction** (third)',
+      '   Real and worth fixing, but it\'s a process/retention issue, not a today-or-this-deal-dies issue. It can absorb the back half of the week without meaningful cost, and any insight from the customer close (objections, friction they hit) may actually sharpen what you fix here.',
+      '',
+      '## First action today',
+      'Time-box **60–90 minutes** to triage the memory bug: check recent deploys/logs for the regression window, pull memory profiler data, and determine blast radius (is it customer-visible, growing, or containable). Goal isn\'t a fix — it\'s a severity call: "safe to defer" vs. "needs immediate escalation." Then move straight into deal-closing outreach/prep with that risk resolved off your plate.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it.each([
+    [
+      'conditional decay',
+      'If customer revenue with momentum decays fast, it should be second.',
+    ],
+    [
+      'attributed decay',
+      'Analysts say customer revenue with momentum decays fast.',
+    ],
+    [
+      'negated decay',
+      'Customer revenue with momentum does not decay fast.',
+    ],
+    [
+      'retracted decay',
+      'Customer revenue with momentum decays fast, or so it seems.',
+    ],
+  ])('keeps bounded momentum-decay rationale fail closed: %s', (_label, customerRationale) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. The production memory bug creates outage risk.',
+      `2. ${customerRationale}`,
+      '3. Onboarding friction reduces retention.',
+      'First action today: reproduce the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+    expect(result).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
+  it('does not lend a momentum-decay rationale to another priority basis', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. Production memory bug risk and market momentum decays fast.',
+      '2. The customer deal drives near-term revenue.',
+      '3. Onboarding friction reduces retention.',
+      'First action today: reproduce the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+    expect(result).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
+  it.each([
+    'that is false.',
+    'that was wrong.',
+    'that is not true.',
+    'ignore that.',
+    'I was wrong.',
+    'that is incorrect.',
+    'forget that.',
+    'strike that.',
+    ', that is false.',
+    '— that is false.',
+    ': that is false.',
+    'actually, that is false.',
+    'no, that is false.',
+    'that\'s false.',
+    'that isn\'t true.',
+    'I\'m wrong.',
+  ])('rejects a dependent momentum-decay retraction: %s', (retraction) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. The production memory bug creates outage risk.',
+      `2. Customer revenue with momentum decays fast${retraction.startsWith(',') || retraction.startsWith('—') || retraction.startsWith(':') ? '' : '; '}${retraction}`,
+      '3. Onboarding friction reduces retention.',
+      'First action today: reproduce the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+    expect(result).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
+  it.each([
+    'Customer revenue creates urgency, but it is not true that the procurement window is closed.',
+    'Customer revenue creates urgency, but disregard that outdated budget estimate.',
+  ])('keeps an affirmed customer basis after an unrelated denial: %s', (customerRationale) => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. The production memory bug creates outage risk.',
+      `2. ${customerRationale}`,
+      '3. Onboarding friction reduces retention.',
+      'First action today: reproduce the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+    });
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it('accepts a plural production-issue topic while keeping its basis fail closed', () => {
     const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
     const memoryRationale = 'Unquantified production issues carry unbounded downside; a slow leak can become an outage.';
