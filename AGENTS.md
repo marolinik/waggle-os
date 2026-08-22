@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-14)
+### Current Release Qualification Contract (2026-08-22)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -52,14 +52,17 @@ WaggleDance, governance) is the upgrade trigger.
 - The Windows Solo qualification receipt must prove the bundled Node sidecar, no-Python
   OpenAI-compatible proxy, Waggle-managed local runtime/model, default in-process embedding path,
   and freedom from developer Node, Docker, Python, external LiteLLM, or a separately installed
-  Ollama. A separate exact-HEAD receipt must prove smart-router primary, compact-tool-context,
-  budget, and fallback paths; user-installed Ollama remains optional.
-- Persona release evidence requires a valid 10-persona x 3-run seal plus a final-HEAD no-impact
-  attestation, or a fresh 30/30 rerun when intervening behavior changed.
+  Ollama. A separate revision-bound receipt must prove smart-router primary, compact-tool-context,
+  budget, and fallback paths and may carry forward only under the launch recommendation's bounded
+  no-impact rule; user-installed Ollama remains optional.
+- Persona release evidence requires a complete 10-persona x 3-run collection with every result
+  at or above 95/100 after any explicitly documented independent semantic adjudication, plus a
+  final-HEAD no-impact attestation or a fresh 30/30 rerun when intervening behavior changed. Never
+  relabel a non-gating collection as a canonical deterministic seal.
 - Do not claim release approval until the current launch recommendation's exact-HEAD gates pass.
-- The frozen internal runtime candidate is `d4f1dae3`: its unsigned NSIS passed 59/59 clean-profile
-  checks. Release-control hardening through `d455aa80` passed 266/266 signing-policy and 86/86
-  workflow/Tauri tests; later documentation descendants do not relabel the runtime receipt.
+- Exact candidate revisions, installer hashes, local receipt hashes, carry-forward limits, and the
+  current verdict live only in `docs/production-readiness/09-LAUNCH_RECOMMENDATION.md`. Do not copy
+  an old candidate's evidence forward merely because a later branch contains its commits.
 - Public GO still requires a publicly trusted Authenticode artifact and a sealed managed Deep
   Security report for the exact approved release-tag commit, with no unresolved Critical/High.
 - The repository remains private until an explicit open-source and licensing decision is made.
@@ -179,8 +182,8 @@ Subdirs:
 MOVED (2026-04-30 monorepo migration): the memory substrate `mind/` (db/schema/
   identity/awareness/frames/sessions/search/knowledge/scoring/reconcile/ontology/
   concept-tracker/entity-normalizer/evolution-runs/execution-traces/
-  improvement-signals/embedding-provider/*-embedder) and `harvest/` (chatgpt/Codex/
-  Codex/gemini/perplexity/pdf/plaintext/markdown/url/universal adapters +
+  improvement-signals/embedding-provider/*-embedder) and `harvest/` (chatgpt/claude/
+  claude-code/gemini/perplexity/pdf/plaintext/markdown/url/universal adapters +
   pipeline.ts + dedup.ts) now live at **packages/hive-mind-core/src/{mind,harvest}/**,
   NOT under packages/core/. The OSS mirror is curated from there through a maintainer-reviewed
   forward-port (§7.5); raw subtree branches are never publish sources.
@@ -247,7 +250,7 @@ npm run lint
 > run the `packages/server` tsc above. (A real type error slipped through this
 > way on 2026-05-28; see `docs/addictiveness-audit-2026-05-28/REDUNDANCY-AUDIT.md`.)
 
-### Windows Solo release commands (PowerShell 7; final frozen clean checkout)
+### Windows Solo release commands (PowerShell 7; frozen clean checkout)
 
 ```powershell
 # Local build-host preparation (the installed desktop has none of these prerequisites).
@@ -258,25 +261,21 @@ npm run build:packages
 # Local unsigned smoke build only; this is not a releasable artifact.
 npm --prefix app run tauri:build:win
 
-# Signed release build, only after release.yml imports and validates exactly one
-# approved production certificate and writes app/src-tauri/.thumbprint.txt.
-node app/scripts/apply-signing-config.mjs
-Push-Location app
-node node_modules/@tauri-apps/cli/tauri.js build --bundles nsis --config src-tauri/tauri.build-override.conf.json
-Pop-Location
+# Optional internal-pilot build. Its private test root is not public trust.
+npm --prefix app run tauri:build:win:pilot-signed
 
-# Certify that signed NSIS artifact under a disposable Windows user.
+# Certify an internal candidate under a disposable Windows profile.
 pwsh -NoProfile -File scripts/certify-windows-installer.ps1 `
   -InstallerPath "<absolute-path-to-Waggle-setup.exe>" `
   -ExpectedSourceRevision "<40-character-final-HEAD>" `
-  -ExpectedSignerThumbprint "<production-signer-thumbprint>" `
-  -RequireAuthenticodeSignature `
   -VerifyManagedModel
 ```
 
-`.github/workflows/release.yml` is authoritative for certificate import,
-thumbprint validation, staged hook verification, signing, certification,
-attestation, and publication. Never treat the local smoke command as signed.
+Production signing is hosted-only. Do not use a local thumbprint, client secret, or
+`sign-windows-artifact.ps1` substitute to create a release artifact. The exact-tag
+`.github/workflows/release.yml` Azure OIDC chain is authoritative for production signing,
+certification, attestation, and publication. Never treat an unsigned or internal-pilot build
+as publicly trusted.
 The certified installed desktop must not depend on developer Node.js, Python,
 Docker, external LiteLLM, or a separately installed Ollama.
 
@@ -479,7 +478,7 @@ shows tagline + bestFor + wontDo. "Create Custom Persona" inline form POSTs to
 
 ## 7. Security Constraints (Non-Negotiable)
 
-1. **Vault-only secrets.** API keys in Vault or `.env` (never committed). `.env.example` has key names only.
+1. **Vault-only secrets.** API keys belong in Vault or an untracked local `.env`, never in Git. `.env.example` may contain non-secret development defaults, but never usable credentials or secrets.
 2. **Injection defense.** `scanForInjection()` from `injection-scanner.ts` MUST be called on all connector/external input.
 3. **No eval, no dynamic require.** Tauri WebView is restricted.
 4. **Tauri IPC allowlist.** Explicit in `app/src-tauri/capabilities/`. Never `allowlist: all: true`.
@@ -579,7 +578,7 @@ Grep before creating. These exist and are functional:
 | `packages/core/src/telemetry.ts` | Telemetry pipeline |
 | `packages/hive-mind-core/src/harvest/pipeline.ts` | Harvest adapters + dedup |
 | `packages/core/src/compliance/` | Compliance + audit |
-| `app/src/components/cockpit/` | Tauri cockpit UI |
+| `apps/web/src/components/os/` | Main desktop cockpit UI loaded by Tauri |
 
 ---
 
@@ -695,7 +694,3 @@ For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-
 
 Maintained by Marko Markovic · Egzakta Group · April 2026
 waggle-os.ai · www.kvark.ai
-
-## Imported Claude Cowork project instructions
-
-This is my app repo... use it for exploring and working. What ever you produce, you will put in a new folder cowork and store all there dont change the reo itself.

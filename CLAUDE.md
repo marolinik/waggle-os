@@ -1,9 +1,9 @@
 # CLAUDE.md — Waggle OS
-### Authoritative Operating Contract · All Agents · All Contributors · All Sessions
+### Claude operational companion
 
-> Read this file in full before touching a single line of code.
-> It is the single source of truth for architecture, strategic intent, and mechanical operating rules.
-> If this file conflicts with any other document, **this file wins.**
+> Read `AGENTS.md` in full before touching code. `AGENTS.md` is the canonical operating
+> contract for all agents and wins on conflict. This file is a Claude-oriented companion;
+> keep shared guidance aligned, but never treat it as a second source of truth.
 
 ---
 
@@ -39,7 +39,7 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Current Release Qualification Contract (2026-08-14)
+### Current Release Qualification Contract (2026-08-22)
 
 - Launch gate: **Windows Solo only**.
 - In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
@@ -65,56 +65,23 @@ WaggleDance, governance) is the upgrade trigger.
 - A release-record-only Markdown descendant does not change the frozen runtime revision or installer
   SHA-256. The eventual public hosted artifact and managed Deep Scan must instead be regenerated for
   and name the exact approved release-tag commit.
-- A GO seal requires a valid 30/30 persona seal across 10 personas at >=95/100 plus either a fresh
-  release-revision run or an approved bounded no-impact attestation. Claude Code/Codex/Hermes official
-  user-auth canaries follow the same rule. GO also requires zero unresolved Critical/High findings.
+- Persona evidence requires a complete 30-result collection across 10 personas at >=95/100 after
+  any explicitly documented independent semantic adjudication, plus either a fresh release-revision
+  run or an approved bounded no-impact attestation. Never relabel a non-gating collection as a
+  canonical deterministic seal. Claude Code/Codex/Hermes official user-auth canaries follow the
+  same carry-forward rule. GO also requires zero unresolved Critical/High findings.
 - Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
   unless the current launch recommendation says GO for that same release.
 
-### Current Windows Solo internal RC evidence (2026-08-14)
+### Evidence authority
 
-The frozen internal runtime/binary evidence revision is
-`d4f1dae3476829f1fc6d73c2173c960527c7b4c9`. Release-control hardening through
-`d455aa80f0c88b50610667a52787c3f4058bd9bb` and later Markdown-only release-record
-commits are bounded no-impact descendants; they change no shipped runtime surface and
-must not relabel the `d4f1dae3` installer or receipts as exact evidence for a later HEAD.
-
-- Persona acceptance: the `692c69b9` seal remains valid after scoped diff review;
-  30/30 accepted receipts across ten launch personas x3, every selected receipt
-  100/100. Local receipt SHA-256:
-  `53EADFE2123D5D26BF234CD8E9C4ACEF85A7665EA32738112A7A61F09464D4FB`.
-- Smart router: the `692c69b9` primary, compact-tool-context, durable-budget, and
-  fallback qualification remains valid because no affected runtime surface changed.
-  Local receipt SHA-256:
-  `973DBDF718156A049486894DD1E2892E2C7F518834AEBA33F91F9CE3C7BD1D9A`.
-- Official user authentication: the Claude Code, Codex, and Hermes serial canaries
-  remain valid after scoped diff review; they read/copied zero auth files. Local receipt
-  SHA-256: `2D27609067E4703969F0AD6055F5A0414B00E9F3B271CE3B917E0860E4393ABD`.
-- Broad regression: at `af19b387`, 714 test files and 11,586 tests passed, with
-  five tests skipped. Changes through `d455aa80` are confined to release, signing,
-  certification, and their tests. Log SHA-256:
-  `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E`.
-- Exact-`d4f1dae3` installer: the unsigned NSIS is 98,686,269 bytes, SHA-256
-  `B5B427B7D4828BF18FC639CA475D7B21D6E007F3095285859AA67164D9C7DC7D`,
-  and passed 59/59 clean-profile lifecycle, managed-model, proxy-restart, repair,
-  data-preservation, and uninstall checks. Receipt SHA-256:
-  `07C0B3D1E24801DE2006A998CDF1F10D40EBF03354003E58EACCFAE4BF3C4DCF`.
-- Signing workflow hardened through `d455aa80`: 266/266 PowerShell policy tests and
-  86/86 workflow/Tauri tests passed, together with app/server typechecks, targeted
-  lint, YAML and PowerShell 7/5.1 parsing, and three independent no-P0-P2 approvals.
-- A live `d4f1dae3` dependency audit refreshed on 2026-08-14 is recorded in the current
-  launch recommendation: full and production-only trees both contain zero Critical and
-  zero High advisories. Moderate advisories remain and are tracked as maintenance.
-
-This qualifies the `d4f1dae3` internal Windows Solo runtime RC. It does not qualify a
-release: the installer is `NotSigned`, exact-tag hosted signing has not executed, and no
-current managed Codex Security Deep Scan has produced a sealed report. The repository
-remains private until an explicit open-source and licensing decision is made. Public
-source or release publication is disabled unless the repository is public and
-`WINDOWS_PUBLIC_RELEASE_AUTHORIZED` is explicitly `true`; final Hive Mind
-drift/exclusion and repository hygiene gates still apply. The eventual hosted artifact
-must be rebuilt from and name the exact approved release-tag commit. Never convert these
-receipts into a GO or overall 9.5/10 claim early.
+Exact candidate revisions, installer and receipt hashes, carry-forward boundaries, open
+checks, and the current verdict live only in
+`docs/production-readiness/09-LAUNCH_RECOMMENDATION.md`. Do not duplicate an old
+candidate table here or infer that an ancestor's installer certifies a later HEAD. The
+repository remains private until an explicit open-source and licensing decision is made.
+Public GO remains blocked until a publicly trusted Authenticode artifact and an exact-candidate
+sealed managed Deep Security report close with no unresolved Critical/High findings.
 
 ### Key Technology Facts (Verified August 2026)
 
@@ -310,7 +277,10 @@ npm run build:packages
 # Local unsigned build only; this verifies packaging/runtime, not public trust.
 npm --prefix app run tauri:build:win
 
-# Internal clean-profile certification of an unsigned local candidate.
+# Optional internal-pilot build. Its private test root is not public trust.
+npm --prefix app run tauri:build:win:pilot-signed
+
+# Internal clean-profile certification. Omit public-signature requirements for a pilot.
 pwsh -NoProfile -File scripts/certify-windows-installer.ps1 `
   -InstallerPath "<absolute-path-to-Waggle-setup.exe>" `
   -ExpectedSourceRevision "<40-character-final-HEAD>" `
@@ -538,7 +508,7 @@ shows tagline + bestFor + wontDo. "Create Custom Persona" inline form POSTs to
 
 ## 7. Security Constraints (Non-Negotiable)
 
-1. **Vault-only secrets.** API keys in Vault or `.env` (never committed). `.env.example` has key names only.
+1. **Vault-only secrets.** API keys belong in Vault or an untracked local `.env`, never in Git. `.env.example` may contain non-secret development defaults, but never usable credentials or secrets.
 2. **Injection defense.** `scanForInjection()` from `injection-scanner.ts` MUST be called on all connector/external input.
 3. **No eval, no dynamic require.** Tauri WebView is restricted.
 4. **Tauri IPC allowlist.** Explicit in `app/src-tauri/capabilities/`. Never `allowlist: all: true`.
@@ -638,7 +608,7 @@ Grep before creating. These exist and are functional:
 | `packages/core/src/telemetry.ts` | Telemetry pipeline |
 | `packages/hive-mind-core/src/harvest/pipeline.ts` | Harvest adapters + dedup |
 | `packages/core/src/compliance/` | Compliance + audit |
-| `app/src/components/cockpit/` | Tauri cockpit UI |
+| `apps/web/src/components/os/` | Main desktop cockpit UI loaded by Tauri |
 
 ---
 
