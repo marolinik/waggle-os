@@ -5,6 +5,7 @@ import { spawn, execFile, type ChildProcess, type SpawnOptions } from 'node:chil
 import {
   chmodSync,
   closeSync,
+  createReadStream,
   createWriteStream,
   existsSync,
   fsyncSync,
@@ -29,6 +30,8 @@ const OLLAMA_ROLLBACK_VERSION = '0.32.0';
 const ollamaReleaseRoot = (version: string): string =>
   `https://github.com/ollama/ollama/releases/download/v${version}`;
 const DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
+const DOWNLOAD_MAX_ATTEMPTS = 3;
+const DOWNLOAD_RETRY_DELAYS_MS = [250, 1_000] as const;
 const START_TIMEOUT_MS = 45_000;
 const WINDOWS_START_TIMEOUT_MS = 120_000;
 const START_DIAGNOSTIC_RAW_TAIL_BYTES = 64 * 1024;
@@ -42,6 +45,9 @@ const INSTALL_LOCK_WAIT_MS = DOWNLOAD_TIMEOUT_MS + 15 * 60_000;
 const INSTALL_LOCK_BUSY_TIMEOUT_MS = 0;
 const INSTALL_LOCK_RETRY_MIN_MS = 200;
 const INSTALL_LOCK_RETRY_MAX_MS = 1_000;
+const TRANSIENT_DOWNLOAD_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+class PermanentManagedRuntimeDownloadError extends Error {}
 
 /**
  * The desktop shell terminates the Node sidecar directly on exit, which bypasses
@@ -1100,6 +1106,103 @@ export class ManagedOllamaRuntime {
     }
   }
 
+  private async downloadArtifact(archive: string): Promise<void> {
+    const artifact = this.artifact!;
+    const deadline = Date.now() + DOWNLOAD_TIMEOUT_MS;
+
+    for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt += 1) {
+      let offset = existsSync(archive) ? statSync(archive).size : 0;
+      if (offset > artifact.sizeBytes) {
+        throw new PermanentManagedRuntimeDownloadError(
+          `Official Ollama runtime exceeded the expected ${artifact.sizeBytes} bytes`,
+        );
+      }
+
+      try {
+        if (offset < artifact.sizeBytes) {
+          const remainingTime = deadline - Date.now();
+          if (remainingTime <= 0) throw new Error('Official Ollama runtime download timed out');
+          const response = await this.fetchImpl(artifact.url, {
+            redirect: 'follow',
+            ...(offset > 0 ? { headers: { Range: `bytes=${offset}-` } } : {}),
+            signal: AbortSignal.timeout(remainingTime),
+          });
+          if (!response.ok || !response.body) {
+            const message = `Official Ollama runtime download failed with HTTP ${response.status}`;
+            if (!TRANSIENT_DOWNLOAD_STATUS.has(response.status)) {
+              throw new PermanentManagedRuntimeDownloadError(message);
+            }
+            throw new Error(message);
+          }
+
+          if (offset > 0 && response.status === 200) {
+            offset = 0;
+          } else if (offset > 0) {
+            const expectedRange = `bytes ${offset}-${artifact.sizeBytes - 1}/${artifact.sizeBytes}`;
+            if (response.status !== 206 || response.headers.get('content-range') !== expectedRange) {
+              throw new PermanentManagedRuntimeDownloadError(
+                'Official Ollama runtime returned an invalid resume range',
+              );
+            }
+          } else if (response.status !== 200) {
+            throw new PermanentManagedRuntimeDownloadError(
+              `Official Ollama runtime returned unexpected HTTP ${response.status}`,
+            );
+          }
+
+          const expectedResponseBytes = artifact.sizeBytes - offset;
+          const declaredSize = Number(response.headers.get('content-length'));
+          if (Number.isFinite(declaredSize) && declaredSize !== expectedResponseBytes) {
+            throw new PermanentManagedRuntimeDownloadError(
+              `Official Ollama runtime size mismatch: expected ${expectedResponseBytes}, got ${declaredSize}`,
+            );
+          }
+
+          let downloaded = offset;
+          const verifier = new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+              downloaded += chunk.length;
+              if (downloaded > artifact.sizeBytes) {
+                callback(new PermanentManagedRuntimeDownloadError(
+                  `Official Ollama runtime exceeded the expected ${artifact.sizeBytes} bytes`,
+                ));
+                return;
+              }
+              callback(null, chunk);
+            },
+          });
+          const body = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+          await pipeline(
+            body,
+            verifier,
+            createWriteStream(archive, { flags: offset > 0 ? 'a' : 'w' }),
+          );
+          if (downloaded !== artifact.sizeBytes || statSync(archive).size !== artifact.sizeBytes) {
+            throw new Error(
+              `Official Ollama runtime size mismatch: expected ${artifact.sizeBytes}, got ${statSync(archive).size}`,
+            );
+          }
+        }
+
+        const digest = createHash('sha256');
+        for await (const chunk of createReadStream(archive)) digest.update(chunk as Buffer);
+        if (digest.digest('hex') !== artifact.sha256) {
+          throw new PermanentManagedRuntimeDownloadError(
+            'Official Ollama runtime checksum verification failed',
+          );
+        }
+        return;
+      } catch (error) {
+        if (error instanceof PermanentManagedRuntimeDownloadError
+          || attempt === DOWNLOAD_MAX_ATTEMPTS) throw error;
+        await new Promise((resolve) => setTimeout(
+          resolve,
+          DOWNLOAD_RETRY_DELAYS_MS[attempt - 1] ?? DOWNLOAD_RETRY_DELAYS_MS.at(-1)!,
+        ));
+      }
+    }
+  }
+
   private async installInternal(): Promise<{ executable: string; installedNow: boolean }> {
     this.assertTrustedTarget();
     if (!this.artifact) throw new Error(`Managed Ollama is unsupported on ${process.platform}/${process.arch}`);
@@ -1120,41 +1223,7 @@ export class ManagedOllamaRuntime {
       await mkdir(staging, { recursive: true });
 
       try {
-        const response = await this.fetchImpl(this.artifact.url, {
-          redirect: 'follow',
-          signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-        });
-        if (!response.ok || !response.body) {
-          throw new Error(`Official Ollama runtime download failed with HTTP ${response.status}`);
-        }
-        const declaredSize = Number(response.headers.get('content-length'));
-        if (Number.isFinite(declaredSize) && declaredSize !== this.artifact.sizeBytes) {
-          throw new Error(`Official Ollama runtime size mismatch: expected ${this.artifact.sizeBytes}, got ${declaredSize}`);
-        }
-
-        const digest = createHash('sha256');
-        let downloaded = 0;
-        const expectedBytes = this.artifact.sizeBytes;
-        const verifier = new Transform({
-          transform(chunk: Buffer, _encoding, callback) {
-            downloaded += chunk.length;
-            if (downloaded > expectedBytes) {
-              callback(new Error(`Official Ollama runtime exceeded the expected ${expectedBytes} bytes`));
-              return;
-            }
-            digest.update(chunk);
-            callback(null, chunk);
-          },
-        });
-        const body = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
-        await pipeline(body, verifier, createWriteStream(archive, { flags: 'wx' }));
-        if (downloaded !== this.artifact.sizeBytes) {
-          throw new Error(`Official Ollama runtime size mismatch: expected ${this.artifact.sizeBytes}, got ${downloaded}`);
-        }
-        const actualDigest = digest.digest('hex');
-        if (actualDigest !== this.artifact.sha256) {
-          throw new Error('Official Ollama runtime checksum verification failed');
-        }
+        await this.downloadArtifact(archive);
 
         await this.extractArchive(archive, staging, this.artifact);
         const executable = await findExecutable(staging, this.artifact.executableName);

@@ -361,6 +361,76 @@ describe('ManagedOllamaRuntime', () => {
     });
   });
 
+  it('resumes a verified runtime download after a transient stream termination', async () => {
+    const bytes = Buffer.from('trusted fixture archive resumed after transport interruption');
+    const splitAt = 23;
+    const dataDir = await temporaryDataDir();
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      if (fetchImpl.mock.calls.length === 1) {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(bytes.subarray(0, splitAt));
+            setTimeout(() => controller.error(new TypeError('terminated')), 10);
+          },
+        });
+        return new Response(body, {
+          status: 200,
+          headers: { 'content-length': String(bytes.length) },
+        });
+      }
+
+      expect(new Headers(init?.headers).get('range')).toBe(`bytes=${splitAt}-`);
+      return new Response(bytes.subarray(splitAt), {
+        status: 206,
+        headers: {
+          'content-length': String(bytes.length - splitAt),
+          'content-range': `bytes ${splitAt}-${bytes.length - 1}/${bytes.length}`,
+        },
+      });
+    });
+    const extractArchive = vi.fn(async (_archive: string, destination: string) => {
+      await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+    });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: fetchImpl as typeof fetch,
+      extractArchive,
+      probe: async () => false,
+    });
+
+    const result = await runtime.install();
+
+    expect(result.installedNow).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(extractArchive).toHaveBeenCalledTimes(1);
+    await expectNoInstallAttemptResidue(dataDir);
+  });
+
+  it('retries a transient HTTP 502 without weakening artifact verification', async () => {
+    const bytes = Buffer.from('trusted fixture archive after transient gateway failure');
+    const dataDir = await temporaryDataDir();
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 502 }))
+      .mockResolvedValueOnce(new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      }));
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: fetchImpl as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      probe: async () => false,
+    });
+
+    const result = await runtime.install();
+
+    expect(result.installedNow).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await expectNoInstallAttemptResidue(dataDir);
+  });
+
   it('promotes a healthy upgrade atomically and restarts only the persisted active version', async () => {
     const dataDir = await temporaryDataDir();
     const firstBytes = Buffer.from('trusted runtime N');
