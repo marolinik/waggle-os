@@ -24,9 +24,9 @@ It is Authenticode-signed by the private internal identity
 timestamp. Windows reports the chain as untrusted because the pilot root is not
 publicly trusted. This is intentional internal-RC evidence, not a public artifact.
 
-The release-record files changed after this candidate are bounded documentation-only
-descendants. They do not change the packaged runtime and do not relabel the installer
-as if it were built from the later documentation commit.
+Post-candidate descendants are bounded documentation plus reviewed non-runtime
+OSS publication tooling/tests. They do not change the packaged runtime or relabel
+the installer as if it were built from a later commit.
 
 Receipt paths below are machine-local evidence locations under ignored `output/` or
 temporary directories. Their SHA-256 digests are recorded deliberately; they are not
@@ -42,7 +42,7 @@ public repository links or downloadable release assets.
 | Smart router and compact tool context | **PASS as scoped carry-forward evidence** — primary, compact-tool-context, durable-budget and fallback paths; managed local runtime; Docker not invoked; clean teardown. Later router-surface changes were covered by focused tests; the final managed-runtime path is independently exercised by the exact installer receipt above | `output/smart-router/qualification-20260813T022319Z-692c69b9.json`; SHA-256 `973DBDF718156A049486894DD1E2892E2C7F518834AEBA33F91F9CE3C7BD1D9A` |
 | Official user-auth cohort | **PASS as scoped carry-forward evidence** — Claude Code, Codex and Hermes; three serial model calls; zero auth files read/copied; tracked tree unchanged. The post-persona candidate delta does not touch official-auth logic | `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json`; SHA-256 `2D27609067E4703969F0AD6055F5A0414B00E9F3B271CE3B917E0860E4393ABD` |
 | Broad application regression | **Historical baseline, not exact-candidate evidence** — at `af19b387`, 714 test files and 11,586 tests passed with five skipped. Subsequent phases have focused gates; final integration still requires every check on the final pushed private-PR descendant to pass | `output/readiness-broad-af19b387-20260813T115524.log`; SHA-256 `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E` |
-| Hosted-signing implementation | **PASS implementation gate, carry-forward** — 266/266 PowerShell signing-policy tests; 86/86 workflow/Tauri tests; app/server typechecks, targeted lint, YAML and PowerShell 7/5.1 parsing; independent security, compatibility and test reviews with no P0-P2 finding. No release-workflow file changed afterward | Preserved release-control receipts through `d455aa80`; public hosted signing has not executed |
+| Hosted-signing implementation | **PASS implementation gate, bounded carry-forward** — 266/266 PowerShell signing-policy tests; 86/86 workflow/Tauri tests; app/server typechecks, targeted lint, YAML and PowerShell 7/5.1 parsing; independent security, compatibility and test reviews with no P0-P2 finding. Later commit `db4e5bec` changed only macOS artifact handling, not the Windows signing control surface | Preserved Windows release-control receipts through `d455aa80`; public hosted signing has not executed |
 
 ## Remaining production GO gates
 

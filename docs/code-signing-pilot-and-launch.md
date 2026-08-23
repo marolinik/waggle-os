@@ -1,5 +1,12 @@
 # Code-Signing Playbook — Pilot + Public Day 0
 
+> [!CAUTION]
+> **PARTIALLY SUPERSEDED — DO NOT USE THE PUBLIC-SIGNING SECTIONS.** The pilot
+> history remains valid for internal RC evidence. Public Windows signing now
+> uses the protected exact-tag GitHub workflow with Azure OIDC/federated identity;
+> client-secret service-principal flows below are invalid. Current ship authority
+> is `docs/production-readiness/09-LAUNCH_RECOMMENDATION.md`.
+
 **Decision (2026-05-07):** Self-sign for pilot (Wave-1 Egzakta-internal, T+10 = 2026-05-16). Procure real certs in parallel for public Day 0 (T+30 = 2026-06-05).
 
 **Why split:** Real Authenticode + Apple Developer ID have 5-15 business-day lead times. Self-signing unblocks the pilot ship date without paying for certs that aren't usable until a vetting check completes.
@@ -189,6 +196,11 @@ After notarization + stapling, Mac users see no warning on first launch — `.dm
 ---
 
 ## 3. CI integration (post-pilot, before public Day 0)
+
+> **INVALIDATED SECTION — DO NOT EXECUTE.** The Azure client-secret example and
+> May 2026 target dates below are historical only. Public Windows signing must
+> use `.github/workflows/release.yml` with hosted OIDC, exact-tag controls, and
+> a publicly trusted certificate after identity validation.
 
 **Target state:** every `main`-branch tag triggers signed builds for both platforms.
 

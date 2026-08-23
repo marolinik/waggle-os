@@ -6,9 +6,9 @@ This review layers exact internal-installer evidence at
 `b9a871cced6ce43120e34e2cf2f656d21de9d3c7`, exact-candidate dependency audits,
 focused runtime/dependency reviews, historical broad-regression evidence, and scoped
 persona/router/auth receipts. Older receipts are carried only where their covered
-surface is unchanged or a later focused gate directly exercises it. This release-record
-update is documentation-only and does not relabel the `b9a871cc` installer as a binary
-built from the later documentation commit.
+surface was unchanged or a later focused gate directly exercised it. Post-candidate
+descendants include documentation and reviewed non-runtime OSS publication tooling/tests;
+they do not relabel the `b9a871cc` installer as a binary built from a later commit.
 
 This review is **not** a replacement for a sealed Codex Security Deep Scan. The active
 launch recommendation remains **NOT YET PUBLIC RELEASE-APPROVED**.

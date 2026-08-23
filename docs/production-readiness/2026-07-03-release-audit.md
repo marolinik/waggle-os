@@ -1,5 +1,11 @@
 # Waggle OS — Production Readiness Audit (2026-07-03)
 
+> [!CAUTION]
+> **HISTORICAL SNAPSHOT — NOT CURRENT SHIP AUTHORITY.** Findings and grades
+> below describe the cited July baseline. Use
+> `docs/production-readiness/09-LAUNCH_RECOMMENDATION.md` for current scope,
+> evidence, open gates, and release verdict.
+
 **Method:** 10 parallel principal-engineer audit lanes (opus, high effort), each required to cite `file:line` evidence it actually read. Baseline at audit time: HEAD `78660ab5` on `main`, vitest 8063/8063 green, lint 0, tsc 0 (agent/server/app), `build:all` clean, git history secret-scan CLEAN (all key-shaped strings are `detectSecrets()` fixtures).
 
 **Subsystem grades:** Build **D** · CI/CD **C** · Docs/DX **C** · Deps/Config **C** · Agent-runtime **C** · Security **B** · Testing **B** · Server-API **B** · Frontend **B** · Memory-substrate **B**.
