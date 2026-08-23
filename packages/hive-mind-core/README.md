@@ -4,12 +4,12 @@
 
 ## What this is
 
-`hive-mind-core` is the persistence + retrieval substrate that powers Waggle OS's memory layer. The public Apache-2.0 distribution lives in `marolinik/hive-mind` and is produced from this canonical source by a maintainer-curated forward-port.
+`hive-mind-core` is the persistence and retrieval substrate that powers Waggle OS's memory layer. The public Apache-2.0 distribution lives in `marolinik/hive-mind` and is produced from this canonical source by a maintainer-curated forward-port.
 
 > **Publication boundary:** this monorepo package is private and must never be
 > published or pushed as a raw subtree split. It contains Waggle-only files and
 > interleaved `install_audit` schema/migration logic. The curated forward-port
-> adapts the public layout/imports and removes all excluded material.
+> adapts the public layout and imports, then removes all excluded material.
 
 ## What's inside
 
@@ -36,12 +36,13 @@
 | `injection-scanner.ts` | `scanForInjection` — prompt-injection detection |
 | `logger.ts` | `createCoreLogger` — minimal structured logger |
 
-## SOTA claim (placeholder until arxiv preprint)
+## Publication status
 
-- Substrate ceiling: 74% on LoCoMo Pass II self-judge (vs Mem0 peer-reviewed 66.9% — methodology bias quantification +27.35pp)
-- GEPA-evolved variants: +12.5pp on held-out validation
-- Qwen 35B with hive-mind context = Opus-class out-of-distribution performance
-- Apache 2.0, no telemetry, no phone-home
+- The public mirror is Apache-2.0 and excludes Waggle-only governance and audit material.
+- Benchmark and performance claims belong in versioned reports with their model,
+  dataset, scorer, revision, and receipts; this README does not make an
+  unqualified SOTA claim.
+- Run `scripts/oss-drift-check.sh` and the public mirror's own test and lint gates before every curated release.
 
 ## Status
 

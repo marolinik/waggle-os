@@ -50,6 +50,9 @@ concurrency:
 
 jobs:
   parity-check:
+    # Permanently inert deprecation anchor. The old test-injection model is not a
+    # safe substitute for the curated forward-port and drift-review workflow.
+    if: ${{ false }}
     name: hive-mind ↔ waggle-os mind substrate parity
     runs-on: ubuntu-latest
     timeout-minutes: 15

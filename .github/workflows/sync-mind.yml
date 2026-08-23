@@ -60,6 +60,8 @@ concurrency:
 
 jobs:
   open-hive-mind-pr:
+    # Permanently inert deprecation anchor. This filtered-patch publisher cannot
+    # enforce the current interleaved proprietary-content boundary.
     name: Open auto-sync PR to marolinik/hive-mind
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -69,7 +71,7 @@ jobs:
     # Configured by Marko via `gh secret set HIVE_MIND_SYNC_TOKEN`.
     # Without the secret, the job fails fast with a documented error
     # rather than silently skipping.
-    if: ${{ vars.MIND_SYNC_ENABLED == 'true' }}
+    if: ${{ false }}
 
     steps:
       - name: Checkout waggle-os (full history for the diff)

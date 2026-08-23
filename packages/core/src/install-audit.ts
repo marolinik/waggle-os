@@ -63,9 +63,10 @@ export interface RecordAuditInput {
 // P7/D15 A3: the CHECK lists are generated from the canonical @waggle/shared
 // arrays via sqlInList, so the SQLite constraint and the TS union can no longer
 // drift (divergence #14 — the old comment admitted "drift silently crashes
-// record()"). The mirror DDL in hive-mind-core/src/mind/schema.ts stays a
-// standalone literal (it's the OSS substrate, §7.5) but is locked to these same
-// canonical lists by the parity test in install-audit-check-parity.test.ts.
+// record()"). The matching DDL in hive-mind-core/src/mind/schema.ts stays a
+// standalone private-monorepo literal and is locked to these same canonical
+// lists by install-audit-check-parity.test.ts. It is stripped from the curated
+// OSS export.
 // P7/D15 #15: trust_source now also carries a CHECK (was unconstrained at the DB
 // while the TS type claimed a closed set). Every historical value came from the
 // typed AuditTrustSource (the pre-security-gate 6-set ⊂ the current 7-set), so
