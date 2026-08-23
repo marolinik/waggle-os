@@ -1,87 +1,112 @@
 # Contributing to `@waggle/hive-mind-core`
 
-This package is the canonical source for the Waggle OS memory substrate and the maintainer-curated Apache-2.0 OSS distribution. Contributions are welcome, but this monorepo package is private because its tree also contains Waggle-only material that must not be published directly.
+This package is the canonical private-monorepo source for Waggle OS's memory
+substrate and its maintainer-curated Apache-2.0 OSS distribution. Contributions
+are welcome, but the private tree also contains Waggle-only material and must
+never be published directly.
 
-## How the package is distributed
+## Distribution and trust boundary
 
-`@waggle/hive-mind-core` lives in the `marolinik/waggle-os` monorepo at `packages/hive-mind-core/`. The public `github.com/marolinik/hive-mind` layout is produced by a maintainer-curated forward-port: adapt package layout/imports, remove excluded files and interleaved schema logic, review the diff, then publish from the OSS checkout. A raw subtree split is never a publish source.
+- Canonical source: private `marolinik/waggle-os`, under
+  `packages/hive-mind-core/`.
+- Public contribution surface: `github.com/marolinik/hive-mind`.
+- Distribution mechanism: a reviewed, maintainer-curated forward-port that
+  adapts layout/imports and removes every private exclusion.
+- `scripts/oss-subtree-split.sh` produces local inspection refs only. Raw refs
+  are never publication sources.
 
-If you're reading this on **github.com/marolinik/hive-mind** (the OSS mirror): file issues + PRs against that repo. A maintainer must intentionally port accepted changes back into `marolinik/waggle-os` before the next curated forward-port.
+The public export excludes:
 
-If you're reading this on **github.com/marolinik/waggle-os** (the canonical monorepo): file issues + PRs directly here. Public-surface changes ship only through the next curated forward-port.
+- `src/mind/evolution-runs.ts`
+- `src/mind/execution-traces.ts`
+- `src/mind/improvement-signals.ts`
+- private vault/compliance surfaces outside this package
+- interleaved `install_audit` DDL and migration logic inside
+  `src/mind/{schema,db}.ts`
 
-The curated export excludes `src/mind/evolution-runs.ts`, `execution-traces.ts`, and `improvement-signals.ts`, plus the interleaved `install_audit` DDL/migration inside `src/mind/schema.ts` and `db.ts`. Vault and compliance code remains in `@waggle/core` and is outside this package. A file filter alone cannot enforce the interleaved exclusion.
+A file filter cannot enforce the interleaved exclusion.
 
-## Direction of development (maintainers — ratified 2026-06-11)
+## Direction of development
 
-**The monorepo is the sole source of truth. Maintainers must not author features directly on the OSS mirror.** This invariant broke once: the cross-encoder reranker was written directly on `marolinik/hive-mind` during a benchmark arc and existed only there until a recon pass found it and reverse-ported it (waggle-os `f47ee8f`). The rules that prevent a repeat:
+The private monorepo is the sole source of truth. Maintainers must not author
+features only in the public mirror.
 
-1. Substrate changes are authored in `waggle-os/packages/hive-mind-core/` first; the mirror is updated by a reviewed, maintainer-curated forward-port. `scripts/oss-subtree-split.sh` is inspection-only and its raw branches must never be pushed.
-2. Work done in a scratch `hive-mind` checkout (benchmarks, experiments) must be reverse-ported into the monorepo in the same work arc — never left to accumulate on the mirror.
-3. Run `scripts/oss-drift-check.sh` before every OSS release push and after any arc that touched a hive-mind checkout. It file-diffs the mapped source trees and flags ONLY-IN-OSS files (the reverse-port failure mode), ONLY-IN-MONO files (pending export), and divergent edits.
-4. External contributor PRs against the OSS repo are welcome (see above) — the maintainer ports accepted changes back into the monorepo first, then prepares the next curated forward-port.
+1. Author substrate changes in `waggle-os/packages/hive-mind-core/` first.
+2. Reverse-port accepted public contributions into the private monorepo before
+   the next curated export.
+3. Run `scripts/oss-drift-check.sh` before every OSS release and after any arc
+   that touched a Hive Mind checkout. It distinguishes `ONLY-IN-OSS`
+   reverse-port candidates, intentional private-only exclusions,
+   `FORWARD-PORT-CANDIDATE` files, divergent edits, forbidden whole-file leaks,
+   and interleaved `install_audit` markers.
+4. Treat any nonzero drift result as release-blocking until every item is
+   classified and the curated diff is independently reviewed.
 
-## Setting up the dev environment
+## Development setup
+
+### External contributors
+
+Use the public mirror; private Waggle OS access is neither required nor
+expected.
 
 ```bash
-# Clone the monorepo
-git clone https://github.com/marolinik/waggle-os.git
-cd waggle-os
-
-# Install workspace deps (registers all packages including hive-mind-core)
+git clone https://github.com/marolinik/hive-mind.git
+cd hive-mind
 npm install
-
-# Build the substrate
-cd packages/hive-mind-core
-npx tsc --build
-
-# Run hive-mind-core's tests in isolation
-npx vitest run
-
-# Run the full repo test suite
-cd ../..
+npm run build
 npm run test
+npm run lint
 ```
 
-Node.js >= 20 required. macOS and Linux work natively. Windows works with the postinstall override that `@waggle/hive-mind-cli` provides — see `packages/hive-mind-cli/docs/WINDOWS-QUIRKS.md`.
+Open branches, issues, and pull requests against `marolinik/hive-mind`.
+
+### Maintainers with private access
+
+```bash
+git clone https://github.com/marolinik/waggle-os.git
+cd waggle-os
+npm install
+npx tsc --build packages/hive-mind-core/tsconfig.json
+npx vitest run packages/hive-mind-core/tests
+```
+
+After the canonical change lands, prepare a separate curated forward-port in a
+clean public-mirror branch and review the complete export diff.
+
+Node.js 20 or newer is required. Public contributors should use the public
+mirror README and issues for current platform support. Maintainers working in
+the private monorepo can additionally consult
+`packages/hive-mind-cli/docs/WINDOWS-QUIRKS.md`.
 
 ## Code style
 
-- TypeScript strict mode (the monorepo `tsconfig.base.json` enables `strict: true`, `noImplicitAny`, `noUnusedLocals`, `noUnusedParameters`)
-- ESM modules — `.js` extensions on all relative imports for runtime resolution after tsc emit
-- No `any` in application code — use `unknown` + narrowing
-- Public API methods + exported functions get explicit return types
-- Internal class methods can rely on type inference
+- TypeScript strict mode; avoid `any` in application code.
+- ESM modules with `.js` extensions on relative imports where required by the
+  emitted runtime.
+- Explicit return types for exported functions and public API methods.
+- Follow the repository-root ESLint configuration.
 
-The repository uses ESLint at the workspace root — run `npm run lint` from the repo root.
+## Pull request checklist
 
-## Pull request guidelines
+1. Work in the repository you are authorized to access: external contributors
+   use `marolinik/hive-mind`; maintainers use the private canonical monorepo.
+2. Name branches `feat/<short-description>` or `fix/<short-description>`.
+3. Add or extend tests for every non-trivial change.
+4. Run that repository's build, tests, and lint before opening the PR.
+5. In the PR body, explain the change, list verification, and state whether the
+   curated OSS surface is affected.
 
-1. **Fork** the canonical waggle-os repo (or work on a branch in your local clone if you have direct push access).
-2. **Create a branch** named `feat/<short-description>` or `fix/<short-description>`.
-3. **Test first** — for any non-trivial change, add or extend a test in `packages/hive-mind-core/tests/`. Existing tests are organized by substrate area (`tests/mind/`, `tests/harvest/`).
-4. **Run the full suite** — `npm run test` from the repo root. Failing tests block the PR. (Some env-dependent tests are expected to fail without local Postgres + Redis — they're marked in the `marketplace` + `server` packages, not in `hive-mind-core`.)
-5. **tsc must compile clean** — `npx tsc --build` from the package root.
-6. **Open the PR** against `main` of waggle-os. Include in the PR body:
-   - What changed + why
-   - Test plan (which test files added/modified)
-   - Whether the change affects the curated OSS surface (i.e., introduces new public exports, changes existing public types, or deprecates a surface)
+Maintainers reverse-port accepted public changes into the canonical monorepo
+before preparing the next curated export.
 
-Maintainer review aim: 2 business days for triage, additional time for substantial changes.
+## Conduct, security, and license
 
-## Code of Conduct
+This project follows the [Contributor Covenant Code of
+Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 
-This project follows the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). Be excellent to each other.
+Report security issues through a [private security advisory on the public Hive
+Mind mirror](https://github.com/marolinik/hive-mind/security/advisories/new) or
+email `hello@egzakta.com`. Do not open a public vulnerability issue.
 
-Report issues to `hello@egzakta.com` or by opening a private security advisory on the canonical repo.
-
-## License
-
-By contributing, you agree your contributions are licensed under Apache 2.0 (see `LICENSE`). Egzakta Group d.o.o. acts as steward for the OSS distribution.
-
-## Quick links
-
-- Canonical monorepo: https://github.com/marolinik/waggle-os
-- OSS mirror: https://github.com/marolinik/hive-mind
-- Issues: https://github.com/marolinik/waggle-os/issues
-- Maintainer: Egzakta Group d.o.o. — `hello@egzakta.com`
+Contributions to the public mirror are licensed under Apache-2.0. Copyright and
+notice terms are defined solely by `LICENSE`.

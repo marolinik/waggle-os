@@ -1,5 +1,11 @@
 # Monorepo Migration Progress Log
 
+> [!CAUTION]
+> **HISTORICAL RECORD — publication guidance superseded.** Completion facts
+> below describe the April 2026 migration. Any “ready to push” statement about
+> raw subtree/export branches is invalid. Current OSS publication authority is
+> `AGENTS.md` §7.5 and `packages/hive-mind-core/CONTRIBUTING.md`.
+
 **Brief:** `D:/Projects/PM-Waggle-OS/briefs/2026-04-30-cc-sesija-B-hive-mind-monorepo-migration.md`
 **Authority chain:**
 - `decisions/2026-04-30-pre-launch-sprint-consolidation-LOCKED.md`
@@ -385,8 +391,16 @@ Closing batch authorized as a single sprint per brief Tasks B16-B27.
 
 ### §2.6 OSS subtree split prep (Tasks B20-B22)
 
+> **CORRECTION (2026-08-22):** These tasks proved isolated-history inspection,
+> not safe publication. Raw export refs have the wrong mirror layout and can
+> contain private files plus interleaved `install_audit`; never publish them.
+> Use a reviewed maintainer-curated forward-port.
+
 - **B20** — `scripts/oss-subtree-split.sh` (NEW): auto-discovers `packages/hive-mind-*`, runs `git subtree split` for each, sentinel-checks for monorepo-level leaks. Idempotent (drops + recreates branches each run).
-- **B21** — Local test run produced clean `oss-<package>-export` branches for all 12 hive-mind-* packages. Sentinel passes (no proprietary leak). Manual `git push` gate preserved per OSS launch playbook.
+- **B21** — Historical receipt: the local run produced 12
+  `oss-<package>-export` branches and the then-current monorepo-level sentinel
+  passed. This proved branch shape only; the former manual raw-publication gate
+  was invalidated by the 2026-06-12 proprietary/interleaved-content analysis.
 - **B22** — `.github/workflows/sync-mind.yml` + `mind-parity-check.yml`: deprecation comments added at file headers. Workflows preserved as audit-trail anchors — trigger paths invalid post-migration so workflows do not fire.
 
 ### §2.7 Tests + import paths + smoke + final acceptance (Tasks B23-B27)
@@ -426,7 +440,8 @@ All four documented in commit `9cf43b8`.
 - **`feature/hive-mind-monorepo-migration` HEAD on origin:** `9cf43b8` (closing trio commit) + this progress doc commit
 - **CC Sesija B sprint cumulative commits:** ~19+ commits since §2.1 close `4859b67`
 - **Test count post-§2.7:** 5949 / 31 / 145 (6125 total) — 99.5% pass rate, IDENTICAL to §2.3 baseline (zero regression)
-- **OSS subtree-split branches (LOCAL ONLY, ready for Day 0 manual push):** `oss-hive-mind-{core,shim-core,cli,mcp-server,wiki-compiler,hooks-claude-code}-export` + 6× `oss-hive-mind-hooks-{cursor,hermes,openclaw,codex,claude-desktop,codex-desktop}-export`
+- **OSS subtree-split branches (historical local inspection refs only; never
+  publish raw):** `oss-hive-mind-{core,shim-core,cli,mcp-server,wiki-compiler,hooks-claude-code}-export` + 6× `oss-hive-mind-hooks-{cursor,hermes,openclaw,codex,claude-desktop,codex-desktop}-export`
 
 **§2.5+§2.6+§2.7 STATUS:** COMPLETE.
 
