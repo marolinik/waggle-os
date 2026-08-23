@@ -94,6 +94,30 @@ describe('dynamic LiteLLM runtime config', () => {
     expect(raw).not.toContain('super-secret-provider-key');
   });
 
+  it('discovers with a working Google alias when the first Gemini alias is stale', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-litellm-google-alias-'));
+    tempDirs.push(dataDir);
+    const vault = new VaultStore(dataDir);
+    process.env.GEMINI_API_KEY = 'stale-gemini-key';
+    process.env.GOOGLE_API_KEY = 'working-google-key';
+    const fetchImpl = vi.fn<typeof fetch>(async (_url, init) => {
+      const key = (init?.headers as Record<string, string>)['x-goog-api-key'];
+      if (key === 'stale-gemini-key') {
+        return new Response(JSON.stringify({ error: 'invalid key' }), { status: 400 });
+      }
+      return new Response(JSON.stringify({
+        models: [{ name: 'models/gemini-2.5-flash' }],
+      }), { status: 200 });
+    });
+
+    const result = await prepareLiteLLMRuntimeConfig(dataDir, vault, { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.modelIds).toEqual(['google/gemini-2.5-flash']);
+    expect(process.env.GEMINI_API_KEY).toBe('working-google-key');
+    expect(process.env.GOOGLE_API_KEY).toBe('working-google-key');
+  });
+
   it('restarts the managed router with a newly discovered model and switches runtime routing', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-litellm-refresh-'));
     tempDirs.push(dataDir);

@@ -1,13 +1,24 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { listPersonas, getPersona, saveCustomPersona, deleteCustomPersona, type AgentPersona } from '@waggle/agent';
+import {
+  listPersonas,
+  getPersona,
+  saveCustomPersona,
+  deleteCustomPersona,
+  isValidCustomPersonaId,
+  type AgentPersona,
+} from '@waggle/agent';
 import { validateBody } from '../../validate-body.js';
+
+const customPersonaIdSchema = z.string().max(200).refine(isValidCustomPersonaId, {
+  message: 'Invalid custom persona ID',
+});
 
 /** POST /api/personas body — a custom persona (name + systemPrompt required). */
 const createPersonaSchema = z.object({
   name: z.string().min(1).max(200),
   systemPrompt: z.string().min(1),
-  id: z.string().max(200).optional(),
+  id: customPersonaIdSchema.optional(),
   description: z.string().optional(),
   icon: z.string().optional(),
   modelPreference: z.string().optional(),
@@ -50,6 +61,13 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
     const body = request.body as z.infer<typeof createPersonaSchema>;
     const id = body.id ?? body.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
 
+    if (!isValidCustomPersonaId(id)) {
+      return reply.code(400).send({
+        error: 'Invalid request body',
+        issues: [{ path: 'id', message: 'Invalid custom persona ID' }],
+      });
+    }
+
     // Prevent overwriting built-in personas
     if (getPersona(id)) {
       return reply.code(409).send({ error: 'A built-in persona with this ID already exists' });
@@ -76,6 +94,10 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
     const dataDir = fastify.localConfig.dataDir;
     const { id } = request.params;
     const updates = request.body as Partial<AgentPersona>;
+
+    if (!isValidCustomPersonaId(id)) {
+      return reply.code(400).send({ error: 'Invalid custom persona ID' });
+    }
 
     // Don't allow patching built-in personas
     const builtIn = getPersona(id);
@@ -176,6 +198,10 @@ Respond with ONLY valid JSON, no markdown or explanation.`;
   fastify.delete<{ Params: { id: string } }>('/api/personas/:id', async (request, reply) => {
     const dataDir = fastify.localConfig.dataDir;
     const { id } = request.params;
+
+    if (!isValidCustomPersonaId(id)) {
+      return reply.code(400).send({ error: 'Invalid custom persona ID' });
+    }
 
     // Don't allow deleting built-in personas
     if (getPersona(id)) {

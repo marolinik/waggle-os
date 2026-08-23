@@ -41,6 +41,11 @@ describe('LauncherApp accessibility metadata', () => {
     expect(prompt).toHaveAttribute('autocomplete', 'off');
     expect(prompt.className).toContain('focus-visible:ring-2');
 
+    const scrollViewport = document.querySelector('[data-radix-scroll-area-viewport]');
+    expect(scrollViewport).not.toBeNull();
+    expect(scrollViewport).toHaveAttribute('tabindex', '0');
+    expect(scrollViewport).toHaveClass('focus-visible:outline-offset-[-2px]');
+
     await waitFor(() => expect(mocks.adapter.detectTools).toHaveBeenCalled());
   });
 });

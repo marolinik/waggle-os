@@ -26,8 +26,9 @@ export default defineConfig({
     include: [
       'packages/*/tests/**/*.test.ts',
       'packages/*/tests/**/*.test.tsx',
-      'packages/hive-mind-wiki-compiler/src/**/*.test.ts',
+      'packages/*/src/**/*.test.ts',
       'tests/**/*.test.ts',
+      'scripts/**/*.test.ts',
       'app/scripts/**/*.test.ts',
       'app/tests/**/*.test.ts',
       'benchmarks/*/tests/**/*.test.ts',

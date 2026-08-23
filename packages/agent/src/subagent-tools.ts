@@ -8,7 +8,11 @@
 
 import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
+import { evaluateExternalMemoryIngress } from '@waggle/core';
+import { selectAgentRunBudget } from './agent-run-budget.js';
 import type { HookRegistry } from './hooks.js';
+import { detectTaskShape } from './task-shape.js';
+import { filterAvailableTools, selectToolsForTurn } from './tool-filter.js';
 
 /**
  * Request-scoped security context threaded into a spawned sub-agent / workflow
@@ -152,6 +156,8 @@ export interface SubAgentToolsDeps {
   litellmApiKey: string;
   /** Default model for sub-agents */
   defaultModel?: string;
+  /** Resolve an explicit child override before any durable run or model call. */
+  resolveModel?: (model: string) => Promise<string>;
   /** Optional callback for streaming sub-agent progress */
   onSubAgentToken?: (agentId: string, token: string) => void;
   onSubAgentTool?: (agentId: string, name: string, input: Record<string, unknown>) => void;
@@ -189,6 +195,14 @@ export interface SubAgentToolsDeps {
   getSpawnSecurityContext?: () => SpawnSecurityContext | undefined;
   /** Durable host lifecycle. Falls back to the legacy in-memory maps when absent. */
   runAdapter?: SubAgentRunAdapter;
+}
+
+const QUARANTINED_AGENT_RESULT = '[Quarantined agent result: unsafe external content]';
+const QUARANTINED_AGENT_ERROR = '[Quarantined agent error: unsafe external content]';
+
+export function guardSubAgentOutput(text: string, kind: 'result' | 'error'): string {
+  if (evaluateExternalMemoryIngress({ content: text }).action === 'allow') return text;
+  return kind === 'result' ? QUARANTINED_AGENT_RESULT : QUARANTINED_AGENT_ERROR;
 }
 
 // In-memory registry of spawned sub-agents and their results
@@ -247,7 +261,7 @@ export const ROLE_TOOL_PRESETS: Record<string, string[]> = {
 };
 
 export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
-  const { availableTools, runLoop, litellmUrl, litellmApiKey, defaultModel } = deps;
+  const { availableTools, runLoop, litellmApiKey, defaultModel } = deps;
 
   return [
     // 1. spawn_agent — Create and run a specialist sub-agent
@@ -270,7 +284,11 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
             description: 'Tool names to give the sub-agent (only used with role="custom"). Defaults to role preset.',
           },
           model: { type: 'string', description: 'Model to use (default: same as parent)' },
-          max_turns: { type: 'number', description: 'Max turns before stopping (default: 50)' },
+          max_turns: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Optional upper bound; the task-aware safety budget may lower it.',
+          },
         },
         required: ['name', 'role', 'task'],
       },
@@ -279,8 +297,19 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
         const role = args.role as string;
         const task = args.task as string;
         const context = args.context as string ?? '';
-        const model = args.model as string ?? defaultModel ?? 'claude-sonnet-4-6';
-        const maxTurns = (args.max_turns as number) ?? 50;
+        const requestedModel = args.model as string | undefined;
+        let model = requestedModel ?? defaultModel ?? 'claude-sonnet-4-6';
+        if (requestedModel !== undefined && deps.resolveModel) {
+          try {
+            model = await deps.resolveModel(requestedModel);
+          } catch (err) {
+            const errMsg = guardSubAgentOutput(
+              err instanceof Error ? err.message : String(err),
+              'error',
+            );
+            return `## Sub-Agent Error: ${name}\n**Error:** Could not resolve the requested model: ${errMsg}`;
+          }
+        }
 
         // Resolve tools for this sub-agent
         let toolNames: string[];
@@ -295,7 +324,25 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
         // sub-agent — the blocked/denied tools are simply absent from its pool.
         const secCtx = deps.getSpawnSecurityContext?.();
         toolNames = filterSpawnToolNames(toolNames, secCtx);
-        const subTools = availableTools.filter(t => toolNames.includes(t.name));
+        const eligibleTools = filterAvailableTools(
+          availableTools.filter(t => toolNames.includes(t.name)),
+        );
+        const subTools = selectToolsForTurn(eligibleTools, {
+          message: task,
+          preferredToolNames: toolNames,
+          fallbackToEligible: true,
+        }).tools;
+        const taskShape = detectTaskShape(task);
+        const runBudget = selectAgentRunBudget({
+          taskShape: taskShape.type,
+          complexity: taskShape.complexity,
+          selectedToolNames: subTools.map(tool => tool.name),
+        });
+        const normalizedMaxTurns = Math.floor(Number(args.max_turns));
+        const requestedMaxTurns = Number.isFinite(normalizedMaxTurns) && normalizedMaxTurns >= 1
+          ? normalizedMaxTurns
+          : runBudget.maxTurns;
+        const maxTurns = Math.min(requestedMaxTurns, runBudget.maxTurns);
 
         // Generate a provisional ID. Hosts with a durable run registry replace
         // it with their canonical public run ID before execution starts.
@@ -331,7 +378,10 @@ ${task}
           });
           if (runHandle?.runId) id = runHandle.runId;
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err);
+          const errMsg = guardSubAgentOutput(
+            err instanceof Error ? err.message : String(err),
+            'error',
+          );
           return `## Sub-Agent Error: ${name}\n**Error:** Could not start the run: ${errMsg}`;
         }
 
@@ -360,14 +410,17 @@ ${task}
           startedAt: startTime,
         });
         try {
+          const bufferedTokens: string[] = [];
           const result = await runLoop({
-            litellmUrl,
+            litellmUrl: deps.litellmUrl,
             litellmApiKey,
             model,
             systemPrompt,
             tools: subTools,
             messages: [{ role: 'user', content: task }],
+            ...runBudget,
             maxTurns,
+            maxToolRounds: Math.min(runBudget.maxToolRounds, Math.max(0, maxTurns - 1)),
             stream: false, // Sub-agents don't stream to the user
             signal: runHandle?.signal,
             // W2.9 + SEC: sub-agents respect approval gates and memory validation
@@ -380,7 +433,7 @@ ${task}
               ? { blockedTools: [...secCtx.blockedTools] }
               : undefined,
             onToken: deps.onSubAgentToken
-              ? (token: string) => deps.onSubAgentToken!(id, token)
+              ? (token: string) => bufferedTokens.push(token)
               : undefined,
             onToolUse: deps.onSubAgentTool
               ? (name: string, input: Record<string, unknown>) => deps.onSubAgentTool!(id, name, input)
@@ -391,12 +444,20 @@ ${task}
             throw new Error('Sub-agent run was cancelled');
           }
 
+          const response = guardSubAgentOutput(result.content, 'result');
+          const emittedContent = bufferedTokens.join('');
+          if (deps.onSubAgentToken
+            && response === result.content
+            && guardSubAgentOutput(emittedContent, 'result') === emittedContent) {
+            for (const token of bufferedTokens) deps.onSubAgentToken(id, token);
+          }
+
           const duration = Date.now() - startTime;
           const subResult: SubAgentResult = {
             agentId: id,
             agentName: name,
             role,
-            response: result.content,
+            response,
             usage: { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens },
             toolsUsed: result.toolsUsed,
             duration,
@@ -439,11 +500,14 @@ ${task}
             completedAt: Date.now(),
           });
 
-          return `## Sub-Agent Result: ${name}\n**Run ID:** ${id}\n**Role:** ${role}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ') || 'none'}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens} total\n\n---\n\n${result.content}`;
+          return `## Sub-Agent Result: ${name}\n**Run ID:** ${id}\n**Role:** ${role}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ') || 'none'}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens} total\n\n---\n\n${response}`;
         } catch (err) {
           const duration = Date.now() - startTime;
           activeAgents.delete(id);
-          const errMsg = err instanceof Error ? err.message : String(err);
+          const errMsg = guardSubAgentOutput(
+            err instanceof Error ? err.message : String(err),
+            'error',
+          );
           const completedAt = Date.now();
           const cancelled = runHandle?.signal?.aborted ?? false;
           const failedResult: SubAgentResult = {

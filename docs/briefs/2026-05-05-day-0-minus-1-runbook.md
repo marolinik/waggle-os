@@ -1,9 +1,16 @@
 # CC Runbook — Day 0 Minus 1: OSS Push Gate + Track A Tag Ceremony
 
+> [!CAUTION]
+> **ARCHIVED / SUPERSEDED — DO NOT EXECUTE.** This May 2026 runbook predates
+> the curated-forward-port security boundary. Every raw subtree/export-branch
+> publication command below is invalid and retained only as historical audit
+> evidence. The only authoritative OSS process is `AGENTS.md` §7.5 plus
+> `packages/hive-mind-core/CONTRIBUTING.md`.
+
 **Brief ID:** `cc-day-0-minus-1-runbook-v2` (amended 2026-05-05 sa NPM republish sekcijom posle CC PM-sync survey nalaza #1)
 **Date:** 2026-05-05 (v1) + amendment 2026-05-05 (v2)
 **Author:** PM
-**Status:** RUNBOOK READY (Marko ratifikovao 2026-05-05 "uradi to sve")
+**Status:** ARCHIVED / SUPERSEDED (was ratified under the invalidated May 2026 model)
 **Stream:** Solo CC sesija (sequential, ne paralelno) — izvršiti dan pre javnog Waggle launch-a
 **Wall-clock:** 75-110 min ukupno (30-45 min push gate + 15-20 min NPM republish + 15 min tag ceremony + 10-15 min verifikacija + 10 min rollback drill)
 **Cost cap:** $8 hard / $5 halt / $1-3 expected (pure git + npm ops, minimal LLM)
@@ -127,6 +134,11 @@ git log --oneline origin/feature/hive-mind-monorepo-migration -3
 ---
 
 ## §2 — Push gate Faza B: 12 OSS export grana (15-20 min)
+
+> **INVALIDATED SECTION — DO NOT RUN OR ADAPT THESE COMMANDS.** Raw
+> `oss-*-export` refs have the wrong public layout and can include proprietary
+> files plus interleaved `install_audit` logic. A reviewed, maintainer-curated
+> forward-port from the private monorepo is required instead.
 
 Ovo su subtree split grane koje rebrendiraju istoriju packages-a kao samostalne repo-e za hive-mind javnu distribuciju. Push redosled je bitan zbog dependency hijerarhije.
 

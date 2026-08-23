@@ -1,0 +1,51 @@
+{
+  "dataset_version": "cc81ed8f7624261a2fa43a335eb46159b7665074b82ddfb4e2c0783fbf2caa46",
+  "schema_version": 2,
+  "instances_with_rubric": 700,
+  "total_nuggets": 2415,
+  "instance_count": 700,
+  "chat_size": "1M",
+  "built_at": "2026-07-06T13:34:37.017Z",
+  "source": "mohammadtavakoli78/BEAM (GitHub)",
+  "source_reference": "Tavakoli, Salemi, Ye, Abdalla, Zamani, Mitchell 2024, \"Beyond a Million Tokens: Benchmarking and Enhancing Long-Term Memory in LLMs\" (arXiv:2510.27246, ICLR 2026)",
+  "beam_chats_path": "D:\\Projects\\BEAM\\chats",
+  "conversations_processed": 35,
+  "chat_size_dir_alias": "1M",
+  "canonicalisation": {
+    "sort_order": "instance_id ascending",
+    "field_order": [
+      "instance_id",
+      "conversation_id",
+      "question",
+      "expected",
+      "context",
+      "memory_ability",
+      "chat_size",
+      "conversation_index",
+      "rubric"
+    ],
+    "line_terminator": "\\n",
+    "trailing_newline": true,
+    "encoding": "utf-8",
+    "no_bom": true
+  },
+  "distribution_by_memory_ability": {
+    "abstention": 70,
+    "contradiction_resolution": 70,
+    "event_ordering": 70,
+    "information_extraction": 70,
+    "instruction_following": 70,
+    "knowledge_update": 70,
+    "multi_session_reasoning": 70,
+    "preference_following": 70,
+    "summarization": 70,
+    "temporal_reasoning": 70
+  },
+  "skip_stats": {
+    "missingChat": 0,
+    "missingProbing": 0,
+    "missingQuestion": 0,
+    "missingAnswer": 0,
+    "noTurns": 0
+  }
+}

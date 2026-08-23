@@ -35,13 +35,20 @@ describe('install', () => {
     if (env) await cleanup(env);
   });
 
-  it('throws when settings.json is missing', async () => {
+  it('creates minimal settings and records ownership when settings.json is missing', async () => {
     const home = await mkdtemp(join(tmpdir(), 'hmc-install-no-settings-'));
     try {
-      await expect(install({
+      const result = await install({
         home,
         hooksDir: join(home, 'dist', 'hooks'),
-      })).rejects.toThrow(/settings/);
+      });
+      const settings = JSON.parse(await readFile(result.paths.settingsPath, 'utf-8')) as ClaudeCodeSettings;
+      const pointer = JSON.parse(await readFile(result.pointerPath, 'utf-8')) as Record<string, unknown>;
+      expect(Object.keys(settings)).toEqual(['hooks']);
+      expect(settings.hooks?.SessionStart).toHaveLength(1);
+      expect(pointer['created_by_us']).toBe(true);
+      expect(pointer['config_path']).toBe(result.paths.settingsPath);
+      expect(await readFile(result.backupPath, 'utf-8')).toBe('{}\n');
     } finally {
       await rm(home, { recursive: true, force: true });
     }
@@ -81,12 +88,33 @@ describe('install', () => {
     expect(after.hooks?.PreCompact).toHaveLength(1);
   });
 
+  it('gives cold SessionStart more time than write hooks by default', async () => {
+    env = await bootstrap({});
+    await install({ home: env.home, hooksDir: env.hooksDir });
+    const after = JSON.parse(await readFile(env.settingsPath, 'utf-8')) as ClaudeCodeSettings;
+    const timeouts = Object.values(after.hooks ?? {}).flatMap((groups) => (
+      groups.map((group) => group.hooks[0]?.timeout)
+    ));
+    expect(timeouts).toEqual([15, 12, 12, 12]);
+  });
+
+  it('uses an explicit timeout override for every hook', async () => {
+    env = await bootstrap({});
+    await install({ home: env.home, hooksDir: env.hooksDir, hookTimeoutSeconds: 9 });
+    const after = JSON.parse(await readFile(env.settingsPath, 'utf-8')) as ClaudeCodeSettings;
+    const timeouts = Object.values(after.hooks ?? {}).flatMap((groups) => (
+      groups.map((group) => group.hooks[0]?.timeout)
+    ));
+    expect(timeouts).toEqual([9, 9, 9, 9]);
+  });
+
   it('drops a pointer file with the backup path + version', async () => {
     env = await bootstrap({});
     const result = await install({ home: env.home, hooksDir: env.hooksDir });
     expect(existsSync(result.pointerPath)).toBe(true);
     const pointer = JSON.parse(await readFile(result.pointerPath, 'utf-8')) as Record<string, unknown>;
     expect(pointer['settings_backup']).toBe(result.backupPath);
+    expect(pointer['created_by_us']).toBe(false);
     expect(pointer['installed_hooks']).toEqual(['session-start', 'user-prompt-submit', 'stop', 'pre-compact']);
     expect(typeof pointer['version']).toBe('string');
   });

@@ -34,6 +34,10 @@ export interface CapabilityCandidate {
   matchReason: string;      // Human-readable: why this matches the need
   installAction: string | null; // null if already active or native
   trust?: TrustAssessment;  // Trust/risk assessment (attached during search)
+  packageId?: number; // Canonical marketplace row identity
+  installType?: 'skill' | 'plugin' | 'mcp';
+  version?: string;
+  author?: string;
 }
 
 export interface AcquisitionProposal {
@@ -159,9 +163,13 @@ export function loadStarterSkillsMeta(starterDir: string): StarterSkillMeta[] {
 
 /** A marketplace search result mapped to candidate format */
 export interface MarketplaceCandidate {
+  packageId?: number;
   name: string;
   description: string;
   packageType: string;
+  installType?: 'skill' | 'plugin' | 'mcp';
+  version?: string;
+  author?: string;
   source: string;
   /** Match score from marketplace FTS (normalized 0–1 or raw) */
   score?: number;
@@ -279,6 +287,10 @@ export function searchCapabilities(input: SearchCapabilitiesInput): AcquisitionP
         matchScore: effectiveScore,
         matchReason: buildMatchReason(nameHits, contentHits) || 'marketplace search match',
         installAction: 'install_capability',
+        packageId: mkt.packageId,
+        installType: mkt.installType,
+        version: mkt.version,
+        author: mkt.author,
         trust: assessTrust({ capabilityType: 'skill', source: 'marketplace', content: mkt.description }),
       });
     }
@@ -375,18 +387,30 @@ function buildProposalSummary(
       ? `- **Risk level**: ${capitalize(recommendation.trust.riskLevel)} (${recommendation.trust.assessmentMode})\n` +
         `- **Trust**: ${recommendation.trust.explanation}\n`
       : '';
-    // Emit the exact inline-install marker the UI parses (capability-request-
-    // parser.ts → CapabilityRequestCard). The agent is instructed (behavioral
-    // spec) to reproduce this verbatim so the user gets a one-click Install
-    // card for ANY source — starter-pack skill, marketplace pkg, or MCP
-    // connector. reason is sanitized so it can't break the comment/JSON.
+    // Emit the structured marker as the final segment of this trusted tool
+    // result. The UI consumes it directly; the agent must not copy it into
+    // ordinary assistant prose. reason is sanitized so it cannot break the
+    // comment/JSON envelope.
     const capReason = String(recommendation.description || recommendation.matchReason || 'fills the requested capability gap')
       .replace(/[{}<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 140);
-    const marker = `<!--waggle:capability_request ${JSON.stringify({
+    const marketplaceIdentity = recommendation.source === 'marketplace'
+      && Number.isSafeInteger(recommendation.packageId)
+      && (recommendation.packageId ?? 0) > 0
+      && (recommendation.installType === 'skill'
+        || recommendation.installType === 'plugin'
+        || recommendation.installType === 'mcp');
+    const markerPayload = {
       name: recommendation.name,
       source: recommendation.source,
+      kind: recommendation.source === 'marketplace' ? 'marketplace' : 'skill',
       reason: capReason,
-    })}-->`;
+      ...(marketplaceIdentity
+        ? { packageId: recommendation.packageId, installType: recommendation.installType }
+        : {}),
+    };
+    const marker = recommendation.source === 'starter-pack' || marketplaceIdentity
+      ? `<!--waggle:capability_request ${JSON.stringify(markerPayload)}-->`
+      : null;
     sections.push(
       `### Recommendation\n\n` +
       `Install **${recommendation.name}** from the ${recommendation.source}.\n` +
@@ -394,8 +418,7 @@ function buildProposalSummary(
       `- **What it does**: ${recommendation.description}\n` +
       trustBlock +
       `- **Approval required**: Yes — user must approve before installation.\n\n` +
-      `Surface this to the user by outputting the following marker on its own ` +
-      `line, verbatim (it renders as a one-click Install card):\n\n${marker}`,
+      (marker ? `The interface will surface this proposal as an install card:\n\n${marker}` : ''),
     );
   } else if (recommendation && recommendation.availability === 'active') {
     sections.push(

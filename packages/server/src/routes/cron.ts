@@ -72,7 +72,7 @@ export async function cronRoutes(fastify: FastifyInstance) {
     };
 
     try {
-      const updated = await cronService.update(id, body);
+      const updated = await cronService.update(team.id, id, body);
       if (!updated) {
         return reply.code(404).send({ error: 'Schedule not found' });
       }

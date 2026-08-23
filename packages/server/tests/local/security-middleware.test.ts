@@ -10,8 +10,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
-import { securityMiddleware, RateLimiter, ENDPOINT_RATE_LIMITS } from '../../src/local/security-middleware.js';
+import Fastify, { type FastifyRequest } from 'fastify';
+import {
+  securityMiddleware,
+  RateLimiter,
+  ENDPOINT_RATE_LIMITS,
+  getResolvedChatWorkspaceId,
+} from '../../src/local/security-middleware.js';
 
 // ── Helper: create a test server with security middleware ─────────────
 
@@ -46,7 +51,16 @@ async function createTestServer(opts?: {
   server.post('/api/waggle-dance/signal', async () => {
     return { ok: true };
   });
+  server.get('/api/waggle-dance/signal', async () => {
+    return { ok: true };
+  });
   server.get('/api/waggle-dance/signals', async () => {
+    return { ok: true };
+  });
+  server.post('/api/waggle-dance/signals', async () => {
+    return { ok: true };
+  });
+  server.post('/v1/chat/completions', async () => {
     return { ok: true };
   });
   server.post('/api/vault/:name/reveal', async () => {
@@ -418,7 +432,7 @@ describe('Bearer Token Authentication', () => {
     }
   });
 
-  it('accepts a narrow run token only on WaggleDance transport routes', async () => {
+  it('accepts a narrow run token only on WaggleDance transport and model completion routes', async () => {
     const runToken = 'run-token-with-enough-entropy-1234567890';
     const server = await createTestServer({
       sessionToken: TEST_TOKEN,
@@ -436,17 +450,54 @@ describe('Bearer Token Authentication', () => {
       });
       expect(receive.statusCode).toBe(200);
 
+      const completion = await server.inject({
+        method: 'POST', url: '/v1/chat/completions',
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(completion.statusCode).toBe(200);
+
       const unrelated = await server.inject({
         method: 'GET', url: '/api/test',
         headers: { 'x-waggle-run-token': runToken },
       });
       expect(unrelated.statusCode).toBe(401);
+      const unrelatedBearer = await server.inject({
+        method: 'GET', url: '/api/test',
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(unrelatedBearer.statusCode).toBe(401);
+      const wrongTransport = await server.inject({
+        method: 'POST', url: '/v1/chat/completions',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(wrongTransport.statusCode).toBe(401);
+      const danceBearer = await server.inject({
+        method: 'POST', url: '/api/waggle-dance/signal',
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(danceBearer.statusCode).toBe(401);
+      const wrongSendMethod = await server.inject({
+        method: 'GET', url: '/api/waggle-dance/signal',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(wrongSendMethod.statusCode).toBe(401);
+      const wrongReceiveMethod = await server.inject({
+        method: 'POST', url: '/api/waggle-dance/signals',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(wrongReceiveMethod.statusCode).toBe(401);
       const wrong = await server.inject({
         method: 'POST', url: '/api/waggle-dance/signal',
         headers: { 'x-waggle-run-token': 'wrong-run-token-with-enough-entropy-123' },
       });
       expect(wrong.statusCode).toBe(401);
       expect(wrong.json().code).toBe('INVALID_TOKEN');
+      const wrongCompletion = await server.inject({
+        method: 'POST', url: '/v1/chat/completions',
+        headers: { authorization: 'Bearer wrong-run-token-with-enough-entropy-123' },
+      });
+      expect(wrongCompletion.statusCode).toBe(401);
+      expect(wrongCompletion.json().code).toBe('INVALID_TOKEN');
     } finally {
       await server.close();
     }
@@ -715,6 +766,584 @@ describe('Vault Reveal Origin Enforcement', () => {
     } finally {
       await server.close();
       fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── Team viewer read-only enforcement ───────────────────────────────────────
+
+describe('Team viewer read-only enforcement', () => {
+  async function createViewerPolicyServer({
+    activeWorkspaceId = 'viewer-workspace',
+    defaultWorkspaceId = activeWorkspaceId,
+    memberWorkspaceFirst = false,
+    managedDefaultRole = null,
+  }: {
+    activeWorkspaceId?: string | null;
+    defaultWorkspaceId?: string | null;
+    memberWorkspaceFirst?: boolean;
+    managedDefaultRole?: 'viewer' | 'member' | null;
+  } = {}) {
+    const server = Fastify({ logger: false });
+    let mutations = 0;
+    let capturedChatWorkspaceId: string | null | undefined;
+
+    server.decorate('workspaceManager', {
+      get(workspaceId: string) {
+        if (workspaceId === 'default' && managedDefaultRole) {
+          return {
+            id: workspaceId,
+            teamId: 'managed-default-team',
+            teamRole: managedDefaultRole,
+          };
+        }
+        if (workspaceId === 'viewer-workspace') {
+          return { id: workspaceId, teamId: 'team-1', teamRole: 'viewer' };
+        }
+        if (workspaceId === 'member-workspace') {
+          return { id: workspaceId, teamId: 'team-1', teamRole: 'member' };
+        }
+        if (workspaceId === 'personal-workspace') {
+          return { id: workspaceId };
+        }
+        return null;
+      },
+      getDefault() {
+        return defaultWorkspaceId;
+      },
+      list() {
+        const teamWorkspaces = memberWorkspaceFirst
+          ? [
+              { id: 'member-workspace', teamId: 'team-1', teamRole: 'member' },
+              { id: 'viewer-workspace', teamId: 'team-1', teamRole: 'viewer' },
+            ]
+          : [
+              { id: 'viewer-workspace', teamId: 'team-1', teamRole: 'viewer' },
+              { id: 'member-workspace', teamId: 'team-1', teamRole: 'member' },
+            ];
+        return [
+          ...teamWorkspaces,
+          { id: 'personal-workspace' },
+        ];
+      },
+    });
+    server.decorate('agentState', { activeWorkspaceId: activeWorkspaceId ?? undefined });
+
+    await server.register(securityMiddleware);
+
+    const mutate = async (request: FastifyRequest) => {
+      if (request.routeOptions.url === '/api/chat') {
+        capturedChatWorkspaceId = getResolvedChatWorkspaceId(request);
+      }
+      mutations += 1;
+      return { ok: true };
+    };
+    server.post('/api/workspaces/:workspaceId/files/delete', mutate);
+    server.patch('/api/workspaces/:id/tasks/:taskId', mutate);
+    server.put('/api/workspaces/:id/tasks/:taskId', mutate);
+    server.delete('/api/workspaces/:id/tasks/:taskId', mutate);
+    server.post('/api/fleet/:workspaceId/pause', mutate);
+    server.post('/api/fleet/spawn', mutate);
+    server.post('/api/agent-groups/:id/run', mutate);
+    server.post('/api/tools/launch', mutate);
+    server.post('/api/chat', mutate);
+    server.post('/api/tools/run', mutate);
+    server.post('/api/rooms', mutate);
+    server.post('/api/cron', mutate);
+    server.patch('/api/cron/:id', mutate);
+    server.post('/api/memory/merge', mutate);
+    server.patch('/api/sessions/:sessionId', mutate);
+    server.patch('/api/artifacts/:id', mutate);
+    server.delete('/api/artifacts/:id', mutate);
+    server.post('/api/export', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/compliance/export', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/compliance/export-pdf', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/automations/test', async () => ({ ok: true, readOnly: true }));
+    server.post('/api/command/interpret', async () => ({ ok: true, readOnly: true }));
+    server.get('/api/workspaces/:workspaceId/files', async () => ({ ok: true, readOnly: true }));
+
+    await server.ready();
+    return {
+      server,
+      getMutations: () => mutations,
+      getCapturedChatWorkspaceId: () => capturedChatWorkspaceId,
+    };
+  }
+
+  it.each([
+    { label: 'omitted workspace', payload: { message: 'blocked' } },
+    { label: 'legacy workspace alias', payload: { message: 'blocked', workspace: 'default' } },
+    { label: 'legacy workspaceId alias', payload: { message: 'blocked', workspaceId: 'default' } },
+    { label: 'explicit viewer workspace', payload: { message: 'blocked', workspace: 'viewer-workspace' } },
+    { label: 'explicit viewer workspaceId', payload: { message: 'blocked', workspaceId: 'viewer-workspace' } },
+  ])('rejects chat mutation through the implicit viewer workspace from $label', async ({ payload }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload,
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not treat the manager default as an implicit chat workspace', async () => {
+    const {
+      server,
+      getMutations,
+      getCapturedChatWorkspaceId,
+    } = await createViewerPolicyServer({
+      activeWorkspaceId: null,
+      defaultWorkspaceId: 'viewer-workspace',
+      memberWorkspaceFirst: true,
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'allowed' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+      expect(getCapturedChatWorkspaceId()).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('prefers the viewer workspace alias over a conflicting member workspaceId', async () => {
+    const { server, getMutations } = await createViewerPolicyServer({
+      activeWorkspaceId: 'member-workspace',
+      defaultWorkspaceId: 'member-workspace',
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'blocked',
+          workspace: 'viewer-workspace',
+          workspaceId: 'member-workspace',
+        },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not treat the first listed workspace as an implicit chat workspace', async () => {
+    const {
+      server,
+      getMutations,
+      getCapturedChatWorkspaceId,
+    } = await createViewerPolicyServer({
+      activeWorkspaceId: null,
+      defaultWorkspaceId: null,
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'allowed' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+      expect(getCapturedChatWorkspaceId()).toBeNull();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rejects a supplied literal managed-default viewer workspace', async () => {
+    const { server, getMutations } = await createViewerPolicyServer({
+      activeWorkspaceId: 'member-workspace',
+      managedDefaultRole: 'viewer',
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'blocked', workspace: 'default' },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('captures a supplied literal managed-default member workspace', async () => {
+    const {
+      server,
+      getMutations,
+      getCapturedChatWorkspaceId,
+    } = await createViewerPolicyServer({
+      activeWorkspaceId: 'viewer-workspace',
+      managedDefaultRole: 'member',
+    });
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'allowed', workspaceId: 'default' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+      expect(getCapturedChatWorkspaceId()).toBe('default');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    {
+      label: 'active member workspace before the viewer manager default',
+      activeWorkspaceId: 'member-workspace',
+      defaultWorkspaceId: 'viewer-workspace',
+      payload: { message: 'allowed' },
+      expectedCapturedWorkspaceId: 'member-workspace',
+    },
+    {
+      label: 'member workspace behind the legacy workspace alias',
+      activeWorkspaceId: 'member-workspace',
+      defaultWorkspaceId: 'viewer-workspace',
+      payload: { message: 'allowed', workspace: 'default' },
+      expectedCapturedWorkspaceId: 'member-workspace',
+    },
+    {
+      label: 'personal workspace behind the legacy workspaceId alias',
+      activeWorkspaceId: 'personal-workspace',
+      defaultWorkspaceId: 'viewer-workspace',
+      payload: { message: 'allowed', workspaceId: 'default' },
+      expectedCapturedWorkspaceId: 'personal-workspace',
+    },
+  ])(
+    'allows chat mutation through the $label',
+    async ({
+      activeWorkspaceId,
+      defaultWorkspaceId,
+      payload,
+      expectedCapturedWorkspaceId,
+    }) => {
+      const {
+        server,
+        getMutations,
+        getCapturedChatWorkspaceId,
+      } = await createViewerPolicyServer({
+        activeWorkspaceId,
+        defaultWorkspaceId,
+      });
+      try {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/api/chat',
+          payload,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ ok: true });
+        expect(getMutations()).toBe(1);
+        expect(getCapturedChatWorkspaceId()).toBe(expectedCapturedWorkspaceId);
+      } finally {
+        await server.close();
+      }
+    },
+  );
+
+  it.each([
+    {
+      label: 'workspace path parameter',
+      request: {
+        method: 'POST' as const,
+        url: '/api/workspaces/viewer-workspace/files/delete',
+      },
+    },
+    {
+      label: 'memory body workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/memory/merge',
+        payload: { workspace: 'viewer-workspace' },
+      },
+    },
+    {
+      label: 'body workspaceId',
+      request: {
+        method: 'POST' as const,
+        url: '/api/memory/merge',
+        payload: { workspaceId: 'viewer-workspace' },
+      },
+    },
+    {
+      label: 'session query workspace',
+      request: {
+        method: 'PATCH' as const,
+        url: '/api/sessions/session-1?workspace=viewer-workspace',
+        payload: { title: 'blocked', workspaceId: 'member-workspace' },
+      },
+    },
+    {
+      label: 'artifact query workspaceId',
+      request: {
+        method: 'PATCH' as const,
+        url: '/api/artifacts/artifact-1?workspaceId=viewer-workspace',
+        payload: { title: 'blocked' },
+      },
+    },
+    {
+      label: 'non-workspaces route parameter',
+      request: {
+        method: 'POST' as const,
+        url: '/api/fleet/viewer-workspace/pause',
+      },
+    },
+    {
+      label: 'task route id parameter',
+      request: {
+        method: 'PATCH' as const,
+        url: '/api/workspaces/viewer-workspace/tasks/task-1',
+        payload: { status: 'done' },
+      },
+    },
+    {
+      label: 'PUT task route id parameter',
+      request: {
+        method: 'PUT' as const,
+        url: '/api/workspaces/viewer-workspace/tasks/task-1',
+        payload: { status: 'done' },
+      },
+    },
+    {
+      label: 'DELETE task route id parameter',
+      request: {
+        method: 'DELETE' as const,
+        url: '/api/workspaces/viewer-workspace/tasks/task-1',
+      },
+    },
+    {
+      label: 'fleet parentWorkspaceId',
+      request: {
+        method: 'POST' as const,
+        url: '/api/fleet/spawn',
+        payload: { task: 'blocked', parentWorkspaceId: 'viewer-workspace' },
+      },
+    },
+    {
+      label: 'top-level workspaceIds array',
+      request: {
+        method: 'POST' as const,
+        url: '/api/rooms',
+        payload: {
+          workspaceIds: ['member-workspace', 'viewer-workspace'],
+          source: 'external_tool',
+          title: 'blocked',
+          task: 'blocked',
+        },
+      },
+    },
+    {
+      label: 'nested participant workspaceIds array',
+      request: {
+        method: 'POST' as const,
+        url: '/api/tools/run',
+        payload: {
+          participants: [
+            { toolId: 'codex', workspaceIds: ['member-workspace'] },
+            { toolId: 'claude-code', workspaceIds: ['viewer-workspace'] },
+          ],
+        },
+      },
+    },
+  ])('rejects viewer mutation resolved from $label before the handler runs', async ({ request }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject(request);
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({
+        code: 'VIEWER_READ_ONLY',
+      });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    { method: 'POST' as const, url: '/api/cron', workspaceId: 'global' },
+    { method: 'POST' as const, url: '/api/cron', workspaceId: '*' },
+  ])('rejects $method $url when $workspaceId expands across a viewer workspace', async (request) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: request.method,
+        url: request.url,
+        payload: { jobType: 'agent_task', workspaceId: request.workspaceId },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    '/api/fleet/spawn',
+    '/api/agent-groups/group-1/run',
+    '/api/tools/launch',
+  ])('rejects an implicit default viewer workspace on %s', async (url) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url,
+        payload: url === '/api/fleet/spawn'
+          ? { task: 'blocked', workspaceId: 'member-workspace' }
+          : url === '/api/tools/launch'
+            ? { id: 'codex' }
+            : { task: 'blocked' },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    {
+      label: 'team member',
+      request: {
+        method: 'POST' as const,
+        url: '/api/workspaces/member-workspace/files/delete',
+      },
+    },
+    {
+      label: 'personal workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/workspaces/personal-workspace/files/delete',
+      },
+    },
+    {
+      label: 'chat workspace alias precedence',
+      request: {
+        method: 'POST' as const,
+        url: '/api/chat',
+        payload: {
+          message: 'allowed',
+          workspace: 'member-workspace',
+          workspaceId: 'viewer-workspace',
+        },
+      },
+    },
+    {
+      label: 'chat personal workspaceId',
+      request: {
+        method: 'POST' as const,
+        url: '/api/chat',
+        payload: { message: 'allowed', workspaceId: 'personal-workspace' },
+      },
+    },
+  ])('allows $label mutations', async ({ request }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject(request);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    {
+      label: 'Fleet parent workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'allowed',
+          parentWorkspaceId: 'member-workspace',
+          workspaceId: 'viewer-workspace',
+        },
+      },
+    },
+    {
+      label: 'agent group workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/agent-groups/group-1/run',
+        payload: { task: 'allowed', workspaceId: 'member-workspace' },
+      },
+    },
+    {
+      label: 'tool launch workspace',
+      request: {
+        method: 'POST' as const,
+        url: '/api/tools/launch',
+        payload: { id: 'codex', workspaceId: 'member-workspace' },
+      },
+    },
+  ])('allows an explicit member $label instead of the viewer default', async ({ request }) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject(request);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(getMutations()).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    '/api/export',
+    '/api/compliance/export',
+    '/api/compliance/export-pdf',
+    '/api/automations/test',
+    '/api/command/interpret',
+  ])('allows a viewer to use the read-only POST projection %s', async (url) => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url,
+        payload: { workspaceId: 'viewer-workspace' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true, readOnly: true });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('allows an ordinary viewer GET', async () => {
+    const { server, getMutations } = await createViewerPolicyServer();
+    try {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/api/workspaces/viewer-workspace/files',
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true, readOnly: true });
+      expect(getMutations()).toBe(0);
+    } finally {
+      await server.close();
     }
   });
 });

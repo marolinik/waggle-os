@@ -13,7 +13,11 @@ import {
   getWorkspaceMind,
   getWorkspaceManager,
 } from '../core/setup.js';
-import type { Importance, FrameSource } from '@waggle/core';
+import {
+  evaluateExternalMemoryIngress,
+  type Importance,
+  type FrameSource,
+} from '@waggle/core';
 
 export function registerMemoryTools(server: McpServer): void {
 
@@ -31,11 +35,28 @@ export function registerMemoryTools(server: McpServer): void {
         .describe('Workspace ID to save into. Omit for personal memory'),
     },
     async ({ content, importance, source, workspace }) => {
+      if (evaluateExternalMemoryIngress({ content }).action === 'block') {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Error: Memory content could not be saved.',
+          }],
+          isError: true,
+        };
+      }
+
       const imp = (importance ?? 'normal') as Importance;
       const src = (source ?? 'agent_inferred') as FrameSource;
 
       // Resolve target mind
-      const target = workspace ? getWorkspaceMind(workspace) : null;
+      const workspaceRequested = workspace !== undefined;
+      const target = workspaceRequested ? getWorkspaceMind(workspace) : null;
+      if (workspaceRequested && !target) {
+        return {
+          content: [{ type: 'text' as const, text: 'Error: Requested workspace is unavailable.' }],
+          isError: true,
+        };
+      }
       const frameStore = target?.frameStore ?? getFrameStore();
       const sessions = target?.sessions ?? getSessions();
       const search = target?.search ?? getSearch();
@@ -63,7 +84,7 @@ export function registerMemoryTools(server: McpServer): void {
             importance: frame.importance,
             source: frame.source,
             created_at: frame.created_at,
-            workspace: workspace ?? 'personal',
+            workspace: workspaceRequested ? workspace : 'personal',
           }, null, 2),
         }],
       };

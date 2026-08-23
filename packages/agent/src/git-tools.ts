@@ -1,5 +1,16 @@
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ToolDefinition } from './tools.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
+
+const NO_WORKSPACE_REPO = 'Error: No Git repository exists inside the active workspace.';
+const EXECUTABLE_FILTER_CONFIG = /^filter\.(.+)\.(?:clean|process)$/i;
+const READ_ONLY_GIT_CONFIG = ['-c', 'core.fsmonitor=false', '-c', 'pager.diff=false'];
+
+function readOnlyGitArgs(...args: string[]): string[] {
+  return [...READ_ONLY_GIT_CONFIG, ...args];
+}
 
 /** Extract a human-readable message from a child_process spawn error. */
 function spawnErrorText(err: unknown): string {
@@ -8,18 +19,129 @@ function spawnErrorText(err: unknown): string {
   return stderrText?.trim() || (err instanceof Error ? err.message : String(err));
 }
 
-function runGit(cwd: string, args: string[], timeoutMs = 10_000): string {
+function gitEnvironment(workspaceRoot: string): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.GIT_DIR;
+  delete env.GIT_WORK_TREE;
+  delete env.GIT_COMMON_DIR;
+  delete env.GIT_INDEX_FILE;
+  delete env.GIT_OBJECT_DIRECTORY;
+  delete env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
+  env.GIT_CEILING_DIRECTORIES = path.dirname(workspaceRoot);
+  return env;
+}
+
+function gitDiffEnvironment(workspaceRoot: string): NodeJS.ProcessEnv {
+  return {
+    ...buildExternalProcessEnv(process.env),
+    GIT_CEILING_DIRECTORIES: path.dirname(workspaceRoot),
+    GIT_NO_LAZY_FETCH: '1',
+    GIT_OPTIONAL_LOCKS: '0',
+  };
+}
+
+function configuredExecutableFilters(
+  repoRoot: string,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  let configNames: string;
   try {
-    return execFileSync('git', args, { cwd, encoding: 'utf-8', timeout: timeoutMs }).trim();
+    configNames = execFileSync(
+      'git',
+      readOnlyGitArgs('config', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process)$'),
+      { cwd: repoRoot, env, encoding: 'utf-8', timeout: 10_000 },
+    );
+  } catch (err) {
+    if ((err as { status?: number }).status === 1) return [];
+    throw err;
+  }
+
+  const drivers = new Set<string>();
+  for (const name of configNames.split(/\r?\n/)) {
+    const driver = name.match(EXECUTABLE_FILTER_CONFIG)?.[1];
+    if (!driver) continue;
+    if (!/^[A-Za-z0-9._-]+$/.test(driver)) {
+      throw new Error(`unsafe Git filter driver name: ${JSON.stringify(driver)}`);
+    }
+    drivers.add(driver);
+  }
+  return [...drivers];
+}
+
+export function buildReadOnlyGitDiffArgs(
+  repoRoot: string,
+  env: NodeJS.ProcessEnv,
+  options: { staged?: boolean; file?: string },
+): string[] {
+  const filterOverrides = configuredExecutableFilters(repoRoot, env).flatMap((driver) => [
+    '-c', `filter.${driver}.clean=`,
+    '-c', `filter.${driver}.process=`,
+    '-c', `filter.${driver}.required=false`,
+  ]);
+  const args = readOnlyGitArgs(
+    ...filterOverrides,
+    'diff', '--no-ext-diff', '--no-textconv',
+  );
+  if (options.staged) args.push('--staged');
+  if (options.file) args.push('--', options.file);
+  return args;
+}
+
+function resolveWorkspaceRepository(workspace: string): string | null {
+  try {
+    const workspaceRoot = fs.realpathSync.native(workspace);
+    const env = gitEnvironment(workspaceRoot);
+    const discovered = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: workspaceRoot,
+      env,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10_000,
+    }).trim();
+    const repoRoot = fs.realpathSync.native(discovered);
+    const normalizedWorkspace = path.normalize(workspaceRoot);
+    const normalizedRepo = path.normalize(repoRoot);
+    const matches = process.platform === 'win32'
+      ? normalizedWorkspace.toLowerCase() === normalizedRepo.toLowerCase()
+      : normalizedWorkspace === normalizedRepo;
+    return matches ? repoRoot : null;
+  } catch {
+    return null;
+  }
+}
+
+function runGitInRepo(
+  repoRoot: string,
+  args: string[],
+  timeoutMs = 10_000,
+  env = gitEnvironment(repoRoot),
+): string {
+  try {
+    return execFileSync('git', args, {
+      cwd: repoRoot,
+      env,
+      encoding: 'utf-8',
+      timeout: timeoutMs,
+    }).trim();
   } catch (err: unknown) {
     return spawnErrorText(err);
   }
 }
 
+function runGit(workspace: string, args: string[], timeoutMs = 10_000): string {
+  const repoRoot = resolveWorkspaceRepository(workspace);
+  return repoRoot ? runGitInRepo(repoRoot, args, timeoutMs) : NO_WORKSPACE_REPO;
+}
+
 /** Run an arbitrary command (for gh CLI). Returns stdout or error text. */
 function runCmd(cmd: string, cmdArgs: string[], cwd: string, timeoutMs = 60_000): string {
   try {
-    return execFileSync(cmd, cmdArgs, { cwd, encoding: 'utf-8', timeout: timeoutMs }).trim();
+    return execFileSync(cmd, cmdArgs, {
+      cwd,
+      env: gitEnvironment(cwd),
+      encoding: 'utf-8',
+      timeout: timeoutMs,
+    }).trim();
   } catch (err: unknown) {
     return spawnErrorText(err);
   }
@@ -44,8 +166,10 @@ export function createGitTools(workspace: string): ToolDefinition[] {
       offlineCapable: true,
       parameters: { type: 'object', properties: {} },
       execute: async () => {
-        const branch = runGit(workspace, ['branch', '--show-current']);
-        const status = runGit(workspace, ['status', '--short']);
+        const repoRoot = resolveWorkspaceRepository(workspace);
+        if (!repoRoot) return NO_WORKSPACE_REPO;
+        const branch = runGitInRepo(repoRoot, ['branch', '--show-current']);
+        const status = runGitInRepo(repoRoot, ['status', '--short']);
         return `Branch: ${branch || '(no branch)'}\n${status || 'Clean'}`;
       },
     },
@@ -61,10 +185,19 @@ export function createGitTools(workspace: string): ToolDefinition[] {
         },
       },
       execute: async (args) => {
-        const gitArgs = ['diff'];
-        if (args.staged) gitArgs.push('--staged');
-        if (args.file) gitArgs.push(args.file as string);
-        const diff = runGit(workspace, gitArgs);
+        const repoRoot = resolveWorkspaceRepository(workspace);
+        if (!repoRoot) return NO_WORKSPACE_REPO;
+        const env = gitDiffEnvironment(repoRoot);
+        let gitArgs: string[];
+        try {
+          gitArgs = buildReadOnlyGitDiffArgs(repoRoot, env, {
+            staged: Boolean(args.staged),
+            file: args.file as string | undefined,
+          });
+        } catch (err) {
+          return `Error: git_diff filter safety check failed: ${spawnErrorText(err)}`;
+        }
+        const diff = runGitInRepo(repoRoot, gitArgs, 10_000, env);
         return diff || 'No changes.';
       },
     },
@@ -267,17 +400,19 @@ export function createGitTools(workspace: string): ToolDefinition[] {
         const body = (args.body as string) || '';
         const base = (args.base as string) || 'main';
         const draft = args.draft as boolean | undefined;
+        const repoRoot = resolveWorkspaceRepository(workspace);
+        if (!repoRoot) return NO_WORKSPACE_REPO;
 
         if (isAvailable('gh')) {
           const ghArgs = ['pr', 'create', '--title', title, '--base', base];
           if (body) ghArgs.push('--body', body);
           if (draft) ghArgs.push('--draft');
-          return runCmd('gh', ghArgs, workspace, 60_000);
+          return runCmd('gh', ghArgs, repoRoot, 60_000);
         }
 
         // gh CLI not available — generate formatted PR description for manual use
-        const currentBranch = runGit(workspace, ['branch', '--show-current']);
-        const recentLog = runGit(workspace, ['log', '--oneline', `${base}..HEAD`, '-20']);
+        const currentBranch = runGitInRepo(repoRoot, ['branch', '--show-current']);
+        const recentLog = runGitInRepo(repoRoot, ['log', '--oneline', `${base}..HEAD`, '-20']);
         return [
           `## Pull Request (manual — gh CLI not found)`,
           '',

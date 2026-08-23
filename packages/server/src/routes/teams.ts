@@ -156,11 +156,18 @@ export async function teamRoutes(fastify: FastifyInstance) {
       const result = await requireTeamRole(fastify, request, reply, slug, 'admin');
       if (!result) return;
 
-      const updated = await teamService.updateMember(result.team.id, targetUserId, parsed.data);
-      if (!updated) {
-        return reply.code(404).send({ error: 'Member not found' });
+      try {
+        const updated = await teamService.updateMember(result.team.id, targetUserId, parsed.data);
+        if (!updated) {
+          return reply.code(404).send({ error: 'Member not found' });
+        }
+        return updated;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message === 'Cannot change the team owner role') {
+          return reply.code(403).send({ error: err.message });
+        }
+        throw err;
       }
-      return updated;
     } else {
       // Self-update: only roleDescription and interests (no role field)
       const result = await requireTeamRole(fastify, request, reply, slug, 'member');

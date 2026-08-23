@@ -228,42 +228,26 @@ export const sessionRoutes: FastifyPluginAsync = async (server) => {
   server.patch<{
     Params: { sessionId: string };
     Body: { title?: string };
-    Querystring: { workspace?: string };
+    Querystring: { workspace: string };
   }>('/api/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = request.params;
     assertSafeSegment(sessionId, 'sessionId');
     const workspaceId = request.query.workspace;
-    if (workspaceId) assertSafeSegment(workspaceId, 'workspace');
+    if (!workspaceId) {
+      return reply.status(400).send({ error: 'workspace is required' });
+    }
+    assertSafeSegment(workspaceId, 'workspace');
     const newTitle = request.body?.title;
 
     if (!newTitle) {
       return reply.status(400).send({ error: 'title is required' });
     }
 
-    // Find session file
-    let filePath: string | null = null;
+    const filePath = path.join(
+      server.localConfig.dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`
+    );
 
-    if (workspaceId) {
-      const candidate = path.join(
-        server.localConfig.dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`
-      );
-      if (fs.existsSync(candidate)) filePath = candidate;
-    } else {
-      const workspacesDir = path.join(server.localConfig.dataDir, 'workspaces');
-      if (fs.existsSync(workspacesDir)) {
-        const entries = fs.readdirSync(workspacesDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (!entry.isDirectory()) continue;
-          const candidate = path.join(workspacesDir, entry.name, 'sessions', `${sessionId}.jsonl`);
-          if (fs.existsSync(candidate)) {
-            filePath = candidate;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!filePath) {
+    if (!fs.existsSync(filePath)) {
       return reply.status(404).send({ error: 'Session not found' });
     }
 
@@ -294,47 +278,27 @@ export const sessionRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // DELETE /api/sessions/:sessionId — delete a session
-  // Need to find the session file across workspaces
   server.delete<{
     Params: { sessionId: string };
-    Querystring: { workspace?: string };
+    Querystring: { workspace: string };
   }>('/api/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = request.params;
     assertSafeSegment(sessionId, 'sessionId');
     const workspaceId = request.query.workspace;
-    if (workspaceId) assertSafeSegment(workspaceId, 'workspace');
-
-    // If workspace is provided, look there directly
-    if (workspaceId) {
-      const filePath = path.join(
-        server.localConfig.dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`
-      );
-
-      if (!fs.existsSync(filePath)) {
-        return reply.status(404).send({ error: 'Session not found' });
-      }
-
-      fs.unlinkSync(filePath);
-      return { deleted: true };
+    if (!workspaceId) {
+      return reply.status(400).send({ error: 'workspace is required' });
     }
+    assertSafeSegment(workspaceId, 'workspace');
 
-    // Without workspace, search all workspaces for the session file
-    const workspacesDir = path.join(server.localConfig.dataDir, 'workspaces');
-    if (!fs.existsSync(workspacesDir)) {
+    const filePath = path.join(
+      server.localConfig.dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`
+    );
+    if (!fs.existsSync(filePath)) {
       return reply.status(404).send({ error: 'Session not found' });
     }
 
-    const entries = fs.readdirSync(workspacesDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const filePath = path.join(workspacesDir, entry.name, 'sessions', `${sessionId}.jsonl`);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        return { deleted: true };
-      }
-    }
-
-    return reply.status(404).send({ error: 'Session not found' });
+    fs.unlinkSync(filePath);
+    return { deleted: true };
   });
 
   // IMP-005: GET /api/sessions/:sessionId/summary — structured post-session summary

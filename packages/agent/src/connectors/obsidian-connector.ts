@@ -12,6 +12,13 @@ import { BaseConnector, type ConnectorAction, type ConnectorResult } from '../co
 import type { VaultStore } from '@waggle/core';
 import type { ConnectorHealth } from '@waggle/shared';
 
+function isContained(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative !== '..'
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative);
+}
+
 export class ObsidianConnector extends BaseConnector {
   readonly id = 'obsidian';
   readonly name = 'Obsidian';
@@ -143,10 +150,39 @@ export class ObsidianConnector extends BaseConnector {
 
   /** Resolve a relative path safely within the vault directory */
   private resolveSafe(relativePath: string): string | null {
-    const resolved = path.resolve(this.vaultPath!, relativePath);
-    // Guard against path traversal
-    if (!resolved.startsWith(this.vaultPath!)) return null;
-    return resolved;
+    if (
+      path.posix.isAbsolute(relativePath)
+      || path.win32.isAbsolute(relativePath)
+      || relativePath.split(/[\\/]/).some(part => part.includes(':'))
+    ) return null;
+
+    const vaultRoot = path.resolve(this.vaultPath!);
+    const resolved = path.resolve(vaultRoot, relativePath.replace(/[\\/]+/g, path.sep));
+    if (!isContained(vaultRoot, resolved)) return null;
+
+    try {
+      const realVault = fs.realpathSync.native(vaultRoot);
+      let existingAncestor = resolved;
+
+      while (true) {
+        try {
+          fs.lstatSync(existingAncestor);
+          break;
+        } catch (err: unknown) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') return null;
+          const parent = path.dirname(existingAncestor);
+          if (parent === existingAncestor) return null;
+          existingAncestor = parent;
+        }
+      }
+
+      const realAncestor = fs.realpathSync.native(existingAncestor);
+      if (!isContained(realVault, realAncestor)) return null;
+      return resolved;
+    } catch {
+      // Includes dangling links and races where an ancestor disappears.
+      return null;
+    }
   }
 
   /** Recursively collect all .md files under a directory */

@@ -14,6 +14,37 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { classifyGatedToolRisk, isCriticalNeverAutopass } from '@waggle/agent';
+import type { RiskLevel } from '@waggle/shared';
+
+const NON_GRANTABLE_TOOLS = new Set([
+  'bash',
+  'run_code',
+  'cli_execute',
+  'install_capability',
+]);
+
+export function isGrantableTool(
+  toolName: string,
+  args: Record<string, unknown> = {},
+  trustedRiskLevel?: RiskLevel,
+): boolean {
+  if (NON_GRANTABLE_TOOLS.has(toolName)) return false;
+  const effectiveRiskLevel = resolveGrantRiskLevel(toolName, args, trustedRiskLevel);
+  return !isCriticalNeverAutopass(toolName, args, effectiveRiskLevel);
+}
+
+export function resolveGrantRiskLevel(
+  toolName: string,
+  args: Record<string, unknown> = {},
+  trustedRiskLevel?: RiskLevel,
+): RiskLevel {
+  try {
+    return classifyGatedToolRisk(toolName, args, trustedRiskLevel).riskLevel;
+  } catch {
+    return 'critical';
+  }
+}
 
 export interface ApprovalGrant {
   id: string;
@@ -102,7 +133,9 @@ export class ApprovalGrantStore {
       const raw = fs.readFileSync(this.filePath, 'utf-8');
       const parsed = JSON.parse(raw) as StoredFile;
       if (parsed.version === 1 && Array.isArray(parsed.grants)) {
-        this.grants = parsed.grants.filter(g => this.isValidGrant(g));
+        this.grants = parsed.grants.filter(
+          g => this.isValidGrant(g) && isGrantableTool(g.toolName),
+        );
       }
     } catch {
       // Corrupted file — start fresh. Do NOT delete, user may want to recover.
@@ -134,7 +167,13 @@ export class ApprovalGrantStore {
    * Check if a grant exists that covers the given (tool, args, source).
    * Expired grants are treated as absent and pruned from memory.
    */
-  has(toolName: string, args: Record<string, unknown>, sourceWorkspaceId: string | null): boolean {
+  has(
+    toolName: string,
+    args: Record<string, unknown>,
+    sourceWorkspaceId: string | null,
+    trustedRiskLevel?: RiskLevel,
+  ): boolean {
+    if (!isGrantableTool(toolName, args, trustedRiskLevel)) return false;
     const now = Date.now();
     const key = keyForTool(toolName, args);
     let found = false;
@@ -161,8 +200,11 @@ export class ApprovalGrantStore {
     toolName: string,
     args: Record<string, unknown>,
     sourceWorkspaceId: string | null,
-    opts: { ttlMs?: number } = {},
+    opts: { ttlMs?: number; trustedRiskLevel?: RiskLevel } = {},
   ): ApprovalGrant {
+    if (!isGrantableTool(toolName, args, opts.trustedRiskLevel)) {
+      throw new Error(`Approval for ${toolName} cannot be persisted.`);
+    }
     const targetKey = keyForTool(toolName, args);
     const description = describeGrant(toolName, targetKey, sourceWorkspaceId);
     const grantedAt = new Date().toISOString();

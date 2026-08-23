@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { verifyWebhook } from '@clerk/fastify/webhooks';
 import { users } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
@@ -13,8 +14,13 @@ interface ClerkWebhookUserData {
 
 export async function webhookRoutes(fastify: FastifyInstance) {
   fastify.post('/api/webhooks/clerk', async (request, reply) => {
-    // In production: verify Clerk webhook signature via svix
-    const event = request.body as { type: string; data: ClerkWebhookUserData };
+    let event: { type: string; data: ClerkWebhookUserData };
+    try {
+      event = await verifyWebhook(request) as typeof event;
+    } catch (error) {
+      fastify.log.warn({ err: error }, 'Clerk webhook verification failed');
+      return reply.code(400).send({ error: 'Invalid webhook signature' });
+    }
 
     switch (event.type) {
       case 'user.created': {

@@ -1,9 +1,9 @@
 # Waggle OS — Threat Model
 
-Waggle OS is a **workspace-native AI agent platform with persistent memory**, shipped as
-a Tauri desktop binary (Windows/macOS) with a bundled Node.js sidecar. This document
-states the trust boundary and the controls that enforce it, so contributors can reason
-about security without reading the full agent + connector stack.
+Waggle OS is a **workspace-native AI agent platform with persistent memory**. The current
+launch scope is a Windows-first Tauri desktop binary with a bundled Node.js sidecar;
+macOS packaging and certification remain roadmap work. This document states the trust
+boundary and the controls that enforce it.
 
 > Status: living document. The controls below are implemented and cited to source.
 > Known gaps are open and honestly listed.
@@ -76,10 +76,11 @@ approval class, initiator, and trust source — a verifiable history of what was
 when, why, and by whom. Backs the EU-AI-Act capability-provenance story.
 
 ### 5. Local secret storage — `vault.ts`
-`packages/core/src/vault.ts`. Secrets are encrypted with AES-256-GCM under a machine-local
-key file; each entry is independently encrypted. API keys live in the vault or `.env`
-(never committed; `.env.example` carries key names only). No secret is ever written to a
-prompt, a log, or a memory frame.
+`packages/core/src/vault.ts`. Secrets are encrypted with AES-256-GCM under a
+machine-local key file; each entry is independently encrypted. Runtime API keys
+belong in the vault or a local `.env` (never committed). `.env.example` contains
+names plus non-secret development defaults, never live credentials. Callers must
+not persist secret values into prompts, logs, or memory frames.
 
 ### 6. MCP tool scope gate — `scope.ts`
 `packages/memory-mcp/src/scope.ts` + `packages/hive-mind-mcp-server/src/scope.ts`. An
@@ -155,7 +156,7 @@ Coverage:
 5. **Connector endpoint URLs are not redacted before logging.** userinfo/query/fragment
    on LiteLLM/connector URLs can leak credentials into logs — fold a `redactUrl` pass into
    the next compliance/logging pass.
-6. **Connector auto-harvest persists external content durably.** Opt-in PRO connector
+6. **Connector auto-harvest persists external content durably.** Opt-in Solo/FREE connector
    harvest writes external data (e.g. inbox metadata + message previews) into the personal
    mind, where it is recalled into model context on later turns. Content is injection-scanned
    per frame but NOT scanned for secrets/PII; the email harvest pins `$select` to

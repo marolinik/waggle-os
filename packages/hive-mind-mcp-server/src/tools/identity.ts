@@ -5,6 +5,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { evaluateExternalMemoryIngress } from '@waggle/hive-mind-core';
 import { getIdentity } from '../core/setup.js';
 
 export function registerIdentityTools(server: McpServer): void {
@@ -61,6 +62,24 @@ export function registerIdentityTools(server: McpServer): void {
       system_prompt: z.string().optional().describe('Custom system prompt additions'),
     },
     async ({ name, role, department, personality, capabilities, system_prompt }) => {
+      const projectedContext = [
+        name !== undefined ? `Name: ${name}` : undefined,
+        role !== undefined ? `Role: ${role}` : undefined,
+        department !== undefined ? `Department: ${department}` : undefined,
+        personality !== undefined ? `Personality: ${personality}` : undefined,
+        capabilities !== undefined ? `Capabilities: ${capabilities}` : undefined,
+        system_prompt !== undefined ? `System Prompt: ${system_prompt}` : undefined,
+      ].filter((value): value is string => value !== undefined).join('\n');
+      if (evaluateExternalMemoryIngress({ content: projectedContext }).action === 'block') {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Error: Identity content could not be saved.',
+          }],
+          isError: true,
+        };
+      }
+
       const identity = getIdentity();
 
       if (!identity.exists()) {

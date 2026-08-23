@@ -9,7 +9,11 @@
  */
 
 import type { TaskShape, TaskShapeType, ComponentPhase } from './task-shape.js';
-import type { WorkflowTemplate, WorkflowStep } from './subagent-orchestrator.js';
+import {
+  MAX_WORKFLOW_STEPS,
+  type WorkflowTemplate,
+  type WorkflowStep,
+} from './subagent-orchestrator.js';
 import type { LoadedSkill } from './prompt-loader.js';
 import type { WorkflowHarness } from './workflow-harness.js';
 import { matchHarness } from './builtin-harnesses.js';
@@ -343,6 +347,14 @@ export function validateTemplate(template: WorkflowTemplate): ValidationError[] 
   if (!template.name) errors.push({ field: 'name', message: 'Template name is required' });
   if (!template.steps || template.steps.length === 0) {
     errors.push({ field: 'steps', message: 'At least one step is required' });
+    return errors;
+  }
+  const workerCount = template.steps.length + (template.aggregation === 'synthesize' ? 1 : 0);
+  if (workerCount > MAX_WORKFLOW_STEPS) {
+    errors.push({
+      field: 'steps',
+      message: `Workflow worker limit exceeded: ${workerCount} > ${MAX_WORKFLOW_STEPS}`,
+    });
     return errors;
   }
   if (!['concatenate', 'last', 'synthesize'].includes(template.aggregation)) {

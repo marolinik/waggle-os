@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseChatCompletionStream } from '../src/sse-parser.js';
 
 /** Build a ReadableStream<Uint8Array> from raw SSE event strings. */
@@ -29,6 +29,8 @@ describe('parseChatCompletionStream', () => {
 
     const result = await parseChatCompletionStream(body);
 
+    expect(result.finishReason).toBeNull();
+    expect(result.doneObserved).toBe(true);
     expect(result.toolCalls).toBeDefined();
     expect(result.toolCalls!).toHaveLength(2);
 
@@ -58,5 +60,85 @@ describe('parseChatCompletionStream', () => {
     expect(result.toolCalls).toHaveLength(2);
     expect(result.toolCalls![0]).toMatchObject({ id: 'c0', function: { name: 'f0', arguments: '{"a":1}' } });
     expect(result.toolCalls![1]).toMatchObject({ id: 'c1', function: { name: 'f1', arguments: '{"b":2}' } });
+  });
+
+  it('records a length termination even when the stream has a DONE sentinel', async () => {
+    const body = streamFrom([
+      sse({ choices: [{ delta: { content: 'Partial answer' } }] }),
+      sse({
+        choices: [{ delta: {}, finish_reason: 'length' }],
+        usage: { prompt_tokens: 120, completion_tokens: 50 },
+      }),
+      'data: [DONE]\n\n',
+    ]);
+
+    const result = await parseChatCompletionStream(body);
+
+    expect(result.content).toBe('Partial answer');
+    expect(result.finishReason).toBe('length');
+    expect(result.doneObserved).toBe(true);
+    expect(result.usage).toEqual({ inputTokens: 120, outputTokens: 50 });
+  });
+
+  it('distinguishes a physical EOF from a protocol-complete stream', async () => {
+    const body = streamFrom([
+      sse({ choices: [{ delta: { content: 'Looks complete' } }] }),
+      sse({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+    ]);
+
+    const result = await parseChatCompletionStream(body);
+
+    expect(result.content).toBe('Looks complete');
+    expect(result.finishReason).toBe('stop');
+    expect(result.doneObserved).toBe(false);
+  });
+
+  it('classifies a reader failure before DONE as a non-retryable incomplete completion', async () => {
+    const encoder = new TextEncoder();
+    let pullCount = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pullCount++ === 0) {
+          controller.enqueue(encoder.encode(sse({
+            choices: [{ delta: { content: 'Partial answer' } }],
+            usage: { prompt_tokens: 120, completion_tokens: 50 },
+          })));
+        } else {
+          controller.error(new Error('upstream socket closed'));
+        }
+      },
+    });
+
+    await expect(parseChatCompletionStream(body)).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      usage: { inputTokens: 120, outputTokens: 50 },
+      message: expect.stringMatching(/before data: \[DONE\].*not accepted/i),
+    });
+  });
+
+  it('cancels immediately at DONE and ignores bytes after the terminal event', async () => {
+    const cancel = vi.fn();
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode([
+          sse({ choices: [{ delta: { content: 'Complete answer' } }] }),
+          sse({
+            choices: [{ delta: {}, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 100, completion_tokens: 20 },
+          }),
+          'data: [DONE]\n\n',
+          sse({ choices: [{ delta: { content: 'MUST_NOT_APPEAR' } }] }),
+        ].join('')));
+      },
+      cancel,
+    });
+
+    const result = await parseChatCompletionStream(body);
+
+    expect(result.content).toBe('Complete answer');
+    expect(result.finishReason).toBe('stop');
+    expect(result.doneObserved).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });

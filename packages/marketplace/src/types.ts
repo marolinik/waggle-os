@@ -166,6 +166,17 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+/** Portable, secret-free identity for one audited marketplace MCP profile. */
+export interface MarketplaceMcpProvenance {
+  kind: 'marketplace';
+  schemaVersion: 1;
+  sourceName: 'mcp_registry';
+  packageName: string;
+  packageVersion: string;
+  npmPackage: string;
+  profileDigest: `sha256:${string}`;
+}
+
 export interface SettingField {
   type: 'string' | 'number' | 'boolean';
   description: string;
@@ -184,8 +195,34 @@ export interface PostInstallHook {
 
 export type InstallationType = 'skill' | 'plugin' | 'mcp';
 
+/** Immutable marketplace snapshot approved by a capability proposal. */
+export interface MarketplaceApprovalIdentity {
+  schemaVersion: 1;
+  packageId: number;
+  sourceId: number;
+  name: string;
+  publisher: string;
+  version: string;
+  installType: InstallationType;
+  manifestDigest: `sha256:${string}`;
+  riskStatus: import('./security.js').Severity;
+  riskScore: number;
+  riskContentHash: string;
+  riskBlocked: boolean;
+  riskDigest: `sha256:${string}`;
+}
+
 export interface InstallRequest {
   packageId: number;
+  /** Exact package and scan snapshot the user approved. */
+  expectedApprovalIdentity?: MarketplaceApprovalIdentity;
+  /** Require the freshly loaded package snapshot to keep this install type. */
+  expectedInstallType?: InstallationType;
+  /**
+   * Bind a delegated MCP install to the exact secret-free catalog receipt the
+   * caller selected. Direct marketplace and CLI installs leave this unset.
+   */
+  expectedMcpProvenance?: MarketplaceMcpProvenance;
   /** Override install path (default: auto-detected from package) */
   installPath?: string;
   /** User-provided settings (API keys, etc.) */
@@ -204,8 +241,18 @@ export interface InstallResult {
   installPath: string;
   message: string;
   errors?: string[];
+  /** Stable conflict marker for callers that preserve retryable HTTP 409s. */
+  errorCode?: 'PACKAGE_IDENTITY_CHANGED';
   /** Security scan result (attached when scan was performed) */
   scanResult?: import('./security.js').ScanResult;
+  /**
+   * Exact validated MCP source template used for installation. Environment
+   * values remain unresolved catalog templates, so this receipt never carries
+   * user secrets and can be safely normalized again at the server boundary.
+   */
+  mcpSourceConfig?: McpServerConfig;
+  /** Source-qualified identity persisted beside the configured MCP entry. */
+  mcpProvenance?: MarketplaceMcpProvenance;
 }
 
 export interface PackInstallResult {

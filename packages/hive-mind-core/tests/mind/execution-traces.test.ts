@@ -132,6 +132,22 @@ describe('ExecutionTraceStore', () => {
       expect(parsed?.finalized_at).not.toBeNull();
     });
 
+    it('preserves the starting model unless finalization supplies the actual model', () => {
+      const unchangedId = store.start({ input: 'x', model: 'primary-model' });
+      const unchanged = store.finalize(unchangedId, { outcome: 'success', output: 'primary result' });
+      expect(unchanged?.model).toBe('primary-model');
+      expect(store.get(unchangedId)?.model).toBe('primary-model');
+
+      const fallbackId = store.start({ input: 'x', model: 'primary-model' });
+      const fallback = store.finalize(fallbackId, {
+        outcome: 'success',
+        output: 'fallback result',
+        model: 'fallback-model',
+      });
+      expect(fallback?.model).toBe('fallback-model');
+      expect(store.get(fallbackId)?.model).toBe('fallback-model');
+    });
+
     it('preserves appended events when not passed explicitly', () => {
       const id = store.start({ input: 'x' });
       const call: TraceToolCall = {
@@ -216,6 +232,147 @@ describe('ExecutionTraceStore', () => {
   });
 
   // ── query ─────────────────────────────────────────────────
+
+  describe('durable cost reservations', () => {
+    it('counts a pending estimate across store restart until it is settled', () => {
+      const id = store.start({ input: 'provider request' });
+      const since = '2000-01-01T00:00:00.000Z';
+      const reservationId = store.reserveCost(id, 0.08);
+      expect(reservationId).toBeGreaterThan(0);
+      expect(store.getTotalCostSince(since)).toBeCloseTo(0.08);
+
+      const restarted = new ExecutionTraceStore(db);
+      expect(restarted.getTotalCostSince(since)).toBeCloseTo(0.08);
+      expect(restarted.settleReservedCost(reservationId, 0.012)).toBe(true);
+      expect(restarted.get(id)?.cost_usd).toBeCloseTo(0.012);
+      expect(restarted.getTotalCostSince(since)).toBeCloseTo(0.012);
+    });
+
+    it('releases a definitely pre-inference reservation', () => {
+      const id = store.start({ input: 'rejected provider request' });
+      const since = '2000-01-01T00:00:00.000Z';
+      const reservationId = store.reserveCost(id, 0.08);
+      expect(store.releaseReservedCost(reservationId)).toBe(true);
+      expect(store.get(id)?.cost_usd).toBe(0);
+      expect(store.getTotalCostSince(since)).toBe(0);
+    });
+
+    it('settles and releases each reservation at most once', () => {
+      const settledTraceId = store.start({ input: 'settle once' });
+      const settledId = store.reserveCost(settledTraceId, 0.08);
+      expect(store.settleReservedCost(settledId, 0.012)).toBe(true);
+      expect(store.settleReservedCost(settledId, 0.012)).toBe(false);
+      expect(() => store.settleReservedCost(settledId, 0.02)).toThrow(/already settled/);
+      expect(() => store.releaseReservedCost(settledId)).toThrow(/already settled/);
+
+      const releasedTraceId = store.start({ input: 'release once' });
+      const releasedId = store.reserveCost(releasedTraceId, 0.08);
+      expect(store.releaseReservedCost(releasedId)).toBe(true);
+      expect(store.releaseReservedCost(releasedId)).toBe(false);
+      expect(() => store.settleReservedCost(releasedId, 0.01)).toThrow(/already released/);
+      expect(() => store.releaseReservedCost(999)).toThrow(/does not exist/);
+    });
+
+    it('rejects invalid costs without changing the trace', () => {
+      const id = store.start({ input: 'invalid cost' });
+      expect(() => store.reserveCost(id, 0)).toThrow(RangeError);
+      expect(() => store.settleReservedCost(id, -1)).toThrow(RangeError);
+      expect(() => store.settleReservedCost(id, 1, 'not-a-date')).toThrow(RangeError);
+      expect(store.get(id)?.cost_usd).toBe(0);
+    });
+
+    it('supports concurrent reservations on one trace without double counting', () => {
+      const traceId = store.start({ input: 'two provider calls' });
+      const first = store.reserveCost(traceId, 0.08);
+      const second = store.reserveCost(traceId, 0.04);
+      const since = '2000-01-01T00:00:00.000Z';
+
+      expect(store.getTotalCostSince(since)).toBeCloseTo(0.12);
+      expect(store.settleReservedCost(first, 0.012)).toBe(true);
+      expect(store.getTotalCostSince(since)).toBeCloseTo(0.052);
+      expect(store.releaseReservedCost(second)).toBe(true);
+      expect(store.get(traceId)?.cost_usd).toBeCloseTo(0.012);
+      expect(store.getTotalCostSince(since)).toBeCloseTo(0.012);
+    });
+
+    it('attributes pending reservations by reservation time rather than trace creation', () => {
+      const traceId = store.start({ input: 'old trace' });
+      db.getDatabase().prepare(`
+        UPDATE execution_traces SET created_at = '2020-01-01 00:00:00' WHERE id = ?
+      `).run(traceId);
+
+      store.reserveCost(traceId, 0.03, '2026-08-12T12:00:00.000Z');
+      expect(store.getTotalCostSince('2026-08-12T00:00:00.000Z')).toBeCloseTo(0.03);
+    });
+
+    it('rolls a failed settlement transaction back to the pending estimate', () => {
+      const traceId = store.start({ input: 'atomic settlement' });
+      const reservationId = store.reserveCost(traceId, 0.08);
+      db.getDatabase().prepare(`
+        CREATE TRIGGER fail_reserved_spend_insert
+        BEFORE INSERT ON execution_trace_spend
+        BEGIN SELECT RAISE(ABORT, 'simulated settlement failure'); END
+      `).run();
+
+      expect(() => store.settleReservedCost(reservationId, 0.012))
+        .toThrow('simulated settlement failure');
+      expect(store.getTotalCostSince('2000-01-01T00:00:00.000Z')).toBeCloseTo(0.08);
+      expect(db.getDatabase().prepare(`
+        SELECT state FROM execution_trace_spend_reservations WHERE id = ?
+      `).get(reservationId)).toEqual({ state: 'pending' });
+    });
+
+    it('rolls a failed release transaction back to pending', () => {
+      const traceId = store.start({ input: 'atomic release' });
+      const reservationId = store.reserveCost(traceId, 0.08);
+      db.getDatabase().prepare(`
+        CREATE TRIGGER fail_reserved_spend_release
+        BEFORE UPDATE ON execution_trace_spend_reservations
+        WHEN NEW.state = 'released'
+        BEGIN SELECT RAISE(ABORT, 'simulated release failure'); END
+      `).run();
+
+      expect(() => store.releaseReservedCost(reservationId))
+        .toThrow('simulated release failure');
+      expect(store.getTotalCostSince('2000-01-01T00:00:00.000Z')).toBeCloseTo(0.08);
+      expect(db.getDatabase().prepare(`
+        SELECT state FROM execution_trace_spend_reservations WHERE id = ?
+      `).get(reservationId)).toEqual({ state: 'pending' });
+    });
+
+    it('preserves legacy and provisional spend without double counting', () => {
+      const traceId = store.start({ input: 'mixed ledger' });
+      store.recordCost(traceId, 0.01, '2026-08-12T10:00:00.000Z');
+      const reservationId = store.reserveCost(traceId, 0.08, '2026-08-12T11:00:00.000Z');
+      const since = '2026-08-12T00:00:00.000Z';
+
+      expect(store.getTotalCostSince(since)).toBeCloseTo(0.09);
+      expect(store.settleReservedCost(reservationId, 0.012)).toBe(true);
+      expect(store.getTotalCostSince(since)).toBeCloseTo(0.022);
+      expect(store.get(traceId)?.cost_usd).toBeCloseTo(0.022);
+    });
+
+    it('fails closed for missing traces and invalid reservation timestamps', () => {
+      expect(() => store.reserveCost(999, 0.08)).toThrow(/does not exist/);
+      const traceId = store.start({ input: 'invalid timestamp' });
+      expect(() => store.reserveCost(traceId, 0.08, 'not-a-date')).toThrow(RangeError);
+      expect(store.getTotalCostSince('2000-01-01T00:00:00.000Z')).toBe(0);
+    });
+
+    it('preserves later legacy cost after a released reservation tombstone', () => {
+      const traceId = store.start({ input: 'released then finalized' });
+      const reservationId = store.reserveCost(traceId, 0.08);
+      expect(store.releaseReservedCost(reservationId)).toBe(true);
+      store.finalize(traceId, { outcome: 'success', output: 'done', costUsd: 0.02 });
+      expect(store.getTotalCostSince('2000-01-01T00:00:00.000Z')).toBeCloseTo(0.02);
+    });
+
+    it('does not attach a new reservation to a finalized trace', () => {
+      const traceId = store.start({ input: 'already complete' });
+      store.finalize(traceId, { outcome: 'success', output: 'done' });
+      expect(() => store.reserveCost(traceId, 0.08)).toThrow(/does not exist/);
+    });
+  });
 
   describe('query', () => {
     beforeEach(() => {

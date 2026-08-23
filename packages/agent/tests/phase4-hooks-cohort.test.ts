@@ -1,14 +1,13 @@
 /**
  * AI-OS Phase 4 — HOOKS_COHORT regression (R8-001 / R8-002 / R8-003).
  *
- * Bug (R8-001): hook install/verify/uninstall was gated on LAUNCH_COHORT
- * (all 7 tools), but at the time only @waggle/hive-mind-hooks-claude-code
+ * Bug (R8-001): hook install/verify/uninstall was gated on LAUNCH_COHORT,
+ * but at the time only @waggle/hive-mind-hooks-claude-code
  * shipped a `bin`; the other hook packages were Wave 2/3 `export {}` stubs
  * with no bin, so `npx @waggle/hive-mind-hooks-<id>` ALWAYS failed for the
  * user. HOOKS_COHORT fixed this by gating hook actions on the tools whose
- * package actually ships a bin. The cohort has since grown as Tier-A/B
- * packages landed (claude-code, claude-desktop, codex, codex-desktop, cursor,
- * hermes, openclaw).
+ * package actually ships a bin and is release-supported. Roadmap packages may
+ * remain installed in the repository without being exposed to users.
  *
  * The existing tool-launcher tests mock execCapture and only assert the
  * npx command SHAPE, so the binless-stub failure was invisible. These
@@ -20,7 +19,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -29,13 +28,14 @@ import {
   type HookRuntimePaths,
   type ToolLauncherDeps,
 } from '../src/tool-launcher.js';
-import { SUPPORTED_TOOLS, LAUNCH_COHORT, type ToolId } from '@waggle/shared';
+import { BUILTIN_TOOL_MANIFESTS, LAUNCH_COHORT, type ToolId } from '@waggle/shared';
 
 // packages/agent/tests → packages/
 const PACKAGES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function hookPackageHasBin(id: ToolId): boolean {
   const pkgPath = join(PACKAGES_DIR, `hive-mind-hooks-${id}`, 'package.json');
+  if (!existsSync(pkgPath)) return false;
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { bin?: unknown };
   return pkg.bin != null && Object.keys(pkg.bin as object).length > 0;
 }
@@ -58,13 +58,23 @@ describe('HOOKS_COHORT grounding (R8-001)', () => {
     }
   });
 
-  it('contains every tool that DOES ship a real hook bin (no real target dropped)', () => {
-    const realTargets = SUPPORTED_TOOLS.filter((id) => hookPackageHasBin(id));
+  it('contains every release-supported tool that ships a real hook bin', () => {
+    const realTargets = BUILTIN_TOOL_MANIFESTS
+      .filter((manifest) => manifest.releaseStatus !== 'roadmap')
+      .map((manifest) => manifest.id as ToolId)
+      .filter((id) => hookPackageHasBin(id));
     expect([...HOOKS_COHORT].sort()).toEqual([...realTargets].sort());
   });
 
-  it('matches the current real-bin cohort (snapshot tripwire)', () => {
-    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw']);
+  it('matches the current release-supported real-bin cohort (snapshot tripwire)', () => {
+    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'hermes']);
+  });
+
+  it('keeps roadmap hook packages on disk but outside the supported cohort', () => {
+    for (const id of ['cursor', 'openclaw'] as const) {
+      expect(hookPackageHasBin(id)).toBe(true);
+      expect(HOOKS_COHORT).not.toContain(id);
+    }
   });
 
   it('is a subset of LAUNCH_COHORT (all hook targets are launchable)', () => {

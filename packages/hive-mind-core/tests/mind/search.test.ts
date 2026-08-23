@@ -74,13 +74,115 @@ describe('Hybrid Search (FTS5 + sqlite-vec + RRF + Relevance)', () => {
       expect(results).toHaveLength(0);
     });
 
-    it('falls back to LIKE when an FTS5-special query would parse-error', async () => {
+    it('recovers when an FTS5-special query would parse-error', async () => {
       await seedFrames();
       // A lone unbalanced double-quote is passed through verbatim by the
-      // sanitizer and triggers an FTS5 MATCH parse error. The LIKE fallback
-      // should still find frames whose content contains the literal substring.
+      // sanitizer and triggers an FTS5 MATCH parse error. The strict fallback
+      // should still find frames containing both meaningful terms.
       const results = await search.keywordSearch('"Machine learning', 10);
       expect(results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('recovers one meaningful token after an FTS5 parse error', async () => {
+      await seedFrames();
+      const results = await search.keywordSearch('"Machine', 10);
+      expect(results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('falls back when punctuation-delimited identifiers miss the sanitized FTS token', async () => {
+      const session = sessions.create();
+      const frame = frames.createIFrame(
+        session.gop_id,
+        'Captured roundtrip-debug-abc123 from a hook event',
+      );
+
+      const results = await search.keywordSearch('roundtrip-debug-abc123', 10);
+      expect(results).toContain(frame.id);
+    });
+
+    it('does not let newer single-token decoys crowd out an exact punctuated identifier', async () => {
+      const session = sessions.create();
+      const target = frames.createIFrame(
+        session.gop_id,
+        'Captured roundtrip-debug-abc123 from a hook event',
+        'normal',
+        'user_stated',
+        '2026-01-01T00:00:00.000Z',
+      );
+
+      for (let i = 0; i < 25; i += 1) {
+        frames.createIFrame(
+          session.gop_id,
+          `Newer roundtrip decoy ${i}`,
+          'normal',
+          'user_stated',
+          `2026-02-${String(i + 1).padStart(2, '0')}T00:00:00.000Z`,
+        );
+      }
+
+      const results = await search.keywordSearch('roundtrip-debug-abc123', 10);
+      expect(results).toContain(target.id);
+    });
+
+    it('keeps punctuation fallback scoped to the requested GOP', async () => {
+      const first = sessions.create();
+      const second = sessions.create();
+      const inScope = frames.createIFrame(
+        first.gop_id,
+        'Captured scope-check-xyz789 in the requested session',
+      );
+      const outOfScope = frames.createIFrame(
+        second.gop_id,
+        'Captured scope-check-xyz789 in another session',
+      );
+
+      const results = await search.keywordSearch('scope-check-xyz789', 10, first.gop_id);
+      expect(results).toContain(inScope.id);
+      expect(results).not.toContain(outOfScope.id);
+    });
+
+    it('matches punctuation-delimited Cyrillic identifiers case-insensitively', async () => {
+      const session = sessions.create();
+      const frame = frames.createIFrame(
+        session.gop_id,
+        'Captured БЕОГРАД-КОНФЕРЕНЦИЈА from an external event',
+      );
+
+      const results = await search.keywordSearch('београд-конференција', 10);
+      expect(results).toContain(frame.id);
+    });
+
+    it('treats LIKE metacharacters literally in whole-query fallback', async () => {
+      const session = sessions.create();
+      const literal = frames.createIFrame(session.gop_id, 'Captured 北京旅行%_\\ marker');
+      const wildcardDecoy = frames.createIFrame(session.gop_id, 'Captured 北京旅行XXY marker');
+
+      const results = await search.keywordSearch('北京旅行%_\\', 10);
+      expect(results).toContain(literal.id);
+      expect(results).not.toContain(wildcardDecoy.id);
+    });
+
+    it('does not broaden overlong punctuation fallback queries', async () => {
+      const session = sessions.create();
+      const tokens = Array.from({ length: 20 }, (_, i) => `segment${i}`);
+      const query = tokens.join('-');
+      const exact = frames.createIFrame(session.gop_id, `Captured ${query} marker`);
+      const prefixOnly = frames.createIFrame(
+        session.gop_id,
+        `Captured ${tokens.slice(0, 16).join('-')} marker`,
+      );
+
+      const results = await search.keywordSearch(query, 10);
+      expect(results).toContain(exact.id);
+      expect(results).not.toContain(prefixOnly.id);
+    });
+
+    it('does not broaden punctuation fallback with short or stop-word fragments', async () => {
+      const session = sessions.create();
+      const unrelated = frames.createIFrame(session.gop_id, 'Totally unrelated topic');
+
+      const results = await search.keywordSearch("doesn't exist", 10);
+      expect(results).not.toContain(unrelated.id);
     });
   });
 

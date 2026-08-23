@@ -24,6 +24,8 @@ import {
   type LlmCallInput,
   type LlmCallResult,
   type RetrievalSearchFn,
+  parseOpenAiTextCompletion,
+  isIncompleteCompletionError,
   resolveModelForClass,
   LIGHTWEIGHT_MODEL,
 } from '@waggle/agent';
@@ -77,6 +79,17 @@ interface AgentRunBody {
   workspaceId?: string;
   maxSteps?: number;
   maxRetrievalsPerStep?: number;
+}
+
+export function parseAgentRunCompletion(data: unknown, latencyMs: number): LlmCallResult {
+  const parsed = parseOpenAiTextCompletion(data);
+  return {
+    content: parsed.content,
+    inTokens: parsed.usage.inputTokens,
+    outTokens: parsed.usage.outputTokens,
+    costUsd: parsed.usage.totalCostUsd,
+    latencyMs,
+  };
 }
 
 export const agentRunRoutes: FastifyPluginAsync = async (server) => {
@@ -143,31 +156,33 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
             Authorization: `Bearer ${litellmKey}`,
           },
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(60_000),
         });
-        const data = (await resp.json()) as {
-          error?: { message?: string };
-          choices?: Array<{ message?: { content?: string } }>;
-          usage?: { prompt_tokens?: number; completion_tokens?: number; total_cost?: number };
-        };
-        if (data.error) {
+        if (!resp.ok) {
           return {
             content: '',
             inTokens: 0,
             outTokens: 0,
             costUsd: 0,
             latencyMs: Date.now() - started,
-            error: data.error.message ?? 'LiteLLM error',
+            error: `LiteLLM HTTP ${resp.status}`,
           };
         }
-        const content = data.choices?.[0]?.message?.content ?? '';
-        return {
-          content,
-          inTokens: data.usage?.prompt_tokens ?? 0,
-          outTokens: data.usage?.completion_tokens ?? 0,
-          costUsd: data.usage?.total_cost ?? 0,
-          latencyMs: Date.now() - started,
-        };
+        let data: unknown;
+        try {
+          data = await resp.json();
+        } catch {
+          // The provider returned HTTP 200 but the body ended before a valid
+          // completion envelope. Classify it as terminal integrity failure so
+          // the outer catch rethrows instead of force-finalizing with a replay.
+          return parseAgentRunCompletion(null, Date.now() - started);
+        }
+        return parseAgentRunCompletion(data, Date.now() - started);
       } catch (err) {
+        // A paid HTTP-200 response with missing/invalid terminal semantics is
+        // not safe to force-finalize: the retrieval loop may already have
+        // made progress, and another model call would replay paid work.
+        if (isIncompleteCompletionError(err)) throw err;
         return {
           content: '',
           inTokens: 0,
@@ -275,6 +290,7 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
       model: model ?? DEFAULT_MODEL,
     });
 
+    let completed = false;
     try {
       const result = await runRetrievalAgentLoop({
         modelAlias: model ?? DEFAULT_MODEL,
@@ -299,13 +315,27 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
         totalTokensOut: result.totalTokensOut,
         totalCostUsd: result.totalCostUsd,
         totalLatencyMs: result.totalLatencyMs,
+        errors: result.errors,
       });
+      completed = result.errors.length === 0;
+      if (!completed) {
+        sendEvent('error', {
+          error: 'agent run completed with errors',
+          errors: result.errors,
+        });
+      }
     } catch (err) {
       sendEvent('error', {
         error: err instanceof Error ? err.message : 'agent run failed',
+        ...(isIncompleteCompletionError(err) ? {
+          code: err.code,
+          tokensIn: err.usage.inputTokens,
+          tokensOut: err.usage.outputTokens,
+          costUsd: err.usage.totalCostUsd,
+        } : {}),
       });
     } finally {
-      sendEvent('done', { ok: true });
+      sendEvent('done', { ok: completed });
       try {
         raw.end();
       } catch {

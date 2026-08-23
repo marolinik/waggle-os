@@ -14,9 +14,9 @@
  *      lossy — comments / trailing commas are dropped — so reversibility relies
  *      on the literal backup, not a re-serialized diff.)
  *   3. Write the managed hook DIRECTORY
- *      `~/.openclaw/hooks/hive-mind/{HOOK.md, handler.js}` — HOOK.md declares
- *      our events, handler.js is the compiled in-process default export COPIED
- *      from this package's dist/.
+ *      `~/.openclaw/hooks/hive-mind/{HOOK.md, handler.js, handler.cjs,
+ *      package.json}`. The discoverable handler.js loads the self-contained
+ *      CommonJS bundle from handler.cjs under a hook-local module boundary.
  *   4. Minimal-touch edit of openclaw.json: flip `hooks.internal.enabled=true`
  *      + add `hooks.internal.entries["hive-mind"]={enabled:true, env?}` via
  *      `jsonRegister`. Existing config preserved verbatim.
@@ -29,7 +29,8 @@
 
 import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { dirname, join } from 'node:path';
 import { createLogger, type Logger } from '@waggle/hive-mind-shim-core';
 import {
   backupByteIdentical,
@@ -62,6 +63,8 @@ export interface InstallResult {
   createdByUs: boolean;
   /** The cli_path embedded in the entry env (undefined = default lookup at runtime). */
   cliPath?: string;
+  /** The packaged Node runtime embedded into the managed loader. */
+  nodePath?: string;
 }
 
 export interface InstallOptions extends ResolvePathsOptions {
@@ -76,16 +79,59 @@ export interface InstallOptions extends ResolvePathsOptions {
    * in-process handler's CliBridge uses it.
    */
   cliPath?: string;
+  /** Packaged Node executable used for JavaScript CLI entries. */
+  nodePath?: string;
   /** Extra env to attach to the hook entry (e.g. WAGGLE_WORKSPACE_ID). */
   env?: Record<string, string>;
+}
+
+export interface OpenclawRuntimeBinding {
+  version: 1;
+  node_path: string;
+  node_sha256: string;
+  cli_path: string;
+  cli_sha256: string;
 }
 
 const POINTER_VERSION = '0.1.0';
 const TOUCHED_KEYS = ['hooks.internal.enabled', `hooks.internal.entries.${HIVE_HOOK_ENTRY_KEY}`] as const;
 const LIFECYCLE_NAMES = ['session-start', 'user-prompt-submit', 'stop', 'pre-compact'] as const;
+export const OPENCLAW_HANDLER_BUNDLE = 'handler.cjs';
+
+const OPENCLAW_HANDLER_ENTRY = 'handler.js';
+export function renderOpenclawHandlerEntrySource(cliPath?: string, nodePath?: string): string {
+  if (cliPath === undefined) {
+    return `'use strict';\nmodule.exports = require('./${OPENCLAW_HANDLER_BUNDLE}');\n`;
+  }
+  const runtimeOptions = nodePath === undefined
+    ? `{ cliPath: ${JSON.stringify(cliPath)} }`
+    : JSON.stringify({ cliPath, nodePath });
+  return [
+    `'use strict';`,
+    `const handler = require('./${OPENCLAW_HANDLER_BUNDLE}');`,
+    `module.exports = (event) => handler(event, ${runtimeOptions});`,
+    '',
+  ].join('\n');
+}
+export const OPENCLAW_HANDLER_ENTRY_SOURCE = renderOpenclawHandlerEntrySource();
+export const OPENCLAW_HANDLER_PACKAGE_JSON = `${JSON.stringify({ private: true, type: 'commonjs' }, null, 2)}\n`;
 
 async function ensureDir(p: string): Promise<void> {
   if (!existsSync(p)) await mkdir(p, { recursive: true });
+}
+
+function isJavaScriptPath(filePath: string): boolean {
+  return /\.(?:c|m)?js$/i.test(filePath);
+}
+
+async function sha256Required(filePath: string, label: string): Promise<string> {
+  try {
+    return createHash('sha256').update(await readFile(filePath)).digest('hex');
+  } catch (error) {
+    throw new Error(
+      `${label} is not readable at ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export async function install(opts: InstallOptions = {}): Promise<InstallResult> {
@@ -114,24 +160,50 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
   const { backupPath } = await backupByteIdentical(paths.configPath, now().toISOString());
   if (backupPath) log.info('openclaw.json backed up', { backupPath });
 
-  // Write the managed hook dir: HOOK.md + the compiled handler.js (copied from
-  // this package's dist/). We COPY rather than reference so the gateway loads a
-  // stable file even if this package is removed (the handler still requires the
-  // @waggle/* deps at runtime — the OQ-5 live-install caveat, see README).
+  // Copy the self-contained bundle so the gateway remains independent of this
+  // package after installation.
   await ensureDir(paths.hiveHookDir);
-  await writeFile(paths.hookMdPath, renderHookMd('handler.js'), 'utf-8');
+  const cliPath = normalizeCliPath(opts.cliPath);
+  const nodePathCandidate = normalizeCliPath(
+    opts.nodePath ?? process.env.WAGGLE_HOOK_NODE_PATH,
+  );
+  let runtimeBinding: OpenclawRuntimeBinding | undefined;
+  if (cliPath !== undefined && isJavaScriptPath(cliPath) && nodePathCandidate !== undefined) {
+    const [nodeSha256, cliSha256] = await Promise.all([
+      sha256Required(nodePathCandidate, 'packaged Node runtime'),
+      sha256Required(cliPath, 'pinned hive-mind CLI'),
+    ]);
+    runtimeBinding = {
+      version: 1,
+      node_path: nodePathCandidate,
+      node_sha256: nodeSha256,
+      cli_path: cliPath,
+      cli_sha256: cliSha256,
+    };
+  }
+  const nodePath = runtimeBinding?.node_path;
+  await writeFile(paths.hookMdPath, renderHookMd(OPENCLAW_HANDLER_ENTRY), 'utf-8');
   if (!existsSync(paths.handlerSourcePath)) {
     throw new Error(
       `compiled handler not found at ${paths.handlerSourcePath}. ` +
       `Build the package (tsc --build) before installing.`,
     );
   }
-  await copyFile(paths.handlerSourcePath, paths.installedHandlerPath);
+  // OpenClaw discovers handler.js by filename. Keep that entry deterministic
+  // CommonJS while retaining the self-contained bundle's .cjs identity; the
+  // hook-local package.json overrides any ancestor `type: module` boundary.
+  await copyFile(paths.handlerSourcePath, join(paths.hiveHookDir, OPENCLAW_HANDLER_BUNDLE));
+  await writeFile(
+    paths.installedHandlerPath,
+    renderOpenclawHandlerEntrySource(cliPath, nodePath),
+    'utf-8',
+  );
+  await writeFile(join(paths.hiveHookDir, 'package.json'), OPENCLAW_HANDLER_PACKAGE_JSON, 'utf-8');
 
   // Minimal-touch config edit.
-  const cliPath = normalizeCliPath(opts.cliPath);
   const env: Record<string, string> = { ...(opts.env ?? {}) };
   if (cliPath !== undefined) env['WAGGLE_HIVE_MIND_CLI'] = cliPath;
+  if (nodePath !== undefined) env['WAGGLE_HOOK_NODE_PATH'] = nodePath;
   const merged = jsonRegister(existingConfig, Object.keys(env).length > 0 ? { env } : {});
   await writeFile(paths.configPath, serializeConfig(merged), 'utf-8');
 
@@ -148,11 +220,17 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
     extra: {
       hook_dir_name: HIVE_HOOK_DIR_NAME,
       touched_keys: TOUCHED_KEYS,
+      runtime_binding: runtimeBinding ?? null,
     },
   };
   await writePointer(paths.pointerPath, pointer);
 
-  log.info('install complete', { createdByUs, hookDir: paths.hiveHookDir, cliPath: cliPath ?? '(PATH lookup)' });
+  log.info('install complete', {
+    createdByUs,
+    hookDir: paths.hiveHookDir,
+    cliPath: cliPath ?? '(PATH lookup)',
+    nodePath: nodePath ?? '(host runtime)',
+  });
 
   const result: InstallResult = {
     paths,
@@ -164,5 +242,6 @@ export async function install(opts: InstallOptions = {}): Promise<InstallResult>
     createdByUs,
   };
   if (cliPath !== undefined) result.cliPath = cliPath;
+  if (nodePath !== undefined) result.nodePath = nodePath;
   return result;
 }

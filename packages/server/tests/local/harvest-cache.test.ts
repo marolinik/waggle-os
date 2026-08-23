@@ -9,7 +9,7 @@
  *    (simulates partial write left by power-loss, SIGKILL, full disk)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -23,8 +23,18 @@ describe('harvest cache (M-08)', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  function cacheTmpFiles(): string[] {
+    const dir = path.join(tmpDir, 'harvest-cache');
+    return fs.existsSync(dir) ? fs.readdirSync(dir).filter((file) => file.endsWith('.tmp')) : [];
+  }
+
+  function filesystemError(code: string): NodeJS.ErrnoException {
+    return Object.assign(new Error(`filesystem error: ${code}`), { code });
+  }
 
   it('round-trips arbitrary JSON payload', () => {
     const payload = { version: 1, items: [{ id: 'a', body: 'hello' }, { id: 'b', body: 'world' }] };
@@ -35,8 +45,86 @@ describe('harvest cache (M-08)', () => {
 
   it('leaves no .tmp sibling after successful write (atomic rename completed)', () => {
     const file = writeHarvestCache(tmpDir, 'atomic-key', { foo: 'bar' });
-    expect(fs.existsSync(`${file}.tmp`)).toBe(false);
+    expect(cacheTmpFiles()).toEqual([]);
     expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it.each(['EPERM', 'EACCES', 'EBUSY'] as const)(
+    'retries a transient Windows %s rename lock and completes atomically',
+    (code) => {
+      const renameSync = fs.renameSync.bind(fs);
+      const rename = vi.spyOn(fs, 'renameSync')
+        .mockImplementationOnce(() => { throw filesystemError(code); })
+        .mockImplementation(renameSync);
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      const file = writeHarvestCache(tmpDir, `transient-${code}`, { code });
+
+      expect(rename).toHaveBeenCalledTimes(2);
+      expect(wait).toHaveBeenCalledOnce();
+      expect(readHarvestCache(file)).toEqual({ code });
+      expect(cacheTmpFiles()).toEqual([]);
+    },
+  );
+
+  it('bounds persistent transient retries without overwriting the prior cache', () => {
+    const file = writeHarvestCache(tmpDir, 'persistent-lock', { version: 1 });
+    const error = filesystemError('EBUSY');
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => { throw error; });
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+    expect(() => writeHarvestCache(tmpDir, 'persistent-lock', { version: 2 })).toThrow(error);
+
+    expect(rename).toHaveBeenCalledTimes(4);
+    expect(wait).toHaveBeenCalledTimes(3);
+    expect(readHarvestCache(file)).toEqual({ version: 1 });
+    expect(cacheTmpFiles()).toEqual([]);
+  });
+
+  it('does not retry a non-transient rename error and still removes its temp file', () => {
+    const error = filesystemError('ENOSPC');
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => { throw error; });
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+    expect(() => writeHarvestCache(tmpDir, 'disk-full', { version: 1 })).toThrow(error);
+
+    expect(rename).toHaveBeenCalledOnce();
+    expect(wait).not.toHaveBeenCalled();
+    expect(cacheTmpFiles()).toEqual([]);
+  });
+
+  it('removes a partially written temp file when the write itself fails', () => {
+    const writeFileSync = fs.writeFileSync.bind(fs);
+    vi.spyOn(fs, 'writeFileSync').mockImplementationOnce((file, data, options) => {
+      writeFileSync(file, data, options);
+      throw filesystemError('ENOSPC');
+    });
+
+    expect(() => writeHarvestCache(tmpDir, 'partial-write', { version: 1 }))
+      .toThrow('filesystem error: ENOSPC');
+    expect(cacheTmpFiles()).toEqual([]);
+  });
+
+  it('uses a unique temp file for successive writes to the same cache key', () => {
+    const writeFileSync = fs.writeFileSync.bind(fs);
+    const renameSync = fs.renameSync.bind(fs);
+    const tempPaths: string[] = [];
+    vi.spyOn(fs, 'writeFileSync').mockImplementation((file, data, options) => {
+      tempPaths.push(String(file));
+      writeFileSync(file, data, options);
+    });
+    vi.spyOn(fs, 'renameSync')
+      .mockImplementationOnce(() => { throw filesystemError('EBUSY'); })
+      .mockImplementation(renameSync);
+    vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+    writeHarvestCache(tmpDir, 'unique-temp', { version: 1 });
+    writeHarvestCache(tmpDir, 'unique-temp', { version: 2 });
+
+    expect(tempPaths).toHaveLength(2);
+    expect(new Set(tempPaths).size).toBe(2);
+    expect(tempPaths.every((file) => file.endsWith('.tmp'))).toBe(true);
+    expect(cacheTmpFiles()).toEqual([]);
   });
 
   it('overwrites an existing cache file atomically', () => {

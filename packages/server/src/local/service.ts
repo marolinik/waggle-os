@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
@@ -17,8 +18,10 @@ import {
   writeWipeReceipt,
 } from './data-erase-helpers.js';
 import {
+  getProviderApiKey,
   hydrateProviderEnvFromVault,
   migrateLegacyProviderKeysToVault,
+  PROVIDER_ENV_NAMES,
 } from './provider-env.js';
 import { prepareLiteLLMRuntimeConfig } from './litellm-runtime-config.js';
 
@@ -48,6 +51,46 @@ export interface ServiceResult {
 }
 
 const DEFAULT_PORT = 3333;
+
+interface DesktopReadyRecord {
+  schemaVersion: 1;
+  instanceId: string;
+  pid: number;
+  host: '127.0.0.1';
+  preferredPort: number;
+  port: number;
+  startedAt: string;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
+}
+
+function publishDesktopReadyFile(filePath: string, record: DesktopReadyRecord): void {
+  const directory = path.dirname(filePath);
+  fs.mkdirSync(directory, { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(record)}\n`, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600,
+    });
+    fs.renameSync(temporaryPath, filePath);
+  } catch (error) {
+    try { fs.unlinkSync(temporaryPath); } catch { /* best effort */ }
+    throw error;
+  }
+}
+
+function removeOwnedDesktopReadyFile(filePath: string, instanceId: string): void {
+  try {
+    const record = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { instanceId?: unknown };
+    if (record.instanceId === instanceId) fs.unlinkSync(filePath);
+  } catch { /* missing, malformed, or owned by a newer launch */ }
+}
 
 /**
  * Resolve the service data directory: explicit option > WAGGLE_DATA_DIR env >
@@ -96,28 +139,35 @@ export function checkPortAvailable(port: number): Promise<boolean> {
   });
 }
 
-/**
- * Check if an Anthropic API key is available (env, vault, or config file).
- * P0-3 fix: Also checks vault to match getAnthropicKey() in anthropic-proxy.ts.
- */
-function hasAnthropicKey(dataDir: string, server?: FastifyInstance): boolean {
-  // Vault first — encrypted storage is the canonical secret store
-  if (server && server.vault) {
+/** Identify configured providers routable by the built-in compatibility proxy. */
+function getConfiguredProviderIds(dataDir: string, server?: FastifyInstance): string[] {
+  const configured = new Set<string>();
+  for (const providerId of Object.keys(PROVIDER_ENV_NAMES)) {
     try {
-      const entry = server.vault.get('anthropic');
-      if (entry?.value) return true;
+      if (server?.vault && getProviderApiKey(providerId, server.vault)) {
+        configured.add(providerId);
+        continue;
+      }
     } catch { /* vault read failed */ }
+    if (PROVIDER_ENV_NAMES[providerId].some((name) => Boolean(process.env[name]))) {
+      configured.add(providerId);
+    }
   }
-  // Legacy fallbacks
-  if (process.env.ANTHROPIC_API_KEY) return true;
+
+  // buildLocalServer migrates legacy plaintext keys into Vault. Keep this
+  // fallback so a partial migration cannot hide an otherwise usable route.
   try {
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return !!config?.providers?.anthropic?.apiKey;
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        providers?: Record<string, { apiKey?: string }>;
+      };
+      for (const [providerId, provider] of Object.entries(config.providers ?? {})) {
+        if (PROVIDER_ENV_NAMES[providerId] && provider.apiKey) configured.add(providerId);
+      }
     }
   } catch { /* ignore */ }
-  return false;
+  return [...configured];
 }
 
 /**
@@ -139,6 +189,16 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   const litellmPort = options?.litellmPort ?? 4000;
   const skipLiteLLM = options?.skipLiteLLM ?? false;
   const emit = options?.onProgress ?? (() => {});
+  const allowDesktopPortFallback = process.env.WAGGLE_DESKTOP_PORT_FALLBACK === '1';
+  const desktopInstanceId = process.env.WAGGLE_INSTANCE_ID?.trim();
+  const desktopReadyFile = process.env.WAGGLE_READY_FILE?.trim();
+  const desktopStartedAt = new Date().toISOString();
+
+  if (allowDesktopPortFallback && (!desktopInstanceId || !desktopReadyFile || !path.isAbsolute(desktopReadyFile))) {
+    throw new Error(
+      'Managed desktop port fallback requires WAGGLE_INSTANCE_ID and an absolute WAGGLE_READY_FILE',
+    );
+  }
 
   // 1. Ensure dataDir exists
   emit({ phase: 'init', message: 'Initializing Waggle service...', progress: 0.05 });
@@ -213,23 +273,32 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
       : { status: 'error', port: litellmPort, error: 'No provider models available' };
   }
 
-  // 5. Check port availability before building server
-  emit({ phase: 'server', message: 'Checking port availability...', progress: 0.7 });
-  const portFree = await checkPortAvailable(port);
-  if (!portFree) {
-    const msg = `Port ${port} is already in use. Another Waggle instance may be running.\nTo fix: close the other instance, or set WAGGLE_PORT=<port> to use a different port.`;
-    emit({ phase: 'server', message: msg, progress: 0.7 });
-    throw new Error(msg);
+  const managedLiteLLMUrl = `http://localhost:${litellmPort}`;
+  let selfProxyUrl = `http://127.0.0.1:${port}/v1`;
+  let litellmReachable = false;
+  if (!skipLiteLLM) {
+    try {
+      const healthRes = await fetch(`${managedLiteLLMUrl}/health/liveliness`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      litellmReachable = healthRes.ok;
+    } catch { /* not reachable */ }
   }
 
-  // 6. Build and start local server
+  // 5. Build and atomically bind the local server. Managed desktop launches
+  // may retry the same Fastify instance on an OS-assigned port when the
+  // preferred port is occupied; CLI/browser launches preserve fail-closed
+  // EADDRINUSE behavior.
   emit({ phase: 'server', message: 'Starting local server...', progress: 0.75 });
   const server = await buildLocalServer({
     dataDir,
     port,
-    litellmUrl: `http://localhost:${litellmPort}`,
+    instanceId: allowDesktopPortFallback ? desktopInstanceId : undefined,
+    litellmUrl: litellmReachable ? managedLiteLLMUrl : selfProxyUrl,
     manageLiteLLM: !skipLiteLLM,
     managedLiteLLMPort: litellmPort,
+    useBuiltInProxy: !litellmReachable,
+    startOfflineManagerOnListen: false,
   });
 
   // 7. Register self-removing shutdown handlers (must add hook before listen)
@@ -246,30 +315,64 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   server.addHook('onClose', async () => {
     process.off('SIGTERM', shutdown);
     process.off('SIGINT', shutdown);
-    // Remove PID file on close
-    try { fs.unlinkSync(path.join(dataDir, 'server.pid')); } catch { /* ok */ }
+    if (allowDesktopPortFallback && desktopReadyFile && desktopInstanceId) {
+      removeOwnedDesktopReadyFile(desktopReadyFile, desktopInstanceId);
+    } else {
+      // Legacy CLI/browser lifecycle keeps the shared PID file contract.
+      try { fs.unlinkSync(path.join(dataDir, 'server.pid')); } catch { /* ok */ }
+    }
   });
 
-  await server.listen({ port, host: resolveBindHost() });
+  const bindHost = allowDesktopPortFallback ? '127.0.0.1' : resolveBindHost();
+  const cleanupListenFailure = async (): Promise<void> => {
+    try { await server.close(); } catch { /* preserve the listen error */ }
+    if (!skipLiteLLM) await stopLiteLLM().catch(() => undefined);
+  };
+  try {
+    await server.listen({ port, host: bindHost });
+  } catch (error) {
+    if (allowDesktopPortFallback && errorCode(error) === 'EADDRINUSE') {
+      try {
+        await server.listen({ port: 0, host: bindHost });
+      } catch (fallbackError) {
+        await cleanupListenFailure();
+        throw fallbackError;
+      }
+    } else {
+      await cleanupListenFailure();
+      if (errorCode(error) === 'EADDRINUSE') {
+        const message = `Port ${port} is already in use. Another Waggle instance may be running.\nTo fix: close the other instance, or set WAGGLE_PORT=<port> to use a different port.`;
+        emit({ phase: 'server', message, progress: 0.7 });
+        throw new Error(message, { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  const listeningAddress = server.server.address();
+  if (!listeningAddress || typeof listeningAddress === 'string') {
+    await server.close();
+    if (!skipLiteLLM) await stopLiteLLM().catch(() => undefined);
+    throw new Error('Unable to resolve the Waggle service listen port');
+  }
+  const actualPort = listeningAddress.port;
+  server.localConfig.port = actualPort;
+  if (!litellmReachable) {
+    selfProxyUrl = `http://127.0.0.1:${actualPort}/v1`;
+    server.localConfig.litellmUrl = selfProxyUrl;
+  }
 
   // Write PID file for stale-process detection
-  try {
-    fs.writeFileSync(path.join(dataDir, 'server.pid'), String(process.pid));
-  } catch { /* non-blocking */ }
+  if (!allowDesktopPortFallback) {
+    try {
+      fs.writeFileSync(path.join(dataDir, 'server.pid'), String(process.pid));
+    } catch { /* non-blocking */ }
+  }
 
   // 8. Determine LLM provider — truthful, not optimistic
   let providerName: 'litellm' | 'anthropic-proxy' | 'ollama' = 'anthropic-proxy';
   let providerHealth: LlmHealthStatus = 'unavailable';
   let providerDetail = 'No working LLM path';
-
-  // Try LiteLLM first
-  let litellmReachable = false;
-  try {
-    const healthRes = await fetch(`http://localhost:${litellmPort}/health/liveliness`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    litellmReachable = healthRes.ok;
-  } catch { /* not reachable */ }
 
   if (litellmReachable) {
     providerName = 'litellm';
@@ -277,16 +380,17 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     providerDetail = `LiteLLM on port ${litellmPort}`;
     log.info(`LLM provider: LiteLLM (http://localhost:${litellmPort})`);
   } else {
-    // Fall back to built-in Anthropic proxy
-    const selfUrl = `http://127.0.0.1:${port}/v1`;
+    // Fall back to the in-process provider proxy (no Python/Docker required).
     server.agentState.litellmApiKey = server.agentState.wsSessionToken;
-    server.localConfig.litellmUrl = selfUrl;
+    server.localConfig.litellmUrl = selfProxyUrl;
     providerName = 'anthropic-proxy';
 
-    const hasKey = hasAnthropicKey(dataDir, server);
-    if (hasKey) {
-      providerHealth = 'healthy';
-      providerDetail = 'Built-in Anthropic proxy (API key configured)';
+    const configuredProviders = getConfiguredProviderIds(dataDir, server);
+    if (configuredProviders.length > 0) {
+      providerHealth = 'degraded';
+      providerDetail = configuredProviders.length === 1 && configuredProviders[0] === 'anthropic'
+        ? 'Built-in Anthropic proxy (API key configured; verification pending)'
+        : `Built-in provider proxy (credentials configured: ${configuredProviders.join(', ')}; verification pending)`;
     } else {
       const localModels = await listOllamaChatModelIds();
       if (localModels.length > 0) {
@@ -296,14 +400,14 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
         server.agentState.currentModel = localModels[0];
       } else {
         providerHealth = 'degraded';
-      providerDetail = 'Built-in Anthropic proxy (no API key — configure in Settings > API Keys)';
+      providerDetail = 'Built-in provider proxy (no API key — configure in Settings > API Keys)';
       }
     }
 
     if (litellm.status !== 'running' && litellm.status !== 'started') {
-      log.info(`LiteLLM unavailable (${litellm.status}), using built-in Anthropic proxy`);
+      log.info(`LiteLLM unavailable (${litellm.status}), using built-in provider proxy`);
     } else {
-      log.info(`LiteLLM not reachable, using built-in Anthropic proxy`);
+      log.info(`LiteLLM not reachable, using built-in provider proxy`);
     }
     log.info(`LLM provider: ${providerDetail}`);
   }
@@ -315,11 +419,29 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     detail: providerDetail,
     checkedAt: new Date().toISOString(),
   };
+  server.offlineManager.start();
 
   emit({ phase: 'ready', message: `LLM: ${providerDetail}`, progress: 0.9 });
 
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+
+  if (allowDesktopPortFallback && desktopReadyFile && desktopInstanceId) {
+    try {
+      publishDesktopReadyFile(desktopReadyFile, {
+        schemaVersion: 1,
+        instanceId: desktopInstanceId,
+        pid: process.pid,
+        host: '127.0.0.1',
+        preferredPort: port,
+        port: actualPort,
+        startedAt: desktopStartedAt,
+      });
+    } catch (error) {
+      await shutdown();
+      throw new Error(`Unable to publish desktop service readiness: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   emit({ phase: 'ready', message: 'Waggle service is ready!', progress: 1 });
 

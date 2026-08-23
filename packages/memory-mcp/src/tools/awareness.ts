@@ -6,7 +6,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getAwareness } from '../core/setup.js';
-import type { AwarenessCategory } from '@waggle/core';
+import { evaluateExternalMemoryIngress, type AwarenessCategory } from '@waggle/core';
 
 export function registerAwarenessTools(server: McpServer): void {
 
@@ -66,6 +66,16 @@ export function registerAwarenessTools(server: McpServer): void {
         .describe('Time-to-live in minutes. Item auto-expires after this duration'),
     },
     async ({ category, content, priority, ttl_minutes }) => {
+      if (evaluateExternalMemoryIngress({ content }).action === 'block') {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Error: Awareness content could not be saved.',
+          }],
+          isError: true,
+        };
+      }
+
       const awareness = getAwareness();
 
       let expiresAt: string | undefined;

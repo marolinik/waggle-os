@@ -19,6 +19,5 @@ export const events = {
 
 export function emit(event: LandingEvent): void {
   if (process.env.NODE_ENV === 'production') return;
-  // eslint-disable-next-line no-console
   console.info('[landing.event]', event.name, event.properties ?? {});
 }

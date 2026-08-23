@@ -57,16 +57,65 @@ function buildGroup(spec: HookEntrySpec): HookGroup {
   return group;
 }
 
-function isHiveGroup(group: HookGroup | undefined): boolean {
-  return !!group && group._hiveMindShim === HIVE_MIND_MARKER;
+function firstCommand(group: HookGroup | undefined): string | undefined {
+  if (!group || !Array.isArray(group.hooks)) return undefined;
+  const command = group.hooks[0]?.command;
+  return typeof command === 'string' ? command : undefined;
+}
+
+export function isHiveHookCommand(command: string | undefined, basename?: HookBasename): boolean {
+  return hiveHookScriptPath(command, basename) !== undefined;
+}
+
+export function generatedHookScriptPath(
+  command: string | undefined,
+  basename?: HookBasename,
+): string | undefined {
+  if (!command) return undefined;
+
+  const pathNode = /^node\s+"([^"]+)"(?:\s|$)/i.exec(command);
+  const pinnedNode = /^"([^"]+)"\s+"([^"]+)"(?:\s|$)/.exec(command);
+  let scriptPath = pathNode?.[1];
+  if (!scriptPath && pinnedNode?.[1] && pinnedNode[2]) {
+    const executable = pinnedNode[1].replace(/\\/g, '/').split('/').at(-1)?.toLowerCase();
+    if (executable === 'node' || executable === 'node.exe') scriptPath = pinnedNode[2];
+  }
+  if (!scriptPath) return undefined;
+
+  const normalized = scriptPath.replace(/\\/g, '/').toLowerCase();
+  const basenames = basename ? [basename] : allHookBasenames();
+  const generated = basenames.some((candidate) => normalized.endsWith(`/${candidate}.js`));
+  return generated ? scriptPath : undefined;
+}
+
+export function hiveHookScriptPath(
+  command: string | undefined,
+  basename?: HookBasename,
+): string | undefined {
+  const scriptPath = generatedHookScriptPath(command, basename);
+  if (!scriptPath) return undefined;
+
+  const normalized = scriptPath.replace(/\\/g, '/').toLowerCase();
+  const basenames = basename ? [basename] : allHookBasenames();
+  const owned = basenames.some((candidate) => normalized.endsWith(
+    `/hive-mind-hooks-claude-code/dist/hooks/${candidate}.js`,
+  ));
+  return owned ? scriptPath : undefined;
+}
+
+export function isOwnedHiveGroup(group: HookGroup | undefined, basename?: HookBasename): boolean {
+  return !!group && (
+    group._hiveMindShim === HIVE_MIND_MARKER
+    || isHiveHookCommand(firstCommand(group), basename)
+  );
 }
 
 /**
  * Returns a NEW settings object with hive-mind hook entries appended to
  * each Claude Code event array. Existing entries are preserved.
  *
- * If a hive-mind entry for a given event is already present (matching
- * marker AND command path), it is replaced in place rather than
+ * If a hive-mind entry for a given event is already present, its marker is
+ * the ownership boundary, so it is replaced in place rather than
  * duplicated — supports re-running install for upgrades.
  */
 export function mergeHiveHooks(
@@ -82,16 +131,15 @@ export function mergeHiveHooks(
     const existingArr = nextHooks[eventKey] ? [...nextHooks[eventKey]] : [];
     const newGroup = buildGroup(spec);
 
-    let replaced = false;
-    for (let i = 0; i < existingArr.length; i += 1) {
-      const g = existingArr[i];
-      if (isHiveGroup(g) && g.hooks[0]?.command === spec.command) {
-        existingArr[i] = newGroup;
-        replaced = true;
-        break;
+    const ownedIndex = existingArr.findIndex((group) => isOwnedHiveGroup(group, spec.basename));
+    if (ownedIndex === -1) {
+      existingArr.push(newGroup);
+    } else {
+      existingArr[ownedIndex] = newGroup;
+      for (let i = existingArr.length - 1; i > ownedIndex; i -= 1) {
+        if (isOwnedHiveGroup(existingArr[i], spec.basename)) existingArr.splice(i, 1);
       }
     }
-    if (!replaced) existingArr.push(newGroup);
 
     nextHooks[eventKey] = existingArr;
   }
@@ -107,7 +155,7 @@ export function mergeHiveHooks(
 export function hasHiveHooks(settings: ClaudeCodeSettings | undefined): boolean {
   if (!settings || !settings.hooks) return false;
   for (const groups of Object.values(settings.hooks)) {
-    if (Array.isArray(groups) && groups.some(isHiveGroup)) return true;
+    if (Array.isArray(groups) && groups.some((group) => isOwnedHiveGroup(group))) return true;
   }
   return false;
 }

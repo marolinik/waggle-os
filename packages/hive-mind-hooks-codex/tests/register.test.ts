@@ -21,7 +21,9 @@ function entry(
 ): JsonRegisterEntry {
   return {
     lifecycle,
-    command: hookCommandFor(`${HOOKS_DIR}/${basename}.js`),
+    // Registration-shape tests are platform-neutral; command dispatch itself
+    // is covered by paths.test.ts against Codex's exact Windows Rust runner.
+    command: hookCommandFor(`${HOOKS_DIR}/${basename}.js`, undefined, { platform: 'linux' }),
     timeout,
   };
 }

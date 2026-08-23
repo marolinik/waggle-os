@@ -44,7 +44,7 @@ const PERSONAS = [
 const DETECTED_TOOLS = [
   detectedTool('claude-code'),
   detectedTool('codex', false),
-  detectedTool('hermes'),
+  { ...detectedTool('hermes'), launchable: false, diagnostic: 'Hermes runtime is broken' },
   detectedTool('openclaw'),
   detectedTool('cursor'),
 ];
@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 describe('ExecutorRegistry', () => {
-  it('composes the five v1 personas and four headless external executors', async () => {
+  it('composes five v1 personas and only release-supported headless executors', async () => {
     const registry = new ExecutorRegistry({
       detectTools: vi.fn(async () => DETECTED_TOOLS),
       personas: () => PERSONAS,
@@ -71,7 +71,6 @@ describe('ExecutorRegistry', () => {
       'external:claude-code',
       'external:codex',
       'external:hermes',
-      'external:openclaw',
     ]);
     expect(candidates.find((candidate) => candidate.id === 'persona:coder')).toMatchObject({
       kind: 'persona',
@@ -98,9 +97,12 @@ describe('ExecutorRegistry', () => {
       healthy: false,
       egressDestination: 'OpenAI',
     });
-    expect(candidates.find((candidate) => candidate.id === 'external:hermes')?.egressDestination).toBe('Nous');
-    expect(candidates.find((candidate) => candidate.id === 'external:openclaw')?.egressDestination)
-      .toBe('configured provider');
+    expect(candidates.find((candidate) => candidate.id === 'external:hermes')).toMatchObject({
+      installed: true,
+      healthy: false,
+      egressDestination: 'Nous',
+    });
+    expect(candidates.find((candidate) => candidate.id === 'external:openclaw')).toBeUndefined();
   });
 
   it('normalizes tool ids and expires rate-limit observations', async () => {

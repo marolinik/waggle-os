@@ -167,7 +167,9 @@ describe('createCliBridge.saveMemory (Commit 1.4 wire format)', () => {
     const result = await bridge.saveMemory(SAMPLE_FRAME);
     expect(result).toEqual({ id: '9', success: true, workspace: 'personal' });
 
-    const wireArgs = JSON.parse(records[0].args[4] as string) as Record<string, unknown>;
+    expect(records[0].args.slice(0, 3)).toEqual(['hook-call', 'save_memory', '--args']);
+    expect(records[0].args.at(-1)).toBe('--json');
+    const wireArgs = JSON.parse(records[0].args[3] as string) as Record<string, unknown>;
     expect(Object.keys(wireArgs).sort()).toEqual(['content', 'importance', 'source']);
     expect(wireArgs['source']).toBe('system');
     expect(wireArgs['importance']).toBe('normal');
@@ -182,7 +184,7 @@ describe('createCliBridge.saveMemory (Commit 1.4 wire format)', () => {
     bridge.setWorkspaceById('team-foo');
 
     await bridge.saveMemory(SAMPLE_FRAME);
-    const wireArgs = JSON.parse(records[0].args[4] as string) as Record<string, unknown>;
+    const wireArgs = JSON.parse(records[0].args[3] as string) as Record<string, unknown>;
     expect(wireArgs['workspace']).toBe('team-foo');
   });
 
@@ -193,13 +195,67 @@ describe('createCliBridge.saveMemory (Commit 1.4 wire format)', () => {
     bridge.setWorkspaceById('default-ws');
 
     await bridge.saveMemory(SAMPLE_FRAME, { workspace: 'override-ws' });
-    const wireArgs = JSON.parse(records[0].args[4] as string) as Record<string, unknown>;
+    const wireArgs = JSON.parse(records[0].args[3] as string) as Record<string, unknown>;
     expect(wireArgs['workspace']).toBe('override-ws');
+  });
+
+  it('runs an uppercase JavaScript CLI path with spaces directly through Node', async () => {
+    const records: MockSpawnRecord[] = [];
+    const cliPath = 'C:\\Program Files\\Hive Mind\\CLI.JS';
+    const spawnImpl = makeSpawnImpl(records, { stdout: jsonResultEnvelope({ id: 7 }) });
+    const bridge = createCliBridge({ cli_path: cliPath, spawnImpl, max_retries: 0 });
+
+    await bridge.saveMemory(SAMPLE_FRAME);
+    expect(records[0].command).toBe(process.execPath);
+    expect(records[0].args).toEqual([
+      cliPath,
+      'hook-call', 'save_memory',
+      '--args', expect.any(String),
+      '--json',
+    ]);
+  });
+
+  it('surfaces fast-path non-zero exits', async () => {
+    const spawnImpl = makeSpawnImpl([], { stderr: 'fast failure', exitCode: 2 });
+    const bridge = createCliBridge({ spawnImpl, max_retries: 0 });
+    await expect(bridge.saveMemory(SAMPLE_FRAME)).rejects.toThrow(/exited with code 2/);
+  });
+
+  it('surfaces fast-path ok:false envelopes', async () => {
+    const stdout = JSON.stringify({ ok: false, tool: 'save_memory', error: 'write denied' });
+    const spawnImpl = makeSpawnImpl([], { stdout });
+    const bridge = createCliBridge({ spawnImpl, max_retries: 0 });
+    await expect(bridge.saveMemory(SAMPLE_FRAME)).rejects.toThrow(/hook tool save_memory failed: write denied/);
+  });
+
+  it('surfaces fast-path isError envelopes', async () => {
+    const stdout = JSON.stringify({
+      ok: true,
+      tool: 'save_memory',
+      isError: true,
+      content: [{ type: 'text', text: 'workspace unavailable' }],
+    });
+    const spawnImpl = makeSpawnImpl([], { stdout });
+    const bridge = createCliBridge({ spawnImpl, max_retries: 0 });
+    await expect(bridge.saveMemory(SAMPLE_FRAME)).rejects.toThrow(/workspace unavailable/);
+  });
+
+  it('bounds fast-path timeout when retries are disabled', async () => {
+    const records: MockSpawnRecord[] = [];
+    const spawnImpl = makeSpawnImpl(records, {
+      stdout: jsonResultEnvelope({ id: 1 }),
+      delayMs: 1_000,
+    });
+    const bridge = createCliBridge({ spawnImpl, timeout_ms: 5, max_retries: 0 });
+
+    await expect(bridge.saveMemory(SAMPLE_FRAME)).rejects.toThrow(/timed out after 505ms/);
+    expect(records).toHaveLength(1);
   });
 });
 
 describe('createCliBridge.recallMemory', () => {
   it('returns MemoryHit[] when upstream replies with a JSON array', async () => {
+    const records: MockSpawnRecord[] = [];
     const hits = [{
       id: 1,
       content: 'past',
@@ -209,11 +265,12 @@ describe('createCliBridge.recallMemory', () => {
       created_at: '2026-04-28T10:00:00.000Z',
       from: 'personal',
     }];
-    const spawnImpl = makeSpawnImpl([], { stdout: jsonResultEnvelope(hits) });
+    const spawnImpl = makeSpawnImpl(records, { stdout: jsonResultEnvelope(hits) });
     const bridge = createCliBridge({ spawnImpl, max_retries: 0 });
     const out = await bridge.recallMemory('past');
     expect(out).toHaveLength(1);
     expect(out[0].score).toBe(0.91);
+    expect(records[0].args.slice(0, 3)).toEqual(['mcp', 'call', 'recall_memory']);
   });
 
   it('returns [] when upstream responds with the "No memories found" plain-text envelope', async () => {
@@ -239,6 +296,54 @@ describe('createCliBridge.recallMemory', () => {
     await bridge.recallMemory('', { scope: 'personal', workspace: null });
     const wireArgs = JSON.parse(records[0].args[4] as string) as Record<string, unknown>;
     expect(wireArgs).toEqual({ query: '', scope: 'personal' });
+  });
+
+  it('routes only eligible empty personal/current recalls through hook-call', async () => {
+    const records: MockSpawnRecord[] = [];
+    const hits = [{
+      id: 1,
+      content: 'fast context',
+      importance: 'important',
+      source: 'system',
+      score: 0.85,
+      created_at: '2026-07-20T00:00:00.000Z',
+      from: 'personal',
+    }];
+    const spawnImpl = makeSpawnImpl(records, { stdout: jsonResultEnvelope(hits) });
+    const bridge = createCliBridge({ spawnImpl, max_retries: 0 });
+
+    await bridge.recallMemory('', { limit: 5, scope: 'personal', workspace: null });
+    await bridge.recallMemory('', { limit: 5, scope: 'current', workspace: 'project-one' });
+
+    expect(records).toHaveLength(2);
+    expect(records[0].args).toEqual([
+      'hook-call', 'recall_memory',
+      '--args', JSON.stringify({ query: '', limit: 5, scope: 'personal' }),
+      '--json',
+    ]);
+    expect(records[1].args).toEqual([
+      'hook-call', 'recall_memory',
+      '--args', JSON.stringify({ query: '', limit: 5, workspace: 'project-one', scope: 'current' }),
+      '--json',
+    ]);
+  });
+
+  it.each([
+    { query: 'semantic', opts: { limit: 5, scope: 'personal' as const } },
+    { query: '', opts: { limit: 5, scope: 'all' as const } },
+    { query: '', opts: { limit: 5, scope: 'personal' as const, profile: 'recent' as const } },
+    { query: '', opts: { scope: 'personal' as const } },
+    { query: '', opts: { limit: 0, scope: 'personal' as const } },
+    { query: '', opts: { limit: 1.5, scope: 'personal' as const } },
+    { query: '', opts: { limit: 101, scope: 'personal' as const } },
+    { query: '', opts: { limit: 5, scope: 'current' as const } },
+    { query: '', opts: { limit: 5, scope: 'current' as const, workspace: 'bad/path' } },
+  ])('keeps ineligible recall on the MCP path: $query/$opts', async ({ query, opts }) => {
+    const records: MockSpawnRecord[] = [];
+    const spawnImpl = makeSpawnImpl(records, { stdout: jsonResultEnvelope([]) });
+    const bridge = createCliBridge({ spawnImpl, max_retries: 0 });
+    await bridge.recallMemory(query, opts);
+    expect(records[0].args.slice(0, 3)).toEqual(['mcp', 'call', 'recall_memory']);
   });
 });
 

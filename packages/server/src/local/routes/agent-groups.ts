@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { FrameStore, SessionStore } from '@waggle/core';
+import { evaluateExternalMemoryIngress, FrameStore, SessionStore } from '@waggle/core';
 import type { CollaborationRunMemoryRefs, CollaborationWorkerRun, WaggleMessage } from '@waggle/shared';
 import {
   SubagentOrchestrator,
@@ -21,7 +21,15 @@ import {
 } from '@waggle/agent';
 import type { AgentRunner } from './chat.js';
 import { buildWorkflowFromGroup } from '../../services/agent-group-executor.js';
+import { applyPersonaToolFilter } from '../persona-tool-filter.js';
+import { listOllamaChatModelIds, resolveUsableModel } from '../model-availability.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
+import { isOfflineOllamaModelReference } from './chat-helpers.js';
+import {
+  bindModelSpendBudget,
+  createModelSpendMeter,
+  type ModelSpendMeter,
+} from '../model-spend-meter.js';
 
 interface AgentGroupMember {
   agentId: string;
@@ -48,6 +56,8 @@ interface GroupRunContext {
 
 const STRATEGIES = ['parallel', 'sequential', 'coordinator'] as const;
 type GroupStrategy = typeof STRATEGIES[number];
+const QUARANTINED_AGENT_RESULT = '[Quarantined agent result: unsafe external content]';
+const QUARANTINED_AGENT_ERROR = '[Quarantined agent error: unsafe external content]';
 
 function isStrategy(value: string): value is GroupStrategy {
   return STRATEGIES.includes(value as GroupStrategy);
@@ -88,6 +98,26 @@ function snapshotWorkers(orchestrator: SubagentOrchestrator): Record<string, unk
   }));
 }
 
+function guardAgentOutput(text: string, kind: 'result' | 'error'): string {
+  if (evaluateExternalMemoryIngress({ content: text }).action === 'allow') return text;
+  return kind === 'result' ? QUARANTINED_AGENT_RESULT : QUARANTINED_AGENT_ERROR;
+}
+
+function guardAgentRunner(runLoop: AgentRunner): AgentRunner {
+  return async (config) => {
+    try {
+      const response = await runLoop(config);
+      const content = guardAgentOutput(response.content, 'result');
+      return content === response.content ? response : { ...response, content };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const durableMessage = guardAgentOutput(message, 'error');
+      if (durableMessage === message) throw error;
+      throw new Error(durableMessage);
+    }
+  };
+}
+
 function getGroupsPath(dataDir: string): string {
   return path.join(dataDir, 'agent-groups.json');
 }
@@ -107,6 +137,28 @@ function saveGroups(dataDir: string, groups: AgentGroup[]): void {
 
 export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
   const dataDir = server.localConfig.dataDir;
+  const activeExecutions = new Map<string, Promise<void>>();
+  let shuttingDown = false;
+
+  server.addHook('preClose', async () => {
+    shuttingDown = true;
+    const executions = [...activeExecutions.entries()];
+    for (const [jobId] of executions) server.localJobStore.cancel(jobId);
+    const results = await Promise.allSettled(executions.map(([, execution]) => execution));
+    const failures = results.flatMap((result, index) => (
+      result.status === 'rejected'
+        ? [{ jobId: executions[index][0], reason: result.reason }]
+        : []
+    ));
+    if (failures.length > 0) {
+      throw new AggregateError(
+        failures.map(({ jobId, reason }) => (
+          `${jobId}: ${reason instanceof Error ? reason.message : String(reason)}`
+        )),
+        'Agent group execution cleanup failed during shutdown',
+      );
+    }
+  });
 
   // GET /api/agent-groups
   server.get('/api/agent-groups', async () => {
@@ -187,6 +239,7 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
     Params: { id: string };
     Body: { task: string; workspaceId?: string; teamId?: string };
   }>('/api/agent-groups/:id/run', async (request, reply) => {
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
     const groups = loadGroups(dataDir);
     const group = groups.find(g => g.id === request.params.id);
     if (!group) return reply.code(404).send({ error: 'Group not found' });
@@ -198,21 +251,46 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
     const missingPersona = group.members.find((member) => !resolvePersona(member.agentId));
     if (missingPersona) return reply.code(409).send({ error: `Persona no longer exists: ${missingPersona.agentId}` });
 
+    const workspaceId = server.agentRunRegistry && server.workspaceManager
+      ? request.body.workspaceId
+        || server.workspaceManager.getDefault()
+        || server.workspaceManager.list()[0]?.id
+      : undefined;
+    const workspace = workspaceId ? server.workspaceManager.get(workspaceId) : undefined;
+    if (server.agentRunRegistry && server.workspaceManager) {
+      if (!workspaceId) return reply.code(404).send({ error: 'workspace_not_found' });
+      if (!workspace) return reply.code(404).send({ error: 'workspace_not_found' });
+    }
+
+    let localExecutionModel: string | undefined;
+    const workspaceModel = workspace?.model?.trim();
+    const currentModel = server.agentState.currentModel?.trim();
+    const configuredModel = workspaceModel && isOfflineOllamaModelReference(workspaceModel)
+      ? workspaceModel
+      : currentModel;
+    if (configuredModel && isOfflineOllamaModelReference(configuredModel)) {
+      try {
+        localExecutionModel = await resolveUsableModel(server, configuredModel);
+        if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
+      } catch (error) {
+        return reply.code(409).send({
+          error: 'model_unavailable',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     let runContext: GroupRunContext | undefined;
     if (server.agentRunRegistry && server.workspaceManager) {
-      const workspaceId = request.body.workspaceId
-        || server.workspaceManager.getDefault()
-        || server.workspaceManager.list()[0]?.id;
-      if (!workspaceId) return reply.code(404).send({ error: 'workspace_not_found' });
-      const workspace = server.workspaceManager.get(workspaceId);
-      if (!workspace) return reply.code(404).send({ error: 'workspace_not_found' });
+      const resolvedWorkspaceId = workspaceId!;
+      const resolvedWorkspace = workspace!;
       let cwd: string;
-      try { cwd = resolveWorkspaceExecutionRoot(dataDir, workspace); }
+      try { cwd = resolveWorkspaceExecutionRoot(dataDir, resolvedWorkspace); }
       catch (err) {
         return reply.code(409).send({ error: 'workspace_root_invalid', message: err instanceof Error ? err.message : String(err) });
       }
       const room = server.agentRunRegistry.createRoom({
-        workspaceIds: [workspaceId],
+        workspaceIds: [resolvedWorkspaceId],
         source: 'agent_group',
         executor: { kind: 'coordinator', agentId: group.id },
         title: group.name,
@@ -225,11 +303,11 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
         const persona = resolvePersona(member.agentId)!;
         const run = server.agentRunRegistry.createWorker({
           parentRunId: room.id,
-          workspaceId,
+          workspaceId: resolvedWorkspaceId,
           source: 'agent_group',
           executor: {
             kind: 'waggle_agent', agentId: member.agentId,
-            personaId: persona.id, model: persona.modelPreference,
+            personaId: persona.id, model: localExecutionModel ?? persona.modelPreference,
           },
           title: persona.name,
           task: task.trim(),
@@ -244,7 +322,7 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
         });
         if (assignment) assignmentIds.set(persona.name, assignment.id);
       }
-      runContext = { roomId: room.id, workspaceId, cwd, runs, assignmentIds };
+      runContext = { roomId: room.id, workspaceId: resolvedWorkspaceId, cwd, runs, assignmentIds };
     }
 
     const job = server.localJobStore.create('group', {
@@ -252,7 +330,15 @@ export const agentGroupRoutes: FastifyPluginAsync = async (server) => {
       task: task.trim(),
       ...(runContext ? { roomId: runContext.roomId, workspaceId: runContext.workspaceId, cwd: runContext.cwd } : {}),
     });
-    void executeGroup(server, group, task.trim(), job.id, runContext);
+    const execution = executeGroup(server, group, task.trim(), job.id, runContext, localExecutionModel);
+    activeExecutions.set(job.id, execution);
+    void execution.then(
+      () => { activeExecutions.delete(job.id); },
+      (error: unknown) => {
+        activeExecutions.delete(job.id);
+        server.log.error({ err: error, jobId: job.id }, 'Agent group execution failed');
+      },
+    );
 
     return reply.code(202).send({
       jobId: job.id,
@@ -277,41 +363,56 @@ async function executeGroup(
   task: string,
   jobId: string,
   runContext?: GroupRunContext,
+  localExecutionModel?: string,
 ): Promise<void> {
   const signal = server.localJobStore.signal(jobId);
   if (!signal) return;
   server.localJobStore.update(jobId, { status: 'running', startedAt: new Date().toISOString() });
   const unregisterControls: Array<() => void> = [];
+  let settleExecution!: () => void;
+  const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
   let acquired = false;
+  let traceId: number | undefined;
+  let spendMeter: ModelSpendMeter | undefined;
 
   try {
     if (runContext) {
       unregisterControls.push(server.agentRunRegistry.registerControls(runContext.roomId, {
-        cancel: () => { server.localJobStore.cancel(jobId); },
+        cancel: async () => {
+          server.localJobStore.cancel(jobId);
+          await executionSettled;
+        },
       }));
       signal.addEventListener('abort', () => {
+        const room = server.agentRunRegistry.get(runContext.roomId);
+        if (room && !['completed', 'failed', 'cancelled', 'interrupted'].includes(room.status)) {
+          server.agentRunRegistry.update(runContext.roomId, { status: 'cancelling' });
+        }
         for (const run of runContext.runs.values()) {
           const current = server.agentRunRegistry.get(run.id);
           if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
-            server.agentRunRegistry.update(run.id, { status: 'cancelled', result: { summary: 'Group run cancelled' } });
+            server.agentRunRegistry.update(run.id, { status: 'cancelling', result: { summary: 'Group run cancelled' } });
           }
         }
       }, { once: true });
     }
 
-    const members = group.members.map((member) => {
-      const persona = resolvePersona(member.agentId)!;
-      return {
-        ...member,
-        name: persona.name,
-        role: member.roleInGroup,
-        systemPrompt: persona.systemPrompt,
-        model: persona.modelPreference,
-        tools: persona.tools,
-      };
-    });
-    const workflow: WorkflowTemplate = buildWorkflowFromGroup({ ...group, members }, task);
-    const runLoop: AgentRunner = server.agentRunner ?? runAgentLoop;
+    const underlyingRunLoop = guardAgentRunner(server.agentRunner ?? runAgentLoop);
+    spendMeter = runContext && server.agentState.costTracker
+      ? createModelSpendMeter(server.agentState.costTracker, (costUsd) => {
+          if (traceId === undefined) return;
+          server.traceStore?.recordCost(traceId, costUsd);
+        })
+      : undefined;
+    const baseRunLoop = spendMeter && runContext
+      ? bindModelSpendBudget(
+          underlyingRunLoop,
+          spendMeter,
+          runContext.workspaceId,
+          listOllamaChatModelIds,
+          () => traceId,
+        )
+      : underlyingRunLoop;
     let availableTools = server.agentState.allTools;
     let sessionOrchestrator: ReturnType<FastifyInstance['agentState']['createSessionOrchestrator']> | undefined;
     let workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0] | undefined;
@@ -324,7 +425,100 @@ async function executeGroup(
         runContext.cwd,
         runContext.workspaceId,
       );
+      traceId = server.traceStore?.start({
+        sessionId: `group-${jobId}`,
+        workspaceId: runContext.workspaceId,
+        model: localExecutionModel ?? server.agentState.currentModel,
+        input: task,
+        tags: [`room:${runContext.roomId}`, `group:${group.id}`, `job:${jobId}`],
+      });
     }
+    const members = group.members.map((member) => {
+      const persona = resolvePersona(member.agentId)!;
+      return {
+        ...member,
+        name: persona.name,
+        role: member.roleInGroup,
+        systemPrompt: persona.systemPrompt,
+        model: localExecutionModel ?? persona.modelPreference,
+        tools: applyPersonaToolFilter(availableTools, persona)
+          .map((tool) => tool.name),
+      };
+    });
+    const workspaceTurnCoordinator = runContext
+      ? server.agentState.workspaceTurnCoordinator
+      : undefined;
+    const updateJobWorkerSnapshot = (activeOrchestrator: SubagentOrchestrator) => {
+      let workers = snapshotWorkers(activeOrchestrator);
+      if (workspaceTurnCoordinator && runContext) {
+        workers = workers.map((worker) => {
+          const workerName = typeof worker.name === 'string' ? worker.name : undefined;
+          const run = workerName ? runContext.runs.get(workerName) : undefined;
+          const status = run ? server.agentRunRegistry.get(run.id)?.status : undefined;
+          if (status === 'queued') return { ...worker, status: 'pending' };
+          if (status === 'running') return { ...worker, status: 'running' };
+          return worker;
+        });
+      }
+      server.localJobStore.update(jobId, { output: { workers } });
+    };
+    const runLoop = workspaceTurnCoordinator && runContext
+      ? async (config: Parameters<AgentRunner>[0]) => {
+          const workerName = /^# Sub-Agent: ([^\r\n]+)$/m.exec(config.systemPrompt)?.[1]?.trim();
+          const run = workerName ? runContext.runs.get(workerName) : undefined;
+          const markWaiting = () => {
+            if (!run) return;
+            const current = server.agentRunRegistry.get(run.id);
+            if (!current || ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) return;
+            server.agentRunRegistry.update(run.id, {
+              status: 'queued',
+              executor: { model: config.model },
+              progress: { message: 'Waiting for workspace', phase: 'workspace_queue' },
+            });
+            updateJobWorkerSnapshot(orchestrator);
+          };
+          const markRunning = () => {
+            if (!run) return;
+            const current = server.agentRunRegistry.get(run.id);
+            if (!current || ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) return;
+            server.agentRunRegistry.update(run.id, {
+              status: 'running',
+              executor: { model: config.model },
+              progress: { message: 'Working', phase: 'running' },
+            });
+            publishGroupDance(
+              server,
+              run,
+              'response',
+              'task_claim',
+              { phase: 'running', result: null, error: null },
+              runContext.assignmentIds.get(workerName!),
+            );
+            updateJobWorkerSnapshot(orchestrator);
+          };
+          const workerScope = workspaceTurnCoordinator.createScope(runContext.cwd, signal);
+          let tools = workerScope.wrapTools(config.tools);
+          const workspaceAccess = workerScope.classify(tools);
+          try {
+            if (workspaceAccess !== 'none') await workerScope.acquire(workspaceAccess, markWaiting);
+            markRunning();
+            tools = server.agentState.bindWorkspaceCollaborationTools({
+              visibleTools: tools,
+              workerTools: tools,
+              runLoop: baseRunLoop,
+              signal,
+              runChildTransaction: (childTools, operation) => (
+                workerScope.runChildTransaction(childTools, operation)
+              ),
+              defaultModel: config.model,
+            });
+            return await baseRunLoop({ ...config, tools });
+          } finally {
+            await workerScope.release();
+          }
+        }
+      : baseRunLoop;
+    const workflow: WorkflowTemplate = buildWorkflowFromGroup({ ...group, members }, task);
     const orchestrator = new SubagentOrchestrator({
       availableTools,
       runLoop,
@@ -333,15 +527,16 @@ async function executeGroup(
       defaultModel: server.agentState.currentModel,
       hooks: server.agentState.hookRegistry,
       signal,
-      getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     });
     orchestrator.on('worker:status', (event: { workerState: import('@waggle/agent').WorkerState }) => {
-      server.localJobStore.update(jobId, { output: { workers: snapshotWorkers(orchestrator) } });
+      updateJobWorkerSnapshot(orchestrator);
       if (!runContext) return;
       const run = runContext.runs.get(event.workerState.name);
       if (!run) return;
       const current = server.agentRunRegistry.get(run.id);
       if (!current || ['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) return;
+      if (signal.aborted) return;
+      if (workspaceTurnCoordinator && event.workerState.status === 'running') return;
       const status = event.workerState.status === 'done'
         ? 'completed'
         : event.workerState.status === 'failed'
@@ -357,6 +552,7 @@ async function executeGroup(
         metrics: { toolsUsed: event.workerState.toolsUsed },
         progress: status === 'running' ? { message: 'Working', phase: 'running' } : null,
       });
+      updateJobWorkerSnapshot(orchestrator);
       const messageType: WaggleMessage['type'] = status === 'running' ? 'response' : 'broadcast';
       const subtype: WaggleMessage['subtype'] = status === 'running' ? 'task_claim' : status === 'queued' ? 'discovery' : 'routed_share';
       publishGroupDance(
@@ -369,7 +565,8 @@ async function executeGroup(
       );
     });
 
-    const { results, aggregated } = await orchestrator.runWorkflow(workflow);
+    const { results, aggregated: rawAggregated } = await orchestrator.runWorkflow(workflow);
+    const aggregated = guardAgentOutput(rawAggregated, 'result');
     const workers = snapshotWorkers(orchestrator);
     const failed = Array.from(results.values()).some((worker) => worker.status === 'failed');
     if (runContext && workspaceMind) {
@@ -393,14 +590,22 @@ async function executeGroup(
         output: { aggregated, workers, ...(runContext ? { roomId: runContext.roomId } : {}) },
       });
     }
+    if (traceId !== undefined) {
+      server.traceStore?.finalize(traceId, {
+        outcome: signal.aborted || failed ? 'abandoned' : 'success',
+        output: aggregated,
+        costUsd: spendMeter?.totalCostUsd(),
+      });
+    }
   } catch (error) {
+    const durableError = guardAgentOutput(error instanceof Error ? error.message : String(error), 'error');
     if (runContext) {
       for (const run of runContext.runs.values()) {
         const current = server.agentRunRegistry.get(run.id);
         if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
           server.agentRunRegistry.update(run.id, {
-            status: signal.aborted ? 'cancelled' : 'failed',
-            result: { error: error instanceof Error ? error.message : String(error) },
+            status: signal.aborted ? 'cancelling' : 'failed',
+            result: { error: durableError },
           });
         }
       }
@@ -409,12 +614,32 @@ async function executeGroup(
       server.localJobStore.update(jobId, {
         status: 'failed',
         completedAt: new Date().toISOString(),
-        output: { error: error instanceof Error ? error.message : String(error) },
+        output: { error: durableError },
+      });
+    }
+    if (traceId !== undefined) {
+      server.traceStore?.finalize(traceId, {
+        outcome: 'abandoned',
+        output: durableError,
+        costUsd: spendMeter?.totalCostUsd(),
       });
     }
   } finally {
     for (const unregister of unregisterControls) unregister();
-    if (acquired && runContext) server.mindCache.release(runContext.workspaceId);
+    try {
+      if (acquired && runContext) server.mindCache.release(runContext.workspaceId);
+    } finally {
+      try {
+        if (runContext && signal.aborted) {
+          const room = server.agentRunRegistry.get(runContext.roomId);
+          if (room?.status === 'cancelling') {
+            server.agentRunRegistry.finalizeRoomCancellation(runContext.roomId);
+          }
+        }
+      } finally {
+        settleExecution();
+      }
+    }
   }
 }
 

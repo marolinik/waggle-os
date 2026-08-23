@@ -29,6 +29,7 @@ import { LocalScheduler, makeRecordExecutionCallback } from '../../src/local/cro
 import { cronRoutes } from '../../src/local/routes/cron.js';
 import { notificationRoutes } from '../../src/local/routes/notifications.js';
 import { automationRoutes } from '../../src/local/routes/automations.js';
+import { securityMiddleware } from '../../src/local/security-middleware.js';
 
 describe('Automations alias routes (Phase 3)', () => {
   let db: MindDB;
@@ -37,12 +38,18 @@ describe('Automations alias routes (Phase 3)', () => {
   let executed: CronSchedule[];
   let failNext: boolean;
   let server: ReturnType<typeof Fastify>;
+  let includeViewerWorkspace: boolean;
+  let literalGlobalIsViewer: boolean;
+  let viewerOptimizationEnabled: boolean;
 
   beforeEach(async () => {
     db = new MindDB(':memory:');
     cronStore = new CronStore(db);
     executed = [];
     failNext = false;
+    includeViewerWorkspace = false;
+    literalGlobalIsViewer = false;
+    viewerOptimizationEnabled = 1 as unknown as boolean;
     scheduler = new LocalScheduler(
       cronStore,
       async (schedule) => {
@@ -62,8 +69,39 @@ describe('Automations alias routes (Phase 3)', () => {
     // Minimal workspace index for the /test workspaceId validation: 'ws-test'
     // is the only known workspace.
     server.decorate('workspaceManager', {
-      get: (id: string) => (id === 'ws-test' ? { id, name: 'Test WS' } : undefined),
+      get: (id: string) => {
+        if (id === 'ws-test') {
+          return { id, name: 'Test WS', teamId: 'team-1', teamRole: 'member' };
+        }
+        if (id === 'viewer-workspace') {
+          return {
+            id,
+            name: 'Viewer WS',
+            teamId: 'team-1',
+            teamRole: 'viewer',
+            optimizationEnabled: viewerOptimizationEnabled,
+          };
+        }
+        if (id === 'global' && literalGlobalIsViewer) {
+          return { id, name: 'Global WS', teamId: 'team-1', teamRole: 'viewer' };
+        }
+        return undefined;
+      },
+      getDefault: () => 'ws-test',
+      list: () => [
+        { id: 'ws-test', name: 'Test WS', teamId: 'team-1', teamRole: 'member' },
+        ...(includeViewerWorkspace
+          ? [{
+              id: 'viewer-workspace',
+              name: 'Viewer WS',
+              teamId: 'team-1',
+              teamRole: 'viewer',
+              optimizationEnabled: viewerOptimizationEnabled,
+            }]
+          : []),
+      ],
     });
+    await server.register(securityMiddleware);
     await server.register(cronRoutes);
     // F4: the real /api/cron/:id/history route (notifications.ts) — its only
     // decoration needs are cronStore + eventBus, both provided above.
@@ -251,6 +289,425 @@ describe('Automations alias routes (Phase 3)', () => {
     expect(cronStore.getById(parseInt(automation.id, 10))!.enabled).toBe(0);
     expect((await server.inject({ method: 'POST', url: '/api/automations/9999/pause' })).statusCode).toBe(404);
     expect((await server.inject({ method: 'POST', url: '/api/automations/abc/pause' })).statusCode).toBe(400);
+  });
+
+  it.each([
+    {
+      label: 'cron PATCH',
+      request: (id: number) => ({
+        method: 'PATCH' as const,
+        url: `/api/cron/${id}`,
+        payload: { name: 'blocked', workspaceId: 'ws-test' },
+      }),
+    },
+    {
+      label: 'cron DELETE',
+      request: (id: number) => ({ method: 'DELETE' as const, url: `/api/cron/${id}` }),
+    },
+    {
+      label: 'cron trigger',
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/cron/${id}/trigger` }),
+    },
+    {
+      label: 'automation PATCH',
+      request: (id: number) => ({
+        method: 'PATCH' as const,
+        url: `/api/automations/${id}`,
+        payload: { name: 'blocked', workspaceId: 'ws-test' },
+      }),
+    },
+    {
+      label: 'automation run',
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/automations/${id}/run` }),
+    },
+    {
+      label: 'automation pause',
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/automations/${id}/pause` }),
+    },
+    {
+      label: 'cron DELETE with parseInt-compatible suffix',
+      request: (id: number) => ({ method: 'DELETE' as const, url: `/api/cron/${id}suffix` }),
+    },
+    {
+      label: 'automation pause with parseInt-compatible suffix',
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/automations/${id}suffix/pause` }),
+    },
+  ])('viewer-owned stored row blocks $label before state changes', async ({ request }) => {
+    const row = cronStore.create({
+      name: 'Viewer schedule',
+      cronExpr: '0 2 * * *',
+      jobType: 'workspace_health',
+      workspaceId: 'viewer-workspace',
+      enabled: false,
+    });
+    const before = cronStore.getById(row.id);
+
+    const res = await server.inject(request(row.id));
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(cronStore.getById(row.id)).toEqual(before);
+    expect(executed).toHaveLength(0);
+  });
+
+  it('stored literal global workspace ID remains guarded outside create-time normalization', async () => {
+    literalGlobalIsViewer = true;
+    const row = cronStore.create({
+      name: 'Global workspace loop',
+      cronExpr: '0 2 * * *',
+      jobType: 'loop',
+      workspaceId: 'global',
+      enabled: false,
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/cron/${row.id}/trigger`,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(executed).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      label: 'cron',
+      expectedStatus: 200,
+      request: {
+        method: 'POST' as const,
+        url: '/api/cron',
+        payload: {
+          name: 'Personal global loop',
+          cronExpr: '0 2 * * *',
+          jobType: 'loop',
+          workspaceId: 'global',
+        },
+      },
+    },
+    {
+      label: 'automation alias',
+      expectedStatus: 201,
+      request: {
+        method: 'POST' as const,
+        url: '/api/automations',
+        payload: {
+          name: 'Personal global loop',
+          schedule: '0 2 * * *',
+          jobType: 'loop',
+          workspaceId: 'global',
+        },
+      },
+    },
+  ])('create-time global normalization does not treat a $label loop as the literal global workspace', async ({
+    expectedStatus,
+    request,
+  }) => {
+    literalGlobalIsViewer = true;
+
+    const res = await server.inject(request);
+
+    expect(res.statusCode).toBe(expectedStatus);
+    expect(cronStore.list()).toHaveLength(1);
+    expect(cronStore.list()[0]?.workspace_id).toBe('*');
+  });
+
+  it('raw create jobConfig string is not interpreted before CronStore serializes it', async () => {
+    includeViewerWorkspace = true;
+    const rawJobConfig = JSON.stringify({ action: 'memory_compact' });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/cron',
+      payload: {
+        name: 'Opaque string config',
+        cronExpr: '0 2 * * *',
+        jobType: 'memory_consolidation',
+        jobConfig: rawJobConfig,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(cronStore.list()[0]!.job_config)).toBe(rawJobConfig);
+  });
+
+  it('raw PATCH jobConfig string is not interpreted before CronStore serializes it', async () => {
+    includeViewerWorkspace = true;
+    const rawJobConfig = JSON.stringify({ action: 'memory_compact' });
+    const row = cronStore.create({
+      name: 'Personal memory sync',
+      cronExpr: '0 2 * * *',
+      jobType: 'memory_consolidation',
+      jobConfig: { action: 'marketplace_sync' },
+      enabled: false,
+    });
+
+    const res = await server.inject({
+      method: 'PATCH',
+      url: `/api/cron/${row.id}`,
+      payload: { jobConfig: rawJobConfig },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(cronStore.getById(row.id)!.job_config)).toBe(rawJobConfig);
+  });
+
+  it.each([
+    {
+      label: 'workspace health through cron trigger',
+      jobType: 'workspace_health' as const,
+      jobConfig: {},
+      workspaceId: undefined,
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/cron/${id}/trigger` }),
+    },
+    {
+      label: 'prompt optimization through automation run',
+      jobType: 'prompt_optimization' as const,
+      jobConfig: {},
+      workspaceId: undefined,
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/automations/${id}/run` }),
+    },
+    {
+      label: 'memory compaction through cron trigger',
+      jobType: 'memory_consolidation' as const,
+      jobConfig: { action: 'memory_compact' },
+      workspaceId: 'ws-test',
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/cron/${id}/trigger` }),
+    },
+    {
+      label: 'index reconciliation through cron trigger',
+      jobType: 'memory_consolidation' as const,
+      jobConfig: { action: 'index_reconcile' },
+      workspaceId: undefined,
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/cron/${id}/trigger` }),
+    },
+  ])('fan-out schedule blocks $label when a viewer workspace is in scope', async ({
+    jobType,
+    jobConfig,
+    workspaceId,
+    request,
+  }) => {
+    includeViewerWorkspace = true;
+    const row = cronStore.create({
+      name: 'Global maintenance',
+      cronExpr: '0 2 * * *',
+      jobType,
+      jobConfig,
+      workspaceId,
+      enabled: false,
+    });
+    const before = cronStore.getById(row.id);
+
+    const res = await server.inject(request(row.id));
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(cronStore.getById(row.id)).toEqual(before);
+    expect(executed).toHaveLength(0);
+  });
+
+  it('prompt optimization ignores a listed viewer workspace without optimization opt-in', async () => {
+    includeViewerWorkspace = true;
+    viewerOptimizationEnabled = false;
+    const row = cronStore.create({
+      name: 'Prompt optimization',
+      cronExpr: '0 2 * * *',
+      jobType: 'prompt_optimization',
+      enabled: false,
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/cron/${row.id}/trigger`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(executed).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      label: 'cron',
+      request: () => ({
+        method: 'POST' as const,
+        url: '/api/cron',
+        payload: {
+          name: 'Global health',
+          cronExpr: '0 2 * * *',
+          jobType: 'workspace_health',
+        },
+      }),
+    },
+    {
+      label: 'automation alias',
+      request: () => ({
+        method: 'POST' as const,
+        url: '/api/automations',
+        payload: {
+          name: 'Global memory lanes',
+          schedule: '0 2 * * *',
+          actions: ['memory_consolidation'],
+          jobConfig: { action: 'memory_lane_extract' },
+          workspaceId: 'ws-test',
+        },
+      }),
+    },
+  ])('viewer cannot create a null-owned fan-out schedule through $label', async ({ request }) => {
+    includeViewerWorkspace = true;
+    const before = cronStore.list();
+
+    const res = await server.inject(request());
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(cronStore.list()).toEqual(before);
+    expect(executed).toHaveLength(0);
+  });
+
+  it.each([
+    {
+      label: 'personal to fan-out',
+      beforeAction: 'marketplace_sync',
+      afterAction: 'memory_compact',
+    },
+    {
+      label: 'fan-out to personal',
+      beforeAction: 'memory_lane_extract',
+      afterAction: 'harvest_sync',
+    },
+  ])('viewer cannot re-scope memory maintenance from $label', async ({
+    beforeAction,
+    afterAction,
+  }) => {
+    includeViewerWorkspace = true;
+    const row = cronStore.create({
+      name: 'Memory maintenance',
+      cronExpr: '0 2 * * *',
+      jobType: 'memory_consolidation',
+      jobConfig: { action: beforeAction },
+      enabled: false,
+    });
+    const before = cronStore.getById(row.id);
+
+    const res = await server.inject({
+      method: 'PATCH',
+      url: `/api/cron/${row.id}`,
+      payload: { jobConfig: { action: afterAction } },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(cronStore.getById(row.id)).toEqual(before);
+  });
+
+  it.each([
+    {
+      label: 'connector fetch',
+      jobType: 'connector_fetch' as const,
+      jobConfig: {},
+      workspaceId: undefined,
+    },
+    {
+      label: 'personal memory sync',
+      jobType: 'memory_consolidation' as const,
+      jobConfig: { action: 'marketplace_sync' },
+      workspaceId: undefined,
+    },
+    {
+      label: 'personal wildcard loop',
+      jobType: 'loop' as const,
+      jobConfig: {},
+      workspaceId: '*',
+    },
+    {
+      label: 'global proactive briefing',
+      jobType: 'proactive' as const,
+      jobConfig: { action: 'morning_briefing' },
+      workspaceId: undefined,
+    },
+    {
+      label: 'personal monthly assessment',
+      jobType: 'monthly_assessment' as const,
+      jobConfig: {},
+      workspaceId: undefined,
+    },
+    {
+      label: 'non-matching spaced memory action',
+      jobType: 'memory_consolidation' as const,
+      jobConfig: { action: ' memory_compact ' },
+      workspaceId: undefined,
+    },
+    {
+      label: 'non-matching spaced agent-task wildcard',
+      jobType: 'agent_task' as const,
+      jobConfig: { prompt: 'Summarize' },
+      workspaceId: ' * ',
+    },
+    {
+      label: 'stored agent task for absent literal global workspace',
+      jobType: 'agent_task' as const,
+      jobConfig: { prompt: 'Summarize' },
+      workspaceId: 'global',
+    },
+  ])('$label is not blocked by an unrelated viewer workspace', async ({
+    jobType,
+    jobConfig,
+    workspaceId,
+  }) => {
+    includeViewerWorkspace = true;
+    const row = cronStore.create({
+      name: 'Personal schedule',
+      cronExpr: '0 2 * * *',
+      jobType,
+      jobConfig,
+      workspaceId,
+      enabled: false,
+    });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/cron/${row.id}/trigger`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(executed).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      label: 'cron PATCH',
+      request: (id: number) => ({
+        method: 'PATCH' as const,
+        url: `/api/cron/${id}`,
+        payload: { name: 'blocked' },
+      }),
+    },
+    {
+      label: 'cron trigger',
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/cron/${id}/trigger` }),
+    },
+    {
+      label: 'automation pause',
+      request: (id: number) => ({ method: 'POST' as const, url: `/api/automations/${id}/pause` }),
+    },
+  ])('stored wildcard row blocks $label when fan-out includes a viewer workspace', async ({ request }) => {
+    includeViewerWorkspace = true;
+    const row = cronStore.create({
+      name: 'All workspaces',
+      cronExpr: '0 2 * * *',
+      jobType: 'agent_task',
+      jobConfig: { prompt: 'Summarize' },
+      workspaceId: '*',
+      enabled: true,
+    });
+    const before = cronStore.getById(row.id);
+
+    const res = await server.inject(request(row.id));
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+    expect(cronStore.getById(row.id)).toEqual(before);
+    expect(executed).toHaveLength(0);
   });
 
   it('logs alias the execution history, camelCased (C27 substrate)', async () => {

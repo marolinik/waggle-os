@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -20,12 +20,15 @@ beforeEach(() => {
   home = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-audit-'));
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   fs.rmSync(home, { recursive: true, force: true });
 });
 
 const badge = (over: Partial<SkillAuditBadge> = {}): Omit<SkillAuditBadge, 'auditedAt'> => ({
   verified: true, score: 0.88, confidence: 0.88, attempts: 1, rewritten: false, demoted: false, ...over,
 });
+
+const tempFiles = (): string[] => fs.readdirSync(home).filter(file => file.endsWith('.tmp'));
 
 describe('loadSkillAudit (fail-safe)', () => {
   it('returns {} when the file is missing — and never creates it on read', () => {
@@ -72,6 +75,66 @@ describe('recordAuditBadge', () => {
     const nested = path.join(home, 'nested');
     recordAuditBadge(nested, 'x', badge());
     expect(fs.existsSync(getSkillAuditPath(nested))).toBe(true);
+  });
+});
+
+describe('saveSkillAudit (Windows transient locks)', () => {
+  it.each(['EPERM', 'EACCES', 'EBUSY'] as const)(
+    'retries %s without leaving a temporary file',
+    (code) => {
+      recordAuditBadge(home, 'prior', badge({ feedback: 'replace me' }));
+      const replacement = {
+        current: { ...badge({ feedback: 'new index' }), auditedAt: '2026-08-03T00:00:00.000Z' },
+      };
+      const actualRename = fs.renameSync.bind(fs);
+      let attempts = 0;
+      const rename = vi.spyOn(fs, 'renameSync').mockImplementation((oldPath, newPath) => {
+        attempts += 1;
+        if (attempts <= 2) throw Object.assign(new Error('temporarily locked'), { code });
+        return actualRename(oldPath, newPath);
+      });
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      saveSkillAudit(home, replacement);
+
+      expect(rename).toHaveBeenCalledTimes(3);
+      expect(wait).toHaveBeenNthCalledWith(1, expect.any(Int32Array), 0, 0, 25);
+      expect(wait).toHaveBeenNthCalledWith(2, expect.any(Int32Array), 0, 0, 50);
+      expect(loadSkillAudit(home)).toEqual(replacement);
+      expect(tempFiles()).toEqual([]);
+    },
+  );
+
+  it('preserves the prior index and cleans up after bounded retry exhaustion', () => {
+    recordAuditBadge(home, 'stable', badge({ feedback: 'keep me' }));
+    const prior = fs.readFileSync(getSkillAuditPath(home), 'utf-8');
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw Object.assign(new Error('still locked'), { code: 'EPERM' });
+    });
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+    expect(() => saveSkillAudit(home, {})).toThrow('still locked');
+
+    expect(rename).toHaveBeenCalledTimes(10);
+    expect(wait).toHaveBeenCalledTimes(9);
+    expect(fs.readFileSync(getSkillAuditPath(home), 'utf-8')).toBe(prior);
+    expect(tempFiles()).toEqual([]);
+  });
+
+  it('does not retry a non-transient rename error and still cleans up', () => {
+    recordAuditBadge(home, 'stable', badge({ feedback: 'keep me' }));
+    const prior = fs.readFileSync(getSkillAuditPath(home), 'utf-8');
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw Object.assign(new Error('invalid destination'), { code: 'ENOENT' });
+    });
+    const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+    expect(() => saveSkillAudit(home, {})).toThrow('invalid destination');
+
+    expect(rename).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+    expect(fs.readFileSync(getSkillAuditPath(home), 'utf-8')).toBe(prior);
+    expect(tempFiles()).toEqual([]);
   });
 });
 

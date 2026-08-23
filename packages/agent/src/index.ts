@@ -19,8 +19,13 @@ export {
 } from './model-router.js';
 export {
   openaiChat,
+  parseOpenAiTextCompletion,
+  isIncompleteCompletionError,
   type ChatMessage,
   type ChatResponse,
+  type CompletionUsage,
+  type IncompleteCompletionError,
+  type ParsedOpenAiTextCompletion,
 } from './providers/openai-compat.js';
 export {
   classifyRateLimitError,
@@ -55,6 +60,14 @@ export {
   type AgentRunProgressEventType,
   type AgentRunProgressCallback,
 } from './agent-loop.js';
+export {
+  selectAgentRunBudget,
+  capToolResultForModel,
+  compactToolContextForModel,
+  type AgentRunBudgetInput,
+  type AgentRunBudgetPolicy,
+  type ToolContextBudget,
+} from './agent-run-budget.js';
 
 // Phase 1.2 — model-aware prompt shapes (oversight in original Phase 1.2:
 // re-export to public API was missing; surfaced + fixed during Phase 2.3
@@ -309,7 +322,20 @@ export { Plan, type PlanStep } from './plan.js';
 export { createPlanTools } from './plan-tools.js';
 export { createGitTools } from './git-tools.js';
 export { PermissionManager, READONLY_TOOLS } from './permissions.js';
-export { filterToolsForContext, filterAvailableTools, filterOfflineTools, getOfflineCapableToolNames, type ToolContext, type ToolFilterConfig } from './tool-filter.js';
+export {
+  DEFAULT_TURN_SCHEMA_CHAR_LIMIT,
+  DEFAULT_TURN_TOOL_LIMIT,
+  filterToolsForContext,
+  filterAvailableTools,
+  filterOfflineTools,
+  getOfflineCapableToolNames,
+  measureOpenAiToolSchemaChars,
+  selectToolsForTurn,
+  type ToolContext,
+  type ToolFilterConfig,
+  type TurnToolSelectionOptions,
+  type TurnToolSelectionResult,
+} from './tool-filter.js';
 export {
   needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass,
   ConfirmationGate, getApprovalClass, classifyGatedToolRisk,
@@ -347,7 +373,7 @@ export { WORKFLOW_TEMPLATES, listWorkflowTemplates, createResearchTeamTemplate, 
 export { loadCustomWorkflows, saveCustomWorkflow, deleteCustomWorkflow, listAllWorkflows } from './custom-workflows.js';
 export { createWorkflowTools, type WorkflowToolsConfig } from './workflow-tools.js';
 export { detectTaskShape, type TaskShape, type TaskShapeType, type TaskShapeSignal, type ComponentPhase } from './task-shape.js';
-export { PromptAssembler, type AssembledPrompt, type AssembleOptions, type AssembleInput, type ScaffoldStyle } from './prompt-assembler.js';
+export { PromptAssembler, CLOSED_WORLD_REWRITE_CONTRACT, isClosedWorldRewriteRequest, type AssembledPrompt, type AssembleOptions, type AssembleInput, type ScaffoldStyle } from './prompt-assembler.js';
 export {
   composeWorkflow, validateTemplate,
   type WorkflowPlan, type ExecutionMode, type PlanStep as ComposerPlanStep, type ComposerContext, type ValidationError,
@@ -362,7 +388,10 @@ export {
   type KvarkAskResponseLike, type KvarkStructuredResult, type KvarkFeedbackResponseLike, type KvarkActionResponseLike,
 } from './kvark-tools.js';
 export { PERSONAS, getPersona, listPersonas, composePersonaPrompt, setPersonaDataDir, type AgentPersona } from './personas.js';
-export { loadCustomPersonas, saveCustomPersona, deleteCustomPersona } from './custom-personas.js';
+export {
+  loadCustomPersonas, saveCustomPersona, deleteCustomPersona,
+  isValidCustomPersonaId, assertValidCustomPersonaId,
+} from './custom-personas.js';
 export { AgentMessageBus, type AgentMessage as BusAgentMessage } from './agent-message-bus.js';
 export { createAgentCommsTools } from './agent-comms-tools.js';
 export { createCliTools, type CliToolsConfig } from './cli-tools.js';
@@ -524,6 +553,7 @@ export {
   type HookRuntimePaths,
   type WaggleRuntimePaths,
 } from './tool-launcher.js';
+export { spawnSidecarOwnedProcess } from './sidecar-owned-process.js';
 export {
   ToolProcessTracker,
   type TrackedProcess,

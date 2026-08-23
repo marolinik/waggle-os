@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => ({
     // probe's honest "nothing to check" idle path.
     probeModel: vi.fn().mockResolvedValue({ configured: false }),
     probeProvider: vi.fn().mockResolvedValue({ configured: false, valid: false, verified: false }),
+    getBrowserCompanionPairing: vi.fn().mockResolvedValue({ paired: false, extensionId: null, pairedAt: null }),
+    createBrowserCompanionPairingCode: vi.fn(),
+    revokeBrowserCompanionPairing: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -79,5 +82,14 @@ describe('PR5 Settings reskin', () => {
     // Switch to Everything → Advanced appears.
     fireEvent.click(screen.getByRole('button', { name: /everything/i }));
     expect(await screen.findByRole('tab', { name: /advanced/i })).toBeInTheDocument();
+  });
+
+  it('exposes Browser Companion pairing in Advanced settings', async () => {
+    await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: /everything/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /advanced/i }));
+
+    expect(await screen.findByTestId('browser-companion-settings')).toBeInTheDocument();
+    expect(mocks.adapter.getBrowserCompanionPairing).toHaveBeenCalledOnce();
   });
 });

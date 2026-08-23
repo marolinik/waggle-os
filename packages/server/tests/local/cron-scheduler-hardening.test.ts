@@ -72,6 +72,60 @@ describe('LocalScheduler P0-A hardening', () => {
     expect(scheduler.getPendingResumes()).toEqual([]);
   });
 
+  it('rechecks automatic execution policy before a rate-limit resume fires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW_MS);
+    vi.spyOn(store, 'getDue').mockReturnValue([schedule]);
+    let canAutoExecute = true;
+    const executor = vi.fn()
+      .mockRejectedValueOnce(new Error('HTTP 429 Retry-After: 60'))
+      .mockResolvedValue(undefined);
+    const onComplete = vi.fn();
+    scheduler = new LocalScheduler(
+      store,
+      executor,
+      onComplete,
+      undefined,
+      () => canAutoExecute,
+    );
+    scheduler.start(24 * 60 * 60 * 1000);
+
+    expect(await scheduler.tick()).toBe(0);
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(scheduler.getPendingResumes()).toHaveLength(1);
+
+    canAutoExecute = false;
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(scheduler.getPendingResumes()).toEqual([]);
+    expect(scheduler.getFailCount(schedule.id)).toBe(0);
+    expect(store.getById(schedule.id)?.last_run_at).toBeNull();
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when the automatic execution guard throws', async () => {
+    vi.spyOn(store, 'getDue').mockReturnValue([schedule]);
+    const leaseSpy = vi.spyOn(store, 'acquireRunLease');
+    const executor = vi.fn();
+    const onComplete = vi.fn();
+    scheduler = new LocalScheduler(
+      store,
+      executor,
+      onComplete,
+      undefined,
+      () => { throw new Error('authorization unavailable'); },
+    );
+
+    expect(await scheduler.tick()).toBe(0);
+    expect(executor).not.toHaveBeenCalled();
+    expect(leaseSpy).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(store.getExecutionHistory(schedule.id)).toEqual([]);
+    expect(store.getById(schedule.id)?.last_run_at).toBeNull();
+    expect(scheduler.getFailCount(schedule.id)).toBe(0);
+  });
+
   it('replaces an older rate-limit timer and guards against a disabled schedule at fire time', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW_MS);

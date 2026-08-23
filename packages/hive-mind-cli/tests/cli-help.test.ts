@@ -83,7 +83,7 @@ describe('hive-mind CLI subcommand help', () => {
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it('prints built status help without creating a personal mind', async () => {
     const dataDir = makeDataDir();
@@ -105,7 +105,7 @@ describe('hive-mind CLI subcommand help', () => {
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it('installs the local package closure and runs npx subcommand help', async () => {
     const dataDir = makeDataDir();
@@ -160,5 +160,5 @@ describe('hive-mind CLI subcommand help', () => {
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 180_000);
 });

@@ -13,6 +13,7 @@ import {
 } from '@waggle/agent';
 import { SUPPORTED_TOOLS, applyPromptArgTemplate, type ToolId, type ToolManifest } from '@waggle/shared';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
+import { canonicalWorkspaceRoot } from '../workspace-turn-coordinator.js';
 
 /**
  * AI-OS #5 — resolve the CLI args for a launch. Explicit `args` (the built-in
@@ -132,6 +133,10 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
     );
   }
   const tracker = server.toolProcessTracker!;
+  interface InteractiveWorkspaceLease {
+    release: () => void;
+    pids: Set<number>;
+  }
   interface InteractiveRunBinding {
     runId: string;
     token?: string;
@@ -139,13 +144,72 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
     cancelRequested: boolean;
   }
   const interactiveRuns = new Map<number, InteractiveRunBinding>();
+  const workspaceLeases = new Map<string, InteractiveWorkspaceLease>();
+  const workspaceLeaseRootsByPid = new Map<number, string>();
   const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'interrupted']);
+
+  const isProcessAlive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (err) {
+      return (err as NodeJS.ErrnoException).code === 'EPERM';
+    }
+  };
+
+  const reserveWorkspaceLease = (
+    workspaceRoot: string,
+    allowExisting: boolean,
+  ): { root: string; lease: InteractiveWorkspaceLease } | undefined => {
+    const root = canonicalWorkspaceRoot(workspaceRoot);
+    const existing = workspaceLeases.get(root);
+    if (existing) return allowExisting ? { root, lease: existing } : undefined;
+    const release = server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(
+      root,
+      'write',
+    );
+    if (!release) return undefined;
+    const lease = { release, pids: new Set<number>() };
+    workspaceLeases.set(root, lease);
+    return { root, lease };
+  };
+
+  const releaseUnusedWorkspaceLease = (
+    root: string,
+    lease: InteractiveWorkspaceLease,
+  ): void => {
+    if (workspaceLeases.get(root) !== lease || lease.pids.size > 0) return;
+    workspaceLeases.delete(root);
+    lease.release();
+  };
+
+  const attachWorkspaceLease = (
+    pid: number,
+    root: string,
+    lease: InteractiveWorkspaceLease,
+  ): void => {
+    lease.pids.add(pid);
+    workspaceLeaseRootsByPid.set(pid, root);
+  };
+
+  const releaseWorkspaceLeaseForPid = (pid: number): void => {
+    const workspaceRoot = workspaceLeaseRootsByPid.get(pid);
+    if (!workspaceRoot) return;
+    workspaceLeaseRootsByPid.delete(pid);
+    const lease = workspaceLeases.get(workspaceRoot);
+    if (!lease) return;
+    lease.pids.delete(pid);
+    if (lease.pids.size > 0) return;
+    workspaceLeases.delete(workspaceRoot);
+    lease.release();
+  };
 
   const releaseInteractiveRun = (pid: number, binding: InteractiveRunBinding): void => {
     if (interactiveRuns.get(pid) !== binding) return;
     interactiveRuns.delete(pid);
     binding.unregister();
     if (binding.token) server.agentRunRegistry.revokeCredential(binding.token);
+    releaseWorkspaceLeaseForPid(pid);
   };
   const settleInteractiveRun = (
     pid: number,
@@ -197,10 +261,13 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
     };
     binding.unregister = server.agentRunRegistry.registerControls(runId, {
       cancel: async () => {
+        const cancellationAlreadyPending = binding.cancelRequested;
         binding.cancelRequested = true;
         const stopped = await tracker.kill(pid);
         if (!stopped.ok && stopped.reason !== 'already-dead') {
-          binding.cancelRequested = false;
+          if (stopped.reason === 'not-tracked' && !cancellationAlreadyPending) {
+            binding.cancelRequested = false;
+          }
           throw new Error(`Could not stop process ${pid}: ${stopped.reason}`);
         }
         settleInteractiveRun(pid, 'cancelled', 'Interactive tool process stopped', runId);
@@ -215,9 +282,15 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
     const alive = new Set(processes.map((process) => process.pid));
     for (const [pid, binding] of interactiveRuns) {
       const run = server.agentRunRegistry.get(binding.runId);
+      if (alive.has(pid) || isProcessAlive(pid)) continue;
+      // A vanished root while cancellation is pending is not proof that its
+      // descendants stopped. Only the awaited tree-kill result may settle the
+      // run and release the shared workspace checkout lease.
+      if (binding.cancelRequested) continue;
       if (!run || terminalStatuses.has(run.status)) {
         releaseInteractiveRun(pid, binding);
-      } else if (!alive.has(pid)) {
+        tracker.forget(pid);
+      } else {
         settleInteractiveRun(
           pid,
           'interrupted',
@@ -226,16 +299,61 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
         );
       }
     }
+    for (const pid of workspaceLeaseRootsByPid.keys()) {
+      if (!alive.has(pid) && !interactiveRuns.has(pid) && !isProcessAlive(pid)) {
+        releaseWorkspaceLeaseForPid(pid);
+      }
+    }
     return processes;
   };
 
   // A restarted sidecar has no raw run credentials or control callbacks. The
   // persisted Registry and tracker are reconciled once, then cancel controls
   // are rebound only for PIDs the tracker still owns and sees alive.
-  const startupProcesses = tracker.list();
+  const restartRuns =
+    server.agentRunRegistry.list({ source: 'external_tool', limit: 1_000 }).reverse();
+  let startupProcesses = tracker.list();
+  const trackedStartupPids = new Set(startupProcesses.map((process) => process.pid));
+  for (const run of restartRuns) {
+    if (
+      run.kind === 'worker' &&
+      run.workspaceId &&
+      run.executor.pid != null &&
+      !trackedStartupPids.has(run.executor.pid) &&
+      !terminalStatuses.has(run.status) &&
+      isProcessAlive(run.executor.pid)
+    ) {
+      tracker.register(
+        run.executor.pid,
+        run.executor.toolId ?? 'external-tool',
+        run.workspaceId,
+      );
+      trackedStartupPids.add(run.executor.pid);
+    }
+  }
+  startupProcesses = tracker.list();
   const startupAlive = new Set(startupProcesses.map((process) => process.pid));
   server.agentRunRegistry.reconcileExternalProcesses(startupAlive);
-  for (const run of server.agentRunRegistry.list({ source: 'external_tool', limit: 1_000 }).reverse()) {
+  for (const process of startupProcesses) {
+    if (!process.workspaceId) continue;
+    const workspace = server.workspaceManager.get(process.workspaceId);
+    if (!workspace) continue;
+    try {
+      const workspaceRoot = resolveWorkspaceExecutionRoot(
+        server.localConfig.dataDir,
+        workspace,
+      );
+      const reservation = reserveWorkspaceLease(workspaceRoot, true);
+      if (!reservation) continue;
+      attachWorkspaceLease(process.pid, reservation.root, reservation.lease);
+    } catch (err) {
+      server.log.error(
+        { err, pid: process.pid, workspaceId: process.workspaceId },
+        'failed to restore tracked interactive workspace lease',
+      );
+    }
+  }
+  for (const run of restartRuns) {
     if (
       run.kind === 'worker' &&
       run.executor.pid != null &&
@@ -254,6 +372,7 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
   server.addHook('onClose', async () => {
     clearInterval(reconcileTimer);
     for (const [pid, binding] of interactiveRuns) releaseInteractiveRun(pid, binding);
+    for (const pid of workspaceLeaseRootsByPid.keys()) releaseWorkspaceLeaseForPid(pid);
   });
 
   // AI-OS #4 — in-memory output buffer for observed launches. Shared across
@@ -314,6 +433,14 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
           message: `${manifest.displayName} was not found. Run tool detection again after installing it.`,
         });
       }
+      if (installed.launchable === false) {
+        return reply.code(409).send({
+          error: 'tool_not_launchable',
+          toolId: body.id,
+          message: installed.diagnostic
+            ?? `${manifest.displayName} was found but cannot be launched safely.`,
+        });
+      }
       installedPath = installed.installedPath;
     } catch (err) {
       server.log.error({ err }, 'tool detection before launch failed');
@@ -345,24 +472,42 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
         message: err instanceof Error ? err.message : String(err),
       });
     }
-    const room = server.agentRunRegistry.createRoom({
+    reconcileInteractiveBindings();
+    const reservation = reserveWorkspaceLease(workspaceRoot, false);
+    if (!reservation) {
+      return reply.code(409).send({
+        error: 'workspace_busy',
+        workspaceId,
+        message: 'Another agent is already using this workspace checkout.',
+      });
+    }
+
+    let roomId: string | undefined;
+    let workerId: string | undefined;
+    let issuedToken: string | undefined;
+    let launchedPid: number | undefined;
+    try {
+      const room = server.agentRunRegistry.createRoom({
       workspaceIds: [workspaceId],
       source: 'external_tool',
       executor: { kind: 'coordinator', toolId: manifest.id },
       title: `${manifest.displayName} interactive session`,
       task: body.prompt ?? `Interactive ${manifest.displayName} session`,
-      capabilities: { cancel: true },
-    });
-    const worker = server.agentRunRegistry.createWorker({
+        capabilities: { cancel: true },
+      });
+      roomId = room.id;
+      const worker = server.agentRunRegistry.createWorker({
       parentRunId: room.id,
       workspaceId,
       source: 'external_tool',
       executor: { kind: 'external_tool', toolId: manifest.id },
       title: manifest.displayName,
       task: body.prompt ?? `Interactive ${manifest.displayName} session`,
-      capabilities: { cancel: true },
-    });
-    const runToken = server.agentRunRegistry.issueCredential(worker.id);
+        capabilities: { cancel: true },
+      });
+      workerId = worker.id;
+      const runToken = server.agentRunRegistry.issueCredential(worker.id);
+      issuedToken = runToken;
     // Self-enabling launch: turn on signal emission and tell the hook
     // which loopback sidecar to post to, so a dock launch lights the
     // SignalBus instead of staying dark.
@@ -378,9 +523,10 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
       runId: worker.id,
       roomId: room.id,
       runToken,
-      observe: body.observe,
-      toolRegistry,
-    });
+        observe: body.observe,
+        toolRegistry,
+      });
+      launchedPid = result.pid ?? undefined;
     if (!result.ok) {
       server.agentRunRegistry.revokeCredential(runToken);
       server.agentRunRegistry.update(worker.id, {
@@ -397,16 +543,19 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
       tracker.register(result.pid, body.id, workspaceId, {
         observed: body.observe === true,
       });
+      attachWorkspaceLease(result.pid, reservation.root, reservation.lease);
+      const binding = bindInteractiveRun(result.pid, worker.id, runToken);
       server.agentRunRegistry.update(worker.id, {
         status: 'running',
         executor: { pid: result.pid },
         progress: { phase: 'interactive', message: `${manifest.displayName} is running` },
       });
-      const binding = bindInteractiveRun(result.pid, worker.id, runToken);
       if (body.observe && result.output) {
         outputBuffer.attach(result.pid, result.output, (code) => {
           if (binding.cancelRequested) {
-            settleInteractiveRun(result.pid!, 'cancelled', 'Interactive tool process stopped', worker.id);
+            // The root exit can race the asynchronous Windows tree kill. The
+            // awaited cancellation path alone may prove cleanup and release.
+            return;
           } else if (code === 0) {
             settleInteractiveRun(result.pid!, 'completed', 'Interactive tool process exited successfully', worker.id);
           } else if (code == null) {
@@ -422,8 +571,103 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
         status: 'failed',
         result: { error: 'Tool launch returned no process id' },
       });
+      return reply.code(500).send({
+        ok: false,
+        pid: null,
+        executed: result.executed,
+        error: 'tool_launch_missing_pid',
+        message: 'Tool launch reported success without a process id.',
+        roomId: room.id,
+        runId: worker.id,
+      });
     }
     return reply.code(202).send({ ...result, roomId: room.id, runId: worker.id });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (launchedPid != null) {
+        let stopped = false;
+        try {
+          const stopResult = await tracker.kill(launchedPid);
+          stopped = stopResult.ok;
+        } catch (stopErr) {
+          server.log.error(
+            { err: stopErr, pid: launchedPid },
+            'failed to stop interactive process after launch error',
+          );
+        }
+        if (!stopped) {
+          try {
+            process.kill(launchedPid);
+          } catch (signalErr) {
+            server.log.error(
+              { err: signalErr, pid: launchedPid },
+              'failed to signal interactive process after launch error',
+            );
+          }
+          stopped = !isProcessAlive(launchedPid);
+          if (!stopped && !workspaceLeaseRootsByPid.has(launchedPid)) {
+            try {
+              attachWorkspaceLease(
+                launchedPid,
+                reservation.root,
+                reservation.lease,
+              );
+            } catch {
+              // Keep the original launch error as the response surface.
+            }
+          }
+        }
+        const binding = interactiveRuns.get(launchedPid);
+        if (binding && stopped) {
+          settleInteractiveRun(
+            launchedPid,
+            'failed',
+            `Interactive tool launch failed after spawn: ${message}`,
+            binding.runId,
+          );
+        } else if (!binding && stopped) {
+          tracker.forget(launchedPid);
+          releaseWorkspaceLeaseForPid(launchedPid);
+        }
+      }
+
+      const retainedBinding =
+        launchedPid == null ? undefined : interactiveRuns.get(launchedPid);
+      if (issuedToken && !retainedBinding) {
+        server.agentRunRegistry.revokeCredential(issuedToken);
+      }
+      if (workerId) {
+        try {
+          const run = server.agentRunRegistry.get(workerId);
+          if (run && !terminalStatuses.has(run.status)) {
+            server.agentRunRegistry.update(workerId, {
+              status: 'failed',
+              result: { error: message, summary: message },
+              progress: null,
+            });
+          }
+        } catch (settleErr) {
+          server.log.error(
+            { err: settleErr, runId: workerId },
+            'failed to settle interactive run after launch error',
+          );
+        }
+      }
+      server.log.error(
+        { err, workspaceId, toolId: body.id, pid: launchedPid },
+        'interactive tool launch failed',
+      );
+      return reply.code(500).send({
+        ok: false,
+        pid: launchedPid ?? null,
+        error: 'tool_launch_failed',
+        message,
+        ...(roomId ? { roomId } : {}),
+        ...(workerId ? { runId: workerId } : {}),
+      });
+    } finally {
+      releaseUnusedWorkspaceLease(reservation.root, reservation.lease);
+    }
   });
 
   // ── GET /api/tools/processes (Phase 4 polish) ────────────────────
@@ -435,8 +679,8 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
   // ── POST /api/tools/kill (E-1) ───────────────────────────────────
   // Only kills processes we've previously tracked via /launch — guards
   // against the UI accidentally sending an arbitrary OS pid and nuking
-  // the user's editor. SIGTERM first (graceful), SIGKILL escalation
-  // after a 3-second grace period.
+  // the user's editor. Windows requires verified process-tree cleanup;
+  // POSIX retains graceful SIGTERM with SIGKILL escalation.
   server.post('/api/tools/kill', async (request, reply) => {
     const parsed = killBodySchema.safeParse(request.body);
     if (!parsed.success) {
@@ -445,15 +689,24 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
         .send({ error: 'Validation failed', details: parsed.error.flatten() });
     }
     const binding = interactiveRuns.get(parsed.data.pid);
+    const cancellationAlreadyPending = binding?.cancelRequested === true;
     if (binding) binding.cancelRequested = true;
     const result = await tracker.kill(parsed.data.pid);
     if (!result.ok) {
-      if (binding && interactiveRuns.get(parsed.data.pid) === binding) binding.cancelRequested = false;
+      if (
+        binding &&
+        result.reason === 'not-tracked' &&
+        !cancellationAlreadyPending &&
+        interactiveRuns.get(parsed.data.pid) === binding
+      ) {
+        binding.cancelRequested = false;
+      }
       // not-tracked is a 404, sigterm-failed-sigkill-failed is a 500.
       const status = result.reason === 'not-tracked' ? 404 : 500;
       return reply.code(status).send(result);
     }
     settleInteractiveRun(parsed.data.pid, 'cancelled', 'Interactive tool process stopped');
+    releaseWorkspaceLeaseForPid(parsed.data.pid);
     return reply.code(200).send(result);
   });
 

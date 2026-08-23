@@ -64,6 +64,59 @@ describe('mergeHiveHooks', () => {
     expect(merged2.hooks?.SessionStart?.[0].hooks[0].timeout).toBe(7);
   });
 
+  it('replaces stale marked entries when the install path changes', () => {
+    const oldCommand = hookCommandFor('/old/dist/hooks', 'session-start', '/old/cli.js');
+    const newCommand = hookCommandFor('/new/dist/hooks', 'session-start', '/new/cli.js');
+    const merged1 = mergeHiveHooks({}, [{ basename: 'session-start', command: oldCommand, timeout: 5 }]);
+    const merged2 = mergeHiveHooks(merged1, [{ basename: 'session-start', command: newCommand, timeout: 7 }]);
+
+    const markedGroups = merged2.hooks?.SessionStart?.filter(
+      (group) => group._hiveMindShim === HIVE_MIND_MARKER,
+    );
+    expect(markedGroups).toHaveLength(1);
+    expect(markedGroups?.[0].hooks[0]).toEqual({
+      type: 'command',
+      command: newCommand,
+      timeout: 7,
+    });
+  });
+
+  it('recognizes and replaces a hook after Claude strips the ownership marker', () => {
+    const oldCommand = hookCommandFor('/old/hive-mind-hooks-claude-code/dist/hooks', 'session-start', '/old/cli.js');
+    const newCommand = hookCommandFor('/new/hive-mind-hooks-claude-code/dist/hooks', 'session-start', '/new/cli.js');
+    const installed = mergeHiveHooks({}, [{ basename: 'session-start', command: oldCommand, timeout: 5 }]);
+    const normalized = structuredClone(installed);
+    delete normalized.hooks?.SessionStart?.[0]._hiveMindShim;
+
+    expect(hasHiveHooks(normalized)).toBe(true);
+    const upgraded = mergeHiveHooks(normalized, [{ basename: 'session-start', command: newCommand, timeout: 7 }]);
+    expect(upgraded.hooks?.SessionStart).toHaveLength(1);
+    expect(upgraded.hooks?.SessionStart?.[0].hooks[0].command).toBe(newCommand);
+  });
+
+  it('does not claim an unrelated command that only mentions a Waggle hook path', () => {
+    const unrelated: ClaudeCodeSettings = {
+      hooks: {
+        SessionStart: [{
+          hooks: [{
+            type: 'command',
+            command: 'echo "C:\\archive\\hive-mind-hooks-claude-code\\dist\\hooks\\session-start.js"',
+          }],
+        }],
+      },
+    };
+
+    expect(hasHiveHooks(unrelated)).toBe(false);
+    const command = hookCommandFor(
+      '/new/hive-mind-hooks-claude-code/dist/hooks',
+      'session-start',
+      '/new/cli.js',
+    );
+    const merged = mergeHiveHooks(unrelated, [{ basename: 'session-start', command, timeout: 5 }]);
+    expect(merged.hooks?.SessionStart).toHaveLength(2);
+    expect(merged.hooks?.SessionStart?.[0]).toEqual(unrelated.hooks?.SessionStart?.[0]);
+  });
+
   it('preserves unrelated top-level fields', () => {
     const merged = mergeHiveHooks(
       { env: { SOMETHING: '1' }, statusLine: { type: 'command', command: 'foo' }, hooks: {} } as ClaudeCodeSettings,

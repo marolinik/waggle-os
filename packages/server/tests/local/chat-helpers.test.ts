@@ -8,12 +8,48 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  allowsAutomaticRecall,
+  allowsConversationHistory,
+  allowsPostResponseDecoration,
+  buildTurnMessageWindow,
+  canUseBudgetModelWithoutCloudEgress,
+  classifyExplicitTurnMutationPolicy,
+  filterToolsByTurnMutationPolicy,
+  isExplicitToolFreeAdvisoryRequest,
   isRegulatedContent,
   isRetryableError,
+  primeMemoryDirectiveClassifier,
+  resolveExplicitMemoryReadDirective,
+  resolveTurnPersistencePermissions,
+  selectAdvisoryMaxOutputTokens,
   shouldSuggestSchedule,
   describeToolUse,
+  type TurnMutationPolicy,
 } from '../../src/local/routes/chat-helpers.js';
+import { isExplicitMemoryRecallRequest } from '../../src/local/routes/chat.js';
 import { summarizeDroppedContext } from '../../src/local/routes/chat-context.js';
+import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
+
+const DEFAULT_TURN_POLICY: TurnMutationPolicy = {
+  denyAllMutations: false,
+  denyMemoryRead: false,
+  denyConversationHistory: false,
+  denyMemoryPersistence: false,
+  denyFileWrites: false,
+  denyCodeExecution: false,
+  denyAgentLaunch: false,
+  contextScope: 'default',
+};
+
+function expectedPolicy(overrides: Partial<TurnMutationPolicy> = {}): TurnMutationPolicy {
+  return { ...DEFAULT_TURN_POLICY, ...overrides };
+}
+
+function canonicalPrompt(id: 'coder' | 'data-engineer' | 'verifier' | 'coordinator'): string {
+  const acceptanceCase = PERSONA_CASES.find(item => item.id === id);
+  if (!acceptanceCase) throw new Error(`Missing canonical persona case: ${id}`);
+  return acceptanceCase.prompt;
+}
 
 // ─── isRegulatedContent ──────────────────────────────────────────────
 
@@ -103,6 +139,10 @@ describe('isRetryableError', () => {
     expect(isRetryableError(new Error('Service unavailable 503'))).toBe(true);
   });
 
+  it('returns true for Error with 504 in message', () => {
+    expect(isRetryableError(new Error('Gateway timeout 504'))).toBe(true);
+  });
+
   // ── Network errors ────────────────────────────────────────────────
 
   it('returns true for ETIMEDOUT error', () => {
@@ -115,6 +155,12 @@ describe('isRetryableError', () => {
 
   it('returns true for ECONNABORTED error', () => {
     expect(isRetryableError(new Error('ECONNABORTED: request timed out'))).toBe(true);
+  });
+
+  it('returns true after the agent loop exhausts network retries', () => {
+    expect(isRetryableError(new Error(
+      'Could not reach the model endpoint after 3 attempts (fetch failed).',
+    ))).toBe(true);
   });
 
   // ── Rate limit / capacity messages ────────────────────────────────
@@ -151,6 +197,10 @@ describe('isRetryableError', () => {
 
   it('returns true for plain object with status 503', () => {
     expect(isRetryableError({ status: 503 })).toBe(true);
+  });
+
+  it('returns true for plain object with status 504', () => {
+    expect(isRetryableError({ status: 504 })).toBe(true);
   });
 
   // ── Non-retryable cases ───────────────────────────────────────────
@@ -204,81 +254,1432 @@ describe('isRetryableError', () => {
 
 // ─── shouldSuggestSchedule ───────────────────────────────────────────
 
+describe('classifyExplicitTurnMutationPolicy', () => {
+  it('denies tools and memory for the canonical broad no-change instruction', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      'Turn this goal into milestones and exit criteria. Do not create or edit anything.',
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
+  });
+
+  it('recognizes equivalent broad read-only instructions', () => {
+    for (const message of [
+      'Inspect this in read-only mode; make no changes.',
+      'Review the proposal without making any changes.',
+      'Summarize it, but do not take any actions.',
+    ]) {
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy({
+        denyAllMutations: true,
+        denyMemoryPersistence: true,
+        denyFileWrites: true,
+        denyCodeExecution: true,
+        denyAgentLaunch: true,
+      }));
+    }
+  });
+
+  it('can prohibit memory without disabling unrelated requested actions', () => {
+    expect(classifyExplicitTurnMutationPolicy('Write the report, but do not save this to memory.'))
+      .toEqual(expectedPolicy({ denyMemoryPersistence: true }));
+  });
+
+  it('prohibits persisted-memory reads without disabling unrelated requested actions', () => {
+    for (const [message, expected] of [
+      ['Do not search memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true })],
+      ['Without searching memory, tell me what we discussed.', expectedPolicy({ denyMemoryRead: true })],
+      ['Explain what we decided without using memory.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Do not use memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Do not use our previous decisions; create a fresh plan.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not search or recall persistent memory; keep this chat context.', expectedPolicy({ denyMemoryRead: true })],
+      ['Without consulting my saved memories, continue from this conversation.', expectedPolicy({ denyMemoryRead: true })],
+      ['Use no memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Ignore our previous decisions and create a fresh plan.', expectedPolicy({ denyMemoryRead: true })],
+      ['Disregard prior context and start from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Avoid using memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Refrain from using saved memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['You must not use memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['You cannot use memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Memory access is forbidden. Explain what we decided.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Memory search is not allowed. Explain what we decided.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not look at memory. Explain what we decided.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not query the memory store.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not read the memory database.', expectedPolicy({ denyMemoryRead: true })],
+      ['Answer without memory.', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['Answer without any memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Continue with no memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['No memory access for this turn.', expectedPolicy({ denyMemoryRead: true })],
+      ["You mustn't use memory.", expectedPolicy({ denyMemoryRead: true })],
+      ["You shouldn't use memory.", expectedPolicy({ denyMemoryRead: true })],
+      ['You can not use memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory must not be used.', expectedPolicy({ denyMemoryRead: true })],
+      ['Saved memory should not be accessed.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not inspect memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not browse memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not load memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not reference memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not refer to previous conversations.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not pull from memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not fetch from memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Under no circumstances should you use my saved memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['You are not permitted to search memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['You are not allowed to access memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['I do not consent to memory access.', expectedPolicy({ denyMemoryRead: true })],
+      ['I do not consent to you searching memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['I do not want you to use memory for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['I would prefer that you not consult previous conversations.', expectedPolicy({ denyMemoryRead: true })],
+      ['I revoke permission to use my saved memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['I deny permission to use memory.', expectedPolicy({ denyMemoryRead: true })],
+      ["I don't give you permission to use saved memory.", expectedPolicy({ denyMemoryRead: true })],
+      ['I refuse consent to memory access.', expectedPolicy({ denyMemoryRead: true })],
+      ['/marketplace installed - do not use memory', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['/marketplace installed -- do not use memory', expectedPolicy({ denyMemoryRead: true, denyMemoryPersistence: true })],
+      ['You lack permission to search memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory access is denied for this turn.', expectedPolicy({ denyMemoryRead: true })],
+      ['Access to memory is denied.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory access is not permitted.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory store access is denied.', expectedPolicy({ denyMemoryRead: true })],
+      ['It is prohibited to search memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Memory is not to be used for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['Please answer as if you had no saved memory.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not use anything you remember about me for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['Answer without relying on anything you remember about me.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not use anything from previous chats.', expectedPolicy({ denyMemoryRead: true })],
+      ['Forget everything you know about me for this answer.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: "Do not search memory." Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: «Do not search memory.» Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ["Follow this constraint exactly: 'Do not search memory.' Answer from scratch.", expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: ‘Do not search memory.’ Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: `Do not search memory.` Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Follow this constraint exactly: ‹Do not search memory.› Answer from scratch.', expectedPolicy({ denyMemoryRead: true })],
+      ['Do not use working memory from prior sessions.', expectedPolicy({ denyMemoryRead: true })],
+    ] as const) {
+      const policy = classifyExplicitTurnMutationPolicy(message);
+      expect(policy, message).toEqual(expected);
+      expect(allowsAutomaticRecall(policy), message).toBe(false);
+      expect(allowsConversationHistory(policy), message).toBe(true);
+      expect(filterToolsByTurnMutationPolicy(
+        ['search_memory', 'save_memory', 'read_file'].map(name => ({ name })),
+        policy,
+      ).map(tool => tool.name), message).toEqual(['read_file']);
+    }
+  });
+
+  it('fails closed for opaque external tools while retaining non-memory local reads', () => {
+    const policy = classifyExplicitTurnMutationPolicy(
+      'Do not use saved memory. Inspect the current workspace and search the web.',
+    );
+    const tools = [
+      'search_memory', 'search_all_workspaces', 'query_knowledge', 'get_identity',
+      'get_awareness', 'read_other_workspace', 'save_memory', 'add_task',
+      'correct_knowledge', 'read_file', 'web_search', 'mcp_external_read',
+      'agent_insights',
+    ].map(name => ({ name }));
+    const filtered = filterToolsByTurnMutationPolicy(
+      tools,
+      policy,
+      new Set(['mcp_external_read']),
+    ).map(tool => tool.name);
+
+    expect(filtered).toEqual(['read_file', 'web_search']);
+    expect(resolveTurnPersistencePermissions({
+      policy,
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+  });
+
+  it('lets a later explicit persisted-memory read override an earlier read prohibition', () => {
+    const message = 'Do not search memory; instead, search memory for our approved launch decision.';
+    const policy = classifyExplicitTurnMutationPolicy(message);
+    expect(policy).toEqual(expectedPolicy());
+    expect(allowsAutomaticRecall(policy)).toBe(true);
+  });
+
+  it('resolves ordered memory-read directives and ignores quoted or code examples', () => {
+    expect(resolveExplicitMemoryReadDirective(
+      'Search my memory, but do not use memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not use memory, but search my saved memory for launch notes.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory, but please search my saved memory for launch notes.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web, use my saved memory instead.',
+    )).toBe('allow');
+    expect(isExplicitMemoryRecallRequest(
+      'Do not search the web, use my saved memory instead.',
+    )).toBe(true);
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web, and do not use my saved memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web, do not use my saved memory.',
+    )).toBe('deny');
+    expect(isExplicitMemoryRecallRequest(
+      'Do not search the web, do not use my saved memory.',
+    )).toBe(false);
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web — use my saved memory instead.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web–use my saved memory instead.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search the web—do not use my saved memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Use, when helpful, my saved memory.',
+    )).toBe('allow');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory, but explain why someone might search memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory, but explain how to search memory safely.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory; search memory only after I explicitly approve.',
+    )).toBe('deny');
+    for (const deferredOverride of [
+      'Do not search memory, but search memory, only if I approve.',
+      'Do not search memory, but search memory (only if I approve).',
+      'Do not search memory, but search memory unless I approve.',
+      'Do not search memory, but search memory later.',
+      'Do not use memory, but use memory provided that I ask later.',
+      'Do not use memory, but use memory as soon as I explicitly ask later.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(deferredOverride), deferredOverride).toBe('deny');
+    }
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory; search memory is the action you must avoid.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory.\n~~~text\nbut search memory for launch notes\n~~~',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory. Explain ``but search memory for launch notes``.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory.\n    but search memory for launch notes',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory.\n> ~~~text\n> but search memory for launch notes\n> ~~~',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Do not search memory. Explain «but search memory for launch notes».',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'Explain "Do not use memory." and `search my memory`.',
+    )).toBe('unspecified');
+    expect(resolveExplicitMemoryReadDirective(
+      'Explain this example:\n```text\nDo not search memory.\n```',
+    )).toBe('unspecified');
+    for (const technicalConstraint of [
+      'Do not use memory-intensive algorithms.',
+      'Do not use an in-memory database.',
+      'Explain the memory usage and memory leak.',
+      'Do not use shared memory; use message passing.',
+      'Do not read memory pressure metrics.',
+      'Do not use memory foam in this prototype.',
+      'Do not use virtual memory for this benchmark.',
+      'Avoid memory bandwidth bottlenecks.',
+      'Benchmark the memory database architecture.',
+      'Compare memory store benchmarks.',
+      'Search prior history of SQLite.',
+      'Use current primary sources to compare SQLite vector search with PostgreSQL plus pgvector for a single-user desktop AI memory store.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(technicalConstraint), technicalConstraint)
+        .toBe('unspecified');
+      expect(classifyExplicitTurnMutationPolicy(technicalConstraint), technicalConstraint)
+        .toEqual(expectedPolicy());
+    }
+  });
+
+  it('does not broaden unrelated object-scoped or quoted constraints', () => {
+    for (const message of [
+      'Do not create a calendar event; remember this preference.',
+      'Explain why the phrase "do not create or edit anything" is ambiguous.',
+      'Explain "Do not search memory." Then explain what we decided.',
+      'Explain `Do not search memory.` Then explain what we decided.',
+      'Do not hesitate to use my saved memory.',
+      'Do not search the web, use my saved memory instead.',
+      'The documentation says:\n> Do not use saved history.\nNow answer normally.',
+      'Compare agents with and without conversation history.',
+      'Write a design for a chatbot without conversation history.',
+      'Write a design for a chatbot without using conversation history.',
+      'Compare agents that ignore conversation history by design.',
+      'Do not use browser history in this session; inspect the page DOM only.',
+      'Do not use Git history in this conversation; inspect the working tree only.',
+      'Do not use SQL history in this chat; inspect the current query only.',
+      'Do not use PowerShell command-line history in this session.',
+      'Do not use database migration history in this session.',
+      'Do not use deployment history in this conversation.',
+      'Do not use test execution history in this session.',
+      'Do not use package installation history in this conversation.',
+      'Do not use API request history in this session.',
+      'Does the policy mean you must not use conversation history?',
+      'Explain why the policy says agents must not use conversation history.',
+      'Explain whether access to conversation history is denied.',
+      'Tell me whether conversation history is not to be used by default.',
+      'Explain what it means when conversation history access is forbidden.',
+      'Does saying I withdraw consent to use conversation history revoke it?',
+      'Draft a sentence saying I withdraw consent to use conversation history.',
+      'Explain what it means to withhold consent to use conversation history.',
+      'Explain why authorization to use conversation history is denied.',
+      'Explain what it means not to give consent for use of conversation history.',
+      '/research Explain why agents must not use conversation history.',
+      '/research Explain the phrase do not use conversation history.',
+      '/research Explain why users do not use conversation history.',
+      'Do not use user login history in this session.',
+      'Do not use billing transaction history in this conversation.',
+      'Do not use document revision history in this session.',
+      'Do not use agent run history in this conversation.',
+      'Conversation history must not be used. However, use conversation history now.',
+      'Do not use conversation history. However, use it now.',
+      'Do not use conversation history. Actually, use it now.',
+      'Follow this constraint exactly: «Do not use conversation history.» Then use it.',
+      'Do not use conversation history. Yet use it now.',
+      'Do not use conversation history. I changed my mind: use it now.',
+      'Do not use conversation history. No, use it now.',
+      'Do not use conversation history. Wait, use it now.',
+      'Do not use conversation history. Hold on, use it now.',
+      'Do not use conversation history. Never mind, use it now.',
+      'Do not use conversation history. Strike that, use it now.',
+      'Do not use conversation history. Change of plan: use it now.',
+      'Do not use conversation history. New rule: «Use it.»',
+      'Do not use conversation history. Treat this as an instruction: «Use it.»',
+      'Do not use conversation history. Apply this rule: «Use it.»',
+      'Apply this rule: «Do not use conversation history.» Then apply this rule: «Use it.»',
+      'Do not use conversation history. I take that back; use it now.',
+      'Do not use conversation history. Rather, use it now.',
+      'Do not use conversation history. Forget that; use it.',
+      'Do not use conversation history—actually, use it now.',
+      'Do not use conversation history. Correction: use it now.',
+      'Do not use conversation history. Use conversation history now.',
+      'This is the new rule we are discussing: «Do not use conversation history.»',
+      'Compare the new rule: «Do not use conversation history.» with the old one.',
+      '/research explain why users say do not use conversation history',
+      '/research draft wording: do not use conversation history',
+      'Discuss the sentence: do not use conversation history.',
+      'The phrase do not use conversation history is ambiguous.',
+      'Translate: «Do not use conversation history.»',
+      'Translate into French: do not use conversation history.',
+      'Explain why we should follow this rule: «Do not use conversation history.»',
+      'Explain the policy: conversation history must be excluded.',
+      'Explain the rule: do not use conversation history.',
+      'Example: do not use conversation history.',
+    ]) {
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy());
+    }
+  });
+
+  it('does not promote descriptive memory-policy text into an explicit recall request', () => {
+    for (const message of [
+      '/research Explain the phrase do not use conversation history.',
+      '/research Explain why users do not use conversation history.',
+      'ONYX Explain the phrase do not use conversation history.',
+      'Explain why users should not use conversation history.',
+      'Draft this sentence: I never gave consent to use conversation history.',
+      'Draft this sentence: There is no consent to use conversation history.',
+      'Quote this statement: You lack my consent to use conversation history.',
+      'This is the new rule we are discussing: «Do not use conversation history.»',
+      'Compare the new rule: «Do not use conversation history.» with the old one.',
+      '/research explain why users say do not use conversation history',
+      '/research draft wording: do not use conversation history',
+      'Discuss the sentence: do not use conversation history.',
+      'The phrase do not use conversation history is ambiguous.',
+      'Translate: «Do not use conversation history.»',
+      'Translate into French: do not use conversation history.',
+      'Explain why we should follow this rule: «Do not use conversation history.»',
+      'Explain the policy: conversation history must be excluded.',
+      'Explain the rule: do not use conversation history.',
+      'Example: do not use conversation history.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('unspecified');
+      expect(isExplicitMemoryRecallRequest(message), message).toBe(false);
+    }
+  });
+
+  it('does not treat attributed unquoted policy text as the user\'s own directive', () => {
+    for (const message of [
+      'Alice said: do not use conversation history. Explain her statement.',
+      'Alice said: do not use saved memory. Explain her statement.',
+      'The report states: memory access is denied. Summarize the report.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('unspecified');
+      expect(isExplicitMemoryRecallRequest(message), message).toBe(false);
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy());
+    }
+    expect(resolveExplicitMemoryReadDirective(
+      'I said: do not use saved memory.',
+    )).toBe('deny');
+    expect(resolveExplicitMemoryReadDirective(
+      'The policy: do not use conversation history.',
+    )).toBe('deny');
+  });
+
+  it('preserves a direct user denial after an attributed unquoted clause', () => {
+    for (const message of [
+      'Alice said: do not use conversation history, but I say: do not use saved memory.',
+      'Alice said: do not use conversation history, but I insist: do not use saved memory.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('deny');
+    }
+
+    for (const message of [
+      'The report states: memory access is denied, but my instruction is: do not use conversation history.',
+      'The report states: memory access is denied, but my explicit instruction is: do not use conversation history.',
+    ]) {
+      expect(classifyExplicitTurnMutationPolicy(message).denyConversationHistory, message).toBe(true);
+    }
+  });
+
+  it('treats explicit double-negations as persisted-memory read permission', () => {
+    for (const message of [
+      'Do not ignore memory.',
+      'Do not disregard previous decisions.',
+      'Never ignore my saved memory.',
+      'Do not ever ignore my saved memory.',
+      'Do not ignore conversation history.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(message), message).toBe('allow');
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual(expectedPolicy());
+    }
+  });
+
+  it('keeps persisted-memory and conversation-history directives independent in both orders', () => {
+    const memoryDeniedHistoryAllowed = classifyExplicitTurnMutationPolicy(
+      'Do not use my saved memory; use conversation history.',
+    );
+    expect(memoryDeniedHistoryAllowed).toEqual(expectedPolicy({
+      denyMemoryRead: true,
+      denyMemoryPersistence: true,
+    }));
+    expect(allowsConversationHistory(memoryDeniedHistoryAllowed)).toBe(true);
+
+    const historyDeniedMemoryAllowed = classifyExplicitTurnMutationPolicy(
+      'Do not use conversation history; use my saved memory.',
+    );
+    expect(historyDeniedMemoryAllowed).toEqual(expectedPolicy({
+      denyConversationHistory: true,
+      denyMemoryPersistence: true,
+    }));
+    expect(allowsAutomaticRecall(historyDeniedMemoryAllowed)).toBe(true);
+    expect(allowsConversationHistory(historyDeniedMemoryAllowed)).toBe(false);
+
+    expect(classifyExplicitTurnMutationPolicy(
+      'Use my saved memory. Actually, do not.',
+    )).toEqual(expectedPolicy({
+      denyMemoryRead: true,
+    }));
+    expect(classifyExplicitTurnMutationPolicy(
+      'Use conversation history. Actually, do not.',
+    )).toEqual(expectedPolicy({
+      denyConversationHistory: true,
+      denyMemoryPersistence: true,
+    }));
+  });
+
+  it('keeps saved session history out only when that history is explicitly denied', () => {
+    const genericMemoryOptOut = classifyExplicitTurnMutationPolicy(
+      'Continue from this conversation without consulting my saved memories.',
+    );
+    expect(allowsConversationHistory(genericMemoryOptOut)).toBe(true);
+
+    const savedHistoryOptOut = classifyExplicitTurnMutationPolicy(
+      'Do not use saved history. Answer from scratch.',
+    );
+    expect(savedHistoryOptOut.denyMemoryRead).toBe(false);
+    expect(allowsConversationHistory(savedHistoryOptOut)).toBe(false);
+
+    for (const priorChatOptOut of [
+      'Do not use prior history of this chat.',
+      'Do not use previous history of this conversation.',
+      'Do not use earlier history of the session.',
+      "Do not use this chat's prior history.",
+      "Do not use this conversation's previous history.",
+      "Do not use the session's earlier history.",
+      'Do not use the prior history from this chat.',
+      'Do not use prior chat history.',
+      'Do not use history from earlier in this chat.',
+      'Do not use the history in this conversation.',
+      'Do not use anything said earlier in this chat.',
+      'Answer without the conversation so far.',
+      'Start fresh without prior messages in this chat.',
+      'Ignore the conversation so far and answer fresh.',
+      'Disregard anything said earlier in this chat.',
+      'Do not rely on the conversation so far.',
+      'Never search prior messages in this chat.',
+      'Do not draw from anything said earlier in this chat.',
+      'Access to conversation history is denied for this turn.',
+      'Conversation history must not be used for this answer.',
+      'Policy: do not use conversation history.',
+      'Rule: do not use conversation history.',
+      'I revoke permission to use conversation history.',
+      'I deny permission to use prior messages in this chat.',
+      'I refuse consent to using conversation history.',
+      'I do not consent to using conversation history.',
+      'Conversation history access is forbidden for this turn.',
+      'It is forbidden to use conversation history for this answer.',
+      'Avoid using conversation history for this answer.',
+      'Refrain from using conversation history for this answer.',
+      'Use no conversation history for this answer.',
+      'I do not want you to use conversation history for this answer.',
+      'I would prefer that you not consult prior messages in this chat.',
+      'With no conversation history, answer from scratch.',
+      'No conversation history access for this turn.',
+      'Answer as if you had no conversation history.',
+      'Use conversation history. However, conversation history must not be used.',
+      'I withdraw consent to use conversation history.',
+      'Consent to use conversation history is withdrawn.',
+      'Permission to use conversation history is revoked.',
+      'You do not have permission to use conversation history.',
+      'No access to conversation history for this turn.',
+      'Conversation history cannot be used for this answer.',
+      'Do not take previous messages in this chat into account.',
+      'Answer independently of previous turns.',
+      'Use conversation history. However, do not use it.',
+      'Use conversation history. Actually, do not use it.',
+      'Use conversation history. On second thought, do not use it.',
+      'TOPAZ Do not use saved history.',
+      'I withdraw my consent for you to use conversation history.',
+      'I no longer consent to use conversation history.',
+      'I withdraw authorization to use conversation history.',
+      'I revoke authorization to use conversation history.',
+      'I decline consent to use conversation history.',
+      'I opt out of using conversation history.',
+      'Consent to use conversation history has been revoked.',
+      'Permission to use conversation history has been withdrawn.',
+      'You are no longer authorized to use conversation history.',
+      'I do not authorize you to use conversation history.',
+      'I do not permit you to use conversation history.',
+      'You do not have my consent to use conversation history.',
+      'I have not authorized you to use conversation history.',
+      'I cancel my consent to use conversation history.',
+      'I remove permission to use conversation history.',
+      'I disallow use of conversation history.',
+      'I prohibit you from using conversation history.',
+      'I forbid you to use conversation history.',
+      'Do not use prior context from this chat.',
+      'Do not use the transcript of this conversation.',
+      'Do not use what we covered earlier in this chat.',
+      'I hereby withdraw consent for use of conversation history.',
+      'I withdraw consent to your use of conversation history.',
+      'I withhold consent to use conversation history.',
+      'I withhold authorization to use conversation history.',
+      'I deny consent to use conversation history.',
+      'I object to the use of conversation history.',
+      'I refuse permission to use conversation history.',
+      'I refuse authorization to use conversation history.',
+      'Authorization to use conversation history is denied.',
+      'I withdraw consent for access to conversation history.',
+      'I no longer authorize you to use conversation history.',
+      'I no longer permit you to use conversation history.',
+      'You have no permission to use conversation history.',
+      'You have no authorization to use conversation history.',
+      'Do not use the chat transcript so far.',
+      'Do not use the conversation transcript so far.',
+      'Do not use transcripts from this conversation.',
+      'Do not use the preceding messages in this chat.',
+      'Do not use the preceding turns in this session.',
+      'Do not use the preceding exchanges in this conversation.',
+      'Do not use the messages earlier in this chat.',
+      'Do not use turns from earlier in this session.',
+      'Do not use the exchanges before in this conversation.',
+      'Do not use the chat log.',
+      "Do not use this conversation's transcript.",
+      'Do not use our discussion so far.',
+      'Do not use this thread so far.',
+      'Do not use what we mentioned earlier in this chat.',
+      'Do not use what we talked about earlier in this chat.',
+      'Do not use above messages.',
+      'Use conversation history. Yet do not use it.',
+      'Use conversation history. Nevertheless, do not use it.',
+      'Use conversation history. Correction: do not use it.',
+      'Use conversation history. Scratch that; do not use it.',
+      'AB Do not use conversation history.',
+      'Use conversation history. Follow this constraint exactly: «Do not use it.»',
+      'Follow this constraint exactly: "Do not use conversation history." Answer from scratch.',
+      'Follow this rule: "Do not use conversation history."',
+      'Follow this policy: "Do not use conversation history."',
+      'Obey this rule: "Do not use conversation history."',
+      'Apply this rule: "Do not use conversation history."',
+      'Enforce this policy: "Do not use conversation history."',
+      'Obey this instruction: `Do not use saved history.` Then answer.',
+      '/research ATLAS Do not use saved history.',
+      'Exclude conversation history from this answer.',
+      'Keep conversation history out of this answer.',
+      'Omit prior messages from this chat.',
+      'Do not consider prior messages in this chat.',
+      'Use conversation history; however exclude it from this answer.',
+      'Use conversation history, except do not use it for this answer.',
+      'Use conversation history, but ignore it for this response.',
+      'Leave prior chat messages out of the answer.',
+      'I do not give consent for use of conversation history.',
+      'I never gave you consent to use conversation history.',
+      'Set aside the conversation so far.',
+      'Do not take earlier turns into consideration.',
+      'Do not factor in previous messages.',
+      'Use conversation history. No, do not use it.',
+      'Use conversation history. Wait, do not use it.',
+      'Use conversation history. Ignore that; do not use it.',
+      'Use conversation history. Change of plan: do not use it.',
+      'I did not give you consent to use conversation history.',
+      "I haven't given you permission to access conversation history.",
+      'Consent to use conversation history was never given.',
+      'No consent was granted to use conversation history.',
+      'Authorization to use conversation history was never granted.',
+      'You were never authorized to use conversation history.',
+      'I have never consented to use conversation history.',
+      'There is no consent to use conversation history.',
+      'Consent for using conversation history has never been provided.',
+      'You lack my consent to use conversation history.',
+      'Put aside the conversation so far.',
+      "Don't base your answer on previous messages.",
+      'Do not use the messages above.',
+      'Use conversation history. Hold on, do not use it.',
+      'Use conversation history. Never mind, do not use it.',
+      'Use conversation history. Strike that, do not use it.',
+      'Use conversation history. Scratch that. Answer without it.',
+      'Use conversation history. New rule: «Do not use it.»',
+      'Use conversation history. Treat this as an instruction: «Do not use it.»',
+      '/research ATLAS please do not use saved history',
+      '/research --mode deep ATLAS Do not use saved history',
+      '/research ATLAS Keep prior messages out of this answer',
+      'Authorization to access conversation history was withheld.',
+      'The prior messages are to be excluded from this answer.',
+      'Previous turns must be omitted from this answer.',
+      'Prior messages should be kept out of this answer.',
+      'For this answer, do not use conversation history.',
+      'For now, do not use conversation history.',
+      'On this turn, do not use conversation history.',
+      'If possible, do not use conversation history.',
+      'Unless I explicitly approve it, do not use conversation history.',
+      'Until I explicitly approve, do not use conversation history.',
+      'Use conversation history only if I explicitly approve.',
+      'Only use conversation history after I approve.',
+      'Use conversation history. I take that back; do not use it.',
+      'Use conversation history. Disregard that; do not use it.',
+      'Use conversation history. Rather, do not use it.',
+      '/research quantum computing please do not use saved history',
+      '/research quantum computing -- do not use saved history',
+      '/investigate AI safety do not use conversation history',
+      '/draft executive memo please do not use saved history',
+      'At this time, do not use conversation history.',
+      'For this task, do not use conversation history.',
+      'In this response, do not consult saved history.',
+      'Use conversation history provided I explicitly approve it.',
+      'Unless and until I approve, do not use conversation history.',
+      'Use conversation history only upon my explicit approval.',
+      'Only use conversation history with my explicit approval.',
+      'Conversation history is to remain excluded from this answer.',
+      'Previous turns shall be omitted from this answer.',
+      'Prior messages are excluded from this answer.',
+      'Keep previous turns outside this answer.',
+      'I have not provided consent for you to use conversation history.',
+      'No authorization exists for access to conversation history.',
+      'Permission to access conversation history is absent.',
+      'You are without my authorization to access conversation history.',
+      'Use conversation history. Cancel that request and answer without it.',
+      'Use conversation history; correction—do not use it.',
+      '/research write a report and please do not use conversation history',
+      '/research draft an outline please do not use saved history',
+      '/research compare options but do not use conversation history',
+      '/research quote sources but do not use conversation history',
+      '/investigate describe the issue but do not use prior messages',
+      'Answer without reference to prior messages.',
+      'Please do not use prior conversation context.',
+      'Do not carry context forward from earlier turns.',
+      'Do not incorporate anything from previous messages.',
+      'For this answer do not use conversation history.',
+      'Please, do not use conversation history.',
+      'Can you please not use conversation history.',
+      '/research Explain quantum computing please do not use saved history',
+      'I never authorized you to use conversation history.',
+      'Use conversation history. I retract that; do not use it.',
+    ]) {
+      expect(resolveExplicitMemoryReadDirective(priorChatOptOut), priorChatOptOut).toBe('deny');
+      expect(classifyExplicitTurnMutationPolicy(priorChatOptOut), priorChatOptOut).toEqual(
+        expectedPolicy({ denyConversationHistory: true, denyMemoryPersistence: true }),
+      );
+    }
+  });
+
+  it('treats a file-scoped prohibition granularly instead of denying every action', () => {
+    expect(classifyExplicitTurnMutationPolicy('Do not create files or schedules.'))
+      .toEqual(expectedPolicy({ denyFileWrites: true }));
+  });
+
+  it('lets a broad denial win over a conflicting memory request', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      'Remember this preference, but do not create or edit anything.',
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
+  });
+
+  it('keeps paired contractions actionable instead of treating them as quoted text', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      "Don't create or edit anything because it's unnecessary.",
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
+    expect(classifyExplicitTurnMutationPolicy(
+      'Don’t create or edit anything.',
+    )).toEqual(expectedPolicy({
+      denyAllMutations: true,
+      denyMemoryPersistence: true,
+      denyFileWrites: true,
+      denyCodeExecution: true,
+      denyAgentLaunch: true,
+    }));
+  });
+
+  it('ignores quoted prohibitions even when the quote contains a contraction', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      "Rewrite: 'Don't create or edit anything.'",
+    )).toEqual(expectedPolicy());
+    expect(classifyExplicitTurnMutationPolicy(
+      'Rewrite: ‘Don’t create or edit anything.’',
+    )).toEqual(expectedPolicy());
+    expect(classifyExplicitTurnMutationPolicy(
+      'Explain “Do not write files or execute code.”',
+    )).toEqual(expectedPolicy());
+    expect(classifyExplicitTurnMutationPolicy(
+      'Discuss “Inspect only this current virtual workspace.”',
+    )).toEqual(expectedPolicy());
+    expect(classifyExplicitTurnMutationPolicy(
+      'Explain “Return exactly one JSON envelope with evidenceScope supplied_only and no text before or after.”',
+    )).toEqual(expectedPolicy());
+  });
+
+  it('classifies the four canonical persona constraints without broadening them', () => {
+    const coder = classifyExplicitTurnMutationPolicy(canonicalPrompt('coder'));
+    expect(coder).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      contextScope: 'workspace-only',
+    }));
+    expect(allowsAutomaticRecall(coder)).toBe(false);
+
+    const dataEngineer = classifyExplicitTurnMutationPolicy(canonicalPrompt('data-engineer'));
+    expect(dataEngineer).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      denyCodeExecution: true,
+    }));
+    expect(allowsAutomaticRecall(dataEngineer)).toBe(true);
+
+    const verifier = classifyExplicitTurnMutationPolicy(canonicalPrompt('verifier'));
+    expect(verifier).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      contextScope: 'supplied-only',
+    }));
+    expect(allowsAutomaticRecall(verifier)).toBe(false);
+
+    const coordinator = classifyExplicitTurnMutationPolicy(canonicalPrompt('coordinator'));
+    expect(coordinator).toEqual(expectedPolicy({
+      denyFileWrites: true,
+      denyAgentLaunch: true,
+    }));
+    expect(allowsAutomaticRecall(coordinator)).toBe(true);
+  });
+
+  it('recognizes self-contained advisory turns without swallowing explicit evidence requests', () => {
+    for (const id of ['data-engineer', 'coordinator'] as const) {
+      const prompt = canonicalPrompt(id);
+      expect(isExplicitToolFreeAdvisoryRequest(
+        prompt,
+        classifyExplicitTurnMutationPolicy(prompt),
+      ), id).toBe(true);
+    }
+    for (const prompt of [
+      'Design a complete ETL in Python with all imports. Do not write files or execute code.',
+      'Design a complete ETL using Python with all imports. Do not write files or execute code.',
+      'Provide a complete runnable example in Python with all imports. Do not write files or execute code.',
+      'Draft a response in Serbian. Do not write files or launch agents.',
+      'Outline a plan from first principles. Do not edit files or launch agents.',
+      'Write a concise plan in the response. Do not write files or execute code.',
+      'Generate a runnable Node.js script with all imports. Do not write files or execute code.',
+      'Design a React.js component. Do not write files or execute code.',
+      'Explain node.js module resolution. Do not write files or execute code.',
+      'Explain "Node.js" module resolution. Do not write files or execute code.',
+      'Prepare a summary using Serbian. Do not write files or execute code.',
+      'Prepare a summary using Markdown. Do not write files or execute code.',
+      'Explain why external sources can be unreliable. Do not write files or execute code.',
+      'Design a policy for evaluating external sources. Do not write files or execute code.',
+      'Explain what a Jira issue is. Do not write files or execute code.',
+      'Design a generic Jira issue template. Do not write files or execute code.',
+      'Design a GitHub project structure from first principles. Do not write files or execute code.',
+      'Explain the tradeoffs of using external sources. Do not write files or execute code.',
+      'Explain why decisions based on external evidence can be risky. Do not write files or execute code.',
+      'Compare "Vue.js" and "React.js" architectures. Do not write files or execute code.',
+      'Explain Node.js file system APIs. Do not write files or execute code.',
+      'Explain how to summarize external sources. Do not write files or execute code.',
+      'Explain how to review a Jira issue. Do not write files or execute code.',
+    ]) {
+      expect(isExplicitToolFreeAdvisoryRequest(
+        prompt,
+        classifyExplicitTurnMutationPolicy(prompt),
+      ), prompt).toBe(true);
+    }
+
+    const coderPrompt = canonicalPrompt('coder');
+    expect(isExplicitToolFreeAdvisoryRequest(
+      coderPrompt,
+      classifyExplicitTurnMutationPolicy(coderPrompt),
+    )).toBe(false);
+
+    for (const prompt of [
+      'Design the migration using the files in this current workspace. Do not write files or execute code.',
+      'Outline two review lanes after searching my saved memory. Do not edit files or launch agents.',
+      'Design a current deployment recommendation from the latest online documentation. Do not write files or execute code.',
+      'Design a migration and cite official sources. Do not write files or execute code.',
+      'Decompose this review based on our previous discussion. Do not edit files or launch agents.',
+      'Design a migration with web_search. Do not write files or execute code.',
+      'Summarize the text above. Do not write files or execute code.',
+      'Okay, outline that plan. Do not edit files or launch agents.',
+      'Now decompose it. Do not edit files or launch agents.',
+      'Now summarize them. Do not write files or execute code.',
+      'Decompose those into lanes. Do not edit files or launch agents.',
+      'Outline the remaining work. Do not edit files or launch agents.',
+      'Explain package.json. Do not write files or execute code.',
+      'Summarize "README.md". Do not write files or execute code.',
+      'Prepare a summary from Slack. Do not write files or execute code.',
+      'Summarize the attached PDF. Do not write files or execute code.',
+      'Summarize the document I attached. Do not write files or execute code.',
+      'Prepare a summary using Salesforce. Do not write files or execute code.',
+      'Prepare a summary from salesforce. Do not write files or execute code.',
+      'Prepare a summary from hubspot. Do not write files or execute code.',
+      'Prepare a summary using Acme CRM. Do not write files or execute code.',
+      'Prepare a summary from Acme records. Do not write files or execute code.',
+      'Prepare a summary using Workday. Do not write files or execute code.',
+      'Prepare a summary using SAP. Do not write files or execute code.',
+      'Summarize Jira issue. Do not write files or launch agents.',
+      'Prepare a summary from external sources. Do not write files or launch agents.',
+      'Summarize records in airtable. Do not write files or execute code.',
+      'Summarize my inbox. Do not write files or execute code.',
+      'Prepare an agenda from my calendar. Do not write files or execute code.',
+      'Summarize the open tasks in Linear. Do not write files or execute code.',
+      'Draft an email based on the record in Salesforce. Do not write files or execute code.',
+      'Draft a response based on the customer email below. Do not write files or execute code.',
+      'Summarize the repository architecture. Do not write files or execute code.',
+      'Explain the codebase structure. Do not write files or execute code.',
+      "Summarize today's AI news. Do not write files or execute code.",
+      'Explain the current weather in Belgrade. Do not write files or execute code.',
+      'Send an email to Alice. Do not write files or launch agents.',
+      'Draft and send an email to Alice. Do not write files or launch agents.',
+      'Draft and email Alice a response. Do not write files or launch agents.',
+      'Schedule a meeting tomorrow. Do not write files or launch agents.',
+      'Prepare and schedule a meeting tomorrow. Do not write files or launch agents.',
+      'Post the update to Slack. Do not write files or launch agents.',
+      'Draft a response and post it to Slack. Do not write files or launch agents.',
+      'Prepare and upload the report. Do not write files or launch agents.',
+      'Draft and share the update. Do not write files or launch agents.',
+      'Draft and message Alice. Do not write files or launch agents.',
+      'Draft a response, email Alice. Do not write files or launch agents.',
+      'Prepare the report; upload to Drive. Do not write files or launch agents.',
+      'Draft the update: post it to Slack. Do not write files or launch agents.',
+      'Draft the response \u2014 email Alice. Do not write files or launch agents.',
+      'Design a plan, create a Jira ticket. Do not write files or launch agents.',
+      'Delete the calendar event. Do not write files or launch agents.',
+      'Design a plan and create a Jira ticket. Do not write files or launch agents.',
+      'Outline the review. Do not edit files or launch agents, but inspect this workspace.',
+      'Design the migration. Do not write files or execute code; search my saved memory first.',
+      'Design the migration without editing files or running code, using the attached schema.',
+      'Outline a plan without editing files or running code based on the current repository.',
+      'Do not edit files or launch agents, inspect this workspace first and outline the result.',
+      'Outline the review. Do not edit files or launch agents, then search my saved memory.',
+      'Review my calendar. Do not write files or launch agents.',
+      'Summarize the current Jira issue. Do not write files or launch agents.',
+      'Check git status. Do not write files or execute code.',
+      'Summarize git status. Do not write files or execute code.',
+      'Explain git diff. Do not write files or execute code.',
+      'Continue and summarize the above. Do not write files or execute code.',
+      'Outline the review. Do not edit files or launch agents: inspect this workspace first.',
+      'Design the migration. Do not write files or execute code, yet search my saved memory.',
+      'Now outline this plan. Do not edit files or launch agents.',
+      'Outline the plan we discussed. Do not edit files or launch agents.',
+      'Outline the plan from before. Do not edit files or launch agents.',
+      'Summarize the current Salesforce account. Do not write files or execute code.',
+      'Summarize the current HubSpot deal. Do not write files or execute code.',
+      'Summarize the current GitHub pull request. Do not write files or execute code.',
+      'Summarize the current Airtable base. Do not write files or execute code.',
+      'Design a plan and once done create a Jira ticket. Do not write files or launch agents.',
+      'Summarize Dockerfile. Do not write files or execute code.',
+      'Summarize "Makefile". Do not write files or execute code.',
+      'Explain .gitignore. Do not write files or execute code.',
+      'Summarize the contents of "node.js". Do not write files or execute code.',
+      'Summarize the contents of react.js. Do not write files or execute code.',
+      'Summarize current Jira tickets. Do not write files or execute code.',
+      'Summarize the open Linear tasks. Do not write files or execute code.',
+      'Summarize current Salesforce accounts. Do not write files or execute code.',
+      'Summarize current HubSpot deals. Do not write files or execute code.',
+      'Summarize current Airtable records. Do not write files or execute code.',
+      'Summarize current GitHub pull requests. Do not write files or execute code.',
+      'Explain the file "node.js". Do not write files or execute code.',
+      'Explain "node.js" file contents. Do not write files or execute code.',
+      'Explain Node.js, then summarize package.json. Do not write files or execute code.',
+      'Compare "Node.js" runtimes, then summarize "config.json". Do not write files or execute code.',
+      'Read package.json and explain Node.js. Do not write files or execute code.',
+      'Explain Node.js using package.json. Do not write files or execute code.',
+      'Summarize external sources. Do not write files or launch agents.',
+      'Design a recommendation based on web data. Do not write files or execute code.',
+    ]) {
+      expect(isExplicitToolFreeAdvisoryRequest(
+        prompt,
+        classifyExplicitTurnMutationPolicy(prompt),
+      ), prompt).toBe(false);
+    }
+  });
+
+  it('caps advisory output from answer-length intent rather than unrelated adjectives', () => {
+    expect(selectAdvisoryMaxOutputTokens(canonicalPrompt('data-engineer'))).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(canonicalPrompt('coordinator'))).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens('Give a concise answer about the migration.')).toBe(2_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain the limits of a 256-token context window in detail. Do not write files or execute code.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain the limitations of a model with a 256 token output limit in detail.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain a model configured for at most 512 tokens in detail.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens('Give an answer of at most 500 words.')).toBe(750);
+    expect(selectAdvisoryMaxOutputTokens('Summarize in at most 120 words.')).toBe(256);
+    expect(selectAdvisoryMaxOutputTokens('Write no fewer than 5000 words.')).toBe(7_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain why a 5000-word report is difficult to review in detail.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Outline how to summarize a 5000-word guide without losing structure.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain a 256-token response buffer thoroughly.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain how an API should write at most 512 tokens to its response buffer.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Explain why complete Python examples should include all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Give a concise answer that includes a complete Python example with all imports.',
+    )).toBe(2_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a concise answer with a complete Python example and all imports.',
+    )).toBe(2_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 1200 tokens.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Design a complete Python example with all imports, exactly 1200 tokens.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 800 words.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Rust example with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Go implementation with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete runnable example in Python with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Generate a runnable Node.js script with all imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Show a syntactically valid C# program with all required imports.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 1200 tokens. Do not write files or execute code.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, limited to 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, no more than 700 words.',
+    )).toBe(1_050);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 5 tokens.',
+    )).toBe(256);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports in exactly 100000 tokens.',
+    )).toBe(12_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Give a concise answer with a complete Python example in exactly 1200 tokens.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete implementation plan.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that does not need to be complete.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script that writes at most 512 tokens to its response buffer.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example for analyzing a 5000-word report.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, not limited to 1200 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports, not capped at 900 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that does not need to include all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that does not need all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example, not a complete one.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example without all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example without including all imports.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a non-runnable Python example.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a Python example that is not fully runnable.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      "Provide a Python example that needn't be complete.",
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      "Provide a Python example that needn't include all imports.",
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 1200-token limit.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in exactly 1200 tokens, please.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in at most 900 tokens, including comments.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in exactly 1200 tokens, if possible.',
+    )).toBe(1_200);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example in at most 900 tokens, including type annotations.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example no longer than 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 512-token limit in its response buffer.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 512-token limit per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports and a 512-token limit for every generated chunk.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a complete Python script that summarizes each report in exactly 1200 words.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Build a complete Python program that returns output in exactly 1200 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example for a model response buffer capped at 512 tokens.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example using at most 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with all imports no more than 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example. Keep the answer under 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example with a maximum of 900 tokens.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a runnable Python example using at most 512 tokens of model context per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens of context for each chunk.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script with all imports, no more than 512 tokens in its response buffer.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a runnable Python example using at most 512 tokens of prompt context per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a runnable Python example using at most 512 tokens in the context window.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens per chunk.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script with all imports, no more than 512 tokens in each API response.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a runnable Python script with all imports, no more than 512 tokens for every response.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens or fewer per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 512 tokens in total per request.',
+    )).toBe(4_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Provide a complete Python example under 900 tokens; include tests.',
+    )).toBe(900);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write about why a 5000-word report is difficult to review.',
+    )).toBe(3_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Write a detailed 5000-token guide to compact cameras. Do not write files or execute code.',
+    )).toBe(5_000);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Could you write a 5000-word report? Do not write files or execute code.',
+    )).toBe(7_500);
+    expect(selectAdvisoryMaxOutputTokens(
+      'Please can you draft a 5000-token guide? Do not write files or execute code.',
+    )).toBe(5_000);
+  });
+
+  it('filters the canonical policies before downstream tool selection', () => {
+    const tools = [
+      'read_file', 'search_files', 'search_content', 'git_status', 'git_diff', 'git_log',
+      'lsp_diagnostics', 'write_file', 'edit_file', 'multi_edit', 'generate_xlsx',
+      'bash', 'run_code', 'cli_execute', 'kill_task', 'search_memory', 'query_knowledge',
+      'spawn_agent', 'compose_workflow', 'orchestrate_workflow', 'execute_step', 'run_harness',
+      'mcp_sqlite_query',
+    ].map(name => ({ name }));
+    const external = new Set(['mcp_sqlite_query']);
+
+    const coderNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('coder')),
+      external,
+    ).map(tool => tool.name);
+    expect(coderNames).toEqual([
+      'read_file', 'search_files', 'search_content',
+    ]);
+
+    const dataEngineerNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('data-engineer')),
+      external,
+    ).map(tool => tool.name);
+    for (const denied of [
+      'write_file', 'edit_file', 'multi_edit', 'generate_xlsx', 'bash', 'run_code',
+      'cli_execute', 'kill_task', 'spawn_agent', 'orchestrate_workflow', 'execute_step',
+      'run_harness', 'mcp_sqlite_query',
+    ]) {
+      expect(dataEngineerNames, denied).not.toContain(denied);
+    }
+    expect(dataEngineerNames).toContain('read_file');
+    expect(dataEngineerNames).toContain('search_memory');
+
+    const coordinatorNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('coordinator')),
+      external,
+    ).map(tool => tool.name);
+    for (const denied of [
+      'write_file', 'edit_file', 'multi_edit', 'generate_xlsx', 'spawn_agent',
+      'compose_workflow', 'orchestrate_workflow', 'execute_step', 'run_harness',
+      'mcp_sqlite_query',
+    ]) {
+      expect(coordinatorNames, denied).not.toContain(denied);
+    }
+
+    expect(filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy(canonicalPrompt('verifier')),
+      external,
+    )).toEqual([]);
+  });
+
+  it('treats execution and delegation as indirect file-write paths', () => {
+    const tools = [
+      'read_file', 'search_files', 'search_content', 'write_file', 'bash', 'run_code',
+      'cli_execute', 'execute_step', 'spawn_agent', 'compose_workflow',
+      'orchestrate_workflow', 'run_harness',
+    ].map(name => ({ name }));
+    const filteredNames = filterToolsByTurnMutationPolicy(
+      tools,
+      classifyExplicitTurnMutationPolicy('Do not write files.'),
+    ).map(tool => tool.name);
+
+    expect(filteredNames).toEqual(['read_file', 'search_files', 'search_content']);
+  });
+
+  it('removes prior-chat evidence from both bounded canonical turns', () => {
+    const history = [
+      { role: 'user', content: 'Prior user claim that must not become evidence.' },
+      { role: 'assistant', content: 'Prior assistant conclusion that must not become evidence.' },
+      { role: 'user', content: 'Current request as originally persisted.' },
+    ];
+
+    for (const id of ['coder', 'verifier'] as const) {
+      const currentPrompt = canonicalPrompt(id);
+      expect(buildTurnMessageWindow(
+        history,
+        currentPrompt,
+        classifyExplicitTurnMutationPolicy(currentPrompt),
+      ), id).toEqual([{ role: 'user', content: currentPrompt }]);
+    }
+
+    const unboundedPrompt = canonicalPrompt('data-engineer');
+    expect(buildTurnMessageWindow(
+      history,
+      unboundedPrompt,
+      classifyExplicitTurnMutationPolicy(unboundedPrompt),
+    )).toEqual(history);
+  });
+
+  it('suppresses learned state and response decorations for bounded or persona-read-only turns', () => {
+    for (const id of ['coder', 'verifier'] as const) {
+      const policy = classifyExplicitTurnMutationPolicy(canonicalPrompt(id));
+      expect(resolveTurnPersistencePermissions({
+        policy,
+        isAutomatedTurn: false,
+        personaIsReadOnly: false,
+      }), id).toEqual({
+        allowMemoryPersistence: false,
+        allowDerivedPersistence: false,
+      });
+      expect(allowsPostResponseDecoration(policy), id).toBe(false);
+    }
+    const verifierPrompt = canonicalPrompt('verifier');
+    expect(shouldSuggestSchedule('Repeat this verification weekly.', [], verifierPrompt)).toBe(true);
+    expect(allowsPostResponseDecoration(
+      classifyExplicitTurnMutationPolicy(verifierPrompt),
+    )).toBe(false);
+
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy(),
+      isAutomatedTurn: false,
+      personaIsReadOnly: true,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy(),
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+      closedWorldRewrite: true,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+    expect(allowsPostResponseDecoration(expectedPolicy(), true)).toBe(false);
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy({ denyMemoryPersistence: true }),
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+    })).toEqual({
+      allowMemoryPersistence: false,
+      allowDerivedPersistence: false,
+    });
+    expect(resolveTurnPersistencePermissions({
+      policy: expectedPolicy(),
+      isAutomatedTurn: false,
+      personaIsReadOnly: false,
+    })).toEqual({
+      allowMemoryPersistence: true,
+      allowDerivedPersistence: true,
+    });
+  });
+
+  it('keeps maximum-size directive classification within a bounded latency', () => {
+    const filler = 'x'.repeat(49_800);
+    const messages = [
+      `${filler}\nDo not use conversation history.`,
+      `${filler}\nApply this rule: «Do not use saved memory.»`,
+      `${filler}\nDo not use conversation history — actually, use it.`,
+    ];
+    primeMemoryDirectiveClassifier();
+    const startedAt = performance.now();
+    const policies = messages.map(message => classifyExplicitTurnMutationPolicy(message));
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(policies[0]?.denyConversationHistory).toBe(true);
+    expect(policies[1]?.denyMemoryRead).toBe(true);
+    expect(policies[2]?.denyConversationHistory).toBe(false);
+    expect(elapsedMs).toBeLessThan(1_000);
+  });
+});
+
+describe('canUseBudgetModelWithoutCloudEgress', () => {
+  it('blocks an implicit local-to-cloud budget route', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'ollama/private-local-model',
+      'openrouter/cloud-budget-model',
+    )).toBe(false);
+  });
+
+  it('allows local-to-local budget routing', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'ollama/private-local-model',
+      'ollama/local-budget-model',
+    )).toBe(true);
+  });
+
+  it('blocks Ollama cloud aliases from being treated as local budget models', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'ollama/private-local-model',
+      'ollama/minimax-m2.7:cloud',
+    )).toBe(false);
+  });
+
+  it('allows cloud-primary routing because history is already cloud-eligible', () => {
+    expect(canUseBudgetModelWithoutCloudEgress(
+      'anthropic/claude-sonnet',
+      'openrouter/cloud-budget-model',
+    )).toBe(true);
+  });
+});
+
 describe('shouldSuggestSchedule', () => {
   // ── Positive: recurring patterns in text, no scheduling tools ─────
 
   it('returns true when response mentions "every day" and no schedule tool used', () => {
-    expect(shouldSuggestSchedule('I can check this every day for you.', [])).toBe(true);
+    expect(shouldSuggestSchedule('I can check this every day for you.', [], '')).toBe(true);
   });
 
   it('returns true for "daily" pattern', () => {
-    expect(shouldSuggestSchedule('This task runs daily.', [])).toBe(true);
+    expect(shouldSuggestSchedule('This task runs daily.', [], '')).toBe(true);
   });
 
   it('returns true for "weekly" pattern', () => {
-    expect(shouldSuggestSchedule('I recommend a weekly review.', [])).toBe(true);
+    expect(shouldSuggestSchedule('I recommend a weekly review.', [], '')).toBe(true);
   });
 
   it('returns true for "every week" pattern', () => {
-    expect(shouldSuggestSchedule('Let me do this every week.', [])).toBe(true);
+    expect(shouldSuggestSchedule('Let me do this every week.', [], '')).toBe(true);
   });
 
   it('returns true for "each morning" pattern', () => {
-    expect(shouldSuggestSchedule('We can run reports each morning.', [])).toBe(true);
+    expect(shouldSuggestSchedule('We can run reports each morning.', [], '')).toBe(true);
   });
 
   it('returns true for "every morning" pattern', () => {
-    expect(shouldSuggestSchedule('I will check every morning.', [])).toBe(true);
+    expect(shouldSuggestSchedule('I will check every morning.', [], '')).toBe(true);
   });
 
   it('returns true for "regularly" pattern', () => {
-    expect(shouldSuggestSchedule('This should be done regularly.', [])).toBe(true);
+    expect(shouldSuggestSchedule('This should be done regularly.', [], '')).toBe(true);
   });
 
   it('returns true for "recurring" pattern', () => {
-    expect(shouldSuggestSchedule('This is a recurring task.', [])).toBe(true);
+    expect(shouldSuggestSchedule('This is a recurring task.', [], '')).toBe(true);
   });
 
-  it('returns true for "scheduled" pattern', () => {
-    expect(shouldSuggestSchedule('The meeting is already scheduled for then.', [])).toBe(true);
+  it('does not treat a one-time scheduled action as recurring work', () => {
+    expect(shouldSuggestSchedule('The meeting is already scheduled for then.', [], '')).toBe(false);
+    expect(shouldSuggestSchedule('Monitor the issue and schedule a fix.', [], '')).toBe(false);
   });
 
   it('returns true for "every month" pattern', () => {
-    expect(shouldSuggestSchedule('We generate reports every month.', [])).toBe(true);
+    expect(shouldSuggestSchedule('We generate reports every month.', [], '')).toBe(true);
   });
 
   it('returns true for "monthly" pattern', () => {
-    expect(shouldSuggestSchedule('The monthly review is due.', [])).toBe(true);
+    expect(shouldSuggestSchedule('The monthly review is due.', [], '')).toBe(true);
   });
 
   // ── Negative: scheduling tool already used ────────────────────────
 
   it('returns false when a schedule tool was already used', () => {
-    expect(shouldSuggestSchedule('Run this daily.', ['schedule_task'])).toBe(false);
+    expect(shouldSuggestSchedule('Run this daily.', ['schedule_task'], '')).toBe(false);
   });
 
   it('returns false when a cron tool was already used', () => {
-    expect(shouldSuggestSchedule('This runs every week.', ['create_cron'])).toBe(false);
+    expect(shouldSuggestSchedule('This runs every week.', ['create_cron'], '')).toBe(false);
   });
 
   it('returns false when tool name contains "schedule" anywhere', () => {
-    expect(shouldSuggestSchedule('Do this weekly.', ['my_schedule_helper'])).toBe(false);
+    expect(shouldSuggestSchedule('Do this weekly.', ['my_schedule_helper'], '')).toBe(false);
   });
 
   // ── Negative: no recurring patterns ───────────────────────────────
 
   it('returns false when response has no recurring patterns', () => {
-    expect(shouldSuggestSchedule('Here is the report you asked for.', [])).toBe(false);
+    expect(shouldSuggestSchedule('Here is the report you asked for.', [], '')).toBe(false);
   });
 
   it('returns false for empty response text', () => {
-    expect(shouldSuggestSchedule('', [])).toBe(false);
+    expect(shouldSuggestSchedule('', [], '')).toBe(false);
   });
 
   // ── Case insensitivity ────────────────────────────────────────────
 
   it('matches patterns case-insensitively', () => {
-    expect(shouldSuggestSchedule('Run DAILY checks.', [])).toBe(true);
+    expect(shouldSuggestSchedule('Run DAILY checks.', [], '')).toBe(true);
+  });
+
+  it('honors explicit schedule prohibitions, including the Finance live prompt', () => {
+    const response = 'Runway equals cash divided by net monthly burn.';
+    for (const message of [
+      'Do not create files or schedules.',
+      "Don't suggest a recurring task.",
+      'No schedules, just answer the question.',
+      'No scheduling, just answer the question.',
+      'No schedule suggestions, just answer the question.',
+      'Answer without creating a calendar event.',
+      'Do not suggest /schedule.',
+      'Do not recommend /schedule.',
+      'Do not append /schedule.',
+      'Do not include /schedule.',
+      'Answer without recommending /schedule.',
+      'Answer without appending /schedule.',
+      "Don't suggest /schedule because it's irrelevant.",
+      'Don’t suggest /schedule.',
+    ]) {
+      expect(shouldSuggestSchedule(response, [], message), message).toBe(false);
+    }
+  });
+
+  it('does not mistake descriptive or double-negated schedule text for a prohibition', () => {
+    const response = 'A monthly review would help.';
+    for (const message of [
+      "Don't forget to create a weekly schedule.",
+      'Do not avoid scheduling the monthly review.',
+      'Do not cancel the existing schedule.',
+      'There are no schedules yet.',
+      'Rewrite: "Do not create schedules."',
+      "Rewrite: 'Do not suggest /schedule.'",
+      "Rewrite: 'Don't suggest /schedule.'",
+      'Rewrite: ‘Don’t suggest /schedule and do not append /schedule.’',
+    ]) {
+      expect(shouldSuggestSchedule(response, [], message), message).toBe(true);
+    }
   });
 });
 

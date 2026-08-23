@@ -1,7 +1,77 @@
 import { describe, it, expect, vi } from 'vitest';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createCliTools } from '../src/cli-tools.js';
+import { resolveToolCommandInvocationFromPath } from '../src/tool-command.js';
+
+// The Windows supervisor gives taskkill /T /F up to 5s to finish walking the
+// process tree. Keep the orphan sentinel beyond that documented cleanup budget.
+const WINDOWS_DESCENDANT_SENTINEL_MS = 6_500;
+const WINDOWS_DESCENDANT_ASSERT_MS = 7_000;
+
+describe('Windows CLI command resolution', () => {
+  it('resolves npm 11 shims without cmd.exe and isolates the lookup environment', async () => {
+    let lookupEnv: NodeJS.ProcessEnv | undefined;
+    const invocation = await resolveToolCommandInvocationFromPath(
+      'npx',
+      ['arg&still-literal', '%PATH%'],
+      'win32',
+      {
+        env: {
+          Path: 'C:\\Node',
+          PATHEXT: '.EXE;.CMD',
+          SystemRoot: 'C:\\Windows',
+          WAGGLE_PHASE2_AMBIENT_SECRET: 'must-not-leak',
+        },
+        pathLookup: async (_binary, env) => {
+          lookupEnv = env;
+          return ['C:\\Node\\npx', 'C:\\Node\\npx.cmd'];
+        },
+        readTextFile: () => [
+          '@ECHO OFF',
+          'SET "NPX_CLI_JS=%~dp0\\node_modules\\npm\\bin\\npx-cli.js"',
+          '"%NODE_EXE%" "%NPX_CLI_JS%" %*',
+        ].join('\n'),
+        fileExists: (path) => path === 'C:\\Node\\node.exe',
+      },
+    );
+
+    expect(invocation).toEqual({
+      binary: 'C:\\Node\\node.exe',
+      args: [
+        'C:\\Node\\node_modules\\npm\\bin\\npx-cli.js',
+        'arg&still-literal',
+        '%PATH%',
+      ],
+    });
+    expect(lookupEnv?.WAGGLE_PHASE2_AMBIENT_SECRET).toBeUndefined();
+    expect(Object.keys(lookupEnv ?? {}).sort()).toEqual(['PATH', 'PATHEXT', 'SYSTEMROOT']);
+  });
+});
 
 describe('cli_discover', () => {
+  it.runIf(process.platform === 'win32')('skips an unsafe batch-only candidate without aborting discovery', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'waggle-cli-discover-batch-'));
+    const batch = join(directory, 'python3.cmd');
+    const previousPath = process.env.PATH;
+    writeFileSync(batch, '@echo off\r\necho unsafe-python-wrapper\r\n');
+    process.env.PATH = `${directory};${previousPath ?? ''}`;
+
+    try {
+      const tools = createCliTools({ allowlist: [] });
+      const discover = tools.find(t => t.name === 'cli_discover')!;
+      const result = JSON.parse(await discover.execute({}));
+
+      expect(result.programs.some((program: { name: string }) => program.name === 'node')).toBe(true);
+      expect(result.programs.some((program: { name: string }) => program.name === 'python3')).toBe(false);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('scans PATH and returns available CLIs', async () => {
     const tools = createCliTools({ allowlist: [] });
     const discover = tools.find(t => t.name === 'cli_discover')!;
@@ -35,6 +105,15 @@ describe('cli_discover', () => {
     const nodeProg = result.programs.find((p: { name: string }) => p.name === 'node');
     expect(nodeProg?.version).toBeTruthy();
     expect(nodeProg?.version.length).toBeGreaterThan(0);
+  });
+
+  it.runIf(process.platform === 'win32')('discovers npm and npx Windows command shims', async () => {
+    const tools = createCliTools({ allowlist: [] });
+    const discover = tools.find(t => t.name === 'cli_discover')!;
+    const result = JSON.parse(await discover.execute({}));
+
+    expect(result.programs.some((p: { name: string }) => p.name === 'npm')).toBe(true);
+    expect(result.programs.some((p: { name: string }) => p.name === 'npx')).toBe(true);
   });
 });
 
@@ -102,8 +181,21 @@ describe('cli_execute', () => {
     }));
 
     expect(result.success).toBe(false);
-    // Node.js will throw on non-zero exit code via execFile
+    expect(result.exitCode).toBe(42);
     expect(result.error).toBeTruthy();
+  });
+
+  it('normalizes a negative timeout instead of killing immediately', async () => {
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    const result = JSON.parse(await execute.execute({
+      program: 'node',
+      args: ['--version'],
+      timeout: -1,
+    }));
+
+    expect(result.success).toBe(true);
   });
 
   it('logs execution to audit trail', async () => {
@@ -144,4 +236,237 @@ describe('cli_execute', () => {
     const allowed = JSON.parse(await execute.execute({ program: 'node', args: ['--version'] }));
     expect(allowed.success).toBe(true);
   });
+
+  it.runIf(process.platform === 'win32')('executes an allowed npm Windows command shim', async () => {
+    const tools = createCliTools({ allowlist: ['npm'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    const result = JSON.parse(await execute.execute({ program: 'npm', args: ['--version'] }));
+
+    expect(result.success).toBe(true);
+    expect(result.stdout).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it.runIf(process.platform === 'win32')('resolves bare known Windows command-shim names with extensions through PATH', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'waggle-cli-known-shims-'));
+    const previousPath = process.env.PATH;
+    const knownShims = ['npm.cmd', 'npx.cmd', 'claude.cmd', 'codex.cmd'];
+    process.env.PATH = `${directory};${previousPath ?? ''}`;
+
+    try {
+      for (const shimName of knownShims) {
+        const stem = shimName.replace(/\.cmd$/i, '');
+        mkdirSync(join(directory, 'node_modules', stem), { recursive: true });
+        const target = join(directory, 'node_modules', stem, 'cli.js');
+        writeFileSync(
+          target,
+          `console.log(${JSON.stringify(`known-shim:${shimName}:`)} + process.argv.slice(2).join('|'));\n`,
+        );
+        writeFileSync(
+          join(directory, shimName),
+          [
+            '@ECHO OFF',
+            'SETLOCAL',
+            'SET "_prog=%~dp0\\node.exe"',
+            `"%_prog%" "%dp0%\\node_modules\\${stem}\\cli.js" %*`,
+          ].join('\r\n'),
+        );
+      }
+
+      const tools = createCliTools({ allowlist: knownShims });
+      const execute = tools.find(t => t.name === 'cli_execute')!;
+
+      for (const shimName of knownShims) {
+        const result = JSON.parse(await execute.execute({
+          program: shimName,
+          args: ['arg&still-literal', '%PATH%'],
+        }));
+
+        expect(result.success).toBe(true);
+        expect(result.stdout).toBe(`known-shim:${shimName}:arg&still-literal|%PATH%`);
+      }
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('fails closed before a generic batch shim can reparse CLI arguments', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'waggle-cli-unsafe-batch-'));
+    const batch = join(directory, 'custom.cmd');
+    const marker = join(directory, 'injected.txt');
+    writeFileSync(batch, '@echo off\r\necho wrapper-ran\r\n');
+    const tools = createCliTools({ allowlist: [batch] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const result = JSON.parse(await execute.execute({
+        program: batch,
+        args: [`safe" & echo injected>${marker} & rem`],
+      }));
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('UNSAFE_WINDOWS_BATCH_SHIM');
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('does not expose ambient secrets to allowed CLI processes', async () => {
+    const previous = process.env.WAGGLE_PHASE2_AMBIENT_SECRET;
+    process.env.WAGGLE_PHASE2_AMBIENT_SECRET = 'must-not-leak';
+    try {
+      const tools = createCliTools({ allowlist: ['node'] });
+      const execute = tools.find(t => t.name === 'cli_execute')!;
+      const result = JSON.parse(await execute.execute({
+        program: 'node',
+        args: ['-e', 'console.log(process.env.WAGGLE_PHASE2_AMBIENT_SECRET ?? "absent")'],
+      }));
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('absent');
+    } finally {
+      if (previous === undefined) delete process.env.WAGGLE_PHASE2_AMBIENT_SECRET;
+      else process.env.WAGGLE_PHASE2_AMBIENT_SECRET = previous;
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('terminates descendants when an allowed CLI times out', async () => {
+    const marker = join(tmpdir(), `waggle-cli-orphan-${process.pid}-${Date.now()}.txt`);
+    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), ${WINDOWS_DESCENDANT_SENTINEL_MS})`;
+    const parentScript = [
+      'const { spawn } = require("node:child_process")',
+      `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { detached: true, stdio: 'ignore' })`,
+      'child.unref()',
+      'setInterval(() => {}, 1000)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const result = JSON.parse(await execute.execute({
+        program: 'node',
+        args: ['-e', parentScript],
+        timeout: 0.3,
+      }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('timeout');
+      await new Promise(resolve => setTimeout(resolve, WINDOWS_DESCENDANT_ASSERT_MS));
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(marker, { force: true });
+    }
+  }, 20_000);
+
+  it.runIf(process.platform === 'win32')('terminates descendants before rejecting oversized CLI output', async () => {
+    const marker = join(tmpdir(), `waggle-cli-maxbuffer-orphan-${process.pid}-${Date.now()}.txt`);
+    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), ${WINDOWS_DESCENDANT_SENTINEL_MS})`;
+    const parentScript = [
+      'const { spawn } = require("node:child_process")',
+      `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { detached: true, stdio: 'ignore' })`,
+      'child.unref()',
+      "process.stdout.write('x'.repeat(2 * 1024 * 1024))",
+      'setInterval(() => {}, 1000)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const result = JSON.parse(await execute.execute({
+        program: 'node',
+        args: ['-e', parentScript],
+        timeout: 10,
+      }));
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(-1);
+      expect(result.error).toContain('maxBuffer');
+      expect(result.stdout.length).toBeLessThanOrEqual(1024 * 1024);
+      await new Promise(resolve => setTimeout(resolve, WINDOWS_DESCENDANT_ASSERT_MS));
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(marker, { force: true });
+    }
+  }, 20_000);
+
+  it.runIf(process.platform === 'win32')('terminates descendants on time while the main event loop is blocked', async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const ready = join(tmpdir(), `waggle-cli-ready-${suffix}.txt`);
+    const marker = join(tmpdir(), `waggle-cli-starved-orphan-${suffix}.txt`);
+    const childScript = [
+      `const fs = require('node:fs')`,
+      `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+      `setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'orphan'), ${WINDOWS_DESCENDANT_SENTINEL_MS})`,
+      'setTimeout(() => {}, 30000)',
+    ].join(';');
+    const parentScript = [
+      `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { stdio: 'ignore' })`,
+      'setTimeout(() => {}, 30000)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const execution = Promise.resolve(execute.execute({
+        program: 'node',
+        args: ['-e', parentScript],
+        timeout: 1,
+      }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      expect(existsSync(ready)).toBe(true);
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, WINDOWS_DESCENDANT_ASSERT_MS);
+      const result = JSON.parse(await execution);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('timeout');
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(ready, { force: true });
+      rmSync(marker, { force: true });
+    }
+  }, 20_000);
+
+  it.runIf(process.platform === 'win32')('preserves CLI success when completion delivery is event-loop blocked', async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const ready = join(tmpdir(), `waggle-cli-completion-ready-${suffix}.txt`);
+    const finished = join(tmpdir(), `waggle-cli-completion-finished-${suffix}.txt`);
+    const script = [
+      `const fs = require('node:fs')`,
+      `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+      'setTimeout(() => {',
+      `  fs.writeFileSync(${JSON.stringify(finished)}, 'finished')`,
+      "  console.log('cli-completed-before-deadline')",
+      '}, 200)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const execution = Promise.resolve(execute.execute({
+        program: 'node',
+        args: ['-e', script],
+        timeout: 3,
+      }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      expect(existsSync(ready)).toBe(true);
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3_800);
+      const result = JSON.parse(await execution);
+
+      expect(existsSync(finished)).toBe(true);
+      expect(result.success).toBe(true);
+      expect(result.stdout).toContain('cli-completed-before-deadline');
+    } finally {
+      rmSync(ready, { force: true });
+      rmSync(finished, { force: true });
+    }
+  }, 15_000);
 });

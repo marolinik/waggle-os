@@ -13,10 +13,10 @@
  *      EXTERNAL list — some of those, e.g. mammoth/sharp, aren't actually
  *      reached).
  *   2. Walk the transitive production-dependency closure of that set from the
- *      repo's own node_modules and copy each package dir verbatim — preserving
- *      prebuilt native .node binaries in place (better-sqlite3/build/Release,
- *      onnxruntime-node/bin) so require('better-sqlite3') both RESOLVES and
- *      FINDS its binary via the package's own relative loader.
+ *      repo's own node_modules. Third-party packages retain their published
+ *      runtime layout; first-party workspaces are reduced to dist, manifest,
+ *      and license notices so source/build artifacts never enter the installer.
+ *      Prebuilt native binaries stay in their package-relative locations.
  *
  * Run after build-sidecar.mjs, before `tauri build`. Arch-parameterized: honors
  * TARGET_ARCH (like bundle-native-deps.mjs) to prune onnxruntime-node's
@@ -39,6 +39,7 @@ const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 // Must match the metafile path written by build-sidecar.mjs (temp, not repo).
 const metaFile = path.join(os.tmpdir(), 'waggle-sidecar-meta.json');
 const stageDir = path.join(resourcesDir, 'node_modules');
+const bundledNpmRuntimeDir = path.join(stageDir, 'waggle-node-runtime');
 const hookRuntimeBuild = path.join(root, 'scripts', 'build-hook-runtime.mjs');
 const HOOK_RUNTIME_ROOTS = new Set([
   '@waggle/hive-mind-cli',
@@ -49,7 +50,11 @@ const HOOK_RUNTIME_ROOTS = new Set([
   '@waggle/hive-mind-hooks-cursor',
   '@waggle/hive-mind-hooks-hermes',
   '@waggle/hive-mind-hooks-openclaw',
+  'waggle-memory-mcp',
 ]);
+// These are loaded through computed require() calls, so esbuild's metafile
+// cannot discover them even though installed desktop features require them.
+const DYNAMIC_RUNTIME_ROOTS = new Set(['adm-zip']);
 
 const platform = process.platform;
 const arch = process.env.TARGET_ARCH || process.arch;
@@ -101,6 +106,11 @@ const RUNTIME_PRUNED_DIR_NAMES = new Set([
   'fixtures',
   'test',
   'tests',
+]);
+const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
+const WORKSPACE_RUNTIME_ENTRY_PATTERN = /^(?:dist|package\.json|licen[cs]e(?:\.(?:md|txt))?|notice(?:\.(?:md|txt))?)$/i;
+const MANUAL_WORKSPACE_RUNTIME_TARGETS = new Map([
+  ['@waggle/hive-mind-hooks-openclaw', ['dist/handler.bundle.cjs']],
 ]);
 const WINDOWS_1252_EXTRA_CODEPOINTS = new Set([
   0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030,
@@ -160,12 +170,19 @@ function resolvePkgDir(name, fromDir) {
 
 let copiedPackages = 0;
 let prunedRuntimeDirs = 0;
+let prunedRuntimeFiles = 0;
+let strippedSourceMapDirectives = 0;
+const stagedWorkspaceNames = new Set();
 
 function isWorkspacePackageDir(pkgDir) {
   const realDir = fs.realpathSync.native(pkgDir);
   return [path.join(root, 'packages'), path.join(root, 'apps')].some((workspaceRoot) => {
     const relative = path.relative(workspaceRoot, realDir);
-    return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+    return relative !== ''
+      && !relative.startsWith(`..${path.sep}`)
+      && relative !== '..'
+      && !path.isAbsolute(relative)
+      && !relative.includes(path.sep);
   });
 }
 
@@ -174,14 +191,39 @@ function copyPackage(srcDir, name) {
   const destDir = path.join(stageDir, name);
   if (fs.existsSync(destDir)) return; // already staged (dedup by flat name)
   fs.mkdirSync(path.dirname(destDir), { recursive: true });
-  const copyOptions = { recursive: true, dereference: true };
   if (isWorkspacePackageDir(srcDir)) {
-    // npm does not publish a workspace package's local node_modules. Copying
-    // it from a dereferenced workspace symlink would leak dev-only packages;
-    // production dependencies are staged separately from the manifest below.
-    copyOptions.filter = (source) => path.basename(source) !== 'node_modules';
+    stagedWorkspaceNames.add(name);
+    const entries = fs.readdirSync(srcDir)
+      .filter((entry) => WORKSPACE_RUNTIME_ENTRY_PATTERN.test(entry));
+    for (const required of ['package.json', 'dist']) {
+      if (!entries.includes(required)) {
+        throw new Error(`Workspace package ${name} has no ${required} runtime payload`);
+      }
+    }
+    fs.mkdirSync(destDir, { recursive: true });
+    for (const entry of entries) {
+      if (entry === 'package.json') {
+        const runtimeManifest = readManifest(srcDir);
+        delete runtimeManifest.devDependencies;
+        delete runtimeManifest.files;
+        delete runtimeManifest.scripts;
+        delete runtimeManifest.types;
+        delete runtimeManifest.typings;
+        fs.writeFileSync(
+          path.join(destDir, entry),
+          `${JSON.stringify(runtimeManifest, null, 2)}\n`,
+          'utf8',
+        );
+        continue;
+      }
+      fs.cpSync(path.join(srcDir, entry), path.join(destDir, entry), {
+        recursive: true,
+        dereference: true,
+      });
+    }
+  } else {
+    fs.cpSync(srcDir, destDir, { recursive: true, dereference: true });
   }
-  fs.cpSync(srcDir, destDir, copyOptions);
   copiedPackages++;
 }
 
@@ -320,6 +362,33 @@ function pruneRuntimeOnlyDirs(dir) {
   }
 }
 
+/** Remove first-party source/build artifacts and dangling source-map directives. */
+function pruneFirstPartyBuildArtifacts(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      pruneFirstPartyBuildArtifacts(full);
+      continue;
+    }
+    if (entry.isFile() && SOURCE_ARTIFACT_PATTERN.test(entry.name)) {
+      fs.rmSync(full, { force: true });
+      prunedRuntimeFiles++;
+      continue;
+    }
+    if (entry.isFile() && /\.(?:[cm]?js)$/i.test(entry.name)) {
+      const source = fs.readFileSync(full, 'utf8');
+      const runtimeOnly = source
+        .replace(/^[ \t]*\/\/[#@]\s*sourceMappingURL\s*=.*(?:\r?\n|$)/gm, '')
+        .replace(/\/\*[#@]\s*sourceMappingURL\s*=.*?\*\//gs, '');
+      if (runtimeOnly !== source) {
+        fs.writeFileSync(full, runtimeOnly, 'utf8');
+        strippedSourceMapDirectives++;
+      }
+    }
+  }
+}
+
 function isWindows1252PathSafe(value) {
   for (const char of value) {
     const code = char.codePointAt(0) || 0;
@@ -342,6 +411,104 @@ function listFiles(dir) {
     }
   }
   return files;
+}
+
+function collectRuntimeExportTargets(value, targets, condition = '') {
+  if (condition === 'types') return;
+  if (typeof value === 'string') {
+    targets.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) collectRuntimeExportTargets(entry, targets, condition);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, entry] of Object.entries(value)) {
+    collectRuntimeExportTargets(entry, targets, key);
+  }
+}
+
+function workspaceRuntimeTargets(manifest, packageName) {
+  const targets = new Set();
+  if (typeof manifest.main === 'string') targets.add(manifest.main);
+  if (typeof manifest.module === 'string') targets.add(manifest.module);
+  if (typeof manifest.bin === 'string') targets.add(manifest.bin);
+  else if (manifest.bin && typeof manifest.bin === 'object') {
+    for (const entry of Object.values(manifest.bin)) {
+      if (typeof entry === 'string') targets.add(entry);
+    }
+  }
+  collectRuntimeExportTargets(manifest.exports, targets);
+  for (const entry of MANUAL_WORKSPACE_RUNTIME_TARGETS.get(packageName) || []) {
+    targets.add(entry);
+  }
+  return targets;
+}
+
+function validateWorkspaceRuntimeTargets(name, packageDir) {
+  const failures = [];
+  const manifest = readManifest(packageDir);
+  const distDir = path.resolve(packageDir, 'dist');
+  const realPackageDir = fs.realpathSync.native(packageDir);
+  const realDistDir = fs.realpathSync.native(distDir);
+  const realDistWithinPackage = realDistDir.startsWith(`${realPackageDir}${path.sep}`);
+  for (const target of workspaceRuntimeTargets(manifest, name)) {
+    const relative = target.replace(/^\.\//, '').split('/').join(path.sep);
+    const resolved = path.resolve(packageDir, relative);
+    const withinDist = resolved.startsWith(`${distDir}${path.sep}`);
+    let regularRuntimeFile = false;
+    let realWithinDist = false;
+    if (withinDist && fs.existsSync(resolved)) {
+      const stat = fs.lstatSync(resolved);
+      regularRuntimeFile = stat.isFile() && !stat.isSymbolicLink();
+      if (regularRuntimeFile) {
+        const realTarget = fs.realpathSync.native(resolved);
+        realWithinDist = realTarget.startsWith(`${realDistDir}${path.sep}`);
+      }
+    }
+    if (
+      !withinDist
+      || !realDistWithinPackage
+      || !realWithinDist
+      || !regularRuntimeFile
+      || target.includes('*')
+    ) {
+      failures.push(`${name} -> ${target}`);
+    }
+  }
+  return failures;
+}
+
+function assertWorkspaceRuntimeOnly() {
+  const unexpected = [];
+  for (const name of stagedWorkspaceNames) {
+    const packageDir = path.join(stageDir, name);
+    for (const entry of fs.readdirSync(packageDir, { withFileTypes: true })) {
+      if (!WORKSPACE_RUNTIME_ENTRY_PATTERN.test(entry.name)) {
+        unexpected.push(`${name}/${entry.name}`);
+      }
+    }
+    for (const file of listFiles(packageDir)) {
+      if (SOURCE_ARTIFACT_PATTERN.test(file)) {
+        unexpected.push(path.relative(stageDir, file).split(path.sep).join('/'));
+      }
+      if (
+        /\.(?:[cm]?js)$/i.test(file)
+        && /(?:\/\/|\/\*)[#@]\s*sourceMappingURL\s*=/.test(fs.readFileSync(file, 'utf8'))
+      ) {
+        unexpected.push(`${path.relative(stageDir, file).split(path.sep).join('/')} -> sourceMappingURL`);
+      }
+    }
+    unexpected.push(...validateWorkspaceRuntimeTargets(name, packageDir));
+  }
+
+  if (unexpected.length === 0) return;
+  console.error(
+    '[stage-sidecar-deps] FATAL - first-party runtime payload contains source/build artifacts:\n'
+    + unexpected.map((entry) => `  - ${entry}`).join('\n'),
+  );
+  process.exit(1);
 }
 
 function listPackageDirs(nodeModulesDir) {
@@ -426,6 +593,32 @@ function dirSizeMB(dir) {
   return (bytes / 1024 / 1024).toFixed(1);
 }
 
+function preserveBundledNpmRuntime() {
+  const required = [
+    path.join(bundledNpmRuntimeDir, 'package.json'),
+    path.join(bundledNpmRuntimeDir, 'NODE-LICENSE'),
+    path.join(bundledNpmRuntimeDir, 'node_modules', 'npm', 'LICENSE'),
+    path.join(bundledNpmRuntimeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(bundledNpmRuntimeDir, 'node_modules', 'npm', 'bin', 'npx-cli.js'),
+    path.join(bundledNpmRuntimeDir, 'bin', platform === 'win32' ? 'npm.cmd' : 'npm'),
+    path.join(bundledNpmRuntimeDir, 'bin', platform === 'win32' ? 'npx.cmd' : 'npx'),
+  ];
+  const missing = required.filter((file) => !fs.existsSync(file));
+  if (missing.length > 0) {
+    console.error(
+      '[stage-sidecar-deps] FATAL - bundled npm runtime is incomplete:\n'
+      + missing.map((file) => `  - ${path.relative(resourcesDir, file)}`).join('\n')
+      + '\n  Run `node scripts/bundle-node.mjs` before staging sidecar dependencies.',
+    );
+    process.exit(1);
+  }
+
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-node-runtime-'));
+  const snapshot = path.join(temporaryRoot, 'waggle-node-runtime');
+  fs.cpSync(bundledNpmRuntimeDir, snapshot, { recursive: true, dereference: true });
+  return { snapshot, temporaryRoot };
+}
+
 // ── main ───────────────────────────────────────────────────────────
 console.log(`[stage-sidecar-deps] Platform: ${platform}-${arch}`);
 
@@ -435,24 +628,57 @@ console.log(`[stage-sidecar-deps] Platform: ${platform}-${arch}`);
 execFileSync(process.execPath, [hookRuntimeBuild], { cwd: root, stdio: 'inherit' });
 
 // Fresh stage dir each run so a removed dep never lingers in a stale bundle.
-fs.rmSync(stageDir, { recursive: true, force: true });
-fs.mkdirSync(stageDir, { recursive: true });
+const preservedNpmRuntime = preserveBundledNpmRuntime();
+try {
+  fs.rmSync(stageDir, { recursive: true, force: true });
+  fs.mkdirSync(stageDir, { recursive: true });
+  fs.cpSync(preservedNpmRuntime.snapshot, bundledNpmRuntimeDir, {
+    recursive: true,
+    dereference: true,
+  });
+} finally {
+  fs.rmSync(preservedNpmRuntime.temporaryRoot, { recursive: true, force: true });
+}
 
 const externals = readExternalPackages();
-const runtimeRoots = new Set([...externals, ...HOOK_RUNTIME_ROOTS]);
+const runtimeRoots = new Set([
+  ...externals,
+  ...HOOK_RUNTIME_ROOTS,
+  ...DYNAMIC_RUNTIME_ROOTS,
+]);
 const staged = [...runtimeRoots].filter((n) => !SKIP.has(n)).sort();
 const skipped = [...externals].filter((n) => SKIP.has(n)).sort();
 console.log(`[stage-sidecar-deps] Bundle/runtime roots: ${runtimeRoots.size} (${staged.length} to stage, ${skipped.length} skipped)`);
 if (skipped.length) console.log(`[stage-sidecar-deps]   skipped: ${skipped.join(', ')}`);
 
 const closure = stageClosure(runtimeRoots);
+const archiveParser = readManifest(path.join(stageDir, 'adm-zip'));
+const [archiveParserMajor, archiveParserMinor] = String(archiveParser.version || '')
+  .split('.')
+  .map(Number);
+if (!(archiveParserMajor > 0 || archiveParserMinor >= 6)) {
+  console.error(
+    '[stage-sidecar-deps] FATAL - adm-zip runtime root must be version 0.6.0 or newer',
+  );
+  process.exit(1);
+}
 
 pruneOnnxRuntime();
 pruneSkipListed(stageDir);
 pruneRuntimeOnlyDirs(stageDir);
+for (const name of stagedWorkspaceNames) {
+  pruneFirstPartyBuildArtifacts(path.join(stageDir, name));
+}
 if (prunedRuntimeDirs > 0) {
   console.log(`[stage-sidecar-deps] Pruned ${prunedRuntimeDirs} runtime-unused package artifact dir(s)`);
 }
+if (prunedRuntimeFiles > 0) {
+  console.log(`[stage-sidecar-deps] Pruned ${prunedRuntimeFiles} first-party source/build artifact file(s)`);
+}
+if (strippedSourceMapDirectives > 0) {
+  console.log(`[stage-sidecar-deps] Stripped ${strippedSourceMapDirectives} first-party source-map directive(s)`);
+}
+assertWorkspaceRuntimeOnly();
 assertWindowsMsiSafeResourcePaths();
 assertStagedNodeModulesSelfContained();
 

@@ -33,8 +33,12 @@
  *   - Per-process start-time fingerprinting to defeat pid reuse.
  */
 
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveWindowsTaskkillPath } from './external-tool-runner.js';
+
+const WINDOWS_TREE_KILL_TIMEOUT_MS = 5_000;
 
 export interface TrackedProcess {
   pid: number;
@@ -66,6 +70,13 @@ export interface ToolProcessTrackerDeps {
    * escalation. Production = setTimeout-backed Promise.
    */
   delay?: (ms: number) => Promise<void>;
+  /** Platform override for deterministic Windows/POSIX termination tests. */
+  platform?: NodeJS.Platform;
+  /**
+   * Windows process-tree terminator. Production uses bounded, shell-free
+   * taskkill.exe /T /F and reports false on spawn, timeout, or exit failure.
+   */
+  killTree?: (pid: number) => Promise<boolean>;
   /**
    * Path to the JSON pidfile used for cross-restart persistence. When
    * set (and no explicit load/save override is given), the tracker
@@ -147,12 +158,25 @@ function defaultDelay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function defaultKillTree(pid: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(
+      resolveWindowsTaskkillPath(),
+      ['/PID', String(pid), '/T', '/F'],
+      { timeout: WINDOWS_TREE_KILL_TIMEOUT_MS, windowsHide: true },
+      (error) => resolve(error === null),
+    );
+  });
+}
+
 export class ToolProcessTracker {
   private processes: Map<number, TrackedProcess> = new Map();
   private readonly isAlive: (pid: number) => boolean;
   private readonly now: () => Date;
   private readonly sendSignal: (pid: number, signal: NodeJS.Signals | number) => boolean;
   private readonly delay: (ms: number) => Promise<void>;
+  private readonly platform: NodeJS.Platform;
+  private readonly killTree: (pid: number) => Promise<boolean>;
   /** Whether persistence is configured (persistPath or injected load/save). */
   private readonly persists: boolean;
   private readonly loadPersisted: () => TrackedProcess[];
@@ -163,6 +187,8 @@ export class ToolProcessTracker {
     this.now = deps.now ?? (() => new Date());
     this.sendSignal = deps.sendSignal ?? defaultSendSignal;
     this.delay = deps.delay ?? defaultDelay;
+    this.platform = deps.platform ?? process.platform;
+    this.killTree = deps.killTree ?? defaultKillTree;
 
     this.persists = Boolean(deps.persistPath || deps.loadPersisted || deps.savePersisted);
     const persistPath = deps.persistPath;
@@ -249,10 +275,10 @@ export class ToolProcessTracker {
   }
 
   /**
-   * Attempt to stop a tracked process gracefully (SIGTERM), escalating
-   * to SIGKILL after `gracefulTimeoutMs` if it's still alive. Returns
-   * a structured result documenting which signal succeeded so the
-   * route layer can surface honest UX.
+   * Attempt to stop a tracked process. Windows uses bounded taskkill /T /F
+   * so success covers the full descendant tree; POSIX uses SIGTERM and then
+   * escalates to SIGKILL after `gracefulTimeoutMs`. Returns a structured
+   * result so the route layer can surface honest UX.
    *
    * Refuses to kill a pid we don't track — this guards against the
    * UI accidentally sending an arbitrary OS pid (e.g. from URL
@@ -267,6 +293,9 @@ export class ToolProcessTracker {
     reason:
       | 'not-tracked'
       | 'already-dead'
+      | 'tree-cleanup-unverified'
+      | 'tree-kill-ok'
+      | 'tree-kill-failed'
       | 'sigterm-ok'
       | 'sigkill-ok'
       | 'sigterm-failed-sigkill-failed';
@@ -275,10 +304,30 @@ export class ToolProcessTracker {
       return { ok: false, pid, reason: 'not-tracked' };
     }
     if (!this.isAlive(pid)) {
+      if (this.platform === 'win32') {
+        return { ok: false, pid, reason: 'tree-cleanup-unverified' };
+      }
       // Already gone — GC the entry and report success.
       this.processes.delete(pid);
       this.persist();
       return { ok: true, pid, reason: 'already-dead' };
+    }
+    if (this.platform === 'win32') {
+      let treeKilled = false;
+      try {
+        treeKilled = await this.killTree(pid);
+      } catch {
+        treeKilled = false;
+      }
+      if (treeKilled) {
+        await this.delay(50);
+        if (!this.isAlive(pid)) {
+          this.processes.delete(pid);
+          this.persist();
+          return { ok: true, pid, reason: 'tree-kill-ok' };
+        }
+      }
+      return { ok: false, pid, reason: 'tree-kill-failed' };
     }
     // Best effort: SIGTERM first so the child can clean up.
     const termSent = this.sendSignal(pid, 'SIGTERM');

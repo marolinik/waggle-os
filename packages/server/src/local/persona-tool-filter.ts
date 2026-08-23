@@ -71,8 +71,9 @@ export const READ_ONLY_ALLOWED_TOOLS: ReadonlySet<string> = new Set<string>([
 
 /**
  * Apply a persona's tool policy:
- *   1. Allowlist — declared tools + always-available (only when the persona
- *      declares any tools; an empty `tools` array means "no narrowing").
+ *   1. Allowlist — declared tools + always-available + dynamic connector
+ *      actions (only when the persona declares any tools; an empty `tools`
+ *      array means "no narrowing").
  *   2. Denylist — `disallowedTools` wins over the allowlist AND always-available.
  *   3. Read-only strip — read-only personas keep ONLY known read tools
  *      (allowlist intersect); every write tool is dropped.
@@ -87,7 +88,7 @@ export function applyPersonaToolFilter(
 
   if (persona.tools.length > 0) {
     const allowed = new Set([...persona.tools, ...ALWAYS_AVAILABLE_TOOLS]);
-    out = out.filter(t => allowed.has(t.name));
+    out = out.filter(t => allowed.has(t.name) || t.name.startsWith('connector_'));
   }
 
   if (persona.disallowedTools?.length) {
@@ -130,3 +131,12 @@ export function filterMcpToolsForPersona(
   }
   return tools;
 }
+
+export {
+  DEFAULT_TURN_SCHEMA_CHAR_LIMIT,
+  DEFAULT_TURN_TOOL_LIMIT,
+  measureOpenAiToolSchemaChars,
+  selectToolsForTurn,
+  type TurnToolSelectionOptions,
+  type TurnToolSelectionResult,
+} from '@waggle/agent';

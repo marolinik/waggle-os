@@ -26,11 +26,38 @@ export interface ParsedChatCompletionStream {
   toolCalls: StreamedToolCall[] | undefined;
   /** Usage from the final chunk carrying a `usage` block */
   usage: { inputTokens: number; outputTokens: number };
+  /** Provider termination reason from the final choice chunk, when supplied. */
+  finishReason: string | null;
+  /** True only when the stream contained the protocol terminal `data: [DONE]` event. */
+  doneObserved: boolean;
 }
 
 export interface SseParseOptions {
   /** Per-token callback fired for each `delta.content` chunk. Caller's content accumulator hooks here. */
   onToken?: (token: string) => void;
+}
+
+function incompleteStreamError(
+  inputTokens: number,
+  outputTokens: number,
+  partialToolCalls: StreamedToolCall[] | undefined,
+): Error & {
+  code: 'INCOMPLETE_COMPLETION';
+  usage: { inputTokens: number; outputTokens: number };
+  partialToolCalls?: StreamedToolCall[];
+} {
+  const error = new Error(
+    'LLM stream ended unexpectedly before data: [DONE]; partial content was not accepted.',
+  ) as Error & {
+    code: 'INCOMPLETE_COMPLETION';
+    usage: { inputTokens: number; outputTokens: number };
+    partialToolCalls?: StreamedToolCall[];
+  };
+  error.name = 'IncompleteCompletionError';
+  error.code = 'INCOMPLETE_COMPLETION';
+  error.usage = { inputTokens, outputTokens };
+  error.partialToolCalls = partialToolCalls;
+  return error;
 }
 
 /**
@@ -47,6 +74,8 @@ export async function parseChatCompletionStream(
   let content = '';
   let inputTokens = 0;
   let outputTokens = 0;
+  let finishReason: string | null = null;
+  let doneObserved = false;
   const toolCalls = new Map<number, StreamedToolCall>();
   // Synthetic slot assignment for providers that omit `tc.index` on parallel
   // tool-call deltas: each distinct `tc.id` gets its own stable slot so their
@@ -59,8 +88,18 @@ export async function parseChatCompletionStream(
   const decoder = new TextDecoder();
   let buffer = '';
 
-  for (;;) {
-    const { done, value } = await reader.read();
+  streamRead: for (;;) {
+    let readResult: ReadableStreamReadResult<Uint8Array>;
+    try {
+      readResult = await reader.read();
+    } catch {
+      throw incompleteStreamError(
+        inputTokens,
+        outputTokens,
+        toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined,
+      );
+    }
+    const { done, value } = readResult;
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
@@ -74,7 +113,13 @@ export async function parseChatCompletionStream(
       for (const line of part.split('\n')) {
         if (!line.startsWith('data: ')) continue;
         const payload = line.slice(6).trim();
-        if (payload === '[DONE]') continue;
+        if (payload === '[DONE]') {
+          doneObserved = true;
+          if (typeof reader.cancel === 'function') {
+            void reader.cancel().catch(() => undefined);
+          }
+          break streamRead;
+        }
 
         let chunk: unknown;
         try {
@@ -86,6 +131,7 @@ export async function parseChatCompletionStream(
         const c = chunk as {
           usage?: { prompt_tokens?: number; completion_tokens?: number };
           choices?: Array<{
+            finish_reason?: string | null;
             delta?: {
               content?: string;
               tool_calls?: Array<{
@@ -102,7 +148,10 @@ export async function parseChatCompletionStream(
           outputTokens = c.usage.completion_tokens ?? outputTokens;
         }
 
-        const delta = c.choices?.[0]?.delta;
+        const choice = c.choices?.[0];
+        if (choice?.finish_reason != null) finishReason = choice.finish_reason;
+
+        const delta = choice?.delta;
         if (!delta) continue;
 
         if (delta.content) {
@@ -154,5 +203,7 @@ export async function parseChatCompletionStream(
     content,
     toolCalls: toolCallsArray,
     usage: { inputTokens, outputTokens },
+    finishReason,
+    doneObserved,
   };
 }

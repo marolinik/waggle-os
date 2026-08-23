@@ -4,9 +4,11 @@ import { FrameStore, SessionStore } from '@waggle/core';
 import {
   TraceRecorder,
   detectTaskShape,
+  filterAvailableTools,
   isEnabled,
   listPersonas,
   runAgentLoop,
+  selectAgentRunBudget,
   type AgentResponse,
 } from '@waggle/agent';
 import type {
@@ -15,12 +17,23 @@ import type {
   GoalAncestry,
   WaggleMessage,
 } from '@waggle/shared';
-import { applyPersonaToolFilter } from './persona-tool-filter.js';
+import { applyPersonaToolFilter, selectToolsForTurn } from './persona-tool-filter.js';
 import { resolveWorkspaceExecutionRoot } from './workspace-execution-root.js';
 import { persistMessage } from './routes/chat-persistence.js';
 import { emitWaggleSignal } from './routes/waggle-signals.js';
 import type { AgentRunner } from './routes/chat.js';
-import { listOllamaChatModelIds, resolveUsableModel } from './model-availability.js';
+import {
+  listOllamaChatModelIds,
+  OllamaModelNotLocalError,
+  resolveUsableModel,
+} from './model-availability.js';
+import type { WorkspaceTurnScope } from './workspace-turn-coordinator.js';
+import { isOfflineOllamaModelReference } from './routes/chat-helpers.js';
+import {
+  bindModelSpendBudget,
+  createModelSpendMeter,
+  type ModelSpendMeter,
+} from './model-spend-meter.js';
 
 const ACTIVE = new Set(['queued', 'starting', 'running', 'waiting_for_approval', 'paused', 'cancelling']);
 
@@ -115,8 +128,9 @@ export async function spawnIsolatedFleetRun(
   const sentinel = (model?: string | null) => !model || model.trim() === 'auto' || model.trim() === 'default';
   const explicitModel = !sentinel(input.model) ? input.model!.trim() : undefined;
   const workspaceModel = workspace.model;
+  const implicitWorkspaceModel = !sentinel(workspaceModel) ? workspaceModel : undefined;
   const selectedModel = explicitModel
-    ?? (!sentinel(workspaceModel) ? workspaceModel : undefined)
+    ?? implicitWorkspaceModel
     ?? server.agentState.currentModel;
   if (!selectedModel || sentinel(selectedModel)) {
     return { statusCode: 503, body: { error: 'model_unavailable', message: 'No executable model is configured' } };
@@ -145,7 +159,18 @@ export async function spawnIsolatedFleetRun(
       };
     }
   } else {
-    model = await resolveUsableModel(server, selectedModel);
+    try {
+      model = await resolveUsableModel(server, selectedModel);
+    } catch (err) {
+      const currentModel = server.agentState.currentModel?.trim();
+      const canRetryCurrentLocal = err instanceof OllamaModelNotLocalError
+        && selectedModel === implicitWorkspaceModel
+        && currentModel
+        && currentModel !== selectedModel
+        && isOfflineOllamaModelReference(currentModel);
+      if (!canRetryCurrentLocal) throw err;
+      model = await resolveUsableModel(server, currentModel);
+    }
   }
   const persona = input.persona ?? workspace.personaId ?? 'general-purpose';
   const room = server.agentRunRegistry.createRoom({
@@ -201,20 +226,75 @@ async function executeFleetRun(
   assignmentId: string | undefined,
 ): Promise<void> {
   const controller = new AbortController();
-  const unregister = server.agentRunRegistry.registerControls(run.id, { cancel: () => controller.abort() });
+  let settleExecution!: () => void;
+  const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
+  const unregister = server.agentRunRegistry.registerControls(run.id, {
+    cancel: async () => {
+      controller.abort();
+      await executionSettled;
+    },
+  });
   let acquired = false;
+  let workspaceTurnScope: WorkspaceTurnScope | undefined;
   let traceId: number | undefined;
+  let fleetSpendMeter: ModelSpendMeter | undefined;
   try {
     const mind = server.mindCache.acquire(run.workspaceId);
     acquired = true;
     const orchestrator = server.agentState.createSessionOrchestrator(mind);
     const persona = listPersonas().find((item) => item.id === personaId) ?? null;
-    let tools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
-    if (persona) tools = applyPersonaToolFilter(tools, persona);
+    fleetSpendMeter = server.agentState.costTracker
+      ? createModelSpendMeter(server.agentState.costTracker, (costUsd) => {
+          if (traceId === undefined) return;
+          server.traceStore?.recordCost(traceId, costUsd);
+        })
+      : undefined;
+    const underlyingRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
+    const runner = fleetSpendMeter
+      ? bindModelSpendBudget(
+          underlyingRunner,
+          fleetSpendMeter,
+          run.workspaceId,
+          listOllamaChatModelIds,
+          () => traceId,
+        )
+      : underlyingRunner;
+    let workerTools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
+    if (persona) workerTools = applyPersonaToolFilter(workerTools, persona);
+    workerTools = filterAvailableTools(workerTools);
+    const workspaceTurnCoordinator = server.agentState.workspaceTurnCoordinator;
+    if (workspaceTurnCoordinator) {
+      workspaceTurnScope = workspaceTurnCoordinator.createScope(cwd, controller.signal);
+      workerTools = workspaceTurnScope.wrapTools(workerTools);
+    }
+    let tools = selectToolsForTurn(workerTools, {
+      message: task,
+      preferredToolNames: persona?.tools ?? [],
+    }).tools;
+    if (workspaceTurnScope) {
+      const workspaceAccess = workspaceTurnScope.classify(tools);
+      if (workspaceAccess !== 'none') await workspaceTurnScope.acquire(workspaceAccess);
+      const activeScope = workspaceTurnScope;
+      tools = server.agentState.bindWorkspaceCollaborationTools({
+        visibleTools: tools,
+        workerTools,
+        runLoop: runner,
+        signal: controller.signal,
+        runChildTransaction: (childTools, operation) => (
+          activeScope.runChildTransaction(childTools, operation)
+        ),
+        defaultModel: model,
+      });
+    }
+    const taskShape = detectTaskShape(task);
+    const runBudget = selectAgentRunBudget({
+      taskShape: taskShape.type,
+      complexity: taskShape.complexity,
+      selectedToolNames: tools.map(tool => tool.name),
+    });
     orchestrator.setGoalAncestry(buildFleetAncestry(server.workspaceManager.get(run.workspaceId)?.name, goal));
     let systemPrompt: string;
     if (isEnabled('PROMPT_ASSEMBLER')) {
-      const taskShape = detectTaskShape(task);
       const assembled = await orchestrator.buildAssembledPrompt(task, persona, { taskShape });
       systemPrompt = assembled.system + (assembled.responseScaffold ? `\n\n## Response shape\n${assembled.responseScaffold}` : '');
     } else {
@@ -243,7 +323,6 @@ async function executeFleetRun(
     });
     publishFleetDance(server, run, 'response', 'task_claim', { phase: 'running', task: 'claimed' }, assignmentId);
 
-    const runner: AgentRunner = server.agentRunner ?? runAgentLoop;
     const result = await runner({
       litellmUrl: server.localConfig.litellmUrl,
       litellmApiKey: server.agentState.litellmApiKey,
@@ -251,7 +330,7 @@ async function executeFleetRun(
       systemPrompt,
       tools,
       messages: [{ role: 'user', content: task }],
-      maxTurns: 10,
+      ...runBudget,
       signal: controller.signal,
       ...(traceRecorder && traceId !== undefined ? {
         traceRecording: { recorder: traceRecorder, handle: { id: traceId, startedAt: Date.now() } },
@@ -276,7 +355,7 @@ async function executeFleetRun(
       : await recordFleetResult(server, run, task, result, mind);
     const totalTokens = result.usage.inputTokens + result.usage.outputTokens;
     server.agentRunRegistry.update(run.id, {
-      status: controller.signal.aborted ? 'cancelled' : 'completed',
+      status: controller.signal.aborted ? 'cancelling' : 'completed',
       result: { summary: result.content, sessionId },
       metrics: {
         toolsUsed: result.toolsUsed,
@@ -295,6 +374,7 @@ async function executeFleetRun(
         outcome: controller.signal.aborted ? 'abandoned' : 'success',
         output: result.content,
         tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
+        costUsd: fleetSpendMeter?.totalCostUsd(),
       });
     }
     emitWaggleSignal({
@@ -311,7 +391,7 @@ async function executeFleetRun(
     const current = server.agentRunRegistry.get(run.id);
     if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
       server.agentRunRegistry.update(run.id, {
-        status: controller.signal.aborted ? 'cancelled' : 'failed',
+        status: controller.signal.aborted ? 'cancelling' : 'failed',
         result: { summary: message, error: message, sessionId },
         progress: null,
       });
@@ -321,7 +401,11 @@ async function executeFleetRun(
         role: 'assistant', content: controller.signal.aborted ? 'This run was cancelled.' : `I couldn't finish this run. ${message}`,
       });
     } catch { /* best effort */ }
-    if (traceId !== undefined) server.traceStore?.finalize(traceId, { outcome: 'abandoned', output: message });
+    if (traceId !== undefined) server.traceStore?.finalize(traceId, {
+      outcome: 'abandoned',
+      output: message,
+      costUsd: fleetSpendMeter?.totalCostUsd(),
+    });
     emitWaggleSignal({
       type: controller.signal.aborted ? 'agent:cancelled' : 'agent:error',
       workspaceId: run.workspaceId, content: message.slice(0, 200),
@@ -331,8 +415,16 @@ async function executeFleetRun(
       phase: controller.signal.aborted ? 'cancelled' : 'failed', error: message,
     }, assignmentId);
   } finally {
-    unregister();
-    if (acquired) server.mindCache.release(run.workspaceId);
+    try {
+      if (workspaceTurnScope) await workspaceTurnScope.release();
+    } finally {
+      try {
+        if (acquired) server.mindCache.release(run.workspaceId);
+      } finally {
+        settleExecution();
+        unregister();
+      }
+    }
   }
 }
 

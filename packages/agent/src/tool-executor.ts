@@ -10,33 +10,45 @@
  *   2. onToolUse callback
  *   3. Governance.blockedTools — early return on block (fires onToolResult)
  *   4. pre:tool hook — early return on cancel
- *  4b. critical-destructive hard floor — deny isCriticalNeverAutopass ops that
- *      reach here without an approval gate (defense-in-depth; independent of hooks)
+ *  4b. state-change approval floor — deny confirmation-required ops that reach
+ *      here without explicit authorization (defense-in-depth; independent of hooks)
  *   5. pre:memory-write hook (save_memory only) — early return on cancel
  *   6. LoopGuard.check — produces error result if duplicate
  *   7. Execute (or capability-router fallback or unknown-tool error)
- *   8. scanForInjection — REVIEW C2: BEFORE onToolResult / post-hooks
+ *   8. evaluateExternalMemoryIngress — REVIEW C2: BEFORE onToolResult / post-hooks
  *   9. onToolResult callback (sanitized content)
  *  10. post:memory-write hook (save_memory only, sanitized)
  *  11. post:tool hook (sanitized)
  *  12. compress model-facing result (subtractive; observers keep full fidelity)
  *
  * Critical invariant (Review C2): steps 8 → 9 → 10 → 11 must stay in this
- * order. Sanitization output is what flows into both model context AND
+ * order. Canonically guarded output is what flows into both model context AND
  * every downstream observer (audit / telemetry / team-sync / UI). Step 12 is
  * subtractive-only and applies ONLY to the returned (model-facing) content —
- * observers at 9–11 still receive the full sanitized result.
+ * observers at 9–11 still receive the full guarded result.
  */
 
 import type { ToolDefinition } from './tools.js';
 import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { LoopGuard } from './loop-guard.js';
-import { scanForInjection } from './injection-scanner.js';
-import { isCriticalNeverAutopass } from './confirmation.js';
+import { evaluateExternalMemoryIngress } from '@waggle/core';
+import { isCriticalNeverAutopass, needsConfirmation } from './confirmation.js';
 import { compressToolOutput } from './tool-output-compressor.js';
 import { logTurnEvent } from './turn-context.js';
 import { untrustedContextWrapper } from './untrusted-context.js';
+
+const QUARANTINED_TOOL_OUTPUT = '[SECURITY] Tool output quarantined.';
+
+/**
+ * Never reflect rejected external content (or guard details) beyond this boundary.
+ * The canonical ingress guard includes legacy scanning plus normalization-aware checks.
+ */
+function guardExternalToolOutput(result: string): string {
+  return evaluateExternalMemoryIngress({ content: result }).action === 'allow'
+    ? result
+    : QUARANTINED_TOOL_OUTPUT;
+}
 
 export interface ToolExecutorDeps {
   toolMap: ReadonlyMap<string, ToolDefinition>;
@@ -135,17 +147,19 @@ export async function executeToolCall(
       result = `Error: Unknown tool "${fnName}". Available tools: ${Array.from(toolMap.keys()).join(', ')}`;
     }
 
-    const scanResult = scanForInjection(result, 'tool_output');
-    if (!scanResult.safe) {
-      result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
-    }
+    result = guardExternalToolOutput(result);
     if (onToolResult) onToolResult(fnName, fnArgs, result);
     return { content: result, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
   }
 
   // ── Step 4: pre:tool hook ──
+  let approvedByHook = false;
   if (hooks) {
-    const hookResult = await hooks.fire('pre:tool', { toolName: fnName, args: fnArgs });
+    const hookResult = await hooks.fire('pre:tool', {
+      toolName: fnName,
+      args: fnArgs,
+      riskLevel: existingTool.riskLevel,
+    });
     if (hookResult.cancelled) {
       return {
         content: `[BLOCKED] ${hookResult.reason ?? 'No reason given'}`,
@@ -154,33 +168,33 @@ export async function executeToolCall(
         toolName: fnName,
       };
     }
+    approvedByHook = hookResult.authorized === true;
   }
 
-  // ── Step 4b: critical-destructive hard floor (defense-in-depth) ──
-  // isCriticalNeverAutopass flags terminal, irreversible operations that must
-  // pass a human/policy approval gate at EVERY layer — not only the main chat
-  // loop. The main loop gates them via the pre:tool hook fired above; spawn
-  // paths (sub-agent / workflow / worker) that forward that same hook registry
-  // inherit the gate. If NO approval mechanism reached this call, fail closed:
-  // deny rather than silently execute. This runs unconditionally — it does not
-  // depend on the pre:tool hook being wired, which is the whole point. Without
-  // it, a spawn path constructed with `hooks: undefined` executed rm -rf ~,
-  // sudo, git push --force main, delete_skill, etc. unconfirmed.
-  if (isCriticalNeverAutopass(fnName, fnArgs)) {
+  // ── Step 4b: state-change approval floor (defense-in-depth) ──
+  // Every confirmation-required operation must carry an explicit authorization
+  // across this final execution boundary. Interactive chat supplies it through
+  // its request-local pre:tool hook; saved grants and elevated autonomy do the
+  // same after their policy checks. Background paths without an approval
+  // provider therefore fail closed instead of silently mutating state.
+  const critical = isCriticalNeverAutopass(fnName, fnArgs, existingTool.riskLevel);
+  if (critical || needsConfirmation(fnName, fnArgs, existingTool.riskLevel)) {
     const approvedOutOfBand = confirmCriticalAction
+      && critical
       ? await confirmCriticalAction(fnName, fnArgs)
       : false;
-    // A pre:tool approval gate present at step 4 already vetted this call (a
-    // critical op always trips needsConfirmationWithAutonomy, so reaching here
-    // past a non-cancelled hook means it was approved). No callback and no gate
-    // ⇒ no human in the loop ⇒ deny.
-    const gatedByHook = hooks !== undefined;
-    if (!approvedOutOfBand && !gatedByHook) {
-      const denyMsg =
-        `[BLOCKED] "${fnName}" is a critical, irreversible operation that requires ` +
-        `explicit human approval. It was denied because this execution context ` +
-        `(such as a sub-agent or automated workflow) has no approval gate. ` +
-        `Terminal-destructive commands never run unconfirmed.`;
+    // Only an explicit successful hook authorization or approval callback can
+    // cross the hard floor. Registry presence or a swallowed hook error is not
+    // proof that a human or policy gate approved the call.
+    if (!approvedOutOfBand && !approvedByHook) {
+      const denyMsg = critical
+        ? `[BLOCKED] "${fnName}" is a critical, irreversible operation that requires ` +
+          `explicit human approval. It was denied because this execution context ` +
+          `(such as a sub-agent or automated workflow) has no approval gate. ` +
+          `Terminal-destructive commands never run unconfirmed.`
+        : `[BLOCKED] "${fnName}" changes state and requires explicit approval. ` +
+          `It was denied because this execution context (such as a sub-agent or ` +
+          `automated workflow) did not provide an authorization decision.`;
       if (onToolResult) onToolResult(fnName, fnArgs, denyMsg);
       return { content: denyMsg, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
     }
@@ -234,16 +248,17 @@ export async function executeToolCall(
   } else if (tool) {
     logTurnEvent(turnId, { stage: 'agent-loop.tool.enter', toolName: fnName, argsKeys: Object.keys(fnArgs) });
     try {
-      result = await tool.execute(fnArgs);
+      const rawResult = await tool.execute(fnArgs);
       // Tools in this codebase report many failures by RETURNING an
       // "Error: ..." string rather than throwing — count those as failures
       // too, or the failure tiers never see them.
-      guard.record(fnName, fnArgs, !/^Error\b/.test(result));
+      guard.record(fnName, fnArgs, !/^Error\b/.test(rawResult));
+      result = guardExternalToolOutput(rawResult);
       logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, resultChars: result.length, error: false });
     } catch (err) {
-      result = `Error executing ${fnName}: ${(err as Error).message}`;
+      result = guardExternalToolOutput(`Error executing ${fnName}: ${(err as Error).message}`);
       guard.record(fnName, fnArgs, false);
-      logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: (err as Error).message });
+      logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: result });
     }
     countedAsUsed = true;
   } else if (capabilityRouter) {
@@ -261,16 +276,14 @@ export async function executeToolCall(
     result = `Error: Unknown tool "${fnName}". Available tools: ${Array.from(toolMap.keys()).join(', ')}`;
   }
 
-  // ── Step 8: sanitize BEFORE post-hooks + onToolResult (Review C2) ──
-  // The scanner output is what flows into both model context on the next
-  // turn AND into every downstream observer (audit sinks, telemetry,
-  // team-sync, UI). Order is load-bearing — do not reorder.
-  const scanResult = scanForInjection(result, 'tool_output');
-  if (!scanResult.safe) {
-    result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
-  }
+  // ── Step 8: canonical guard BEFORE post-hooks + onToolResult (Review C2) ──
+  // The guarded output is what flows into both model context on the next turn
+  // AND every downstream observer (audit sinks, telemetry, team-sync, UI).
+  // Non-allows become an opaque marker; guard details and normalized attacker
+  // content must never cross this boundary. Order is load-bearing.
+  result = guardExternalToolOutput(result);
 
-  // ── Step 9: onToolResult callback (sanitized content) ──
+  // ── Step 9: onToolResult callback (guarded content) ──
   if (onToolResult) onToolResult(fnName, fnArgs, result);
 
   // ── Step 10: post:memory-write hook (save_memory only, sanitized) ──

@@ -32,7 +32,12 @@ describe('held-action-executor', () => {
   });
   afterEach(() => {
     db.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   describe('isProposableTool (F2 allowlist)', () => {
@@ -162,6 +167,22 @@ describe('held-action-executor', () => {
       expect(execSpy).toHaveBeenCalledWith({ name: 'retry-flaky-fetch', content: '# Retry flaky fetch' });
       expect(store.getPendingAction('pa-1')!.status).toBe('executed');
     });
+
+    it.each(['', '../default', '..\\default'])(
+      'refuses an invalid persisted workspace id (%j) without running the tool',
+      async (workspaceId) => {
+        const execSpy = vi.fn(async () => 'ran');
+        const server = makeServer(store, { name: 'send_email', execute: execSpy });
+        hold({ workspaceId });
+
+        const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
+
+        expect(r.ok).toBe(false);
+        expect(r.error).toMatch(/invalid workspace/);
+        expect(execSpy).not.toHaveBeenCalled();
+        expect(store.getPendingAction('pa-1')!.status).toBe('failed');
+      },
+    );
 
     it('refuses to run a held action past its expiry', async () => {
       const execSpy = vi.fn(async () => 'sent');

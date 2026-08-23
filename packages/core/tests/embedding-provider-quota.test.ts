@@ -17,7 +17,12 @@ describe('Embedding Provider — Tier & Quota Enforcement', () => {
 
   afterEach(() => {
     db.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   describe('Tier enforcement on provider selection', () => {

@@ -4,10 +4,12 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { MindDB, createFileStore, reconcileFtsIndex } from '@waggle/core';
+import { MindDB, WaggleConfig, createFileStore, reconcileFtsIndex } from '@waggle/core';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
 import { validateBody } from '../../validate-body.js';
+import { getBoundTeamServer } from '../team-server-binding.js';
+import { fetchTeamServer } from '../team-server-egress.js';
 
 /** POST /api/workspaces body — create a workspace (name + group required). Model
  *  format + local-path existence get deeper checks in the handler; enum fields
@@ -30,6 +32,28 @@ const createWorkspaceSchema = z.object({
   teamRole: z.enum(['owner', 'admin', 'member', 'viewer']).optional(),
   teamUserId: z.string().optional(),
 });
+
+/**
+ * Workspace trust-boundary fields are immutable through the generic metadata
+ * update routes. In particular, accepting storage or execution-root fields
+ * here would let a caller rebind an existing workspace to an arbitrary host
+ * directory without the create/link validation flow.
+ */
+const updateWorkspaceSchema = z.object({
+  name: z.string().optional(),
+  group: z.string().optional(),
+  icon: z.string().optional(),
+  model: z.string().optional(),
+  persona: z.string().nullable().optional(),
+  personaId: z.string().nullable().optional(),
+  agentGroupId: z.string().nullable().optional(),
+  templateId: z.string().optional(),
+  tone: z.enum(['professional', 'casual', 'technical', 'legal', 'marketing']).optional(),
+  budget: z.number().finite().nullable().optional(),
+  status: z.string().optional(),
+  description: z.string().optional(),
+  type: z.enum(['project', 'client', 'research', 'personal', 'team', 'organization']).optional(),
+}).strict();
 import { extractProgressItems, type ProgressItem } from './sessions.js';
 import { readFileRegistry, type FileRegistryEntry } from './ingest.js';
 import { buildWorkspaceState, type WorkspaceState, type StateItem } from '../workspace-state.js';
@@ -335,31 +359,135 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     }
     // Resolve templateId from either templateId or template body field
     const resolvedTemplateId = request.body.templateId ?? request.body.template;
-    // Validate local storagePath exists
-    if (storageType === 'local' && storagePath) {
-      if (!fs.existsSync(storagePath)) {
-        return reply.status(400).send({ error: `Storage path does not exist: ${storagePath}` });
+    let resolvedLocalStoragePath: string | undefined;
+    if (storageType === 'local') {
+      if (!storagePath?.trim()) {
+        return reply.status(400).send({ error: 'Local storage requires storagePath' });
+      }
+      try {
+        resolvedLocalStoragePath = fs.realpathSync.native(storagePath.trim());
+        if (!fs.statSync(resolvedLocalStoragePath).isDirectory()) {
+          return reply.status(400).send({
+            error: `Storage path is not a directory: ${storagePath}`,
+          });
+        }
+      } catch {
+        return reply.status(400).send({
+          error: `Storage path does not exist or is not accessible: ${storagePath}`,
+        });
       }
     }
 
-    const ws = server.workspaceManager.create({
-      name, group, icon, model, personaId, directory, tone,
-      teamId, teamServerUrl, teamRole, teamUserId,
-      ...(resolvedTemplateId && { templateId: resolvedTemplateId }),
-      ...(storageType && { storageType }),
-      ...(storagePath && { storagePath }),
-      ...(storageConfig && { storageConfig }),
-    });
+    let boundTeamServerUrl = teamServerUrl;
+    let teamServerToken: string | undefined;
+    const hasTeamId = typeof teamId === 'string' && teamId.trim().length > 0;
+    const hasTeamServerUrl = typeof teamServerUrl === 'string' && teamServerUrl.trim().length > 0;
+    if ((teamId !== undefined || teamServerUrl !== undefined) && (!hasTeamId || !hasTeamServerUrl)) {
+      return reply.status(400).send({ error: 'Team workspaces require both teamId and teamServerUrl' });
+    }
+    if (teamId && teamServerUrl) {
+      const configuredTeamServer = new WaggleConfig(server.localConfig.dataDir).getTeamServer();
+      const boundTeamServer = getBoundTeamServer(teamServerUrl, configuredTeamServer);
+      if (!boundTeamServer) {
+        return reply.status(400).send({ error: 'Team workspace URL must match the configured Team server' });
+      }
+      boundTeamServerUrl = boundTeamServer.url;
+      teamServerToken = boundTeamServer.token;
+    }
+
+    let preparedLocalProvider: { ensureStructure?: () => void } | undefined;
+    const createdLocalDirectories: string[] = [];
+    const rollbackPreparedLocalDirectories = () => {
+      for (const directory of [...createdLocalDirectories].reverse()) {
+        try { fs.rmdirSync(directory); } catch { /* best-effort rollback */ }
+      }
+    };
+    if (resolvedLocalStoragePath) {
+      try {
+        const { getStorageProvider, STANDARD_DIRS } = await import('../storage/index.js');
+        const missingDirectories: string[] = [];
+        for (const directory of STANDARD_DIRS) {
+          const standardPath = path.join(resolvedLocalStoragePath, directory);
+          try {
+            const stat = fs.lstatSync(standardPath);
+            if (stat.isSymbolicLink() || !stat.isDirectory()) {
+              throw new Error(`Standard workspace path is not a directory: ${directory}`);
+            }
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+              missingDirectories.push(standardPath);
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        try {
+          for (const directory of missingDirectories) {
+            fs.mkdirSync(directory);
+            createdLocalDirectories.push(directory);
+          }
+        } catch (error) {
+          rollbackPreparedLocalDirectories();
+          throw error;
+        }
+
+        preparedLocalProvider = getStorageProvider(
+          {
+            id: 'pending-local-workspace',
+            storageType: 'local',
+            storagePath: resolvedLocalStoragePath,
+          },
+          server.localConfig.dataDir,
+        ) as { ensureStructure?: () => void };
+      } catch {
+        return reply.status(400).send({
+          error: `Local storage cannot initialize its standard directories: ${storagePath}`,
+        });
+      }
+    }
+
+    const ws = (() => {
+      let createdWorkspaceId: string | undefined;
+      try {
+        const created = server.workspaceManager.create({
+          name, group, icon, model, personaId, directory, tone,
+          teamId, teamServerUrl: boundTeamServerUrl, teamRole, teamUserId,
+          ...(resolvedTemplateId && { templateId: resolvedTemplateId }),
+        });
+        createdWorkspaceId = created.id;
+        if (!resolvedLocalStoragePath) return created;
+
+        server.workspaceManager.update(created.id, {
+          storageType: 'local',
+          storagePath: resolvedLocalStoragePath,
+        });
+        const linked = server.workspaceManager.get(created.id);
+        if (!linked) throw new Error('Workspace metadata disappeared during local binding');
+        return linked;
+      } catch (error) {
+        if (createdWorkspaceId) {
+          try { server.workspaceManager.delete(createdWorkspaceId); } catch { /* best-effort rollback */ }
+        }
+        rollbackPreparedLocalDirectories();
+        throw error;
+      }
+    })();
 
     // Auto-create standard file directory structure
     try {
       const { getStorageProvider } = await import('../storage/index.js');
-      const provider = getStorageProvider(
-        { id: ws.id, storageType: storageType ?? 'virtual', storagePath, storageConfig },
+      const provider = preparedLocalProvider ?? getStorageProvider(
+        {
+          id: ws.id,
+          storageType: ws.storageType ?? storageType ?? 'virtual',
+          storagePath: ws.storagePath,
+          storageConfig,
+        },
         server.localConfig.dataDir,
       );
       const maybeStructured = provider as { ensureStructure?: () => void };
-      if (typeof maybeStructured.ensureStructure === 'function') {
+      if (!preparedLocalProvider && typeof maybeStructured.ensureStructure === 'function') {
         maybeStructured.ensureStructure();
       }
     } catch { /* non-blocking */ }
@@ -434,34 +562,29 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // Register workspace on team server (fire-and-forget)
-    if (teamId && teamServerUrl) {
+    if (teamId && boundTeamServerUrl && teamServerToken) {
       try {
-        const { WaggleConfig } = await import('@waggle/core');
-        const waggleConfig = new WaggleConfig(server.localConfig.dataDir);
-        const teamServer = waggleConfig.getTeamServer();
-        if (teamServer?.token) {
-          fetch(`${teamServerUrl}/api/teams/${teamId}/entities`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${teamServer.token}`,
+        fetchTeamServer(`${boundTeamServerUrl}/api/teams/${teamId}/entities`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${teamServerToken}`,
+          },
+          body: JSON.stringify({
+            entityType: 'workspace',
+            name: ws.id,
+            properties: {
+              displayName: ws.name,
+              group: ws.group,
+              model: ws.model,
+              personaId: ws.personaId,
+              createdBy: teamUserId ?? 'local-user',
             },
-            body: JSON.stringify({
-              entityType: 'workspace',
-              name: ws.id,
-              properties: {
-                displayName: ws.name,
-                group: ws.group,
-                model: ws.model,
-                personaId: ws.personaId,
-                createdBy: teamUserId ?? 'local-user',
-              },
-            }),
-            signal: AbortSignal.timeout(5000),
-          }).catch(err => {
-            log.warn(`[waggle] Team workspace registration failed:`, err.message);
-          });
-        }
+          }),
+          signal: AbortSignal.timeout(5000),
+        }).catch(err => {
+          log.warn(`[waggle] Team workspace registration failed:`, err.message);
+        });
       } catch { /* team registration is best-effort */ }
     }
 
@@ -912,8 +1035,8 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
   // PUT /api/workspaces/:id — update workspace
   server.put<{
     Params: { id: string };
-    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null; status?: 'active' | 'paused' | 'archived'; description?: string };
-  }>('/api/workspaces/:id', async (request, reply) => {
+    Body: { name?: string; group?: string; icon?: string; model?: string; persona?: string | null; personaId?: string | null; agentGroupId?: string | null; templateId?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null; status?: 'active' | 'paused' | 'archived'; description?: string; type?: 'project' | 'client' | 'research' | 'personal' | 'team' | 'organization' };
+  }>('/api/workspaces/:id', { preHandler: validateBody(updateWorkspaceSchema) }, async (request, reply) => {
     assertSafeSegment(request.params.id, 'id');
     const existing = server.workspaceManager.get(request.params.id);
     if (!existing) {
@@ -929,10 +1052,11 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (request.body.status !== undefined && !VALID_WORKSPACE_STATUSES.has(request.body.status)) {
       return reply.status(400).send({ error: `Invalid status "${request.body.status}". Must be one of: active, paused, archived` });
     }
-    const { personaId, agentGroupId, ...rest } = request.body;
+    const { persona, personaId, agentGroupId, ...rest } = request.body;
+    const normalizedPersonaId = personaId !== undefined ? personaId : persona;
     server.workspaceManager.update(request.params.id, {
       ...rest,
-      ...(personaId !== null ? { personaId } : {}),
+      ...(normalizedPersonaId !== undefined ? { personaId: normalizedPersonaId ?? undefined } : {}),
       ...(agentGroupId !== undefined ? { agentGroupId: agentGroupId ?? undefined } : {}),
     });
     emitAuditEvent(server, { workspaceId: request.params.id, eventType: 'workspace_update', input: JSON.stringify(request.body) });
@@ -942,8 +1066,8 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
   // PATCH /api/workspaces/:id — partial update (same as PUT but PATCH method)
   server.patch<{
     Params: { id: string };
-    Body: { name?: string; group?: string; icon?: string; model?: string; personaId?: string | null; agentGroupId?: string | null; directory?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null; status?: 'active' | 'paused' | 'archived'; description?: string };
-  }>('/api/workspaces/:id', async (request, reply) => {
+    Body: { name?: string; group?: string; icon?: string; model?: string; persona?: string | null; personaId?: string | null; agentGroupId?: string | null; templateId?: string; tone?: 'professional' | 'casual' | 'technical' | 'legal' | 'marketing'; budget?: number | null; status?: 'active' | 'paused' | 'archived'; description?: string; type?: 'project' | 'client' | 'research' | 'personal' | 'team' | 'organization' };
+  }>('/api/workspaces/:id', { preHandler: validateBody(updateWorkspaceSchema) }, async (request, reply) => {
     assertSafeSegment(request.params.id, 'id');
     const existing = server.workspaceManager.get(request.params.id);
     if (!existing) {
@@ -955,10 +1079,11 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (request.body.status !== undefined && !VALID_WORKSPACE_STATUSES.has(request.body.status)) {
       return reply.status(400).send({ error: `Invalid status "${request.body.status}". Must be one of: active, paused, archived` });
     }
-    const { personaId, agentGroupId, ...rest } = request.body;
+    const { persona, personaId, agentGroupId, ...rest } = request.body;
+    const normalizedPersonaId = personaId !== undefined ? personaId : persona;
     server.workspaceManager.update(request.params.id, {
       ...rest,
-      ...(personaId !== undefined ? { personaId: personaId ?? undefined } : {}),
+      ...(normalizedPersonaId !== undefined ? { personaId: normalizedPersonaId ?? undefined } : {}),
       ...(agentGroupId !== undefined ? { agentGroupId: agentGroupId ?? undefined } : {}),
     });
     emitAuditEvent(server, { workspaceId: request.params.id, eventType: 'workspace_update', input: JSON.stringify(request.body) });

@@ -32,6 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AgentPersona } from './personas.js';
 import { getPersona } from './personas.js';
+import { assertValidCustomPersonaId } from './custom-personas.js';
 
 // ── Public result shape ────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export interface DeployPersonaInput {
   /** The evolved system prompt text */
   systemPrompt: string;
   /** Optional additional field overrides */
-  overrides?: Partial<AgentPersona>;
+  overrides?: Partial<Omit<AgentPersona, 'id' | 'systemPrompt'>>;
 }
 
 /**
@@ -68,6 +69,7 @@ export function deployPersonaOverride(
   dataDir: string,
   input: DeployPersonaInput,
 ): DeployResult {
+  assertValidCustomPersonaId(input.personaId);
   const personasDir = path.join(dataDir, 'personas');
   if (!fs.existsSync(personasDir)) {
     fs.mkdirSync(personasDir, { recursive: true });
@@ -81,19 +83,24 @@ export function deployPersonaOverride(
 
   const builtin = getPersona(input.personaId);
   const persona: AgentPersona = builtin
-    ? { ...builtin, ...input.overrides, systemPrompt: input.systemPrompt }
-    : {
+    ? {
+        ...builtin,
+        ...input.overrides,
         id: input.personaId,
+        systemPrompt: input.systemPrompt,
+      }
+    : {
         name: input.personaId,
         description: input.overrides?.description ?? `${input.personaId} (evolved)`,
         icon: input.overrides?.icon ?? 'sparkles',
-        systemPrompt: input.systemPrompt,
         modelPreference: input.overrides?.modelPreference ?? 'claude-sonnet-4-6',
         tools: input.overrides?.tools ?? [],
         workspaceAffinity: input.overrides?.workspaceAffinity ?? [],
         suggestedCommands: input.overrides?.suggestedCommands ?? [],
         defaultWorkflow: input.overrides?.defaultWorkflow ?? null,
         ...input.overrides,
+        id: input.personaId,
+        systemPrompt: input.systemPrompt,
       };
 
   writeAtomic(filePath, JSON.stringify(persona, null, 2));
@@ -113,6 +120,7 @@ export function rollbackPersonaOverride(
   dataDir: string,
   personaId: string,
 ): boolean {
+  assertValidCustomPersonaId(personaId);
   const filePath = path.join(dataDir, 'personas', `${personaId}.json`);
   const backupPath = `${filePath}.bak`;
   if (fs.existsSync(backupPath)) {
@@ -270,5 +278,22 @@ export function applyBehavioralSpecOverrides(
 function writeAtomic(filePath: string, contents: string): void {
   const tmpPath = `${filePath}.tmp`;
   fs.writeFileSync(tmpPath, contents, 'utf-8');
-  fs.renameSync(tmpPath, filePath);
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
+  try {
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      try {
+        fs.renameSync(tmpPath, filePath);
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 10) throw error;
+        // Windows antivirus and indexers can briefly hold an exclusive handle.
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmpPath, { force: true }); } catch { /* best-effort cleanup */ }
+  }
 }

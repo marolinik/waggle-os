@@ -115,11 +115,11 @@ describe('Data Export (GDPR)', () => {
 
     // Build the local server
     server = await buildLocalServer({ dataDir: tmpDir });
-  });
+  }, 60_000);
 
   afterAll(async () => {
-    await server.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    await server?.close();
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it('POST /api/export returns a ZIP with correct Content-Type', async () => {

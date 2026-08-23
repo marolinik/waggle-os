@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +10,8 @@ import type {
 } from '@waggle/shared';
 import { resolveToolCommandInvocation } from './tool-command.js';
 import { stripAnsi } from './tool-output-buffer.js';
-import { resolvedShellPath, mergePathValue } from './shell-env.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
+import { spawnSidecarOwnedProcess } from './sidecar-owned-process.js';
 
 const MAX_STDOUT = 256 * 1024;
 const MAX_STDERR = 64 * 1024;
@@ -19,13 +20,8 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1_000;
 const DEFAULT_STALL_AFTER_MS = 120_000;
 const MIN_STALL_AFTER_MS = 30_000;
-
-const ENV_ALLOWLIST = new Set([
-  'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE',
-  'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'TERM',
-  'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY',
-  'OPENROUTER_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY',
-]);
+const TREE_KILL_TIMEOUT_MS = 5_000;
+const TERMINATION_SETTLE_MS = 2_000;
 
 export type ExternalRunEventType =
   | 'started' | 'progress' | 'message' | 'tool'
@@ -72,6 +68,7 @@ export interface ExternalToolRunResult {
   status: 'completed' | 'failed' | 'cancelled' | 'timed_out';
   exitCode: number | null;
   summary: string;
+  error?: string;
   sessionId?: string;
   stdoutTail: string;
   stderrTail: string;
@@ -80,9 +77,12 @@ export interface ExternalToolRunResult {
 
 export interface ExternalProcessHandle {
   pid: number;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
   stdout: { on(event: 'data', cb: (chunk: Buffer | string) => void): void };
   stderr: { on(event: 'data', cb: (chunk: Buffer | string) => void): void };
   stdin: { write(value: string): void; end(): void };
+  kill(signal?: NodeJS.Signals | number): boolean;
   once(event: 'error', cb: (error: Error) => void): void;
   once(event: 'exit', cb: (code: number | null) => void): void;
 }
@@ -128,6 +128,12 @@ export async function runExternalTool(
   const promptFile = task.promptTransport === 'temp-file'
     ? (deps.createPromptFile ?? defaultCreatePromptFile)(request.prompt)
     : undefined;
+  let promptCleaned = false;
+  const cleanupPromptFile = () => {
+    if (promptCleaned) return;
+    promptCleaned = true;
+    try { promptFile?.cleanup(); } catch { /* best-effort secure temp cleanup */ }
+  };
   const args = renderArgs(
     request.sessionId && task.resumeArgvTemplate ? task.resumeArgvTemplate : task.argvTemplate,
     task,
@@ -136,7 +142,7 @@ export async function runExternalTool(
     promptFile?.path,
     timeoutMs,
   );
-  const env = buildExternalToolEnv(deps.baseEnv ?? process.env, request, workspacePath);
+  const env = buildExternalToolEnv(deps.baseEnv ?? process.env, request, workspacePath, platform);
   const spawnProcess = deps.spawnProcess ?? defaultSpawnProcess;
   const killTree = deps.killTree ?? defaultKillTree;
   const parseState: ParseState = { finalText: '' };
@@ -146,7 +152,6 @@ export async function runExternalTool(
   let seq = 0;
   let abortRequested = request.signal?.aborted ?? false;
   let timedOut = false;
-  let killRequested = false;
   let lastEventAtMs = startedAt;
   let stalledEpisode = false;
 
@@ -169,7 +174,7 @@ export async function runExternalTool(
   };
 
   if (abortRequested) {
-    promptFile?.cleanup();
+    cleanupPromptFile();
     emit('cancelled', 'Cancelled before launch');
     return terminalResult('cancelled', null, '', '', '', now() - startedAt);
   }
@@ -178,29 +183,13 @@ export async function runExternalTool(
   try {
     child = spawnProcess(request.binary, args, { cwd: workspacePath, env });
   } catch (err) {
-    promptFile?.cleanup();
+    cleanupPromptFile();
     const message = err instanceof Error ? err.message : String(err);
     emit('failed', message);
     return terminalResult('failed', null, message, '', message, now() - startedAt);
   }
   emit('started', `Started ${request.manifest.displayName}`, child.pid);
 
-  const requestKill = async () => {
-    if (killRequested) return;
-    killRequested = true;
-    try { await killTree(child.pid, platform); }
-    catch (err) { stderr = appendTail(stderr, err instanceof Error ? err.message : String(err), MAX_STDERR); }
-  };
-
-  const abortHandler = () => {
-    abortRequested = true;
-    void requestKill();
-  };
-  request.signal?.addEventListener('abort', abortHandler, { once: true });
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    void requestKill();
-  }, timeoutMs);
   const stallTimer = stallAfterMs === undefined ? undefined : setInterval(() => {
     if (abortRequested || timedOut) return;
     const idleMs = now() - lastEventAtMs;
@@ -236,15 +225,18 @@ export async function runExternalTool(
     const progress = stripAnsi(text).trim();
     if (progress) emit('progress', progress);
   });
-  if (task.promptTransport === 'stdin') child.stdin.write(request.prompt);
-  child.stdin.end();
-
   return await new Promise<ExternalToolRunResult>((resolve) => {
     let settled = false;
+    let terminationIntent: 'cancelled' | 'timed_out' | null = null;
+    let treeKillDeadline: NodeJS.Timeout | undefined;
+    let settlementTimer: NodeJS.Timeout | undefined;
+    let timeout: NodeJS.Timeout | undefined;
     const finish = (exitCode: number | null, spawnError?: Error) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
+      if (treeKillDeadline) clearTimeout(treeKillDeadline);
+      if (settlementTimer) clearTimeout(settlementTimer);
       if (stallTimer) clearInterval(stallTimer);
       request.signal?.removeEventListener('abort', abortHandler);
       if (stdoutRemainder.trim()) parseLine(task.outputDialect, stdoutRemainder, parseState, emit);
@@ -254,30 +246,123 @@ export async function runExternalTool(
       if (task.outputDialect === 'hermes-text') {
         parseState.sessionId = extractSessionId(stripAnsi(stderr)) ?? parseState.sessionId;
       }
-      promptFile?.cleanup();
+      cleanupPromptFile();
+
+      if (
+        task.outputDialect === 'claude-stream-json' &&
+        exitCode === 0 &&
+        !timedOut &&
+        !abortRequested &&
+        !spawnError &&
+        !parseState.finalText &&
+        !parseState.error
+      ) {
+        parseState.error = 'Claude Code completed without a final response';
+      }
 
       const cleanStdout = redact(stdout, env);
       const cleanStderr = redact(stderr, env);
-      const summary = truncate(
-        stripAnsi(
-          redact(parseState.finalText, env) ||
-          (cleanStdout.trim() || cleanStderr.trim() || spawnError?.message || ''),
-        ).trim(),
-        MAX_STDOUT,
-      );
       let status: ExternalToolRunResult['status'];
       if (timedOut) status = 'timed_out';
       else if (abortRequested) status = 'cancelled';
       else if (spawnError || exitCode !== 0 || parseState.error) status = 'failed';
       else status = 'completed';
-      emit(status, status === 'completed' ? summary : (parseState.error || spawnError?.message || cleanStderr || summary));
+      const terminalError = status === 'failed'
+        ? truncate(stripAnsi(
+          (parseState.error ? redact(parseState.error, env) : '') ||
+          (spawnError ? redact(spawnError.message, env) : '') ||
+          cleanStderr.trim() ||
+          (exitCode !== null && exitCode !== 0
+            ? `${request.manifest.displayName} exited with code ${exitCode}`
+            : ''),
+        ).trim(), MAX_STDERR)
+        : undefined;
+      const stdoutFallback = task.outputDialect === 'claude-stream-json' ? '' : cleanStdout.trim();
+      const summary = truncate(
+        stripAnsi(
+          redact(parseState.finalText, env) ||
+          stdoutFallback ||
+          cleanStderr.trim() ||
+          terminalError ||
+          '',
+        ).trim(),
+        MAX_STDOUT,
+      );
+      emit(status, status === 'completed' ? summary : (terminalError || summary));
       resolve({
         ...terminalResult(status, exitCode, summary, cleanStdout, cleanStderr, now() - startedAt),
+        ...(terminalError ? { error: terminalError } : {}),
         ...(parseState.sessionId ? { sessionId: parseState.sessionId } : {}),
       });
     };
+
+    const appendCleanupError = (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      stderr = appendTail(stderr, message, MAX_STDERR);
+    };
+    const childHasExited = () => child.exitCode !== null || child.signalCode !== null;
+    const forceRootKill = () => {
+      if (settled || childHasExited()) return;
+      try {
+        if (!child.kill('SIGKILL')) appendCleanupError('Root process refused SIGKILL');
+      } catch (error) {
+        appendCleanupError(error);
+      }
+    };
+    const scheduleForcedSettlement = () => {
+      if (settled || settlementTimer) return;
+      settlementTimer = setTimeout(() => finish(child.exitCode), TERMINATION_SETTLE_MS);
+    };
+    const requestTermination = (intent: 'cancelled' | 'timed_out') => {
+      if (settled || terminationIntent) return;
+      if (childHasExited()) {
+        finish(child.exitCode);
+        return;
+      }
+      terminationIntent = intent;
+      abortRequested = intent === 'cancelled';
+      timedOut = intent === 'timed_out';
+      if (intent === 'cancelled' && timeout) {
+        clearTimeout(timeout);
+        timeout = undefined;
+      }
+
+      let treeAttemptFinished = false;
+      const finishTreeAttempt = (fallbackToRoot: boolean, error?: unknown) => {
+        if (settled || treeAttemptFinished) return;
+        treeAttemptFinished = true;
+        if (treeKillDeadline) {
+          clearTimeout(treeKillDeadline);
+          treeKillDeadline = undefined;
+        }
+        if (error !== undefined) appendCleanupError(error);
+        if (fallbackToRoot) forceRootKill();
+        scheduleForcedSettlement();
+      };
+
+      treeKillDeadline = setTimeout(() => {
+        finishTreeAttempt(true, new Error(`Process-tree cleanup exceeded ${TREE_KILL_TIMEOUT_MS}ms`));
+      }, TREE_KILL_TIMEOUT_MS);
+      try {
+        void killTree(child.pid, platform).then(
+          () => finishTreeAttempt(false),
+          (error) => finishTreeAttempt(true, error),
+        );
+      } catch (error) {
+        finishTreeAttempt(true, error);
+      }
+    };
+    const abortHandler = () => requestTermination('cancelled');
+
     child.once('error', (error) => finish(null, error));
     child.once('exit', (code) => finish(code));
+    timeout = setTimeout(() => requestTermination('timed_out'), timeoutMs);
+    request.signal?.addEventListener('abort', abortHandler, { once: true });
+    // Close the spawn/listener race: an abort can land after the pre-launch
+    // check but before the listener above is attached.
+    if (request.signal?.aborted) abortHandler();
+    if (!abortRequested && task.promptTransport === 'stdin') child.stdin.write(request.prompt);
+    child.stdin.end();
   });
 }
 
@@ -285,20 +370,9 @@ export function buildExternalToolEnv(
   base: NodeJS.ProcessEnv,
   request: Pick<ExternalToolRunRequest, 'runId' | 'roomId' | 'workspaceId' | 'dance' | 'dataDir'>,
   workspacePath: string,
+  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(base)) {
-    if (value !== undefined && ENV_ALLOWLIST.has(key.toUpperCase())) env[key] = value;
-  }
-  // POSIX GUI-launched sidecars inherit a bare PATH. Merge the
-  // resolved login-shell PATH so spawned CLIs resolve their shims; the value
-  // stays ENV_ALLOWLIST-scoped (PATH only). No-op on win32 / before resolve.
-  if (process.platform !== 'win32') {
-    const shellPath = resolvedShellPath();
-    if (shellPath) env.PATH = mergePathValue(shellPath, env.PATH);
-  }
-  return {
-    ...env,
+  return buildExternalProcessEnv(base, {
     WAGGLE_RUN_ID: request.runId,
     WAGGLE_ROOM_ID: request.roomId,
     WAGGLE_WORKSPACE_ID: request.workspaceId,
@@ -314,7 +388,7 @@ export function buildExternalToolEnv(
     ...(request.dataDir ? { HIVE_MIND_DATA_DIR: request.dataDir } : {}),
     WAGGLE_SIGNAL_EMIT: '0',
     NO_COLOR: '1',
-  };
+  }, platform);
 }
 
 function requireTaskSpec(
@@ -425,17 +499,26 @@ function parseJsonValue(
 
   if (dialect === 'claude-stream-json') {
     if (type === 'result') {
-      state.finalText = stringValue(record.result) ?? state.finalText;
-      if (record.is_error === true) state.error = state.finalText || 'Claude Code reported an error';
+      const result = stringValue(record.result);
+      const subtype = stringValue(record.subtype);
+      if (result) state.finalText = result;
+      if (record.is_error === true || subtype?.startsWith('error_')) {
+        state.error = stringValue(record.error) || result || subtype || 'Claude Code reported an error';
+      }
       return;
     }
     const blocks = ((record.message as Record<string, unknown> | undefined)?.content ?? record.content) as unknown;
+    const assistantText: string[] = [];
     for (const block of Array.isArray(blocks) ? blocks : []) {
       if (!block || typeof block !== 'object') continue;
       const item = block as Record<string, unknown>;
-      if (item.type === 'text' && typeof item.text === 'string') emit('message', item.text);
+      if (item.type === 'text' && typeof item.text === 'string') {
+        assistantText.push(item.text);
+        emit('message', item.text);
+      }
       if (item.type === 'tool_use') emit('tool', String(item.name ?? 'tool'));
     }
+    if (assistantText.length > 0) state.finalText = assistantText.join('\n');
     return;
   }
   if (dialect === 'codex-jsonl') {
@@ -541,21 +624,34 @@ function defaultSpawnProcess(
   options: { cwd: string; env: NodeJS.ProcessEnv },
 ): ExternalProcessHandle {
   const invocation = resolveToolCommandInvocation(binary, args);
-  const child = spawn(invocation.binary, invocation.args, {
+  const child = spawnSidecarOwnedProcess(invocation.binary, invocation.args, {
     cwd: options.cwd,
     env: options.env,
-    shell: false,
     detached: process.platform !== 'win32',
+    windowsHide: true,
     windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   return child as unknown as ExternalProcessHandle;
 }
 
+export function resolveWindowsTaskkillPath(env: NodeJS.ProcessEnv = process.env): string {
+  const candidate = env.SystemRoot ?? env.WINDIR;
+  const windowsRoot = candidate && path.win32.isAbsolute(candidate)
+    ? path.win32.normalize(candidate)
+    : 'C:\\Windows';
+  return path.win32.join(windowsRoot, 'System32', 'taskkill.exe');
+}
+
 async function defaultKillTree(pid: number, platform: NodeJS.Platform): Promise<void> {
   if (platform === 'win32') {
     await new Promise<void>((resolve, reject) => {
-      execFile('taskkill.exe', ['/PID', String(pid), '/T', '/F'], (error) => error ? reject(error) : resolve());
+      execFile(
+        resolveWindowsTaskkillPath(),
+        ['/PID', String(pid), '/T', '/F'],
+        { timeout: TREE_KILL_TIMEOUT_MS, windowsHide: true },
+        (error) => error ? reject(error) : resolve(),
+      );
     });
     return;
   }

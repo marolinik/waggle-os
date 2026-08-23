@@ -10,6 +10,7 @@ import {
   KnowledgeGraph,
   ImprovementSignalStore,
   createCoreLogger,
+  evaluateExternalMemoryIngress,
   type Embedder,
   TEMPORAL_GUIDANCE,
   renderReferenceDateLine,
@@ -52,6 +53,7 @@ import { logTurnEvent } from './turn-context.js';
 import { tierForModel, type ModelTier } from './model-tier.js';
 import type { AgentPersona } from './personas.js';
 import {
+  isClosedWorldRewriteRequest,
   PromptAssembler,
   type AssembleOptions,
   type AssembledPrompt,
@@ -84,6 +86,8 @@ export interface OrchestratorConfig {
    * creation failure soft-fails to RRF-only ordering.
    */
   reranker?: Reranker;
+  /** Optional managed cache root for the lazy in-process reranker model. */
+  rerankerCacheDir?: string;
   /** AI-OS #6 — durable "why" breadcrumb injected into buildSystemPrompt. */
   goalAncestry?: GoalAncestry;
 }
@@ -143,6 +147,7 @@ export class Orchestrator {
   private cognify: CognifyPipeline;
   /** W4.2: memoized reranker promise — resolves undefined on creation failure. */
   private rerankerPromise: Promise<Reranker | undefined> | null = null;
+  private readonly rerankerCacheDir: string | undefined;
 
   /** Team sync client — set for team workspaces, null for personal */
   private teamSync: import('@waggle/core').TeamSync | null = null;
@@ -160,6 +165,7 @@ export class Orchestrator {
     this.mode = config.mode ?? 'local';
     this.version = config.version ?? '0.0.0';
     this.skills = config.skills ?? [];
+    this.rerankerCacheDir = config.rerankerCacheDir;
     this.goalAncestry = config.goalAncestry ?? null;
     this.identity = new IdentityLayer(config.db);
     this.awareness = new AwarenessLayer(config.db);
@@ -317,7 +323,7 @@ export class Orchestrator {
     return compute();
   }
 
-  buildSystemPrompt(): string {
+  buildSystemPrompt(modelOverride = this.model): string {
     // ── IDENTITY (always personal, stable within a session) ──
     // Cache key must hash the full identity content — updated_at alone
     // has only second precision in SQLite, so rapid successive edits
@@ -345,7 +351,7 @@ export class Orchestrator {
       const caps: AgentCapabilities = {
         tools: this.tools.map(t => ({ name: t.name, description: t.description })),
         skills: this.skills,
-        model: this.model,
+        model: modelOverride,
         memoryStats: this.getMemoryStats(),
         mode: this.mode,
         version: this.version,
@@ -377,14 +383,31 @@ export class Orchestrator {
   async buildAssembledPrompt(
     query: string,
     persona: AgentPersona | null = null,
-    opts: AssembleOptions = {},
+    opts: AssembleOptions & { model?: string } = {},
   ): Promise<AssembledPrompt> {
-    const tier = tierForModel(this.model);
-    const corePrompt = this.buildSystemPrompt();
-    const context = this.loadRecentContextFrames();
+    const effectiveModel = opts.model ?? this.model;
+    const tier = tierForModel(effectiveModel);
+    const closedWorldRewrite = isClosedWorldRewriteRequest(query);
+    const corePrompt = closedWorldRewrite ? '' : this.buildSystemPrompt(effectiveModel);
+    const context: ContextFramesImpl = closedWorldRewrite
+      ? {
+          stateFrames: [],
+          recentChanges: [],
+          activeWork: [],
+          keyEntities: [],
+          personalPreferences: [],
+        }
+      : this.loadRecentContextFrames();
 
     let recalled: RecalledMemory;
-    if (opts.recalledText !== undefined) {
+    if (closedWorldRewrite) {
+      recalled = {
+        workspace: [],
+        personal: [],
+        scanSafe: true,
+        renderedText: '',
+      };
+    } else if (opts.recalledText !== undefined) {
       // W4.5 (plan bug #9-2, double-compute): the caller already ran
       // recallMemory this turn — reuse its rendered multi-lane block instead
       // of re-running the searches. recallMemory scans for injection itself
@@ -458,7 +481,8 @@ export class Orchestrator {
    * W4.2/W4.5: lazy cross-encoder reranker — DEFAULT ON since the W4.5 live
    * smoke (real ONNX load + 58-83ms warm recalls verified through the real
    * server). Kill switch: WAGGLE_RERANKER=0. First use downloads the ~22MB
-   * model (cached at ~/.hive-mind/models); creation failure (offline, OOM)
+   * model (cached at the configured managed path, or ~/.hive-mind/models for
+   * standalone callers); creation failure (offline, OOM)
    * memoizes undefined: recall soft-fails to RRF-only ordering, never throws.
    */
   private getReranker(): Promise<Reranker | undefined> {
@@ -467,7 +491,10 @@ export class Orchestrator {
       this.rerankerPromise = Promise.resolve(undefined);
       return this.rerankerPromise;
     }
-    this.rerankerPromise = createInProcessReranker().catch((e: unknown) => {
+    const rerankerConfig = this.rerankerCacheDir
+      ? { cacheDir: this.rerankerCacheDir }
+      : undefined;
+    this.rerankerPromise = createInProcessReranker(rerankerConfig).catch((e: unknown) => {
       logger.warn('reranker unavailable — falling back to RRF ordering', {
         error: e instanceof Error ? e.message : String(e),
       });
@@ -485,6 +512,24 @@ export class Orchestrator {
     const scoreFloor = opts?.scoreFloor;
     logTurnEvent(opts?.turnId, { stage: 'orchestrator.recallMemory.enter', queryChars: query.length, limit, profile });
     try {
+      const personalHasFrames = this.db.getDatabase()
+        .prepare('SELECT 1 FROM memory_frames LIMIT 1')
+        .get() !== undefined;
+      const workspaceHasFrames = this.workspaceLayers
+        ? this.workspaceLayers.db.getDatabase()
+            .prepare('SELECT 1 FROM memory_frames LIMIT 1')
+            .get() !== undefined
+        : false;
+      if (!personalHasFrames && !workspaceHasFrames) {
+        logTurnEvent(opts?.turnId, {
+          stage: 'orchestrator.recallMemory.exit',
+          totalCount: 0,
+          blocked: false,
+          emptyMindFastPath: true,
+        });
+        return { text: '', count: 0, recalled: [], recalledFrames: [] };
+      }
+
       // Detect catch-up intent — these queries need importance-based recall, not literal text matching
       const catchUpPatterns = [
         /\bcatch me up\b/i, /\bwhere (?:are|were) we\b/i, /\bwhat matters\b/i,
@@ -909,6 +954,7 @@ export class Orchestrator {
     const importance = 'normal';
     const marker = `[Session summary — ${sessionKey}]`;
     const content = `${marker}\n\n${summary}`;
+    if (evaluateExternalMemoryIngress({ content }).action !== 'allow') return null;
 
     const frames = this.workspaceLayers?.frames ?? this.frames;
     const cognify = this.workspaceLayers?.cognify ?? this.cognify;

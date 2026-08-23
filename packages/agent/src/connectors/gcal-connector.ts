@@ -92,15 +92,15 @@ export class GoogleCalendarConnector extends BaseConnector {
   private clientId: string | null = null;
   private clientSecret: string | null = null;
   private vault: VaultStore | null = null;
+  private credentialGeneration = 0;
 
   async connect(vault: VaultStore): Promise<void> {
+    this.credentialGeneration += 1;
     this.vault = vault;
     const cred = vault.getConnectorCredential(this.id);
-    if (cred) {
-      this.accessToken = cred.value;
-      this.refreshToken = cred.refreshToken ?? null;
-      this.expiresAt = cred.expiresAt ?? null;
-    }
+    this.accessToken = cred?.value ?? null;
+    this.refreshToken = cred?.refreshToken ?? null;
+    this.expiresAt = cred?.expiresAt ?? null;
 
     const clientIdEntry = vault.get(`connector:${this.id}:client_id`);
     this.clientId = clientIdEntry?.value ?? null;
@@ -170,13 +170,18 @@ export class GoogleCalendarConnector extends BaseConnector {
       throw new Error('Cannot refresh token — missing refresh_token, client_id, or client_secret');
     }
 
+    const credentialGeneration = this.credentialGeneration;
+    const accessToken = this.accessToken;
+    const refreshToken = this.refreshToken;
+    const vault = this.vault;
+
     const res = await fetch(TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: this.clientId,
         client_secret: this.clientSecret,
-        refresh_token: this.refreshToken,
+        refresh_token: refreshToken,
         grant_type: 'refresh_token',
       }),
       signal: AbortSignal.timeout(10000),
@@ -185,13 +190,23 @@ export class GoogleCalendarConnector extends BaseConnector {
     if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`);
 
     const data = await res.json() as { access_token: string; expires_in: number; refresh_token?: string };
+    const currentCredential = vault?.getConnectorCredential(this.id);
+    if (
+      this.credentialGeneration !== credentialGeneration
+      || !currentCredential
+      || currentCredential.value !== accessToken
+      || (currentCredential.refreshToken ?? null) !== refreshToken
+    ) {
+      throw new Error('Connector credentials changed during token refresh');
+    }
+
     this.accessToken = data.access_token;
     this.expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
     if (data.refresh_token) this.refreshToken = data.refresh_token;
 
     // Persist updated tokens back to vault
-    if (this.vault) {
-      this.vault.setConnectorCredential(this.id, {
+    if (vault) {
+      vault.setConnectorCredential(this.id, {
         type: 'oauth2',
         value: this.accessToken,
         refreshToken: this.refreshToken ?? undefined,

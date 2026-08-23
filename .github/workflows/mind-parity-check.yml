@@ -5,15 +5,17 @@ name: mind-parity-check
 # This workflow ran the (then-external) hive-mind repo's mind/+harvest/ tests
 # against waggle-os's substrate to verify behavioral parity while the same code
 # lived in both repos. After CC Sesija B migration, the substrate lives ONLY in
-# waggle-os/packages/hive-mind-core/, and the OSS mirror at
-# github.com/marolinik/hive-mind is generated FROM waggle-os via subtree-split
-# (not maintained as a parallel codebase). Parity checking is therefore
-# definitionally trivial — the OSS export is byte-identical to its source.
+# waggle-os/packages/hive-mind-core/. The OSS mirror at
+# github.com/marolinik/hive-mind is a separately curated layout produced from
+# that canonical source. It is intentionally not byte-identical: imports and
+# layout differ, and excluded files plus interleaved `install_audit` logic are
+# removed during the maintainer-reviewed forward-port.
 #
 # This workflow is preserved as the deprecation anchor. It will NOT fire on
 # push because trigger paths (packages/core/src/mind/**) no longer exist as
 # tracked content. See sync-mind.yml's deprecation note for the full migration
-# context.
+# context. Do not reactivate this injection workflow as a substitute for the
+# current drift review, curated export, and public-mirror test gates.
 
 # Memory Sync Repair Step 3.1. Verifies that hive-mind's mind/ + harvest/
 # tests pass against waggle-os's substrate. The check runs the waggle-os
@@ -48,6 +50,9 @@ concurrency:
 
 jobs:
   parity-check:
+    # Permanently inert deprecation anchor. The old test-injection model is not a
+    # safe substitute for the curated forward-port and drift-review workflow.
+    if: ${{ false }}
     name: hive-mind ↔ waggle-os mind substrate parity
     runs-on: ubuntu-latest
     timeout-minutes: 15

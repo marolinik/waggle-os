@@ -124,10 +124,12 @@ export const createResourceSchema = z.object({
   config: z.record(z.unknown()),
 });
 
+export const scheduledJobTypeSchema = z.enum(['chat', 'task', 'waggle', 'group']);
+
 export const createCronSchema = z.object({
   name: z.string().min(1).max(200),
   cronExpr: z.string().min(1),
-  jobType: z.string().min(1),
+  jobType: scheduledJobTypeSchema,
   jobConfig: z.record(z.unknown()).default({}),
 });
 

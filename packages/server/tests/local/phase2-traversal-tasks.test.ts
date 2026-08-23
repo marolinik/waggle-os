@@ -34,7 +34,12 @@ describe('tasks routes — path traversal guard (R6-002)', () => {
 
   afterEach(async () => {
     await server.close();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(dataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   it('GET rejects a traversal :id with 400', async () => {

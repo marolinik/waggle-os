@@ -6,7 +6,7 @@
  * audit history drawer.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const mocks = vi.hoisted(() => ({
@@ -22,8 +22,10 @@ const mocks = vi.hoisted(() => ({
     getExtendAudit: vi.fn(),
     fetch: vi.fn(),
   },
+  toast: vi.fn(),
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
+vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mocks.toast }) }));
 
 import ConnectorsApp, { buildRevokeRequest, resetConnectorsRouteCache, shouldResetCredentialInputs } from '@/components/os/apps/ConnectorsApp';
 import { ServiceProvider } from '@/providers/ServiceProvider';
@@ -51,6 +53,12 @@ const JIRA_CONNECTOR = {
   id: 'jira', name: 'Jira', description: 'Project tracking', service: 'jira',
   authType: 'bearer', status: 'disconnected', capabilities: ['read', 'write'],
   substrate: 'waggle', tools: [], category: 'productivity',
+};
+
+const SALESFORCE_CONNECTOR = {
+  id: 'salesforce', name: 'Salesforce', description: 'CRM', service: 'salesforce',
+  authType: 'bearer', status: 'disconnected', capabilities: ['read', 'write'],
+  substrate: 'waggle', tools: [], category: 'crm',
 };
 
 const renderApp = () => render(
@@ -211,6 +219,14 @@ describe('ConnectorsApp — Connector Hub (S07)', () => {
     expect(email).toHaveAttribute('spellcheck', 'false');
     expect(email.className).toContain('focus-visible:ring-2');
 
+    const siteUrl = screen.getByRole('textbox', { name: /jira site url/i });
+    expect(siteUrl).toHaveAttribute('type', 'url');
+    expect(siteUrl).toHaveAttribute('name', 'connectorBaseUrl');
+    expect(siteUrl).toHaveAttribute('autocomplete', 'url');
+    expect(siteUrl).toHaveAttribute('spellcheck', 'false');
+    expect(siteUrl).toHaveAttribute('placeholder', 'https://your-team.atlassian.net');
+    expect(siteUrl.className).toContain('focus-visible:ring-2');
+
     const token = screen.getByLabelText(/jira api token/i);
     expect(token).toHaveAttribute('type', 'password');
     expect(token).toHaveAttribute('name', 'connectorToken');
@@ -219,6 +235,215 @@ describe('ConnectorsApp — Connector Hub (S07)', () => {
     expect(token.className).toContain('focus-visible:ring-2');
 
     expect(screen.getByRole('button', { name: /^connect$/i }).className).toContain('focus-visible:ring-2');
+  });
+
+  it('submits ordinary connector credentials through the connect endpoint only', async () => {
+    renderApp();
+    fireEvent.click(await screen.findByText('Slack'));
+
+    const connect = screen.getByRole('button', { name: /^connect$/i });
+    expect(connect).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/slack api token/i), {
+      target: { value: '  xoxb-connector-token  ' },
+    });
+    expect(connect).toBeEnabled();
+    fireEvent.click(connect);
+
+    await waitFor(() => expect(mocks.adapter.connectConnector).toHaveBeenCalledWith('slack', {
+      token: 'xoxb-connector-token',
+    }));
+    expect(mocks.adapter.addVaultSecret).not.toHaveBeenCalled();
+  });
+
+  it('requires Jira email and site URL, then sends a trimmed credential tuple through connectConnector', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([...CONNECTORS, JIRA_CONNECTOR]);
+    renderApp();
+    fireEvent.click(await screen.findByText('Jira'));
+
+    const connect = screen.getByRole('button', { name: /^connect$/i });
+    fireEvent.change(screen.getByLabelText(/jira api token/i), {
+      target: { value: ' jira-token ' },
+    });
+    expect(connect).toBeDisabled();
+    fireEvent.change(screen.getByRole('textbox', { name: /atlassian account email/i }), {
+      target: { value: ' owner@example.com ' },
+    });
+    expect(connect).toBeDisabled();
+    fireEvent.change(screen.getByRole('textbox', { name: /jira site url/i }), {
+      target: { value: ' https://team.atlassian.net ' },
+    });
+    expect(connect).toBeEnabled();
+    fireEvent.click(connect);
+
+    await waitFor(() => expect(mocks.adapter.connectConnector).toHaveBeenCalledWith('jira', {
+      token: 'jira-token',
+      email: 'owner@example.com',
+      baseUrl: 'https://team.atlassian.net',
+    }));
+    expect(mocks.adapter.addVaultSecret).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Jira'));
+    expect(screen.getByLabelText(/jira api token/i)).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: /atlassian account email/i })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: /jira site url/i })).toHaveValue('');
+  });
+
+  it('requires an accessible Salesforce instance URL and submits it with the token', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([...CONNECTORS, SALESFORCE_CONNECTOR]);
+    renderApp();
+    fireEvent.click(await screen.findByText('Salesforce'));
+
+    const instanceUrl = screen.getByRole('textbox', { name: /salesforce instance url/i });
+    expect(instanceUrl).toHaveAttribute('type', 'url');
+    expect(instanceUrl).toHaveAttribute('name', 'connectorInstanceUrl');
+    expect(instanceUrl).toHaveAttribute('autocomplete', 'url');
+    expect(instanceUrl).toHaveAttribute('spellcheck', 'false');
+
+    const connect = screen.getByRole('button', { name: /^connect$/i });
+    fireEvent.change(screen.getByLabelText(/salesforce api token/i), {
+      target: { value: ' salesforce-token ' },
+    });
+    expect(connect).toBeDisabled();
+    fireEvent.change(instanceUrl, {
+      target: { value: ' https://acme.my.salesforce.com ' },
+    });
+    expect(connect).toBeEnabled();
+    fireEvent.click(connect);
+
+    await waitFor(() => expect(mocks.adapter.connectConnector).toHaveBeenCalledWith('salesforce', {
+      token: 'salesforce-token',
+      instanceUrl: 'https://acme.my.salesforce.com',
+    }));
+    expect(mocks.adapter.addVaultSecret).not.toHaveBeenCalled();
+  });
+
+  it('preserves entered credentials and exposes the server error when connect is rejected', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([...CONNECTORS, SALESFORCE_CONNECTOR]);
+    mocks.adapter.connectConnector.mockRejectedValueOnce(new Error('Valid Salesforce instanceUrl required'));
+    renderApp();
+    fireEvent.click(await screen.findByText('Salesforce'));
+
+    const token = screen.getByLabelText(/salesforce api token/i);
+    const instanceUrl = screen.getByRole('textbox', { name: /salesforce instance url/i });
+    fireEvent.change(token, { target: { value: 'salesforce-token' } });
+    fireEvent.change(instanceUrl, { target: { value: 'https://acme.my.salesforce.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /^connect$/i }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'Connection failed',
+      description: 'Valid Salesforce instanceUrl required',
+      variant: 'destructive',
+    }));
+    expect(token).toHaveValue('salesforce-token');
+    expect(instanceUrl).toHaveValue('https://acme.my.salesforce.com');
+    expect(screen.getByRole('button', { name: /^connect$/i })).toBeEnabled();
+  });
+
+  it('preserves the full Jira tuple and exposes an invalid-site server rejection for retry', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([...CONNECTORS, JIRA_CONNECTOR]);
+    mocks.adapter.connectConnector.mockRejectedValueOnce(new Error('Valid Jira baseUrl required'));
+    renderApp();
+    fireEvent.click(await screen.findByText('Jira'));
+
+    const token = screen.getByLabelText(/jira api token/i);
+    const email = screen.getByRole('textbox', { name: /atlassian account email/i });
+    const siteUrl = screen.getByRole('textbox', { name: /jira site url/i });
+    fireEvent.change(token, { target: { value: 'jira-token' } });
+    fireEvent.change(email, { target: { value: 'owner@example.com' } });
+    fireEvent.change(siteUrl, { target: { value: 'https://jira.example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /^connect$/i }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'Connection failed',
+      description: 'Valid Jira baseUrl required',
+      variant: 'destructive',
+    }));
+    expect(token).toHaveValue('jira-token');
+    expect(email).toHaveValue('owner@example.com');
+    expect(siteUrl).toHaveValue('https://jira.example.com');
+    expect(screen.getByRole('button', { name: /^connect$/i })).toBeEnabled();
+  });
+
+  it('locks connector switching while Jira connect is pending, then restores the retry tuple on rejection', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([
+      ...CONNECTORS,
+      JIRA_CONNECTOR,
+      SALESFORCE_CONNECTOR,
+    ]);
+    let rejectConnection!: (reason: Error) => void;
+    mocks.adapter.connectConnector.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+      rejectConnection = reject;
+    }));
+    renderApp();
+    fireEvent.click(await screen.findByText('Jira'));
+
+    const jiraRow = screen.getByText('Jira').closest('button')!;
+    const salesforceRow = screen.getByText('Salesforce').closest('button')!;
+    const token = screen.getByLabelText(/jira api token/i);
+    const email = screen.getByRole('textbox', { name: /atlassian account email/i });
+    const siteUrl = screen.getByRole('textbox', { name: /jira site url/i });
+    fireEvent.change(token, { target: { value: 'jira-token' } });
+    fireEvent.change(email, { target: { value: 'owner@example.com' } });
+    fireEvent.change(siteUrl, { target: { value: 'https://team.atlassian.net' } });
+    fireEvent.click(screen.getByRole('button', { name: /^connect$/i }));
+
+    await waitFor(() => expect(mocks.adapter.connectConnector).toHaveBeenCalledTimes(1));
+    expect(jiraRow).toBeDisabled();
+    expect(salesforceRow).toBeDisabled();
+    expect(token).toBeDisabled();
+    expect(email).toBeDisabled();
+    expect(siteUrl).toBeDisabled();
+    fireEvent.click(salesforceRow);
+    expect(screen.queryByLabelText(/salesforce api token/i)).not.toBeInTheDocument();
+
+    await act(async () => {
+      rejectConnection(new Error('Valid Jira baseUrl required'));
+    });
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      title: 'Connection failed',
+      description: 'Valid Jira baseUrl required',
+      variant: 'destructive',
+    }));
+    expect(token).toHaveValue('jira-token');
+    expect(email).toHaveValue('owner@example.com');
+    expect(siteUrl).toHaveValue('https://team.atlassian.net');
+    expect(jiraRow).toBeEnabled();
+    expect(salesforceRow).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^connect$/i })).toBeEnabled();
+  });
+
+  it('clears token, email, and instance URL whenever the target connector changes', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([
+      ...CONNECTORS,
+      JIRA_CONNECTOR,
+      SALESFORCE_CONNECTOR,
+    ]);
+    renderApp();
+
+    fireEvent.click(await screen.findByText('Jira'));
+    fireEvent.change(screen.getByLabelText(/jira api token/i), { target: { value: 'jira-token' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /atlassian account email/i }), {
+      target: { value: 'owner@example.com' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: /jira site url/i }), {
+      target: { value: 'https://team.atlassian.net' },
+    });
+
+    fireEvent.click(screen.getByText('Salesforce'));
+    expect(screen.getByLabelText(/salesforce api token/i)).toHaveValue('');
+    const instanceUrl = screen.getByRole('textbox', { name: /salesforce instance url/i });
+    expect(instanceUrl).toHaveValue('');
+    fireEvent.change(screen.getByLabelText(/salesforce api token/i), { target: { value: 'sf-token' } });
+    fireEvent.change(instanceUrl, { target: { value: 'https://acme.my.salesforce.com' } });
+
+    fireEvent.click(screen.getByText('Jira'));
+    expect(screen.getByLabelText(/jira api token/i)).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: /atlassian account email/i })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: /jira site url/i })).toHaveValue('');
+
+    fireEvent.click(screen.getByText('Salesforce'));
+    expect(screen.getByLabelText(/salesforce api token/i)).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: /salesforce instance url/i })).toHaveValue('');
   });
 });
 

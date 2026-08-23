@@ -36,6 +36,7 @@ import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
 import TelegramDigestCard from '@/components/os/settings/TelegramDigestCard';
 import ChannelsSettings from '@/components/os/settings/ChannelsSettings';
 import CoverageCompassCard from '@/components/os/settings/CoverageCompassCard';
+import BrowserCompanionSettings from '@/components/os/settings/BrowserCompanionSettings';
 import { AVAILABLE_SHAPES, useSelectedShape, type PromptShape } from '@/lib/shape-selection';
 import { SectionLabel } from '@/components/os/warm';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
@@ -1110,6 +1111,7 @@ const SettingsApp = () => {
                 <p className="text-[11px] text-muted-foreground font-mono">~/.waggle/</p>
                 <p className="text-[11px] text-muted-foreground mt-1">All workspaces, memory, vault, and config live here.</p>
               </div>
+              <BrowserCompanionSettings />
               <div className="p-3 rounded-xl bg-secondary/30 border border-border/30" data-testid="login-briefing-setting">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-display font-medium text-foreground">Show login briefing on each launch</p>

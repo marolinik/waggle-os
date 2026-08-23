@@ -32,6 +32,8 @@ export interface OfflineManagerConfig {
   getLlmEndpoint: () => string;
   /** Function that returns the API key for the LLM endpoint */
   getLlmApiKey: () => string;
+  /** Provider-aware check that confirms a model can serve completions */
+  checkLlmReadiness?: (signal: AbortSignal) => Promise<boolean>;
   /** Event bus for emitting SSE notifications */
   eventBus: EventEmitter;
 }
@@ -45,6 +47,9 @@ export class OfflineManager {
   private _checkIntervalMs: number;
   private _getLlmEndpoint: () => string;
   private _getLlmApiKey: () => string;
+  private _checkLlmReadiness: ((signal: AbortSignal) => Promise<boolean>) | undefined;
+  private _activeCheck: Promise<boolean> | null = null;
+  private _checkAbortController: AbortController | null = null;
   private _eventBus: EventEmitter;
   private _lastCheck: string = new Date().toISOString();
 
@@ -52,6 +57,7 @@ export class OfflineManager {
     this._checkIntervalMs = config.checkIntervalMs ?? 30_000;
     this._getLlmEndpoint = config.getLlmEndpoint;
     this._getLlmApiKey = config.getLlmApiKey;
+    this._checkLlmReadiness = config.checkLlmReadiness;
     this._eventBus = config.eventBus;
     this._queuePath = path.join(config.dataDir, 'offline-queue.json');
 
@@ -82,18 +88,21 @@ export class OfflineManager {
   start(): void {
     if (this._timer) return;
     // Run an initial check
-    this._checkHealth().catch(() => {});
+    void this._runManagedCheck().catch(() => {});
     this._timer = setInterval(() => {
-      this._checkHealth().catch(() => {});
+      void this._runManagedCheck().catch(() => {});
     }, this._checkIntervalMs);
   }
 
   /** Stop periodic health checks */
-  stop(): void {
+  async stop(): Promise<void> {
     if (this._timer) {
       clearInterval(this._timer);
       this._timer = null;
     }
+    const activeCheck = this._activeCheck;
+    this._checkAbortController?.abort();
+    if (activeCheck) await activeCheck.catch(() => false);
   }
 
   /** Queue a message for later delivery */
@@ -138,47 +147,73 @@ export class OfflineManager {
 
   // ── Internal ────────────────────────────────────────────────────
 
-  private async _checkHealth(): Promise<boolean> {
+  private _runManagedCheck(): Promise<boolean> {
+    if (this._activeCheck) return this._activeCheck;
+
+    const controller = new AbortController();
+    this._checkAbortController = controller;
+    const activeCheck = this._checkHealth(controller.signal).finally(() => {
+      if (this._activeCheck === activeCheck) {
+        this._activeCheck = null;
+        this._checkAbortController = null;
+      }
+    });
+    this._activeCheck = activeCheck;
+    return activeCheck;
+  }
+
+  private async _checkHealth(signal?: AbortSignal): Promise<boolean> {
     const wasOffline = this._offline;
     let reachable = false;
 
     try {
-      const endpoint = this._getLlmEndpoint();
-      const apiKey = this._getLlmApiKey();
+      if (this._checkLlmReadiness) {
+        reachable = await this._checkLlmReadiness(signal ?? new AbortController().signal);
+      } else {
+        const endpoint = this._getLlmEndpoint();
+        const apiKey = this._getLlmApiKey();
 
-      // Lightweight probe — use HEAD on common health/models endpoint
-      // For Anthropic: try HEAD on /v1/models; for LiteLLM: /health
-      const probeUrl = endpoint.includes('anthropic')
-        ? `${endpoint.replace(/\/+$/, '')}/v1/models`
-        : `${endpoint.replace(/\/+$/, '')}/health`;
+        // Legacy endpoint probe for standalone users that do not provide the
+        // production completion-readiness callback.
+        const probeUrl = endpoint.includes('anthropic')
+          ? `${endpoint.replace(/\/+$/, '')}/v1/models`
+          : `${endpoint.replace(/\/+$/, '')}/health`;
 
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 5_000);
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 5_000);
 
-      const headers: Record<string, string> = {};
-      if (apiKey) {
-        // Anthropic uses x-api-key, OpenAI-compat uses Authorization
-        if (endpoint.includes('anthropic')) {
-          headers['x-api-key'] = apiKey;
-          headers['anthropic-version'] = '2023-06-01';
-        } else {
-          headers['Authorization'] = `Bearer ${apiKey}`;
+        const headers: Record<string, string> = {};
+        if (apiKey) {
+          // Anthropic uses x-api-key, OpenAI-compat uses Authorization
+          if (endpoint.includes('anthropic')) {
+            headers['x-api-key'] = apiKey;
+            headers['anthropic-version'] = '2023-06-01';
+          } else {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+          }
         }
+
+        let response: Response;
+        try {
+          response = await fetch(probeUrl, {
+            method: 'GET',
+            headers,
+            signal: signal ? AbortSignal.any([signal, ac.signal]) : ac.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+
+        // Authentication failures and missing routes are not model-ready.
+        reachable = response.status >= 200 && response.status < 300;
       }
-
-      const response = await fetch(probeUrl, {
-        method: 'GET',
-        headers,
-        signal: ac.signal,
-      });
-      clearTimeout(timer);
-
-      // Any 2xx or even 401 means the endpoint is reachable
-      // (401 = wrong key, but server is up)
-      reachable = response.status < 500;
     } catch {
       reachable = false;
     }
+
+    // Shutdown cancellation is not a provider failure and must not emit a
+    // stale offline transition after the server has begun closing.
+    if (signal?.aborted) return false;
 
     this._lastCheck = new Date().toISOString();
 

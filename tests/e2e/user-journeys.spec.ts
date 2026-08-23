@@ -641,6 +641,18 @@ test.describe('User Journey Tests', () => {
         'button:visible, [role="tab"]:visible, [role="tabpanel"]:visible, input:visible, select:visible, textarea:visible',
       );
       expect(overflow, `${route} visible control overflow`).toEqual([]);
+
+      if (route === '/settings/profile') {
+        const profileTabs = page.getByRole('tablist', { name: 'Profile sections' });
+        for (const tabName of ['Writing Style', 'Brand & Templates', 'Interests']) {
+          await profileTabs.getByRole('tab', { name: tabName }).click();
+          const tabOverflow = await visibleHorizontalOverflow(
+            page,
+            'button:visible, [role="tab"]:visible, [role="tabpanel"]:visible, input:visible, select:visible, textarea:visible',
+          );
+          expect(tabOverflow, `/settings/profile ${tabName} visible control overflow`).toEqual([]);
+        }
+      }
     }
   });
 
@@ -775,11 +787,15 @@ test.describe('User Journey Tests', () => {
       contentType: 'application/json',
       body: JSON.stringify({ model: null, configured: false, verified: false }),
     }));
-    await page.route('**/api/settings/probe-provider', route => route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ configured: false, valid: false, verified: false }),
-    }));
+    await page.route('**/api/settings/probe-provider', route => {
+      const { provider } = route.request().postDataJSON() as { provider?: string };
+      const configured = keySaved && provider === 'anthropic';
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ configured, valid: configured, verified: false }),
+      });
+    });
     await page.route('**/api/settings', async route => {
       if (route.request().method() !== 'PUT') {
         await route.continue();

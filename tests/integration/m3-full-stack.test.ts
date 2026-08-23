@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { buildServer } from '../../packages/server/src/index.js';
@@ -7,14 +8,34 @@ import {
 } from '../../packages/server/src/db/schema.js';
 import { sql } from 'drizzle-orm';
 
+const SIGNING_KEY = Buffer.from('waggle-m3-full-stack-test-secret');
+const SIGNING_SECRET = `whsec_${SIGNING_KEY.toString('base64')}`;
+
+function signedHeaders(payload: object) {
+  const id = 'msg_waggle_m3_full_stack';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = createHmac('sha256', SIGNING_KEY)
+    .update(`${id}.${timestamp}.${JSON.stringify(payload)}`)
+    .digest('base64');
+
+  return {
+    'svix-id': id,
+    'svix-timestamp': String(timestamp),
+    'svix-signature': `v1,${signature}`,
+  };
+}
+
 describe('M3 Full Stack Integration', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
   let ownerId: string;
   let memberId: string;
   let teamId: string;
+  let originalSigningSecret: string | undefined;
   const teamSlug = 'integ-team';
 
   beforeAll(async () => {
+    originalSigningSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
+    process.env.CLERK_WEBHOOK_SIGNING_SECRET = SIGNING_SECRET;
     server = await buildServer();
 
     // Clean up leftover test data from previous runs (reverse dependency order)
@@ -45,54 +66,69 @@ describe('M3 Full Stack Integration', () => {
   });
 
   afterAll(async () => {
-    // Clean up all test data
-    await server.db.execute(sql`DELETE FROM agent_audit_log WHERE user_id IN (SELECT id FROM users WHERE clerk_id LIKE 'integ_%')`);
-    await server.db.execute(sql`DELETE FROM team_resources WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM team_relations WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM team_entities WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM messages WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM tasks WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM agent_jobs WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM cron_schedules WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM team_capability_requests WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM team_capability_overrides WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM team_capability_policies WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
-    await server.db.execute(sql`DELETE FROM teams WHERE slug = 'integ-team'`);
-    await server.db.execute(sql`DELETE FROM users WHERE clerk_id LIKE 'integ_%'`);
-    await server.close();
+    try {
+      // Clean up all test data
+      await server.db.execute(sql`DELETE FROM agent_audit_log WHERE user_id IN (SELECT id FROM users WHERE clerk_id LIKE 'integ_%')`);
+      await server.db.execute(sql`DELETE FROM team_resources WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM team_relations WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM team_entities WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM messages WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM tasks WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM agent_jobs WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM cron_schedules WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM team_members WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM team_capability_requests WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM team_capability_overrides WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM team_capability_policies WHERE team_id IN (SELECT id FROM teams WHERE slug = 'integ-team')`);
+      await server.db.execute(sql`DELETE FROM teams WHERE slug = 'integ-team'`);
+      await server.db.execute(sql`DELETE FROM users WHERE clerk_id LIKE 'integ_%'`);
+    } finally {
+      try {
+        await server?.close();
+      } finally {
+        if (originalSigningSecret === undefined) {
+          delete process.env.CLERK_WEBHOOK_SIGNING_SECRET;
+        } else {
+          process.env.CLERK_WEBHOOK_SIGNING_SECRET = originalSigningSecret;
+        }
+      }
+    }
   });
 
   it('Step 1: Creates users via webhook', async () => {
     // Create owner
+    const ownerEvent = {
+      type: 'user.created',
+      data: {
+        id: 'integ_owner',
+        first_name: 'Owner',
+        last_name: 'User',
+        email_addresses: [{ email_address: 'integ_owner@test.com' }],
+      },
+    };
     let res = await server.inject({
       method: 'POST',
       url: '/api/webhooks/clerk',
-      payload: {
-        type: 'user.created',
-        data: {
-          id: 'integ_owner',
-          first_name: 'Owner',
-          last_name: 'User',
-          email_addresses: [{ email_address: 'integ_owner@test.com' }],
-        },
-      },
+      headers: signedHeaders(ownerEvent),
+      payload: ownerEvent,
     });
     expect(res.statusCode).toBe(200);
 
     // Create member
+    const memberEvent = {
+      type: 'user.created',
+      data: {
+        id: 'integ_member',
+        first_name: 'Member',
+        last_name: 'User',
+        email_addresses: [{ email_address: 'integ_member@test.com' }],
+      },
+    };
     res = await server.inject({
       method: 'POST',
       url: '/api/webhooks/clerk',
-      payload: {
-        type: 'user.created',
-        data: {
-          id: 'integ_member',
-          first_name: 'Member',
-          last_name: 'User',
-          email_addresses: [{ email_address: 'integ_member@test.com' }],
-        },
-      },
+      headers: signedHeaders(memberEvent),
+      payload: memberEvent,
     });
     expect(res.statusCode).toBe(200);
 

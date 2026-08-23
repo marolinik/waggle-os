@@ -15,7 +15,19 @@ import {
   getPersonalDb,
   getAdapter,
 } from '../core/setup.js';
-import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive, SuppressionStore, readArchiveUids, withArchiveUid } from '@waggle/core';
+import { resolveImportFilePath } from './ingest.js';
+import {
+  evaluateExternalMemoryIngress,
+  projectExternalMemoryContent,
+  resolveRelativeDate,
+  HARVEST_FRAME_CONTENT_CAP,
+  MAX_TURNS_PER_ITEM,
+  writeRawTurnFrames,
+  RawArchive,
+  SuppressionStore,
+  readArchiveUids,
+  withArchiveUid,
+} from '@waggle/core';
 
 export function registerHarvestTools(server: McpServer): void {
 
@@ -30,15 +42,16 @@ export function registerHarvestTools(server: McpServer): void {
       data: z.string().optional()
         .describe('JSON string of the export data. Provide this OR file_path, not both'),
       file_path: z.string().optional()
-        .describe('Path to the export file on disk. Provide this OR data, not both'),
+        .describe('Relative path beneath WAGGLE_MCP_IMPORT_ROOT. Provide this OR data, not both'),
     },
     async ({ source, data, file_path }) => {
-      // Validate: one of data or file_path must be provided
-      if (!data && !file_path) {
+      // Keep raw JSON and local path inputs separate. Local files are resolved
+      // only beneath the explicit MCP import root.
+      if ((data === undefined) === (file_path === undefined)) {
         return {
           content: [{
             type: 'text' as const,
-            text: 'Error: provide either "data" (JSON string) or "file_path" (path to export file)',
+            text: 'Error: provide either "data" (JSON string) or "file_path" (relative import path), not both',
           }],
           isError: true,
         };
@@ -47,8 +60,9 @@ export function registerHarvestTools(server: McpServer): void {
       // Parse input
       let parsed: unknown;
       try {
-        if (file_path) {
-          const raw = fs.readFileSync(file_path, 'utf-8');
+        if (file_path !== undefined) {
+          const safePath = resolveImportFilePath(file_path);
+          const raw = fs.readFileSync(safePath, 'utf-8');
           parsed = JSON.parse(raw);
         } else {
           parsed = JSON.parse(data!);
@@ -73,6 +87,99 @@ export function registerHarvestTools(server: McpServer): void {
             type: 'text' as const,
             text: `No conversations found in ${source} export data.`,
           }],
+        };
+      }
+
+      const preparedItems = items.map((item) => {
+        const storedContent = item.content.slice(0, HARVEST_FRAME_CONTENT_CAP);
+        const content = item.title
+          ? `[${item.source}] ${item.title}: ${storedContent}`
+          : `[${item.source}] ${storedContent}`;
+        const ingressContent = projectExternalMemoryContent({
+          content: item.content,
+          messages: item.messages,
+          parseMethod: item.metadata?.parseMethod,
+          maxChars: HARVEST_FRAME_CONTENT_CAP,
+        });
+        const ingressFrameContent = item.title
+          ? `[${item.source}] ${item.title}: ${ingressContent}`
+          : `[${item.source}] ${ingressContent}`;
+        const archiveIngressContent = projectExternalMemoryContent({
+          content: item.content,
+          messages: item.messages,
+          parseMethod: item.metadata?.parseMethod,
+        });
+        const entityProjections: Array<{ type: string; name: string; recalled: string }> = [];
+        if (Array.isArray(item.metadata?.entities)) {
+          for (const entity of item.metadata.entities) {
+            if (!entity || typeof entity !== 'object') continue;
+            const { name, type } = entity as Record<string, unknown>;
+            if (typeof name !== 'string') continue;
+            const storedType = typeof type === 'string' && type ? type : 'concept';
+            entityProjections.push({
+              type: storedType,
+              name,
+              recalled: `${storedType}: ${name}`,
+            });
+          }
+        }
+        const rawTurnProjections: Array<{ content: string; timestamp?: string }> = [];
+        if (process.env.WAGGLE_RAWDETAIL !== '0' && Array.isArray(item.messages)) {
+          for (const message of item.messages) {
+            if (message.role !== 'user' && message.role !== 'assistant') continue;
+            const rawTurnContent = (message.text ?? '').trim();
+            if (!rawTurnContent) continue;
+            if (rawTurnProjections.length >= MAX_TURNS_PER_ITEM) break;
+            rawTurnProjections.push({
+              content: rawTurnContent.slice(0, HARVEST_FRAME_CONTENT_CAP),
+              timestamp: message.timestamp,
+            });
+          }
+        }
+        return {
+          item,
+          content,
+          ingressFrameContent,
+          archiveIngressContent,
+          entityProjections,
+          rawTurnProjections,
+        };
+      });
+      const hasUnsafeContent = (file_path !== undefined
+        && evaluateExternalMemoryIngress({ content: file_path }).action !== 'allow')
+        || preparedItems.some(({
+          item,
+          ingressFrameContent,
+          archiveIngressContent,
+          entityProjections,
+          rawTurnProjections,
+        }) => {
+          if (evaluateExternalMemoryIngress({ content: ingressFrameContent }).action !== 'allow'
+            || evaluateExternalMemoryIngress({
+              title: item.title,
+              content: archiveIngressContent,
+            }).action !== 'allow'
+            || [item.source, item.id, item.timestamp].some((value) =>
+              evaluateExternalMemoryIngress({ content: value }).action !== 'allow')) {
+            return true;
+          }
+          if (entityProjections.some(({ type, name, recalled }) =>
+            evaluateExternalMemoryIngress({ content: recalled }).action !== 'allow'
+            || evaluateExternalMemoryIngress({ title: type, content: name }).action !== 'allow')) {
+            return true;
+          }
+          return rawTurnProjections.some(({ content: rawTurnContent, timestamp }) =>
+            evaluateExternalMemoryIngress({ content: rawTurnContent }).action !== 'allow'
+            || (timestamp !== undefined
+              && evaluateExternalMemoryIngress({ content: timestamp }).action !== 'allow'));
+        });
+      if (hasUnsafeContent) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Error: imported content was blocked by the memory safety policy.',
+          }],
+          isError: true,
         };
       }
 
@@ -111,12 +218,8 @@ export function registerHarvestTools(server: McpServer): void {
       const suppression = new SuppressionStore(getPersonalDb());
       let suppressedSkipped = 0;
 
-      for (const item of items) {
+      for (const { item, content } of preparedItems) {
         if (suppression.isSuppressed(item.source, item.id)) { suppressedSkipped++; continue; }
-        // Build a summary from the conversation
-        const content = item.title
-          ? `[${item.source}] ${item.title}: ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`
-          : `[${item.source}] ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`;
 
         // W4.3c (ingest unification): this legacy duplicate previously passed NO
         // timestamp at all — every imported frame got datetime('now'), neither

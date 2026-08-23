@@ -18,7 +18,7 @@ import {
   ClaudeCodeAdapter, GeminiAdapter, UniversalAdapter, harvestSetHash,
   type ImportSourceType, type UniversalImportItem,
   type SourceAdapter, type FilesystemAdapter, resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP,
-  writeRawTurnFrames,
+  evaluateExternalMemoryIngress, projectExternalMemoryContent, writeRawTurnFrames,
 } from '@waggle/core';
 import { loadProfile, saveProfile, type IdentitySuggestion } from './profile.js';
 import { importItemTypeToMemoryKind, harvestConfidence } from './harvest-classify.js';
@@ -56,6 +56,75 @@ function isIsoTimestamp(value: string): boolean {
 // W4.4: unified with the MCP surfaces via the shared constant.
 const HARVEST_PREVIEW_CAP_CHARS = HARVEST_FRAME_CONTENT_CAP;
 
+const HARVEST_SELECTED_CACHE_FORMAT = 'waggle-harvest-selected-v1';
+
+interface SelectedHarvestCache {
+  format: typeof HARVEST_SELECTED_CACHE_FORMAT;
+  items: UniversalImportItem[];
+}
+
+function hasSelectedHarvestCacheFormat(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && (value as Record<string, unknown>).format === HARVEST_SELECTED_CACHE_FORMAT;
+}
+
+function isCachedHarvestItem(value: unknown): value is UniversalImportItem {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  if (
+    typeof item.id !== 'string'
+    || typeof item.source !== 'string'
+    || typeof item.type !== 'string'
+    || typeof item.title !== 'string'
+    || typeof item.content !== 'string'
+    || typeof item.timestamp !== 'string'
+    || typeof item.metadata !== 'object'
+    || item.metadata === null
+    || Array.isArray(item.metadata)
+  ) return false;
+  if (item.messages === undefined) return true;
+  return Array.isArray(item.messages) && item.messages.every((message) => {
+    if (typeof message !== 'object' || message === null || Array.isArray(message)) return false;
+    const candidate = message as Record<string, unknown>;
+    return (candidate.role === 'user' || candidate.role === 'assistant' || candidate.role === 'system')
+      && typeof candidate.text === 'string'
+      && (candidate.timestamp === undefined || typeof candidate.timestamp === 'string');
+  });
+}
+
+function isSelectedHarvestCache(value: unknown): value is SelectedHarvestCache {
+  return hasSelectedHarvestCacheFormat(value)
+    && Array.isArray(value.items)
+    && value.items.every(isCachedHarvestItem);
+}
+
+/** Cache only the selected, security-checked projection needed to resume. */
+function selectedHarvestCache(items: UniversalImportItem[]): SelectedHarvestCache {
+  return {
+    format: HARVEST_SELECTED_CACHE_FORMAT,
+    items: items.map((item) => ({
+      id: item.id,
+      source: item.source,
+      type: item.type,
+      title: item.title,
+      content: item.content,
+      timestamp: item.timestamp,
+      metadata: item.metadata?.parseMethod === 'universal-text'
+        ? { parseMethod: 'universal-text' }
+        : {},
+      ...(item.messages ? {
+        messages: item.messages.map((message) => ({
+          role: message.role,
+          text: message.text,
+          ...(message.timestamp ? { timestamp: message.timestamp } : {}),
+        })),
+      } : {}),
+    })),
+  };
+}
+
 /** M-08: where cached input payloads live so we can resume interrupted runs. */
 function getHarvestCacheDir(dataDir: string): string {
   return path.join(dataDir, 'harvest-cache');
@@ -75,13 +144,25 @@ export function writeHarvestCache(dataDir: string, cacheKey: string, data: unkno
   const dir = getHarvestCacheDir(dataDir);
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${cacheKey}.json`);
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data), 'utf-8');
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+
   try {
-    fs.renameSync(tmp, file);
-  } catch (err) {
-    try { fs.unlinkSync(tmp); } catch { /* already gone */ }
-    throw err;
+    fs.writeFileSync(tmp, JSON.stringify(data), 'utf-8');
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        fs.renameSync(tmp, file);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 4) throw error;
+        // Windows antivirus and indexers can briefly hold an exclusive handle.
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+  } finally {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best-effort cleanup */ }
   }
   return file;
 }
@@ -289,6 +370,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     let data: unknown;
     let source: ImportSourceType;
     let resumingRunId: number | null = null;
+    let cachedItems: UniversalImportItem[] | undefined;
 
     if (typeof body.resumeFromRun === 'number') {
       const prior = runStore.getById(body.resumeFromRun);
@@ -305,6 +387,12 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       if (cached === null) {
         // Missing, unreadable, or corrupted (partial-write from a prior crash).
         return reply.code(410).send({ error: 'Cached input for this run is no longer available' });
+      }
+      if (hasSelectedHarvestCacheFormat(cached)) {
+        if (!isSelectedHarvestCache(cached)) {
+          return reply.code(410).send({ error: 'Cached input for this run is no longer available' });
+        }
+        cachedItems = cached.items;
       }
       data = cached;
       source = prior.source;
@@ -323,7 +411,9 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     // `{ scanLocal: true }` instead of a parsed payload. Route these through
     // the adapter's scan() method against the source's default local dir.
     let items: UniversalImportItem[];
-    if (isScanLocalRequest(data)) {
+    if (cachedItems) {
+      items = cachedItems;
+    } else if (isScanLocalRequest(data)) {
       if (!isFilesystemAdapter(adapter)) {
         return reply.code(400).send({
           error: `Source '${source}' does not support local scan`,
@@ -367,6 +457,41 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     // unchanged since the last sync. Hash the incoming set and compare to the
     // stored last_content_hash. Only for a fresh (non-resume) run — resuming
     // means a prior pass was interrupted mid-save and must continue.
+    // External exports are untrusted and become durable in three forms below:
+    // resumable input cache, raw provenance archive, and recallable summary/raw
+    // frames (which then feed cognify/wiki). Preflight the complete selected batch
+    // before the first of those effects so one hostile item cannot leave a partial
+    // import. When an adapter's content is exactly its serialized messages, scan
+    // every raw message text rather than the trusted synthesized `user:` /
+    // `assistant:` labels (the scanner treats an ASSISTANT marker as hostile).
+    // Any projection mismatch falls back to the full content so adapter metadata
+    // can never make unrepresented attacker text disappear from the scan.
+    for (const item of items) {
+      const ingressContent = projectExternalMemoryContent({
+        content: item.content ?? '',
+        messages: item.messages,
+        parseMethod: item.metadata?.parseMethod,
+      });
+      const decision = evaluateExternalMemoryIngress({
+        title: `[Harvest:${item.source}] ${item.title}`,
+        content: ingressContent,
+      });
+      if (decision.action === 'block') {
+        request.log.warn(
+          {
+            source: item.source,
+            itemId: String(item.id).slice(0, 80),
+            flags: decision.scan.flags,
+            score: decision.scan.score,
+          },
+          '[harvest] rejected unsafe imported content before persistence',
+        );
+        return reply.code(422).send({
+          error: 'Imported content was rejected because it is unsafe.',
+        });
+      }
+    }
+
     const incomingHash = harvestSetHash(items);
     if (resumingRunId === null) {
       const priorStore = new HarvestSourceStore(personalDb);
@@ -393,7 +518,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     } else {
       const cacheKey = randomUUID();
       try {
-        cachePath = writeHarvestCache(dataDir, cacheKey, data);
+        cachePath = writeHarvestCache(dataDir, cacheKey, selectedHarvestCache(items));
       } catch {
         // Cache write failure is non-fatal — the run just won't be resumable.
         cachePath = null;

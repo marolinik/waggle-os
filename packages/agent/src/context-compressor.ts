@@ -15,7 +15,7 @@
  */
 
 import { COMPACTION_PROMPT } from './behavioral-spec.js';
-import { createCoreLogger } from '@waggle/core';
+import { createCoreLogger, evaluateExternalMemoryIngress } from '@waggle/core';
 const log = createCoreLogger('context-compressor');
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -57,6 +57,17 @@ export interface CompressionResult {
 export interface CompressibleMessage {
   role: string;
   content: string;
+}
+
+function previousSummarySystemMessage(previousSummary: string): string {
+  return `You are summarizing a conversation that has been compressed before. Here is the previous summary:\n\n${previousSummary}\n\nNow incorporate the new messages below into an updated summary.`;
+}
+
+function safePreviousSummary(previousSummary?: string | null): string | null {
+  if (previousSummary === undefined || previousSummary === null) return null;
+  return evaluateExternalMemoryIngress({ content: previousSummarySystemMessage(previousSummary) }).action === 'allow'
+    ? previousSummary
+    : null;
 }
 
 // ── Step 1: Token Estimation ─────────────────────────────────────────────
@@ -238,6 +249,7 @@ export async function summarizeMiddle(
   config: Pick<CompressionConfig, 'budgetModel' | 'litellmUrl' | 'litellmApiKey' | 'fetch'>,
   previousSummary?: string | null,
 ): Promise<string> {
+  previousSummary = safePreviousSummary(previousSummary);
   if (middle.length === 0) return previousSummary ?? '';
 
   const fetchFn = config.fetch ?? globalThis.fetch;
@@ -249,7 +261,7 @@ export async function summarizeMiddle(
   if (previousSummary) {
     summarizerMessages.push({
       role: 'system',
-      content: `You are summarizing a conversation that has been compressed before. Here is the previous summary:\n\n${previousSummary}\n\nNow incorporate the new messages below into an updated summary.`,
+      content: previousSummarySystemMessage(previousSummary),
     });
   }
 
@@ -268,14 +280,21 @@ export async function summarizeMiddle(
     temperature: 0.1,
   };
 
-  const response = await fetchFn(`${config.litellmUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.litellmApiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetchFn(`${config.litellmUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.litellmApiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (error) {
+    log.warn(`Summarizer request failed: ${error instanceof Error ? error.message : String(error)}`);
+    return buildFallbackSummary(middle, previousSummary);
+  }
 
   if (!response.ok) {
     try {
@@ -285,11 +304,39 @@ export async function summarizeMiddle(
     return buildFallbackSummary(middle, previousSummary);
   }
 
-  const result = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
+  let result: {
+    choices?: Array<{
+      finish_reason?: string | null;
+      message?: {
+        content?: string | null;
+        tool_calls?: unknown[];
+      };
+    }>;
   };
-  const content = result.choices?.[0]?.message?.content;
-  if (!content) {
+  try {
+    const parsed = await response.json() as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      log.warn('Summarizer response was not a JSON object; using deterministic fallback');
+      return buildFallbackSummary(middle, previousSummary);
+    }
+    result = parsed as typeof result;
+  } catch (error) {
+    log.warn(`Summarizer response was not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return buildFallbackSummary(middle, previousSummary);
+  }
+  const choice = result.choices?.[0];
+  if (choice?.finish_reason !== 'stop') {
+    log.warn(
+      `Summarizer returned an incomplete completion (finish_reason=${choice?.finish_reason ?? 'missing'}); using deterministic fallback`,
+    );
+    return buildFallbackSummary(middle, previousSummary);
+  }
+  if (choice.message?.tool_calls?.length) {
+    log.warn('Summarizer returned tool calls with finish_reason=stop; using deterministic fallback');
+    return buildFallbackSummary(middle, previousSummary);
+  }
+  const content = choice.message?.content;
+  if (typeof content !== 'string' || content.trim().length === 0) {
     return buildFallbackSummary(middle, previousSummary);
   }
 
@@ -337,6 +384,7 @@ export async function compressConversation(
   previousSummary?: string | null,
 ): Promise<CompressionResult> {
   const originalTokens = estimateTokens(messages);
+  const safeSummary = safePreviousSummary(previousSummary);
 
   // Step 1: Detect — do we need compression?
   if (!needsCompression(messages, config)) {
@@ -346,7 +394,7 @@ export async function compressConversation(
       originalTokens,
       compressedTokens: originalTokens,
       summaryGenerated: false,
-      summary: previousSummary ?? null,
+      summary: safeSummary,
     };
   }
 
@@ -368,18 +416,30 @@ export async function compressConversation(
       originalTokens,
       compressedTokens: estimateTokens(result),
       summaryGenerated: false,
-      summary: previousSummary ?? null,
+      summary: safeSummary,
     };
   }
 
   // Step 4: Summarize the middle
-  const summary = await summarizeMiddle(regions.middle, config, previousSummary);
+  const summary = await summarizeMiddle(regions.middle, config, safeSummary);
 
   // Step 5: Inject — replace middle with a single summary message
   const summaryMessage: CompressibleMessage = {
     role: 'system',
     content: `[Conversation compressed — ${regions.middle.length} messages summarized]\n\n${summary}`,
   };
+
+  if (evaluateExternalMemoryIngress({ content: summaryMessage.content }).action !== 'allow') {
+    const messagesWithoutSummary = [...regions.head, ...regions.tail];
+    return {
+      messages: messagesWithoutSummary,
+      compressed: true,
+      originalTokens,
+      compressedTokens: estimateTokens(messagesWithoutSummary),
+      summaryGenerated: false,
+      summary: null,
+    };
+  }
 
   const compressed = [...regions.head, summaryMessage, ...regions.tail];
   const compressedTokens = estimateTokens(compressed);

@@ -8,7 +8,9 @@ describe('Streaming', () => {
     const sseBody = [
       'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
       'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
-      'data: {"choices":[{"delta":{"content":"!"}}],"usage":{"prompt_tokens":10,"completion_tokens":3}}\n\n',
+      'data: {"choices":[{"delta":{"content":"!"}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":3}}\n\n',
       'data: [DONE]\n\n',
     ].join('');
 
@@ -57,14 +59,14 @@ describe('Streaming', () => {
       'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"echo","arguments":""}}]}}]}\n\n',
       'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"text\\""}}]}}]}\n\n',
       'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\\"hi\\"}"}}]}}]}\n\n',
-      'data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":20,"completion_tokens":10}}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":20,"completion_tokens":10}}\n\n',
       'data: [DONE]\n\n',
     ].join('');
 
     // Second response: final text (non-streaming since we test mixed)
     const sseFinal = [
       'data: {"choices":[{"delta":{"content":"Done!"}}]}\n\n',
-      'data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":30,"completion_tokens":5}}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":5}}\n\n',
       'data: [DONE]\n\n',
     ].join('');
 
@@ -130,7 +132,7 @@ describe('Streaming', () => {
 
     // Split an SSE event across two reads
     const chunk1 = 'data: {"choices":[{"delta":{"con';
-    const chunk2 = 'tent":"Hello"}}]}\n\ndata: {"choices":[{"delta":{"content":" world"}}],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\ndata: [DONE]\n\n';
+    const chunk2 = 'tent":"Hello"}}]}\n\ndata: {"choices":[{"delta":{"content":" world"}}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}\n\ndata: [DONE]\n\n';
 
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -175,7 +177,7 @@ describe('Streaming', () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        choices: [{ message: { content: 'Hello!' } }],
+        choices: [{ message: { content: 'Hello!' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 10, completion_tokens: 2 },
       }),
     });
@@ -195,7 +197,8 @@ describe('Streaming', () => {
 
   it('sends stream options in request body when stream=true', async () => {
     const sseBody = [
-      'data: {"choices":[{"delta":{"content":"Hi"}}],"usage":{"prompt_tokens":5,"completion_tokens":1}}\n\n',
+      'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1}}\n\n',
       'data: [DONE]\n\n',
     ].join('');
 

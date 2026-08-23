@@ -46,6 +46,8 @@ export interface WorkflowToolsConfig extends OrchestratorConfig {
   onWorkerStatus?: (event: { workerId: string; status: string; workerState: import('./subagent-orchestrator.js').WorkerState }) => void;
   /** Durable host lifecycle. Generic embedders may omit it. */
   runAdapter?: WorkflowRunAdapter;
+  /** Resolve explicit worker overrides before durable runs or model calls. */
+  resolveModel?: (model: string) => Promise<string>;
 }
 
 export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition[] {
@@ -172,6 +174,23 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
           return 'Provide either a template name or an inline_template.';
         }
 
+        const resolveModel = config.resolveModel;
+        if (resolveModel) {
+          try {
+            template = {
+              ...template,
+              steps: await Promise.all(template.steps.map(async (step) => (
+                step.model !== undefined
+                  ? { ...step, model: await resolveModel(step.model) }
+                  : step
+              ))),
+            };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return `## Workflow Error: ${template.name}\nCould not resolve a worker model: ${message}`;
+          }
+        }
+
         // Fire workflow:start hook
         if (config.hooks) {
           const hookResult = await config.hooks.fire('workflow:start', {
@@ -218,8 +237,8 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
         let aggregated: string;
         try {
           ({ results, aggregated } = await orchestrator.runWorkflow(template));
-          if (runHandle && config.runAdapter?.complete) {
-            await config.runAdapter.complete(runHandle, { results, aggregated });
+          if (runHandle?.signal?.aborted) {
+            throw new Error('Workflow run was cancelled');
           }
 
           // Fire workflow:end hook
@@ -229,6 +248,12 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
               workflowName,
               workflowTask: task,
             });
+          }
+          if (runHandle?.signal?.aborted) {
+            throw new Error('Workflow run was cancelled');
+          }
+          if (runHandle && config.runAdapter?.complete) {
+            await config.runAdapter.complete(runHandle, { results, aggregated });
           }
         } catch (err) {
           const error = err instanceof Error ? err : new Error(String(err));

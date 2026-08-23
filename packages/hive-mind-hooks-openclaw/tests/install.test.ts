@@ -11,7 +11,7 @@ import { HIVE_ENTRY_KEY, HOOKS_KEY } from '../src/json5-merger.js';
 
 interface TestEnv {
   home: string;
-  /** A fake compiled handler.js the installer COPIES into the managed hook dir. */
+  /** A fake compiled CommonJS handler bundle the installer COPIES into the managed hook dir. */
   handlerSource: string;
   configPath: string;
   pointerPath: string;
@@ -30,8 +30,8 @@ async function bootstrap(initial: string | undefined): Promise<TestEnv> {
   // Fake compiled handler — install copies this verbatim into the hook dir.
   const distDir = join(home, 'fake-dist');
   await mkdir(distDir, { recursive: true });
-  const handlerSource = join(distDir, 'handler.js');
-  await writeFile(handlerSource, 'export default async () => {};\n', 'utf-8');
+  const handlerSource = join(distDir, 'handler.bundle.cjs');
+  await writeFile(handlerSource, 'module.exports = async () => {};\n', 'utf-8');
   return {
     home,
     handlerSource,
@@ -146,15 +146,20 @@ describe('install (openclaw)', () => {
 
   // ── managed hook DIR (in-process model — no per-event scripts) ─────────
 
-  it('writes the managed hook DIR with HOOK.md + a byte-identical copy of handler.js', async () => {
+  it('writes a host-discoverable loader plus a byte-identical .cjs bundle', async () => {
     env = await bootstrap(undefined);
     const handlerBytes = await readFile(env.handlerSource, 'utf-8');
     const result = await install({ home: env.home, handlerSourcePath: env.handlerSource });
     expect(result.hookDir).toBe(env.hiveHookDir);
     expect(existsSync(join(env.hiveHookDir, 'HOOK.md'))).toBe(true);
     expect(existsSync(join(env.hiveHookDir, 'handler.js'))).toBe(true);
-    // handler.js is copied verbatim from dist.
-    expect(await readFile(join(env.hiveHookDir, 'handler.js'), 'utf-8')).toBe(handlerBytes);
+    expect(existsSync(join(env.hiveHookDir, 'handler.cjs'))).toBe(true);
+    expect(await readFile(join(env.hiveHookDir, 'handler.cjs'), 'utf-8')).toBe(handlerBytes);
+    expect(await readFile(join(env.hiveHookDir, 'handler.js'), 'utf-8')).toContain("require('./handler.cjs')");
+    expect(JSON.parse(await readFile(join(env.hiveHookDir, 'package.json'), 'utf-8'))).toMatchObject({
+      type: 'commonjs',
+      private: true,
+    });
     // HOOK.md declares the four events incl. the prefixed compaction key.
     const hookMd = await readFile(join(env.hiveHookDir, 'HOOK.md'), 'utf-8');
     expect(hookMd).toContain('agent:bootstrap');
@@ -168,8 +173,9 @@ describe('install (openclaw)', () => {
   // saturate the CPU (forks pool, 4 workers) and the spawns can exceed vitest's
   // 30s default testTimeout (observed 2026-07-15 full-suite flake,
   // standalone-green). 60s per-test timeout, same class as f322cc2c.
-  it('copies a self-contained handler that imports and runs with NODE_PATH empty', async () => {
+  it('loads below a type:module ancestor and runs with NODE_PATH empty', async () => {
     env = await bootstrap(undefined);
+    await writeFile(join(env.home, 'package.json'), '{"type":"module"}\n', 'utf-8');
     const buildScript = fileURLToPath(new URL('../scripts/build-handler.mjs', import.meta.url));
     const handlerEntry = fileURLToPath(new URL('../src/handler.ts', import.meta.url));
     execFileSync(process.execPath, [buildScript, handlerEntry, env.handlerSource], {

@@ -4,6 +4,8 @@
  * native compaction step.
  */
 
+import { isDirectExecution } from '@waggle/hive-mind-shim-core';
+
 import {
   pickStringFromObject,
   runHook,
@@ -38,15 +40,6 @@ export async function runPreCompact(opts: Partial<HookRunOptions> = {}): Promise
   return runHook(preCompactHandler, { name: 'pre-compact', ...opts });
 }
 
-const isMain = (() => {
-  try {
-    if (typeof process.argv[1] !== 'string') return false;
-    const url = new URL(`file://${process.argv[1].replace(/\\/g, '/')}`);
-    return url.href === import.meta.url;
-  } catch {
-    return false;
-  }
-})();
-if (isMain) {
+if (isDirectExecution(import.meta.url)) {
   void runPreCompact();
 }

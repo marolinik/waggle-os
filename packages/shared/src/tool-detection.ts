@@ -17,8 +17,8 @@
  */
 
 /**
- * Canonical AI-tool IDs that hive-mind has shipped hook packages for.
- * See packages/hive-mind-hooks-* for the matching installers.
+ * Canonical built-in AI-tool execution surfaces. CLI and desktop surfaces use
+ * distinct ids whenever they have different launch/task capabilities.
  */
 export const SUPPORTED_TOOLS = [
   'claude-code',
@@ -27,6 +27,7 @@ export const SUPPORTED_TOOLS = [
   'codex',
   'codex-desktop',
   'hermes',
+  'hermes-desktop',
   'openclaw',
 ] as const;
 
@@ -74,6 +75,8 @@ export interface ToolCapabilities {
   liveWaggleDance: boolean;
 }
 
+export type ToolReleaseStatus = 'supported' | 'roadmap';
+
 /**
  * AI-OS #5 — declarative descriptor for one external tool. The single source of
  * truth for the per-tool facts that used to be duplicated across SUPPORTED_TOOLS
@@ -84,8 +87,12 @@ export interface ToolCapabilities {
 export interface ToolManifest {
   id: string;
   displayName: string;
+  /** Omitted means supported; roadmap integrations remain detectable but inert. */
+  releaseStatus?: ToolReleaseStatus;
   launchable: boolean;
   hookCapable: boolean;
+  /** Built-in-only pointer root; third-party adapters always use the user home. */
+  hookRoot?: 'user-home' | 'hermes-home';
   hookPointer: string;
   detect: ToolDetectSpec;
   /**
@@ -98,12 +105,13 @@ export interface ToolManifest {
   capabilities?: ToolCapabilities;
   /** Present only when the adapter has a verified, capturable headless lane. */
   task?: ToolTaskSpec;
-  /** true = first-party (the 7); false/absent = loaded third-party. */
+  /** true = first-party built-in; false/absent = loaded third-party. */
   builtin?: boolean;
 }
 
 /**
- * The canonical 7 built-in tools — the source of truth for their per-tool data.
+ * The canonical 8 built-in execution surfaces — the source of truth for their
+ * per-tool data.
  * SUPPORTED_TOOLS (above) stays the `as const` type anchor; the cohort/name/
  * pointer consts derive from these manifests.
  */
@@ -113,8 +121,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     hookPointer: '.claude/hive-mind-install.json', detect: { kind: 'path', binaryName: 'claude' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
     task: {
-      argvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--no-session-persistence', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
-      resumeArgvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--resume', '{sessionId}', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      argvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      resumeArgvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--resume', '{sessionId}', '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
       accessArgs: {
         'read-only': ['--permission-mode', 'plan'],
         'workspace-write': ['--permission-mode', 'acceptEdits'],
@@ -130,7 +138,7 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
   {
-    id: 'cursor', displayName: 'Cursor', launchable: true, hookCapable: true,
+    id: 'cursor', displayName: 'Cursor', releaseStatus: 'roadmap', launchable: false, hookCapable: false,
     hookPointer: '.cursor/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
@@ -139,8 +147,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'path', binaryName: 'codex' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
     task: {
-      argvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
-      resumeArgvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', 'resume', '{sessionId}', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
+      argvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
+      resumeArgvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--color', 'never', '-C', '{workspacePath}', 'resume', '--json', '{sessionId}', '-'],
       accessArgs: {
         'read-only': ['--ask-for-approval', 'never', '--sandbox', 'read-only'],
         'workspace-write': ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'],
@@ -156,18 +164,23 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
   {
-    id: 'hermes', displayName: 'Hermes Agent', launchable: true, hookCapable: true,
-    hookPointer: '.hermes/hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true,
+    id: 'hermes', displayName: 'Hermes Agent CLI', launchable: true, hookCapable: true,
+    hookRoot: 'hermes-home', hookPointer: 'hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: false, resumable: true, liveWaggleDance: false },
     task: {
       argvTemplate: ['chat', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
-      resumeArgvTemplate: ['chat', '--resume', '{sessionId}', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
+      resumeArgvTemplate: ['chat', '--resume', '{sessionId}', '--no-restore-cwd', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
       accessArgs: { native: [] }, promptTransport: 'arg', outputDialect: 'hermes-text', workspaceBinding: 'cwd',
       permissionModes: ['native'], resumable: true,
     },
   },
   {
-    id: 'openclaw', displayName: 'OpenClaw', launchable: true, hookCapable: true,
+    id: 'hermes-desktop', displayName: 'Hermes Desktop', launchable: true, hookCapable: false,
+    hookPointer: '', detect: { kind: 'candidates' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
+  },
+  {
+    id: 'openclaw', displayName: 'OpenClaw', releaseStatus: 'roadmap', launchable: false, hookCapable: false,
     hookPointer: '.openclaw/hive-mind-install.json', detect: { kind: 'path', binaryName: 'openclaw' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
     task: {
@@ -182,11 +195,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
 /**
  * Tools the launcher dock + hook installer support end-to-end.
  *
- * Phase 1 shipped with 3 entries (Claude Code, Cursor, Claude
- * Desktop — D3). Phase 4 extends to all 7 because (a) each tool
- * already has a published hook-installer package
- * (@waggle/hive-mind-hooks-<id>), and (b) the marginal cost per
- * additional detector is one PATH lookup or candidate-path entry.
+ * Registered integrations can remain detectable for compatibility while
+ * `releaseStatus: 'roadmap'` keeps them out of both launch and hook cohorts.
  */
 export const LAUNCH_COHORT: readonly ToolId[] =
   BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id as ToolId);
@@ -215,9 +225,9 @@ export const TOOL_DISPLAY_NAMES = Object.fromEntries(
  *   - `installed`  : true iff the binary was found at a known path.
  *   - `installedPath` : absolute path to the binary, or null.
  *   - `version` : version string (best-effort; null if exec failed).
- *   - `hooksInstalled` : true iff a hive-mind hook pointer file
- *     was found AND its referenced backup file still exists
- *     (so a partially-rolled-back install reports false).
+ *   - `hooksInstalled` : true iff the hook pointer and its referenced rollback
+ *     state are healthy; tools with active-config verification must also still
+ *     contain their marker-tagged hook entries.
  *   - `hookPointerPath` : the pointer file we read (or attempted),
  *     for diagnostics.
  *   - `diagnostic` : optional human-readable reason for any
@@ -228,11 +238,13 @@ export interface DetectedTool {
   /** Tool id — a built-in ToolId or a loaded third-party adapter id (#5). */
   id: string;
   displayName: string;
+  /** Release qualification inherited from the manifest. Omitted means supported. */
+  releaseStatus?: ToolReleaseStatus;
   /** True when the tool manifest allows launching from the dock. */
   launchable?: boolean;
   /** True when the tool manifest declares hook support. */
   hookCapable?: boolean;
-  /** True for the built-in seven tools; false for loaded adapters. */
+  /** True for built-in execution surfaces; false for loaded adapters. */
   builtin?: boolean;
   /** True when the manifest can accept the launch prompt inline. */
   acceptsInlinePrompt?: boolean;

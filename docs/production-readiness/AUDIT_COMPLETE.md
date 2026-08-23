@@ -1,5 +1,10 @@
 # Waggle V1 Pre-Production Qualification — COMPLETE
 
+> **Historical snapshot — superseded.** The “then ship” and “You can ship”
+> statements below record an older audit and are not a current release verdict.
+> Use [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the
+> active Windows Solo gate.
+
 **Date**: 2026-03-20
 **Branch**: `phase8-wave-8f-ui-ux`
 **Baseline**: 3,895 tests, 277 files, zero failures

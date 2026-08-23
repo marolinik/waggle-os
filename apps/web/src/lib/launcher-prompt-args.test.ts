@@ -57,17 +57,15 @@ describe('promptArgsForTool', () => {
   });
 
   describe('hermes', () => {
-    it('passes prompt as positional argument (best-effort convention)', () => {
-      expect(promptArgsForTool('hermes', 'summarize todays standup')).toEqual([
-        'summarize todays standup',
-      ]);
+    it('does not send an unverified positional prompt during interactive launch', () => {
+      expect(promptArgsForTool('hermes', 'summarize todays standup')).toBeNull();
     });
   });
 
   // ── GUI / folder-based tools ───────────────────────────────────────
 
   describe('GUI-only / folder-based tools return null', () => {
-    it.each(['cursor', 'claude-desktop', 'codex-desktop'])(
+    it.each(['cursor', 'claude-desktop', 'codex-desktop', 'hermes-desktop'])(
       '%s — no CLI prompt surface',
       (toolId) => {
         expect(promptArgsForTool(toolId, 'anything')).toBeNull();
@@ -87,7 +85,8 @@ describe('toolAcceptsInlinePrompt', () => {
     ['claude-code', true],
     ['openclaw', true],
     ['codex', true],
-    ['hermes', true],
+    ['hermes', false],
+    ['hermes-desktop', false],
     ['cursor', false],
     ['claude-desktop', false],
     ['codex-desktop', false],

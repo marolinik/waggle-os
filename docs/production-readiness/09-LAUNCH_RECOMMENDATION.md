@@ -1,143 +1,91 @@
-# Launch Recommendation — Waggle V1
+# Launch Recommendation — Windows Solo
 
-Generated: 2026-03-20
+Updated: 2026-08-22
 
----
+## Current verdict: INTERNAL RC QUALIFIED; NOT YET PUBLIC RELEASE-APPROVED
 
-## Recommendation: CONDITIONAL GO
+The launch scope is intentionally narrow: **Windows Solo**, with **Claude Code,
+Codex, and Hermes** as the supported external-agent cohort. Cursor, OpenClaw,
+and macOS packaging/certification remain roadmap work and do not block this
+scope. This document is the ship authority; older readiness reports are
+historical evidence only.
 
-Ship after fixing the 8 CRITICAL issues (~6.5 hours of work). The HIGH issues are important but can be addressed in a rapid V1.0.1 patch within the first week.
+## Frozen internal candidate
 
----
+The exact internal runtime/binary evidence revision is:
 
-## Executive Summary
+`b9a871cced6ce43120e34e2cf2f656d21de9d3c7`
 
-Waggle is a substantial, well-architected product with 3,895 passing tests, 53 agent tools, 29 connectors, 15K+ marketplace packages, and a complete feature set covering all 8 Kill List use cases. The agent loop, memory system, and vault encryption are architecturally sound. The UI underwent a recent Phase 10 rewrite that brought Tailwind adoption and Direction D palette cleanup.
+The exact local NSIS candidate is 102,920,864 bytes with SHA-256
+`9DB493F31E30DF0D252B1959B31DAE77E6499992A4E4EBEAFC72565510AF1095`.
+It is Authenticode-signed by the private internal identity
+`CN=Egzakta Internal Pilot, O=Egzakta Group, C=RS` (thumbprint
+`E2F028541E7A4D1FE80FFFF02079060D36579846`) and carries a DigiCert RFC3161
+timestamp. Windows reports the chain as untrusted because the pilot root is not
+publicly trusted. This is intentional internal-RC evidence, not a public artifact.
 
-However, the audit uncovered **8 CRITICAL issues** (5 security, 1 stability, 2 UX) that must be fixed before any external user touches the product. The most severe: CORS is wide open (any website can call your localhost APIs), there are no React error boundaries (one render error = permanent white screen), and the streaming loading indicator is invisible (users can't tell the agent is thinking).
+Post-candidate descendants are bounded documentation plus reviewed non-runtime
+OSS publication tooling/tests. They do not change the packaged runtime or relabel
+the installer as if it were built from a later commit.
 
-The good news: every CRITICAL fix is straightforward. Total estimated effort is 6.5 hours. None require architectural changes.
+Receipt paths below are machine-local evidence locations under ignored `output/` or
+temporary directories. Their SHA-256 digests are recorded deliberately; they are not
+public repository links or downloadable release assets.
 
----
+## Current gate evidence
 
-## What's Ready (Strengths)
+| Gate | Result | Receipt / evidence |
+|---|---|---|
+| Windows installer lifecycle + managed model | **PASS internal RC, exact `b9a871cc`** — 64/64 checks; FREE/Solo; bundled Node sidecar and npm; in-process embeddings; Waggle-managed Ollama 0.32.3 and `qwen2.5:0.5b`; model chat; built-in proxy restart; same-version repair; data preservation; managed cleanup; uninstall; no Docker/Python/developer Node/external LiteLLM/separate Ollama prerequisite | `output/installer-certification/b9a871cc-20260822T101817Z-clean/windows-installer-certificate-managed.json`; SHA-256 `75EF7C75D63BF34AFB293A14691978F17C64F30B71CD1288B11BD1477C74E7FE` |
+| Dependency severity | **PASS Critical/High at exact candidate** — both full and production audit commands exit 0; full tree 0 Critical/0 High/21 Moderate/1 Low; production tree 0 Critical/0 High/17 Moderate/2 Low. The new `node-tar` High advisory was closed with transitive tar 7.5.22 | `npm audit --audit-level=high --json`; `npm audit --omit=dev --audit-level=high --json`; fix commit `bdaf5e09` |
+| Ten-persona acceptance | **PASS for the agreed persona-quality gate, bounded carry-forward** — at `4c712ff6`, 30/30 across ten personas x3 are at least 95/100 after two independent semantic adjudications; 28 deterministic passes, two 90-point results adjudicated to 100, zero critical failures. The artifact explicitly remains a non-gating collection, not a canonical deterministic seal | `output/playwright/persona-acceptance-schema7-20260822T073743Z-4c712ff6/semantic-adjudication.json`; SHA-256 `F2318DBBD187D075AC7BE78957822FDF04A1EBB78A549D67EF6928C452D93129`; receipt-set digest `b714705d574a397f72b19c5f30eda7dcf68e403488c5baf89d525ef526768d43` |
+| Smart router and compact tool context | **PASS as scoped carry-forward evidence** — primary, compact-tool-context, durable-budget and fallback paths; managed local runtime; Docker not invoked; clean teardown. Later router-surface changes were covered by focused tests; the final managed-runtime path is independently exercised by the exact installer receipt above | `output/smart-router/qualification-20260813T022319Z-692c69b9.json`; SHA-256 `973DBDF718156A049486894DD1E2892E2C7F518834AEBA33F91F9CE3C7BD1D9A` |
+| Official user-auth cohort | **PASS as scoped carry-forward evidence** — Claude Code, Codex and Hermes; three serial model calls; zero auth files read/copied; tracked tree unchanged. The post-persona candidate delta does not touch official-auth logic | `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json`; SHA-256 `2D27609067E4703969F0AD6055F5A0414B00E9F3B271CE3B917E0860E4393ABD` |
+| Broad application regression | **Historical baseline, not exact-candidate evidence** — at `af19b387`, 714 test files and 11,586 tests passed with five skipped. Subsequent phases have focused gates; final integration still requires every check on the final pushed private-PR descendant to pass | `output/readiness-broad-af19b387-20260813T115524.log`; SHA-256 `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E` |
+| Hosted-signing implementation | **PASS implementation gate, bounded carry-forward** — 266/266 PowerShell signing-policy tests; 86/86 workflow/Tauri tests; app/server typechecks, targeted lint, YAML and PowerShell 7/5.1 parsing; independent security, compatibility and test reviews with no P0-P2 finding. Later commit `db4e5bec` changed only macOS artifact handling, not the Windows signing control surface | Preserved Windows release-control receipts through `d455aa80`; public hosted signing has not executed |
 
-1. **Solid agent core** — 53 tools, loop guards, injection scanning, approval gates, sub-agent orchestration. 1,272 tests on the agent package alone.
+## Remaining production GO gates
 
-2. **Complete feature set** — All 8 Kill List use cases work. Workspace memory, connectors, marketplace, personas, cron, swarm protocol, capability packs, onboarding with memory import.
+1. **Public Authenticode:** the current artifact uses the private internal-pilot
+   identity. A protected exact-tag Azure OIDC run must build, sign, timestamp,
+   certify and attest the approved release commit with a publicly trusted identity.
+2. **Formal deep security seal:** no sealed managed Deep Scan covers `b9a871cc` or
+   the eventual release tag. Historical scans cover other revisions; permission,
+   policy and artifact-workflow failures are not no-finding results. Static review,
+   dependency audit and focused security review are not substitutes.
+3. **Private repository integration:** PR #58 is the review vehicle. The final pushed
+   descendant must pass all remote CI/Tauri/install-smoke/review checks before merge.
+   Merge must preserve repository privacy and use the reviewed PR; no direct main push.
 
-3. **Good test coverage** — 3,895 tests across 277 files, zero failures. Every major package has dedicated test suites with behavior-focused assertions and realistic mocks.
+## Repository and Hive Mind hygiene
 
-4. **Security fundamentals** — AES-256-GCM vault, parameterized SQL everywhere, path traversal protection, CLI allowlists, DOMPurify HTML sanitization, SecurityGate for marketplace.
+The private Waggle repository is the product source of truth. Its tracked release
+documentation and operating contracts must be consistent before PR #58 merges. Local
+builds, receipts, caches, secrets, databases and nested research checkouts are not source
+and must never be swept into Git with a broad clean/add operation.
 
-5. **Deployment infrastructure** — Tauri Windows installer built (8.2MB), Docker production compose, Render.com blueprint, GitHub Actions CI/release pipeline.
+The Hive Mind substrate remains monorepo-first. The public mirror requires a separate,
+maintainer-curated forward-port with explicit proprietary exclusions before its next OSS
+release or any parity claim. Mirror drift does not block this private Windows Solo RC,
+but raw subtree output must never be pushed as the mirror.
 
-6. **Product polish** — 8 personas, dark/light mode, keyboard shortcuts, global search, workspace hue colors, onboarding wizard, tool card transparency, approval gates inline in chat.
+## Installation contract
 
----
+Windows Solo must run without Docker, Python, developer Node.js, external LiteLLM,
+or a separately installed Ollama. The bundled Node sidecar and no-Python
+OpenAI-compatible proxy are required; in-process embeddings are the default and a
+local Ollama runtime/model is Waggle-managed. A user-installed Ollama remains optional.
 
-## Must Fix Before Launch (CRITICAL — ~6.5 hours)
+## Deferred scope
 
-### Security (4 hours)
+Cursor and OpenClaw remain roadmap integrations. macOS packaging, signing,
+notarization and runtime certification are roadmap work. The Hive Mind OSS
+forward-port is a separate future publication operation.
 
-| # | Issue | Fix | Time |
-|---|-------|-----|------|
-| 1 | **CORS allows any origin** — any website can call all Waggle APIs | Change `origin: true` to `origin: ['http://localhost:1420', 'tauri://localhost']` (or your Tauri webview origins). Fix SSE hijack endpoints to use the same allowlist. | 1.5 hr |
-| 2 | **Server CSP has `unsafe-eval` + `unsafe-inline`** | Remove both. If scripts break, use nonces or hashes instead. | 30 min |
-| 3 | **OAuth refresh tokens stored plaintext** | Encrypt refresh tokens the same way access tokens are encrypted in `setConnectorCredential()`. | 1 hr |
-| 4 | **Verify API key revoked** | Go to Anthropic dashboard, confirm the key from commit `c29d75f` is revoked. Delete local branch `phase6-capability-truth`. | 30 min |
+## Approval rule
 
-### Stability (2 hours)
-
-| # | Issue | Fix | Time |
-|---|-------|-----|------|
-| 5 | **Zero error boundaries** | Add `<ErrorBoundary>` wrapping each view in App.tsx, plus one at the app root. Use react-error-boundary or a simple class component. Show "Something went wrong" with a retry button. | 2 hr |
-
-### UX (30 minutes)
-
-| # | Issue | Fix | Time |
-|---|-------|-----|------|
-| 6 | **Streaming indicator invisible** | The loading dots use BEM CSS classes with no definitions. Either add the CSS or replace with Tailwind `animate-pulse` dots. | 15 min |
-| 7 | **SplashScreen wrong palette** | Replace `#1a1a2e`/`#16213e`/`#0f3460` with Direction D tokens. Change `#f5a623` to `#d4a843`. | 15 min |
-
----
-
-## Ship-Week Fixes (HIGH — ~28 hours, V1.0.1)
-
-**Security hardening (first 2 days):**
-- Approval gates: change auto-approve to auto-deny on 5min timeout (15 min)
-- WebSocket authentication: require session token on `/ws` connect (2 hr)
-- Team WebSocket: validate JWT instead of trusting userId param (2 hr)
-- Replace `xlsx` with `exceljs` to fix prototype pollution (2 hr)
-- Generate Tauri updater keypair and set pubkey (30 min)
-
-**Agent loop safety (day 3):**
-- Cap rate-limit retries (max 3, then fail gracefully) (1 hr)
-- Add token budget enforcement with configurable limit (2 hr)
-- Parameterize sqlite-vec SQL interpolation (30 min)
-
-**Frontend stability (days 3-5):**
-- Add code splitting with `React.lazy()` for 7 views (2 hr)
-- Deduplicate SSE connections (1 hr)
-- Fix eventBus.removeAllListeners to scope per-client (1 hr)
-- Fix light theme breakage across components (2 hr)
-
-**Build fixes (day 5):**
-- Fix npx waggle: compile .ts entry, resolve workspace deps (2 hr)
-- Add non-root user to Docker (30 min)
-- Fix CI branch target master→main (15 min)
-- Clean up 87 TypeScript errors (2 hr)
-
----
-
-## Known Limitations (Ship Anyway)
-
-These are acceptable for V1 and can be improved iteratively:
-
-1. **No browser E2E tests** — Unit/integration coverage is strong (3,895 tests). True browser automation (Playwright user journeys) is a V1.1 investment. Screenshot baselines exist.
-
-2. **Monolithic App.tsx (1300 lines)** — Works but hard to maintain. Refactoring into feature-specific providers is a V1.1 task that won't affect users.
-
-3. **No React.memo optimization** — The app performs fine at current scale. Memoization is premature optimization until profiling shows problems.
-
-4. **macOS build not configured** — DMG, code signing, notarization require an Apple Developer account. Windows installer works. Ship Windows-first, add macOS in V1.1.
-
-5. **Direction D at ~78%** — The Phase 10 UI rewrite made massive progress (371→19 inline styles). Remaining 22% is polish, not broken functionality.
-
-6. **KVARK client not wired** — KVARK integration (Phase 7) is library code + tests. Not wired into the running server because KVARK itself needs its HTTP API deployed first. This is expected — it's the Enterprise tier path.
-
-7. **Conversation history unbounded** — At typical usage (10-50 turns/session), this isn't a problem. Add context window management for power users in V1.1.
-
----
-
-## Post-Launch Priority Queue
-
-### First Week (V1.0.1)
-1. All HIGH security fixes (approval timeout, WebSocket auth, xlsx, updater pubkey)
-2. Agent loop safety (retry cap, token budget)
-3. Frontend stability (code splitting, SSE dedup, error boundaries for remaining components)
-4. Light theme fixes
-
-### First Month (V1.1)
-1. Browser E2E test suite (Playwright user journeys)
-2. React component rendering tests
-3. App.tsx decomposition (extract providers/hooks)
-4. macOS build + code signing
-5. npx waggle publishable package
-6. CI pipeline expansion (Docker, lint, security scan)
-7. Direction D compliance to 95%+
-
-### First Quarter (V1.2)
-1. KVARK server-side wiring (when KVARK HTTP API ready)
-2. Performance profiling + React.memo optimization
-3. Context window management for long conversations
-4. Token budget UI (user-configurable spend limits)
-5. Full accessibility audit (WCAG 2.1 AA)
-
----
-
-## Verdict
-
-**CONDITIONAL GO** — Fix the 8 CRITICALs (6.5 hours), then ship. The product is feature-complete, well-tested, and architecturally sound. The critical issues are configuration mistakes, not design flaws. Every fix is surgical and low-risk.
-
-The foundation is strong. Ship it.
+Change the public Windows binary verdict to **GO** only after a publicly trusted
+Authenticode artifact and a formal managed Deep Security seal cover the approved
+release candidate with no unresolved Critical or High findings, and the final private
+PR checks are green. Until then, do not describe Waggle as production-ready, claim an
+overall 9.5/10, or claim superiority over competing products.

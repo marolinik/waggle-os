@@ -79,7 +79,7 @@ const SETUP_HINTS: Record<string, ConnectorSetupHint> = {
 };
 
 /**
- * The token/email inputs are a single shared state reused across every
+ * The credential inputs are a single shared state reused across every
  * connector row. They must be cleared whenever the expanded connector
  * changes (but NOT when re-collapsing the same one) so a credential typed
  * for connector A can never be submitted to connector B. Pure so it can be
@@ -118,6 +118,7 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
+  const [instanceUrlInput, setInstanceUrlInput] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ConnectorDefinition | null>(null);
@@ -126,12 +127,14 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   const { toast } = useToast();
 
   // Expand a connector (or collapse when re-clicking the open one). Resets the
-  // token/email inputs whenever the target connector changes (R4-007).
+  // credential inputs whenever the target connector changes (R4-007).
   const selectConnector = (id: string | null) => {
+    if (connecting) return;
     setExpanded(prev => {
       if (shouldResetCredentialInputs(prev, id)) {
         setTokenInput('');
         setEmailInput('');
+        setInstanceUrlInput('');
       }
       return id;
     });
@@ -162,13 +165,17 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
     if (!tokenInput.trim()) return;
     setConnecting(true);
     try {
-      if (emailInput) {
-        await adapter.addVaultSecret({ key: `connector:${id}:email`, value: emailInput });
-      }
-      await adapter.addVaultSecret({ key: `connector:${id}`, value: tokenInput, type: 'bearer' });
-      await adapter.connectConnector(id);
+      await adapter.connectConnector(id, {
+        token: tokenInput.trim(),
+        ...(id === 'jira' ? {
+          email: emailInput.trim(),
+          baseUrl: instanceUrlInput.trim(),
+        } : {}),
+        ...(id === 'salesforce' ? { instanceUrl: instanceUrlInput.trim() } : {}),
+      });
       setTokenInput('');
       setEmailInput('');
+      setInstanceUrlInput('');
       setExpanded(null);
       await loadConnectors();
     } catch (err) {
@@ -277,8 +284,10 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
       onToggle={() => selectConnector(expanded === conn.id ? null : conn.id)}
       tokenInput={tokenInput}
       emailInput={emailInput}
+      instanceUrlInput={instanceUrlInput}
       onTokenChange={setTokenInput}
       onEmailChange={setEmailInput}
+      onInstanceUrlChange={setInstanceUrlInput}
       connecting={connecting}
       onConnect={() => void handleConnect(conn.id)}
       onDisconnect={() => void handleDisconnect(conn.id)}
@@ -366,7 +375,8 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
                 </p>
                 <button
                   onClick={() => selectConnector('composio')}
-                  className="px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-400 text-[11px] font-display hover:bg-violet-500/30 transition-colors"
+                  disabled={connecting}
+                  className="px-2.5 py-1 rounded-lg bg-violet-500/20 text-violet-400 text-[11px] font-display hover:bg-violet-500/30 disabled:opacity-50 transition-colors"
                 >
                   Set up Composio
                 </button>

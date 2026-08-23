@@ -42,6 +42,7 @@ export { ENTERPRISE_PACKS } from './enterprise-packs.js';
 export type { EnterprisePack } from './enterprise-packs.js';
 export { MCP_SERVERS, seedMcpServers } from './mcp-registry.js';
 export type { McpServerEntry } from './mcp-registry.js';
+export { createMarketplaceMcpProvenance } from './install-security.js';
 export { PACKAGE_CATEGORIES, categorizePackage, recategorizeAll } from './categories.js';
 export type { PackageCategoryId } from './categories.js';
 
@@ -53,9 +54,11 @@ export type {
   InstallManifest,
   PluginManifest,
   McpServerConfig,
+  MarketplaceMcpProvenance,
   SettingField,
   PostInstallHook,
   InstallationType,
+  MarketplaceApprovalIdentity,
   InstallRequest,
   InstallResult,
   PackInstallResult,

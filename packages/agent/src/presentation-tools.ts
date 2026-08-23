@@ -9,8 +9,10 @@ import PptxGenJS from 'pptxgenjs';
 import type { ToolDefinition } from './tools.js';
 
 function resolveSafe(workspace: string, filePath: string): string {
-  const resolved = path.resolve(workspace, filePath);
-  if (!resolved.startsWith(path.resolve(workspace))) {
+  const root = path.resolve(workspace);
+  const resolved = path.resolve(root, filePath);
+  const relative = path.relative(root, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error(`Path resolves outside workspace: ${filePath}`);
   }
   return resolved;
@@ -24,6 +26,12 @@ interface SlideDef {
   layout?: 'title' | 'content' | 'two-column' | 'blank';
   notes?: string;
   table?: { headers: string[]; rows: string[][] };
+}
+
+function hasUnsupportedImageInput(slide: unknown): boolean {
+  if (!slide || typeof slide !== 'object') return false;
+  return Object.prototype.hasOwnProperty.call(slide, 'image')
+    || Object.prototype.hasOwnProperty.call(slide, 'images');
 }
 
 // Hive DS colors for presentations
@@ -72,6 +80,9 @@ export function createPresentationTools(workspace: string): ToolDefinition[] {
 
         if (!filePath?.endsWith('.pptx')) return 'Error: filePath must end with .pptx';
         if (!slides || slides.length === 0) return 'Error: at least one slide is required';
+        if (slides.some(hasUnsupportedImageInput)) {
+          return 'Error: image inputs are not supported by the Waggle presentation tool';
+        }
 
         try {
           const resolved = resolveSafe(workspace, filePath);

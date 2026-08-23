@@ -123,6 +123,13 @@ interface WorkspacesMeta {
   defaultWorkspace?: string | null;
 }
 
+const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
+
+function isContained(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+}
+
 /**
  * WorkspaceManager manages workspace CRUD, groups, and directory structure.
  * Each workspace lives under {baseDir}/workspaces/{id}/ with:
@@ -164,8 +171,19 @@ export class WorkspaceManager {
    */
   // Reverse-ported from OSS hive-mind (oss-drift triage R4, 2026-06-11).
   ensure(id: string, options: Partial<CreateWorkspaceOptions> = {}): WorkspaceConfig {
+    this.assertWorkspaceId(id);
     const existing = this.get(id);
     if (existing) return existing;
+    const workspacePath = path.join(this.workspacesDir, id);
+    const workspaceStat = fs.lstatSync(workspacePath, { throwIfNoEntry: false });
+    if (workspaceStat) {
+      if (id !== 'default' || !this.isEmptyLegacyWorkspaceDirectory(workspacePath, workspaceStat)) {
+        throw new Error(`Workspace path already exists but is not a valid workspace: ${id}`);
+      }
+      const sessionsPath = path.join(workspacePath, 'sessions');
+      if (fs.lstatSync(sessionsPath, { throwIfNoEntry: false })) fs.rmdirSync(sessionsPath);
+      fs.rmdirSync(workspacePath);
+    }
 
     return this.createWithId(id, {
       ...options,
@@ -178,13 +196,19 @@ export class WorkspaceManager {
    * Shared create path: write directory structure + config for an exact id.
    */
   private createWithId(id: string, options: CreateWorkspaceOptions): WorkspaceConfig {
+    this.assertWorkspaceId(id);
     const wsDir = path.join(this.workspacesDir, id);
 
-    fs.mkdirSync(wsDir, { recursive: true });
-    fs.mkdirSync(path.join(wsDir, 'sessions'), { recursive: true });
+    fs.mkdirSync(wsDir);
+    const canonicalRoot = fs.realpathSync.native(this.workspacesDir);
+    const canonicalWorkspace = fs.realpathSync.native(wsDir);
+    if (!isContained(canonicalRoot, canonicalWorkspace)) {
+      throw new Error(`Workspace path escapes workspace root: ${id}`);
+    }
+    fs.mkdirSync(path.join(canonicalWorkspace, 'sessions'));
 
     // Touch workspace.mind — MindDB will init schema when first opened
-    fs.writeFileSync(path.join(wsDir, 'workspace.mind'), '');
+    fs.writeFileSync(path.join(canonicalWorkspace, 'workspace.mind'), '', { flag: 'wx' });
 
     const config: WorkspaceConfig = {
       id,
@@ -214,9 +238,9 @@ export class WorkspaceManager {
     };
 
     fs.writeFileSync(
-      path.join(wsDir, 'workspace.json'),
+      path.join(canonicalWorkspace, 'workspace.json'),
       JSON.stringify(config, null, 2),
-      'utf-8'
+      { encoding: 'utf-8', flag: 'wx' }
     );
 
     return config;
@@ -262,11 +286,22 @@ export class WorkspaceManager {
    * Get a workspace by ID. Returns null if not found.
    */
   get(id: string): WorkspaceConfig | null {
-    const configPath = path.join(this.workspacesDir, id, 'workspace.json');
-    if (!fs.existsSync(configPath)) return null;
+    if (!WORKSPACE_ID.test(id)) return null;
 
-    const raw = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(raw) as WorkspaceConfig;
+    try {
+      const workspaceDir = this.resolveWorkspaceDir(id);
+      if (!workspaceDir) return null;
+      const configPath = path.join(workspaceDir, 'workspace.json');
+      const configStat = fs.lstatSync(configPath, { throwIfNoEntry: false });
+      if (!configStat?.isFile() || configStat.isSymbolicLink() || configStat.nlink !== 1) return null;
+      const canonicalConfig = fs.realpathSync.native(configPath);
+      if (!isContained(workspaceDir, canonicalConfig)) return null;
+
+      const config = JSON.parse(fs.readFileSync(canonicalConfig, 'utf-8')) as WorkspaceConfig;
+      return config.id === id ? config : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -318,7 +353,74 @@ export class WorkspaceManager {
    * Get the path to a workspace's .mind file.
    */
   getMindPath(id: string): string {
-    return path.join(this.workspacesDir, id, 'workspace.mind');
+    this.assertWorkspaceId(id);
+    const lexicalMindPath = path.join(this.workspacesDir, id, 'workspace.mind');
+    const workspaceDir = this.resolveWorkspaceDir(id);
+    if (!workspaceDir) throw new Error(`Workspace not found: ${id}`);
+
+    const configPath = path.join(workspaceDir, 'workspace.json');
+    const configStat = fs.lstatSync(configPath, { throwIfNoEntry: false });
+    if (!configStat?.isFile() || configStat.isSymbolicLink() || configStat.nlink !== 1) {
+      throw new Error(`Workspace config not found: ${id}`);
+    }
+    const canonicalConfig = fs.realpathSync.native(configPath);
+    if (!isContained(workspaceDir, canonicalConfig)) {
+      throw new Error(`Workspace config escapes workspace directory: ${id}`);
+    }
+    const config = JSON.parse(fs.readFileSync(canonicalConfig, 'utf-8')) as WorkspaceConfig;
+    if (config.id !== id) throw new Error(`Workspace config id mismatch: ${id}`);
+
+    const mindPath = path.join(workspaceDir, 'workspace.mind');
+    const mindStat = fs.lstatSync(mindPath, { throwIfNoEntry: false });
+    if (!mindStat) return lexicalMindPath;
+    if (!mindStat?.isFile() || mindStat.isSymbolicLink() || mindStat.nlink !== 1) {
+      throw new Error(`Workspace mind is not a regular file: ${id}`);
+    }
+    const canonicalMind = fs.realpathSync.native(mindPath);
+    if (!isContained(workspaceDir, canonicalMind)) {
+      throw new Error(`Workspace mind escapes workspace directory: ${id}`);
+    }
+    return lexicalMindPath;
+  }
+
+  private assertWorkspaceId(id: string): void {
+    if (!WORKSPACE_ID.test(id)) throw new Error(`Invalid workspace id: ${id}`);
+  }
+
+  private isEmptyLegacyWorkspaceDirectory(workspacePath: string, stat: fs.Stats): boolean {
+    if (stat.isSymbolicLink() || !stat.isDirectory()) return false;
+    const canonicalRoot = fs.realpathSync.native(this.workspacesDir);
+    const canonicalWorkspace = fs.realpathSync.native(workspacePath);
+    if (!isContained(canonicalRoot, canonicalWorkspace)) return false;
+    const entries = fs.readdirSync(workspacePath, { withFileTypes: true });
+    if (entries.length === 0) return true;
+    if (entries.length !== 1 || entries[0]?.name !== 'sessions' || !entries[0].isDirectory()) return false;
+    const sessionsPath = path.join(workspacePath, 'sessions');
+    const sessionsStat = fs.lstatSync(sessionsPath);
+    if (sessionsStat.isSymbolicLink()) return false;
+    const canonicalSessions = fs.realpathSync.native(sessionsPath);
+    return isContained(canonicalWorkspace, canonicalSessions) && fs.readdirSync(sessionsPath).length === 0;
+  }
+
+  private resolveWorkspaceDir(id: string): string | null {
+    this.assertWorkspaceId(id);
+    const lexicalRoot = path.resolve(this.workspacesDir);
+    const lexicalWorkspace = path.resolve(lexicalRoot, id);
+    if (!isContained(lexicalRoot, lexicalWorkspace)) {
+      throw new Error(`Workspace path escapes workspace root: ${id}`);
+    }
+    const workspaceStat = fs.lstatSync(lexicalWorkspace, { throwIfNoEntry: false });
+    if (!workspaceStat) return null;
+    if (workspaceStat.isSymbolicLink() || !workspaceStat.isDirectory()) {
+      throw new Error(`Workspace path is not a regular directory: ${id}`);
+    }
+
+    const canonicalRoot = fs.realpathSync.native(lexicalRoot);
+    const canonicalWorkspace = fs.realpathSync.native(lexicalWorkspace);
+    if (!isContained(canonicalRoot, canonicalWorkspace)) {
+      throw new Error(`Workspace path escapes workspace root: ${id}`);
+    }
+    return canonicalWorkspace;
   }
 
   /**

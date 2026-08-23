@@ -1,5 +1,11 @@
 # PM Sync — Pre-Day-0 Two-Repo Survey
 
+> [!CAUTION]
+> **ARCHIVED / SUPERSEDED — DO NOT EXECUTE.** This May 2026 snapshot predates
+> the curated-forward-port policy. Raw subtree/export publication recommendations
+> are invalid; current authority is `AGENTS.md` §7.5 and
+> `packages/hive-mind-core/CONTRIBUTING.md`.
+
 **Date:** 2026-05-05
 **Scope:** `D:\Projects\waggle-os` (proprietary monorepo, branch `main`) + `D:\Projects\hive-mind` (Apache 2.0 OSS, branch `master`)
 **Author:** CC inventory pass, no mutations to either repo
@@ -408,6 +414,11 @@ A `feat/sync-to-waggle-os-workflow` branch already exists in hive-mind (origin s
 | Light mode finish (P40/P41 + CR-2) | CLAUDE.md §10 | Polish-sprint Phase B |
 
 ### §8e — Dangling concerns (not raised by PM Claude)
+
+> **CORRECTION (2026-08-22):** Item 1's raw subtree-push recommendation is
+> invalid and must not be executed. Reconcile the public mirror only through a
+> reviewed maintainer-curated forward-port that excludes private files and
+> interleaved `install_audit` logic.
 
 The following are observations from code-side that PM-Claude wouldn't have visibility into. Each surfaces a real risk that should be tracked.
 

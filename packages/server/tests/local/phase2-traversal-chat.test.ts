@@ -42,6 +42,7 @@ import { persistMessage } from '../../src/local/routes/chat-persistence.js';
 describe('R6-001 — POST /api/chat session-persistence path traversal guard', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let validWorkspaceId: string;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-traversal-'));
@@ -56,6 +57,10 @@ describe('R6-001 — POST /api/chat session-persistence path traversal guard', (
     mind.close();
 
     server = await buildLocalServer({ dataDir: tmpDir });
+    validWorkspaceId = (
+      server as unknown as { agentState: { activeWorkspaceId: string } }
+    ).agentState.activeWorkspaceId;
+    if (!validWorkspaceId) throw new Error('Expected a boot-created active workspace');
 
     // Force echo mode so a VALID chat request completes instead of streaming
     // against a live LLM: mark the provider unavailable AND point the litellm
@@ -115,7 +120,7 @@ describe('R6-001 — POST /api/chat session-persistence path traversal guard', (
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
-      payload: { message: 'hello world', workspace: 'ws-valid', session: 'sess-valid' },
+      payload: { message: 'hello world', workspace: validWorkspaceId, session: 'sess-valid' },
     });
 
     // Valid segments pass the guard; echo mode completes the stream → 200.
@@ -124,7 +129,7 @@ describe('R6-001 — POST /api/chat session-persistence path traversal guard', (
 
     // And the session file landed UNDER the workspaces root, as expected.
     const sessionFile = path.join(
-      tmpDir, 'workspaces', 'ws-valid', 'sessions', 'sess-valid.jsonl',
+      tmpDir, 'workspaces', validWorkspaceId, 'sessions', 'sess-valid.jsonl',
     );
     expect(fs.existsSync(sessionFile)).toBe(true);
   });

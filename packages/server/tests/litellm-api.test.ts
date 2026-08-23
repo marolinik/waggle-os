@@ -13,8 +13,13 @@ vi.mock('../src/local/lifecycle.js', () => ({
 
 import { buildLocalServer } from '../src/local/index.js';
 import { getLiteLLMStatus, startLiteLLM, stopLiteLLM } from '../src/local/lifecycle.js';
-import { resolveUsableModel } from '../src/local/model-availability.js';
+import {
+  listOllamaChatModelIds,
+  resolveExplicitRoutableModel,
+  resolveUsableModel,
+} from '../src/local/model-availability.js';
 import { PROVIDER_ENV_NAMES } from '../src/local/provider-env.js';
+import { startService } from '../src/local/service.js';
 import { injectWithAuth } from './test-utils.js';
 
 const mockGetStatus = getLiteLLMStatus as ReturnType<typeof vi.fn>;
@@ -65,6 +70,8 @@ describe('LiteLLM Management API', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     server.vault.delete('openai');
+    server.vault.delete('google');
+    server.vault.delete('openrouter');
   });
 
   // --- GET /api/litellm/status ---
@@ -308,6 +315,92 @@ describe('LiteLLM Management API', () => {
     expect(body.models).toEqual(['ollama/llama3.2:latest']);
   });
 
+  it('local inference status separates remote aliases from installed models', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'minimax-m2.7:cloud', remote_host: 'https://ollama.com:443' },
+            { name: 'gemma4:31b' },
+          ],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/version')) {
+        return new Response(JSON.stringify({ version: '0.12.0' }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    const res = await injectWithAuth(server, { method: 'GET', url: '/api/local-inference/status' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.offlineReady).toBe(true);
+    expect(body.setupRequired).toBe(false);
+    expect(body.totalLocalModels).toBe(1);
+    expect(body.primaryServer.models).toEqual(['gemma4:31b']);
+    expect(body.primaryServer.cloudModels).toEqual(['minimax-m2.7:cloud']);
+  });
+
+  it('local inference status reports setup required for cloud-only Ollama', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'minimax-m2.7:cloud' }] }), {
+          status: 200,
+        });
+      }
+      if (url.endsWith('/api/version')) {
+        return new Response(JSON.stringify({ version: '0.12.0' }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    const res = await injectWithAuth(server, { method: 'GET', url: '/api/local-inference/status' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ollamaInstalled).toBe(true);
+    expect(body.offlineReady).toBe(false);
+    expect(body.setupRequired).toBe(true);
+    expect(body.totalLocalModels).toBe(0);
+    expect(body.primaryServer).toBeNull();
+    expect(body.servers[0].cloudModels).toEqual(['minimax-m2.7:cloud']);
+    expect(body.setupMessage).toMatch(/install|pull/i);
+  });
+
+  it('desktop startup stays degraded when Ollama exposes only a cloud alias', async () => {
+    const soloDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cloud-only-startup-'));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [{
+            name: 'minimax-m2.7:cloud',
+            remote_host: 'https://ollama.com:443',
+          }],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    const { server: soloServer } = await startService({
+      dataDir: soloDir,
+      port: 0,
+      litellmPort: 49_999,
+      skipLiteLLM: true,
+    });
+    try {
+      const body = (await soloServer.inject({ method: 'GET', url: '/health' })).json();
+      expect(body.status).toBe('degraded');
+      expect(body.llm).toMatchObject({ provider: 'anthropic-proxy', health: 'degraded' });
+      expect(soloServer.agentState.llmProvider.detail).toContain('no API key');
+      expect(soloServer.agentState.currentModel).not.toBe('ollama/minimax-m2.7:cloud');
+    } finally {
+      await soloServer.close();
+      fs.rmSync(soloDir, { recursive: true, force: true });
+    }
+  });
+
   it('GET /api/agent/model resolves a cloud default to a local chat model when no provider key exists', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -339,7 +432,197 @@ describe('LiteLLM Management API', () => {
     expect(body.model).toBe('ollama/llama3.2:latest');
   });
 
-  it('model resolver keeps the startup-selected Ollama model over a stale cloud default', async () => {
+  it('prefers a deterministic credentialed cloud fallback over an unrelated host Ollama model', async () => {
+    const runtimePath = path.join(dataDir, 'litellm.runtime.json');
+    const priorRuntime = fs.existsSync(runtimePath) ? fs.readFileSync(runtimePath, 'utf-8') : null;
+    const priorCurrentModel = server.agentState.currentModel;
+    server.agentState.currentModel = 'claude-sonnet-4-6';
+    server.vault.set('google', 'google-cloud-fallback-test-key');
+    server.vault.set('openrouter', 'openrouter-cloud-fallback-test-key');
+    fs.writeFileSync(runtimePath, JSON.stringify({
+      model_list: [
+        { model_name: 'google/gemini-2.5-flash' },
+        { model_name: 'openrouter/openai/gpt-5.3-codex' },
+      ],
+    }), 'utf-8');
+
+    const discoveredProviders: string[] = [];
+    let ollamaRequests = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('https://generativelanguage.googleapis.com/')) {
+        discoveredProviders.push('google');
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'models/text-embedding-004' },
+            { name: 'models/gemini-2.5-flash' },
+          ],
+        }), { status: 200 });
+      }
+      if (url.startsWith('https://openrouter.ai/')) {
+        discoveredProviders.push('openrouter');
+        return new Response(JSON.stringify({
+          data: [{ id: 'openai/gpt-5.3-codex' }],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/tags')) {
+        ollamaRequests += 1;
+        return new Response(JSON.stringify({
+          models: [{ name: 'minicpm5-fable:1b' }],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, 'claude-sonnet-4-6'))
+        .resolves.toBe('google/gemini-2.5-flash');
+      expect(discoveredProviders.sort()).toEqual(['google', 'openrouter']);
+      expect(ollamaRequests).toBe(0);
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      if (priorRuntime === null) fs.rmSync(runtimePath, { force: true });
+      else fs.writeFileSync(runtimePath, priorRuntime, 'utf-8');
+    }
+  });
+
+  it('quality-ranks an OpenRouter fallback instead of selecting the first catalog item', async () => {
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = 'claude-sonnet-4-6';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('openrouter', 'openrouter-quality-fallback-test-key');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('https://openrouter.ai/')) {
+        return new Response(JSON.stringify({
+          data: [
+            { id: 'thinkingmachines/inkling' },
+            { id: 'anthropic/claude-sonnet-5' },
+            { id: 'openai/gpt-5.6-sol' },
+          ],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, 'claude-sonnet-4-6'))
+        .resolves.toBe('openrouter/anthropic/claude-sonnet-5');
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
+    }
+  });
+
+  it('routes a preferred Claude alias through the built-in OpenRouter proxy without catalog discovery', async () => {
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = 'claude-sonnet-4-6';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('openrouter', 'openrouter-direct-fallback-test-key');
+    let catalogRequests = 0;
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('https://')) catalogRequests += 1;
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'minicpm5-fable:1b' }] }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, 'claude-sonnet-4-6'))
+        .resolves.toBe('openrouter/anthropic/claude-sonnet-5');
+      expect(catalogRequests).toBe(0);
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
+    }
+  });
+
+  it('keeps an explicit built-in proxy model exact when managed LiteLLM catalog state is stale', async () => {
+    const requestedModel = 'openrouter/openai/gpt-5.3-codex';
+    const fallbackModel = 'google/gemini-2.5-flash';
+    const runtimePath = path.join(dataDir, 'litellm.runtime.json');
+    const priorRuntime = fs.existsSync(runtimePath) ? fs.readFileSync(runtimePath, 'utf-8') : null;
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = fallbackModel;
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('google', 'google-model-lock-test-key');
+    server.vault.set('openrouter', 'openrouter-model-lock-test-key');
+    fs.writeFileSync(runtimePath, JSON.stringify({
+      model_list: [{ model_name: fallbackModel }],
+    }), 'utf-8');
+
+    const probedModels: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/v1/chat/completions')) {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        probedModels.push(body.model);
+        return new Response('{}', { status: 200 });
+      }
+      if (url.startsWith('https://generativelanguage.googleapis.com/')) {
+        return new Response(JSON.stringify({
+          models: [{ name: 'models/gemini-2.5-flash' }],
+        }), { status: 200 });
+      }
+      if (url.startsWith('https://openrouter.ai/')) {
+        return new Response('', { status: 503 });
+      }
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, requestedModel)).resolves.toBe(requestedModel);
+      await expect(resolveExplicitRoutableModel(server, requestedModel)).resolves.toBe(requestedModel);
+
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: requestedModel },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        model: requestedModel,
+        configured: true,
+        verified: true,
+      });
+      expect(probedModels).toEqual([requestedModel]);
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
+      if (priorRuntime === null) fs.rmSync(runtimePath, { force: true });
+      else fs.writeFileSync(runtimePath, priorRuntime, 'utf-8');
+    }
+  });
+
+  it('never exposes or selects a remote Ollama cloud alias as a local model', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith('/api/tags')) {
@@ -356,12 +639,32 @@ describe('LiteLLM Management API', () => {
       }
       return { ok: false, status: 503 } as Response;
     });
-    await injectWithAuth(server, {
+
+    await expect(listOllamaChatModelIds()).resolves.toEqual(['ollama/gemma4:31b']);
+    const selected = await injectWithAuth(server, {
       method: 'PUT',
       url: '/api/agent/model',
       payload: { model: 'ollama/minimax-m2.7:cloud' },
     });
 
-    await expect(resolveUsableModel(server, 'claude-sonnet-4-6')).resolves.toBe('ollama/minimax-m2.7:cloud');
+    expect(selected.statusCode).toBe(409);
+    expect(selected.json()).toMatchObject({ code: 'OLLAMA_MODEL_NOT_LOCAL' });
+    await expect(resolveUsableModel(server, 'ollama/minimax-m2.7:cloud'))
+      .rejects.toMatchObject({ code: 'OLLAMA_MODEL_NOT_LOCAL', statusCode: 409 });
+  });
+
+  it('rejects an exact Ollama tag that is not installed instead of choosing another tag', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return {
+          ok: true,
+          json: async () => ({ models: [{ name: 'gemma4:31b' }] }),
+        } as Response;
+      }
+      return { ok: false, status: 503 } as Response;
+    });
+
+    await expect(resolveUsableModel(server, 'ollama/llama3.2:latest'))
+      .rejects.toMatchObject({ code: 'OLLAMA_MODEL_NOT_LOCAL', statusCode: 409 });
   });
 });

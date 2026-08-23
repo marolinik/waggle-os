@@ -3,8 +3,9 @@
  *
  * The table is declared in TWO places: install-audit.ts (core, generated from
  * the canonical @waggle/shared arrays) and hive-mind-core/src/mind/schema.ts
- * (the OSS substrate, a standalone literal). They MUST produce identical CHECK
- * lists or auditStore.record() crashes on one path. This test pins both to the
+ * (a private-monorepo literal). They MUST produce identical CHECK lists or
+ * auditStore.record() crashes on one path. The interleaved DDL is stripped from
+ * the curated OSS export. This test pins both to the
  * single canonical source, so a drift in either fails CI instead of production.
  */
 import { describe, it, expect } from 'vitest';
@@ -32,7 +33,7 @@ describe('install_audit CHECK parity (A3)', () => {
       expect(INSTALL_AUDIT_TABLE_SQL).toContain(expected);
     });
 
-    it(`OSS substrate schema.ts pins ${col} to the canonical list`, () => {
+    it(`private substrate schema.ts pins ${col} to the canonical list`, () => {
       expect(SCHEMA_SQL).toContain(expected);
     });
   }

@@ -25,6 +25,8 @@ export interface TeamSyncConfig {
   displayName: string;
 }
 
+export type TeamSyncFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
 export interface SyncedFrame {
   /** Server-side entity ID (UUID). */
   remoteId: string;
@@ -88,10 +90,12 @@ export function entityToSyncedFrame(entity: {
  */
 export class TeamSync {
   private config: TeamSyncConfig;
+  private fetchTeamServer: TeamSyncFetch;
   private lastSyncTimestamp: string | null = null;
 
-  constructor(config: TeamSyncConfig) {
+  constructor(config: TeamSyncConfig, fetchTeamServer: TeamSyncFetch) {
     this.config = config;
+    this.fetchTeamServer = fetchTeamServer;
   }
 
   /**
@@ -102,7 +106,7 @@ export class TeamSync {
     const entity = frameToEntity(frame, this.config.userId, this.config.displayName);
 
     try {
-      const response = await fetch(
+      const response = await this.fetchTeamServer(
         `${this.config.teamServerUrl}/api/teams/${this.config.teamSlug}/entities`,
         {
           method: 'POST',
@@ -137,7 +141,7 @@ export class TeamSync {
       const url = `${this.config.teamServerUrl}/api/teams/${this.config.teamSlug}/entities?type=memory_frame`;
       // Note: `since` filtering would require server-side support. For now, pull all and filter client-side.
 
-      const response = await fetch(url, {
+      const response = await this.fetchTeamServer(url, {
         headers: {
           'Authorization': `Bearer ${this.config.authToken}`,
         },

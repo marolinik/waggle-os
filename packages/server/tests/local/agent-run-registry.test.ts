@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { agentRunsRoutes } from '../../src/local/routes/agent-runs.js';
+import { securityMiddleware } from '../../src/local/security-middleware.js';
 
 const tempDirs: string[] = [];
 
@@ -218,6 +219,155 @@ describe('AgentRunRegistry', () => {
 });
 
 describe('agent run routes', () => {
+  it('blocks a viewer from controlling a stored run even when the body spoofs a member workspace', async () => {
+    const { registry } = createRegistry();
+    const room = registry.createRoom({
+      workspaceIds: ['viewer-workspace'],
+      source: 'fleet',
+      title: 'Viewer room',
+      task: 'Keep running',
+    });
+    const worker = registry.createWorker({
+      parentRunId: room.id,
+      workspaceId: 'viewer-workspace',
+      source: 'fleet',
+      executor: { kind: 'waggle_agent' },
+      title: 'Viewer worker',
+      task: room.task,
+      status: 'running',
+      capabilities: { cancel: true },
+    });
+    let controlCalls = 0;
+    registry.registerControls(worker.id, { cancel: () => { controlCalls++; } });
+
+    const server = Fastify({ logger: false });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      get: (id: string) => id === 'viewer-workspace'
+        ? { id, teamId: 'team-1', teamRole: 'viewer' }
+        : id === 'member-workspace'
+          ? { id, teamId: 'team-1', teamRole: 'member' }
+          : undefined,
+    } as never);
+    await server.register(securityMiddleware);
+    await server.register(agentRunsRoutes);
+
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: `/api/agent-runs/${worker.id}/control`,
+        payload: { action: 'cancel', workspaceId: 'member-workspace' },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(controlCalls).toBe(0);
+      expect(registry.get(worker.id)?.status).toBe('running');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('fails closed for mixed and unresolved stored run scopes while preserving member controls and 404s', async () => {
+    const { registry } = createRegistry();
+    const mixedRoom = registry.createRoom({
+      workspaceIds: ['member-workspace', 'viewer-workspace'],
+      source: 'agent_group',
+      title: 'Mixed room',
+      task: 'Coordinate',
+      status: 'running',
+      capabilities: { cancel: true },
+    });
+    const unresolvedRoom = registry.createRoom({
+      workspaceIds: ['removed-workspace'],
+      source: 'fleet',
+      title: 'Unresolved room',
+      task: 'Keep running',
+    });
+    const unresolvedWorker = registry.createWorker({
+      parentRunId: unresolvedRoom.id,
+      workspaceId: 'removed-workspace',
+      source: 'fleet',
+      executor: { kind: 'waggle_agent' },
+      title: 'Unresolved worker',
+      task: unresolvedRoom.task,
+      status: 'running',
+      capabilities: { cancel: true },
+    });
+    const memberRoom = registry.createRoom({
+      workspaceIds: ['member-workspace'],
+      source: 'fleet',
+      title: 'Member room',
+      task: 'Keep running',
+    });
+    const memberWorker = registry.createWorker({
+      parentRunId: memberRoom.id,
+      workspaceId: 'member-workspace',
+      source: 'fleet',
+      executor: { kind: 'waggle_agent' },
+      title: 'Member worker',
+      task: memberRoom.task,
+      status: 'running',
+      capabilities: { cancel: true },
+    });
+    let mixedCalls = 0;
+    let unresolvedCalls = 0;
+    let memberCalls = 0;
+    registry.registerControls(mixedRoom.id, { cancel: () => { mixedCalls++; } });
+    registry.registerControls(unresolvedWorker.id, { cancel: () => { unresolvedCalls++; } });
+    registry.registerControls(memberWorker.id, { cancel: () => { memberCalls++; } });
+
+    const server = Fastify({ logger: false });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      get: (id: string) => id === 'viewer-workspace'
+        ? { id, teamId: 'team-1', teamRole: 'viewer' }
+        : id === 'member-workspace'
+          ? { id, teamId: 'team-1', teamRole: 'member' }
+          : undefined,
+    } as never);
+    await server.register(securityMiddleware);
+    await server.register(agentRunsRoutes);
+
+    try {
+      const mixed = await server.inject({
+        method: 'POST',
+        url: `/api/agent-runs/${mixedRoom.id}/control`,
+        payload: { action: 'cancel', workspaceId: 'member-workspace' },
+      });
+      expect(mixed.statusCode).toBe(403);
+      expect(mixed.json()).toMatchObject({ code: 'VIEWER_READ_ONLY' });
+      expect(mixedCalls).toBe(0);
+
+      const unresolved = await server.inject({
+        method: 'POST',
+        url: `/api/agent-runs/${unresolvedWorker.id}/control`,
+        payload: { action: 'cancel' },
+      });
+      expect(unresolved.statusCode).toBe(403);
+      expect(unresolved.json()).toMatchObject({ code: 'RUN_WORKSPACE_SCOPE_UNRESOLVED' });
+      expect(unresolvedCalls).toBe(0);
+
+      const member = await server.inject({
+        method: 'POST',
+        url: `/api/agent-runs/${memberWorker.id}/control`,
+        payload: { action: 'cancel' },
+      });
+      expect(member.statusCode).toBe(200);
+      expect(memberCalls).toBe(1);
+      expect(registry.get(memberWorker.id)?.status).toBe('cancelled');
+
+      const unknown = await server.inject({
+        method: 'POST',
+        url: '/api/agent-runs/not-found/control',
+        payload: { action: 'cancel' },
+      });
+      expect(unknown.statusCode).toBe(404);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('creates a Room, exposes snapshot/replay, and returns honest control errors', async () => {
     const { registry } = createRegistry();
     const server = Fastify({ logger: false });

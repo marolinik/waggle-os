@@ -218,7 +218,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="twitter:image" content={META_OG_IMAGE} />
         <script
           type="application/ld+json"
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{
             // Static compile-time object (no user input); escape `<` per the
             // standard JSON-LD embedding guidance to rule out </script> breaks.

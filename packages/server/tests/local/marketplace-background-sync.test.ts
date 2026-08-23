@@ -31,6 +31,23 @@ describe('marketplace background sync startup control', () => {
     expect(syncAll).not.toHaveBeenCalled();
   });
 
+  it('keeps the first minute after startup free of marketplace sync work by default', async () => {
+    vi.useFakeTimers();
+    const syncAll = vi.fn().mockResolvedValue([]);
+    const stop = scheduleMarketplaceBackgroundSync({
+      marketplaceDb: {} as never,
+      log: { info: vi.fn() },
+      env: {},
+      createSync: () => ({ syncAll }),
+    });
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(syncAll).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(syncAll).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it('runs after the delay, repeats daily, and stops cleanly', async () => {
     vi.useFakeTimers();
     const log = { info: vi.fn() };

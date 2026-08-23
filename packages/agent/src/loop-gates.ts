@@ -22,7 +22,12 @@
  * reading as the conversation loop it conceptually is.
  */
 
-import { assertsUnverifiedCompletion, VERIFICATION_GATE_DIRECTIVE } from './verification-gate.js';
+import {
+  assertsUnverifiedCompletion,
+  isVerificationToolName,
+  VERIFICATION_GATE_DIRECTIVE,
+  VERIFICATION_NO_TOOL_DISCLOSURE,
+} from './verification-gate.js';
 import { planSkillDistillation } from './skill-distillation.js';
 import { logTurnEvent } from './turn-context.js';
 
@@ -72,8 +77,12 @@ export interface MaybeFireCompletionGateArgs {
   content: string;
   /** Names of tools used so far in this run (D1 reads length+set; D3 reads set for verification-class) */
   toolsUsed: readonly string[];
+  /** Names of tools the model can actually call in this run. */
+  availableToolNames?: readonly string[];
   /** Caller's message history — pushed to in-place when a gate fires */
   messages: GateMessage[];
+  /** Current user-authored request, captured before internal directives are added. */
+  userRequest?: string;
   /** Current gate state (returned with one-shot flags flipped if a gate fires) */
   state: GateState;
   /** Default true — set false to opt out of D3 */
@@ -99,6 +108,8 @@ export interface GateResult {
   fired: boolean;
   /** New state object — copy of input state with one-shot flags + preserved answer updated. */
   state: GateState;
+  /** Deterministic local suffix used when a claim cannot be verified by any available tool. */
+  contentSuffix?: string;
 }
 
 /**
@@ -110,34 +121,53 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   const {
     content,
     toolsUsed,
+    availableToolNames = [],
     messages,
+    userRequest = '',
     state,
     enableVerification = true,
     enableSkillDistillation = true,
     onSkillDistillationFire,
     turnId,
   } = args;
+  let nextState = state;
+  let contentSuffix: string | undefined;
 
   // ── D3 verification-before-completion gate ──
   if (
     enableVerification &&
     !state.verificationCorrectionUsed &&
-    assertsUnverifiedCompletion(content, toolsUsed)
+    assertsUnverifiedCompletion(content, toolsUsed, userRequest)
   ) {
-    messages.push({ role: 'assistant', content });
-    messages.push({ role: 'user', content: VERIFICATION_GATE_DIRECTIVE });
-    logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
-    return {
-      fired: true,
-      state: { ...state, verificationCorrectionUsed: true },
-    };
+    if (!availableToolNames.some(isVerificationToolName)) {
+      logTurnEvent(turnId, {
+        stage: 'agent-loop.verification-gate.disclosed',
+        contentChars: content.length,
+      });
+      contentSuffix = VERIFICATION_NO_TOOL_DISCLOSURE;
+      nextState = { ...state, verificationCorrectionUsed: true };
+    } else {
+      const systemMessage = messages.find(message => message.role === 'system');
+      const internalDirective = `\n\n# Internal verification correction\n${VERIFICATION_GATE_DIRECTIVE}`;
+      if (systemMessage && typeof systemMessage.content === 'string') {
+        systemMessage.content += internalDirective;
+      } else {
+        messages.unshift({ role: 'system', content: internalDirective.trim() });
+      }
+      logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
+      return {
+        fired: true,
+        state: { ...state, verificationCorrectionUsed: true },
+      };
+    }
   }
 
   // ── D1 Hermes-parity closed learning loop (mechanical closure) ──
-  if (enableSkillDistillation && !state.skillDistillationUsed) {
-    const distillPlan = planSkillDistillation(toolsUsed, content);
+  if (enableSkillDistillation && !nextState.skillDistillationUsed) {
+    const acceptedContent = `${content}${contentSuffix ?? ''}`;
+    const distillPlan = planSkillDistillation(toolsUsed, acceptedContent);
     if (distillPlan) {
-      messages.push({ role: 'assistant', content });
+      messages.push({ role: 'assistant', content: acceptedContent });
       messages.push({ role: 'user', content: distillPlan.directive });
       logTurnEvent(turnId, { stage: 'agent-loop.skill-distillation.fired', toolCalls: toolsUsed.length });
 
@@ -157,15 +187,16 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
 
       return {
         fired: true,
+        contentSuffix,
         state: {
-          ...state,
+          ...nextState,
           skillDistillationUsed: true,
-          preservedAnswerForDistillation: content,
+          preservedAnswerForDistillation: acceptedContent,
         },
       };
     }
   }
 
   // No gate fired — caller can accept completion.
-  return { fired: false, state };
+  return { fired: false, state: nextState, contentSuffix };
 }

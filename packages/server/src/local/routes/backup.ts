@@ -15,6 +15,12 @@ import path from 'node:path';
 import * as crypto from 'node:crypto';
 import * as zlib from 'node:zlib';
 import type { FastifyPluginAsync } from 'fastify';
+import {
+  isChatHistoryRestoreBusy,
+  isolateLegacyDefaultChatSessions,
+  notifyChatHistoryRestored,
+  planChatHistoryRestore,
+} from './chat-persistence.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -66,6 +72,106 @@ interface FileMeta {
   relativePath: string;
   fullPath: string;
   sizeBytes: number;
+}
+
+interface RestoreRoot {
+  lexical: string;
+  real: string;
+}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function pathExistsByLstat(candidate: string): boolean {
+  try {
+    fs.lstatSync(candidate);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+    throw error;
+  }
+}
+
+/** Find the nearest existing path without following a dangling final link. */
+function deepestExisting(candidate: string): string {
+  let current = candidate;
+  while (!pathExistsByLstat(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+  return current;
+}
+
+function createRestoreRoot(dataDir: string): RestoreRoot {
+  const lexical = path.resolve(dataDir);
+  return { lexical, real: fs.realpathSync(lexical) };
+}
+
+/**
+ * Resolve an archive path under dataDir using both lexical and filesystem-aware
+ * containment. Both slash styles are separators because archives are portable
+ * and may be restored on Windows even when authored elsewhere.
+ */
+function resolveRestorePath(root: RestoreRoot, relativePath: unknown): string {
+  if (typeof relativePath !== 'string' || relativePath.length === 0 || relativePath.includes('\0')) {
+    throw new Error('Invalid backup path');
+  }
+
+  if (path.posix.isAbsolute(relativePath) || path.win32.isAbsolute(relativePath) || /^[A-Za-z]:/.test(relativePath)) {
+    throw new Error('Invalid backup path');
+  }
+
+  const segments = relativePath.split(/[\\/]+/);
+  if (segments.some(segment => segment === '' || segment === '.' || segment === '..')) {
+    throw new Error('Invalid backup path');
+  }
+
+  const resolved = path.resolve(root.lexical, ...segments);
+  if (!isWithinRoot(root.lexical, resolved)) {
+    throw new Error('Invalid backup path');
+  }
+
+  // realpath the deepest existing ancestor so a not-yet-created child under a
+  // symlink or Windows junction cannot escape through a lexically in-root path.
+  const realExisting = fs.realpathSync(deepestExisting(resolved));
+  if (!isWithinRoot(root.real, realExisting)) {
+    throw new Error('Invalid backup path');
+  }
+
+  return resolved;
+}
+
+function writeRestoreFile(root: RestoreRoot, relativePath: string, content: Buffer): void {
+  const resolved = resolveRestorePath(root, relativePath);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+
+  // Revalidate after directory creation and immediately before opening. New
+  // files use O_EXCL; existing files are opened without truncation, revalidated,
+  // and only then truncated. O_NOFOLLOW closes the final-link race on platforms
+  // that expose it (Windows junction ancestors remain covered by realpath).
+  const confirmed = resolveRestorePath(root, relativePath);
+  if (confirmed !== resolved) throw new Error('Invalid backup path');
+
+  const exists = pathExistsByLstat(confirmed);
+  const noFollow = fs.constants.O_NOFOLLOW ?? 0;
+  const flags = fs.constants.O_WRONLY
+    | noFollow
+    | (exists ? 0 : fs.constants.O_CREAT | fs.constants.O_EXCL);
+  const fd = fs.openSync(confirmed, flags, 0o666);
+  try {
+    if (resolveRestorePath(root, relativePath) !== confirmed) {
+      throw new Error('Invalid backup path');
+    }
+    fs.ftruncateSync(fd, 0);
+    fs.writeFileSync(fd, content);
+  } finally {
+    fs.closeSync(fd);
+  }
+
 }
 
 /**
@@ -342,13 +448,28 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
       return reply.status(400).send({ error: 'Backup file is corrupted: invalid manifest' });
     }
 
+    let restoreFiles: FileEntry[];
+    try {
+      restoreFiles = planChatHistoryRestore(manifest.files);
+    } catch (error) {
+      return reply.status(409).send({
+        error: error instanceof Error ? error.message : 'Invalid chat history layout in backup.',
+      });
+    }
+    const restoreRoot = createRestoreRoot(dataDir);
+
     // Preview mode: return what will be restored without applying
     if (body.preview) {
       const existingFiles: string[] = [];
       const newFiles: string[] = [];
 
-      for (const file of manifest.files) {
-        const targetPath = path.join(dataDir, file.relativePath);
+      for (const file of restoreFiles) {
+        let targetPath: string;
+        try {
+          targetPath = resolveRestorePath(restoreRoot, file.relativePath);
+        } catch {
+          return reply.status(400).send({ error: `Invalid backup path: ${String(file.relativePath)}` });
+        }
         if (fs.existsSync(targetPath)) {
           existingFiles.push(file.relativePath);
         } else {
@@ -367,21 +488,46 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
     }
 
     // Apply restore
+    if (isChatHistoryRestoreBusy(dataDir)) {
+      return reply.status(409).send({
+        error: 'Cannot restore backup while a chat turn is active.',
+        code: 'CHAT_TURN_IN_PROGRESS',
+      });
+    }
+    const currentChatLayout = isolateLegacyDefaultChatSessions(dataDir);
+    if (currentChatLayout.status === 'recovery-required') {
+      return reply.status(409).send({
+        error: currentChatLayout.reason,
+        code: currentChatLayout.code,
+      });
+    }
+    for (const file of restoreFiles) {
+      try {
+        resolveRestorePath(restoreRoot, file.relativePath);
+      } catch {
+        return reply.status(400).send({
+          restored: false,
+          filesRestored: 0,
+          totalFiles: manifest.fileCount,
+          conflicts: [],
+          errors: [`Skipped ${String(file.relativePath)}: path traversal detected`],
+          backupCreatedAt: manifest.createdAt,
+        });
+      }
+    }
+
     let filesRestored = 0;
     const conflicts: string[] = [];
     const errors: string[] = [];
 
-    const root = path.resolve(dataDir);
-
-    for (const file of manifest.files) {
+    for (const file of restoreFiles) {
       // Skip marketplace.db — it re-syncs on startup
       if (file.relativePath === 'marketplace.db') continue;
 
-      // Prevent path traversal. The boundary check must be separator-aware:
-      // a bare startsWith(root) would let a sibling dir sharing the root prefix
-      // (e.g. root '/data', resolved '/data-evil/x') pass and escape.
-      const resolved = path.resolve(dataDir, file.relativePath);
-      if (!(resolved === root || resolved.startsWith(root + path.sep))) {
+      let resolved: string;
+      try {
+        resolved = resolveRestorePath(restoreRoot, file.relativePath);
+      } catch {
         errors.push(`Skipped ${file.relativePath}: path traversal detected`);
         continue;
       }
@@ -392,21 +538,20 @@ export const backupRoutes: FastifyPluginAsync = async (server) => {
       }
 
       try {
-        // Ensure parent directory exists
-        const parentDir = path.dirname(resolved);
-        if (!fs.existsSync(parentDir)) {
-          fs.mkdirSync(parentDir, { recursive: true });
-        }
-
-        // Write file
         const content = Buffer.from(file.content, 'base64');
-        fs.writeFileSync(resolved, content);
+        writeRestoreFile(restoreRoot, file.relativePath, content);
         filesRestored++;
       } catch (err) {
-        errors.push(`Failed to restore ${file.relativePath}: ${err instanceof Error ? err.message : 'unknown error'}`);
+        const message = err instanceof Error ? err.message : 'unknown error';
+        if (message === 'Invalid backup path') {
+          errors.push(`Skipped ${file.relativePath}: path traversal detected`);
+        } else {
+          errors.push(`Failed to restore ${file.relativePath}: ${message}`);
+        }
       }
     }
 
+    notifyChatHistoryRestored(dataDir);
     return {
       restored: true,
       filesRestored,

@@ -98,18 +98,24 @@ export class ScoutAgent {
     });
   }
 
-  async adopt(findingId: string) {
+  async adopt(findingId: string, userId: string) {
     const [updated] = await this.db.update(scoutFindings)
       .set({ status: 'adopted' })
-      .where(eq(scoutFindings.id, findingId))
+      .where(and(
+        eq(scoutFindings.id, findingId),
+        eq(scoutFindings.userId, userId),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async dismiss(findingId: string) {
+  async dismiss(findingId: string, userId: string) {
     const [updated] = await this.db.update(scoutFindings)
       .set({ status: 'dismissed' })
-      .where(eq(scoutFindings.id, findingId))
+      .where(and(
+        eq(scoutFindings.id, findingId),
+        eq(scoutFindings.userId, userId),
+      ))
       .returning();
     return updated ?? null;
   }

@@ -33,13 +33,15 @@
  * this package's tree (or have the deps bundled). Documented in the README.
  */
 
+import { spawn } from 'node:child_process';
 import {
   createCliBridge,
   createLogger,
-  type CliBridgeOptions,
   type MemoryHit,
+  type SpawnFn,
 } from '@waggle/hive-mind-shim-core';
 import {
+  buildHookBridgeOptions,
   makeOpenclawHandler,
   type HookContext,
   type InternalHookEventLike,
@@ -134,18 +136,63 @@ function extractFor(
   }
 }
 
-/** Build a CliBridge, honoring an install-pinned cli path from env. */
-function buildBridge(): ReturnType<typeof createCliBridge> {
+export interface OpenclawHookRuntimeOptions {
+  /** Install-pinned CLI path embedded into the managed handler loader. */
+  readonly cliPath?: string;
+  /** Install-pinned Node executable used for JavaScript CLI entries. */
+  readonly nodePath?: string;
+}
+
+/** Build a CliBridge, preferring the loader-pinned path over ambient env. */
+function buildBridge(opts: OpenclawHookRuntimeOptions = {}): ReturnType<typeof createCliBridge> {
   const logger = createLogger({ name: 'openclaw-hooks/handler' });
-  const cliPath = process.env.WAGGLE_HIVE_MIND_CLI;
-  const opts: CliBridgeOptions = { logger };
-  if (typeof cliPath === 'string' && cliPath.length > 0) opts.cli_path = cliPath;
-  return createCliBridge(opts);
+  const envCliPath = process.env.WAGGLE_HIVE_MIND_CLI;
+  const cliPath = typeof opts.cliPath === 'string' && opts.cliPath.length > 0
+    ? opts.cliPath
+    : envCliPath;
+  const nodePath = typeof opts.nodePath === 'string' && opts.nodePath.length > 0
+    ? opts.nodePath
+    : undefined;
+  const isJavaScriptCli = typeof cliPath === 'string'
+    && /\.(?:c|m)?js$/i.test(cliPath);
+  const pinnedNodeSpawn: SpawnFn | undefined = isJavaScriptCli && nodePath
+    ? (_command, args, spawnOptions) => (
+      spawnOptions === undefined
+        ? spawn(nodePath, args)
+        : spawn(nodePath, args, spawnOptions)
+    )
+    : undefined;
+  // OpenClaw shares its gateway event loop with hooks, so every bridge call â€”
+  // including pre-compact cleanup â€” is intentionally best-effort and bounded.
+  // A stalled CLI must release the gateway instead of delaying compaction.
+  return createCliBridge({
+    ...buildHookBridgeOptions(
+      logger,
+      typeof cliPath === 'string' && cliPath.length > 0 ? cliPath : undefined,
+    ),
+    ...(pinnedNodeSpawn ? { spawnImpl: pinnedNodeSpawn } : {}),
+  });
 }
 
 const handler = makeOpenclawHandler(openclawAdapter, {
   stopDebounceMs: DEFAULT_STOP_DEBOUNCE_MS,
 });
+
+const pendingPromptSnapshots = new Map<string, Promise<MemoryHit[]>>();
+const PENDING_PROMPT_SNAPSHOT_TTL_MS = 5 * 60_000;
+
+function promptSnapshotKey(event: OpenclawRuntimeEvent, fallback: string): string {
+  const key = event.sessionKey;
+  return typeof key === 'string' && key.length > 0 ? key : fallback;
+}
+
+function rememberPromptSnapshot(key: string, snapshot: Promise<MemoryHit[]>): void {
+  pendingPromptSnapshots.set(key, snapshot);
+  const expiry = setTimeout(() => {
+    if (pendingPromptSnapshots.get(key) === snapshot) pendingPromptSnapshots.delete(key);
+  }, PENDING_PROMPT_SNAPSHOT_TTL_MS);
+  expiry.unref?.();
+}
 
 /**
  * The OpenClaw default export. Receives the runtime `InternalHookEvent`, maps
@@ -158,23 +205,68 @@ const handler = makeOpenclawHandler(openclawAdapter, {
  *
  * NEVER throws — always returns a resolved promise (fail-open).
  */
-export default async function openclawHook(event: OpenclawRuntimeEvent): Promise<void> {
+export default async function openclawHook(
+  event: OpenclawRuntimeEvent,
+  runtimeOptions: OpenclawHookRuntimeOptions = {},
+): Promise<void> {
   try {
     const lifecycle = lifecycleFor(event);
     if (lifecycle === undefined) return;
     const ctx = asContext(event);
     const extracted = extractFor(lifecycle, ctx);
 
+    if (lifecycle === 'user-prompt-submit') {
+      const prompt = extracted as UserPromptExtracted;
+      const key = promptSnapshotKey(event, prompt.sessionId);
+      const previous = pendingPromptSnapshots.get(key);
+      const snapshot = (previous ?? Promise.resolve<MemoryHit[]>([]))
+        .catch(() => [])
+        .then(async () => {
+          const bridge = buildBridge(runtimeOptions);
+          let hits: MemoryHit[] = [];
+          try {
+            hits = await bridge.recallMemory('', {
+              limit: DEFAULT_RECALL_LIMIT,
+              scope: 'personal',
+            });
+          } catch {
+            // Fail open: prompt capture still runs if historical recall fails.
+          }
+          const hookCtx: HookContext = {
+            bridge,
+            logger: createLogger({ name: 'openclaw-hooks/handler' }),
+          };
+          await handler.handle({ event, extracted: prompt }, hookCtx);
+          return hits;
+        })
+        .catch(() => []);
+      rememberPromptSnapshot(key, snapshot);
+      await snapshot;
+      return;
+    }
+
     // SessionStart: drive recall ourselves so we can mutate bootstrapFiles
     // with the injected text (the shared body's stdout return is unused
     // in-process).
     if (lifecycle === 'session-start') {
-      await injectBootstrap(ctx, extracted as SessionStartExtracted);
+      const sessionStart = extracted as SessionStartExtracted;
+      const key = promptSnapshotKey(event, sessionStart.sessionId ?? provenanceScope(ctx));
+      const snapshot = pendingPromptSnapshots.get(key);
+      if (snapshot) {
+        const hits = await snapshot;
+        if (pendingPromptSnapshots.get(key) === snapshot) pendingPromptSnapshots.delete(key);
+        await injectBootstrap(ctx, sessionStart, runtimeOptions, hits);
+      } else {
+        await injectBootstrap(ctx, sessionStart, runtimeOptions);
+      }
       return;
     }
 
     const input: OpenclawHandlerInput = { event, extracted };
-    const hookCtx: HookContext = { bridge: buildBridge(), logger: createLogger({ name: 'openclaw-hooks/handler' }) };
+    const hookCtx: HookContext = {
+      bridge: buildBridge(runtimeOptions),
+      logger: createLogger({ name: 'openclaw-hooks/handler' }),
+    };
     await handler.handle(input, hookCtx);
   } catch {
     // FAIL-OPEN: swallow — the gateway flow must never be affected.
@@ -190,11 +282,13 @@ export default async function openclawHook(event: OpenclawRuntimeEvent): Promise
 async function injectBootstrap(
   ctx: OpenclawRuntimeContext,
   extracted: SessionStartExtracted,
+  runtimeOptions: OpenclawHookRuntimeOptions = {},
+  snapshot?: readonly MemoryHit[],
 ): Promise<void> {
   const logger = createLogger({ name: 'openclaw-hooks/handler' });
   try {
-    const bridge = buildBridge();
-    const hits: MemoryHit[] = await bridge.recallMemory('', {
+    const hits: readonly MemoryHit[] = snapshot
+      ?? await buildBridge(runtimeOptions).recallMemory('', {
       limit: extracted.recallLimit,
       scope: 'personal',
     });
@@ -203,7 +297,7 @@ async function injectBootstrap(
     const arr = ctx.bootstrapFiles;
     if (Array.isArray(arr)) {
       // Mutate the host-owned array in place — this IS the injection seam.
-      (arr as unknown[]).push(text);
+      (arr as unknown[]).push(createRecallBootstrapFile(text));
     } else {
       // The host did not provide a mutable array; nothing to inject into.
       logger.debug('agent:bootstrap had no bootstrapFiles array — skipping inject');
@@ -211,6 +305,21 @@ async function injectBootstrap(
   } catch {
     // Fail-open: a recall failure must not block bootstrap.
   }
+}
+
+export interface OpenclawBootstrapFile {
+  path: string;
+  name: string;
+  content: string;
+}
+
+/** Build the virtual context file shape accepted by OpenClaw's sanitizer. */
+export function createRecallBootstrapFile(content: string): OpenclawBootstrapFile {
+  return {
+    path: 'HIVE_MIND_RECALL.md',
+    name: 'HIVE_MIND_RECALL.md',
+    content,
+  };
 }
 
 const PER_HIT_BUDGET = 240;

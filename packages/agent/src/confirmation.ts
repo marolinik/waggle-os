@@ -5,7 +5,7 @@
  * Only commands that modify state need user approval.
  */
 
-import { RISK_LEVELS, type RiskLevel } from '@waggle/shared';
+import { RISK_LEVELS, riskAtLeast, type RiskLevel } from '@waggle/shared';
 import { deriveApprovalClass } from './trust-model.js';
 
 // Tools that ALWAYS need confirmation.
@@ -14,8 +14,10 @@ import { deriveApprovalClass } from './trust-model.js';
 // surface enterprise buyers care about — so they're gated too.
 // Phase B.3 will add persistent "always allow" grants per pair.
 const ALWAYS_CONFIRM = new Set([
-  'write_file', 'edit_file', 'generate_docx',
-  'git_commit', 'git_push', 'git_pr', 'git_merge',
+  'write_file', 'edit_file', 'multi_edit', 'generate_docx', 'generate_xlsx', 'generate_pptx', 'generate_pdf',
+  'cli_execute',
+  'run_code',
+  'git_commit', 'git_push', 'git_pull', 'git_pr', 'git_merge',
   'install_capability',
   // D4(i) skill-write governance: create_skill gates at normal (auto-passes at
   // trusted/yolo via TRUSTED_AUTOPASS); delete_skill gates at every level via
@@ -26,16 +28,15 @@ const ALWAYS_CONFIRM = new Set([
 ]);
 
 // Connector action name patterns that indicate write operations
-const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|remove|add|set|put)_/;
+const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|remove|destroy|purge|drop|add|set|put|upload|append)(?:_|$)/;
 
 // Bash command patterns that are safe (read-only / informational)
 const SAFE_BASH_PATTERNS = [
-  /^(date|whoami|hostname|pwd|echo|printenv|env|uname|id|uptime)\b/,
-  /^(ls|dir|cat|head|tail|wc|find|which|where|type)\b/,
-  /^(git\s+(status|log|diff|branch|remote|show|tag))\b/,
-  /^(node|python|python3|npm|npx|pip)\s+--version/,
-  /^(curl|wget)\s+.*--head/,
-  /^(df|du|free|top|ps|netstat|lsof)\b/,
+  /^(date|whoami|hostname|pwd|uname|id|uptime)$/i,
+  /^(ls|dir)(?:\s+-[al]+)?$/i,
+  /^git\s+(status|log|diff|branch|remote|show|tag)(?:\s+--?[a-z-]+)*$/i,
+  /^(node|python|python3|npm|npx|pip)\s+--version\b/i,
+  /^(df|du|free|top|ps|netstat|lsof)\b/i,
 ];
 
 // Bash command patterns that are destructive (always confirm)
@@ -75,17 +76,41 @@ const CHAIN_OPERATORS = /&&|\|\||;|\|/;
 /** Known high-risk connector actions (never trust LLM-provided metadata for this) */
 const CONNECTOR_HIGH_RISK_ACTIONS = new Set([
   'send_email', 'send_template', // email is always high-risk
+  'execute', 'execute_action',   // database writes and Composio's dynamic action bridge
 ]);
 
-export function needsConfirmation(toolName: string, args?: Record<string, unknown>): boolean {
+function isHighRiskConnectorAction(toolName: string): boolean {
+  for (const actionName of CONNECTOR_HIGH_RISK_ACTIONS) {
+    if (toolName.endsWith(`_${actionName}`)) return true;
+  }
+  return false;
+}
+
+export function needsConfirmation(
+  toolName: string,
+  args?: Record<string, unknown>,
+  trustedRiskLevel?: RiskLevel,
+): boolean {
+  // Terminal operations are always gated, even if a narrower name classifier
+  // below does not yet recognize the specific destructive verb.
+  if (isCriticalNeverAutopass(toolName, args, trustedRiskLevel)) return true;
+
+  // ToolDefinition metadata is server/provider-authored. It may only add a
+  // gate; name- and argument-based policy below remains authoritative.
+  if (trustedRiskLevel && riskAtLeast(trustedRiskLevel, 'medium')) return true;
+
   // Connector tools: determine risk from tool NAME only (never trust args metadata)
   // This prevents LLM injection of _connectorMeta to bypass approval gates
   if (toolName.startsWith('connector_')) {
-    // Extract action name: connector_<id>_<action> → <action>
-    const parts = toolName.split('_');
-    const actionPart = parts.slice(2).join('_'); // everything after connector_<id>_
-    if (CONNECTOR_HIGH_RISK_ACTIONS.has(actionPart)) return true;
+    if (isHighRiskConnectorAction(toolName)) return true;
     return CONNECTOR_WRITE_PATTERNS.test(toolName);
+  }
+
+  // Extended Git tools mix read-only and state-changing actions under one
+  // tool name. Unknown/missing actions fail closed; only the explicit list
+  // variants are informational and may run without approval.
+  if (toolName === 'git_branch' || toolName === 'git_stash') {
+    return String(args?.action ?? '').toLowerCase() !== 'list';
   }
 
   // Non-bash tools: simple set check
@@ -132,9 +157,7 @@ import type { ApprovalClass } from '@waggle/shared';
 export function getApprovalClass(toolName: string, args?: Record<string, unknown>): ApprovalClass {
   // Connector tools: derive approval class from tool NAME, not args
   if (toolName.startsWith('connector_')) {
-    const parts = toolName.split('_');
-    const actionPart = parts.slice(2).join('_');
-    if (CONNECTOR_HIGH_RISK_ACTIONS.has(actionPart)) return 'critical';
+    if (isHighRiskConnectorAction(toolName)) return 'critical';
     if (CONNECTOR_WRITE_PATTERNS.test(toolName)) return 'elevated';
     return 'standard';
   }
@@ -161,24 +184,37 @@ export function getApprovalClass(toolName: string, args?: Record<string, unknown
 export function classifyGatedToolRisk(
   toolName: string,
   args?: Record<string, unknown>,
+  trustedRiskLevel?: RiskLevel,
 ): { riskLevel: RiskLevel; approvalClass: ApprovalClass } {
+  const elevate = (
+    classification: { riskLevel: RiskLevel; approvalClass: ApprovalClass },
+  ): { riskLevel: RiskLevel; approvalClass: ApprovalClass } => {
+    if (!trustedRiskLevel || !riskAtLeast(trustedRiskLevel, classification.riskLevel)) {
+      return classification;
+    }
+    return {
+      riskLevel: trustedRiskLevel,
+      approvalClass: deriveApprovalClass(trustedRiskLevel),
+    };
+  };
+
   // Terminal/destructive ops on the never-autopass blacklist → critical.
   if (isCriticalNeverAutopass(toolName, args)) {
-    return { riskLevel: 'critical', approvalClass: 'critical' };
+    return elevate({ riskLevel: 'critical', approvalClass: 'critical' });
   }
   // Connector tools carry their risk in the name (write vs read vs high-risk).
   if (toolName.startsWith('connector_')) {
     const cls = getApprovalClass(toolName, args);
     const riskLevel: RiskLevel = cls === 'critical' ? 'high' : cls === 'elevated' ? 'medium' : 'low';
-    return { riskLevel, approvalClass: cls };
+    return elevate({ riskLevel, approvalClass: cls });
   }
   // Cross-workspace reads are gated for PRIVACY, not destructiveness → low.
   if (toolName === 'read_other_workspace' || toolName === 'read_other_workspace_file' || toolName === 'list_workspace_files') {
-    return { riskLevel: 'low', approvalClass: 'standard' };
+    return elevate({ riskLevel: 'low', approvalClass: 'standard' });
   }
   // Everything else that gated — fs writes, git mutations, bash, docx — is a
   // state-changing action: medium / elevated.
-  return { riskLevel: 'medium', approvalClass: 'elevated' };
+  return elevate({ riskLevel: 'medium', approvalClass: 'elevated' });
 }
 
 export interface ConfirmationGateConfig {
@@ -242,16 +278,25 @@ const CRITICAL_NEVER_AUTOPASS: RegExp[] = [
  * Returns true if the tool call would be critical/never-autopass EVEN at YOLO.
  * Used by the autonomy gate to keep the safety net intact at the top level.
  */
-export function isCriticalNeverAutopass(toolName: string, args?: Record<string, unknown>): boolean {
+export function isCriticalNeverAutopass(
+  toolName: string,
+  args?: Record<string, unknown>,
+  trustedRiskLevel?: RiskLevel,
+): boolean {
+  // Canonical high/critical risk maps to the critical approval class, whose
+  // contract is never auto-pass. Lower metadata cannot weaken name policy.
+  if (trustedRiskLevel && riskAtLeast(trustedRiskLevel, 'high')) return true;
+
   // D4(i): deleting a skill is destructive — always ask, every autonomy level.
   if (toolName === 'delete_skill') return true;
+  if (toolName === 'run_code') return true;
   // Irreversible connector deletes (delete_record, delete_repository, …) are
   // terminal — never auto-pass and never a one-click L2 held action.
   if (toolName.startsWith('connector_') && /_(delete|remove|destroy|purge|drop)(_|$)/.test(toolName)) return true;
   if (toolName === 'bash') {
     const command = String(args?.command ?? '').trim();
-    for (const pat of CRITICAL_NEVER_AUTOPASS) {
-      if (pat.test(command)) return true;
+    for (const pattern of CRITICAL_NEVER_AUTOPASS) {
+      if (pattern.test(command)) return true;
     }
   }
   if (toolName === 'install_capability') {
@@ -283,22 +328,22 @@ export function needsConfirmationWithAutonomy(
   toolName: string,
   args: Record<string, unknown> | undefined,
   level: AutonomyLevel = 'normal',
+  trustedRiskLevel?: RiskLevel,
 ): boolean {
-  const baseGates = needsConfirmation(toolName, args);
+  const baseGates = needsConfirmation(toolName, args, trustedRiskLevel);
   if (!baseGates) return false; // never gated anyway
 
   if (level === 'normal') return true;
+  if (toolName === 'bash' || toolName === 'run_code') return true;
 
   // Critical blacklist overrides everything — never auto-pass at any level.
-  if (isCriticalNeverAutopass(toolName, args ?? {})) return true;
+  if (isCriticalNeverAutopass(toolName, args ?? {}, trustedRiskLevel)) return true;
 
   if (level === 'yolo') return false;
 
-  // Trusted: pass the Trusted-specific set + bash (already filtered above),
-  // gate everything else.
+  // Trusted: pass the Trusted-specific set and gate everything else.
   if (level === 'trusted') {
     if (TRUSTED_AUTOPASS.has(toolName)) return false;
-    if (toolName === 'bash') return false; // passed the blacklist check
     return true; // git push, install, connector writes, cross-workspace writes still gate
   }
 
@@ -318,10 +363,14 @@ export class ConfirmationGate {
     this.headless = config.headless ?? false;
   }
 
-  async confirm(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+  async confirm(
+    toolName: string,
+    args: Record<string, unknown>,
+    trustedRiskLevel?: RiskLevel,
+  ): Promise<boolean> {
     // L1 reads / recall / notify never gate — let them flow even in headless.
     // (Checked FIRST so the headless deny-default cannot block read-only work.)
-    if (!needsConfirmation(toolName, args)) return true;
+    if (!needsConfirmation(toolName, args, trustedRiskLevel)) return true;
     if (this.autoApprove.has(toolName)) return true;
     // Legacy non-interactive behaviour is preserved when headless=false; a
     // headless tick denies the confirmation-requiring action instead.

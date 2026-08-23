@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Build the npm-free hook + collaboration CLI payload staged into Tauri. */
+/** Build the npm-free hook, memory MCP, and collaboration CLI payload staged into Tauri. */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,6 +10,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tsc = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 
 const projects = [
+  'packages/shared/tsconfig.json',
+  'packages/hive-mind-core/tsconfig.json',
+  'packages/core/tsconfig.json',
+  'packages/wiki-compiler/tsconfig.json',
   'packages/hive-mind-cli/tsconfig.json',
   'packages/hive-mind-hooks-claude-code/tsconfig.json',
   'packages/hive-mind-hooks-claude-desktop/tsconfig.json',
@@ -18,6 +22,7 @@ const projects = [
   'packages/hive-mind-hooks-cursor/tsconfig.json',
   'packages/hive-mind-hooks-hermes/tsconfig.json',
   'packages/hive-mind-hooks-openclaw/tsconfig.json',
+  'packages/memory-mcp/tsconfig.json',
 ];
 
 if (!fs.existsSync(tsc)) {
@@ -25,7 +30,7 @@ if (!fs.existsSync(tsc)) {
   process.exit(1);
 }
 
-console.log('[build-hook-runtime] Building CLI and seven hook adapters...');
+console.log('[build-hook-runtime] Building CLI, seven hook adapters, and memory MCP...');
 execFileSync(process.execPath, [tsc, '--build', ...projects], {
   cwd: root,
   stdio: 'inherit',
@@ -47,6 +52,7 @@ const expected = [
   'packages/hive-mind-hooks-hermes/dist/bin/hermes-hooks.js',
   'packages/hive-mind-hooks-openclaw/dist/bin/openclaw-hooks.js',
   'packages/hive-mind-hooks-openclaw/dist/handler.bundle.cjs',
+  'packages/memory-mcp/dist/index.js',
 ];
 const missing = expected.filter((entry) => !fs.existsSync(path.join(root, entry)));
 if (missing.length > 0) {

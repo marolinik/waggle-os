@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { config } from '../middleware';
+import { config } from '../proxy';
 
-describe('www Clerk middleware boundary', () => {
+describe('www Clerk proxy boundary', () => {
   it('protects only identity and server-owned flows', () => {
     expect(config.matcher).toEqual([
       '/account(.*)',

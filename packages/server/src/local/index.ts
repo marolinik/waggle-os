@@ -6,14 +6,16 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, SuppressionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, harvestSetHash, type WorkspaceConfig } from '@waggle/core';
 import { corsOriginAllowed } from './cors-config.js';
+import { getBoundTeamServer } from './team-server-binding.js';
+import { fetchTeamServer } from './team-server-egress.js';
 import { getStorageProvider } from './storage/index.js';
-import { resolveBindHost } from './net-config.js';
+import { isLoopbackBind, resolveBindHost } from './net-config.js';
 import { isLocalRequest } from './origin-guard.js';
 import { MemoryWeaver } from '@waggle/weaver';
 import {
@@ -29,6 +31,7 @@ import {
   createSubAgentTools,
   createWorkflowTools,
   runAgentLoop,
+  parseOpenAiTextCompletion,
   ensureIdentity,
   loadSystemPrompt,
   loadSkills,
@@ -66,7 +69,7 @@ import {
 } from '@waggle/agent';
 import { PluginRuntimeManager, getStarterSkillsDir, validatePluginManifest } from '@waggle/sdk';
 import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '@waggle/marketplace';
-import { parseTier } from '@waggle/shared';
+import { parseTier, type RiskLevel } from '@waggle/shared';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import { runConnectorFetch } from './connector-harvest.js';
 import { writeAutoSyncSummaryFrame } from './harvest-autosync-frame.js';
@@ -83,7 +86,7 @@ import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
 import { runMemoryLaneExtraction } from './memory-lane-cron.js';
-import { runVectorBackfill } from './vector-backfill.js';
+import { VectorEnrichmentService } from './services/vector-enrichment-service.js';
 import { ingestRoutes, readFileRegistry } from './routes/ingest.js';
 import { mindRoutes } from './routes/mind.js';
 import { agentRoutes } from './routes/agent.js';
@@ -109,6 +112,11 @@ import { notificationRoutes, emitNotification, emitSubagentStatus } from './rout
 import { materialFingerprint } from './notification-gate.js';
 import { marketplaceDevRoutes } from './routes/marketplace-dev.js';
 import { marketplaceRoutes } from './routes/marketplace.js';
+import {
+  CapabilityProposalStore,
+  createCapabilityProposalRoutes,
+  installMarketplaceApprovalIdentity,
+} from './routes/capability-proposals.js';
 import { agentSearchRoutes } from './routes/agent-search.js';
 import { connectorRoutes } from './routes/connectors.js';
 import { mcpRoutes } from './routes/mcps.js';
@@ -136,11 +144,17 @@ import { documentRoutes } from './routes/documents.js';
 import { fileRoutes } from './routes/files.js';
 import { browseRoutes } from './routes/browse.js';
 import { browserExtRoutes } from './routes/browser-ext.js';
+import {
+  BROWSER_COMPANION_CREDENTIAL_VAULT_KEY,
+  browserCompanionCredentialMatches,
+  isBrowserCompanionCredentialHash,
+} from './browser-companion-pairing.js';
 import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
 import { ChannelManager } from './channels/manager.js';
 import { runChannelChatTurn } from './channels/chat-client.js';
 import { channelRoutes } from './channels/routes.js';
 import { isChannelPlatform } from './channels/types.js';
+import { WorkspaceTurnCoordinator } from './workspace-turn-coordinator.js';
 import { IdleSessionWatcher, readRecentTranscript, buildReviewInstruction, NOTHING_TO_DO } from './idle-watcher.js';
 import { DreamJournal } from './dream-journal.js';
 import { dreamRoutes } from './routes/dreams.js';
@@ -162,11 +176,15 @@ import { agentRunsRoutes } from './routes/agent-runs.js';
 import { localInferenceRoutes } from './routes/local-inference.js';
 import { complianceRoutes } from './routes/compliance.js';
 import { OfflineManager } from './offline-manager.js';
+import { listOllamaChatModelIds } from './model-availability.js';
 import { log, createLogger } from './logger.js';
 import { installErrorHandler } from './error-handler.js';
 import { seedDefaultCrons } from './setup-crons.js';
 import { registerConnectors } from './setup-connectors.js';
-import { securityMiddleware } from './security-middleware.js';
+import {
+  cronScheduleHasReadOnlyViewerTarget,
+  securityMiddleware,
+} from './security-middleware.js';
 import { LocalScheduler, makeRecordExecutionCallback } from './cron.js';
 import { EvolutionService, isEvolutionAutoEnabled } from './services/evolution-service.js';
 import {
@@ -191,6 +209,8 @@ export interface LocalConfig {
   host: string;
   dataDir: string;       // ~/.waggle
   litellmUrl: string;    // http://localhost:4000
+  /** Immutable desktop-launch identity used to prove sidecar ownership. */
+  instanceId?: string;
   /** Governed CLI execution — allowlist of program names the agent may run. */
   cli?: { allowlist?: string[] };
   /** Active subscription tier, when known (drives session/feature caps). */
@@ -199,6 +219,10 @@ export interface LocalConfig {
   manageLiteLLM?: boolean;
   /** Stable child-process port, retained even while requests use a fallback proxy. */
   managedLiteLLMPort?: number;
+  /** Route all agent-loop traffic through this server's built-in provider proxy. */
+  useBuiltInProxy?: boolean;
+  /** False when a managed caller must resolve provider state before health probes start. */
+  startOfflineManagerOnListen?: boolean;
 }
 
 /** Pending approval request — resolved when user approves or denies. */
@@ -207,6 +231,7 @@ export interface PendingApproval {
   toolName: string;
   input: Record<string, unknown>;
   timestamp: number;
+  riskLevel?: RiskLevel;
 }
 
 /**
@@ -228,6 +253,63 @@ export interface LlmProviderStatus {
   checkedAt: string;
 }
 
+export interface WorkspaceCollaborationBinding {
+  /** Tools visible to the owning turn after persona, availability, and intent filtering. */
+  visibleTools: ToolDefinition[];
+  /** Broader policy-filtered pool from which child workers receive their tools. */
+  workerTools: ToolDefinition[];
+  runLoop: AgentRunner;
+  signal: AbortSignal;
+  runChildTransaction: (
+    tools: readonly ToolDefinition[],
+    operation: () => Promise<import('@waggle/agent').AgentResponse>,
+  ) => Promise<import('@waggle/agent').AgentResponse>;
+  defaultModel: string;
+}
+
+const WORKSPACE_COLLABORATION_TOOL_NAMES = new Set([
+  'spawn_agent',
+  'list_agents',
+  'get_agent_result',
+  'compose_workflow',
+  'orchestrate_workflow',
+  'list_harnesses',
+  'run_harness',
+]);
+
+export type WorkspaceCollaborationToolFactory = (
+  workerTools: ToolDefinition[],
+  runLoop: AgentRunner,
+  defaultModel: string,
+  signal?: AbortSignal,
+) => ToolDefinition[];
+
+export function bindWorkspaceChildTools(
+  options: WorkspaceCollaborationBinding,
+  createTools: WorkspaceCollaborationToolFactory,
+): ToolDefinition[] {
+  const enabledNames = new Set(options.visibleTools.map((tool) => tool.name));
+  const workerTools = options.workerTools.filter(
+    (tool) => !WORKSPACE_COLLABORATION_TOOL_NAMES.has(tool.name),
+  );
+  const childRunLoop: AgentRunner = (config) => options.runChildTransaction(
+    config.tools,
+    () => options.runLoop({ ...config, signal: options.signal }),
+  );
+  const replacements = createTools(
+    workerTools,
+    childRunLoop,
+    options.defaultModel,
+    options.signal,
+  ).filter((tool) => enabledNames.has(tool.name));
+  return [
+    ...options.visibleTools.filter(
+      (tool) => !WORKSPACE_COLLABORATION_TOOL_NAMES.has(tool.name),
+    ),
+    ...replacements,
+  ];
+}
+
 export interface AgentState {
   orchestrator: Orchestrator;
   allTools: ToolDefinition[];
@@ -235,10 +317,12 @@ export interface AgentState {
   costTracker: CostTracker;
   skills: LoadedSkill[];
   userSystemPrompt: string | null;
-  sessionHistories: Map<string, Array<{ role: string; content: string }>>;
+  sessionHistories: Map<string, import('./routes/chat-persistence.js').ChatHistoryMessage[]>;
   currentModel: string;
   litellmApiKey: string;
   pendingApprovals: Map<string, PendingApproval>;
+  /** Serializes checkout-reading/writing agent turns by canonical physical root. */
+  workspaceTurnCoordinator: WorkspaceTurnCoordinator;
   /** Phase B.3: persistent "always allow" grant store for gated tools. */
   approvalGrantStore: import('./approval-grants.js').ApprovalGrantStore;
   /**
@@ -251,13 +335,21 @@ export interface AgentState {
    * Create a fresh Orchestrator for a workspace session with the given mind mounted.
    * Each session gets its own instance (Option Y fix from docs/plans/phase-a-the-room.md §9).
    */
-  createSessionOrchestrator: (workspaceMind: import('@waggle/core').MindDB) => Orchestrator;
+  createSessionOrchestrator: {
+    (): Orchestrator;
+    (workspaceMind: import('@waggle/core').MindDB): Orchestrator;
+  };
   /**
    * Build the full tool pool for a session, using the session's orchestrator for mind tools.
    * When `sourceWorkspaceId` is provided, also injects Phase B.2 cross-workspace read tools
    * (read_other_workspace, list_workspaces, list_workspace_files) scoped to that source.
    */
   buildToolsForSession: (sessionOrch: Orchestrator, workspacePath: string, sourceWorkspaceId?: string) => ToolDefinition[];
+  /**
+   * Recreate collaboration producers after primitive workspace tools are lease-wrapped.
+   * The fresh producers run each child loop as one scope-local transaction.
+   */
+  bindWorkspaceCollaborationTools: (options: WorkspaceCollaborationBinding) => ToolDefinition[];
   /**
    * Activate workspace mind for the given workspace ID. Returns true if switched.
    * @deprecated — use `sessionManager.getOrCreate()` with `createSessionOrchestrator`
@@ -275,27 +367,6 @@ export interface AgentState {
   activeWorkspaceId: string | null;
   /** Current sub-agent orchestrator instance (set during workflow execution) */
   subagentOrchestrator: import('@waggle/agent').SubagentOrchestrator | null;
-  /**
-   * SEC: request-scoped security context for spawned agents. Set by the chat
-   * route for the lifetime of a single agent run (cleared in its finally) so
-   * that sub-agents / workflow workers spawned during the run inherit the same
-   * approval gate, governance blockedTools, and persona tool-allowlist as the
-   * main loop. `null` outside an active run. Structural shape matches
-   * @waggle/agent SpawnSecurityContext (kept inline to avoid a type re-export).
-   */
-  spawnSecurityContext: {
-    hooks?: import('@waggle/agent').HookRegistry;
-    blockedTools?: readonly string[];
-    allowedToolNames?: ReadonlySet<string> | null;
-  } | null;
-  /**
-   * #17: origin of the currently-executing chat turn. Same request-scoped
-   * lifecycle as spawnSecurityContext (set by the chat route, cleared in its
-   * finally). cron-tools' create_schedule snapshots it synchronously at
-   * tool-execute time so ai_task delivery targets come from a trusted source,
-   * never from free-form tool arguments. `null` outside an active run.
-   */
-  turnOrigin: import('@waggle/agent').TurnOrigin | null;
   /** Plugin runtime manager — lifecycle, tools, skills from plugins */
   pluginRuntimeManager: import('@waggle/sdk').PluginRuntimeManager;
   /** MCP server runtime — stdio servers, health, tools */
@@ -308,6 +379,8 @@ export interface AgentState {
   llmProvider: LlmProviderStatus;
   /** Session token for WebSocket authentication (generated on server startup) */
   wsSessionToken: string;
+  /** SHA-256 hash of the paired Browser Companion credential, or null when unpaired. */
+  browserCompanionCredentialHash: string | null;
   /** Memory-weaver run timestamps for the personal mind. */
   weaverState: { lastPersonalConsolidation: string | null; lastPersonalDecay: string | null };
   /** Per-workspace memory-weaver run timestamps, keyed by workspace ID. */
@@ -360,6 +433,48 @@ declare module 'fastify' {
   }
 }
 
+const LOOPBACK_BOOTSTRAP_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+function loopbackAuthorityMatchesRequest(
+  rawOrigin: string,
+  rawHost: string | undefined,
+): boolean {
+  if (!rawHost) return false;
+  try {
+    const origin = new URL(rawOrigin);
+    const requestUrl = new URL(`http://${rawHost}`);
+    const originHost = origin.hostname.replace(/^\[|\]$/g, '');
+    const requestHost = requestUrl.hostname.replace(/^\[|\]$/g, '');
+    return origin.protocol === 'http:'
+      && origin.username === ''
+      && origin.password === ''
+      && LOOPBACK_BOOTSTRAP_HOSTS.has(originHost)
+      && LOOPBACK_BOOTSTRAP_HOSTS.has(requestHost)
+      && origin.host === requestUrl.host;
+  } catch {
+    return false;
+  }
+}
+
+function browserBootstrapAuthorityAllowed(request: FastifyRequest): boolean {
+  const secFetchSite = request.headers['sec-fetch-site'];
+  if (secFetchSite !== undefined && secFetchSite !== 'same-origin') return false;
+  const rawOrigin = request.headers.origin ?? request.headers.referer;
+  if (!rawOrigin) return secFetchSite === 'same-origin';
+  return loopbackAuthorityMatchesRequest(rawOrigin, request.headers.host);
+}
+
+function desktopBootstrapMatches(
+  rawHeader: string | string[] | undefined,
+  expected: string | null,
+): boolean {
+  if (!expected || typeof rawHeader !== 'string') return false;
+  const actualBytes = Buffer.from(rawHeader);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length
+    && crypto.timingSafeEqual(actualBytes, expectedBytes);
+}
+
 export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const fullConfig: LocalConfig = {
     port: parseInt(process.env.WAGGLE_PORT ?? '3333'),
@@ -367,7 +482,19 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     dataDir: config.dataDir ?? process.env.WAGGLE_DATA_DIR ?? '',
     litellmUrl: config.litellmUrl ?? 'http://localhost:4000',
     ...config,
+    instanceId: config.instanceId ?? process.env.WAGGLE_INSTANCE_ID,
   };
+  const managedDesktopBootstrap = typeof fullConfig.instanceId === 'string'
+    && fullConfig.instanceId.trim().length > 0;
+  const rawDesktopBootstrapToken = process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN?.trim();
+  // The credential is needed only to bind this server instance to its Tauri
+  // launcher. Remove it before any tool discovery or child process can inherit it.
+  delete process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN;
+  const desktopBootstrapToken = rawDesktopBootstrapToken
+    && rawDesktopBootstrapToken.length >= 32
+    && rawDesktopBootstrapToken.length <= 200
+    ? rawDesktopBootstrapToken
+    : null;
   const resolvedTier = parseTier(String(fullConfig.tier ?? '')) ?? readTierFromDataDir(fullConfig.dataDir);
   fullConfig.tier = resolvedTier;
 
@@ -518,11 +645,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   try {
     const marketplaceDbTarget = path.join(fullConfig.dataDir, 'marketplace.db');
     if (!fs.existsSync(marketplaceDbTarget)) {
-      // Try to copy from monorepo packages/marketplace/marketplace.db.
+      // Packaged service.js and marketplace.db are sibling Tauri resources.
+      // Development and built-package candidates follow for non-Tauri runs.
       // __dirname resolves to packages/server/src/local during tsx dev, and
       // to packages/server/dist/local after a build — both need ../../..
       // to reach the packages/ root, plus a fallback for the production bundle.
       const seedPaths = [
+        path.resolve(__dirname, 'marketplace.db'),                            // packaged Tauri resource
         path.resolve(__dirname, '../../../marketplace/marketplace.db'),          // dev: tsx from src/local
         path.resolve(__dirname, '../../../../marketplace/marketplace.db'),        // built: dist/local
         path.resolve(__dirname, '../../../../packages/marketplace/marketplace.db'),
@@ -563,13 +692,21 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // Marketplace is optional — never block startup
   }
   server.decorate('marketplace', marketplaceDb);
+  const capabilityProposalStore = new CapabilityProposalStore();
+  server.decorate('capabilityProposalStore', capabilityProposalStore);
 
-  // ── Daily marketplace sync (non-blocking, 15s delay after startup) ──
+  // ── Daily marketplace sync (non-blocking, 60s delay after startup) ──
   const stopMarketplaceBackgroundSync = scheduleMarketplaceBackgroundSync({ marketplaceDb, log });
 
   // ── Agent state (matches CLI initialization) ────────────────────────
-  const litellmApiKey = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
-  const litellmUrl = fullConfig.litellmUrl;
+  const wsSessionToken = crypto.randomBytes(32).toString('hex');
+  const storedBrowserCompanionHash = vault.get(BROWSER_COMPANION_CREDENTIAL_VAULT_KEY)?.value;
+  const browserCompanionCredentialHash = isBrowserCompanionCredentialHash(storedBrowserCompanionHash)
+    ? storedBrowserCompanionHash
+    : null;
+  const litellmApiKey = fullConfig.useBuiltInProxy
+    ? wsSessionToken
+    : process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
 
   // Build embedding config from WaggleConfig + Vault keys
   const waggleConfig = new WaggleConfig(fullConfig.dataDir || undefined);
@@ -601,39 +738,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Decorate server with embedding provider for status endpoints
   server.decorate('embeddingProvider', embeddingProvider);
 
-  // Vec index rebuild when real provider activates (mock → real transition)
-  if (embeddingProvider.getActiveProvider() !== 'mock') {
-    try {
-      const db = multiMind.personal.getDatabase();
-      const vecRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames_vec').get() as { cnt: number } | undefined;
-      const totalRow = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number };
-      if (totalRow.cnt > 0 && (vecRow?.cnt ?? 0) < totalRow.cnt) {
-        log.info(` Re-indexing ${totalRow.cnt} frames with real embeddings (${embeddingProvider.getActiveProvider()})...`);
-        const { vecFixed } = await reconcileIndexes(multiMind.personal, embedder);
-        if (vecFixed > 0) {
-          log.info(` Re-indexed ${vecFixed} frames with real embeddings`);
-        }
-      }
-    } catch (err) {
-      log.warn(` Vec reconciliation deferred: ${(err as Error).message}`);
-    }
-  }
-
-  // D1 follow-up (2026-06-12): one-time vector repair + chunk backfill for the
-  // personal mind — mock-fingerprinted vectors get re-embedded for real, and
-  // pre-existing frames get chunk-indexed so the (default-ON) chunk lane has
-  // something to retrieve. Idempotent via a meta flag; workspace minds are
-  // covered by the daily memory_lane_extract cron. Fire-and-forget — boot
-  // must never block on (re-)embedding a large mind.
-  void runVectorBackfill(multiMind.personal, embeddingProvider).then((vb) => {
-    if (!vb.skipped) {
-      log.info(
-        ` Vector backfill (personal): repaired=${vb.vectorsRepaired} ` +
-        `reembedded=${vb.framesReembedded} chunks=${vb.chunksCreated}` +
-        (vb.errors.length ? ` errors=${vb.errors.join('; ')}` : '')
-      );
-    }
-  });
+  const waggleHome = fullConfig.dataDir || path.join(os.homedir(), '.waggle');
+  const rerankerCacheDir = path.join(waggleHome, 'models', 'reranker');
 
   // Orchestrator — connects to personal .mind
   const orchestrator = new Orchestrator({
@@ -641,15 +747,18 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     embedder,
     mode: 'local',
     version: '0.4',
+    rerankerCacheDir,
   });
   ensureIdentity(orchestrator.getIdentity());
 
   // Build tools — use a default workspace (homedir), but tools are rebuilt
   // per-request when a workspace directory is specified in chat.
   const defaultWorkspace = os.homedir();
-  const waggleHome = fullConfig.dataDir || path.join(os.homedir(), '.waggle');
   const mindTools = orchestrator.getTools();
-  const systemTools = createSystemTools(defaultWorkspace);
+  const systemTools = createSystemTools({
+    workspace: defaultWorkspace,
+    denySensitiveFiles: true,
+  });
   const planTools = createPlanTools();
   const gitTools = createGitTools(defaultWorkspace);
   const documentTools = [
@@ -688,9 +797,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       try {
         const results = marketplaceDb.search({ query, limit: 10 });
         return results.packages.map(pkg => ({
+          packageId: pkg.id,
           name: pkg.name,
           description: pkg.description,
           packageType: pkg.package_type,
+          installType: pkg.waggle_install_type,
+          version: pkg.version,
+          author: pkg.author,
           source: 'marketplace',
           score: undefined, // FTS5 doesn't expose raw scores through our API
         }));
@@ -701,12 +814,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   });
 
   // Cron tools — let the agent manage cron schedules (via REST API).
-  // #17: getTurnOrigin lets create_schedule stamp ai_task delivery targets
-  // from the request-scoped origin snapshot (read synchronously at
-  // tool-execute time — see AgentState.turnOrigin).
-  const cronTools = createCronTools({
-    getTurnOrigin: () => server.agentState.turnOrigin,
-  });
+  // The chat route replaces surviving cron tools with request-bound copies so
+  // overlapping turns cannot exchange delivery origins.
+  const cronTools = createCronTools();
 
   // Search tools — Tavily + Brave with vault-backed API keys
   const searchTools = createSearchTools(async (key: string) => {
@@ -827,13 +937,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const subAgentTools = createSubAgentTools({
     availableTools: baseTools,
     runLoop: runAgentLoop,
-    litellmUrl: fullConfig.litellmUrl,
+    get litellmUrl() { return fullConfig.litellmUrl; },
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
-    // SEC: sub-agents spawned during a chat request inherit that request's
-    // approval gate + governance denylist + persona allowlist. The chat route
-    // publishes this per request; called at spawn time (post-decoration).
-    getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     onSubAgentStatus: (event) => {
       emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
         id: event.agentId,
@@ -886,12 +992,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const workflowTools = createWorkflowTools({
     availableTools: baseTools,
     runLoop: runAgentLoop,
-    litellmUrl: fullConfig.litellmUrl,
+    get litellmUrl() { return fullConfig.litellmUrl; },
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
-    // SEC: workflow workers inherit the spawning request's approval gate +
-    // governance denylist + persona allowlist (same contract as sub-agents).
-    getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     onWorkerStatus: (event) => {
       // Relay sub-agent status to eventBus for SSE notification stream
       const orch = server.agentState.subagentOrchestrator;
@@ -954,6 +1057,24 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Cost tracker
   const costTracker = new CostTracker({});
+  const budgetConfig = new WaggleConfig(fullConfig.dataDir);
+  costTracker.setBudget(
+    budgetConfig.getDailyBudget(),
+    budgetConfig.getBudgetHardCap() ? 'hard' : 'soft',
+  );
+  const budgetDay = new Date().toISOString().slice(0, 10);
+  const budgetDayStart = `${budgetDay}T00:00:00.000Z`;
+  try {
+    costTracker.initializeDailyCarryover(
+      budgetDay,
+      traceStore.getTotalCostSince(budgetDayStart, traceStore.getLatestId()),
+    );
+  } catch (error) {
+    if (budgetConfig.getBudgetHardCap() && budgetConfig.getDailyBudget() !== null) {
+      throw new Error('Cannot initialize hard daily model budget from persisted spend', { cause: error });
+    }
+    server.log.warn({ err: error }, 'Persisted daily model spend unavailable');
+  }
 
   // Command registry — workflow-native slash commands
   const commandRegistry = new CommandRegistry();
@@ -1014,7 +1135,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const mcpToolRetriever = new McpToolRetriever({ embedder });
 
   // Session histories (server-side, like CLI)
-  const sessionHistories = new Map<string, Array<{ role: string; content: string }>>();
+  const sessionHistories = new Map<string, import('./routes/chat-persistence.js').ChatHistoryMessage[]>();
 
   // Default model — W2C: initialize from config.json's defaultModel so the
   // top-bar chip and Settings → Models agree from the first launch (this was
@@ -1024,6 +1145,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Pending approvals map for confirmation gates
   const pendingApprovals = new Map<string, PendingApproval>();
+  const workspaceTurnCoordinator = new WorkspaceTurnCoordinator();
 
   // Phase B.3: persistent "always allow" grant store — survives sessions
   // so approved (tool, target) combinations don't re-prompt every time.
@@ -1065,6 +1187,58 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       return undefined;
     }
   };
+  const createWorkspaceCollaborationTools = (
+    workerTools: ToolDefinition[],
+    runLoop: AgentRunner,
+    defaultModel: string,
+    signal?: AbortSignal,
+  ): ToolDefinition[] => {
+    const workspaceSubAgentTools = createSubAgentTools({
+      availableTools: workerTools,
+      runLoop,
+      get litellmUrl() { return fullConfig.litellmUrl; },
+      litellmApiKey,
+      defaultModel,
+      onSubAgentStatus: (event) => {
+        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
+          id: event.agentId,
+          name: event.name,
+          role: event.role,
+          status: event.status === 'error' ? 'failed' : event.status,
+          task: event.task,
+          toolsUsed: event.toolsUsed,
+          startedAt: event.startedAt,
+          completedAt: event.completedAt,
+        }]);
+      },
+    });
+    const workspaceWorkflowTools = createWorkflowTools({
+      availableTools: workerTools,
+      runLoop,
+      get litellmUrl() { return fullConfig.litellmUrl; },
+      litellmApiKey,
+      defaultModel,
+      signal,
+      onWorkerStatus: (event) => {
+        const orch = server.agentState.subagentOrchestrator;
+        const agents = orch ? orch.getWorkers().map(w => ({
+          id: w.id, name: w.name, role: w.role, status: w.status,
+          task: w.task, toolsUsed: w.toolsUsed, startedAt: w.startedAt, completedAt: w.completedAt,
+        })) : [{
+          id: event.workerId, name: event.workerState.name, role: event.workerState.role,
+          status: event.workerState.status, task: event.workerState.task,
+          toolsUsed: event.workerState.toolsUsed, startedAt: event.workerState.startedAt,
+          completedAt: event.workerState.completedAt,
+        }];
+        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, agents);
+      },
+    });
+    return [...workspaceSubAgentTools, ...workspaceWorkflowTools];
+  };
+
+  const bindWorkspaceCollaborationTools = (
+    options: WorkspaceCollaborationBinding,
+  ): ToolDefinition[] => bindWorkspaceChildTools(options, createWorkspaceCollaborationTools);
 
   // Factory to rebuild workspace-scoped tools for a given directory.
   // Optional `orchForMindTools` replaces the shared-orchestrator mind tools with
@@ -1087,10 +1261,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // L-18: when the workspace is team-backed, route file tools through the
     // shared provider. Otherwise pass only the cwd (fs fallback).
     const fileBackend = buildFileBackendForWorkspace(workspaceId);
+    const wsMeta = workspaceId ? wsManager.get(workspaceId) : null;
+    const denySensitiveFiles = Boolean(wsMeta?.directory || wsMeta?.storagePath);
 
     const wsBase = [
       ...mindToolsForRequest,
-      ...createSystemTools({ workspace: wsPath, fileBackend }),
+      ...createSystemTools({ workspace: wsPath, fileBackend, denySensitiveFiles }),
       ...createPlanTools(),
       ...createGitTools(wsPath),
       ...createDocumentTools(wsPath),
@@ -1105,46 +1281,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       ...cliTools,
       ...connectorTools,
     ];
-    const wsSub = createSubAgentTools({
-      availableTools: wsBase,
-      runLoop: runAgentLoop,
-      litellmUrl: fullConfig.litellmUrl,
-      litellmApiKey: litellmApiKey,
-      defaultModel: 'claude-sonnet-4-6',
-      onSubAgentStatus: (event) => {
-        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
-          id: event.agentId,
-          name: event.name,
-          role: event.role,
-          status: event.status === 'error' ? 'failed' : event.status,
-          task: event.task,
-          toolsUsed: event.toolsUsed,
-          startedAt: event.startedAt,
-          completedAt: event.completedAt,
-        }]);
-      },
-    });
-    const wsWorkflow = createWorkflowTools({
-      availableTools: wsBase,
-      runLoop: runAgentLoop,
-      litellmUrl: fullConfig.litellmUrl,
-      litellmApiKey: litellmApiKey,
-      defaultModel: 'claude-sonnet-4-6',
-      onWorkerStatus: (event) => {
-        const orch = server.agentState.subagentOrchestrator;
-        const agents = orch ? orch.getWorkers().map(w => ({
-          id: w.id, name: w.name, role: w.role, status: w.status,
-          task: w.task, toolsUsed: w.toolsUsed, startedAt: w.startedAt, completedAt: w.completedAt,
-        })) : [{
-          id: event.workerId, name: event.workerState.name, role: event.workerState.role,
-          status: event.workerState.status, task: event.workerState.task,
-          toolsUsed: event.workerState.toolsUsed, startedAt: event.workerState.startedAt,
-          completedAt: event.workerState.completedAt,
-        }];
-        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, agents);
-      },
-    });
-    return [...wsBase, ...wsSub, ...wsWorkflow];
+    return [
+      ...wsBase,
+      ...createWorkspaceCollaborationTools(wsBase, runAgentLoop, 'claude-sonnet-4-6'),
+    ];
   };
 
   // ── Workspace Session Manager ────────────────────────────────────
@@ -1164,14 +1304,15 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
    *
    * See docs/plans/phase-a-the-room.md §9 for the Option X vs Option Y decision.
    */
-  const createSessionOrchestrator = (workspaceMind: MindDB): Orchestrator => {
+  const createSessionOrchestrator = (workspaceMind?: MindDB): Orchestrator => {
     const sessionOrch = new Orchestrator({
       db: multiMind.personal,
       embedder,
       mode: 'local',
       version: '0.4',
+      rerankerCacheDir,
     });
-    sessionOrch.setWorkspaceMind(workspaceMind);
+    if (workspaceMind) sessionOrch.setWorkspaceMind(workspaceMind);
     return sessionOrch;
   };
 
@@ -1230,6 +1371,14 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     allowedRoot: path.join(fullConfig.dataDir, 'workspaces'),
   });
   server.decorate('mindCache', mindCache);
+  const vectorEnrichmentService = new VectorEnrichmentService({
+    personalMind: multiMind.personal,
+    embeddingProvider,
+    listWorkspaceIds: () => wsManager.list().map(workspace => workspace.id),
+    acquireWorkspaceMind: workspaceId => mindCache.acquire(workspaceId),
+    releaseWorkspaceMind: workspaceId => mindCache.release(workspaceId),
+    log: (level, message) => log[level](message),
+  });
   let activeWorkspaceId: string | null = null;
   const setActiveWorkspaceId = (workspaceId: string | null): void => {
     activeWorkspaceId = workspaceId;
@@ -1238,22 +1387,70 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   };
 
   // ── TeamSync cache — one TeamSync instance per team workspace ──
-  const teamSyncCache = new Map<string, TeamSync>();
+  const teamSyncCache = new Map<string, { sync: TeamSync; binding: string }>();
+
+  const serializeTeamSyncBinding = (
+    teamServer: NonNullable<ReturnType<WaggleConfig['getTeamServer']>>,
+    teamId: string,
+  ): string => JSON.stringify({
+    url: teamServer.url,
+    teamId,
+    token: crypto.createHash('sha256').update(teamServer.token ?? '').digest('hex'),
+    userId: teamServer.userId ?? 'local-user',
+    displayName: teamServer.displayName ?? 'You',
+  });
 
   function getTeamSync(workspaceId: string, wsConfig: WorkspaceConfig | null, waggleConfig: WaggleConfig): TeamSync | null {
-    if (!wsConfig?.teamId || !wsConfig?.teamServerUrl) return null;
+    if (!wsConfig?.teamId || !wsConfig?.teamServerUrl) {
+      teamSyncCache.delete(workspaceId);
+      return null;
+    }
+    const teamServer = getBoundTeamServer(wsConfig.teamServerUrl, waggleConfig.getTeamServer());
+    if (!teamServer?.token) {
+      teamSyncCache.delete(workspaceId);
+      return null;
+    }
+    const binding = serializeTeamSyncBinding(teamServer, wsConfig.teamId);
     const cached = teamSyncCache.get(workspaceId);
-    if (cached) return cached;
-    const teamServer = waggleConfig.getTeamServer();
-    if (!teamServer?.token) return null;
+    if (cached?.binding === binding) return cached.sync;
     const sync = new TeamSync({
-      teamServerUrl: wsConfig.teamServerUrl,
+      teamServerUrl: teamServer.url,
       teamSlug: wsConfig.teamId, // teamId is used as slug
       authToken: teamServer.token,
       userId: teamServer.userId ?? 'local-user',
       displayName: teamServer.displayName ?? 'You',
-    });
-    teamSyncCache.set(workspaceId, sync);
+    }, fetchTeamServer);
+    const pushFrame = sync.pushFrame.bind(sync);
+    sync.pushFrame = async (frame) => {
+      const currentWorkspace = wsManager.get(workspaceId);
+      const currentWaggleConfig = new WaggleConfig(fullConfig.dataDir);
+      const currentTeamServer = getBoundTeamServer(
+        currentWorkspace?.teamServerUrl,
+        currentWaggleConfig.getTeamServer(),
+      );
+      const currentBinding = currentWorkspace?.teamId && currentTeamServer?.token
+        ? serializeTeamSyncBinding(currentTeamServer, currentWorkspace.teamId)
+        : null;
+      const cached = teamSyncCache.get(workspaceId);
+      if (cached?.sync !== sync) {
+        return cached && currentBinding === cached.binding
+          ? cached.sync.pushFrame(frame)
+          : null;
+      }
+      if (currentBinding === binding) return pushFrame(frame);
+
+      teamSyncCache.delete(workspaceId);
+      if (currentWorkspace?.teamId && currentTeamServer?.token) {
+        const replacement = getTeamSync(workspaceId, currentWorkspace, currentWaggleConfig);
+        if (replacement) {
+          if (activeWorkspaceId === workspaceId) orchestrator.setTeamSync(replacement);
+          return replacement.pushFrame(frame);
+        }
+      }
+      if (activeWorkspaceId === workspaceId) orchestrator.setTeamSync(null);
+      return null;
+    };
+    teamSyncCache.set(workspaceId, { sync, binding });
     return sync;
   }
 
@@ -1332,6 +1529,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
           let saved = 0;
           let couldNotVerify = 0;
+          let skippedUnsafe = 0;
           for (const item of items) {
             // #7 sticky erasure: distinguish a confirmed erasure MATCH from a
             // fail-closed read ERROR — both skip the write, but a broken-DB read
@@ -1343,14 +1541,18 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             }
             // #7 Art.17: stamp the subject key (metadata.sourceId) so a subject-mode
             // DSAR can reach this auto-synced summary — shared with the cron path.
-            writeAutoSyncSummaryFrame(personalFrameStore, item);
+            if (!writeAutoSyncSummaryFrame(personalFrameStore, item)) {
+              skippedUnsafe++;
+              continue;
+            }
             saved++;
           }
           // R3-004: store the content digest so the manual harvest route can
           // skip an unchanged re-scan on the next sync.
           harvestStore.recordSync(src.source, items.length, saved, harvestSetHash(items));
           log.info(`[harvest-auto-sync] ${src.source}: imported ${saved} items`
-            + (couldNotVerify > 0 ? ` (${couldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : ''));
+            + (couldNotVerify > 0 ? ` (${couldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : '')
+            + (skippedUnsafe > 0 ? ` (${skippedUnsafe} unsafe items skipped)` : ''));
         } catch (err) {
           log.debug(`[harvest-auto-sync] ${src.source} failed:`, err);
         }
@@ -1394,8 +1596,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           const sessionsDir = path.join(fullConfig.dataDir, 'workspaces', workspaceId, 'sessions');
           const undistilled = findUndistilledSessions(sessionsDir);
           for (const session of undistilled) {
-            wsWeaver.distillSessionContent(session.date, session.summary, session.keyPoints);
-            markSessionDistilled(session.filePath);
+            const distilled = wsWeaver.distillSessionContent(session.date, session.summary, session.keyPoints);
+            if (distilled) markSessionDistilled(session.filePath);
           }
         } catch (err) { log.debug('Workspace distillation skipped', err); }
       }
@@ -1437,6 +1639,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               log.warn(`TeamSync pull failed:`, err.message);
             });
           }
+        } else {
+          orchestrator.setTeamSync(null);
         }
       } else {
         // Non-team workspace — clear TeamSync
@@ -1458,7 +1662,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     // and this seam closed the same MindDB.
     sessionManager.close(workspaceId);
     mindCache.close(workspaceId);
+    teamSyncCache.delete(workspaceId);
     if (activeWorkspaceId === workspaceId) {
+      orchestrator.setTeamSync(null);
       orchestrator.clearWorkspaceMind();
       setActiveWorkspaceId(null);
     }
@@ -1481,10 +1687,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     currentModel,
     litellmApiKey,
     pendingApprovals,
+    workspaceTurnCoordinator,
     approvalGrantStore,
     buildToolsForWorkspace,
     createSessionOrchestrator,
     buildToolsForSession,
+    bindWorkspaceCollaborationTools,
     activateWorkspaceMind: activateWorkspaceMindWithWeaver,
     getWorkspaceMindDb,
     closeWorkspaceMind,
@@ -1493,8 +1701,6 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     weaverState,
     workspaceWeaverStatus,
     subagentOrchestrator: null,
-    spawnSecurityContext: null,
-    turnOrigin: null,
     pluginRuntimeManager,
     mcpRuntime,
     mcpToolRetriever,
@@ -1505,7 +1711,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       detail: 'Not yet initialized',
       checkedAt: new Date().toISOString(),
     },
-    wsSessionToken: crypto.randomBytes(32).toString('hex'),
+    wsSessionToken,
+    browserCompanionCredentialHash,
   });
   activateWorkspaceMindWithWeaver(defaultWorkspaceId);
 
@@ -1601,6 +1808,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             let totalFrames = 0;
             let sourcesScanned = 0;
             let totalCouldNotVerify = 0;
+            let totalSkippedUnsafe = 0;
             for (const src of stale) {
               if (src.source !== 'claude-code' || !src.sourcePath) continue;
               try {
@@ -1617,7 +1825,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                   }
                   // #7 Art.17: stamp the subject key (metadata.sourceId) so a
                   // subject-mode DSAR reaches this cron-synced summary — shared helper.
-                  writeAutoSyncSummaryFrame(personalFrames, item);
+                  if (!writeAutoSyncSummaryFrame(personalFrames, item)) {
+                    totalSkippedUnsafe++;
+                    continue;
+                  }
                   saved++;
                 }
                 // R3-004: store the content digest for next-sync skip.
@@ -1631,7 +1842,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             }
             if (sourcesScanned > 0) {
               log.info(`[cron] Harvest sync: ${totalFrames} frames from ${totalItems} items across ${sourcesScanned} source(s)`
-                + (totalCouldNotVerify > 0 ? ` (${totalCouldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : ''));
+                + (totalCouldNotVerify > 0 ? ` (${totalCouldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : '')
+                + (totalSkippedUnsafe > 0 ? ` (${totalSkippedUnsafe} unsafe items skipped)` : ''));
             }
             dreamJournal.record('harvest_sync', {
               framesSaved: totalFrames,
@@ -1698,8 +1910,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 }),
               });
               if (!res.ok) throw new Error(`lane-extract LLM HTTP ${res.status}`);
-              const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
-              return data.choices?.[0]?.message?.content ?? '';
+              const data = await res.json() as unknown;
+              return parseOpenAiTextCompletion(data).content;
             };
             const minds: Array<{ label: string; db: import('@waggle/core').MindDB }> = [
               { label: 'personal', db: multiMind.personal },
@@ -1714,18 +1926,15 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             let laneProfiles = 0;
             for (const mind of minds) {
               try {
-                // D1 follow-up: one-time vector repair + chunk backfill per
-                // mind (no-op via meta flag after first success; retries here
-                // daily while the embedder is mock).
-                const vb = await runVectorBackfill(mind.db, server.embeddingProvider);
-                if (!vb.skipped) {
-                  log.info(
-                    `[cron] Vector backfill (${mind.label}): repaired=${vb.vectorsRepaired} ` +
-                    `reembedded=${vb.framesReembedded} chunks=${vb.chunksCreated}`
-                  );
-                }
                 const r = await runMemoryLaneExtraction(mind.db, llmCall);
                 if (!r.skipped) {
+                  if (r.errors.length > 0) {
+                    log.warn(
+                      `[cron] Memory lanes (${mind.label}) incomplete; watermark held for retry: ` +
+                      r.errors.join('; ').slice(0, 200)
+                    );
+                    continue;
+                  }
                   log.info(
                     `[cron] Memory lanes (${mind.label}): ${r.framesProcessed} frames → ` +
                     `facts=${r.written?.factsWritten ?? 0} events=${r.written?.eventsWritten ?? 0} ` +
@@ -1942,10 +2151,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                 if (!variantResponse.ok) {
                   log.warn(`[cron] GEPA variant generation failed: HTTP ${variantResponse.status}`);
                 } else {
-                  const variantBody = await variantResponse.json() as {
-                    choices?: Array<{ message?: { content?: string } }>;
-                  };
-                  const variantText = variantBody.choices?.[0]?.message?.content ?? '';
+                  const variantBody = await variantResponse.json() as unknown;
+                  const variantText = parseOpenAiTextCompletion(variantBody).content;
 
                   if (variantText.length > 100) {
                     // Store the variant in the optimization_log with a marker
@@ -2034,6 +2241,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             break;
           }
           let aiTaskSucceeded = false;
+          const targetErrors: unknown[] = [];
 
           for (const target of targetWorkspaces) {
             try {
@@ -2061,7 +2269,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                 // Delivery: origin channel first (stamped from the trusted
                 // turn-origin snapshot at create time), notification always.
                 const deliverTo = taskConfig.deliverTo as { platform?: string; chatId?: string } | undefined;
-                if (deliverTo?.platform && deliverTo?.chatId && output && isChannelPlatform(deliverTo.platform)) {
+                if (!turn.error && deliverTo?.platform && deliverTo?.chatId && output && isChannelPlatform(deliverTo.platform)) {
                   const sent = await server.channelManager
                     ?.sendTo(deliverTo.platform, deliverTo.chatId, `[${schedule.name}]\n${output}`)
                     .catch((e: unknown) => {
@@ -2078,7 +2286,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                   actionUrl: `/workspaces/${target.id}`,
                 });
                 if (turn.error) {
-                  log.warn(`[cron] ai_task "${schedule.name}" failed for workspace "${target.name}": ${turn.error}`);
+                  throw new Error(`ai_task failed for workspace "${target.name}": ${turn.error}`);
                 } else {
                   log.info(`[cron] ai_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
                 }
@@ -2104,10 +2312,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
               });
 
               if (response.ok) {
-                const body = await response.json() as {
-                  choices?: Array<{ message?: { content?: string } }>;
-                };
-                const output = body.choices?.[0]?.message?.content ?? '';
+                const body = await response.json() as unknown;
+                const output = parseOpenAiTextCompletion(body).content;
                 const summary = output.length > 200 ? output.slice(0, 197) + '...' : output;
 
                 emitNotification(server, {
@@ -2119,11 +2325,17 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
 
                 log.info(`[cron] agent_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
               } else {
-                log.warn(`[cron] agent_task "${schedule.name}" LLM call failed: HTTP ${response.status}`);
+                throw new Error(`agent_task LLM call failed: HTTP ${response.status}`);
               }
             } catch (wsErr) {
               log.warn(`[cron] agent_task "${schedule.name}" failed for workspace "${target.name}": ${(wsErr as Error).message}`);
+              targetErrors.push(wsErr);
             }
+          }
+
+          if (targetErrors.length === 1) throw targetErrors[0];
+          if (targetErrors.length > 1) {
+            throw new AggregateError(targetErrors, `agent_task failed in ${targetErrors.length} workspaces`);
           }
 
           // #17 once mode: one-shot ai_task disables itself after the first
@@ -2134,6 +2346,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           }
         } catch (err) {
           log.warn(`[cron] agent_task handler failed: ${(err as Error).message}`);
+          throw err;
         }
         break;
       }
@@ -2225,8 +2438,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             signal: AbortSignal.timeout(120_000),
           });
           if (!resp.ok) throw new Error(`Loop LLM call failed: HTTP ${resp.status}`);
-          const body = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
-          return body.choices?.[0]?.message?.content ?? '';
+          const body = await resp.json() as unknown;
+          return parseOpenAiTextCompletion(body).content;
         };
         const loopResult = await runLoopTick({ schedule, mindDb, embedder, chat: loopChat, log });
         if (!loopResult.skipped) {
@@ -2313,7 +2526,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       category: 'cron',
       actionUrl: '/settings/mission-control',
     });
-  });
+  }, schedule => !cronScheduleHasReadOnlyViewerTarget(schedule, server));
   scheduler.start();
   server.decorate('scheduler', scheduler);
 
@@ -2387,14 +2600,68 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   }, 24 * 60 * 60 * 1000); // once per day
 
   // PM-6: Offline manager — periodic LLM health checks
+  const resolveOfflineManagerEndpoint = (): string => {
+    if (!fullConfig.useBuiltInProxy) return fullConfig.litellmUrl;
+    const address = server.server.address();
+    return address && typeof address === 'object'
+      ? `http://127.0.0.1:${address.port}/v1`
+      : fullConfig.litellmUrl;
+  };
   const offlineManager = new OfflineManager({
     dataDir: fullConfig.dataDir,
-    getLlmEndpoint: () => fullConfig.litellmUrl,
+    getLlmEndpoint: resolveOfflineManagerEndpoint,
     getLlmApiKey: () => server.agentState?.litellmApiKey ?? '',
+    checkLlmReadiness: async (signal) => {
+      const selectedModel = server.agentState.currentModel.trim();
+      const selectedOllama = selectedModel.toLowerCase().startsWith('ollama/');
+      const unselectedOllama = !selectedModel
+        && server.agentState.llmProvider.provider === 'ollama';
+      if (selectedOllama || unselectedOllama) {
+        const localModels = await listOllamaChatModelIds(signal);
+        return selectedOllama
+          ? localModels.some(model => model.toLowerCase() === selectedModel.toLowerCase())
+          : localModels.length > 0;
+      }
+
+      const endpoint = resolveOfflineManagerEndpoint().replace(/\/+$/, '');
+      const apiKey = server.agentState.litellmApiKey;
+      const headers: Record<string, string> = {};
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      const response = await fetch(`${endpoint}/health/readiness`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+      });
+      if (!response.ok) return false;
+      if (server.agentState.llmProvider.provider !== 'litellm') return true;
+
+      // LiteLLM readiness alone only proves the router process is accepting
+      // traffic. Its local model catalog must also expose the selected route.
+      const modelsResponse = await fetch(`${endpoint}/models`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+      });
+      if (!modelsResponse.ok) return false;
+      const modelsPayload = await modelsResponse.json() as {
+        data?: Array<{ id?: string }>;
+      };
+      const modelIds = (modelsPayload.data ?? [])
+        .map(model => model.id)
+        .filter((model): model is string => typeof model === 'string');
+      return selectedModel ? modelIds.includes(selectedModel) : modelIds.length > 0;
+    },
     eventBus,
     checkIntervalMs: 30_000,
   });
-  offlineManager.start();
+  if (fullConfig.startOfflineManagerOnListen !== false) {
+    server.addHook('onListen', async () => {
+      offlineManager.start();
+    });
+  }
+  server.addHook('preClose', async () => {
+    await offlineManager.stop();
+  });
   server.decorate('offlineManager', offlineManager);
 
   // Plugins
@@ -2423,18 +2690,47 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   };
   await server.register(securityMiddleware, {
     sessionToken: server.agentState.wsSessionToken,
-    authenticateRunToken: (token) => agentRunRegistry.authenticateCredential(token) !== undefined,
+    authenticateBrowserCompanionToken: (token) => browserCompanionCredentialMatches(
+      token,
+      server.agentState.browserCompanionCredentialHash,
+    ),
+    authenticateRunToken: (token) => {
+      const run = agentRunRegistry.authenticateCredential(token);
+      if (!run) return false;
+      return { runId: run.id, model: run.executor.model };
+    },
     rateLimiter: Object.keys(rateLimiterConfig).length > 0 ? rateLimiterConfig : undefined,
   });
 
-  // D1: session-token bootstrap. Auth-exempt (you cannot require the token to fetch
-  // it) but same-origin gated — a cross-origin page is blocked from reading the
-  // response by CORS and rejected here by isLocalRequest. The Tauri webview reads
-  // this once on connect() and sends the token as a Bearer on every other request.
+  // D1: session-token bootstrap. Managed desktop launches require a random
+  // per-launch credential delivered only through Tauri IPC. An ordinary browser
+  // can forge a tauri.localhost Origin, so Origin alone is not an application
+  // identity. Browser-only mode has no IPC channel and is instead bound to the
+  // exact loopback request authority (host + port).
   server.get('/api/auth/session-token', async (request, reply) => {
-    if (!isLocalRequest(request)) {
-      return reply.code(403).send({ error: 'Forbidden: external origin' });
+    if (!isLoopbackBind()) {
+      return reply.code(403).send({
+        error: 'Session bootstrap is available only on a loopback-bound sidecar.',
+        code: 'SESSION_BOOTSTRAP_LOOPBACK_ONLY',
+      });
     }
+    if (managedDesktopBootstrap) {
+      if (!desktopBootstrapMatches(
+        request.headers['x-waggle-desktop-bootstrap'],
+        desktopBootstrapToken,
+      )) {
+        return reply.code(403).send({
+          error: 'Desktop session bootstrap requires the owned launch credential.',
+          code: 'DESKTOP_BOOTSTRAP_REQUIRED',
+        });
+      }
+    } else if (!browserBootstrapAuthorityAllowed(request)) {
+      return reply.code(403).send({
+        error: 'Session bootstrap origin does not match the local service authority.',
+        code: 'SESSION_BOOTSTRAP_ORIGIN_MISMATCH',
+      });
+    }
+    reply.header('Cache-Control', 'no-store');
     return { token: server.agentState.wsSessionToken };
   });
 
@@ -2515,6 +2811,10 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(notificationRoutes);
   await server.register(marketplaceDevRoutes);
   await server.register(marketplaceRoutes);
+  await server.register(createCapabilityProposalRoutes(
+    capabilityProposalStore,
+    (identity) => installMarketplaceApprovalIdentity(server, identity),
+  ));
   await server.register(agentSearchRoutes);
   await server.register(connectorRoutes);
   // UX-Refactor Phase 4 (Extend layer): MCP Hub (S08) + the marketplace
@@ -2891,9 +3191,17 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // Health check — truthful, not optimistic
   server.get('/health', async () => {
     const llm = { ...server.agentState.llmProvider };
+    const listeningAddress = server.server.address();
+    const servicePort = typeof listeningAddress === 'object' && listeningAddress
+      ? listeningAddress.port
+      : server.localConfig.port;
 
     // P0-3: If provider is anthropic-proxy and claims healthy, validate the key actually works
-    if (llm.provider === 'anthropic-proxy' && llm.health === 'healthy') {
+    if (
+      llm.provider === 'anthropic-proxy'
+      && llm.health === 'healthy'
+      && llm.detail.startsWith('Built-in Anthropic proxy')
+    ) {
       const keyValid = freshAnthropicValidation();
       if (keyValid === false) {
         llm.health = 'degraded';
@@ -2912,7 +3220,22 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       }
     })();
 
-    const overallStatus = llm.health === 'healthy' && dbHealthy
+    // Startup may resolve a provider after OfflineManager's initial probe.
+    // Once a later completion-readiness probe runs, it becomes authoritative.
+    const offlineState = offlineManager.state;
+    const providerCheckedAt = Date.parse(llm.checkedAt);
+    const readinessCheckedAt = Date.parse(offlineManager.lastCheck);
+    const providerStatusIsNewer = Number.isFinite(providerCheckedAt)
+      && providerCheckedAt > readinessCheckedAt;
+    const llmReachable = providerStatusIsNewer
+      ? llm.health === 'healthy'
+      : !offlineState.offline;
+    const effectiveOfflineState = {
+      ...offlineState,
+      offline: !llmReachable,
+      since: llmReachable ? null : offlineState.since,
+    };
+    const overallStatus = llmReachable && llm.health === 'healthy' && dbHealthy
       ? 'ok'
       : llm.health === 'unavailable' || !dbHealthy
         ? 'unavailable'
@@ -2959,20 +3282,22 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     return {
       status: overallStatus,
       mode: 'local',
+      instanceId: server.localConfig.instanceId ?? null,
+      port: servicePort,
       timestamp: new Date().toISOString(),
       llm: {
         provider: llm.provider,
         health: llm.health,
         detail: llm.detail,
         checkedAt: llm.checkedAt,
-        reachable: llm.health === 'healthy' || !offlineManager.state.offline,
+        reachable: llmReachable,
         lastCheck: new Date().toISOString(),
       },
       database: { healthy: dbHealthy },
       memoryStats,
       serviceHealth,
       defaultModel: server.agentState.currentModel,
-      offline: offlineManager.state,
+      offline: effectiveOfflineState,
       // R1-001: wsToken intentionally NOT returned — /health is unauthenticated
       // and the token authenticates every other route. Localhost clients are
       // trusted by security-middleware and never needed it.
@@ -2987,7 +3312,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     stopMarketplaceBackgroundSync();
     scheduler.stop();
     evolutionService.stop();
-    offlineManager.stop();
+    await offlineManager.stop();
     clearInterval(auditCleanupTimer);
 
     // Stop MCP servers
@@ -3003,6 +3328,9 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     // Close all workspace sessions (new concurrent model)
     sessionManager.closeAll();
 
+    // Let the active bounded pass finish before closing any borrowed mind.
+    await vectorEnrichmentService.stop();
+
     // Close all cached workspace minds
     mindCache.closeAll();
     multiMind.close();
@@ -3017,6 +3345,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       try { marketplaceDb.close(); } catch { /* already closed */ }
     }
   });
+
+  vectorEnrichmentService.start();
 
   // ── Start Teams server if PostgreSQL is configured (TEAMS tier) ──
   // Skip in test environment to avoid port conflicts and addHook-after-listen errors

@@ -175,6 +175,20 @@ describe('SpawnAgentDialog durable launch', () => {
     expect(modelList).toContainElement(screen.getByTitle('anthropic/claude-3-5-sonnet'));
   });
 
+  it('shows the retry CTA when a configured provider returns no models', async () => {
+    mocks.adapter.getModels.mockResolvedValue([]);
+    mocks.adapter.getModel.mockResolvedValue('');
+    mocks.adapter.getProviders.mockResolvedValue({
+      providers: [{ id: 'anthropic', name: 'Anthropic', hasKey: true, models: [] }],
+      search: [],
+      activeSearch: '',
+    });
+    renderDialog();
+
+    const retryCta = await screen.findByTestId('spawn-no-models-cta');
+    expect(retryCta).toHaveTextContent('Retry');
+  });
+
   it('blocks launch and explains how to configure a model when no provider is ready', async () => {
     mocks.adapter.getModels.mockResolvedValue([]);
     mocks.adapter.getModel.mockResolvedValue('anthropic/claude-3-5-sonnet');

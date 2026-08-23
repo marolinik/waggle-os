@@ -2,7 +2,9 @@
 //
 // As of CC Sesija B 2026-04-30 (PM Q3 Plan A ratification), the substrate
 // (mind/ + harvest/ + logger + injection-scanner) lives in @waggle/hive-mind-core
-// and is distributed as Apache 2.0 OSS via subtree-split. This barrel re-exports
+// and is distributed as Apache 2.0 OSS through a reviewed, maintainer-curated
+// forward-port. Raw subtree-split output is never a publication source. This
+// barrel re-exports
 // substrate symbols for backward compatibility — existing consumers (packages/agent,
 // apps/web, packages/server, etc.) keep their `import { ... } from '@waggle/core'`
 // imports unchanged.
@@ -17,6 +19,9 @@ export {
   // Logger + injection scanner
   createCoreLogger, type CoreLogger,
   scanForInjection, type ScanResult,
+  evaluateExternalMemoryIngress, projectExternalMemoryContent,
+  type ExternalMemoryIngressDecision, type ExternalMemoryIngressInput,
+  type ExternalMemoryProjectionInput,
   // mind/ — memory substrate
   MindDB, EmbeddingDimMismatchError,
   type EmbeddingFingerprint, type FingerprintCheck,
@@ -144,7 +149,7 @@ export {
   type OptimizationLogEntry, type CreateOptimizationLogInput,
 } from './optimization-log.js';
 
-// ── Compliance (AI Act) — stays in @waggle/core (NOT extracted per .github/sync.md) ──
+// ── Compliance (AI Act) — stays in @waggle/core; excluded by curated export ──
 export { InteractionStore } from './compliance/interaction-store.js';
 export { ComplianceStatusChecker } from './compliance/status-checker.js';
 export { ReportGenerator, type ReportGeneratorDeps } from './compliance/report-generator.js';

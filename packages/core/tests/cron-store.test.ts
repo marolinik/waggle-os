@@ -18,7 +18,12 @@ describe('CronStore', () => {
 
   afterEach(() => {
     db.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   function makeInput(overrides?: Partial<CreateScheduleInput>): CreateScheduleInput {

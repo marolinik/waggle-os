@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
-import { users, agents, agentGroups, agentGroupMembers, agentJobs, teams } from '../../src/db/schema.js';
+import { users, agents, agentGroups, agentGroupMembers, agentJobs, teams, teamMembers } from '../../src/db/schema.js';
 import { sql, eq } from 'drizzle-orm';
 
 describe('Agent API', () => {
@@ -8,8 +8,11 @@ describe('Agent API', () => {
   let user1Id: string;
   let user2Id: string;
   let teamId: string;
+  let team2Id: string;
   let agent1Id: string;
   let agent2Id: string;
+  let foreignAgentId: string;
+  let group1Id: string;
 
   beforeAll(async () => {
     server = await buildServer();
@@ -48,6 +51,17 @@ describe('Agent API', () => {
       ownerId: user1Id,
     }).returning();
     teamId = team.id;
+
+    await server.db.insert(teamMembers).values({ teamId, userId: user1Id, role: 'owner' });
+
+    const [team2] = await server.db.insert(teams).values({
+      name: 'Agent Test Team 2',
+      slug: 'agtest-team-2',
+      ownerId: user2Id,
+    }).returning();
+    team2Id = team2.id;
+
+    await server.db.insert(teamMembers).values({ teamId: team2Id, userId: user2Id, role: 'owner' });
 
     // Override auth handler for tests
     server._authHandler.fn = async function (request, reply) {
@@ -119,12 +133,14 @@ describe('Agent API', () => {
 
   it('lists agents returns only the user\'s agents', async () => {
     // Create an agent for user2
-    await server.inject({
+    const foreignAgentResponse = await server.inject({
       method: 'POST',
       url: '/api/agents',
       headers: { 'x-test-user-id': user2Id },
       payload: { name: 'User2 Agent' },
     });
+    expect(foreignAgentResponse.statusCode).toBe(201);
+    foreignAgentId = JSON.parse(foreignAgentResponse.body).id;
 
     const response = await server.inject({
       method: 'GET',
@@ -198,6 +214,110 @@ describe('Agent API', () => {
     expect(body.name).toBe('Research Squad');
     expect(body.strategy).toBe('parallel');
     expect(body.members).toHaveLength(2);
+    group1Id = body.id;
+  });
+
+  it('rejects foreign and missing agents identically when creating a group', async () => {
+    const payload = {
+      name: 'Cross-tenant group',
+      strategy: 'parallel',
+      members: [
+        { agentId: agent1Id, roleInGroup: 'worker', executionOrder: 0 },
+        { agentId: foreignAgentId, roleInGroup: 'worker', executionOrder: 1 },
+      ],
+    };
+    const foreignResponse = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      headers: { 'x-test-user-id': user1Id },
+      payload,
+    });
+    const missingResponse = await server.inject({
+      method: 'POST',
+      url: '/api/agent-groups',
+      headers: { 'x-test-user-id': user1Id },
+      payload: {
+        ...payload,
+        members: [
+          payload.members[0],
+          { ...payload.members[1], agentId: '00000000-0000-4000-8000-000000000001' },
+        ],
+      },
+    });
+
+    expect(foreignResponse.statusCode).toBe(404);
+    expect(missingResponse.statusCode).toBe(404);
+    expect(JSON.parse(foreignResponse.body)).toEqual({ error: 'Agent not found' });
+    expect(missingResponse.body).toBe(foreignResponse.body);
+
+    const groups = await server.db
+      .select()
+      .from(agentGroups)
+      .where(eq(agentGroups.userId, user1Id));
+    expect(groups.some((group) => group.name === payload.name)).toBe(false);
+  });
+
+  it('rejects foreign replacement members without altering the owned group', async () => {
+    const foreignResponse = await server.inject({
+      method: 'PATCH',
+      url: `/api/agent-groups/${group1Id}`,
+      headers: { 'x-test-user-id': user1Id },
+      payload: {
+        members: [
+          { agentId: agent1Id, roleInGroup: 'worker', executionOrder: 0 },
+          { agentId: foreignAgentId, roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+    const missingResponse = await server.inject({
+      method: 'PATCH',
+      url: `/api/agent-groups/${group1Id}`,
+      headers: { 'x-test-user-id': user1Id },
+      payload: {
+        members: [
+          { agentId: agent1Id, roleInGroup: 'worker', executionOrder: 0 },
+          {
+            agentId: '00000000-0000-4000-8000-000000000001',
+            roleInGroup: 'worker',
+            executionOrder: 1,
+          },
+        ],
+      },
+    });
+
+    expect(foreignResponse.statusCode).toBe(404);
+    expect(missingResponse.statusCode).toBe(404);
+    expect(JSON.parse(foreignResponse.body)).toEqual({ error: 'Agent not found' });
+    expect(missingResponse.body).toBe(foreignResponse.body);
+
+    const groupResponse = await server.inject({
+      method: 'GET',
+      url: `/api/agent-groups/${group1Id}`,
+      headers: { 'x-test-user-id': user1Id },
+    });
+    expect(groupResponse.statusCode).toBe(200);
+    const group = JSON.parse(groupResponse.body);
+    expect(group.members.map((member: { agentId: string }) => member.agentId).sort())
+      .toEqual([agent1Id, agent2Id].sort());
+  });
+
+  it('replaces group membership when every agent belongs to the caller', async () => {
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/agent-groups/${group1Id}`,
+      headers: { 'x-test-user-id': user1Id },
+      payload: {
+        members: [
+          { agentId: agent1Id, roleInGroup: 'lead', executionOrder: 0 },
+          { agentId: agent2Id, roleInGroup: 'worker', executionOrder: 1 },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const group = JSON.parse(response.body);
+    expect(group.members.map((member: { agentId: string }) => member.agentId).sort())
+      .toEqual([agent1Id, agent2Id].sort());
   });
 
   it('creates a group with coordinator strategy and a lead agent', async () => {
@@ -283,6 +403,160 @@ describe('Agent API', () => {
     expect(job.status).toBe('queued');
     expect(job.jobType).toBe('group');
     expect(job.userId).toBe(user1Id);
+  });
+
+  it('rejects an owned group run attributed to a foreign team', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${group1Id}/run`,
+      headers: { 'x-test-user-id': user1Id },
+      payload: { task: 'Cross-tenant run', teamId: team2Id },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body)).toEqual({ error: 'Team not found' });
+  });
+
+  it('rejects generic job submission for a foreign team', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user1Id },
+      payload: { jobType: 'chat', teamId: team2Id, input: { message: 'Cross-tenant job' } },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body)).toEqual({ error: 'Team not found' });
+  });
+
+  it('rejects a generic group job that references another user\'s group', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user2Id },
+      payload: {
+        jobType: 'group',
+        teamId: team2Id,
+        input: { groupId: group1Id, taskInput: { task: 'Run foreign group' } },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body)).toEqual({ error: 'Agent group not found' });
+  });
+
+  it('hides job status from users outside the job team while preserving member access', async () => {
+    const createResponse = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user1Id },
+      payload: { jobType: 'chat', teamId, input: { message: 'Private job' } },
+    });
+    expect(createResponse.statusCode).toBe(202);
+    const { jobId } = JSON.parse(createResponse.body);
+
+    const foreignResponse = await server.inject({
+      method: 'GET',
+      url: `/api/jobs/${jobId}`,
+      headers: { 'x-test-user-id': user2Id },
+    });
+    expect(foreignResponse.statusCode).toBe(404);
+    expect(JSON.parse(foreignResponse.body)).toEqual({ error: 'Job not found' });
+
+    const memberResponse = await server.inject({
+      method: 'GET',
+      url: `/api/jobs/${jobId}`,
+      headers: { 'x-test-user-id': user1Id },
+    });
+    expect(memberResponse.statusCode).toBe(200);
+    expect(JSON.parse(memberResponse.body).id).toBe(jobId);
+  });
+
+  it('prevents users outside the job team from cancelling it', async () => {
+    const createResponse = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user1Id },
+      payload: { jobType: 'chat', teamId, input: { message: 'Do not cancel' } },
+    });
+    expect(createResponse.statusCode).toBe(202);
+    const { jobId } = JSON.parse(createResponse.body);
+
+    const foreignResponse = await server.inject({
+      method: 'POST',
+      url: `/api/jobs/${jobId}/cancel`,
+      headers: { 'x-test-user-id': user2Id },
+    });
+    expect(foreignResponse.statusCode).toBe(404);
+    expect(JSON.parse(foreignResponse.body)).toEqual({ error: 'Job not found' });
+
+    const [unchanged] = await server.db
+      .select()
+      .from(agentJobs)
+      .where(eq(agentJobs.id, jobId))
+      .limit(1);
+    expect(unchanged.status).toBe('queued');
+
+    const memberResponse = await server.inject({
+      method: 'POST',
+      url: `/api/jobs/${jobId}/cancel`,
+      headers: { 'x-test-user-id': user1Id },
+    });
+    expect(memberResponse.statusCode).toBe(200);
+  });
+
+  it('fails closed when a legacy group contains a foreign-owned agent', async () => {
+    const [legacyGroup] = await server.db.insert(agentGroups).values({
+      userId: user1Id,
+      name: 'Legacy compromised group',
+      strategy: 'parallel',
+    }).returning();
+    await server.db.insert(agentGroupMembers).values({
+      groupId: legacyGroup.id,
+      agentId: foreignAgentId,
+      roleInGroup: 'worker',
+      executionOrder: 0,
+    });
+
+    const getResponse = await server.inject({
+      method: 'GET',
+      url: `/api/agent-groups/${legacyGroup.id}`,
+      headers: { 'x-test-user-id': user1Id },
+    });
+    const patchResponse = await server.inject({
+      method: 'PATCH',
+      url: `/api/agent-groups/${legacyGroup.id}`,
+      headers: { 'x-test-user-id': user1Id },
+      payload: { name: 'Preserved compromise' },
+    });
+    const runResponse = await server.inject({
+      method: 'POST',
+      url: `/api/agent-groups/${legacyGroup.id}/run`,
+      headers: { 'x-test-user-id': user1Id },
+      payload: { task: 'Run foreign configuration', teamId },
+    });
+    const jobResponse = await server.inject({
+      method: 'POST',
+      url: '/api/jobs',
+      headers: { 'x-test-user-id': user1Id },
+      payload: {
+        jobType: 'group',
+        teamId,
+        input: { groupId: legacyGroup.id, taskInput: { task: 'Run foreign configuration' } },
+      },
+    });
+
+    for (const response of [getResponse, patchResponse, runResponse, jobResponse]) {
+      expect(response.statusCode).toBe(404);
+      expect(JSON.parse(response.body)).toEqual({ error: 'Agent group not found' });
+    }
+
+    const [unchanged] = await server.db
+      .select()
+      .from(agentGroups)
+      .where(eq(agentGroups.id, legacyGroup.id))
+      .limit(1);
+    expect(unchanged.name).toBe('Legacy compromised group');
   });
 
   it('deletes an agent', async () => {

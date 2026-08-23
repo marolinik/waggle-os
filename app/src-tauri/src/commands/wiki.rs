@@ -26,7 +26,7 @@ use crate::service::ServiceState;
 /// index (slugs + titles + metadata); call get_wiki_page_content for the body.
 #[tauri::command]
 pub async fn get_wiki_pages(state: State<'_, ServiceState>) -> Result<Value, String> {
-    let url = sidecar_url(state.port, "/api/wiki/pages");
+    let url = sidecar_url(state.verified_port()?, "/api/wiki/pages");
     let resp = http_get(&url).await?;
     parse_json(resp).await
 }
@@ -36,7 +36,7 @@ pub async fn get_wiki_pages(state: State<'_, ServiceState>) -> Result<Value, Str
 #[tauri::command]
 pub async fn get_wiki_page(state: State<'_, ServiceState>, slug: String) -> Result<Value, String> {
     let url = sidecar_url(
-        state.port,
+        state.verified_port()?,
         &format!("/api/wiki/pages/{}", urlencoding::encode(&slug)),
     );
     let resp = http_get(&url).await?;
@@ -51,7 +51,7 @@ pub async fn get_wiki_page_content(
     slug: String,
 ) -> Result<Value, String> {
     let url = sidecar_url(
-        state.port,
+        state.verified_port()?,
         &format!("/api/wiki/pages/{}/content", urlencoding::encode(&slug)),
     );
     let resp = http_get(&url).await?;
@@ -69,7 +69,7 @@ pub async fn compile_wiki_section(
     if let Some(ws) = workspace_id {
         body["workspace"] = json!(ws);
     }
-    let url = sidecar_url(state.port, "/api/wiki/compile");
+    let url = sidecar_url(state.verified_port()?, "/api/wiki/compile");
     let resp = http_post(&url, &body).await?;
     parse_json(resp).await
 }

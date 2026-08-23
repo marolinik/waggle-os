@@ -70,6 +70,16 @@ export class KnowledgeService {
       properties?: Record<string, unknown>;
     },
   ) {
+    const endpointIds = [...new Set([data.sourceId, data.targetId])];
+    const ownedEndpoints = await this.db
+      .select({ id: teamEntities.id })
+      .from(teamEntities)
+      .where(and(
+        eq(teamEntities.teamId, teamId),
+        inArray(teamEntities.id, endpointIds),
+      ));
+    if (ownedEndpoints.length !== endpointIds.length) return null;
+
     const [relation] = await this.db.insert(teamRelations).values({
       teamId,
       sourceId: data.sourceId,
@@ -87,8 +97,18 @@ export class KnowledgeService {
     depth: number = 2,
     relationTypes?: string[],
   ) {
+    const [startEntity] = await this.db
+      .select()
+      .from(teamEntities)
+      .where(and(
+        eq(teamEntities.id, startEntityId),
+        eq(teamEntities.teamId, teamId),
+      ))
+      .limit(1);
+    if (!startEntity) return null;
+
     const visited = new Set<string>([startEntityId]);
-    const resultEntities: Array<typeof teamEntities.$inferSelect> = [];
+    const resultEntities: Array<typeof teamEntities.$inferSelect> = [startEntity];
     const resultRelations: Array<typeof teamRelations.$inferSelect> = [];
 
     let frontier = [startEntityId];
@@ -140,14 +160,8 @@ export class KnowledgeService {
       frontier = nextFrontier;
     }
 
-    // Fetch the start entity
-    const [startEntity] = await this.db
-      .select()
-      .from(teamEntities)
-      .where(eq(teamEntities.id, startEntityId));
-
     return {
-      entities: [startEntity, ...resultEntities].filter(Boolean),
+      entities: resultEntities,
       relations: resultRelations,
     };
   }

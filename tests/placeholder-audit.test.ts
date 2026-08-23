@@ -33,7 +33,7 @@ const REPO_ROOT = resolve(__dirname, '..');
  * Update this when the audit doc is bumped; NEVER bump it without documenting
  * the new hit in docs/plans/L-17-placeholder-audit-2026-04-19.md.
  */
-const EXPECTED_MARKER_COUNT = 1;
+const EXPECTED_MARKER_COUNT = 0;
 
 const MARKER_REGEX = /\/\/\s*(?:MOCK|TODO|FIXME|XXX):|\/\*\s*(?:MOCK|TODO|FIXME|XXX):/g;
 

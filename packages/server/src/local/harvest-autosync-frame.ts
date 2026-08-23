@@ -13,7 +13,13 @@
  * routing both call sites through it keeps that contract from drifting between them.
  */
 
-import { type FrameStore, type MemoryFrame, type UniversalImportItem } from '@waggle/core';
+import {
+  evaluateExternalMemoryIngress,
+  projectExternalMemoryContent,
+  type FrameStore,
+  type MemoryFrame,
+  type UniversalImportItem,
+} from '@waggle/core';
 
 /** Preview cap for auto-synced summaries — intentionally lighter than the manual
  *  path's HARVEST_PREVIEW_CAP_CHARS (these are unattended background scans). */
@@ -23,12 +29,25 @@ export const AUTOSYNC_PREVIEW_CAP = 4000;
  * Write one auto-synced harvest summary frame and stamp its subject key
  * (metadata.sourceId = item.id) so a subject-mode DSAR can reach it. Guarded so a
  * re-synced dedup'd frame never clobbers a review status the user already set
- * (createIFrame returns the existing frame on a content-hash match).
+ * (createIFrame returns the existing frame on a content-hash match). Returns
+ * null when the exact summary projection is unsafe; no frame or metadata write
+ * occurs in that case.
  */
-export function writeAutoSyncSummaryFrame(frames: FrameStore, item: UniversalImportItem): MemoryFrame {
+export function writeAutoSyncSummaryFrame(frames: FrameStore, item: UniversalImportItem): MemoryFrame | null {
   const label = `[Harvest:${item.source}] ${item.title}`;
   const content = item.content.slice(0, AUTOSYNC_PREVIEW_CAP);
-  const frame = frames.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
+  const storedContent = `${label}\n\n${content}`;
+  const ingressContent = projectExternalMemoryContent({
+    content: item.content,
+    messages: item.messages,
+    parseMethod: item.metadata?.parseMethod,
+    maxChars: AUTOSYNC_PREVIEW_CAP,
+  });
+  if (evaluateExternalMemoryIngress({ title: label, content: ingressContent }).action === 'block') {
+    return null;
+  }
+
+  const frame = frames.createIFrame('harvest', storedContent, 'normal', 'import');
   if (!frame.metadata || frame.metadata === '{}') {
     frames.setMetadata(frame.id, JSON.stringify({ sourceId: item.id }));
   }

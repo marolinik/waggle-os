@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -20,7 +20,7 @@ async function bootstrap(initial: ClaudeCodeSettings, withHookFiles: boolean): P
   await mkdir(claudeDir, { recursive: true });
   const settingsPath = join(claudeDir, 'settings.json');
   await writeFile(settingsPath, JSON.stringify(initial, null, 2), 'utf-8');
-  const hooksDir = join(home, 'fake-dist', 'hooks');
+  const hooksDir = join(home, 'hive-mind-hooks-claude-code', 'dist', 'hooks');
   await mkdir(hooksDir, { recursive: true });
   if (withHookFiles) {
     for (const b of ['session-start', 'user-prompt-submit', 'stop', 'pre-compact']) {
@@ -48,6 +48,7 @@ function mockSpawnImpl(opts: { exitCode: number; stdout?: string; stderr?: strin
 describe('verify', () => {
   const envs: TestEnv[] = [];
   afterEach(async () => {
+    vi.unstubAllEnvs();
     for (const env of envs.splice(0)) await rm(env.home, { recursive: true, force: true });
   });
 
@@ -88,6 +89,25 @@ describe('verify', () => {
     expect(result.ok).toBe(true);
     const cliCheck = result.checks.find((c) => c.name === 'hive-mind-cli reachable');
     expect(cliCheck?.ok).toBe(true);
+  });
+
+  it('passes after Claude normalizes away marker keys but preserves hook commands', async () => {
+    const env = await bootstrap({}, true);
+    envs.push(env);
+    await install({ home: env.home, hooksDir: env.hooksDir });
+    const settingsPath = join(env.home, '.claude', 'settings.json');
+    const settings = JSON.parse(await readFile(settingsPath, 'utf-8')) as ClaudeCodeSettings;
+    for (const groups of Object.values(settings.hooks ?? {})) {
+      for (const group of groups) delete group._hiveMindShim;
+    }
+    await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+
+    const result = await verify({
+      home: env.home,
+      hooksDir: env.hooksDir,
+      spawnImpl: mockSpawnImpl({ exitCode: 0 }),
+    });
+    expect(result.ok).toBe(true);
   });
 
   it('reports CLI unreachable when the spawn exits non-zero', async () => {
@@ -141,5 +161,45 @@ describe('verify', () => {
     expect(result.ok).toBe(false);
     const fileCheck = result.checks.find((c) => c.name.includes('readable on disk'));
     expect(fileCheck?.ok).toBe(false);
+  });
+
+  it('flags missing hook scripts when the installed command pins a quoted Windows Node path', async () => {
+    vi.stubEnv('WAGGLE_HOOK_NODE_PATH', 'C:\\Program Files\\nodejs\\node.exe');
+    const env = await bootstrap({}, false);
+    envs.push(env);
+    await install({ home: env.home, hooksDir: env.hooksDir });
+
+    const result = await verify({
+      home: env.home,
+      hooksDir: env.hooksDir,
+      spawnImpl: mockSpawnImpl({ exitCode: 0 }),
+    });
+
+    expect(result.ok).toBe(false);
+    const fileChecks = result.checks.filter((c) => c.name.includes('readable on disk'));
+    expect(fileChecks).toHaveLength(4);
+    expect(fileChecks.every((check) => check.ok === false)).toBe(true);
+  });
+
+  it('rejects a readable hook command from a stale install directory', async () => {
+    const env = await bootstrap({}, true);
+    envs.push(env);
+    await install({ home: env.home, hooksDir: env.hooksDir });
+    const currentHooksDir = join(env.home, 'current', 'hive-mind-hooks-claude-code', 'dist', 'hooks');
+    await mkdir(currentHooksDir, { recursive: true });
+    for (const basename of ['session-start', 'user-prompt-submit', 'stop', 'pre-compact']) {
+      await writeFile(join(currentHooksDir, `${basename}.js`), '/* current hook */', 'utf-8');
+    }
+
+    const result = await verify({
+      home: env.home,
+      hooksDir: currentHooksDir,
+      spawnImpl: mockSpawnImpl({ exitCode: 0 }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.checks.filter((check) => (
+      !check.ok && check.name.includes('contains hive-mind entry')
+    ))).toHaveLength(4);
   });
 });

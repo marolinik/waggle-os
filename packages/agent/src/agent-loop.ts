@@ -1,4 +1,5 @@
 import type { ToolDefinition } from './tools.js';
+import { RISK_LEVELS, riskAtLeast, type RiskLevel } from '@waggle/shared';
 import { LoopGuard } from './loop-guard.js';
 import { parseChatCompletionStream } from './sse-parser.js';
 import { maybeFireCompletionGate, initialGateState } from './loop-gates.js';
@@ -8,10 +9,32 @@ import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
 import { logTurnEvent } from './turn-context.js';
+import {
+  capToolResultForModel,
+  compactToolContextForModel,
+  type ToolContextBudget,
+} from './agent-run-budget.js';
+import { estimateTokens as estimateTextTokens } from './tool-output-compressor.js';
+import type {
+  ModelSpendBudget,
+  ModelSpendBillingClass,
+  ModelSpendReservation,
+} from './cost-tracker.js';
+import { MODEL_SPEND_RESERVATION_HEADER } from './cost-tracker.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
+type PluginToolCandidate = Omit<ToolDefinition, 'riskLevel'> & { riskLevel?: unknown };
+
 export interface PluginToolProvider {
-  getAllTools(): Array<{ name: string; description: string; parameters: Record<string, unknown>; execute: (args: Record<string, unknown>) => Promise<string> }>;
+  getAllTools(): PluginToolCandidate[];
+}
+
+function normalizePluginToolRisk(value: unknown): RiskLevel {
+  if ((RISK_LEVELS as readonly unknown[]).includes(value)) {
+    const declared = value as RiskLevel;
+    if (riskAtLeast(declared, 'medium')) return declared;
+  }
+  return 'medium';
 }
 
 export interface AgentMessage {
@@ -31,6 +54,15 @@ export interface AgentLoopConfig {
   litellmUrl: string;
   litellmApiKey: string;
   model: string;
+  /** Canonical priced model before any provider-specific ID rewriting. */
+  billingModel?: string;
+  /** Shared process budget ledger. Omit to preserve unmanaged/library callers. */
+  modelSpendBudget?: ModelSpendBudget;
+  /** Set to free only after the server has verified the route is offline/free. */
+  modelSpendBillingClass?: ModelSpendBillingClass;
+  spendWorkspaceId?: string;
+  /** Existing durable trace that must own self-proxy spend before dispatch. */
+  modelSpendTraceId?: number;
   systemPrompt: string;
   tools: ToolDefinition[];
   messages: Array<{ role: string; content: string }>;
@@ -45,6 +77,12 @@ export interface AgentLoopConfig {
    */
   onGiveUp?: (message: string) => void;
   maxTurns?: number;
+  /** Evidence/tool rounds allowed before a final synthesis-only turn is forced. */
+  maxToolRounds?: number;
+  /** Tokens held back from maxTokenBudget for the final synthesis request. */
+  synthesisReserveTokens?: number;
+  /** Model-facing tool-result hard cap and historical compaction policy. */
+  toolContextBudget?: ToolContextBudget;
   stream?: boolean;
   fetch?: typeof globalThis.fetch;
   hooks?: HookRegistry;
@@ -53,6 +91,13 @@ export interface AgentLoopConfig {
   pluginTools?: PluginToolProvider;
   /** Optional maximum token budget (input + output combined). Loop terminates gracefully when exceeded. */
   maxTokenBudget?: number;
+  /** Maximum completion tokens requested from the provider on any one dispatch. */
+  maxOutputTokens?: number;
+  /** Optional provider-native reasoning policy. Omitted to preserve provider defaults. */
+  reasoning?: {
+    enabled: boolean;
+    effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  };
   /** Optional abort signal — when aborted, the agent loop exits between turns */
   signal?: AbortSignal;
   /** Team governance policies — blocked tools and allowed sources.
@@ -173,6 +218,63 @@ function containsRawToolCallMarkup(content: string): boolean {
     || /```(?:json|tool)?\s*\{[^`]*"tool"/is.test(content);
 }
 
+const EXPLICIT_CITATION_INTENT = /\b(?:cite|citations?|source\s+urls?|provide\s+(?:the\s+)?(?:sources?|links?)|include\s+(?:the\s+)?(?:sources?|links?))\b/i;
+const NEGATED_CITATION_INTENT = /\b(?:do\s+not|don't|dont|never|avoid|omit|without|no)\b(?:\s+\w+){0,4}\s+(?:cite|citations?|sources?|source\s+urls?|links?)\b/i;
+const UNUSABLE_FETCH_RESULT = /^(?:error\b|fetch\s+(?:failed|error)\b|page fetched but no text content found\b|\[(?:security|blocked)\]|tool\s+"[^"]+"\s+(?:is blocked|not found)\b)/i;
+
+function safeFetchedCitationUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    // Never reproduce credentials or signed/query-bearing URLs automatically.
+    if (parsed.username || parsed.password || parsed.search) return null;
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function appendFetchedSourceFooter(
+  content: string,
+  citationIntent: boolean,
+  fetchedUrls: ReadonlySet<string>,
+): { content: string; suffix: string } {
+  if (!citationIntent || fetchedUrls.size === 0) return { content, suffix: '' };
+  const missing = [...fetchedUrls].filter(url => !content.includes(url));
+  if (missing.length === 0) return { content, suffix: '' };
+  const suffix = `${content.endsWith('\n') ? '\n' : '\n\n'}Sources fetched:\n${missing.map(url => `- ${url}`).join('\n')}`;
+  return { content: `${content}${suffix}`, suffix };
+}
+
+const SUPPORTED_COMPLETION_FINISH_REASONS = new Set(['stop', 'tool_calls']);
+
+type IncompleteCompletionError = Error & {
+  code: 'INCOMPLETE_COMPLETION';
+  usage?: AgentResponse['usage'];
+  partialToolCalls?: unknown;
+};
+
+function isIncompleteCompletionError(error: unknown): error is IncompleteCompletionError {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
+}
+
+function incompleteCompletionError(
+  reason: string,
+  usage: AgentResponse['usage'],
+): IncompleteCompletionError {
+  const error = new Error(
+    `LLM returned an incomplete completion (${reason}); partial content was not accepted.`,
+  ) as IncompleteCompletionError;
+  error.name = 'IncompleteCompletionError';
+  error.code = 'INCOMPLETE_COMPLETION';
+  error.usage = usage;
+  return error;
+}
+
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
   const {
     litellmUrl,
@@ -185,6 +287,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     onToolUse: userOnToolUse,
     onToolResult: userOnToolResult,
     maxTurns = 10,
+    maxToolRounds,
+    synthesisReserveTokens,
+    toolContextBudget = {
+      maxSingleResultChars: 8_000,
+      recentResultCount: 2,
+      historicalResultChars: 750,
+    },
     stream = false,
     fetch: fetchFn = globalThis.fetch,
     hooks,
@@ -196,10 +305,38 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     onSkillDistillationFire,
   } = config;
 
+  if (
+    config.maxTokenBudget !== undefined
+    && (!Number.isFinite(config.maxTokenBudget) || config.maxTokenBudget < 1)
+  ) {
+    throw new RangeError('maxTokenBudget must be a positive finite number');
+  }
+  if (
+    config.maxOutputTokens !== undefined
+    && (!Number.isFinite(config.maxOutputTokens) || config.maxOutputTokens < 1)
+  ) {
+    throw new RangeError('maxOutputTokens must be a positive finite number');
+  }
+
+  const userRequest = [...inputMessages]
+    .reverse()
+    .find(message => message.role === 'user')?.content ?? '';
+  const citationIntent = EXPLICIT_CITATION_INTENT.test(userRequest)
+    && !NEGATED_CITATION_INTENT.test(userRequest);
+  const successfullyFetchedCitationUrls = new Set<string>();
+  let lastToolObservation: {
+    name: string;
+    citationUrl: string | null;
+    usableResult: boolean;
+  } | undefined;
+
   logTurnEvent(turnId, {
     stage: 'agent-loop.enter',
     model,
     maxTurns,
+    maxToolRounds,
+    maxTokenBudget: config.maxTokenBudget,
+    synthesisReserveTokens,
     toolCount: configTools.length,
     messageCount: inputMessages.length,
     systemPromptChars: systemPrompt.length,
@@ -232,16 +369,30 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       }
     : userOnToolUse;
 
-  const onToolResult = traceCallbacks
-    ? (name: string, input: Record<string, unknown>, result: string) => {
-        traceCallbacks.onToolResult(name, input, result);
-        userOnToolResult?.(name, input, result);
-      }
-    : userOnToolResult;
+  const onToolResult = (
+    name: string,
+    input: Record<string, unknown>,
+    result: string,
+  ) => {
+    const trimmedResult = result.trim();
+    lastToolObservation = {
+      name,
+      citationUrl: safeFetchedCitationUrl(input.url),
+      usableResult: trimmedResult.length > 0 && !UNUSABLE_FETCH_RESULT.test(trimmedResult),
+    };
+    traceCallbacks?.onToolResult(name, input, result);
+    userOnToolResult?.(name, input, result);
+  };
 
   // Merge plugin tools (if any) into the base tool set
   const tools: ToolDefinition[] = pluginToolProvider
-    ? [...configTools, ...pluginToolProvider.getAllTools()]
+    ? [
+        ...configTools,
+        ...pluginToolProvider.getAllTools().map((tool) => ({
+          ...tool,
+          riskLevel: normalizePluginToolRisk(tool.riskLevel),
+        })),
+      ]
     : configTools;
 
   // Build messages array with system prompt + input messages
@@ -289,6 +440,79 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // One-shot completion gates (D3 verification, D1 skill distillation) +
   // preserved-answer slot for issue #4. See `./loop-gates.ts` for details.
   let gateState = initialGateState();
+  let toolRoundCount = 0;
+  let synthesisForced = false;
+  let lastRequestInputTokens = 0;
+  const maxTokenBudget = typeof config.maxTokenBudget === 'number'
+    && Number.isFinite(config.maxTokenBudget)
+    && config.maxTokenBudget > 0
+    ? Math.floor(config.maxTokenBudget)
+    : undefined;
+  const configuredOutputCeiling = config.maxOutputTokens ?? synthesisReserveTokens ?? 8_192;
+  const outputTokenCeiling = Number.isFinite(configuredOutputCeiling) && configuredOutputCeiling > 0
+    ? Math.floor(configuredOutputCeiling)
+    : 8_192;
+
+  const budgetStopResponse = (
+    usableContent?: string,
+    usableContentWasStreamed = false,
+  ): AgentResponse => {
+    const used = totalInputTokens + totalOutputTokens;
+    const preservedContent = gateState.preservedAnswerForDistillation;
+    const usableAnswer = usableContent?.trim();
+    const baseContent = preservedContent
+      ?? usableAnswer
+      ?? `Token budget exhausted before another safe provider request (used ${used} tokens, limit ${maxTokenBudget}).`;
+    const finalized = appendFetchedSourceFooter(
+      baseContent,
+      citationIntent,
+      successfullyFetchedCitationUrls,
+    );
+    if (stream && onToken) {
+      if (preservedContent || usableContentWasStreamed) {
+        if (finalized.suffix) onToken(finalized.suffix);
+      } else {
+        onToken(finalized.content);
+      }
+    }
+    const content = finalized.content;
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.exit',
+      reason: 'token-budget-exhausted',
+      contentChars: content.length,
+      toolsUsed,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+    });
+    return {
+      content,
+      toolsUsed,
+      usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+    };
+  };
+
+  const forceSynthesis = (reason: 'tool-round-limit' | 'token-reserve'): void => {
+    if (synthesisForced) return;
+    synthesisForced = true;
+    messages.push({
+      role: 'user',
+      content: [
+        'Evidence collection is complete. Do not call more tools. Produce the final answer now using only the evidence already present.',
+        'Use this truncation-safe order:',
+        '1. First sentence: directly answer the user\'s main question and state any requested recommendation or decision. If the evidence cannot support one, say that there.',
+        '2. Immediately complete every other explicit user deliverable, as compactly as the request allows, including requested tables.',
+        '3. Only then add source inventories, methodology, detailed fact-versus-inference discussion, evidence gaps, caveats, or other supporting detail.',
+        'Do not open with sources, process, or evidence gaps. Cite source URLs alongside supported claims, distinguish verified facts from inference, and do not mention internal turn or token budgets.',
+      ].join('\n'),
+    });
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.synthesis-forced',
+      reason,
+      toolRoundCount,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+    });
+  };
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
@@ -300,14 +524,70 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     }
 
+    if (!synthesisForced && maxToolRounds !== undefined && toolRoundCount >= maxToolRounds) {
+      forceSynthesis('tool-round-limit');
+    }
+    const usedBeforeRequest = totalInputTokens + totalOutputTokens;
+    let requestMessages = compactToolContextForModel(messages, toolContextBudget);
+    const turnOpenAiTools = gateState.verificationCorrectionUsed
+      ? openaiTools.filter(tool => tool.function.name !== 'save_memory')
+      : openaiTools;
+    const estimateNextRequestTokens = (): number => {
+      const serializedEstimate = estimateTextTokens(
+        JSON.stringify(requestMessages)
+        + (!synthesisForced && turnOpenAiTools.length > 0 ? JSON.stringify(turnOpenAiTools) : ''),
+      );
+      return synthesisForced
+        ? serializedEstimate
+        : Math.max(lastRequestInputTokens, serializedEstimate);
+    };
+    let estimatedNextRequestTokens = estimateNextRequestTokens();
+    // A tool turn is not safe merely because its own request fits: the next
+    // no-tools synthesis must be able to replay comparable context and still
+    // retain the configured completion allowance.
+    let futureSynthesisReserve = !synthesisForced && turnOpenAiTools.length > 0 && synthesisReserveTokens
+      ? estimatedNextRequestTokens + synthesisReserveTokens
+      : 0;
+    if (
+      !synthesisForced
+      && turnOpenAiTools.length > 0
+      && maxTokenBudget
+      && synthesisReserveTokens
+      && usedBeforeRequest + estimatedNextRequestTokens + futureSynthesisReserve >= maxTokenBudget
+    ) {
+      forceSynthesis('token-reserve');
+      requestMessages = compactToolContextForModel(messages, toolContextBudget);
+      estimatedNextRequestTokens = estimateNextRequestTokens();
+      futureSynthesisReserve = 0;
+    }
+
+    const outputTokenLimit = maxTokenBudget === undefined
+      ? outputTokenCeiling
+      : Math.min(
+          outputTokenCeiling,
+          Math.floor(maxTokenBudget - usedBeforeRequest - estimatedNextRequestTokens - futureSynthesisReserve),
+        );
+    if (outputTokenLimit < 1) return budgetStopResponse();
+
     const body: Record<string, unknown> = {
       model,
-      messages,
+      messages: requestMessages,
+      max_tokens: outputTokenLimit,
     };
-    if (openaiTools.length > 0) {
-      body.tools = openaiTools;
+    if (config.reasoning) {
+      body.reasoning = { ...config.reasoning };
     }
-    if (stream) {
+    const currentRequestToolNames = synthesisForced
+      ? []
+      : turnOpenAiTools.map(tool => tool.function.name);
+    if (currentRequestToolNames.length > 0) {
+      body.tools = turnOpenAiTools;
+    }
+    // A forced synthesis is the only request in the turn that cannot execute
+    // tools. Make it atomic so an upstream SSE truncation cannot discard an
+    // otherwise complete evidence-backed answer after all tool work finished.
+    const requestUsesStream = stream && !synthesisForced;
+    if (requestUsesStream) {
       body.stream = true;
       body.stream_options = { include_usage: true };
     }
@@ -322,17 +602,49 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       : timeoutSignal;
 
     let response: Response;
+    let spendReservation: ModelSpendReservation | undefined = config.modelSpendBudget?.reserveModelSpend({
+      model: config.billingModel ?? model,
+      inputTokens: estimatedNextRequestTokens,
+      maxOutputTokens: outputTokenLimit,
+      workspaceId: config.spendWorkspaceId,
+      billingClass: config.modelSpendBillingClass,
+    });
+    const reservationHandoff = spendReservation
+      ? config.modelSpendBudget?.issueModelSpendReservationHandoff?.(
+          spendReservation,
+          JSON.stringify(body),
+          litellmUrl,
+          config.modelSpendTraceId ?? config.traceRecording?.handle.id,
+        )
+      : undefined;
     try {
       response = await fetchFn(`${litellmUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${litellmApiKey}`,
+          ...(reservationHandoff
+            ? { [MODEL_SPEND_RESERVATION_HEADER]: reservationHandoff.token }
+            : {}),
         },
         body: JSON.stringify(body),
         signal: requestSignal,
       });
     } catch (netErr) {
+      if (reservationHandoff) {
+        const handoffDisposition = config.modelSpendBudget?.takeModelSpendReservationHandoffDisposition?.(
+          reservationHandoff.token,
+        );
+        config.modelSpendBudget?.discardModelSpendReservationHandoff?.(reservationHandoff.token);
+        if (handoffDisposition === 'release' && spendReservation) {
+          config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
+          spendReservation = undefined;
+        }
+      }
+      if (spendReservation) {
+        config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+        spendReservation = undefined;
+      }
       // The fetch promise itself rejected — a network-level failure (endpoint
       // down / restarting, socket hang-up, "fetch failed") or our timeout fired.
       // A genuine client disconnect re-throws (caught by the between-turn guard
@@ -349,8 +661,29 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       continue;
     }
 
+    if (reservationHandoff) {
+      const handoffDisposition = config.modelSpendBudget?.takeModelSpendReservationHandoffDisposition?.(
+        reservationHandoff.token,
+      );
+      config.modelSpendBudget?.discardModelSpendReservationHandoff?.(reservationHandoff.token);
+      if (handoffDisposition === 'release' && spendReservation) {
+        config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
+        spendReservation = undefined;
+      }
+    }
     if (!response.ok) {
       const action = await handleNonOkResponse(response, retryState);
+      if (spendReservation) {
+        const definitelyRejectedBeforeInference = response.status === 429
+          || [400, 401, 403, 404, 405, 413, 415, 422].includes(response.status);
+        if (definitelyRejectedBeforeInference) {
+          config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
+        } else {
+          // Server-side failures can be ambiguous about inference/token use.
+          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+        }
+        spendReservation = undefined;
+      }
       if (action.kind === 'fatal') throw action.error;
       if (onToken) onToken(action.notice);
       await new Promise(r => setTimeout(r, action.waitMs));
@@ -365,16 +698,60 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     };
     let turnInputTokens = 0;
     let turnOutputTokens = 0;
+    let completionFinishReason: string | null = null;
+    let streamDoneObserved = !requestUsesStream;
+    let currentTurnStreamedContent = '';
 
-    if (stream) {
-      const parsed = await parseChatCompletionStream(response.body!, {
-        onToken: (token) => {
-          allStreamedContent += token;
-          if (onToken) onToken(token);
-        },
-      });
+    if (requestUsesStream) {
+      let parsed: Awaited<ReturnType<typeof parseChatCompletionStream>>;
+      try {
+        parsed = await parseChatCompletionStream(response.body!, {
+          onToken: (token) => {
+            currentTurnStreamedContent += token;
+            allStreamedContent += token;
+            if (onToken) onToken(token);
+          },
+        });
+      } catch (error) {
+        if (!isIncompleteCompletionError(error)) {
+          if (spendReservation) {
+            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            spendReservation = undefined;
+          }
+          throw error;
+        }
+        const observedInput = error.usage?.inputTokens ?? 0;
+        const observedOutput = error.usage?.outputTokens ?? 0;
+        const failedInputTokens = observedInput > 0
+          ? observedInput
+          : estimatedNextRequestTokens;
+        const failedOutputTokens = observedOutput > 0
+          ? observedOutput
+          : Math.max(1, estimateTextTokens(JSON.stringify({
+            content: currentTurnStreamedContent,
+            tool_calls: error.partialToolCalls ?? [],
+          })));
+        error.usage = {
+          inputTokens: totalInputTokens + failedInputTokens,
+          outputTokens: totalOutputTokens + failedOutputTokens,
+        };
+        if (spendReservation) {
+          if (observedInput > 0 || observedOutput > 0) {
+            config.modelSpendBudget?.reconcileModelSpend(spendReservation, {
+              inputTokens: failedInputTokens,
+              outputTokens: failedOutputTokens,
+            });
+          } else {
+            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+          }
+          spendReservation = undefined;
+        }
+        throw error;
+      }
       turnInputTokens = parsed.usage.inputTokens;
       turnOutputTokens = parsed.usage.outputTokens;
+      completionFinishReason = parsed.finishReason;
+      streamDoneObserved = parsed.doneObserved;
       // Use empty string (not null) when there are tool_calls — some LLM
       // proxies (LiteLLM→Anthropic) mishandle null content alongside tool_use.
       assistantMessage = {
@@ -383,8 +760,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     } else {
       // Non-streaming path: parse the single chat completion response.
+      try {
       const data = await response.json() as {
         choices?: Array<{
+          finish_reason?: string | null;
           message: {
             content: string | null;
             tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
@@ -392,14 +771,45 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
-      if (!data.choices || data.choices.length === 0) {
-        throw new Error(
-          `LiteLLM returned no choices: ${JSON.stringify(data).slice(0, 200)}`
-        );
-      }
-      assistantMessage = data.choices[0].message;
+        if (!data.choices || data.choices.length === 0) {
+          throw new Error(
+            `LiteLLM returned no choices: ${JSON.stringify(data).slice(0, 200)}`
+          );
+        }
+        const choice = data.choices[0];
+        if (!choice.message || typeof choice.message !== 'object') {
+          throw new Error(
+            `LiteLLM returned an invalid choice: ${JSON.stringify(choice).slice(0, 200)}`
+          );
+        }
+        assistantMessage = choice.message;
+        completionFinishReason = choice.finish_reason ?? null;
       turnInputTokens = data.usage?.prompt_tokens ?? 0;
       turnOutputTokens = data.usage?.completion_tokens ?? 0;
+      } catch (error) {
+        if (spendReservation) {
+          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+          spendReservation = undefined;
+        }
+        throw error;
+      }
+    }
+
+    // Some OpenAI-compatible providers omit or corrupt usage counters. Do not
+    // interpret missing/non-finite counters as free work.
+    if (!Number.isFinite(turnInputTokens) || turnInputTokens <= 0) {
+      turnInputTokens = estimatedNextRequestTokens;
+    }
+    if (!Number.isFinite(turnOutputTokens) || turnOutputTokens <= 0) {
+      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
+    }
+
+    if (spendReservation) {
+      config.modelSpendBudget?.reconcileModelSpend(spendReservation, {
+        inputTokens: turnInputTokens,
+        outputTokens: turnOutputTokens,
+      });
+      spendReservation = undefined;
     }
 
     // R3-008: if the run was aborted while the in-flight response was being
@@ -417,19 +827,50 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     totalInputTokens += turnInputTokens;
     totalOutputTokens += turnOutputTokens;
+
+    const incompleteReason = completionFinishReason === 'length'
+      ? 'finish_reason=length'
+      : requestUsesStream && !streamDoneObserved
+        ? 'stream ended before data: [DONE]'
+        : completionFinishReason === null
+          ? 'missing finish_reason'
+          : !SUPPORTED_COMPLETION_FINISH_REASONS.has(completionFinishReason)
+          ? `unsupported finish_reason=${completionFinishReason}`
+          : null;
+    if (incompleteReason) {
+      logTurnEvent(turnId, {
+        stage: 'agent-loop.incomplete-completion',
+        reason: incompleteReason,
+        finishReason: completionFinishReason,
+        streamDoneObserved,
+        inputTokens: turnInputTokens,
+        outputTokens: turnOutputTokens,
+      });
+      throw incompleteCompletionError(incompleteReason, {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      });
+    }
+
+    lastRequestInputTokens = turnInputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
 
-    // Check token budget
-    if (config.maxTokenBudget && (totalInputTokens + totalOutputTokens) > config.maxTokenBudget) {
-      const used = totalInputTokens + totalOutputTokens;
-      // Issue #4 — if D1 has already fired, the user's answer is the deliverable;
-      // surface it rather than swallowing it under a budget message.
-      return {
-        content: gateState.preservedAnswerForDistillation
-          ?? `Token budget exceeded (used ${used} tokens, limit ${config.maxTokenBudget}).`,
-        toolsUsed,
-        usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
-      };
+    // Provider usage is authoritative and known only after the response. Once
+    // the hard budget is exhausted, do not execute pending tools, completion
+    // gates, or a second synthesis request.
+    if (maxTokenBudget !== undefined && (totalInputTokens + totalOutputTokens) >= maxTokenBudget) {
+      const usableContent = assistantMessage.tool_calls?.length && !synthesisForced
+        ? undefined
+        : ((assistantMessage.content ?? '').trim() || allStreamedContent.trim() || undefined);
+      const result = budgetStopResponse(
+        usableContent
+          ?? (synthesisReserveTokens
+            ? 'I gathered evidence but the token budget was exhausted before a reliable final synthesis.'
+            : `Token budget exceeded (used ${totalInputTokens + totalOutputTokens} tokens, limit ${maxTokenBudget}).`),
+        Boolean(requestUsesStream && usableContent),
+      );
+      if (!stream && onToken && result.content) onToken(result.content);
+      return result;
     }
 
     // No tool calls — return the final response
@@ -452,12 +893,14 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       }
 
       // Completion-time gates: D3 (verification) + D1 (skill distillation).
-      // See ./loop-gates.ts. If a gate fires, it pushes the corrective
-      // directive into `messages` and returns fired=true → continue loop.
+      // See ./loop-gates.ts. If a gate fires, it amends the internal context
+      // and returns fired=true → continue loop.
       const gate = await maybeFireCompletionGate({
         content,
         toolsUsed,
+        availableToolNames: currentRequestToolNames,
         messages,
+        userRequest,
         state: gateState,
         enableVerification: verificationGate,
         enableSkillDistillation: skillDistillationGate,
@@ -465,16 +908,28 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         turnId,
       });
       gateState = gate.state;
-      if (gate.fired) continue;
+      if (gate.fired) {
+        if (stream && onToken && gate.contentSuffix) onToken(gate.contentSuffix);
+        continue;
+      }
+
+      const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
+      // Once D1 has fired, surface the preserved user answer instead of the
+      // internal skill-distillation summary produced by the current turn.
+      const finalized = appendFetchedSourceFooter(
+        gateState.preservedAnswerForDistillation ?? acceptedContent,
+        citationIntent,
+        successfullyFetchedCitationUrls,
+      );
+      const finalContent = finalized.content;
 
       // In non-streaming mode, emit the full content as a single token
-      if (!stream && onToken && content) {
-        onToken(content);
+      if (!requestUsesStream && onToken && finalContent) {
+        onToken(finalContent);
+      } else if (requestUsesStream && onToken) {
+        if (gate.contentSuffix) onToken(gate.contentSuffix);
+        if (finalized.suffix) onToken(finalized.suffix);
       }
-      // Issue #4 — once D1 has fired, the user's answer was captured before
-      // the distillation turn ran; the current `content` is the skill
-      // summary, NOT the answer. Surface the preserved answer instead.
-      const finalContent = gateState.preservedAnswerForDistillation ?? content;
       logTurnEvent(turnId, {
         stage: 'agent-loop.exit',
         contentChars: finalContent.length,
@@ -489,7 +944,32 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     }
 
+    // Tool definitions are withheld on the reserved synthesis turn. If a model
+    // nevertheless emits a phantom native call, accept its prose but never
+    // execute beyond the evidence budget.
+    if (synthesisForced) {
+      const synthesis = (assistantMessage.content ?? '').trim()
+        || allStreamedContent
+        || 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.';
+      const finalized = appendFetchedSourceFooter(
+        gateState.preservedAnswerForDistillation ?? synthesis,
+        citationIntent,
+        successfullyFetchedCitationUrls,
+      );
+      if (!requestUsesStream && onToken && finalized.content) {
+        onToken(finalized.content);
+      } else if (requestUsesStream && onToken && finalized.suffix) {
+        onToken(finalized.suffix);
+      }
+      return {
+        content: finalized.content,
+        toolsUsed,
+        usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+      };
+    }
+
     // Has tool calls — execute them and continue the loop
+    toolRoundCount++;
     // Ensure content is never null when tool_calls are present (LiteLLM→Anthropic compat)
     messages.push({
       role: 'assistant',
@@ -499,9 +979,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     // Execute each tool call through the explicit middleware chain in
     // `./tool-executor.ts`. Review C2 hook-ordering is preserved there.
+    const turnToolMap = gateState.verificationCorrectionUsed
+      ? new Map([...toolMap].filter(([name]) => name !== 'save_memory'))
+      : toolMap;
     for (const toolCall of assistantMessage.tool_calls) {
+      lastToolObservation = undefined;
       const r = await executeToolCall(toolCall, {
-        toolMap,
+        toolMap: turnToolMap,
         guard,
         hooks,
         capabilityRouter: config.capabilityRouter,
@@ -510,8 +994,27 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         onToolResult,
         turnId,
       });
+      const observation = lastToolObservation as {
+        name: string;
+        citationUrl: string | null;
+        usableResult: boolean;
+      } | undefined;
+      if (
+        citationIntent
+        && r.countedAsUsed
+        && r.toolName === 'web_fetch'
+        && observation?.name === 'web_fetch'
+        && observation.usableResult
+        && observation.citationUrl
+      ) {
+        successfullyFetchedCitationUrls.add(observation.citationUrl);
+      }
       if (r.countedAsUsed) toolsUsed.push(r.toolName);
-      messages.push({ role: 'tool', content: r.content, tool_call_id: r.toolCallId });
+      messages.push({
+        role: 'tool',
+        content: capToolResultForModel(r.content, toolContextBudget.maxSingleResultChars),
+        tool_call_id: r.toolCallId,
+      });
 
       // Steal #9 T3 — a critical failure streak: give up rather than burn more
       // turns retrying a tool that keeps failing. Surface the give-up copy and
@@ -534,12 +1037,29 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
   }
 
-  // maxTurns reached — return any accumulated content rather than generic message.
-  // Issue #4 — if D1 has already fired, prefer the user's captured answer
-  // over the generic "max tool turns" fallback (the answer is the deliverable).
+  // maxTurns reached — bounded runs must never expose an internal max-turn
+  // message. Normally the reserved synthesis turn returns above; this fallback
+  // is only for a malformed provider response during that final request.
+  const fallbackBaseWasStreamed = Boolean(
+    gateState.preservedAnswerForDistillation || allStreamedContent,
+  );
+  const finalized = appendFetchedSourceFooter(
+    gateState.preservedAnswerForDistillation
+      ?? (allStreamedContent || (synthesisReserveTokens
+        ? 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.'
+        : `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`)),
+    citationIntent,
+    successfullyFetchedCitationUrls,
+  );
+  if (stream && onToken) {
+    if (fallbackBaseWasStreamed) {
+      if (finalized.suffix) onToken(finalized.suffix);
+    } else {
+      onToken(finalized.content);
+    }
+  }
   return {
-    content: gateState.preservedAnswerForDistillation
-      ?? (allStreamedContent || `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`),
+    content: finalized.content,
     toolsUsed,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
   };

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildServer } from '../../src/index.js';
 import { users, teams, teamMembers, teamEntities, teamRelations } from '../../src/db/schema.js';
-import { sql } from 'drizzle-orm';
+import { eq, or, sql } from 'drizzle-orm';
 
 describe('Team Knowledge Graph API', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
@@ -10,6 +10,7 @@ describe('Team Knowledge Graph API', () => {
   let outsiderId: string;
   let teamSlug: string;
   let teamId: string;
+  let foreignEntityId: string;
 
   beforeAll(async () => {
     server = await buildServer();
@@ -59,6 +60,25 @@ describe('Team Knowledge Graph API', () => {
       { teamId, userId: ownerId, role: 'owner' },
       { teamId, userId: memberId, role: 'member' },
     ]);
+
+    const [foreignTeam] = await server.db.insert(teams).values({
+      name: 'Foreign KG Team',
+      slug: 'kgtest-foreign-knowledge',
+      ownerId: outsiderId,
+    }).returning();
+    await server.db.insert(teamMembers).values({
+      teamId: foreignTeam.id,
+      userId: outsiderId,
+      role: 'owner',
+    });
+    const [foreignEntity] = await server.db.insert(teamEntities).values({
+      teamId: foreignTeam.id,
+      entityType: 'secret',
+      name: 'Foreign Entity',
+      properties: { confidential: true },
+      sharedBy: outsiderId,
+    }).returning();
+    foreignEntityId = foreignEntity.id;
 
     // Override auth handler
     server._authHandler.fn = async function (request, reply) {
@@ -189,6 +209,48 @@ describe('Team Knowledge Graph API', () => {
     expect(body.teamId).toBe(teamId);
   });
 
+  it('rejects relations when either endpoint belongs to another team', async () => {
+    const localRes = await server.inject({
+      method: 'POST',
+      url: `/api/teams/${teamSlug}/entities`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: { entityType: 'concept', name: 'Local Endpoint' },
+    });
+    const localEntity = localRes.json();
+
+    const foreignSource = await server.inject({
+      method: 'POST',
+      url: `/api/teams/${teamSlug}/relations`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: {
+        sourceId: foreignEntityId,
+        targetId: localEntity.id,
+        relationType: 'references',
+      },
+    });
+    const foreignTarget = await server.inject({
+      method: 'POST',
+      url: `/api/teams/${teamSlug}/relations`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: {
+        sourceId: localEntity.id,
+        targetId: foreignEntityId,
+        relationType: 'references',
+      },
+    });
+
+    expect(foreignSource.statusCode).toBe(404);
+    expect(foreignSource.json()).toEqual({ error: 'Entity not found' });
+    expect(foreignTarget.statusCode).toBe(404);
+    expect(foreignTarget.json()).toEqual({ error: 'Entity not found' });
+
+    const leaked = await server.db.select().from(teamRelations).where(or(
+      eq(teamRelations.sourceId, foreignEntityId),
+      eq(teamRelations.targetId, foreignEntityId),
+    ));
+    expect(leaked).toEqual([]);
+  });
+
   it('graph traversal returns connected entities up to depth N', async () => {
     // Create a chain: A -> B -> C
     const resA = await server.inject({
@@ -257,6 +319,19 @@ describe('Team Knowledge Graph API', () => {
     expect(entityIds2).toContain(nodeB.id);
     expect(entityIds2).toContain(nodeC.id);
     expect(graph2.relations.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not return a foreign-team graph start entity', async () => {
+    const response = await server.inject({
+      method: 'GET',
+      url: `/api/teams/${teamSlug}/graph?startId=${foreignEntityId}&depth=1`,
+      headers: { 'x-test-user-id': ownerId },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: 'Entity not found' });
+    expect(response.body).not.toContain('Foreign Entity');
+    expect(response.body).not.toContain('confidential');
   });
 
   it('shared_by tracks who contributed', async () => {

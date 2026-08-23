@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runAgentLoop, type AgentLoopConfig } from '../src/agent-loop.js';
+import { HookRegistry } from '../src/hooks.js';
 import type { ToolDefinition } from '../src/tools.js';
 
 /**
@@ -156,6 +157,8 @@ describe('Governance enforcement in agent loop', () => {
 
   it('allows all tools when governancePolicies has empty blockedTools', async () => {
     const executeSpy = vi.fn(async () => 'done');
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ authorize: true }));
     const tool: ToolDefinition = {
       name: 'write_file',
       description: 'Write a file',
@@ -175,6 +178,7 @@ describe('Governance enforcement in agent loop', () => {
       makeConfig({
         fetch,
         tools: [tool],
+        hooks,
         governancePolicies: { blockedTools: [] },
       })
     );

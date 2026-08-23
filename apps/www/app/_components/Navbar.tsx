@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { SignInButton, UserButton, Show } from '@clerk/nextjs';
 import BrandMark from './BrandMark';
 import DownloadCTA from './DownloadCTA';
@@ -47,9 +48,9 @@ export default function Navbar() {
   return (
     <header className={headerClass}>
       <div className={styles.inner}>
-        <a href="/" className={styles.brand} aria-label={t('aria.home')}>
+        <Link href="/" className={styles.brand} aria-label={t('aria.home')}>
           <BrandMark withWordmark />
-        </a>
+        </Link>
 
         <nav className={styles.nav} aria-label={t('aria.primary')}>
           {NAV_ITEMS.map((item) => (

@@ -6,6 +6,8 @@
  */
 
 import { spawn } from 'node:child_process';
+import { statSync } from 'node:fs';
+import { win32 as pathWin32 } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
@@ -76,13 +78,103 @@ function isNoiseEntity(name: string, entityType: string): boolean {
 // OpenAI-style model id + OPENAI_API_KEY routes to the OpenAI chat API — the
 // executor the benchmark validated with.
 
+const CLAUDE_ENV_ALLOWLIST = new Set([
+  'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'COMSPEC',
+  'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'USER', 'USERNAME',
+  'LOGNAME', 'SHELL', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+  'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMW6432',
+  'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LANGUAGE', 'LC_ALL', 'LC_CTYPE',
+  'TERM', 'COLORTERM', 'TZ', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME',
+  'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'CLAUDE_CONFIG_DIR',
+  'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+]);
+
+export interface ClaudeLaunchDeps {
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+  isFile?: (candidate: string) => boolean;
+}
+
+export interface ClaudeLaunch {
+  command: string;
+  args: string[];
+  options: {
+    stdio: ['pipe', 'pipe', 'pipe'];
+    shell: false;
+    windowsHide: true;
+    env: NodeJS.ProcessEnv;
+  };
+}
+
+function regularFile(candidate: string): boolean {
+  try { return statSync(candidate).isFile(); } catch { return false; }
+}
+
+function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const found = Object.entries(env).find(([key]) => key.toUpperCase() === name);
+  return found?.[1];
+}
+
+function claudeProcessEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (value !== undefined && CLAUDE_ENV_ALLOWLIST.has(key.toUpperCase())) env[key] = value;
+  }
+  env.HIVE_MIND_NO_SYNTH = '1';
+  return env;
+}
+
+export function buildClaudeLaunch(
+  args: string[],
+  deps: ClaudeLaunchDeps = {},
+): ClaudeLaunch {
+  const platform = deps.platform ?? process.platform;
+  const sourceEnv = deps.env ?? process.env;
+  const env = claudeProcessEnv(sourceEnv);
+  const isFile = deps.isFile ?? regularFile;
+  let command = 'claude';
+  let launchArgs = [...args];
+
+  if (platform === 'win32') {
+    const pathEntries = (envValue(env, 'PATH') ?? '')
+      .split(';')
+      .map((entry) => entry.trim().replace(/^"|"$/g, ''))
+      .filter(Boolean);
+    let resolved = false;
+    for (const directory of pathEntries) {
+      const executable = pathWin32.join(directory, 'claude.exe');
+      if (isFile(executable)) {
+        command = executable;
+        resolved = true;
+        break;
+      }
+      const shim = pathWin32.join(directory, 'claude.cmd');
+      if (!isFile(shim)) continue;
+      const cliCandidates = [
+        pathWin32.join(directory, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+        pathWin32.resolve(directory, '..', '@anthropic-ai', 'claude-code', 'cli.js'),
+      ];
+      const cli = cliCandidates.find(isFile);
+      if (!cli) continue;
+      command = process.execPath;
+      launchArgs = [cli, ...args];
+      resolved = true;
+      break;
+    }
+    if (!resolved) throw new Error('Claude CLI not found on the sanitized Windows PATH');
+  }
+
+  return {
+    command,
+    args: launchArgs,
+    options: { stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true, env },
+  };
+}
+
 function spawnClaudeText(prompt: string, timeoutMs = 120_000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('claude', ['-p', '--output-format=text'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
-      env: { ...process.env, HIVE_MIND_NO_SYNTH: '1' },
-    });
+    const launch = buildClaudeLaunch(['-p', '--output-format=text']);
+    const proc = spawn(launch.command, launch.args, launch.options);
     let stdout = '';
     let stderr = '';
     let settled = false;

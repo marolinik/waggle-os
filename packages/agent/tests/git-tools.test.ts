@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ToolDefinition } from '../src/tools.js';
-import { createGitTools } from '../src/git-tools.js';
+import { buildReadOnlyGitDiffArgs, createGitTools } from '../src/git-tools.js';
 
 let tmpDir: string;
 let tools: ToolDefinition[];
@@ -44,6 +44,43 @@ describe('createGitTools', () => {
     expect(result).toContain('hello.txt');
   });
 
+  it('git_status refuses to discover a repository above the active workspace', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'private-parent-file.txt'), 'must stay private');
+    const nestedWorkspace = path.join(tmpDir, 'managed', 'workspace', 'files');
+    fs.mkdirSync(nestedWorkspace, { recursive: true });
+
+    const nestedTools = createGitTools(nestedWorkspace);
+    const status = nestedTools.find(t => t.name === 'git_status')!;
+    const result = await status.execute({});
+
+    expect(result).toBe('Error: No Git repository exists inside the active workspace.');
+    expect(result).not.toContain('private-parent-file.txt');
+  });
+
+  it('git_commit cannot stage or commit changes in a repository above the workspace', async () => {
+    const parentFile = path.join(tmpDir, 'private-parent-file.txt');
+    fs.writeFileSync(parentFile, 'initial');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'parent baseline'], { cwd: tmpDir });
+    fs.writeFileSync(parentFile, 'sensitive change');
+
+    const nestedWorkspace = path.join(tmpDir, 'managed', 'workspace', 'files');
+    fs.mkdirSync(nestedWorkspace, { recursive: true });
+    const nestedTools = createGitTools(nestedWorkspace);
+    const commit = nestedTools.find(t => t.name === 'git_commit')!;
+    const result = await commit.execute({ message: 'must not commit parent' });
+
+    expect(result).toBe('Error: No Git repository exists inside the active workspace.');
+    expect(execFileSync('git', ['diff', '--cached', '--name-only'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim()).toBe('');
+    expect(execFileSync('git', ['log', '-1', '--pretty=%s'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim()).toBe('parent baseline');
+  });
+
   it('git_diff shows changes for modified file', async () => {
     // Create initial commit so diff works
     fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
@@ -57,6 +94,187 @@ describe('createGitTools', () => {
     const result = await diff.execute({});
     expect(result).toContain('modified');
     expect(result).toContain('original');
+  });
+
+  it('git_diff treats an option-looking file as a path and cannot write output', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+
+    const outsideOutput = path.join(path.dirname(tmpDir), `${path.basename(tmpDir)}-escaped.diff`);
+    const diff = tools.find(t => t.name === 'git_diff')!;
+    try {
+      await diff.execute({ file: `--output=${outsideOutput}` });
+      expect(fs.existsSync(outsideOutput)).toBe(false);
+    } finally {
+      fs.rmSync(outsideOutput, { force: true });
+    }
+  });
+
+  it('git_diff does not execute a repository-configured external diff command', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+
+    const marker = path.join(tmpDir, 'external-diff-ran');
+    const helper = path.join(tmpDir, 'external-diff.cjs');
+    fs.writeFileSync(helper, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+    execFileSync('git', ['config', 'diff.external', `"${process.execPath}" "${helper}"`], { cwd: tmpDir });
+
+    const diff = tools.find(t => t.name === 'git_diff')!;
+    await diff.execute({});
+
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it('git_diff does not execute an external diff command inherited from the environment', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+
+    const marker = path.join(tmpDir, 'environment-diff-ran');
+    const helper = path.join(tmpDir, 'environment-diff.cjs');
+    fs.writeFileSync(helper, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+    const originalExternalDiff = process.env.GIT_EXTERNAL_DIFF;
+    process.env.GIT_EXTERNAL_DIFF = `"${process.execPath}" "${helper}"`;
+    try {
+      const diff = tools.find(t => t.name === 'git_diff')!;
+      await diff.execute({});
+      expect(fs.existsSync(marker)).toBe(false);
+    } finally {
+      if (originalExternalDiff === undefined) delete process.env.GIT_EXTERNAL_DIFF;
+      else process.env.GIT_EXTERNAL_DIFF = originalExternalDiff;
+    }
+  });
+
+  it('git_diff does not execute a textconv command selected by repository attributes', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.gitattributes'), '*.txt diff=unsafe\n');
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+
+    const marker = path.join(tmpDir, 'textconv-ran');
+    const helper = path.join(tmpDir, 'textconv.cjs');
+    fs.writeFileSync(helper, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+    execFileSync('git', ['config', 'diff.unsafe.textconv', `"${process.execPath}" "${helper}"`], { cwd: tmpDir });
+
+    const diff = tools.find(t => t.name === 'git_diff')!;
+    await diff.execute({});
+
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it('git_diff does not execute a clean filter selected by repository attributes', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.gitattributes'), '*.txt filter=unsafe\n');
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+
+    const marker = path.join(tmpDir, 'clean-filter-ran');
+    const helper = path.join(tmpDir, 'clean-filter.cjs');
+    fs.writeFileSync(helper, [
+      "const fs = require('node:fs');",
+      `fs.writeFileSync(${JSON.stringify(marker)}, 'ran');`,
+      "process.stdin.pipe(process.stdout);",
+    ].join('\n'));
+    execFileSync('git', ['config', 'filter.unsafe.clean', `"${process.execPath}" "${helper}"`], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+
+    const diff = tools.find(t => t.name === 'git_diff')!;
+    const result = await diff.execute({ file: 'file.txt' });
+
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(result).toContain('original');
+    expect(result).toContain('modified');
+  });
+
+  it('git_diff does not execute a process filter selected by repository attributes', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.gitattributes'), '*.txt filter=unsafe\n');
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+
+    const marker = path.join(tmpDir, 'process-filter-ran');
+    const helper = path.join(tmpDir, 'process-filter.cjs');
+    fs.writeFileSync(helper, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+    execFileSync('git', ['config', 'filter.unsafe.process', `"${process.execPath}" "${helper}"`], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+
+    const diff = tools.find(t => t.name === 'git_diff')!;
+    const result = await diff.execute({ file: 'file.txt' });
+
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(result).toContain('original');
+    expect(result).toContain('modified');
+  });
+
+  it('git_diff allows a safe staged diff without executing a configured clean filter', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.gitattributes'), '*.txt filter=unsafe\n');
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+    execFileSync('git', ['add', 'file.txt'], { cwd: tmpDir });
+
+    const marker = path.join(tmpDir, 'staged-clean-filter-ran');
+    const helper = path.join(tmpDir, 'staged-clean-filter.cjs');
+    fs.writeFileSync(helper, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+    execFileSync('git', ['config', 'filter.unsafe.clean', `"${process.execPath}" "${helper}"`], { cwd: tmpDir });
+
+    const diff = tools.find(t => t.name === 'git_diff')!;
+    const result = await diff.execute({ staged: true, file: 'file.txt' });
+
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(result).toContain('original');
+    expect(result).toContain('modified');
+  });
+
+  it('git_diff allows an unstaged path not selected by a configured filter', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.gitattributes'), '*.bin filter=unsafe\n');
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+
+    const marker = path.join(tmpDir, 'unrelated-clean-filter-ran');
+    const helper = path.join(tmpDir, 'unrelated-clean-filter.cjs');
+    fs.writeFileSync(helper, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+    execFileSync('git', ['config', 'filter.unsafe.clean', `"${process.execPath}" "${helper}"`], { cwd: tmpDir });
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+
+    const diff = tools.find(t => t.name === 'git_diff')!;
+    const result = await diff.execute({ file: 'file.txt' });
+
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(result).toContain('original');
+    expect(result).toContain('modified');
+  });
+
+  it('git_diff keeps configured filters disabled if attributes activate after argument construction', () => {
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'original');
+    execFileSync('git', ['add', '.'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: tmpDir });
+
+    const marker = path.join(tmpDir, 'raced-clean-filter-ran');
+    const helper = path.join(tmpDir, 'raced-clean-filter.cjs');
+    fs.writeFileSync(helper, [
+      "const fs = require('node:fs');",
+      `fs.writeFileSync(${JSON.stringify(marker)}, 'ran');`,
+      "process.stdin.pipe(process.stdout);",
+    ].join('\n'));
+    execFileSync('git', ['config', 'filter.unsafe.clean', `"${process.execPath}" "${helper}"`], { cwd: tmpDir });
+
+    const args = buildReadOnlyGitDiffArgs(tmpDir, process.env, { file: 'file.txt' });
+    fs.writeFileSync(path.join(tmpDir, '.gitattributes'), '*.txt filter=unsafe\n');
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified');
+    const result = execFileSync('git', args, { cwd: tmpDir, encoding: 'utf-8' });
+
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(result).toContain('original');
+    expect(result).toContain('modified');
   });
 
   it('git_log shows commits after committing', async () => {

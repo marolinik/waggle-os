@@ -127,6 +127,7 @@ export async function runChannelChatTurn(req: ChatTurnRequest): Promise<ChatTurn
     let content = '';
     let approvalRequired = false;
     let error: string | undefined;
+    let sawDone = false;
 
     for (;;) {
       const { done, value } = await reader.read();
@@ -135,6 +136,7 @@ export async function runChannelChatTurn(req: ChatTurnRequest): Promise<ChatTurn
       buffer = drained.rest;
       for (const evt of drained.events) {
         if (evt.event === 'done') {
+          sawDone = true;
           const d = evt.data as { content?: string };
           if (typeof d?.content === 'string') content = d.content;
         } else if (evt.event === 'approval_required') {
@@ -145,6 +147,10 @@ export async function runChannelChatTurn(req: ChatTurnRequest): Promise<ChatTurn
         }
       }
       if (done) break;
+    }
+
+    if (!sawDone && !approvalRequired && !error) {
+      error = 'INCOMPLETE_COMPLETION: Agent turn ended before the done event';
     }
 
     return { content, approvalRequired, error };

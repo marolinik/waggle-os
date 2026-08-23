@@ -370,4 +370,38 @@ describe('makeStopHandler — WAGGLE_SIGNAL_EMIT opt-in', () => {
     );
     expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
   });
+
+  it('returns below the host budget after a near-timeout save and a stalled signal', async () => {
+    const a = makeMockAdapter({ source: 'cursor' });
+    const bridge = makeMockBridge();
+    bridge.saveMemory.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2_400));
+      return { id: 'frame-slow', success: true, workspace: 'personal' };
+    });
+    const stalled = ((_url: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) {
+          reject(new Error('missing abort signal'));
+          return;
+        }
+        const rejectAbort = (): void => reject(new DOMException('aborted', 'AbortError'));
+        if (signal.aborted) rejectAbort();
+        else signal.addEventListener('abort', rejectAbort, { once: true });
+      })) as typeof globalThis.fetch;
+    const h = makeStopHandler(a);
+    const startedAt = performance.now();
+
+    await withEnv('WAGGLE_SIGNAL_EMIT', '1', () =>
+      withCapturedFetch(stalled, () =>
+        h.run(h.parse({ response: 'never expose credentials.', cwd: '/p' }), makeCtx(bridge)),
+      ),
+    );
+
+    const elapsedMs = performance.now() - startedAt;
+    expect(bridge.saveMemory).toHaveBeenCalledTimes(1);
+    expect(bridge.saveMemory.mock.calls[0][0].content).toContain('never expose credentials');
+    expect(elapsedMs).toBeGreaterThanOrEqual(2_300);
+    expect(elapsedMs).toBeLessThan(4_000);
+  }, 5_000);
 });

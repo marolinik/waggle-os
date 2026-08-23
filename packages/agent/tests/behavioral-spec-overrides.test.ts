@@ -102,3 +102,14 @@ describe('premium harness contract (R3 — verification before completion)', () 
     expect(txt).toMatch(/Only distill from SUCCESSFUL work|Never distill a failed attempt/);
   });
 });
+
+describe('external comparison evidence contract', () => {
+  it('batches independent primary-source fetches before synthesis', () => {
+    expect(BEHAVIORAL_SPEC.behavioralRules).toContain(
+      'batch the independent web_fetch calls in the next tool round',
+    );
+    expect(BEHAVIORAL_SPEC.behavioralRules).toContain(
+      'do not synthesize while a required source remains unfetched',
+    );
+  });
+});

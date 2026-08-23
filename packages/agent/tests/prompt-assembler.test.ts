@@ -83,6 +83,10 @@ function baseInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
   };
 }
 
+function defaultScaffold(body: string): string {
+  return `If the user specifies a response format, follow it exactly. Otherwise: ${body}`;
+}
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('PromptAssembler.assemble', () => {
@@ -94,6 +98,16 @@ describe('PromptAssembler.assemble', () => {
     expect(out.system).toContain('## Persona: Researcher');
     expect(out.debug.sectionsIncluded).toContain('Identity');
     expect(out.debug.sectionsIncluded).toContain('Persona');
+  });
+
+  it('packages the persona operating instructions exactly once', () => {
+    const marker = 'PERSONA_OPERATING_RAIL_UNIQUE';
+    const out = assembler.assemble(baseInput({
+      persona: persona({ systemPrompt: `${marker}\nAlways ground claims in evidence.` }),
+    }));
+
+    expect(out.system).toContain(marker);
+    expect(out.system.match(new RegExp(marker, 'g'))).toHaveLength(1);
   });
 
   it('small tier caps State frames at 3', () => {
@@ -125,7 +139,7 @@ describe('PromptAssembler.assemble', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'mid', taskShape: shape('plan-execute', 0.8) }),
     );
-    expect(out.responseScaffold).toBe('State plan. Execute. Report.');
+    expect(out.responseScaffold).toBe(defaultScaffold('State plan. Execute. Report.'));
     expect(out.system).toContain('# Response format');
     expect(out.debug.scaffoldApplied).toBe(true);
   });
@@ -135,8 +149,140 @@ describe('PromptAssembler.assemble', () => {
       baseInput({ tier: 'small', taskShape: shape('compare', 0.7) }),
     );
     expect(out.responseScaffold).toBe(
-      'State the assumption. List the trade-offs. Give the recommendation.',
+      defaultScaffold('State the assumption. List the trade-offs. Give the recommendation.'),
     );
+  });
+
+  it('makes every generic review scaffold explicitly subordinate to the user response format', () => {
+    for (const tier of ['small', 'mid'] as const) {
+      for (const scaffoldStyle of ['compression', 'expansion'] as const) {
+        const out = assembler.assemble(
+          baseInput({
+            query: 'Review this release decision and explain the issues.',
+            tier,
+            taskShape: shape('review', 0.9),
+          }),
+          { scaffoldStyle },
+        );
+        expect(out.responseScaffold).toMatch(
+          /^If the user specifies a response format, follow it exactly\. Otherwise:/,
+        );
+        expect(out.debug.scaffoldApplied).toBe(true);
+        expect(out.debug.exclusiveResponseContract).toBe(false);
+        expect(out.debug.scaffoldSuppressed).toBe(false);
+      }
+    }
+  });
+
+  it.each([
+    'Return JSON only.',
+    'Return only the code.',
+    'Reply with exactly "PASS" and nothing else.',
+    'Only use JSON.parse and explain the result.',
+    'Never answer with only JSON; include a narrative.',
+  ])('does not infer free-form language and keeps the scaffold safely conditional: %s', (query) => {
+    const out = assembler.assemble(
+      baseInput({ query, tier: 'small', taskShape: shape('review', 0.9) }),
+    );
+
+    expect(out.responseScaffold).toMatch(
+      /^If the user specifies a response format, follow it exactly\. Otherwise:/,
+    );
+    expect(out.debug.exclusiveResponseContract).toBe(false);
+    expect(out.debug.scaffoldSuppressed).toBe(false);
+  });
+
+  it('lets code-owned contracts explicitly suppress a scaffold without magic prompt wording', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Review the release evidence.',
+        tier: 'small',
+        taskShape: shape('review', 0.9),
+      }),
+      { exclusiveResponseContract: true },
+    );
+
+    expect(out.responseScaffold).toBeNull();
+    expect(out.debug.exclusiveResponseContract).toBe(true);
+    expect(out.debug.scaffoldSuppressed).toBe(true);
+  });
+
+  it('treats an explicitly bounded rewrite as closed-world and suppresses outside context', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Rewrite this into a crisp executive memo. Preserve the facts and add no new claims: API tests pass.',
+        tier: 'mid',
+        taskShape: shape('decide', 0.9),
+        context: {
+          ...emptyContext(),
+          stateFrames: [frame('State says shipping now is safe.')],
+          recentChanges: [frame('Recent changes say all gaps are closed.', { type: 'P' })],
+          activeWork: [{ category: 'task', content: 'Ship immediately.', priority: 1 }],
+        },
+        recalled: {
+          workspace: [],
+          personal: [],
+          scanSafe: true,
+          renderedText: '# Recalled Memories\n- Shipping now is safe.',
+        },
+      }),
+    );
+
+    expect(out.responseScaffold).toBeNull();
+    expect(out.debug.closedWorldRewrite).toBe(true);
+    expect(out.debug.scaffoldSuppressed).toBe(true);
+    expect(out.debug.sectionsIncluded).not.toContain('State');
+    expect(out.debug.sectionsIncluded).not.toContain('Recent changes');
+    expect(out.debug.sectionsIncluded).not.toContain('Active work');
+    expect(out.debug.sectionsIncluded).not.toContain('Recalled memory');
+    expect(out.system).not.toContain('State says shipping now is safe.');
+    expect(out.system).not.toContain('Recent changes say all gaps are closed.');
+    expect(out.system).not.toContain('Ship immediately.');
+    expect(out.system).not.toContain('Shipping now is safe.');
+    expect(out.system).toContain('# Closed-world rewrite');
+    expect(out.system).toContain('Do not add implications, explanations, rationale, risks');
+    expect(out.debug.sectionsIncluded.at(-1)).toBe('Closed-world rewrite');
+  });
+
+  it('does not infer a closed-world boundary from an ordinary rewrite request', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Rewrite this product launch note to sound clearer.',
+        tier: 'mid',
+        taskShape: shape('draft', 0.9),
+      }),
+    );
+
+    expect(out.debug.closedWorldRewrite).toBe(false);
+    expect(out.system).not.toContain('# Closed-world rewrite');
+  });
+
+  it('recognizes a boundary-first closed-world rewrite directive', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Using only the provided text, condense this into three bullets.',
+        tier: 'mid',
+        taskShape: shape('decide', 0.9),
+      }),
+    );
+
+    expect(out.debug.closedWorldRewrite).toBe(true);
+    expect(out.responseScaffold).toBeNull();
+    expect(out.system).toContain('# Closed-world rewrite');
+  });
+
+  it('does not mistake a quoted transform phrase for a rewrite directive', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Explain what “rewrite this” means without adding new facts.',
+        tier: 'mid',
+        taskShape: shape('review', 0.9),
+      }),
+    );
+
+    expect(out.debug.closedWorldRewrite).toBe(false);
+    expect(out.responseScaffold).toBe(defaultScaffold('Briefly state assumption, then recommendation.'));
+    expect(out.system).not.toContain('# Closed-world rewrite');
   });
 
   it('draft shape emits no scaffold at any tier', () => {
@@ -172,7 +318,7 @@ describe('PromptAssembler.assemble', () => {
       { confidenceThreshold: 0.15 },
     );
     expect(out.responseScaffold).toBe(
-      'Cite the frame. Quote the relevant fragment. Answer directly.',
+      defaultScaffold('Cite the frame. Quote the relevant fragment. Answer directly.'),
     );
   });
 
@@ -352,32 +498,31 @@ describe('PromptAssembler.assemble — v5 scaffoldStyle', () => {
     expect(noStyle.system).toBe(explicit.system);
   });
 
-  it('compression + small + compare matches v4 text exactly (snapshot)', () => {
+  it('compression + small + compare preserves the v4 body after the safety qualifier', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
       { scaffoldStyle: 'compression' },
     );
-    // Byte-identical to v4 (now COMPRESSION_SCAFFOLDS[compare][small]).
     expect(out.responseScaffold).toBe(
-      'State the assumption. List the trade-offs. Give the recommendation.',
+      defaultScaffold('State the assumption. List the trade-offs. Give the recommendation.'),
     );
   });
 
-  it('compression + mid + plan-execute matches v4 text exactly (snapshot)', () => {
+  it('compression + mid + plan-execute preserves the v4 body after the safety qualifier', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'mid', taskShape: shape('plan-execute', 0.8) }),
       { scaffoldStyle: 'compression' },
     );
-    expect(out.responseScaffold).toBe('State plan. Execute. Report.');
+    expect(out.responseScaffold).toBe(defaultScaffold('State plan. Execute. Report.'));
   });
 
-  it('compression + small + research matches v4 text exactly (snapshot)', () => {
+  it('compression + small + research preserves the v4 body after the safety qualifier', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'small', taskShape: shape('research', 0.8) }),
       { scaffoldStyle: 'compression' },
     );
     expect(out.responseScaffold).toBe(
-      'Cite the frame. Quote the relevant fragment. Answer directly.',
+      defaultScaffold('Cite the frame. Quote the relevant fragment. Answer directly.'),
     );
   });
 

@@ -166,7 +166,12 @@ describe('MarketplaceDB -- Source Management', () => {
 
   afterEach(() => {
     db.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   // ── addSource ──────────────────────────────────────────────────────
@@ -402,7 +407,12 @@ describe('MarketplaceDB -- Enhanced Search', () => {
 
   afterEach(() => {
     db.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   it('search returns installedCount in results', () => {

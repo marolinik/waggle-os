@@ -6,7 +6,9 @@
  * shows an amber "setup needed" badge instead.
  */
 import { execFile } from 'node:child_process';
+import { win32 as pathWin32 } from 'node:path';
 import { promisify } from 'node:util';
+import { buildExternalProcessEnv } from './external-process-env.js';
 import { parseSkillFrontmatter } from './skill-frontmatter.js';
 
 const execFileAsync = promisify(execFile);
@@ -34,6 +36,12 @@ export interface SkillRequirementDeps {
   now?: () => number;
 }
 
+export interface SkillBinLookupInvocation {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+}
+
 /**
  * Extract a skill's declared requirements from its raw markdown content.
  * Returns null when the skill declares none (no `requires:` block, or empty).
@@ -49,12 +57,36 @@ export function extractSkillRequirements(content: string): SkillRequirements | n
 // Default bin lookup — adapted from tool-detection.ts defaultPathFromEnv
 // (module-private there; ~10 copied lines beat widening that file's export
 // surface). execFile with shell:false — bin names are never shell-expanded.
+function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const match = Object.entries(env).find(([key]) => key.toUpperCase() === name);
+  return match?.[1];
+}
+
+export function buildSkillBinLookupInvocation(
+  name: string,
+  platform: NodeJS.Platform = process.platform,
+  base: NodeJS.ProcessEnv = process.env,
+): SkillBinLookupInvocation {
+  const env = buildExternalProcessEnv(base, {}, platform);
+  if (platform !== 'win32') return { command: 'which', args: [name], env };
+  const windowsRoot = envValue(env, 'SYSTEMROOT') ?? envValue(env, 'WINDIR') ?? 'C:\\Windows';
+  return {
+    command: pathWin32.join(windowsRoot, 'System32', 'where.exe'),
+    // Windows `where.exe name` includes the current directory; $PATH confines
+    // badge checks to PATH so workspace-local executables do not spoof setup.
+    args: [`$PATH:${name}`],
+    env,
+  };
+}
+
 async function defaultHasBin(name: string): Promise<boolean> {
-  const cmd = process.platform === 'win32' ? 'where.exe' : 'which';
+  const invocation = buildSkillBinLookupInvocation(name);
   try {
-    const { stdout } = await execFileAsync(cmd, [name], {
+    const { stdout } = await execFileAsync(invocation.command, invocation.args, {
       timeout: 3000,
       shell: false,
+      env: invocation.env,
+      windowsHide: true,
     });
     return stdout.split(/\r?\n/).some((l) => l.trim().length > 0);
   } catch {

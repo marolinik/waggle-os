@@ -3,6 +3,7 @@ import {
   needsConfirmation,
   needsConfirmationWithAutonomy,
   isCriticalNeverAutopass,
+  getApprovalClass,
   classifyGatedToolRisk,
   ConfirmationGate,
 } from '../src/confirmation.js';
@@ -18,6 +19,10 @@ describe('needsConfirmation', () => {
 
   it('returns true for edit_file', () => {
     expect(needsConfirmation('edit_file')).toBe(true);
+  });
+
+  it('returns true for run_code', () => {
+    expect(needsConfirmation('run_code')).toBe(true);
   });
 
   it('returns true for git_commit', () => {
@@ -39,6 +44,67 @@ describe('needsConfirmation', () => {
 
   it('returns false for read_skill (ungated)', () => {
     expect(needsConfirmation('read_skill')).toBe(false);
+  });
+});
+
+describe('connector mutation confirmation policy', () => {
+  it.each([
+    'connector_dropbox_upload_file',
+    'connector_gdrive_upload_file',
+    'connector_gsheets_append_values',
+    'connector_onedrive_upload_file',
+  ])('gates state-changing connector action %s as elevated', (toolName) => {
+    expect(needsConfirmation(toolName)).toBe(true);
+    expect(getApprovalClass(toolName)).toBe('elevated');
+  });
+
+  it.each([
+    'connector_postgres_execute',
+    'connector_composio_execute_action',
+  ])('gates high-risk connector action %s as critical', (toolName) => {
+    expect(needsConfirmation(toolName)).toBe(true);
+    expect(getApprovalClass(toolName)).toBe('critical');
+    expect(classifyGatedToolRisk(toolName)).toEqual({
+      riskLevel: 'high',
+      approvalClass: 'critical',
+    });
+  });
+
+  it.each([
+    'connector_dropbox_download_file',
+    'connector_gdrive_get_file',
+    'connector_gsheets_get_values',
+    'connector_onedrive_search_files',
+    'connector_postgres_query',
+    'connector_composio_list_actions',
+  ])('keeps read-only connector action %s ungated', (toolName) => {
+    expect(needsConfirmation(toolName)).toBe(false);
+    expect(getApprovalClass(toolName)).toBe('standard');
+  });
+});
+
+describe('fail-closed local execution policy', () => {
+  it('only auto-approves exact argument-free introspection and version probes', () => {
+    expect(needsConfirmation('bash', { command: 'pwd' })).toBe(false);
+    expect(needsConfirmation('bash', { command: 'node --version' })).toBe(false);
+    expect(needsConfirmation('bash', { command: 'echo %GEMINI_API_KEY%' })).toBe(true);
+    expect(needsConfirmation('bash', { command: 'cat C:\\Users\\someone\\secret.txt' })).toBe(true);
+    expect(needsConfirmation('bash', { command: 'type C:\\Users\\someone\\secret.txt' })).toBe(true);
+    expect(needsConfirmation('bash', { command: 'curl https://example.com --head' })).toBe(true);
+    expect(needsConfirmation('bash', { command: 'echo hello > output.txt' })).toBe(true);
+  });
+
+  it('keeps arbitrary shell and code execution gated at every autonomy level', () => {
+    for (const level of ['normal', 'trusted', 'yolo'] as const) {
+      expect(needsConfirmationWithAutonomy('bash', { command: 'echo hello' }, level)).toBe(true);
+      expect(needsConfirmationWithAutonomy('run_code', { code: '1 + 1' }, level)).toBe(true);
+    }
+    expect(isCriticalNeverAutopass('bash', { command: 'echo hello' })).toBe(false);
+    expect(isCriticalNeverAutopass('run_code', { code: '1 + 1' })).toBe(true);
+    expect(classifyGatedToolRisk('run_code', { code: '1 + 1' })).toEqual({
+      riskLevel: 'critical',
+      approvalClass: 'critical',
+    });
   });
 });
 
@@ -166,7 +232,7 @@ describe('ConfirmationGate', () => {
   it('auto-approves safe bash commands without calling promptFn', async () => {
     const promptFn = vi.fn().mockResolvedValue(false);
     const gate = new ConfirmationGate({ promptFn });
-    const result = await gate.confirm('bash', { command: 'ls -la' });
+    const result = await gate.confirm('bash', { command: 'pwd' });
     expect(result).toBe(true);
     expect(promptFn).not.toHaveBeenCalled();
   });
@@ -196,10 +262,16 @@ describe('ConfirmationGate headless deny-default (scheduled-tick footgun)', () =
     expect(await gate.confirm('connector_gmail_send_email', { to: 'x@y.z' })).toBe(false);
   });
 
+  it('denies an opaque provider-declared high-risk action while flowing declared-low reads', async () => {
+    const gate = new ConfirmationGate({ headless: true });
+    expect(await gate.confirm('connector_mock_sync_records', {}, 'high')).toBe(false);
+    expect(await gate.confirm('connector_mock_read_records', {}, 'low')).toBe(true);
+  });
+
   it('still flows L1 read-only work (read_file, safe bash) in headless', async () => {
     const gate = new ConfirmationGate({ headless: true });
     expect(await gate.confirm('read_file', { path: '/tmp/x' })).toBe(true);
-    expect(await gate.confirm('bash', { command: 'ls -la' })).toBe(true);
+    expect(await gate.confirm('bash', { command: 'pwd' })).toBe(true);
   });
 
   it('routes gated actions through promptFn when one is wired (L2 approval seam)', async () => {

@@ -1,6 +1,55 @@
 # Waggle OS
 
-Workspace-native AI agent platform with persistent memory, model-agnostic orchestration, and skill-extensible capabilities. It ships as a Tauri 2.0 desktop binary (Windows/macOS) with a Vite-bundled web app and a Node.js sidecar.
+Workspace-native AI agent platform with persistent memory, model-agnostic orchestration, and skill-extensible capabilities. The current desktop release scope is Windows-first: a Tauri 2.0 app with a Vite-bundled web UI and bundled Node.js sidecar; macOS packaging and certification remain roadmap work.
+
+## Current Release Scope
+
+The active launch gate is **Windows Solo**. Its in-scope external-agent release cohort is **Claude Code, Codex, and Hermes**. Each tool uses the user's own installation and authentication; Waggle does not redistribute provider credentials or bypass provider terms.
+
+- **Cursor and OpenClaw are roadmap integrations.** They remain registered for detection and future development, but the production launcher, hooks, Fleet/task path, and direct run API do not offer them.
+- Claude Desktop, Codex Desktop, and Hermes Desktop may appear as detected convenience launch surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
+- **ChatGPT/OpenAI is a model and memory-import surface**, not a separate local coding-agent launcher.
+- The Windows Solo launch contract requires an exact-revision Windows installer qualification receipt to prove its bundled Node sidecar, no-Python OpenAI-compatible proxy, Waggle-managed local runtime/model, default in-process embedding path, and freedom from developer Node, Docker, Python, an external LiteLLM service, or a separately installed Ollama. A separate revision-bound router receipt must prove the smart-router primary, compact-tool-context, budget, and fallback paths. Router, persona, and authentication receipts may cover a later candidate only through an independently reviewed bounded no-impact attestation proving that no covered runtime surface changed; otherwise they must be rerun. A user-installed Ollama remains optional.
+- Docker/LiteLLM deployment files remain optional server and team deployment choices; they are not desktop prerequisites.
+
+Release status, revision-bound receipts, and any bounded carry-forward attestations are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
+
+### Current Windows Solo internal RC evidence — 2026-08-22
+
+The frozen internal runtime/binary candidate is
+`b9a871cced6ce43120e34e2cf2f656d21de9d3c7`. Its internally pilot-signed NSIS is
+102,920,864 bytes with SHA-256
+`9DB493F31E30DF0D252B1959B31DAE77E6499992A4E4EBEAFC72565510AF1095`.
+The exact candidate passed **64/64** clean-profile checks: bundled sidecar and npm,
+FREE/Solo first boot, in-process embeddings, Waggle-managed Ollama 0.32.3 and
+`qwen2.5:0.5b`, local-model chat, proxy restart, same-version repair, data preservation,
+cleanup, and uninstall. Docker, Python, developer Node.js, external LiteLLM, and a
+separately installed Ollama were not prerequisites.
+
+- The full and production dependency audits at this candidate contain **0 Critical and
+  0 High** findings. A newly published High advisory in `node-tar` was closed by pinning
+  the transitive runtime to 7.5.22; lower-severity maintenance remains documented.
+- Persona quality evidence at `4c712ff6` contains all ten personas x3: **30/30 are at
+  least 95/100 after two independent semantic adjudications**, with no critical failure.
+  The artifact is explicitly a non-gating collection, not a canonical deterministic
+  seal; 28 results passed deterministically and two 90-point results were adjudicated to
+  100. The bounded delta to the runtime candidate does not touch persona, chat, scorer,
+  or official-auth behavior.
+- Smart-router primary, compact-tool-context, durable-budget and fallback evidence, plus
+  the Claude Code, Codex, and Hermes official-user-auth canaries, remain scoped
+  carry-forward evidence under the reviewed no-impact rule. The auth harness read or
+  copied no credential files.
+- The historical broad regression baseline at `af19b387` passed 714 files and 11,586
+  tests. It is not relabeled as an exact-candidate run; focused tests, exact installer
+  certification and dependency audits cover subsequent changes, and final private-PR
+  CI must pass before integration.
+
+Detailed local receipt paths, hashes, limitations, and integration gates are recorded in
+the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md).
+The internal signer (`CN=Egzakta Internal Pilot`) and DigiCert timestamp prove the pilot
+pipeline but are not publicly trusted Authenticode. Public release is **not yet approved**:
+a protected hosted build with a publicly trusted signer and an exact-candidate sealed
+managed Deep Security report remain mandatory.
 
 ## Architecture
 
@@ -57,11 +106,20 @@ The monorepo has **28 packages** under `packages/`. They split into two groups.
 
 ## Quick Start
 
-### Self-host in one line (Linux / macOS)
+### Windows Solo desktop
+
+Use only the signed Windows installer and SHA-256 identified by a **GO** [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If that recommendation is not GO, no packaged desktop artifact is release-approved; use the source-development instructions below.
+
+### Self-host from the private repository (Linux / macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/marolinik/waggle-os/main/install.sh | bash
+gh repo clone marolinik/waggle-os
+cd waggle-os
+bash install.sh
 ```
+
+This path is for maintainers with authenticated access to the private repository.
+Do not publish an anonymous raw-file installer until the source/licensing decision is explicit.
 
 Best for a VPS or homelab — this runs a headless Waggle server (no desktop shell):
 
@@ -74,7 +132,7 @@ Manage the running server with the installed wrapper: `scripts/waggle-server.sh 
 ### Run from source (development)
 
 ```bash
-# Prerequisites: Node.js >= 20, npm
+# Prerequisites: Node.js ^20.19.0 or >=22.12.0, npm
 npm install
 
 # (Optional) copy the env template. Provider API keys are normally set in-app
@@ -90,6 +148,10 @@ npm run dev:web
 
 # Open http://localhost:8080
 ```
+
+The source tree follows the root `package.json` Node engine above. The packaged
+Windows Solo desktop carries its own pinned Node.js 22.23.2 runtime, so an
+installed user does not need a separate Node.js installation.
 
 `npm run dev:server` runs the Fastify sidecar via `tsx` (equivalent to
 `cd packages/server && npx tsx src/local/start.ts`). `npm run dev:web` runs the
@@ -115,7 +177,7 @@ run. See [`.env.example`](./.env.example) for the full contract.
 | `ANTHROPIC_API_KEY` | Recommended | Claude API key. Optional in `.env` — can be set in-app instead (vault). |
 | `OPENAI_API_KEY` | No | Enables OpenAI models and optional OpenAI embeddings. |
 | `EMBEDDING_PROVIDER` | No | `auto` (default) · `inprocess` · `ollama` · `voyage` · `openai` · `mock`. `auto` tries in-process → Ollama → API → mock. |
-| `LITELLM_BASE_URL` | No | LiteLLM proxy URL for multi-model routing (default `http://localhost:4000`). |
+| `LITELLM_BASE_URL` | No | Optional external LiteLLM-compatible proxy URL. The Windows Solo desktop uses its bundled no-Python proxy unless explicitly configured otherwise. |
 | `DATABASE_URL` | Team only | PostgreSQL connection string. |
 | `REDIS_URL` | Team only | Redis for the background job queue. |
 

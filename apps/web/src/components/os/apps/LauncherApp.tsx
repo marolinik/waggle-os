@@ -1,10 +1,10 @@
 /**
  * AI-OS Phase 2B — LauncherApp.
  *
- * Dock surface for the AI-OS tool launcher. Lists every supported
- * AI tool — all 7 are launchable; 6 (all but claude-desktop) also
- * support hook install/verify/uninstall — with detection status,
- * hook-install status, and per-tool actions:
+ * Dock surface for the AI-OS tool launcher. Lists registered AI execution
+ * surfaces while keeping roadmap integrations visibly inert. Each card
+ * includes detection status, hook-install status,
+ * and its supported actions:
  *
  *   Launch in workspace X / Install hooks / Verify hooks / Uninstall hooks
  *
@@ -40,12 +40,13 @@ import {
   BUILTIN_TOOL_MANIFESTS,
   type ExternalToolAccess,
   type ToolCapabilities,
+  type ToolReleaseStatus,
 } from '@waggle/shared';
 
 // #5 — derived from the shared manifest registry (single source of truth),
 // replacing the hand-maintained local copies. LAUNCH_COHORT = launchable tools;
-// HOOKS_COHORT = tools whose hive-mind hook package ships a bin (hookCapable —
-// claude-desktop is the only one excluded). Mirrors the backend cohorts, which
+// HOOKS_COHORT = tools whose hive-mind hook package ships a bin (hookCapable).
+// Hermes Desktop is intentionally excluded. Mirrors the backend cohorts, which
 // derive from the same BUILTIN_TOOL_MANIFESTS.
 const LAUNCH_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id);
 const HOOKS_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m) => m.id);
@@ -53,6 +54,7 @@ const HOOKS_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m)
 interface DetectedTool {
   id: string;
   displayName: string;
+  releaseStatus?: ToolReleaseStatus;
   launchable?: boolean;
   hookCapable?: boolean;
   builtin?: boolean;
@@ -116,12 +118,15 @@ const HOOK_PATH_RE = /([A-Za-z]:\\[^\s]+|\/[^\s]+)/;
 const MAX_VISIBLE_HOOK_DETAILS = 6;
 
 const toolCanLaunch = (tool: DetectedTool): boolean =>
-  tool.launchable ?? LAUNCH_COHORT.includes(tool.id);
+  tool.releaseStatus !== 'roadmap'
+  && (tool.launchable ?? LAUNCH_COHORT.includes(tool.id));
 
 const launchUnavailableMessage = (tool: DetectedTool): string =>
-  tool.installed && tool.diagnostic
-    ? 'Launch is blocked for this install. Follow the note above, then refresh.'
-    : 'Detection ready. This adapter is not configured for launch.';
+  tool.releaseStatus === 'roadmap'
+    ? 'Roadmap integration. Detection retained for compatibility; launch, tasks, and hooks are deferred.'
+    : tool.installed && tool.diagnostic
+      ? 'Launch is blocked for this install. Follow the note above, then refresh.'
+      : 'Detection ready. This adapter is not configured for launch.';
 
 const toolUsesInlinePrompt = (tool: DetectedTool): boolean =>
   toolAcceptsInlinePrompt(tool.id) || tool.acceptsInlinePrompt === true;
@@ -139,6 +144,7 @@ const defaultAccessForTool = (tool: DetectedTool): ExternalToolAccess | null => 
 
 const toolCanRunCapturedTask = (tool: DetectedTool): boolean =>
   tool.installed &&
+  toolCanLaunch(tool) &&
   tool.capabilities?.headlessTask === true &&
   (tool.permissionModes?.length ?? 0) > 0;
 
@@ -763,7 +769,7 @@ const LauncherApp = ({ activeWorkspaceId, workspaces = [], onOpenRoom }: Launche
                           Not installed
                         </Badge>
                       )}
-                      {tool.hooksInstalled && (
+                      {tool.hooksInstalled && tool.releaseStatus !== 'roadmap' && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4" style={{ background: 'var(--honey-wash)', color: 'var(--honey)' }}>
                           Hooks active
                         </Badge>
@@ -786,7 +792,11 @@ const LauncherApp = ({ activeWorkspaceId, workspaces = [], onOpenRoom }: Launche
                           Running
                         </button>
                       )}
-                      {!launchable && (
+                      {tool.releaseStatus === 'roadmap' ? (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                          Roadmap
+                        </Badge>
+                      ) : !launchable && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
                           Detect only
                         </Badge>
@@ -906,8 +916,8 @@ const LauncherApp = ({ activeWorkspaceId, workspaces = [], onOpenRoom }: Launche
                     </div>
                     {launchOnly && (
                       <div className="text-[11px] text-muted-foreground">
-                        {tool.id === 'claude-desktop'
-                          ? 'Hooks are not supported for Claude Desktop yet.'
+                        {tool.id === 'hermes-desktop'
+                          ? 'Hook management is not supported for Hermes Desktop.'
                           : 'Hook management is not supported for this tool yet.'}
                       </div>
                     )}

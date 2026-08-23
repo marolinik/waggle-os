@@ -1,10 +1,31 @@
 import { describe, expect, it } from 'vitest';
+import { createLogger } from '@waggle/hive-mind-shim-core';
 import {
+  buildHookBridgeOptions,
   parseHookArgs,
   pickStringField,
   pickStringFromObject,
   safeJsonParse,
 } from '../../src/hooks/_shared.js';
+
+describe('buildHookBridgeOptions', () => {
+  it('uses one bounded attempt for every Claude hook', () => {
+    const logger = createLogger({ name: 'claude-hook-test' });
+    const sessionStart = buildHookBridgeOptions(
+      logger,
+      'C:\\waggle\\hive-mind-cli.js',
+    );
+    expect(sessionStart).toMatchObject({
+      logger,
+      cli_path: 'C:\\waggle\\hive-mind-cli.js',
+      timeout_ms: 10_000,
+      max_retries: 0,
+    });
+    const stop = buildHookBridgeOptions(logger, 'C:\\waggle\\hive-mind-cli.js');
+    expect(stop.timeout_ms).toBe(10_000);
+    expect(stop.max_retries).toBe(0);
+  });
+});
 
 describe('safeJsonParse', () => {
   it('returns {} for empty / whitespace input', () => {

@@ -1,19 +1,39 @@
-// P1b D3: must be the FIRST import — arms the adapter's request-deferral gate
-// before any other module in the import graph can evaluate (see boot-connect.ts).
-import "./boot-connect";
-import { createRoot } from "react-dom/client";
-import App from "./App.tsx";
-import "./index.css";
-import { applyStoredThemeEarly } from "@/providers/ThemeProvider";
+import { armBootConnection } from './boot-connect';
 
-// Apply the persisted theme before first paint to avoid a flash of the wrong
-// theme (warm graphite/dark default; warm paper for light).
-applyStoredThemeEarly();
+const root = document.getElementById('root');
+if (!root) throw new Error('Waggle root element is missing');
 
-createRoot(document.getElementById("root")!).render(<App />);
+const startup = document.createElement('main');
+startup.setAttribute('role', 'status');
+startup.setAttribute('aria-live', 'polite');
+startup.dataset.waggleStartup = 'loading';
+Object.assign(startup.style, {
+  alignItems: 'center',
+  color: '#f6f1e4',
+  display: 'flex',
+  fontFamily: 'system-ui, sans-serif',
+  fontSize: '16px',
+  justifyContent: 'center',
+  minHeight: '100vh',
+});
 
-// Initialize PostHog cloud analytics (DAY0-04).
-// Non-blocking and lazy-loaded so analytics never bloats the startup bundle.
-void import("@/lib/posthog")
-  .then(({ initPostHog }) => initPostHog())
-  .catch(() => {});
+const startupMessage = document.createElement('p');
+startupMessage.textContent = 'Starting Waggle…';
+startup.append(startupMessage);
+root.replaceChildren(startup);
+
+const showStartupFailure = (error: unknown) => {
+  console.error('[waggle] UI startup failed', error);
+  startup.setAttribute('role', 'alert');
+  startup.dataset.waggleStartup = 'failed';
+  startupMessage.textContent = 'Waggle could not start. Close and reopen the app.';
+};
+
+try {
+  void armBootConnection()
+    .then(() => import('./app-entry'))
+    .then(({ mountApp }) => mountApp())
+    .catch((error) => showStartupFailure(error));
+} catch (error) {
+  showStartupFailure(error);
+}

@@ -1,9 +1,9 @@
 # CLAUDE.md — Waggle OS
-### Authoritative Operating Contract · All Agents · All Contributors · All Sessions
+### Claude operational companion
 
-> Read this file in full before touching a single line of code.
-> It is the single source of truth for architecture, strategic intent, and mechanical operating rules.
-> If this file conflicts with any other document, **this file wins.**
+> Read `AGENTS.md` in full before touching code. `AGENTS.md` is the canonical operating
+> contract for all agents and wins on conflict. This file is a Claude-oriented companion;
+> keep shared guidance aligned, but never treat it as a second source of truth.
 
 ---
 
@@ -16,8 +16,9 @@ If you're about to write code, **Section 3** is the most important thing you'll 
 
 ## 1. What Waggle OS Actually Is
 
-**Waggle OS** is a workspace-native AI agent platform with persistent memory. It ships as a
-Tauri 2.0 desktop binary for Windows and macOS, with a Vite-bundled web app and a Node.js sidecar.
+**Waggle OS** is a workspace-native AI agent platform with persistent memory. Its current desktop
+release scope is Windows-first: a Tauri 2.0 app with a Vite-bundled web UI and bundled Node.js
+sidecar. macOS packaging, signing, notarization, and runtime certification are roadmap work.
 
 **Strategic function:** Waggle is the demand-creation and qualification engine for KVARK —
 Egzakta Group's sovereign enterprise AI platform.
@@ -38,23 +39,68 @@ Egzakta Group's sovereign enterprise AI platform.
 and connectors are all free (they generate memory). Team collaboration (shared memory,
 WaggleDance, governance) is the upgrade trigger.
 
-### Key Technology Facts (Verified April 2026)
+### Current Release Qualification Contract (2026-08-22)
+
+- Launch gate: **Windows Solo only**.
+- In-scope external-agent release cohort: **Claude Code, Codex, and Hermes**. Each integration
+  uses the user's own installed client and its official user authentication.
+- **Cursor and OpenClaw are roadmap-only**: detection metadata may remain, but production launch,
+  hooks, Fleet/task dispatch, and direct run routes must fail closed for them.
+- Claude Desktop, Codex Desktop, and Hermes Desktop may remain as detected convenience launch
+  surfaces; they are not separate memory-hook or agent-acceptance targets in this release gate.
+- ChatGPT/OpenAI is a model/provider and memory-import surface, not a separate launcher target.
+- The Windows Solo launch contract requires an exact-revision Windows installer qualification receipt to
+  prove its bundled Node sidecar, no-Python OpenAI-compatible proxy, Waggle-managed local runtime/model, default
+  in-process embedding path, and freedom from developer Node, Docker, Python, external LiteLLM, or a
+  separately installed Ollama. A separate revision-bound router receipt must prove the smart-router primary,
+  compact-tool-context, budget, and fallback paths. A user-installed Ollama remains optional.
+- Every receipt is valid first for the exact source revision and artifact SHA-256 it names. An older
+  router, persona, or authentication receipt is historical unless the current launch recommendation
+  explicitly carries it forward through a bounded no-impact attestation.
+- Bounded carry-forward is allowed only when an exhaustive intervening-diff review proves that no
+  covered runtime surface changed, independent review approves that classification, and focused tests
+  and lint cover the intervening changes. Any affected persona, chat, provider, authentication, memory,
+  routing, or tool-context behavior requires a fresh receipt. Installer, public signing, and sealed
+  security artifacts remain revision-bound and must name the exact candidate they cover.
+- A release-record-only Markdown descendant does not change the frozen runtime revision or installer
+  SHA-256. The eventual public hosted artifact and managed Deep Scan must instead be regenerated for
+  and name the exact approved release-tag commit.
+- Persona evidence requires a complete 30-result collection across 10 personas at >=95/100 after
+  any explicitly documented independent semantic adjudication, plus either a fresh release-revision
+  run or an approved bounded no-impact attestation. Never relabel a non-gating collection as a
+  canonical deterministic seal. Claude Code/Codex/Hermes official user-auth canaries follow the
+  same carry-forward rule. GO also requires zero unresolved Critical/High findings.
+- Do not claim release approval, production readiness, an overall 9.5/10, or competitor superiority
+  unless the current launch recommendation says GO for that same release.
+
+### Evidence authority
+
+Exact candidate revisions, installer and receipt hashes, carry-forward boundaries, open
+checks, and the current verdict live only in
+`docs/production-readiness/09-LAUNCH_RECOMMENDATION.md`. Do not duplicate an old
+candidate table here or infer that an ancestor's installer certifies a later HEAD. The
+repository remains private until an explicit open-source and licensing decision is made.
+Public GO remains blocked until a publicly trusted Authenticode artifact and an exact-candidate
+sealed managed Deep Security report close with no unresolved Critical/High findings.
+
+### Key Technology Facts (Verified August 2026)
 
 | Layer | Stack |
 |---|---|
 | Frontend | React **19** + TypeScript + Vite + Tailwind 4 + base-ui/react |
 | Desktop | Tauri 2.0 (Rust shell) |
 | Backend | Fastify sidecar (Node.js, bundled into Tauri) |
-| LLM routing | LiteLLM (see `litellm-config.yaml`) |
+| LLM routing | Windows Solo release contract: bundled no-Python OpenAI-compatible proxy and smart router; optional LiteLLM deployment config |
 | Database | SQLite via @waggle/core (better-sqlite3 + sqlite-vec-windows-x64) |
 | Memory | FrameStore + HybridSearch + KnowledgeGraph + IdentityLayer + AwarenessLayer |
 | Agent runtime | `packages/agent/src/agent-loop.ts` |
 | Billing | Stripe (installed; `stripe@^21.0.1`) |
 | Design | Hive DS — honey #e5a000 / hive-950 #08090c / accent #a78bfa |
 | Tests | Vitest (unit) + Playwright (E2E) |
-| Deploy | Dockerfile + docker-compose.production.yml + render.yaml |
+| Deploy | Windows Tauri installer release contract; optional Dockerfile + docker-compose.production.yml + render.yaml for server/team deployment |
 
-Package manager: npm (root) with `bun.lock` also present. Node >= 20.
+Package manager: npm with the root `package-lock.json`. Source development requires Node
+`^20.19.0 || >=22.12.0`; the packaged Windows desktop runtime is pinned to Node `22.23.2`.
 
 ---
 
@@ -67,7 +113,7 @@ waggle-os/
 ├── apps/
 │   ├── web/             # <-- MAIN web app UI (this is where most components live)
 │   └── www/             # Landing page (waggle-os.ai)
-├── packages/            # 16 workspace packages (see below)
+├── packages/            # 28 workspace packages (see below)
 ├── sidecar/             # Node.js sidecar bundled into Tauri
 ├── scripts/             # build-sidecar, bundle-native-deps, bundle-node
 ├── tests/               # Cross-cutting integration tests
@@ -81,7 +127,7 @@ waggle-os/
 └── package.json (workspaces: apps/*, packages/*)
 ```
 
-### Packages (`packages/`, 27 workspaces — verified 2026-05-28)
+### Packages (`packages/`, 28 workspaces — verified 2026-08-02)
 ```
 Core (15):
 admin-web       cli             launcher        marketplace
@@ -89,15 +135,15 @@ agent           core            memory-mcp      optimizer
 sdk             server          shared          waggle-dance
 weaver          wiki-compiler   worker
 
-hive-mind OSS split (12 — synced to marolinik/hive-mind, see §7.5):
+hive-mind OSS source set (13 — curated forward-port target is marolinik/hive-mind; see §7.5):
 hive-mind-core   hive-mind-cli   hive-mind-shim-core   hive-mind-mcp-server
-hive-mind-wiki-compiler
+hive-mind-wiki-compiler   hive-mind-hooks-core
 hive-mind-hooks-{claude-code, claude-desktop, codex, codex-desktop,
                  cursor, hermes, openclaw}
 ```
 > Note: the prior list said "16" and included `ui`, which has no `package.json`
-> (not a workspace). Real count is 27. The 12 `hive-mind-*` packages were added
-> since the April verification.
+> (not a workspace). The live count is 28: 15 product packages and 13
+> `hive-mind-*` packages.
 
 ### `packages/agent/src/` — MOST ACTIVE (94 .ts files + 4 subdirs)
 
@@ -155,7 +201,8 @@ MOVED (2026-04-30 monorepo migration): the memory substrate `mind/` (db/schema/
   improvement-signals/embedding-provider/*-embedder) and `harvest/` (chatgpt/claude/
   claude-code/gemini/perplexity/pdf/plaintext/markdown/url/universal adapters +
   pipeline.ts + dedup.ts) now live at **packages/hive-mind-core/src/{mind,harvest}/**,
-  NOT under packages/core/. The OSS mirror is generated from there via subtree-split (§7.5).
+  NOT under packages/core/. The OSS mirror is curated from there through a maintainer-reviewed
+  forward-port (§7.5); raw subtree branches are never publish sources.
 ```
 
 For the deep-dive on what the mind/ substrate does, see [`docs/memory-architecture.md`](docs/memory-architecture.md).
@@ -218,6 +265,49 @@ npm run lint
 > `tsx` (transpile-only) — server-route type errors ship undetected unless you
 > run the `packages/server` tsc above. (A real type error slipped through this
 > way on 2026-05-28; see `docs/addictiveness-audit-2026-05-28/REDUNDANCY-AUDIT.md`.)
+
+### Windows Solo release commands (PowerShell 7; final frozen clean checkout)
+
+```powershell
+# Local build-host preparation (the installed desktop has none of these prerequisites).
+npm ci
+npm ci --prefix app --ignore-scripts
+npm run build:packages
+
+# Local unsigned build only; this verifies packaging/runtime, not public trust.
+npm --prefix app run tauri:build:win
+
+# Optional internal-pilot build. Its private test root is not public trust.
+npm --prefix app run tauri:build:win:pilot-signed
+
+# Internal clean-profile certification. Omit public-signature requirements for a pilot.
+pwsh -NoProfile -File scripts/certify-windows-installer.ps1 `
+  -InstallerPath "<absolute-path-to-Waggle-setup.exe>" `
+  -ExpectedSourceRevision "<40-character-final-HEAD>" `
+  -VerifyManagedModel
+```
+
+Production signing is hosted-only. Do not run `new-windows-signing-handoff.ps1`,
+`sign-windows-artifact.ps1`, or a local thumbprint-signing substitute to create a
+release artifact. `.github/workflows/release.yml` is authoritative and must run from
+an approved exact release tag. Its Windows chain is `build-windows-prebuilt` ->
+`prepare-windows-signing` -> `sign-windows` -> `certify-windows` ->
+`attest-windows` -> `publish-windows`.
+`sign-windows` requires Azure Artifact Signing OIDC variables, a federated credential
+scoped to the exact approved tag ref, and the least-privilege certificate-profile signer
+role. Before Azure authentication, it must bind the push event, repository, tag,
+workflow ref/SHA, clean checkout, and fresh `origin/main` ancestry. Signing may produce
+private Actions artifacts, but public attestation and `publish-windows` remain disabled
+while the repository is private; publication additionally requires
+`WINDOWS_PUBLIC_RELEASE_AUTHORIZED` to be explicitly `true`. The existing `production`
+environment isolates public-attestation OIDC claims from the exact-tag Azure signer.
+Private repositories require GitHub Enterprise Cloud for GitHub artifact attestations,
+so the sealed certified artifact is the terminal private-repository output. The approved
+signer subject and timestamp must still pass before credential-free certification.
+Never treat the local certification command as signed or change repository visibility
+without an explicit OSS/licensing decision.
+The certified installed desktop must not depend on developer Node.js, Python,
+Docker, external LiteLLM, or a separately installed Ollama.
 
 ---
 
@@ -379,7 +469,7 @@ interface AgentPersona {
   // guardrails + picker metadata (all optional, all shipped)
   disallowedTools?: string[]      // denylist — overrides tools[] on conflict
   failurePatterns?: string[]      // documented failure modes — shown in hover tooltip
-  isReadOnly?: boolean            // true = no write tools ever (enforced in assembleToolPool)
+  isReadOnly?: boolean            // true = no write tools after applyPersonaToolFilter/filterMcpToolsForPersona
   tagline?: string                // one sentence for picker hover
   bestFor?: string[]              // 3 example tasks in user-facing language
   wontDo?: string                 // hard boundary statement
@@ -418,7 +508,7 @@ shows tagline + bestFor + wontDo. "Create Custom Persona" inline form POSTs to
 
 ## 7. Security Constraints (Non-Negotiable)
 
-1. **Vault-only secrets.** API keys in Vault or `.env` (never committed). `.env.example` has key names only.
+1. **Vault-only secrets.** API keys belong in Vault or an untracked local `.env`, never in Git. `.env.example` may contain non-secret development defaults, but never usable credentials or secrets.
 2. **Injection defense.** `scanForInjection()` from `injection-scanner.ts` MUST be called on all connector/external input.
 3. **No eval, no dynamic require.** Tauri WebView is restricted.
 4. **Tauri IPC allowlist.** Explicit in `app/src-tauri/capabilities/`. Never `allowlist: all: true`.
@@ -428,7 +518,7 @@ shows tagline + bestFor + wontDo. "Create Custom Persona" inline form POSTs to
 
 ---
 
-## 7.5. Memory Substrate Sync (waggle-os → hive-mind, subtree-split)
+## 7.5. Memory Substrate Sync (waggle-os → hive-mind, curated forward-port)
 
 The memory substrate lives at **`packages/hive-mind-core/src/{mind,harvest}/`** (moved from
 `packages/core/src/` in the 2026-04-30 monorepo migration). The public OSS mirror at
@@ -443,14 +533,14 @@ directly on the OSS mirror.** Parity is NOT automatic — it broke once: the cro
 (`inprocess-reranker.ts` + HybridSearch options) was written directly on `marolinik/hive-mind`
 during the LoCoMo benchmark arc and existed ONLY there, discovered by the W4 recon and
 reverse-ported in W4.2 (`f47ee8f`). Rules:
-1. Substrate changes land in `packages/hive-mind-core/` here FIRST; the mirror is regenerated
-   via subtree-split afterward.
+1. Substrate changes land in `packages/hive-mind-core/` here FIRST; the mirror is updated
+   through a reviewed, maintainer-curated forward-port afterward.
 2. Benchmark/experiment work in a `D:/Projects/hive-mind` checkout is throwaway unless
    reverse-ported here — port it the same arc, don't let it sit.
 3. Run **`scripts/oss-drift-check.sh`** (file-level diff of the mapped src trees) before every
    OSS release push and after any arc that touched a hive-mind checkout.
-4. External PRs on the OSS repo are fine — the maintainer merges them back here via
-   subtree-pull, then re-splits.
+4. External PRs on the OSS repo are fine — the maintainer intentionally ports accepted changes
+   back here first, then prepares the next curated forward-port.
 === END CRITICAL ===
 
 === CORRECTION — how the sync ACTUALLY works (2026-06-12 drift analysis) ===
@@ -481,8 +571,9 @@ The prior text here claimed the mirror is produced by `scripts/oss-subtree-split
 **To work on the substrate or publish the OSS mirror:** see
 [`packages/hive-mind-core/CONTRIBUTING.md`](./packages/hive-mind-core/CONTRIBUTING.md),
 [`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh) (inspection/guard only), and
-[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh) (run before every release; note its
-~50 "DIFFERS" are mostly OSS-adaptation noise — layout + import rewrites — not true drift).
+[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh) (run before every release; its
+snapshot-dependent `ONLY-IN-*`/`DIFFERS` results include expected layout, import, logger, and
+branding adaptations, but every entry must still be classified before an OSS release).
 
 **Deprecated (do not rely on; do not delete):** the old dual-repo bidirectional-sync workflows
 `.github/workflows/{mind-parity-check,sync-mind}.yml` and the `.github/sync.md` manual are **preserved
@@ -517,7 +608,7 @@ Grep before creating. These exist and are functional:
 | `packages/core/src/telemetry.ts` | Telemetry pipeline |
 | `packages/hive-mind-core/src/harvest/pipeline.ts` | Harvest adapters + dedup |
 | `packages/core/src/compliance/` | Compliance + audit |
-| `app/src/components/cockpit/` | Tauri cockpit UI |
+| `apps/web/src/components/os/` | Main desktop cockpit UI loaded by Tauri |
 
 ---
 
@@ -556,7 +647,7 @@ Do not recreate or expose outside gating.
 - **Premium harness reached HONEST 21/21** (May 2026 S1) — every pillar regression-locked + composing. Full agent suite 2657/2657. See `memory/project_session_handoff_0519_s1.md`.
 
 **AI-OS arc (May 2026 S1/S2, 14 commits on origin):**
-- Phase 0 — Tool detection PoC (`packages/agent/src/tool-detection.ts`) for all 7 supported AI tools, hermetic + cross-platform.
+- Phase 0 — Tool detection PoC (`packages/agent/src/tool-detection.ts`) for eight registered AI-tool surfaces, hermetic + cross-platform. Registration is broader than release support.
 - Phase 1A — WaggleDance v2 dispatcher branches wired (discovery/routed_share/model_recipe/knowledge_match/task_claim/model_recommendation).
 - Phase 1B — Local sidecar surface (`/api/waggle-dance/signal` + `/signals`), SignalBus ring buffer, personal-tier-eligible.
 - Phase 1C — Bridge: v2 bus → existing `/api/waggle/signals` UI stream (zero frontend changes).
@@ -565,7 +656,7 @@ Do not recreate or expose outside gating.
 - Phase 2A — Launcher backend (`/api/tools/launch`, `/api/tools/hooks`).
 - Phase 2B — LauncherApp dock surface (`apps/web/src/components/os/apps/LauncherApp.tsx`).
 - Phase 3 — Skill diffusion (D1 fire → `skill_share` broadcast via `onSkillDistillationFire` callback).
-- Phase 4 — Full 7-tool launch cohort + Mission Control inventory tile + Memory provenance badge + launch-with-prompt textarea + process tracker / 'Running' badge.
+- Phase 4 — Eight-tool inventory/detection surface + Mission Control tile + Memory provenance badge + launch-with-prompt textarea + process tracker / 'Running' badge. The in-scope agent-integration release cohort is Claude Code, Codex, and Hermes; Cursor and OpenClaw are roadmap-only.
 
 End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSPACE_ID` env → hook captures → shim emitter → bus → bridge → UI. Rollback tag: `checkpoint/pre-ai-os-2026-05-20`. AI-OS exploration doc: `docs/plans/AI-OS-EXPLORATION-2026-05-19.md`.
 
@@ -574,7 +665,7 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 |---|---|---|
 | 1 | Spawn Agent + Dock wiring | P36 already wired in `Dock.tsx`+`Desktop.tsx`; P35 third-tier fallback (LiteLLM → runtime model → provider catalogs) landed `14942be`. Residual: runtime verification on a clean install. |
 | 2 | Light mode finish | P40/P41 + CR-2 — semantic-token migration is done (no hive-950 references except a comment); remaining issues are render-time fine-tuning (BootScreen visual polish + a few header-styling judgments) that need a binary build to validate. |
-| 3 | Wave 2/3 hook implementations | **Mostly DONE (corrected 2026-06-29).** 6 of 7 hook packages ship real bins: claude-code + the 2026-06-01 Wave 2/3 port (codex, codex-desktop, cursor, hermes, openclaw). Only `hive-mind-hooks-claude-desktop` remains a binless `export {}` stub (deferred MCP-bridge category). The dock (`LauncherApp.tsx`) now exposes hook install/verify/uninstall for all 6 via the corrected `HOOKS_COHORT` (was hardcoded `['claude-code']`). Residual: claude-desktop MCP-bridge hook only. |
+| 3 | External-tool release cohort | **Windows Solo scope fixed 2026-08-02.** Claude Code, Codex, and Hermes are the in-scope agent-integration cohort. Cursor and OpenClaw implementations remain in-tree as roadmap work and are fail-closed in production surfaces. Claude Desktop, Codex Desktop, and Hermes Desktop are convenience launch surfaces, not separate agent-acceptance targets. |
 
 **Closed during May 2026 backlog sweep:**
 - ✅ OW-6 PersonaSwitcher two-tier — shipped via M-01 (`PersonaSwitcher.tsx` + `lib/persona-tier.ts` + `lib/persona-tooltip.ts`); 26/26 tests passing
@@ -623,11 +714,11 @@ For the full polish+launch backlog see `docs/plans/BACKLOG-CONSOLIDATED-2026-04-
 | BEHAVIORAL_SPEC | Core agent rules (`packages/agent/src/behavioral-spec.ts`) |
 | Sidecar | Node.js Fastify server bundled into Tauri (`/sidecar`) |
 | KVARK | Egzakta sovereign enterprise AI — top of the Waggle funnel |
-| LiteLLM | LLM routing layer (`litellm-config.yaml`) |
+| LiteLLM | Optional server/team deployment proxy config (`litellm-config.yaml`); Windows Solo uses the bundled no-Python proxy and smart router |
 | WaggleDance | Multi-agent coordination package (`packages/waggle-dance`) |
-| Weaver | `packages/weaver` — (check source for current role) |
+| Weaver | Memory consolidation and session-skill extraction engine (`packages/weaver`) |
 | Evolution | Self-improvement subsystem (`evolution-*.ts`, `judge.ts`, `iterative-optimizer.ts`) |
-| assembleToolPool | Per-persona tool filtering from allowlist + denylist (to implement) |
+| applyPersonaToolFilter / filterMcpToolsForPersona | Enforced local and MCP per-persona allowlist/denylist filtering (`packages/server/src/local/persona-tool-filter.ts`) |
 
 ---
 

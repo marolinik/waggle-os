@@ -87,6 +87,14 @@ export class TeamService {
     userId: string,
     data: { role?: 'admin' | 'member'; roleDescription?: string; interests?: string[] },
   ) {
+    if (data.role !== undefined) {
+      const membership = await this.getMembership(teamId, userId);
+      if (!membership) return null;
+      if (membership.role === 'owner') {
+        throw new Error('Cannot change the team owner role');
+      }
+    }
+
     const setData: Record<string, unknown> = {};
     if (data.role !== undefined) setData.role = data.role;
     if (data.roleDescription !== undefined) setData.roleDescription = data.roleDescription;

@@ -110,6 +110,7 @@ const SHAPE_PATTERNS: ShapePattern[] = [
       /\bwhat\s+(would you|do you)\s+recommend\b/i,
       /\bhelp\s+(me\s+)?(decide|choose)\b/i,
       /\bmake\s+a\s+(decision|choice)\b/i,
+      /\b(?:choose|rank|set)\s+(?:the\s+)?(?:order|priorit(?:y|ies))\b/i,
     ],
     keywords: [
       /\bdecide\b/i, /\brecommend/i, /\badvise\b/i, /\bchoose\b/i,

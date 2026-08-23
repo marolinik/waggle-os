@@ -16,7 +16,14 @@ import type { JudgeLLMCall } from '../src/judge.js';
 
 let home: string;
 beforeEach(() => { home = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-audit-')); });
-afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
+afterEach(() => {
+  fs.rmSync(home, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 100,
+  });
+});
 
 // Judge replies (LLMJudge weights .5/.3/.2; short actual ⇒ lengthPenalty 1.0).
 const PASS_JUDGE = '{"correctness":9,"procedure":9,"conciseness":8,"feedback":"good"}';   // overall 0.88

@@ -296,9 +296,17 @@ describe('@waggle/cli runtime UX', () => {
       fs.mkdirSync(projectDir, { recursive: true });
 
       const dependencies: Record<string, string> = {};
+      const prepackPoison = 'WAGGLE_PREPACK_POISON_SENTINEL';
       for (const workspace of CLI_PACKAGE_CLOSURE) {
         const build = await run(bin('npm'), ['run', 'build', '--workspace', workspace], home);
         expect(build.status).toBe(0);
+
+        if (workspace === '@waggle/agent') {
+          fs.appendFileSync(
+            path.join(ROOT, 'packages', 'agent', 'dist', 'presentation-tools.js'),
+            `\nconsole.error('${prepackPoison}');\n`,
+          );
+        }
 
         const pack = await run(
           bin('npm'),
@@ -325,6 +333,66 @@ describe('@waggle/cli runtime UX', () => {
       );
       expect(install.status).toBe(0);
 
+      const installedAgentDir = path.join(projectDir, 'node_modules', '@waggle', 'agent');
+      const installedAgentManifest = JSON.parse(
+        fs.readFileSync(path.join(installedAgentDir, 'package.json'), 'utf8'),
+      ) as { dependencies?: Record<string, string> };
+      expect(
+        fs.readFileSync(path.join(installedAgentDir, 'dist', 'presentation-tools.js'), 'utf8'),
+      ).not.toContain(prepackPoison);
+      expect(installedAgentManifest.dependencies?.pptxgenjs).toBeUndefined();
+      expect(installedAgentManifest.dependencies?.jszip).toBeDefined();
+      expect(
+        fs.existsSync(
+          path.join(
+            installedAgentDir,
+            'dist',
+            'vendor',
+            'pptxgenjs',
+            'dist',
+            'pptxgen.cjs.js',
+          ),
+        ),
+      ).toBe(true);
+
+      const pptxProbe = await runInCwd(
+        process.execPath,
+        [
+          '--input-type=module',
+          '--eval',
+          [
+            "const watchdog = setTimeout(() => { console.error('PPTX runtime probe timed out'); process.exit(124); }, 30_000);",
+            "const { createPresentationTools } = await import('@waggle/agent');",
+            "const tool = createPresentationTools(process.cwd()).find(({ name }) => name === 'generate_pptx');",
+            "if (!tool) throw new Error('generate_pptx tool is missing');",
+            "const result = await tool.execute({ filePath: 'package-runtime-smoke.pptx', slides: [{ title: 'Runtime smoke', layout: 'title' }] });",
+            "if (!String(result).startsWith('Successfully generated')) throw new Error(String(result));",
+            "const [{ default: JSZip }, { readFile }] = await Promise.all([import('jszip'), import('node:fs/promises')]);",
+            "const zip = await JSZip.loadAsync(await readFile('package-runtime-smoke.pptx'));",
+            "for (const entry of ['[Content_Types].xml', 'ppt/presentation.xml', 'ppt/slides/slide1.xml']) if (!zip.file(entry)) throw new Error(`PPTX entry is missing: ${entry}`);",
+            "const slideXml = await zip.file('ppt/slides/slide1.xml').async('string');",
+            "if (!slideXml.includes('Runtime smoke')) throw new Error('PPTX slide content is missing');",
+            "clearTimeout(watchdog);",
+            "process.stdout.write('pptx-runtime-ok');",
+          ].join('\n'),
+        ],
+        projectDir,
+        home,
+      );
+      if (pptxProbe.status !== 0) {
+        throw new Error(
+          [
+            'Installed @waggle/agent could not generate a PPTX.',
+            `status=${pptxProbe.status ?? 'null'} signal=${pptxProbe.signal ?? 'none'}`,
+            `stdout:\n${pptxProbe.stdout}`,
+            `stderr:\n${pptxProbe.stderr}`,
+          ].join('\n'),
+        );
+      }
+      expect(pptxProbe.stdout).toContain('pptx-runtime-ok');
+      const pptxBytes = fs.readFileSync(path.join(projectDir, 'package-runtime-smoke.pptx'));
+      expect(pptxBytes.subarray(0, 2).toString('ascii')).toBe('PK');
+
       const result = await runInCwd(bin('npx'), ['waggle', '--help'], projectDir, home);
 
       expect(result.status).toBe(0);
@@ -335,7 +403,7 @@ describe('@waggle/cli runtime UX', () => {
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 300_000);
 
   it('installs the local package closure and starts the local REPL', async () => {
     const home = makeHome();
@@ -440,7 +508,7 @@ describe('@waggle/cli runtime UX', () => {
       if (child) await stopProcess(child);
       fs.rmSync(home, { recursive: true, force: true });
     }
-  }, 180_000);
+  }, 300_000);
 
   it('installs the local package closure and completes a streamed chat turn', async () => {
     const home = makeHome();

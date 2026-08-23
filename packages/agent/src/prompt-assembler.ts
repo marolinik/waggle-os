@@ -11,7 +11,7 @@
  *
  * Truncation policy: if the assembled system prompt exceeds `maxSystemChars`,
  * trim Recent changes → Active work → State, in that order. Identity, Persona,
- * Personal preferences, and Response format are never trimmed.
+ * Personal preferences, Response format, and Closed-world rewrite are never trimmed.
  */
 
 import type { MemoryFrame, Importance } from '@waggle/core';
@@ -55,6 +55,12 @@ export interface AssembledPromptDebug {
   taskShape: TaskShapeType | null;
   taskShapeConfidence: number;
   scaffoldApplied: boolean;
+  /** Always returned; optional in the type for backward-compatible external mocks. */
+  exclusiveResponseContract?: boolean;
+  /** Always returned; optional in the type for backward-compatible external mocks. */
+  scaffoldSuppressed?: boolean;
+  /** Always returned; optional in the type for backward-compatible external mocks. */
+  closedWorldRewrite?: boolean;
   /** v5: which scaffold style was used (compression = v4 default, expansion = v5 opt-in). */
   scaffoldStyle: ScaffoldStyle;
   sectionsIncluded: string[];
@@ -88,8 +94,8 @@ export interface AssembleOptions {
   /** Minimum task-shape confidence for scaffold emission. Default 0.3. */
   confidenceThreshold?: number;
   /**
-   * v5: scaffold variant. Default 'compression' — preserves v4 behavior
-   * byte-identically when unset or explicitly 'compression'.
+   * v5: scaffold variant. Default 'compression' preserves the v4 scaffold
+   * body; the assembler adds a response-format precedence qualifier.
    */
   scaffoldStyle?: ScaffoldStyle;
   /**
@@ -100,12 +106,48 @@ export interface AssembleOptions {
   recalledText?: string;
   /** H-AUDIT-1: per-turn trace ID (UUID v4). Logs prompt-assembly stage. */
   turnId?: string;
+  /**
+   * Force exclusive-output handling for code-owned prompts with a typed output
+   * contract. Free-form user language is deliberately not inferred here.
+   */
+  exclusiveResponseContract?: boolean;
 }
 
 // ── Constants ────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_CHARS = 32_000;
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.3;
+const DEFAULT_SCAFFOLD_QUALIFIER = 'If the user specifies a response format, follow it exactly. Otherwise:';
+const TRANSFORM_DIRECTIVE_START = String.raw`(?:^|[.!?]\s+)`;
+const TRANSFORM_DIRECTIVE_COURTESY = String.raw`(?:(?:please|kindly)\s+|(?:can|could|would|will)\s+you\s+|I\s+(?:want|need)\s+you\s+to\s+|I'd\s+like\s+you\s+to\s+)?`;
+const CLOSED_WORLD_TRANSFORM_REQUEST = new RegExp([
+  `${TRANSFORM_DIRECTIVE_START}${TRANSFORM_DIRECTIVE_COURTESY}${String.raw`(?:rewrite|rephrase|paraphrase|revise|edit|polish|tighten|condense|shorten|summari[sz]e|translate)\b`}`,
+  `${TRANSFORM_DIRECTIVE_START}${TRANSFORM_DIRECTIVE_COURTESY}${String.raw`turn\b[\s\S]{0,80}\binto\b`}`,
+].join('|'), 'i');
+const CLOSED_WORLD_BOUNDARY_FIRST_REQUEST = new RegExp([
+  `${TRANSFORM_DIRECTIVE_START}${String.raw`using\s+only\s+(?:the\s+)?(?:supplied|provided|source)\s+(?:text|facts?|material|content|information)[,:]\s+(?:please\s+)?(?:rewrite|rephrase|paraphrase|revise|edit|polish|tighten|condense|shorten|summari[sz]e|translate)\b`}`,
+  `${TRANSFORM_DIRECTIVE_START}${String.raw`without\s+(?:add(?:ing)?|introduc(?:ing)?|invent(?:ing)?)\s+(?:any\s+)?(?:new|additional)\s+(?:claims?|facts?|details?|information)[,:]\s+(?:please\s+)?(?:rewrite|rephrase|paraphrase|revise|edit|polish|tighten|condense|shorten|summari[sz]e|translate)\b`}`,
+].join('|'), 'i');
+const CLOSED_WORLD_EVIDENCE_BOUNDARY = new RegExp([
+  String.raw`\bclosed[- ]world\b`,
+  String.raw`\b(?:add|introduce|invent)\s+no\s+(?:new|additional)\s+(?:claims?|facts?|details?|information)\b`,
+  String.raw`\b(?:do\s+not|don't|without)\s+(?:add(?:ing)?|introduc(?:e|ing)|invent(?:ing)?)\s+(?:any\s+)?(?:new|additional)\s+(?:claims?|facts?|details?|information)\b`,
+  String.raw`\bus(?:e|ing)\s+only\s+(?:the\s+)?(?:supplied|provided|source)\s+(?:text|facts?|material|content|information)\b`,
+  String.raw`\b(?:supplied|provided)\s+(?:text|facts?|material|content|information)\s+(?:is|are)\s+(?:the\s+)?(?:complete|entire|only)\s+(?:evidence|source|basis|input)\b`,
+].join('|'), 'i');
+export const CLOSED_WORLD_REWRITE_CONTRACT = [
+  '# Closed-world rewrite',
+  "The user's supplied source text is the complete evidence boundary for this transformation.",
+  '- Preserve every supplied fact, including its polarity, status, quantity, timing, recommendation, and original certainty.',
+  '- Do not add implications, explanations, rationale, risks, causes, predictions, assumptions, recommendations, or conclusions unless the source states them.',
+  '- Output only the requested rewrite; omit commentary and follow-up offers unless the user explicitly requests them.',
+].join('\n');
+
+export function isClosedWorldRewriteRequest(query: string): boolean {
+  return (CLOSED_WORLD_TRANSFORM_REQUEST.test(query)
+      || CLOSED_WORLD_BOUNDARY_FIRST_REQUEST.test(query))
+    && CLOSED_WORLD_EVIDENCE_BOUNDARY.test(query);
+}
 
 /** Frames retained per tier — assembler caps top-N after upstream retrieval. */
 const FRAME_LIMITS: Record<ModelTier, number> = {
@@ -289,6 +331,10 @@ function renderPersona(persona: AgentPersona): string {
   const lines = [`## Persona: ${persona.name}`];
   if (persona.tagline) lines.push(persona.tagline);
   lines.push(persona.description);
+  const operatingInstructions = persona.systemPrompt.trim();
+  if (operatingInstructions) {
+    lines.push(`### Persona operating instructions\n${operatingInstructions}`);
+  }
   return lines.join('\n');
 }
 
@@ -321,11 +367,12 @@ export class PromptAssembler {
     const maxChars = opts.maxSystemChars ?? DEFAULT_MAX_CHARS;
     const confThreshold = opts.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
     const tier = opts.tierOverride ?? input.tier;
-    // v5 brief §7.2: default 'compression' preserves v4 behavior byte-identically.
+    // v5 brief §7.2: default 'compression' preserves the v4 scaffold body.
     const scaffoldStyle: ScaffoldStyle = opts.scaffoldStyle ?? 'compression';
     // Brief §10: derive task shape from query when caller hasn't supplied one.
     const taskShape = opts.taskShape ?? input.taskShape ?? detectTaskShape(input.query);
     const frameLimit = FRAME_LIMITS[tier];
+    const closedWorldRewrite = isClosedWorldRewriteRequest(input.query);
 
     const sections: Section[] = [];
 
@@ -344,7 +391,7 @@ export class PromptAssembler {
     }
 
     // ── State (I-frames) — trimmable ──
-    const stateFrames = selectFrames(input.context.stateFrames, frameLimit);
+    const stateFrames = closedWorldRewrite ? [] : selectFrames(input.context.stateFrames, frameLimit);
     if (stateFrames.length > 0) {
       sections.push({
         name: 'State',
@@ -354,7 +401,7 @@ export class PromptAssembler {
     }
 
     // ── Recent changes (P/B-frames) — trimmable first ──
-    const changeFrames = selectFrames(input.context.recentChanges, frameLimit);
+    const changeFrames = closedWorldRewrite ? [] : selectFrames(input.context.recentChanges, frameLimit);
     if (changeFrames.length > 0) {
       sections.push({
         name: 'Recent changes',
@@ -364,7 +411,7 @@ export class PromptAssembler {
     }
 
     // ── Active work (awareness items) — trimmable ──
-    if (input.context.activeWork.length > 0) {
+    if (!closedWorldRewrite && input.context.activeWork.length > 0) {
       sections.push({
         name: 'Active work',
         body: `# Active work\n${renderActiveWork(input.context.activeWork)}`,
@@ -385,7 +432,7 @@ export class PromptAssembler {
     // Brief §8: recallMemory already scans; assembler must not re-scan, and
     // must ignore recall entirely when scanSafe is false.
     const recalledFrames: MemoryFrame[] = [];
-    if (input.recalled.scanSafe && input.recalled.renderedText) {
+    if (!closedWorldRewrite && input.recalled.scanSafe && input.recalled.renderedText) {
       // W4.5: pre-rendered multi-lane block — carries its own header
       // ('# Recalled Memories' + provenance + temporal guidance). Subject
       // to the same overall char budget as every other section.
@@ -394,7 +441,7 @@ export class PromptAssembler {
         body: input.recalled.renderedText,
         frameCount: 0,
       });
-    } else if (input.recalled.scanSafe) {
+    } else if (!closedWorldRewrite && input.recalled.scanSafe) {
       recalledFrames.push(
         ...selectFrames(input.recalled.workspace, frameLimit),
         ...selectFrames(input.recalled.personal, frameLimit),
@@ -409,11 +456,24 @@ export class PromptAssembler {
     }
 
     // ── Response format (scaffold) — gated ──
-    const scaffold = selectScaffold(tier, taskShape, confThreshold, scaffoldStyle);
+    const candidateScaffold = selectScaffold(tier, taskShape, confThreshold, scaffoldStyle);
+    const exclusiveResponseContract = opts.exclusiveResponseContract === true;
+    const scaffold = exclusiveResponseContract || closedWorldRewrite || candidateScaffold === null
+      ? null
+      : `${DEFAULT_SCAFFOLD_QUALIFIER} ${candidateScaffold}`;
+    const scaffoldSuppressed = (exclusiveResponseContract || closedWorldRewrite)
+      && candidateScaffold !== null;
     if (scaffold) {
       sections.push({
         name: 'Response format',
         body: `# Response format\n${scaffold}`,
+        frameCount: 0,
+      });
+    }
+    if (closedWorldRewrite) {
+      sections.push({
+        name: 'Closed-world rewrite',
+        body: CLOSED_WORLD_REWRITE_CONTRACT,
         frameCount: 0,
       });
     }
@@ -442,6 +502,9 @@ export class PromptAssembler {
       tier,
       taskShape: taskShape?.type ?? null,
       scaffoldApplied: scaffold !== null,
+      exclusiveResponseContract,
+      scaffoldSuppressed,
+      closedWorldRewrite,
       scaffoldStyle,
       sectionsIncluded,
       framesUsed,
@@ -457,6 +520,9 @@ export class PromptAssembler {
         taskShape: taskShape?.type ?? null,
         taskShapeConfidence: taskShape?.confidence ?? 0,
         scaffoldApplied: scaffold !== null,
+        exclusiveResponseContract,
+        scaffoldSuppressed,
+        closedWorldRewrite,
         scaffoldStyle,
         sectionsIncluded,
         framesUsed,

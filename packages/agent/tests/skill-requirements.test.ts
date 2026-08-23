@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   extractSkillRequirements,
+  buildSkillBinLookupInvocation,
   checkSkillRequirements,
   clearSkillRequirementsCache,
 } from '../src/skill-requirements.js';
@@ -96,5 +97,20 @@ describe('checkSkillRequirements', () => {
     clearSkillRequirementsCache();
     await checkSkillRequirements({ env: [], bins: ['ffmpeg'] }, { hasBin });
     expect(hasBin).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('buildSkillBinLookupInvocation', () => {
+  it('uses a sanitized env and absolute System32 where.exe on win32', () => {
+    const invocation = buildSkillBinLookupInvocation('vitest', 'win32', {
+      PATH: 'C:\\Tools',
+      SystemRoot: 'C:\\Windows',
+      OPENAI_API_KEY: 'must-not-cross',
+    });
+
+    expect(invocation.command).toBe('C:\\Windows\\System32\\where.exe');
+    expect(invocation.args).toEqual(['$PATH:vitest']);
+    expect(invocation.env.PATH).toBe('C:\\Tools');
+    expect(invocation.env.OPENAI_API_KEY).toBeUndefined();
   });
 });

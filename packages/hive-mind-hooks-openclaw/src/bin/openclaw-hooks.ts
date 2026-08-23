@@ -58,10 +58,9 @@ function printHelp(): void {
     '  --help, -h           Show this help.',
     '  --handler-source <PATH>  Override compiled handler.js source (testing).',
     '  --cli-path <PATH>    Absolute path to the hive-mind-cli binary or its',
-    '                       compiled JS entry. Required on Windows (npm bin',
-    '                       is a .cmd shim) and recommended for production',
-    '                       installs. Threaded into the hook entry env as',
-    '                       WAGGLE_HIVE_MIND_CLI.',
+    '                       compiled JS entry. Required for managed install',
+    '                       and verify. Verify treats it as the authoritative',
+    '                       packaged CLI expectation.',
     '',
     'Repo: https://github.com/marolinik/waggle-os',
     '',
@@ -159,7 +158,11 @@ async function main(): Promise<void> {
       return;
     }
     if (command === 'verify') {
-      const result = await verify(baseOpts);
+      const result = await verify({
+        ...baseOpts,
+        ...(cliPath !== undefined ? { cliPath } : {}),
+        requireManagedRuntime: true,
+      });
       printVerifySummary(result);
       if (!result.ok) process.exit(1);
       return;

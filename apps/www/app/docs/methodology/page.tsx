@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import BrandMark from '../../_components/BrandMark';
@@ -41,11 +42,11 @@ export default function MethodologyPage() {
   return (
     <main style={pageStyle}>
       <header style={headerStyle}>
-        <a href="/" style={brandLinkStyle}>
+        <Link href="/" style={brandLinkStyle}>
           <BrandMark withWordmark />
           <span style={separatorStyle}>·</span>
           <span style={crumbStyle}>Methodology</span>
-        </a>
+        </Link>
       </header>
 
       <article style={articleStyle} className="methodology-prose">
@@ -53,9 +54,9 @@ export default function MethodologyPage() {
       </article>
 
       <footer style={footerStyle}>
-        <a href="/" style={backLinkStyle}>
+        <Link href="/" style={backLinkStyle}>
           ← Back to Waggle
-        </a>
+        </Link>
       </footer>
 
       <style>{scopedCss}</style>

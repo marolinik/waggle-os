@@ -30,7 +30,12 @@ describe('skill-usage — gap F', () => {
     waggleHome = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-usage-'));
   });
   afterEach(() => {
-    fs.rmSync(waggleHome, { recursive: true, force: true });
+    fs.rmSync(waggleHome, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   it('records a new skill usage and increments on repeat', () => {
@@ -84,7 +89,12 @@ describe('retireStaleSkills — gap F', () => {
 
   afterEach(() => {
     db.close();
-    fs.rmSync(waggleHome, { recursive: true, force: true });
+    fs.rmSync(waggleHome, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   it('retires skills whose last-used is older than maxIdleDays', () => {

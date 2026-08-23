@@ -3,6 +3,7 @@ import { runAgentLoop, type AgentLoopConfig, type PluginToolProvider } from '../
 import type { ToolDefinition } from '../src/tools.js';
 import { CapabilityRouter } from '../src/capability-router.js';
 import { HookRegistry } from '../src/hooks.js';
+import { needsConfirmationWithAutonomy } from '../src/confirmation.js';
 import Database from 'better-sqlite3';
 
 /**
@@ -71,8 +72,22 @@ describe('runAgentLoop', () => {
     // Verify body includes system prompt and user message
     const body = JSON.parse(init.body);
     expect(body.model).toBe('gpt-4');
+    expect(body.reasoning).toBeUndefined();
     expect(body.messages[0]).toEqual({ role: 'system', content: 'You are a helpful assistant.' });
     expect(body.messages[1]).toEqual({ role: 'user', content: 'Hello' });
+  });
+
+  it('forwards an explicit provider reasoning policy without inventing one', async () => {
+    const fetch = mockFetch([{ content: 'Bounded answer.' }]);
+    const config = makeConfig({
+      fetch,
+      reasoning: { enabled: true, effort: 'low' },
+    });
+
+    await runAgentLoop(config);
+
+    const body = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(body.reasoning).toEqual({ enabled: true, effort: 'low' });
   });
 
   it('retries once when the model emits raw tool-call markup as text', async () => {
@@ -193,7 +208,10 @@ describe('runAgentLoop', () => {
         status: 200,
         json: async () => ({
           choices: [
-            { message: { role: 'assistant', content: 'I can answer without that malformed tool call.' } },
+            {
+              message: { role: 'assistant', content: 'I can answer without that malformed tool call.' },
+              finish_reason: 'stop',
+            },
           ],
           usage: { prompt_tokens: 12, completion_tokens: 7 },
         }),
@@ -332,6 +350,8 @@ describe('runAgentLoop', () => {
 
   it('merges plugin tools into the agent toolset via pluginTools provider', async () => {
     const pluginExecute = vi.fn(async () => 'plugin-result');
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ authorize: true }));
     const pluginToolProvider: PluginToolProvider = {
       getAllTools: () => [
         {
@@ -354,7 +374,7 @@ describe('runAgentLoop', () => {
     ]);
 
     const result = await runAgentLoop(
-      makeConfig({ fetch, pluginTools: pluginToolProvider })
+      makeConfig({ fetch, pluginTools: pluginToolProvider, hooks })
     );
 
     expect(result.content).toBe('Found via plugin.');
@@ -399,6 +419,100 @@ describe('runAgentLoop', () => {
     expect(toolNames).toContain('plugin_tool');
     expect(toolNames).toHaveLength(2);
   });
+
+  it.each([
+    ['missing', undefined],
+    ['low', 'low'],
+    ['invalid', 'trusted'],
+  ])('normalizes %s plugin-provider risk to the medium confirmation floor', async (_label, riskLevel) => {
+    const pluginExecute = vi.fn(async () => 'MUTATION_RAN');
+    const pluginToolProvider: PluginToolProvider = {
+      getAllTools: () => [{
+        name: 'opaque_plugin_mutation',
+        description: 'Perform a plugin action',
+        parameters: { type: 'object', properties: {} },
+        execute: pluginExecute,
+        ...(riskLevel === undefined ? {} : { riskLevel }),
+      }],
+    };
+    const hooks = new HookRegistry();
+    let observedRisk: unknown;
+    hooks.on('pre:tool', (ctx) => {
+      observedRisk = ctx.riskLevel;
+      if (ctx.toolName && needsConfirmationWithAutonomy(
+        ctx.toolName,
+        ctx.args,
+        'normal',
+        ctx.riskLevel as 'low' | 'medium' | 'high' | 'critical' | undefined,
+      )) {
+        return { cancel: true, reason: 'external plugin risk requires approval' };
+      }
+    });
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{
+          id: 'call_plugin_risk',
+          function: { name: 'opaque_plugin_mutation', arguments: '{}' },
+        }],
+      },
+      { content: 'The plugin action was not approved.' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      hooks,
+      pluginTools: pluginToolProvider,
+    }));
+
+    expect(observedRisk).toBe('medium');
+    expect(pluginExecute).not.toHaveBeenCalled();
+    expect(result.toolsUsed).toEqual([]);
+    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    const toolResult = secondBody.messages.find(
+      (message: { role?: string; tool_call_id?: string }) =>
+        message.role === 'tool' && message.tool_call_id === 'call_plugin_risk',
+    );
+    expect(toolResult.content).toContain('[BLOCKED]');
+    expect(toolResult.content).toContain('requires approval');
+  });
+
+  it.each(['high', 'critical'] as const)(
+    'preserves valid %s plugin-provider risk through pre:tool',
+    async (riskLevel) => {
+      const pluginExecute = vi.fn(async () => 'MUTATION_RAN');
+      const pluginToolProvider: PluginToolProvider = {
+        getAllTools: () => [{
+          name: 'opaque_plugin_mutation',
+          description: 'Perform a plugin action',
+          parameters: { type: 'object', properties: {} },
+          execute: pluginExecute,
+          riskLevel,
+        }],
+      };
+      const hooks = new HookRegistry();
+      let observedRisk: unknown;
+      hooks.on('pre:tool', (ctx) => {
+        observedRisk = ctx.riskLevel;
+        return { cancel: true, reason: 'approval required' };
+      });
+      const fetch = mockFetch([
+        {
+          content: null,
+          tool_calls: [{
+            id: 'call_plugin_elevated_risk',
+            function: { name: 'opaque_plugin_mutation', arguments: '{}' },
+          }],
+        },
+        { content: 'The plugin action was not approved.' },
+      ]);
+
+      await runAgentLoop(makeConfig({ fetch, hooks, pluginTools: pluginToolProvider }));
+
+      expect(observedRisk).toBe(riskLevel);
+      expect(pluginExecute).not.toHaveBeenCalled();
+    },
+  );
 
   it('terminates with error after 3 consecutive 429 rate-limit responses', async () => {
     let callCount = 0;

@@ -13,6 +13,7 @@
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
+import type { CronSchedule } from '@waggle/core';
 import { isLoopbackBind } from './net-config.js';
 
 // ── Security Headers ────────────────────────────────────────────────────
@@ -253,6 +254,7 @@ const AUTH_EXEMPT_PATHS = [
   '/health',
   '/api/auth/session-token',
   '/api/browser-ext/session-token',
+  '/api/browser-ext/pair',
   '/api/stripe/webhook',
 ];
 
@@ -298,14 +300,389 @@ export interface SecurityMiddlewareOpts {
   rateLimiter?: RateLimiterConfig;
   /** Session token for bearer auth. When set, all non-exempt routes require Authorization header. */
   sessionToken?: string;
-  /** Validate a narrow per-run credential for the two WaggleDance transport routes. */
-  authenticateRunToken?: (token: string) => boolean;
+  /** Validate the persisted, scoped Browser Companion credential. */
+  authenticateBrowserCompanionToken?: (token: string) => boolean;
+  /** Validate a narrow per-run credential for WaggleDance and one model-completion route. */
+  authenticateRunToken?: (token: string) => RunTokenAuthResult;
 }
 
-const RUN_TOKEN_PATHS = new Set([
-  '/api/waggle-dance/signal',
-  '/api/waggle-dance/signals',
+export interface AuthenticatedRunToken {
+  runId?: string;
+  model?: string;
+}
+
+export type RunTokenAuthResult = boolean | AuthenticatedRunToken | null | undefined;
+
+const RUN_TOKEN_METHODS = new Map<string, string>([
+  ['/api/waggle-dance/signal', 'POST'],
+  ['/api/waggle-dance/signals', 'GET'],
 ]);
+
+/** OpenClaw's OpenAI-compatible client can send only a Bearer credential here. */
+const RUN_TOKEN_BEARER_PATHS = new Set([
+  '/v1/chat/completions',
+]);
+
+const UNSAFE_WORKSPACE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * POST endpoints that project existing workspace data without changing it.
+ * Keep this allowlist exact and intentionally small: new POST reads must opt in,
+ * rather than silently bypassing the Team-viewer policy.
+ */
+const VIEWER_READ_ONLY_POST_EXEMPT_PATHS = new Set([
+  '/api/export',
+  '/api/compliance/export',
+  '/api/compliance/export-pdf',
+  '/api/automations/test',
+  '/api/command/interpret',
+]);
+
+const DEFAULT_WORKSPACE_MUTATION_PATHS = new Set([
+  '/api/chat',
+  '/api/fleet/spawn',
+  '/api/agent-groups/:id/run',
+  '/api/tools/launch',
+]);
+
+const resolvedChatWorkspaceIds = new WeakMap<FastifyRequest, string | null>();
+const authenticatedRunTokens = new WeakMap<FastifyRequest, AuthenticatedRunToken>();
+
+export function getResolvedChatWorkspaceId(
+  request: FastifyRequest,
+): string | null | undefined {
+  return resolvedChatWorkspaceIds.get(request);
+}
+
+export function getAuthenticatedRunToken(
+  request: FastifyRequest,
+): AuthenticatedRunToken | undefined {
+  return authenticatedRunTokens.get(request);
+}
+
+const STORED_CRON_OWNER_PATHS = new Set([
+  '/api/cron/:id',
+  '/api/cron/:id/trigger',
+  '/api/automations/:id',
+  '/api/automations/:id/run',
+  '/api/automations/:id/pause',
+]);
+
+const ALL_WORKSPACE_CRON_JOB_TYPES = new Set([
+  'workspace_health',
+]);
+
+const FAN_OUT_MEMORY_ACTIONS = new Set([
+  'index_reconcile',
+  'memory_compact',
+  'memory_lane_extract',
+]);
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function bearerTokenFromAuth(authHeader: string | undefined): string | undefined {
+  const match = authHeader?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || undefined;
+}
+
+function runTokenAuthSnapshot(result: RunTokenAuthResult): AuthenticatedRunToken | null {
+  if (result === true) return {};
+  if (!result || typeof result !== 'object') return null;
+  return {
+    ...(typeof result.runId === 'string' ? { runId: result.runId } : {}),
+    ...(typeof result.model === 'string' ? { model: result.model } : {}),
+  };
+}
+
+function stringFields(
+  record: Record<string, unknown> | null,
+  fields: readonly string[],
+): string[] {
+  const values: string[] = [];
+  for (const field of fields) {
+    const value = record?.[field];
+    if (typeof value === 'string' && value.trim()) values.push(value.trim());
+  }
+  return values;
+}
+
+function stringArrayFields(
+  record: Record<string, unknown> | null,
+  fields: readonly string[],
+): string[] {
+  const values: string[] = [];
+  for (const field of fields) {
+    const candidates = record?.[field];
+    if (!Array.isArray(candidates)) continue;
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) values.push(candidate.trim());
+    }
+  }
+  return values;
+}
+
+function parsedCronJobConfig(
+  jobConfig: unknown,
+  serialized: boolean,
+): Record<string, unknown> | null {
+  let config = asRecord(jobConfig);
+  if (!config && serialized && typeof jobConfig === 'string') {
+    try {
+      config = asRecord(JSON.parse(jobConfig));
+    } catch {
+      return null;
+    }
+  }
+  return config;
+}
+
+function allWorkspaceIds(fastify: FastifyInstance): string[] {
+  return fastify.workspaceManager?.list().map((workspace) => workspace.id) ?? [];
+}
+
+function cronScheduleWorkspaceIds(
+  jobType: unknown,
+  jobConfig: unknown,
+  workspaceId: unknown,
+  fastify: FastifyInstance,
+  serializedJobConfig = false,
+): string[] {
+  const normalizedWorkspaceId = typeof workspaceId === 'string' && workspaceId.length > 0
+    ? workspaceId
+    : null;
+  const explicitOwnerIds = normalizedWorkspaceId
+    && normalizedWorkspaceId !== '*'
+    ? [normalizedWorkspaceId]
+    : [];
+
+  if (typeof jobType !== 'string') return explicitOwnerIds;
+  if (ALL_WORKSPACE_CRON_JOB_TYPES.has(jobType)) {
+    return [...explicitOwnerIds, ...allWorkspaceIds(fastify)];
+  }
+  if (jobType === 'prompt_optimization') {
+    const optimizedWorkspaceIds = fastify.workspaceManager?.list()
+      .filter((workspace) => Boolean(workspace.optimizationEnabled))
+      .map((workspace) => workspace.id) ?? [];
+    return [...explicitOwnerIds, ...optimizedWorkspaceIds];
+  }
+  if (jobType === 'memory_consolidation') {
+    const rawAction = parsedCronJobConfig(jobConfig, serializedJobConfig)?.action;
+    const action = typeof rawAction === 'string' ? rawAction : undefined;
+    if (action !== undefined && FAN_OUT_MEMORY_ACTIONS.has(action)) {
+      return [...explicitOwnerIds, ...allWorkspaceIds(fastify)];
+    }
+  }
+  if (
+    jobType === 'agent_task'
+    && normalizedWorkspaceId === '*'
+  ) {
+    return allWorkspaceIds(fastify);
+  }
+  return explicitOwnerIds;
+}
+
+/**
+ * Resolve a persisted schedule through the same workspace-target rules used by
+ * the HTTP authorization hook. Automatic scheduler paths do not pass through
+ * Fastify, so they must re-check the current role immediately before running.
+ */
+export function cronScheduleHasReadOnlyViewerTarget(
+  schedule: CronSchedule,
+  fastify: FastifyInstance,
+): boolean {
+  return cronScheduleWorkspaceIds(
+    schedule.job_type,
+    schedule.job_config,
+    schedule.workspace_id,
+    fastify,
+    true,
+  ).some((workspaceId) => {
+    const workspace = fastify.workspaceManager?.get(workspaceId);
+    return Boolean(workspace?.teamId && workspace.teamRole === 'viewer');
+  });
+}
+
+function storedMutationWorkspaceIds(
+  request: FastifyRequest,
+  fastify: FastifyInstance,
+  routeUrl: string,
+): string[] {
+  const params = asRecord(request.params);
+
+  if (routeUrl === '/api/approval/:requestId') {
+    const requestId = stringFields(params, ['requestId'])[0];
+    if (!requestId) return [];
+    const held = fastify.cronStore?.getPendingAction(requestId);
+    if (!held) return [];
+    if (held.workspace_id === null) return [];
+    if (held.workspace_id && held.workspace_id !== '*') return [held.workspace_id];
+    return ['default'];
+  }
+
+  if (!STORED_CRON_OWNER_PATHS.has(routeUrl)) return [];
+  const id = parseInt(stringFields(params, ['id'])[0] ?? '', 10);
+  if (Number.isNaN(id)) return [];
+  const schedule = fastify.cronStore?.getById(id);
+  if (!schedule) return [];
+
+  const currentWorkspaceIds = cronScheduleWorkspaceIds(
+    schedule.job_type,
+    schedule.job_config,
+    schedule.workspace_id,
+    fastify,
+    true,
+  );
+  if (request.method === 'PATCH') {
+    const body = asRecord(request.body);
+    const hasNextJobConfig = body !== null && Object.hasOwn(body, 'jobConfig');
+    const nextJobConfig = hasNextJobConfig
+      ? body.jobConfig
+      : schedule.job_config;
+    const nextWorkspaceId = body && Object.hasOwn(body, 'workspaceId')
+      ? body.workspaceId
+      : schedule.workspace_id;
+    return [
+      ...currentWorkspaceIds,
+      ...cronScheduleWorkspaceIds(
+        schedule.job_type,
+        nextJobConfig,
+        nextWorkspaceId,
+        fastify,
+        !hasNextJobConfig,
+      ),
+    ];
+  }
+  return currentWorkspaceIds;
+}
+
+function createdCronWorkspaceIds(
+  body: Record<string, unknown> | null,
+  fastify: FastifyInstance,
+  routeUrl: string,
+): string[] {
+  if (routeUrl !== '/api/cron') return [];
+  return cronScheduleWorkspaceIds(
+    body?.jobType,
+    body?.jobConfig,
+    body?.workspaceId === 'global' ? '*' : body?.workspaceId,
+    fastify,
+  );
+}
+
+/**
+ * Resolve the workspace whose state an unsafe request targets. Route parameters
+ * win for /api/workspaces/* so a body cannot redirect authorization to a more
+ * privileged workspace. Other workspace-scoped routes use their established
+ * body/query fields, including Fleet's parent id and multi-workspace Rooms.
+ * The few routes that intentionally fall back to the active/default workspace
+ * must authorize that resolved fallback too.
+ */
+function mutationWorkspaceIds(
+  request: FastifyRequest,
+  fastify: FastifyInstance,
+): string[] {
+  if (!UNSAFE_WORKSPACE_METHODS.has(request.method)) return [];
+
+  const routeUrl = request.routeOptions?.url ?? request.url.split('?')[0];
+  if (VIEWER_READ_ONLY_POST_EXEMPT_PATHS.has(routeUrl)) return [];
+
+  const params = asRecord(request.params);
+  if (routeUrl.startsWith('/api/workspaces/:')) {
+    return stringFields(params, ['workspaceId', 'id']).slice(0, 1);
+  }
+
+  const body = asRecord(request.body);
+  const query = asRecord(request.query);
+  if (DEFAULT_WORKSPACE_MUTATION_PATHS.has(routeUrl)) {
+    if (routeUrl === '/api/chat') {
+      const explicitWorkspaceId = stringFields(
+        { workspace: body?.workspace ?? body?.workspaceId },
+        ['workspace'],
+      )[0];
+      const isLiteralDefaultWorkspace = explicitWorkspaceId === 'default'
+        && !!fastify.workspaceManager?.get('default');
+      const resolvedWorkspaceId = explicitWorkspaceId
+        && (explicitWorkspaceId !== 'default' || isLiteralDefaultWorkspace)
+        ? explicitWorkspaceId
+        : fastify.agentState?.activeWorkspaceId ?? null;
+
+      resolvedChatWorkspaceIds.set(request, resolvedWorkspaceId);
+      return resolvedWorkspaceId ? [resolvedWorkspaceId] : [];
+    }
+
+    const explicitWorkspaceIds = routeUrl === '/api/fleet/spawn'
+      ? stringFields(body, ['parentWorkspaceId'])
+      : stringFields(body, ['workspaceId']);
+    if (explicitWorkspaceIds.length > 0) return explicitWorkspaceIds;
+
+    const fallbackWorkspaceId = routeUrl === '/api/tools/launch'
+      ? fastify.agentState?.activeWorkspaceId
+        ?? fastify.workspaceManager?.getDefault()
+        ?? fastify.workspaceManager?.list()[0]?.id
+      : fastify.workspaceManager?.getDefault()
+        ?? fastify.workspaceManager?.list()[0]?.id;
+    return fallbackWorkspaceId ? [fallbackWorkspaceId] : [];
+  }
+
+  const participantWorkspaceIds = Array.isArray(body?.participants)
+    ? body.participants.flatMap((participant) =>
+      stringArrayFields(asRecord(participant), ['workspaceIds']))
+    : [];
+  const bodyWorkspaceIds = stringFields(body, ['workspaceId', 'workspace', 'parentWorkspaceId']);
+  const directBodyWorkspaceIds = request.method === 'POST'
+    && (routeUrl === '/api/cron' || routeUrl === '/api/automations')
+    ? bodyWorkspaceIds.filter((workspaceId) => workspaceId !== 'global')
+    : bodyWorkspaceIds;
+  const workspaceIds = [...new Set([
+    ...stringFields(params, ['workspaceId']),
+    ...directBodyWorkspaceIds,
+    ...stringFields(query, ['workspaceId', 'workspace']),
+    ...stringArrayFields(body, ['workspaceIds']),
+    ...participantWorkspaceIds,
+    ...storedMutationWorkspaceIds(request, fastify, routeUrl),
+    ...createdCronWorkspaceIds(body, fastify, routeUrl),
+  ])];
+  return workspaceIds;
+}
+
+function storedAgentRunControlWorkspaceIds(
+  request: FastifyRequest,
+  fastify: FastifyInstance,
+): string[] | null | undefined {
+  const routeUrl = request.routeOptions?.url ?? request.url.split('?')[0];
+  if (
+    request.method !== 'POST'
+    || (routeUrl !== '/api/agent-runs/:id/control' && routeUrl !== '/api/agents/:id/pause')
+  ) {
+    return undefined;
+  }
+
+  const id = stringFields(asRecord(request.params), ['id'])[0];
+  if (!id) return null;
+  if (!fastify.agentRunRegistry) {
+    return routeUrl === '/api/agent-runs/:id/control' ? null : undefined;
+  }
+
+  const run = routeUrl === '/api/agent-runs/:id/control'
+    ? fastify.agentRunRegistry.get(id)
+    : fastify.agentRunRegistry.list({ source: 'fleet', limit: 1_000 })
+      .find((candidate) => candidate.kind === 'worker' && candidate.executor.agentId === id);
+  if (!run) return undefined;
+
+  const workspaceIds = run.kind === 'room' ? run.workspaceIds : [run.workspaceId];
+  if (
+    workspaceIds.length === 0
+    || workspaceIds.some((workspaceId) => !fastify.workspaceManager?.get(workspaceId))
+  ) {
+    return null;
+  }
+
+  return workspaceIds;
+}
 
 async function securityMiddlewarePlugin(
   fastify: FastifyInstance,
@@ -313,6 +690,7 @@ async function securityMiddlewarePlugin(
 ) {
   const limiter = new RateLimiter(opts.rateLimiter);
   const sessionToken = opts.sessionToken ?? null;
+  const browserCompanionRequests = new WeakSet<FastifyRequest>();
 
   // R2-004: when bound to loopback, reject requests whose Host header is not a
   // known-local name. This defeats DNS-rebinding, which would otherwise let a
@@ -380,12 +758,34 @@ async function securityMiddlewarePlugin(
         (trustLocalhost && isLocalhost);
       const rawRunToken = request.headers['x-waggle-run-token'];
       const runToken = typeof rawRunToken === 'string' ? rawRunToken : undefined;
-      const runTokenEligible = RUN_TOKEN_PATHS.has(requestPath);
-      const runTokenValid = Boolean(
-        runTokenEligible && runToken && opts.authenticateRunToken?.(runToken),
-      );
-      if (!isAuthExempt && !runTokenValid) {
-        const authHeader = request.headers.authorization;
+      const authHeader = request.headers.authorization;
+      const bearerToken = bearerTokenFromAuth(authHeader);
+      const browserCompanionCredentialValid = typeof bearerToken === 'string'
+        && (opts.authenticateBrowserCompanionToken?.(bearerToken) ?? false);
+      const browserCompanionEligible = browserCompanionCredentialValid
+        && (
+          (request.method === 'GET' && requestPath === '/api/browser-ext/health')
+          || (request.method === 'POST' && requestPath === '/api/memory/frames')
+        );
+      if (browserCompanionEligible) {
+        browserCompanionRequests.add(request);
+      }
+      const runTokenEligible = RUN_TOKEN_METHODS.get(requestPath) === request.method;
+      const headerRunTokenSnapshot = runTokenEligible && runToken
+        ? runTokenAuthSnapshot(opts.authenticateRunToken?.(runToken))
+        : null;
+      const bearerRunTokenSnapshot = request.method === 'POST'
+          && RUN_TOKEN_BEARER_PATHS.has(requestPath)
+          && bearerToken
+        ? runTokenAuthSnapshot(opts.authenticateRunToken?.(bearerToken))
+        : null;
+      if (headerRunTokenSnapshot || bearerRunTokenSnapshot) {
+        authenticatedRunTokens.set(request, headerRunTokenSnapshot ?? bearerRunTokenSnapshot!);
+      }
+      const headerRunTokenValid = Boolean(headerRunTokenSnapshot);
+      const bearerRunTokenValid = Boolean(bearerRunTokenSnapshot);
+      const runTokenValid = headerRunTokenValid || bearerRunTokenValid;
+      if (!isAuthExempt && !runTokenValid && !browserCompanionEligible) {
         // P1b-SSE: header-less GETs on the SSE allowlist may authenticate via
         // `?token=` (EventSource cannot send headers). A header, when present,
         // always wins — the query path is a fallback transport, not an
@@ -404,7 +804,7 @@ async function securityMiddlewarePlugin(
               code: runToken ? 'INVALID_TOKEN' : 'MISSING_TOKEN',
             });
           }
-          const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+          const token = bearerTokenFromAuth(authHeader) ?? null;
           if (token !== sessionToken) {
             return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
           }
@@ -450,6 +850,56 @@ async function securityMiddlewarePlugin(
     }
 
     reply.header('X-RateLimit-Remaining', String(result.remaining));
+  });
+
+  // Team viewers are read-only across every local workspace mutation surface,
+  // not only /api/chat. Resolve the persisted workspace role after Fastify has
+  // parsed params/body/query, then stop before any route handler can mutate.
+  fastify.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (browserCompanionRequests.has(request) && request.method === 'POST') {
+      const body = request.body;
+      const isRecord = body !== null && typeof body === 'object' && !Array.isArray(body);
+      const payload = isRecord ? body as Record<string, unknown> : null;
+      const targetsWorkspace = payload !== null && (
+        Object.prototype.hasOwnProperty.call(payload, 'workspace')
+        || Object.prototype.hasOwnProperty.call(payload, 'workspaceId')
+      );
+      const sourceEscalates = payload !== null
+        && Object.prototype.hasOwnProperty.call(payload, 'source')
+        && payload.source !== 'import';
+      const importanceEscalates = payload !== null
+        && Object.prototype.hasOwnProperty.call(payload, 'importance')
+        && payload.importance !== 'normal'
+        && payload.importance !== 'low';
+      if (!payload || targetsWorkspace || sourceEscalates || importanceEscalates) {
+        return reply.code(403).send({
+          error: 'Browser Companion is limited to personal imported-memory capture.',
+          code: 'BROWSER_COMPANION_SCOPE_VIOLATION',
+        });
+      }
+    }
+
+    const storedRunWorkspaceIds = storedAgentRunControlWorkspaceIds(request, fastify);
+    if (storedRunWorkspaceIds === null) {
+      return reply.code(403).send({
+        error: 'Agent run workspace scope could not be resolved.',
+        code: 'RUN_WORKSPACE_SCOPE_UNRESOLVED',
+      });
+    }
+
+    const mutationTargets = new Set([
+      ...mutationWorkspaceIds(request, fastify),
+      ...(storedRunWorkspaceIds ?? []),
+    ]);
+    for (const workspaceId of mutationTargets) {
+      const workspace = fastify.workspaceManager?.get(workspaceId);
+      if (workspace?.teamId && workspace.teamRole === 'viewer') {
+        return reply.code(403).send({
+          error: 'Viewers cannot modify team workspaces. Ask a team admin to upgrade your role.',
+          code: 'VIEWER_READ_ONLY',
+        });
+      }
+    }
   });
 }
 

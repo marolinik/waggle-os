@@ -77,13 +77,13 @@ describe('POST /api/evolution/run', () => {
     vault.set('anthropic', 'sk-ant-stub-for-tests', { models: ['claude-haiku-4-5-20251001'] });
 
     server = await buildLocalServer({ dataDir: tmpDir });
-  });
+  }, 60_000);
 
   afterAll(async () => {
-    await server.close();
+    await server?.close();
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
     clearLLMFactory();
-  });
+  }, 60_000);
 
   beforeEach(() => {
     server.evolutionStore.clear();

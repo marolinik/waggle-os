@@ -31,6 +31,14 @@ interface VaultRecord {
   updatedAt: string;
 }
 
+interface ConnectorCredentialInput {
+  type: 'api_key' | 'oauth2' | 'bearer' | 'basic';
+  value: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  scopes?: string[];
+}
+
 export class VaultStore {
   private dataDir: string;
   private vaultPath: string;
@@ -52,39 +60,116 @@ export class VaultStore {
 
   /** Ensure the encryption key exists. Generate if missing. */
   private ensureKey(): Buffer {
+    let key: Buffer;
+    let created = false;
+
     if (fs.existsSync(this.keyPath)) {
-      const key = Buffer.from(fs.readFileSync(this.keyPath, 'utf-8').trim(), 'hex');
+      const keyStat = fs.lstatSync(this.keyPath);
+      if (!keyStat.isFile() || keyStat.isSymbolicLink()) {
+        throw new Error(`Vault key path is not a regular file: ${this.keyPath}`);
+      }
+      key = Buffer.from(fs.readFileSync(this.keyPath, 'utf-8').trim(), 'hex');
       if (key.length !== KEY_LENGTH) {
         throw new Error(
           `Vault key file is corrupted — expected ${KEY_LENGTH} bytes, got ${key.length}. Delete ${this.keyPath} to regenerate.`
         );
       }
-      return key;
+    } else {
+      key = crypto.randomBytes(KEY_LENGTH);
+      if (process.platform !== 'win32') {
+        fs.writeFileSync(this.keyPath, key.toString('hex'), { mode: 0o600, flag: 'wx' });
+      }
+      created = true;
     }
-    const key = crypto.randomBytes(KEY_LENGTH);
-    fs.writeFileSync(this.keyPath, key.toString('hex'), { mode: 0o600 });
-    // Review Critical #1: On Windows, restrict key file access to current user only.
-    // Previously used `require('node:child_process')` inline which fails silently under
-    // ESM (`type: module` in the sidecar) — the try/catch swallowed the ReferenceError
-    // and every Windows install left the vault key with no ACL restriction.
-    // Now imported statically at the top of the file; the try/catch only covers actual
-    // icacls failures (e.g. icacls.exe not on PATH in a minimal Windows image).
+
     if (process.platform === 'win32') {
       try {
-        // Resolve the current user via whoami (safer than process.env.USERNAME
-        // which can be absent or spoofed in containerized/scripted setups)
-        const currentUser = execFileSync('whoami', { encoding: 'utf-8' }).trim();
-        execFileSync('icacls', [
-          this.keyPath,
-          '/inheritance:r',
-          '/grant:r',
-          `${currentUser}:F`,
-        ], { stdio: 'ignore' });
+        this.restrictWindowsKeyPermissions(created ? key : undefined);
       } catch (err) {
-        log.warn('Could not restrict key file permissions via icacls — vault key may be readable by other users', err);
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Could not restrict vault key permissions on Windows: ${reason}.`);
       }
     }
     return key;
+  }
+
+  private restrictWindowsKeyPermissions(newKey?: Buffer): void {
+    const systemRoot = process.env.SystemRoot?.trim();
+    const normalizedRoot = systemRoot ? path.win32.normalize(systemRoot) : '';
+    if (!/^[A-Za-z]:\\/.test(normalizedRoot)) {
+      throw new Error('SystemRoot is missing or is not a drive-rooted Windows path');
+    }
+
+    const system32 = path.win32.join(normalizedRoot, 'System32');
+    const powershell = path.win32.join(
+      system32,
+      'WindowsPowerShell',
+      'v1.0',
+      'powershell.exe',
+    );
+
+    const aclScript = [
+      "$ErrorActionPreference = 'Stop'",
+      '$keyPath = $env:WAGGLE_VAULT_KEY_PATH',
+      '$createKey = $env:WAGGLE_VAULT_CREATE_KEY -eq "1"',
+      '$createdByThisInvocation = $false',
+      'try {',
+      '  $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User',
+      '  $full = [Security.AccessControl.FileSystemRights]::FullControl',
+      '  $allow = [Security.AccessControl.AccessControlType]::Allow',
+      '  $targetAcl = New-Object Security.AccessControl.FileSecurity',
+      '  $targetAcl.SetOwner($sid)',
+      '  $targetAcl.SetAccessRuleProtection($true, $false)',
+      '  $targetAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule -ArgumentList @($sid, $full, $allow)))',
+      '  if ($createKey) {',
+      '    $keyHex = [Console]::In.ReadToEnd().Trim()',
+      '    if ($keyHex -notmatch "^[0-9a-f]{64}$") { throw "Invalid generated vault key" }',
+      '    $keyBytes = [Text.Encoding]::ASCII.GetBytes($keyHex)',
+      '    $stream = [IO.FileStream]::new($keyPath, [IO.FileMode]::CreateNew, $full, [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough, $targetAcl)',
+      '    $createdByThisInvocation = $true',
+      '    try { $stream.Write($keyBytes, 0, $keyBytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }',
+      '  } else {',
+      '    $existingAttributes = [IO.File]::GetAttributes($keyPath)',
+      '    if (($existingAttributes -band [IO.FileAttributes]::Directory) -or ($existingAttributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Vault key is not a regular file" }',
+      '    [IO.File]::SetAccessControl($keyPath, $targetAcl)',
+      '  }',
+      '  $attributes = [IO.File]::GetAttributes($keyPath)',
+      '  $length = [IO.FileInfo]::new($keyPath).Length',
+      '  if (($attributes -band [IO.FileAttributes]::Directory) -or ($attributes -band [IO.FileAttributes]::ReparsePoint) -or $length -ne 64) { throw "Vault key payload is not a regular 64-byte file" }',
+      '  $acl = [IO.File]::GetAccessControl($keyPath)',
+      '  $ownerSid = $acl.GetOwner([Security.Principal.SecurityIdentifier])',
+      '  $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))',
+      '  $current = @($rules | Where-Object { -not $_.IsInherited -and $_.IdentityReference.Value -eq $sid.Value -and $_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow })',
+      '  $hasFull = @($current | Where-Object { ($_.FileSystemRights -band $full) -eq $full }).Count -eq 1',
+      '  if (-not $acl.AreAccessRulesProtected -or $ownerSid.Value -ne $sid.Value -or $rules.Count -ne 1 -or -not $hasFull) { throw "Vault ACL is not current-user-only" }',
+      '} catch {',
+      '  if ($createdByThisInvocation) { try { [IO.File]::Delete($keyPath) } catch {} }',
+      '  throw',
+      '}',
+    ].join('\n');
+    const childEnv: NodeJS.ProcessEnv = {
+      SystemRoot: normalizedRoot,
+      WINDIR: normalizedRoot,
+      WAGGLE_VAULT_KEY_PATH: this.keyPath,
+      WAGGLE_VAULT_CREATE_KEY: newKey ? '1' : '0',
+    };
+    for (const name of ['TEMP', 'TMP', 'ComSpec', 'SystemDrive', 'PROCESSOR_ARCHITECTURE']) {
+      const value = process.env[name];
+      if (value) childEnv[name] = value;
+    }
+    execFileSync(powershell, [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-EncodedCommand',
+      Buffer.from(aclScript, 'utf16le').toString('base64'),
+    ], {
+      encoding: 'utf-8',
+      env: childEnv,
+      input: newKey?.toString('hex') ?? '',
+      stdio: ['pipe', 'ignore', 'pipe'],
+      windowsHide: true,
+    });
   }
 
   /** Encrypt a plaintext string. Returns iv:authTag:ciphertext (all hex). */
@@ -233,26 +318,55 @@ export class VaultStore {
     return name in vault;
   }
 
-  /** Set a connector credential with typed metadata */
-  setConnectorCredential(connectorId: string, credential: {
-    type: 'api_key' | 'oauth2' | 'bearer' | 'basic';
-    value: string;
-    refreshToken?: string;
-    expiresAt?: string;
-    scopes?: string[];
-  }): void {
-    this.set(`connector:${connectorId}`, credential.value, {
-      credentialType: credential.type,
-      expiresAt: credential.expiresAt,
-      scopes: credential.scopes,
-    });
-    // Store refresh token as a separate encrypted entry (never in plaintext metadata)
-    if (credential.refreshToken) {
-      this.set(`connector:${connectorId}:refresh`, credential.refreshToken);
-    } else {
-      // Clear any previously stored refresh token if not provided
-      this.delete(`connector:${connectorId}:refresh`);
+  /** Set a connector credential with typed metadata. */
+  setConnectorCredential(connectorId: string, credential: ConnectorCredentialInput): void {
+    this.setConnectorCredentialBundle(connectorId, credential);
+  }
+
+  /**
+   * Persist a connector credential and its encrypted companion values with one
+   * vault-file replacement. This prevents a multi-field credential (for
+   * example Jira token + email + site origin) from being partially updated.
+   */
+  setConnectorCredentialBundle(
+    connectorId: string,
+    credential: ConnectorCredentialInput,
+    relatedSecrets: Readonly<Record<string, string>> = {},
+  ): void {
+    const secretEntries = Object.entries(relatedSecrets);
+    if (secretEntries.some(([suffix]) => !/^[a-z][a-z0-9_]*$/.test(suffix))) {
+      throw new TypeError('Invalid connector credential suffix');
     }
+
+    const vault = this.readVault();
+    const updatedAt = new Date().toISOString();
+    vault[`connector:${connectorId}`] = {
+      encrypted: this.encrypt(credential.value),
+      metadata: {
+        credentialType: credential.type,
+        expiresAt: credential.expiresAt,
+        scopes: credential.scopes,
+      },
+      updatedAt,
+    };
+
+    const refreshKey = `connector:${connectorId}:refresh`;
+    if (credential.refreshToken) {
+      vault[refreshKey] = {
+        encrypted: this.encrypt(credential.refreshToken),
+        updatedAt,
+      };
+    } else {
+      delete vault[refreshKey];
+    }
+
+    for (const [suffix, value] of secretEntries) {
+      vault[`connector:${connectorId}:${suffix}`] = {
+        encrypted: this.encrypt(value),
+        updatedAt,
+      };
+    }
+    this.writeVault(vault);
   }
 
   /** Get a connector credential with typed metadata */

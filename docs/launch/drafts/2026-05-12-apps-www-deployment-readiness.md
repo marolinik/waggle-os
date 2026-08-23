@@ -165,7 +165,7 @@ environment before deploy.
 | `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | Where to send post-signup (e.g. `/`) |
 | `CLERK_WEBHOOK_SECRET` | For Clerk → tier publicMetadata sync; set if using Clerk webhooks (else can defer) |
 | `STRIPE_SECRET_KEY` | Live key, on Egzakta account (`CNCrMQy1f7`). **Marko declined rotation per session call** — left in chat log; consider rotating post-Day-0. |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_smwv4fInMEzJ3NSj3AwcNY2pz21eVrBu` (live endpoint created Wave 2 PG3 prep) |
+| `STRIPE_WEBHOOK_SECRET` | `[REDACTED - rotate in Stripe and store only in the deployment secret manager]` (live endpoint created Wave 2 PG3 prep) |
 | `STRIPE_PRICE_PRO_MONTHLY` | `price_1TVsaMCNCrMQy1f7KwImpxA4` (Pro $19/mo) |
 | `STRIPE_PRICE_PRO_ANNUAL` | `price_1TVsaLCNCrMQy1f7YhQGDH2o` (Pro $190/yr) |
 | `STRIPE_PRICE_TEAMS_MONTHLY` | `price_1TVsaLCNCrMQy1f7WUhtbZ88` (Teams $49/seat/mo) |

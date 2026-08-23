@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { runAgentLoop, type AgentLoopConfig } from '../src/agent-loop.js';
+import { HookRegistry } from '../src/hooks.js';
 import { createSystemTools } from '../src/system-tools.js';
 import { Workspace } from '../src/workspace.js';
 
@@ -233,6 +234,8 @@ describe('Integration: Local Mode', () => {
 
   it('agent writes a file via tool call and it persists on disk', async () => {
     const tools = createSystemTools(tmpDir);
+    const hooks = new HookRegistry();
+    hooks.on('pre:tool', () => ({ authorize: true }));
 
     const fetch = mockFetch([
       {
@@ -259,6 +262,7 @@ describe('Integration: Local Mode', () => {
       makeConfig({
         fetch,
         tools,
+        hooks,
         messages: [{ role: 'user', content: 'Create a file' }],
       })
     );

@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type ToolDefinition, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -13,9 +14,17 @@ import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
+import {
+  issueCapabilityProposalFromToolResult,
+  resolveMarketplaceApprovalIdentity,
+  stripCapabilityRequestMarker,
+} from './capability-proposals.js';
+import { resolveGrantRiskLevel } from '../approval-grants.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
-import { listPersonas, composePersonaPrompt, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
+import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, isClosedWorldRewriteRequest, type AssembledPrompt } from '@waggle/agent';
+
+const NON_RETAINED_TURN_CONTENT = '[Not retained: memory disabled for this turn]';
 
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
@@ -35,17 +44,47 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse } from './chat-helpers.js';
-import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
+import { allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import {
+  chatSessionStateKey,
+  createPersistedCapabilityReceipt,
+  isChatSessionStateKeyForWorkspace,
+  isolateLegacyDefaultChatSessions,
+  registerChatHistoryRestoreParticipant,
+  resolveChatHistoryTarget,
+  persistMessage,
+  loadSessionMessages,
+  stripTrailingFailedPair,
+} from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
+import {
+  behavioralRulesForPromptPackage,
+  composeClosedWorldChatPrompt,
+  composeEvidenceBoundedChatPrompt,
+  composeToolFreeAdvisoryChatPrompt,
+  composeChatPromptTail,
+  selectChatPromptPackageMode,
+  type ChatPromptPackageMode,
+} from './chat-prompt-packaging.js';
 import { getGovernancePermissions } from './chat-governance.js';
-import { applyPersonaToolFilter, filterMcpToolsForPersona } from '../persona-tool-filter.js';
+import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
-import { resolveUsableModel } from '../model-availability.js';
+import {
+  canonicalizeModelReference,
+  listOllamaChatModelIds,
+  resolveExplicitRoutableModel,
+  resolveUsableModel,
+} from '../model-availability.js';
+import { bindModelSpendBudget } from '../model-spend-meter.js';
+import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
+import type { WorkspaceTurnScope } from '../workspace-turn-coordinator.js';
 import { bindChatCollaborationTools } from '../chat-collaboration.js';
+import { getBoundTeamServer } from '../team-server-binding.js';
+import { fetchTeamServer } from '../team-server-egress.js';
+import { getResolvedChatWorkspaceId } from '../security-middleware.js';
 import type { GoalAncestry } from '@waggle/shared';
-import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
+import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
@@ -70,6 +109,42 @@ export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 function isClosedDbError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
   return /database (connection|handle) is not open|database is closed/i.test(msg);
+}
+
+function isIncompleteCompletionError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
+}
+
+function getBillableUsage(
+  usage: unknown,
+): { inputTokens: number; outputTokens: number } | null {
+  const candidate = usage as {
+    inputTokens?: unknown;
+    outputTokens?: unknown;
+  } | null | undefined;
+  if (!candidate
+    || typeof candidate.inputTokens !== 'number'
+    || !Number.isFinite(candidate.inputTokens)
+    || candidate.inputTokens < 0
+    || typeof candidate.outputTokens !== 'number'
+    || !Number.isFinite(candidate.outputTokens)
+    || candidate.outputTokens < 0
+    || candidate.inputTokens + candidate.outputTokens <= 0) {
+    return null;
+  }
+  return {
+    inputTokens: candidate.inputTokens,
+    outputTokens: candidate.outputTokens,
+  };
+}
+
+function getIncompleteCompletionUsage(
+  error: unknown,
+): { inputTokens: number; outputTokens: number } | null {
+  if (!isIncompleteCompletionError(error)) return null;
+  return getBillableUsage((error as { usage?: unknown }).usage);
 }
 
 const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
@@ -118,6 +193,8 @@ const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'list_workspace_files',
   'read_other_workspace_file',
 ]);
+const EXPLICIT_READ_ONLY_TOOL_NAMES = new Set([...READONLY_TOOLS, 'read_skill']);
+const PLAN_AUTHORING_TOOL_NAMES = new Set(['create_plan', 'add_plan_step']);
 
 /**
  * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
@@ -133,13 +210,174 @@ export function resolveChatAncestry(
   return name ? { project: name } : {};
 }
 
+/** Injected runners still need request-scoped evidence boundaries. */
+export function shouldPackageSystemPromptForTurn(
+  hasCustomRunner: boolean,
+  contextScope: TurnContextScope,
+  closedWorldRewrite: boolean,
+): boolean {
+  return !hasCustomRunner || contextScope !== 'default' || closedWorldRewrite;
+}
+
+export function hasRegulatedDisclaimer(content: string, personaId: string): boolean {
+  const normalized = content.toLowerCase();
+  const recommendationLead = '(?:^|[.!?;\\r\\n]\\s*|,\\s*|[-*]\\s+)(?:(?:please|you should|you may want to|(?:i|we) recommend (?:that )?you)\\s+)?';
+  const hasAdvisorReferral = (advisor: string): boolean => (
+    new RegExp(`${recommendationLead}consult\\s+(?:(?:with\\s+)?(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
+    || new RegExp(`${recommendationLead}(?:verify|check|confirm|review|discuss)(?:\\s+(?:this|it|these|those|the (?:figures?|analysis|advice|decision|matter|plan)))?\\s+with\\s+(?:(?:your|a|an|the)\\s+)?${advisor}\\b(?!['’]s\\b)`).test(normalized)
+  );
+
+  if (personaId === 'finance-owner') {
+    return /\bnot (?:financial(?: or investment)?|investment(?: or financial)?) advice\b/.test(normalized)
+      || hasAdvisorReferral('(?:licensed\\s+)?(?:accountant|financial advisor)');
+  }
+  if (personaId === 'hr-manager' || personaId === 'legal-professional') {
+    return normalized.includes('not legal advice')
+      || /\b(?:does not|will not|not intended to) create (?:an? )?attorney-client relationship\b/.test(normalized)
+      || hasAdvisorReferral('(?:(?:licensed\\s+)?attorney|legal team)');
+  }
+  return false;
+}
+
+const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|explore|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
+const AMBIGUOUS_GATED_ACTION_VERB_SOURCE = String.raw`(?:message|share|post|update)`;
+const NEGATABLE_CAPABILITY_VERB_SOURCE = String.raw`(?:${EXPLICIT_GATED_ACTION_VERB_SOURCE}|${AMBIGUOUS_GATED_ACTION_VERB_SOURCE}|use|call|invoke|search|research|investigate|try|retry)`;
+const CAPABILITY_GERUND_SOURCE = String.raw`(?:writing|reading|editing|modifying|creating|generating|exporting|downloading|committing|pushing|pulling|merging|branching|running|executing|installing|deleting|removing|inspecting|exploring|reviewing|analy[sz]ing|fixing|debugging|testing|validating|verifying|checking|building|compiling|typechecking|linting|refactoring|implementing|drafting|preparing|scheduling|sending|emailing|messaging|sharing|publishing|uploading|updating|posting|delegating|coordinating|orchestrating|browsing|navigating|opening|clicking|filling|querying|calculating|computing|using|calling|invoking|searching|researching|investigating|trying|retrying)`;
+const NEGATABLE_CAPABILITY_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|shell|browser|web|internet)`;
+const NEGATED_CAPABILITY_RESUME_SOURCE = String.raw`(?:\b(?:but|however|yet|instead|then)\b|[:\u2013\u2014]\s*(?=(?:please\s+)?${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
+const WITHOUT_CAPABILITY_RESUME_SOURCE = String.raw`(?:${NEGATED_CAPABILITY_RESUME_SOURCE}|\band\s+(?=${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
+const NEGATED_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${NEGATED_CAPABILITY_RESUME_SOURCE})[^,.;!?\r\n])*(?=${NEGATED_CAPABILITY_RESUME_SOURCE}|[,.;!?\r\n]|$)`;
+const DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${NEGATED_CAPABILITY_RESUME_SOURCE})[^.;!?\r\n])*(?=${NEGATED_CAPABILITY_RESUME_SOURCE}|[.;!?\r\n]|$)`;
+const WITHOUT_CAPABILITY_TAIL_SOURCE = String.raw`(?:(?!${WITHOUT_CAPABILITY_RESUME_SOURCE})[^,.;!?\r\n])*(?=${WITHOUT_CAPABILITY_RESUME_SOURCE}|[,.;!?\r\n]|$)`;
+const EXPLICIT_GATED_ACTION_PATTERN = new RegExp(String.raw`\b${EXPLICIT_GATED_ACTION_VERB_SOURCE}\b`, 'i');
+const RETRY_GATED_ACTION_PATTERN = /^\s*(?:(?:ok(?:ay)?|yes)[,\s]+)?(?:(?:please\s+)|(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?))?(?:try\s+(?:now|again)|retry|same\s+again)\b/i;
+const DIRECT_CAPABILITY_LEAD_SOURCE = String.raw`(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+you\s+(?:please(?:,\s*|\s+))?(?:(?:be\s+able\s+to\s+)|(?:help\s+(?:me|us)\s+(?:to\s+)?)))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want|would\s+like)\s+you\s+to\s+)|(?:(?:please(?:,\s*|\s+))?go\s+ahead\s+and\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?`;
+const DIRECT_CAPABILITY_ACTION_PATTERN = new RegExp(
+  String.raw`^\s*${DIRECT_CAPABILITY_LEAD_SOURCE}${NEGATABLE_CAPABILITY_VERB_SOURCE}\b`,
+  'i',
+);
+const READ_ONLY_REPOSITORY_DISCOVERY_PATTERN = /(?:^|[.;:!?\r\n]\s*|\b(?:and|but|then)\s+)(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want)\s+you\s+to\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?(?:(?:explore|examine|understand|look\s+(?:through|at))\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|code|project|workspace)\b|inspect\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|workspace)\b)/i;
+const REPOSITORY_EXECUTION_OR_MUTATION_PATTERN = /(?:^|[.;:!?\r\n]\s*|\b(?:and|but|then)\s+)(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want)\s+you\s+to\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?(?:run|execute|test|fix|debug|edit|modify|write|create|implement|compile|lint|refactor|commit|push|pull|merge|delete|remove)\b|\b(?:use|using)\s+(?:bash|terminal|shell)\b/i;
+const NEGATED_CAPABILITY_DIRECTIVE_SOURCE = String.raw`(?:do\s+not|don['\u2019]t|(?:do\s+not|don['\u2019]t)\s+want\s+to|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|may\s+not|might\s+not|cannot|can\s+not|can['\u2019]t|will\s+not|won['\u2019]t|would\s+not|wouldn['\u2019]t|(?:am|are|is|['\u2019](?:m|re|s))\s+not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?|(?:aren['\u2019]t|isn['\u2019]t)\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to)|there\s+(?:is|['\u2019]s)\s+no\s+need\s+to|not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?)`;
+const DIRECT_NEGATED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b${NEGATED_CAPABILITY_DIRECTIVE_SOURCE}\s+${NEGATABLE_CAPABILITY_VERB_SOURCE}\b${DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const WITHOUT_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\bwithout\s+(?:${CAPABILITY_GERUND_SOURCE}\b|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b|(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b)${WITHOUT_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE = String.raw`(?:(?:no(?!\s+more\s+than\b)|zero|0|not\s+(?:one|a\s+single|any))\s+|(?:none|neither)(?:\s+of)?\s+(?:the\s+)?)`;
+const POST_VERBAL_NEGATED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b(?:(?:run|execute|test)\s+(?:${POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE}(?:tests?|commands?|scripts?|tasks?|checks?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:tests?|commands?|scripts?|tasks?|checks?)\b)|(?:edit|modify|write|create|delete|remove)\s+(?:${POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE}(?:files?|documents?|artifacts?|changes?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:files?|documents?|artifacts?|changes?)\b)|(?:commit|push|pull|merge)\s+(?:${POST_VERBAL_NEGATIVE_CAPABILITY_COUNT_SOURCE}(?:changes?|commits?|branches?|files?)\b|nothing(?!\s+but\b)|neither\b[^.;!?\r\n]*\bnor\b[^.;!?\r\n]*\b(?:changes?|commits?|branches?|files?)\b))[^.;!?\r\n]*`,
+  'gi',
+);
+const NOMINAL_NEGATED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b(?:no\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}|avoid\s+(?:${CAPABILITY_GERUND_SOURCE}\b(?:\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})?|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}|(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})|not\s+(?:${CAPABILITY_GERUND_SOURCE}\b(?:\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})?|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})|refrain\s+from\s+(?:${CAPABILITY_GERUND_SOURCE}\b(?:\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})?|(?:the\s+)?use\s+of\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE})|(?:using\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}|(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}(?:\s+use)?)\s+(?:is|remains)\s+(?:prohibited|forbidden|disallowed|not\s+(?:allowed|needed|required|necessary)))\b${NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const NO_NEED_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\b(?:(?:there\s+is|there['\u2019]s)\s+no\s+need|(?:you\s+)?(?:do\s+not|don['\u2019]t)\s+need)\s+to\s+(?:use|call|invoke)\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b${NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const NOT_IN_CAPABILITY_PATTERN = new RegExp(
+  String.raw`\bnot\s+(?:in|to|as)\s+(?:a\s+|the\s+|any\s+)?${NEGATABLE_CAPABILITY_NOUN_SOURCE}\b${NEGATED_CAPABILITY_TAIL_SOURCE}`,
+  'gi',
+);
+const AMBIGUOUS_GATED_ACTION_PATTERN = new RegExp(
+  String.raw`(?:^|[.;:!?\r\n][ \t]*|\b(?:and|then|please|to)\s+)(?:[-+*][ \t]+|\d+[.)][ \t]+)?(?:please\s+)?(?:(?:share|post|update)\s+(?:(?:the|this|that|it|a|an|my|our|your)\b|(?:result|report|file|document|dashboard|record)\b)|message\s+(?:(?:the|this|that|a|my|our|your)\b|(?:me|us|him|her|them|team|finance)\b))`,
+  'i',
+);
+
+function stripNegatedCapabilityClauses(message: string): string {
+  return message
+    .replace(DIRECT_NEGATED_CAPABILITY_PATTERN, ' ')
+    .replace(WITHOUT_CAPABILITY_PATTERN, ' ')
+    .replace(POST_VERBAL_NEGATED_CAPABILITY_PATTERN, ' ')
+    .replace(NOMINAL_NEGATED_CAPABILITY_PATTERN, ' ')
+    .replace(NO_NEED_CAPABILITY_PATTERN, ' ')
+    .replace(NOT_IN_CAPABILITY_PATTERN, ' ');
+}
+
+function hasExplicitGatedToolIntent(message: string): boolean {
+  return EXPLICIT_GATED_ACTION_PATTERN.test(message)
+    || RETRY_GATED_ACTION_PATTERN.test(message)
+    || AMBIGUOUS_GATED_ACTION_PATTERN.test(message)
+    || /\b(file|docx|document|artifact|workbook|spreadsheet|xlsx|terminal|shell|bash|command|calculator|cross-workspace|other workspace)\b/i.test(message)
+    || /\b(?:use|using|call|invoke|run)\s+(?:(?:the|a|an)\s+)?(?:calculator|python|code|spreadsheet|workbook|xlsx)\b/i.test(message)
+    || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
+    || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
+    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
+    || isExplicitPlanAuthoringRequest(message);
+}
+
+function isTerminalModelBudgetError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 'DAILY_MODEL_BUDGET_EXCEEDED'
+    || code === 'DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE';
+}
+
 export function isExplicitGatedToolRequest(message: string): boolean {
-  return /\b(write|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|cross-workspace|other workspace)\b/i.test(message)
-    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message);
+  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
+  if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
+  const actionableMessage = stripNegatedCapabilityClauses(message);
+  if (isInlineTextOnlyDraftRequest(actionableMessage)) return false;
+  if (isInlineSelfContainedCalculationRequest(actionableMessage)) return false;
+  return hasExplicitGatedToolIntent(actionableMessage);
+}
+
+function shouldRequireCapabilityAcquisitionTools(message: string): boolean {
+  const actionableMessage = stripNegatedCapabilityClauses(message);
+  if (RETRY_GATED_ACTION_PATTERN.test(actionableMessage)) return false;
+  if (!DIRECT_CAPABILITY_ACTION_PATTERN.test(actionableMessage)) return false;
+  if (/\bexplor(?:e|ing)\b/i.test(actionableMessage)) return false;
+  if (READ_ONLY_REPOSITORY_DISCOVERY_PATTERN.test(actionableMessage)
+    && !REPOSITORY_EXECUTION_OR_MUTATION_PATTERN.test(actionableMessage)) {
+    return false;
+  }
+  return isExplicitGatedToolRequest(message);
+}
+
+function isInlineSelfContainedCalculationRequest(message: string): boolean {
+  if (!/\b(?:calculate|compute)\b/i.test(message)) return false;
+  const suppliedNumbers = message.match(/(?<![\w.])[-+]?\d[\d,.]*(?:\.\d+)?%?/g) ?? [];
+  if (suppliedNumbers.length < 2) return false;
+  return !hasExplicitGatedToolIntent(message.replace(/\b(?:calculate|compute)\b/gi, ' '));
+}
+
+function isInlineTextOnlyDraftRequest(message: string): boolean {
+  if (!/\b(?:draft|prepare|write)\b/i.test(message) || isExplicitPlanAuthoringRequest(message)) {
+    return false;
+  }
+  const affirmativeRequest = message.replace(
+    /\b(?:do not|don't|never|without)\b[^.?!]*(?:[.?!]|$)/gi,
+    ' ',
+  );
+  return !/\b(?:file|docx|pdf|document|artifact|export|download|code|bug|repo(?:sitory)?|terminal|shell|bash|command|test suite|database|sql|etl|pipeline|previous|prior|saved|memory|notes?|schedule|calendar|send|post|delegate|agent|browser|website|url|calculate|calculator|compute)\b/i.test(affirmativeRequest);
+}
+
+function isExplicitPlanAuthoringRequest(message: string): boolean {
+  return /\/plan\b/i.test(message)
+    || /\b(?:create|make|build|draft|prepare|write|generate|develop|set up)\b[^.?!\r\n]{0,100}\bplan\b/i.test(message)
+    || /\bplan(?:ning)?\s+(?:this|that|the|a|an|my|our|your)\b/i.test(message);
 }
 
 export function isExplicitMemoryRecallRequest(message: string): boolean {
-  return /\b(search|find|look up|recall|memories|saved memory|what do you know about me|what have you saved|what do you remember|do you remember|remember about)\b/i.test(message);
+  if (!allowsPersistedMemoryRead(classifyExplicitTurnMutationPolicy(message))) return false;
+  if (resolveExplicitPersistedMemoryReadDirective(message) === 'allow') return true;
+  const directRecall = /\b(?:what do you know about me|what have you saved|what memor(?:y|ies) have you saved(?: about me)?|what do you remember about (?:me|us|my|our))\b/i.test(message)
+    || /\bwhat do you remember\s*[?.!,;:]?\s*$/i.test(message)
+    || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(message);
+  const explicitMemoryLookup = /\b(?:search|find|look up|show|list|open|inspect|retrieve)\s+(?:me\s+)?(?:(?:in|inside|within)\s+)?(?:(?:my|our|your|the|saved|previous|prior)\s+)?memor(?:y|ies)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|containing|regarding)\b))/i;
+  const ownedContextLookup = /\b(?:search|find|look up|recall|retrieve)\s+(?:(?:my|our)\s+saved\s+|(?:saved|previous|prior)\s+)(?:[\w'-]+\s+){0,3}(?:notes?|preferences?|decisions?|history|context)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|on|containing|regarding)\b))/i;
+  const ownedPriorContext = /\b(?:our|my)\s+(?:(?:(?:previous|prior|earlier|agreed)\s+)?(?:decisions?|agreements?|plans?|choices?|conclusions?|discussion)|(?:previous|prior|earlier|agreed)\s+context)\b/i.test(message)
+    || /\b(?:the\s+)?agreed\s+(?:plan|decision|approach|scope|next steps?)\b/i.test(message)
+    || /\bwhat\s+(?:we|I)\s+(?:decided|agreed|discussed|chose|selected)\b/i.test(message);
+  return directRecall
+    || explicitMemoryLookup.test(message)
+    || ownedContextLookup.test(message)
+    || ownedPriorContext;
 }
 
 export function isExplicitMemorySaveRequest(message: string): boolean {
@@ -148,13 +386,14 @@ export function isExplicitMemorySaveRequest(message: string): boolean {
 
 export function isExplicitExternalResearchRequest(message: string): boolean {
   return /https?:\/\//i.test(message)
-    || /\b(web|internet|online|current|latest|today|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|investigate|look up|find out|dig into|study|survey|external)\b/i.test(message);
+    || /\b(web|internet|online|current|latest|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|look up|find out|dig into|study|survey|external)\b/i.test(message);
 }
 
 export function shouldNarrowToolsForConversationalTurn(
   message: string,
   autonomyLevel: AutonomyLevel,
 ): boolean {
+  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return true;
   return autonomyLevel === 'normal' && !isExplicitGatedToolRequest(message);
 }
 
@@ -162,18 +401,35 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
   tools: T[],
   message: string,
   autonomyLevel: AutonomyLevel,
+  mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
+  externalToolNames: ReadonlySet<string> = new Set<string>(),
 ): T[] {
-  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return tools;
+  let eligibleTools = filterToolsByTurnMutationPolicy(
+    tools,
+    mutationPolicy,
+    externalToolNames,
+  );
+  if (autonomyLevel === 'normal' && !isExplicitPlanAuthoringRequest(message)) {
+    eligibleTools = eligibleTools.filter(tool => !PLAN_AUTHORING_TOOL_NAMES.has(tool.name));
+  }
+  if (mutationPolicy.denyAllMutations) {
+    return eligibleTools.filter(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name));
+  }
+  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return eligibleTools;
   const allowMemorySearch = isExplicitMemoryRecallRequest(message);
   const allowMemorySave = isExplicitMemorySaveRequest(message);
   const allowExternalResearch = isExplicitExternalResearchRequest(message);
-  return tools.filter((tool) => {
+  eligibleTools = eligibleTools.filter((tool) => {
     if (CONVERSATIONAL_GATED_TOOL_NAMES.has(tool.name)) return false;
     if (tool.name === 'search_memory' && !allowMemorySearch) return false;
     if (tool.name === 'save_memory' && !allowMemorySave) return false;
     if ((tool.name === 'web_search' || tool.name === 'web_fetch') && !allowExternalResearch) return false;
-    return true;
+    return tool.name === 'search_memory'
+      || tool.name === 'save_memory'
+      || tool.name === 'web_search'
+      || tool.name === 'web_fetch';
   });
+  return eligibleTools;
 }
 
 type PluginToolProvider = NonNullable<AgentLoopConfig['pluginTools']>;
@@ -183,13 +439,32 @@ export function filterPluginToolsForConversationalTurn(
   message: string,
   autonomyLevel: AutonomyLevel,
   onWithheld?: (count: number) => void,
+  mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): PluginToolProvider {
-  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
+  if (!mutationPolicy.denyAllMutations
+    && !mutationPolicy.denyMemoryRead
+    && !mutationPolicy.denyMemoryPersistence
+    && !mutationPolicy.denyFileWrites
+    && !mutationPolicy.denyCodeExecution
+    && !mutationPolicy.denyAgentLaunch
+    && mutationPolicy.contextScope === 'default'
+    && !shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
 
   return {
     getAllTools: () => {
       const pluginTools = provider.getAllTools();
-      const filtered = filterGatedToolsForConversationalTurn(pluginTools, message, autonomyLevel);
+      // Plugin capabilities are external and may mutate remote state. On a
+      // conversational turn there is no safe static allowlist for arbitrary
+      // plugin names, so defer all of them until the user requests an action.
+      const pluginNames = new Set(pluginTools.map(tool => tool.name));
+      const policyFiltered = filterToolsByTurnMutationPolicy(
+        pluginTools,
+        mutationPolicy,
+        pluginNames,
+      );
+      const filtered = shouldNarrowToolsForConversationalTurn(message, autonomyLevel)
+        ? []
+        : policyFiltered;
       if (filtered.length !== pluginTools.length) {
         onWithheld?.(pluginTools.length - filtered.length);
       }
@@ -198,8 +473,15 @@ export function filterPluginToolsForConversationalTurn(
   };
 }
 
-function conversationalToolPolicyPrompt(message: string, autonomyLevel: AutonomyLevel): string {
+export function conversationalToolPolicyPrompt(
+  message: string,
+  autonomyLevel: AutonomyLevel,
+  selectedToolCount: number,
+): string {
   if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return '';
+  if (selectedToolCount === 0) {
+    return `\n\n# Current Turn Tool Policy\nNo executable tools are available in this turn. Answer the user directly in plain text. Never emit tool-call syntax, tool names as control tokens, or a request to run an absent tool. Do not mention this policy or claim that a tool was used.`;
+  }
   return `\n\n# Current Turn Tool Policy\nThis is a normal conversational turn. Some action, inspection, plugin, planning, and external research tools may be intentionally hidden until the user asks for a concrete action or lookup. Do not mention this policy. Do not infer or tell the user that a capability is missing because a tool is absent on this turn. If the user asks what Waggle can do, answer at the product level and offer one concrete next step.`;
 }
 
@@ -229,29 +511,44 @@ interface ApprovalWaitOptions {
     toolName: string;
     input: Record<string, unknown>;
     timestamp: number;
+    riskLevel?: RiskLevel;
   }>;
   cronStore: Pick<CronStore, 'savePendingAction'>;
   requestId: string;
   toolName: string;
   input: Record<string, unknown>;
+  riskLevel?: RiskLevel;
   heldAction: Omit<SavePendingActionInput, 'id' | 'source' | 'expiresAt'>;
   heldEvent: Record<string, unknown>;
   policy: ApprovalTimeoutPolicy;
   sendEvent: (event: 'approval_held', data: Record<string, unknown>) => void;
   onHeld: (expiresAt: string) => void;
+  signal?: AbortSignal;
 }
 
 export async function waitForApprovalDecision(options: ApprovalWaitOptions): Promise<{ approved: boolean; held: boolean; timedOut: boolean }> {
   let held = false;
   let timedOut = false;
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let abortHandler: (() => void) | undefined;
   const approved = await new Promise<boolean>((resolve) => {
     options.pendingApprovals.set(options.requestId, {
       resolve,
       toolName: options.toolName,
       input: options.input,
       timestamp: Date.now(),
+      riskLevel: options.riskLevel,
     });
+
+    abortHandler = () => {
+      if (!options.pendingApprovals.delete(options.requestId)) return;
+      resolve(false);
+    };
+    if (options.signal?.aborted) {
+      abortHandler();
+      return;
+    }
+    options.signal?.addEventListener('abort', abortHandler, { once: true });
 
     timeout = setTimeout(() => {
       if (!options.pendingApprovals.delete(options.requestId)) return;
@@ -288,10 +585,12 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
     }, options.policy.timeoutMs);
   });
   if (timeout) clearTimeout(timeout);
+  if (abortHandler) options.signal?.removeEventListener('abort', abortHandler);
   return { approved, held, timedOut };
 }
 
 export const chatRoutes: FastifyPluginAsync = async (server) => {
+  primeMemoryDirectiveClassifier();
   // ── Use shared agent state from server ──────────────────────────────
   const {
     orchestrator,
@@ -302,7 +601,53 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     userSystemPrompt,
     sessionHistories,
   } = server.agentState;
+  let chatHistoryLayout = isolateLegacyDefaultChatSessions(
+    server.localConfig.dataDir,
+  );
+  const getChatHistoryLayout = () => {
+    if (chatHistoryLayout.status === 'recovery-required') {
+      chatHistoryLayout = isolateLegacyDefaultChatSessions(
+        server.localConfig.dataDir,
+      );
+    }
+    return chatHistoryLayout;
+  };
+  if (chatHistoryLayout.status === 'recovery-required') {
+    log.warn(`[chat] ${chatHistoryLayout.reason}`);
+  }
   const approvalTimeoutPolicy = resolveApprovalTimeoutPolicy();
+  let persistedTraceBoundaryId = 0;
+  try {
+    persistedTraceBoundaryId = server.traceStore?.getLatestId() ?? 0;
+  } catch (costBoundaryError) {
+    log.warn(
+      '[chat] persisted cost boundary unavailable; starting daily carryover at zero:',
+      costBoundaryError instanceof Error ? costBoundaryError.message : String(costBoundaryError),
+    );
+  }
+
+  const getTrackedDailySpend = (enabled: boolean): number => {
+    const day = new Date().toISOString().slice(0, 10);
+    const dayStart = `${day}T00:00:00.000Z`;
+
+    if (!costTracker.hasDailyCarryover(day)) {
+      try {
+        const persisted = server.traceStore?.getTotalCostSince(
+          dayStart,
+          persistedTraceBoundaryId,
+        ) ?? 0;
+        costTracker.initializeDailyCarryover(day, persisted);
+      } catch (costReadError) {
+        log.warn(
+          '[chat] persisted daily cost read failed; using in-process total:',
+          costReadError instanceof Error ? costReadError.message : String(costReadError),
+        );
+      }
+    }
+
+    if (!enabled) return 0;
+    return costTracker.getDailyTotal();
+  };
   // Read dynamically — may be updated to built-in proxy at runtime
   const getLitellmUrl = () => server.localConfig.litellmUrl;
 
@@ -351,8 +696,80 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     }
   });
 
-  // C3: Cache the base system prompt per session to avoid rebuilding on every message
-  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined }>();
+// C3: Cache the base system prompt per session to avoid rebuilding on every message
+const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode; model: string | undefined }>();
+// Workspace IDs are filesystem-backed and cannot contain `:` on Windows.
+// Reserve a non-workspace scope for personal audit/collaboration streams.
+const PERSONAL_CHAT_SCOPE_ID = 'personal::default';
+const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
+
+  // A WorkspaceSession owns the shared mind handle and workspace lifetime, but
+  // chat-local mutable tools (plans, save counters) and orchestrator receipts
+  // must not be shared by distinct conversations in that workspace.
+  interface ChatRuntime {
+    orchestrator: Orchestrator;
+    tools: ToolDefinition[];
+    toolContextKey: string;
+    activeTurns: number;
+  }
+  const MAX_CHAT_RUNTIMES_PER_WORKSPACE = 32;
+  const chatRuntimes = new WeakMap<WorkspaceSession, Map<string, ChatRuntime>>();
+  const activeChatTurns = new Set<string>();
+
+  function pruneChatRuntimes(cache: Map<string, ChatRuntime>): void {
+    if (cache.size <= MAX_CHAT_RUNTIMES_PER_WORKSPACE) return;
+    for (const [sessionId, runtime] of cache) {
+      if (runtime.activeTurns !== 0) continue;
+      cache.delete(sessionId);
+      if (cache.size <= MAX_CHAT_RUNTIMES_PER_WORKSPACE) break;
+    }
+  }
+
+  function acquireChatRuntime(
+    workspaceSession: WorkspaceSession,
+    sessionId: string,
+    workspacePath: string,
+    workspaceId: string,
+  ): ChatRuntime {
+    let cache = chatRuntimes.get(workspaceSession);
+    if (!cache) {
+      cache = new Map();
+      chatRuntimes.set(workspaceSession, cache);
+    }
+
+    const toolContextKey = `${workspaceId}\u0000${workspacePath}`;
+    let runtime = cache.get(sessionId);
+    if (!runtime || runtime.toolContextKey !== toolContextKey) {
+      const runtimeOrchestrator = server.agentState.createSessionOrchestrator(workspaceSession.mind);
+      runtime = {
+        orchestrator: runtimeOrchestrator,
+        tools: server.agentState.buildToolsForSession(runtimeOrchestrator, workspacePath, workspaceId),
+        toolContextKey,
+        activeTurns: 0,
+      };
+    } else {
+      // Map insertion order is the LRU order. Touch a reused runtime.
+      cache.delete(sessionId);
+    }
+
+    runtime.activeTurns += 1;
+    cache.set(sessionId, runtime);
+    pruneChatRuntimes(cache);
+    return runtime;
+  }
+
+  function releaseChatRuntime(
+    workspaceSession: WorkspaceSession,
+    sessionId: string,
+    runtime: ChatRuntime,
+  ): void {
+    runtime.activeTurns = Math.max(0, runtime.activeTurns - 1);
+    const cache = chatRuntimes.get(workspaceSession);
+    if (!cache || cache.get(sessionId) !== runtime) return;
+    cache.delete(sessionId);
+    cache.set(sessionId, runtime);
+    pruneChatRuntimes(cache);
+  }
 
   // Profile cache (review Major #4): was fs.readFileSync on every buildSystemPrompt call —
   // blocks the Node event loop on every concurrent SSE request. Load once per mtime change,
@@ -396,6 +813,25 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   // Auto skill capture: track tool sequences per session and dismissed suggestions
   const sessionToolSequences = new Map<string, string[][]>();
   const dismissedCaptureSuggestions = new Set<string>();
+  const unregisterRestoreParticipant = registerChatHistoryRestoreParticipant(
+    server.localConfig.dataDir,
+    {
+      isBusy: () => activeChatTurns.size > 0,
+      onRestored: () => {
+        sessionHistories.clear();
+        systemPromptCache.clear();
+        compressionSummaries.clear();
+        compactionFrameIds.clear();
+        sessionToolSequences.clear();
+        chatHistoryLayout = isolateLegacyDefaultChatSessions(
+          server.localConfig.dataDir,
+        );
+      },
+    },
+  );
+  server.addHook('onClose', async () => {
+    unregisterRestoreParticipant();
+  });
 
   // Build the rich system prompt — behavioral specification, not just tool docs
   // Accepts the caller's orchestrator so per-session orchestrators get their own
@@ -414,24 +850,64 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
      * FR #4: when PROMPT_ASSEMBLER is on, the caller pre-fetches a structured
      * AssembledPrompt via `orch.buildAssembledPrompt(query, persona, opts)`.
      * If provided, its `system` replaces the basic `orch.buildSystemPrompt()`
-     * call below — the rest of the wrapper (profile, skills, workspaceNow,
-     * behavioralSpec rules, persona) still layers on top because the assembler
-     * does not include those. Caching is skipped when assembled is provided
-     * because memory recall results vary per turn.
+     * call below. The wrapper adds only context that is not already represented
+     * by the assembler, so persona and response-shape instructions stay singular.
+     * Caching is skipped when assembled is provided because memory recall results
+     * vary per turn.
      */
     assembled?: AssembledPrompt | null,
+    packageMode: ChatPromptPackageMode = 'full',
+    closedWorldRewrite = false,
+    contextScope: TurnContextScope = 'default',
+    selectedToolCount = 0,
+    selectedModel?: string,
+    cacheWorkspaceId = workspaceId ?? 'default',
+    toolFreeAdvisory = false,
+    includePersistedMemory = true,
+    includeConversationDerivedWorkspaceState = true,
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
     const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
 
+    if (contextScope !== 'default') {
+      const evidenceBoundedPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+      return composeEvidenceBoundedChatPrompt({
+        persona: evidenceBoundedPersona,
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+        contextScope,
+        selectedToolCount,
+        workspacePath,
+      });
+    }
+
+    if (closedWorldRewrite) {
+      const closedWorldPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+      return composeClosedWorldChatPrompt({
+        persona: closedWorldPersona,
+        assembled: assembled ?? null,
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+      });
+    }
+    if (toolFreeAdvisory) {
+      const advisoryPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+      return composeToolFreeAdvisoryChatPrompt({
+        persona: advisoryPersona,
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+        packageMode,
+      });
+    }
+
     // Check cache: reuse if same session, workspace, workspaceId, skill count, and persona.
     // Skip cache entirely when assembled is provided — it reflects per-turn
     // memory recall + task-shape detection that should not be cached across turns.
-    const cacheKey = sessionId ?? 'default';
-    if (!assembled) {
+    const cacheKey = chatSessionStateKey(
+      cacheWorkspaceId,
+      sessionId ?? 'default',
+    );
+    if (!assembled && includePersistedMemory) {
       const cached = systemPromptCache.get(cacheKey);
-      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength) {
+      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode && cached.model === selectedModel) {
         return cached.prompt;
       }
     }
@@ -449,58 +925,78 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Orchestrator's built prompt (identity + self-awareness + preloaded context).
     // FR #4: when PromptAssembler is on, swap in the structured assembled prompt
     // — adds Identity + Persona + State + Recent + Memory sections via the
-    // sixth-layer assembler. The remaining wrapper layers (profile, skills,
-    // workspaceNow, behavioralSpec, persona-via-composePersonaPrompt) still
-    // run below because the assembler does not include those.
+    // sixth-layer assembler. Wrapper-only profile, runtime, workspace, active
+    // behavioral, and correction context is layered below.
     // AI-OS #6 — supply the durable "why" (project ← workspace name) before the
     // orchestrator renders its system prompt. Empty ancestry self-suppresses.
-    orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
-    prompt += assembled?.system ?? orch.buildSystemPrompt();
+    if (includePersistedMemory) {
+      orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
+    }
+    prompt += assembled?.system
+      ?? (includePersistedMemory ? orch.buildSystemPrompt(selectedModel) : '');
 
     // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
-    try {
-      const profileData = loadProfile(server.localConfig.dataDir) as Record<string, unknown> & {
-        name?: string; role?: string; company?: string; industry?: string;
-        communicationStyle?: string; interests?: string[]; language?: string;
-        writingStyle?: { analyzed?: boolean; tone?: string; sentenceLength?: string; vocabulary?: string; structure?: string };
-        brand?: { analyzed?: boolean; primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string };
-      } | null;
-      if (profileData) {
-        if (profileData.name || profileData.role || profileData.company) {
-          prompt += `\n\n# About the User\n`;
-          if (profileData.name) prompt += `- Name: ${profileData.name}\n`;
-          if (profileData.role) prompt += `- Role: ${profileData.role}\n`;
-          if (profileData.company) prompt += `- Company: ${profileData.company}\n`;
-          if (profileData.industry) prompt += `- Industry: ${profileData.industry}\n`;
-          if (profileData.communicationStyle) prompt += `- Prefers ${profileData.communicationStyle} responses\n`;
-          if (profileData.interests?.length) prompt += `- Interests: ${profileData.interests.join(', ')}\n`;
-          const ws = profileData.writingStyle;
-          if (ws?.analyzed) {
-            prompt += `- Writing style: ${ws.tone} tone, ${ws.sentenceLength} sentences, ${ws.vocabulary} vocabulary, ${ws.structure} structure\n`;
-            prompt += `- When drafting content for this user, match their writing style.\n`;
-          }
-          const b = profileData.brand;
-          if (b && (b.analyzed || b.primaryColor !== '#D4A84B')) {
-            prompt += `- Brand colors: primary ${b.primaryColor}, secondary ${b.secondaryColor}, accent ${b.accentColor}\n`;
-            if (b.fontHeading) prompt += `- Brand fonts: ${b.fontHeading} (headings), ${b.fontBody} (body)\n`;
-            prompt += `- When generating documents (docx, pptx, pdf, xlsx), apply these brand styles.\n`;
-          }
-          if (profileData.language && profileData.language !== 'en') {
-            prompt += `- Preferred language: ${profileData.language}\n`;
+    if (includePersistedMemory) {
+      try {
+        const profileData = loadProfile(server.localConfig.dataDir) as Record<string, unknown> & {
+          name?: string; role?: string; company?: string; industry?: string;
+          communicationStyle?: string; interests?: string[]; language?: string;
+          writingStyle?: { analyzed?: boolean; tone?: string; sentenceLength?: string; vocabulary?: string; structure?: string };
+          brand?: { analyzed?: boolean; primaryColor?: string; secondaryColor?: string; accentColor?: string; fontHeading?: string; fontBody?: string };
+        } | null;
+        if (profileData) {
+          if (profileData.name || profileData.role || profileData.company) {
+            prompt += `\n\n# About the User\n`;
+            if (profileData.name) prompt += `- Name: ${profileData.name}\n`;
+            if (profileData.role) prompt += `- Role: ${profileData.role}\n`;
+            if (profileData.company) prompt += `- Company: ${profileData.company}\n`;
+            if (profileData.industry) prompt += `- Industry: ${profileData.industry}\n`;
+            if (profileData.communicationStyle) prompt += `- Prefers ${profileData.communicationStyle} responses\n`;
+            if (profileData.interests?.length) prompt += `- Interests: ${profileData.interests.join(', ')}\n`;
+            const ws = profileData.writingStyle;
+            if (ws?.analyzed) {
+              prompt += `- Writing style: ${ws.tone} tone, ${ws.sentenceLength} sentences, ${ws.vocabulary} vocabulary, ${ws.structure} structure\n`;
+              prompt += `- When drafting content for this user, match their writing style.\n`;
+            }
+            const b = profileData.brand;
+            if (b && (b.analyzed || b.primaryColor !== '#D4A84B')) {
+              prompt += `- Brand colors: primary ${b.primaryColor}, secondary ${b.secondaryColor}, accent ${b.accentColor}\n`;
+              if (b.fontHeading) prompt += `- Brand fonts: ${b.fontHeading} (headings), ${b.fontBody} (body)\n`;
+              prompt += `- When generating documents (docx, pptx, pdf, xlsx), apply these brand styles.\n`;
+            }
+            if (profileData.language && profileData.language !== 'en') {
+              prompt += `- Preferred language: ${profileData.language}\n`;
+            }
           }
         }
-      }
-    } catch { /* profile shape unexpected — continue without */ }
+      } catch { /* profile shape unexpected — continue without */ }
+    }
 
-    prompt += `
+    if (packageMode === 'compact') {
+      prompt += `
+
+# Runtime Context
+- Date: ${dateStr}
+- Time: ${timeStr}
+- Platform: ${process.platform} (${process.arch})
+- Working directory: ${workspacePath ?? 'not set'}
+${sessionId ? `- Session: ${sessionId}` : ''}
+${historyLength && historyLength > 0 ? `- Continuing conversation: ${historyLength} previous messages are in context.` : '- New conversation.'}
+${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId}` : ''}
+${includePersistedMemory ? '' : '- Persisted memory: disabled by the user for this turn.'}
+`;
+    } else {
+      prompt += `
 
 # Who You Are
 
-You are Waggle — a personal AI orchestrator with persistent memory, knowledge graph, and real-world tools.
+You are Waggle — a personal AI orchestrator with knowledge-work and real-world tools.
 You are NOT a chatbot. You are an autonomous agent that thinks, plans, acts, and learns.
 
 You are one orchestrator among many — each user has their own Waggle, fine-tuned to them.
-You remember everything important. You build knowledge over time. You get better with every interaction.
+${includePersistedMemory
+  ? 'You remember important context, build knowledge over time, and improve with every interaction.'
+  : 'Persisted memory is disabled by the user for this turn. Use only the current conversation and permitted tools; do not infer or claim stored context.'}
 
 ## Your Runtime (you already know this — do NOT call bash for date/time)
 - Date: ${dateStr}
@@ -512,23 +1008,30 @@ ${workspacePath
   ? (workspacePath.includes('/files') || workspacePath.includes('\\files')
     ? `- Workspace files: managed storage (${workspacePath})\n- Generated files will appear in managed workspace storage.`
     : `- Workspace linked to: ${workspacePath} (all file operations are relative to this directory)\n- Generated files will appear in: ${workspacePath}`)
-  : `- No workspace directory set. Use save_memory to store information instead of files.`}
+  : includePersistedMemory
+    ? `- No workspace directory set. Use save_memory to store information instead of files.`
+    : `- No workspace directory set. Persisted memory is disabled for this turn.`}
 ${process.platform === 'win32' ? '- Windows note: use `date /t` and `time /t` (not bare `date` which prompts for input). Use `dir` instead of `ls`.' : ''}
 ${sessionId ? `- Session: ${sessionId}` : ''}
-${historyLength && historyLength > 0 ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.` : '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'}
+${historyLength && historyLength > 0
+  ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.`
+  : includePersistedMemory
+    ? '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'
+    : '- This is a new conversation with persisted memory disabled for this turn.'}
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailor responses to this domain.` : ''}
 `;
+    }
 
     // Behavioral rules from the ACTIVE spec — baseline with any deployed
     // self-evolution overrides applied. Falls back to the compiled
     // BEHAVIORAL_SPEC when the server hasn't decorated activeBehavioralSpec
     // (legacy test harness).
     const activeSpec = server.activeBehavioralSpec ?? BEHAVIORAL_SPEC;
-    prompt += '\n' + activeSpec.rules;
+    prompt += '\n' + behavioralRulesForPromptPackage(activeSpec, packageMode);
 
     // Token monitoring
     const estimatedTokens = Math.ceil(prompt.length / 4);
-    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (behavioral-spec v${activeSpec.version})`);
+    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (${packageMode}, behavioral-spec v${activeSpec.version})`);
     if (estimatedTokens > 12000) {
       log.warn(`[Orchestrator] System prompt exceeds 12K tokens (${estimatedTokens}). Consider trimming.`);
     }
@@ -537,10 +1040,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Dead code removed — the old 250-line inline spec lived here
 
     // Append loaded skills with active integration instructions
-    prompt += buildSkillPromptSection(skills);
+    if (packageMode === 'full' && includePersistedMemory) {
+      prompt += buildSkillPromptSection(skills);
+    }
 
     // Workspace Now — inject structured context so the agent is grounded on first turn
-    if (workspaceId) {
+    if (includePersistedMemory && includeConversationDerivedWorkspaceState && workspaceId) {
       try {
         const nowBlock = buildWorkspaceNowBlock({
           dataDir: server.localConfig.dataDir,
@@ -563,42 +1068,36 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
 
     // W3.3: Inject actionable correction signals — user corrections from prior sessions
-    try {
-      const signalStore = orch.getImprovementSignals();
-      if (signalStore) {
-        const actionable = signalStore.getActionable();
-        if (actionable.length > 0) {
-          prompt += '\n\n# User Corrections (from prior sessions — follow these)\n';
-          for (const signal of actionable) {
-            prompt += `- ${signal.detail} (observed ${signal.count}x)\n`;
+    if (includePersistedMemory) {
+      try {
+        const signalStore = orch.getImprovementSignals();
+        if (signalStore) {
+          const actionable = signalStore.getActionable();
+          if (actionable.length > 0) {
+            prompt += '\n\n# User Corrections (from prior sessions — follow these)\n';
+            for (const signal of actionable) {
+              prompt += `- ${signal.detail} (observed ${signal.count}x)\n`;
+            }
           }
         }
-      }
-    } catch { /* non-blocking */ }
-
-    // W1.3: Apply active persona instructions (extends, not replaces, core prompt)
-    // W7.3: Pass workspace tone to composePersonaPrompt
-    const workspaceTone = wsConfig?.tone;
-    if (activePersonaId) {
-      const persona = resolvePersona(activePersonaId);
-      prompt = composePersonaPrompt(prompt, persona, undefined, workspaceTone);
-    } else if (workspaceTone) {
-      // Even without a persona, apply tone if workspace has one set
-      prompt = composePersonaPrompt(prompt, null, undefined, workspaceTone);
+      } catch { /* non-blocking */ }
     }
 
-    // FR #4: append the assembler's task-shape responseScaffold as a final
-    // response-shape note. The scaffold guides the model toward the format
-    // the task type calls for ("Cite source. Answer." etc.). Empty when the
-    // task shape has low confidence or the tier is frontier.
-    if (assembled?.responseScaffold) {
-      prompt += '\n\n## Response shape\n' + assembled.responseScaffold;
-    }
+    // W1.3/W7.3: add persona only on the legacy path; assembler-owned persona
+    // content stays singular. DOCX guidance always applies; persisted workspace
+    // tone is withheld when the user disables memory reads for this turn.
+    const workspaceTone = includePersistedMemory ? wsConfig?.tone : undefined;
+    const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+    prompt = composeChatPromptTail(prompt, {
+      persona: activePersona,
+      workspaceTone,
+      assembled: assembled ?? null,
+    });
 
     // C3: Cache the built prompt — only when there's no per-turn assembler
     // input. Caching an assembled prompt would replay stale memory recall.
-    if (!assembled) {
-      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength });
+    if (!assembled && includePersistedMemory) {
+      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength, packageMode, model: selectedModel });
     }
 
     return prompt;
@@ -612,6 +1111,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       workspaceId?: string;
       model?: string;
       session?: string;
+      /** Browser client alias retained alongside the legacy `session` key. */
+      sessionId?: string;
       workspacePath?: string;
       persona?: string;
       /**
@@ -657,21 +1158,62 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       channel?: { platform: string; chatId: string };
     };
   }>('/api/chat', async (request, reply) => {
+    const totalServerStartedAt = performance.now();
+    let firstTokenAt: number | null = null;
+
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
     // Phase A.2: `persona` is an optional per-window override — takes precedence
     // over the workspace's default persona for this single request only.
     const {
       message, workspace: _ws, workspaceId: _wsId, model, session,
+      sessionId: sessionIdAlias,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
       autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
       origin, channel: channelMeta,
     } = request.body ?? {};
-    const workspace = _ws ?? _wsId;
+    const suppliedWorkspace = _ws ?? _wsId;
+    const authorizedWorkspace = getResolvedChatWorkspaceId(request);
+    const workspace = suppliedWorkspace;
+    if (workspace) assertSafeSegment(workspace, 'workspace');
+    const workspaceConfig = workspace
+      ? server.workspaceManager?.get(workspace)
+      : undefined;
+    const historyWorkspace = authorizedWorkspace === undefined
+      ? workspace
+      : authorizedWorkspace ?? undefined;
+    const historyWorkspaceConfig = historyWorkspace
+      ? server.workspaceManager?.get(historyWorkspace)
+      : undefined;
+    const historyTarget = resolveChatHistoryTarget(
+      server.localConfig.dataDir,
+      historyWorkspace,
+      !!historyWorkspaceConfig,
+    );
+    const usesNamedWorkspace = historyTarget.isManagedWorkspace;
+    const historyWorkspaceId = historyTarget.workspaceId;
+    const executionWorkspaceId = authorizedWorkspace === null
+      ? undefined
+      : authorizedWorkspace ?? historyWorkspaceId;
+    const executionScopeId = executionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID;
+    const executionWorkspaceConfig = executionWorkspaceId
+      ? server.workspaceManager?.get(executionWorkspaceId)
+      : undefined;
+    if (historyWorkspaceId === 'default') {
+      const currentChatHistoryLayout = getChatHistoryLayout();
+      if (currentChatHistoryLayout.status === 'recovery-required') {
+        return reply.status(409).send({
+          error: 'Default chat history needs recovery before it can be used.',
+          code: currentChatHistoryLayout.code,
+        });
+      }
+    }
+    const requestedSessionId = session ?? sessionIdAlias;
 
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
     // already sets it, so its review turns are gated even without `origin`.
-    // Execution traces + improvement-signal surfacing stay UNGATED.
+    // Compliance execution traces stay ungated. Learned memory, improvement
+    // signals, and skill capture are gated below by the resolved turn policy.
     const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
 
     // Phase B.5: resolve the effective autonomy level for this request.
@@ -692,18 +1234,73 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // so the full turn graph is reconstructable from a single correlation
     // key. Also satisfies EU AI Act Art. 14 traceability requirements.
     const turnId = generateTurnId();
-    logTurnEvent(turnId, { stage: 'chat.turn.start', workspace, model, messageChars: (message ?? '').length });
+    logTurnEvent(turnId, {
+      stage: 'chat.turn.start',
+      workspace: executionWorkspaceId,
+      model,
+      messageChars: (message ?? '').length,
+    });
 
     // A2: Resolve workspace directory — use explicit path, workspace config, or virtual storage
     // NEVER fall back to user homedir — use managed storage instead
-    let workspacePath = explicitWorkspacePath;
-    if (!workspacePath && workspace) {
-      const wsConfig = server.workspaceManager?.get(workspace);
-      if (wsConfig?.directory && fs.existsSync(wsConfig.directory)) {
-        workspacePath = wsConfig.directory; // linked mode
-      } else if (workspace !== 'default') {
+    let workspacePath = workspace ? undefined : explicitWorkspacePath;
+    let workspacePathFromTrustedConfig = false;
+    if (workspace) {
+      const configuredPath = workspaceConfig?.directory || workspaceConfig?.storagePath;
+      if (workspaceConfig && configuredPath) {
+        try {
+          workspacePath = resolveWorkspaceExecutionRoot(
+            server.localConfig.dataDir,
+            workspaceConfig,
+          );
+          workspacePathFromTrustedConfig = true;
+        } catch (error) {
+          log.warn(`[chat] Configured workspace root is unavailable for ${workspace}: ${(error as Error).message}`);
+          return reply.status(409).send({
+            error: 'Configured workspace directory is unavailable',
+            code: 'WORKSPACE_ROOT_UNAVAILABLE',
+          });
+        }
+      } else if (usesNamedWorkspace) {
         // Virtual workspace storage — managed files directory
         workspacePath = path.join(server.localConfig.dataDir, 'workspaces', workspace, 'files');
+      } else {
+        // Legacy default-workspace callers may still supply an anchored managed path.
+        workspacePath = explicitWorkspacePath;
+      }
+    }
+    let executionWorkspacePath = workspacePath;
+    if (authorizedWorkspace && authorizedWorkspace !== workspace) {
+      const authorizedConfig = server.workspaceManager?.get(authorizedWorkspace);
+      if (!authorizedConfig || !server.agentState.getWorkspaceMindDb(authorizedWorkspace)) {
+        return reply.status(409).send({
+          error: 'Active workspace is unavailable',
+          code: 'WORKSPACE_NOT_READY',
+        });
+      }
+      if (authorizedConfig.teamId && authorizedConfig.teamRole === 'viewer') {
+        return reply.status(403).send({
+          error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
+          code: 'VIEWER_READ_ONLY',
+        });
+      }
+
+      const configuredPath = authorizedConfig.directory || authorizedConfig.storagePath;
+      try {
+        executionWorkspacePath = configuredPath
+          ? resolveWorkspaceExecutionRoot(server.localConfig.dataDir, authorizedConfig)
+          : path.join(
+              server.localConfig.dataDir,
+              'workspaces',
+              authorizedWorkspace,
+              'files',
+            );
+      } catch (error) {
+        log.warn(`[chat] Active workspace root unavailable for ${authorizedWorkspace}: ${(error as Error).message}`);
+        return reply.status(409).send({
+          error: 'Active workspace directory unavailable',
+          code: 'WORKSPACE_ROOT_UNAVAILABLE',
+        });
       }
     }
 
@@ -718,16 +1315,56 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     if (message.length > MAX_MESSAGE_LENGTH) {
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
     }
+    const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+    const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
+    const toolFreeAdvisoryCandidate = autonomyLevel === 'normal'
+      && !isAutomatedTurn
+      && !isExplicitMemoryRecallRequest(message)
+      && !isExplicitMemorySaveRequest(message)
+      && !isExplicitExternalResearchRequest(message)
+      && isExplicitToolFreeAdvisoryRequest(message, turnMutationPolicy);
+    let toolFreeAdvisory = false;
+    const requestClosedWorldRewrite = isClosedWorldRewriteRequest(message);
+    const turnPersonaId = personaOverride
+      ?? executionWorkspaceConfig?.personaId
+      ?? null;
+    const turnPersona = turnPersonaId ? resolvePersona(turnPersonaId) : null;
+    const turnPersistence = resolveTurnPersistencePermissions({
+      policy: turnMutationPolicy,
+      isAutomatedTurn,
+      personaIsReadOnly: turnPersona?.isReadOnly === true,
+      closedWorldRewrite: requestClosedWorldRewrite,
+    });
+    let allowMemoryPersistence = turnPersistence.allowMemoryPersistence;
+    let allowDerivedPersistence = turnPersistence.allowDerivedPersistence;
+    const retainedTurnText = (value: string): string => (
+      allowDerivedPersistence ? value : NON_RETAINED_TURN_CONTENT
+    );
+    const retainedTurnJson = (value: unknown): string => (
+      allowDerivedPersistence
+        ? JSON.stringify(value) ?? 'null'
+        : JSON.stringify({ redacted: NON_RETAINED_TURN_CONTENT })
+    );
+    const turnAllowsResponseDecoration = allowsPostResponseDecoration(
+      turnMutationPolicy,
+      requestClosedWorldRewrite,
+    );
+    let allowResponseDecoration = turnAllowsResponseDecoration;
 
     // R6-001: path-traversal guard on the session-persistence path segments.
-    // `workspace` and `session` come straight from the request body and are
+    // `workspace` and the resolved session alias come straight from the request body and are
     // joined into dataDir/workspaces/<workspace>/sessions/<session>.jsonl by
     // chat-persistence (persistMessage / loadSessionMessages). A crafted
     // "../evil" segment would escape the sessions dir on both write and read.
     // Reuse the shared guard; runs BEFORE reply.hijack() so the thrown
     // {statusCode:400} is converted to a 400 by Fastify's default error handler.
-    if (workspace) assertSafeSegment(workspace, 'workspace');
-    if (session) assertSafeSegment(session, 'session');
+    if (session && sessionIdAlias && session !== sessionIdAlias) {
+      return reply.status(400).send({
+        error: 'session and sessionId must match when both are provided',
+        code: 'SESSION_ID_CONFLICT',
+      });
+    }
+    if (requestedSessionId) assertSafeSegment(requestedSessionId, 'session');
 
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
@@ -746,23 +1383,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // Review Critical #3: viewer RBAC moved above reply.hijack() — after hijack,
     // reply.status(403) silently no-ops and the client gets HTTP 200 + empty SSE stream.
-    if (workspace && workspace !== 'default') {
-      const wsConfig = server.workspaceManager?.get(workspace);
-      if (wsConfig?.teamId && wsConfig?.teamRole === 'viewer') {
+    if (workspaceConfig?.teamId && workspaceConfig?.teamRole === 'viewer') {
         return reply.status(403).send({
           error: 'Viewers cannot send messages in team workspaces. Ask a team admin to upgrade your role.',
           code: 'VIEWER_READ_ONLY',
         });
-      }
     }
 
-    // Review Critical #1: path-traversal guard on workspacePath.
-    // A client can supply "../../../../etc" or on Windows "C:\\Windows\\System32".
-    // Both the explicit-path and workspace-derived branches must be anchored to dataDir.
+    // Review Critical #1: request-supplied paths stay anchored to dataDir.
+    // A workspace directory loaded from persisted config is an explicit user
+    // trust grant and was canonicalized by resolveWorkspaceExecutionRoot above.
     if (workspacePath) {
       const resolved = path.resolve(workspacePath);
       const allowed = path.resolve(server.localConfig.dataDir);
-      if (resolved !== allowed && !resolved.startsWith(allowed + path.sep)) {
+      if (!workspacePathFromTrustedConfig
+        && resolved !== allowed
+        && !resolved.startsWith(allowed + path.sep)) {
         log.warn(`[security] Path traversal attempt blocked: ${workspacePath}`);
         return reply.status(400).send({
           error: 'Invalid workspace path',
@@ -779,23 +1415,39 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Set SSE headers via raw response (include CORS since hijack bypasses Fastify plugins)
     const raw = reply.raw;
     raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
+      'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': validateOrigin(request.headers.origin as string | undefined),
     });
+    // Commit the SSE response before provider time-to-first-token. Otherwise a
+    // slow model can look like an offline backend to clients waiting on headers.
+    raw.flushHeaders();
+
+    // The response side owns the long-lived SSE socket. Cancelling its reader
+    // closes reply.raw (request.raw already finished after the POST body), which
+    // must abort the provider/tool run immediately.
+    const abortController = new AbortController();
+    let turnSignal: AbortSignal = abortController.signal;
+    raw.once('close', () => {
+      if (!raw.writableEnded) abortController.abort();
+    });
+    if (raw.destroyed) abortController.abort();
 
     // Helper to write SSE events
     const sendEvent = (event: string, data: unknown) => {
+      if (turnSignal.aborted || raw.destroyed || raw.writableEnded) return;
+      if (event === 'token' && firstTokenAt === null) {
+        firstTokenAt = performance.now();
+      }
       raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-
-    // Graceful shutdown: abort agent loop when client disconnects
-    const abortController = new AbortController();
-    request.raw.on('close', () => {
-      abortController.abort();
-    });
+    const throwIfTurnAborted = (): void => {
+      if (turnSignal.aborted) {
+        throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
+      }
+    };
 
     // Declare at handler scope so error handler can surface recalled memories (P1-4)
     let recalledContext = '';
@@ -825,72 +1477,214 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // can persist the raw user turn even when generation fails. Memory capture
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
-    // Turn-scoped pin for the shared orchestrator's workspace mind (default/
-    // no-workspace chats). Hoisted so the outer finally can release it.
+    let activeChatRuntime: { workspaceSession: WorkspaceSession; sessionId: string; runtime: ChatRuntime } | undefined;
+    let workspaceTurnScope: WorkspaceTurnScope | undefined;
+    // Turn-scoped pin for an implicit/default request-owned workspace mind.
+    // Hoisted so the outer finally can release it.
     let pinnedSharedMindId: string | null = null;
-    const activeSessionId = session ?? workspace ?? 'default';
-    const activeWorkspaceId = workspace ?? 'default';
-    let activeHistory: Array<{ role: string; content: string }> | undefined;
+    // A named workspace session owns a long-lived pin. Each active chat turn
+    // takes another pin so Fleet kill cannot release/evict its mind before the
+    // turn observes the workspace abort signal and unwinds.
+    let pinnedWorkspaceMindId: string | null = null;
+    const activeSessionId = requestedSessionId ?? historyWorkspaceId;
+    const activeWorkspaceId = historyWorkspaceId;
+    const activeExecutionWorkspaceId = executionWorkspaceId;
+    const activeSessionStateWorkspaceId = historyTarget.stateWorkspaceId;
+    const activeSessionStateKey = chatSessionStateKey(
+      activeSessionStateWorkspaceId,
+      activeSessionId,
+    );
+    const sessionPersistenceDataDir = historyTarget.dataDir;
+    let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
+    let activeAttemptModel: string | null = null;
+    let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
+
+    // Mutable conversation-local state cannot accept two overlapping turns.
+    // Reject the second request before model resolution or history mutation.
+    if (activeChatTurns.has(activeSessionStateKey)) {
+      sendEvent('error', {
+        message: 'Another turn is already running for this session.',
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+      if (!raw.destroyed && !raw.writableEnded) raw.end();
+      return;
+    }
+    activeChatTurns.add(activeSessionStateKey);
+    const hasCustomRunner = !!server.agentRunner;
+    const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
 
     try {
-      const hasCustomRunner = !!server.agentRunner;
       requestHookRegistry = hasCustomRunner ? undefined : hookRegistry.fork();
 
       // Resolve the agent runner (injectable for tests)
-      const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
+      const sessionId = activeSessionId;
+      const effectiveWorkspace = activeExecutionWorkspaceId;
+      const sessionStateKey = activeSessionStateKey;
+
+      // Named workspaces must acquire one coherent chat runtime before any
+      // asynchronous model work or conversation mutation. Construction errors
+      // fail closed; mixing a workspace tool pool with the shared orchestrator
+      // would cross memory and mutable agent state.
+      let sessionOrch: Orchestrator = orchestrator;
+      let sessionTools: ToolDefinition[] | undefined;
+      let wsSession: WorkspaceSession | undefined;
+      if (!hasCustomRunner && usesNamedWorkspace) {
+        try {
+          if (!effectiveWorkspace) {
+            throw new Error('Managed workspace identity is unavailable');
+          }
+          if (!server.agentState.getWorkspaceMindDb(effectiveWorkspace)) {
+            throw new Error('Workspace mind is unavailable');
+          }
+          const candidateSession = server.sessionManager.getOrCreate(
+            effectiveWorkspace,
+            () => server.mindCache.acquire(effectiveWorkspace),
+            (m) => server.agentState.createSessionOrchestrator(m),
+            (m, o) => server.agentState.buildToolsForSession(
+              o,
+              executionWorkspacePath ?? effectiveWorkspace,
+              effectiveWorkspace,
+            ),
+            server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
+            () => server.mindCache.release(effectiveWorkspace),
+          );
+          if (candidateSession.status !== 'active') {
+            throw new Error(`Workspace session is ${candidateSession.status}`);
+          }
+          turnSignal = AbortSignal.any([
+            abortController.signal,
+            candidateSession.abortController.signal,
+          ]);
+          if (turnSignal.aborted) {
+            throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
+          }
+
+          server.mindCache.acquire(effectiveWorkspace);
+          pinnedWorkspaceMindId = effectiveWorkspace;
+          const runtime = acquireChatRuntime(
+            candidateSession,
+            sessionId,
+            executionWorkspacePath ?? effectiveWorkspace,
+            effectiveWorkspace,
+          );
+
+          wsSession = candidateSession;
+          activeChatRuntime = { workspaceSession: candidateSession, sessionId, runtime };
+          sessionOrch = runtime.orchestrator;
+          sessionTools = runtime.tools;
+        } catch (err) {
+          log.warn(`[session] Failed to create workspace chat runtime for "${effectiveWorkspace}": ${(err as Error).message}`);
+          throw new Error(`Workspace "${effectiveWorkspace}" is not ready for chat.`);
+        }
+      } else if (!hasCustomRunner && authorizedWorkspace !== undefined) {
+        try {
+          if (authorizedWorkspace) {
+            const requestMind = server.mindCache.acquire(authorizedWorkspace);
+            pinnedSharedMindId = authorizedWorkspace;
+            sessionOrch = server.agentState.createSessionOrchestrator(requestMind);
+          } else {
+            sessionOrch = server.agentState.createSessionOrchestrator();
+          }
+          sessionTools = server.agentState.buildToolsForSession(
+            sessionOrch,
+            executionWorkspacePath ?? os.homedir(),
+            authorizedWorkspace ?? undefined,
+          );
+        } catch (err) {
+          log.warn(`[session] Failed to create request-scoped chat runtime: ${(err as Error).message}`);
+          throw new Error('Chat workspace is not ready.');
+        }
+      }
+      activeSessionOrch = sessionOrch;
+      if (!hasCustomRunner) {
+        workspaceTurnScope = server.agentState.workspaceTurnCoordinator.createScope(
+          executionWorkspacePath ?? os.homedir(),
+          turnSignal,
+        );
+      }
 
       // ── Model Pilot: resolve model with fallback chain ──
       const pilotConfig = new WaggleConfig(server.localConfig.dataDir);
-      const wsModelConfig = workspace ? server.workspaceManager?.get(workspace)?.model : undefined;
+      const wsModelConfig = executionWorkspaceConfig?.model;
       const primaryModel = model ?? wsModelConfig ?? pilotConfig.getDefaultModel() ?? 'claude-sonnet-4-6';
       const fallbackModel = pilotConfig.getFallbackModel();
       const budgetModel = pilotConfig.getBudgetModel();
       const budgetThreshold = pilotConfig.getBudgetThreshold();
 
-      // Budget check: if daily spend exceeds threshold, use budget model
+      // Resolve model selection before availability and fallback checks.
       let resolvedModel = primaryModel;
       let modelSwitchReason: string | null = null;
+      let budgetModelSelected = false;
+      const budgetRoutingAllowed = budgetModel
+        ? canUseBudgetModelWithoutCloudEgress(primaryModel, budgetModel)
+        : false;
+      const dailyBudget = pilotConfig.getDailyBudget() ?? 0;
+      const spent = getTrackedDailySpend(dailyBudget > 0);
+      const budgetThresholdReached = dailyBudget > 0
+        && spent / dailyBudget >= budgetThreshold;
 
-      const dailyBudget = pilotConfig.getDailyBudget();
-      if (dailyBudget && dailyBudget > 0 && budgetModel) {
-        const spent = costTracker.getDailyTotal();
-        if (spent / dailyBudget >= budgetThreshold) {
-          resolvedModel = budgetModel;
-          modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
-        }
-      }
-
-      // Smart routing: simple messages → budget model (cost optimization)
-      if (!modelSwitchReason && budgetModel) {
-        const routing = routeMessage(message, resolvedModel, budgetModel);
+      // Classify first: spend pressure must never downgrade consequential work.
+      if (budgetModel && budgetRoutingAllowed && budgetThresholdReached) {
+        const routing = routeMessage(message, primaryModel, budgetModel);
         if (routing.reason === 'simple_turn') {
           resolvedModel = routing.model;
-          // Smart routing is silent — no toast, no inline message
+          budgetModelSelected = resolvedModel !== primaryModel;
+          if (budgetModelSelected) {
+            modelSwitchReason = `Budget ${Math.round(budgetThreshold * 100)}% reached ($${spent.toFixed(2)}/$${dailyBudget.toFixed(2)})`;
+          }
         }
       }
 
       // ── Conversation history management (moved before LLM check so echo mode also persists) ──
-      resolvedModel = await resolveUsableModel(server, resolvedModel);
-
-      const sessionId = activeSessionId;
-      const effectiveWorkspace = activeWorkspaceId;
+      try {
+        const selectedModelBeforeResolution = resolvedModel.trim();
+        resolvedModel = await resolveUsableModel(server, resolvedModel);
+        const normalizedOnly = resolvedModel
+          === canonicalizeModelReference(selectedModelBeforeResolution);
+        if (!normalizedOnly) {
+          budgetModelSelected = false;
+          modelSwitchReason = `${selectedModelBeforeResolution} unavailable; ${resolvedModel} selected`;
+        }
+      } catch (selectedResolutionError) {
+        const unavailableModel = resolvedModel;
+        if (budgetModelSelected && unavailableModel !== primaryModel) {
+          try {
+            resolvedModel = await resolveUsableModel(server, primaryModel);
+            budgetModelSelected = false;
+            modelSwitchReason = `${unavailableModel} unavailable; primary selected`;
+          } catch (primaryResolutionError) {
+            if (!fallbackModel || fallbackModel === unavailableModel) throw primaryResolutionError;
+            resolvedModel = await resolveUsableModel(server, fallbackModel);
+            budgetModelSelected = false;
+            modelSwitchReason = `${unavailableModel} and ${primaryModel} unavailable; configured fallback selected`;
+          }
+        } else {
+          if (!fallbackModel || fallbackModel === unavailableModel) throw selectedResolutionError;
+          resolvedModel = await resolveUsableModel(server, fallbackModel);
+          modelSwitchReason = `${unavailableModel} unavailable; configured fallback selected`;
+        }
+      }
+      throwIfTurnAborted();
 
       // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
 
-      // Get or create session history — load from disk if not in RAM
-      if (!sessionHistories.has(sessionId)) {
+      // A conversation-history denial is a read boundary, not only a prompt-
+      // packaging choice. Do not read or cache the saved transcript for this turn.
+      if (!turnMutationPolicy.denyConversationHistory && !sessionHistories.has(sessionStateKey)) {
         const saved = loadSessionMessages(
-          server.localConfig.dataDir, effectiveWorkspace, sessionId
+          sessionPersistenceDataDir, activeWorkspaceId, sessionId
         );
-        sessionHistories.set(sessionId, saved);
+        sessionHistories.set(sessionStateKey, saved);
       }
-      const history = sessionHistories.get(sessionId)!;
-      activeHistory = history;
+      const history = turnMutationPolicy.denyConversationHistory
+        ? []
+        : sessionHistories.get(sessionStateKey)!;
+      activeHistory = turnMutationPolicy.denyConversationHistory ? undefined : history;
 
       // F4 retry-dedup: a retried turn re-issues the failed user message. Drop
       // the previously persisted failed user+assistant pair (RAM + disk) so a
       // reload doesn't render it duplicated alongside the fresh turn.
-      if (retryTurn) {
+      if (retryTurn && !turnMutationPolicy.denyConversationHistory) {
         const n = history.length;
         if (n >= 2
           && history[n - 1].role === 'assistant'
@@ -899,75 +1693,32 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && history[n - 2].role === 'user') {
           history.splice(n - 2, 2);
         }
-        stripTrailingFailedPair(server.localConfig.dataDir, effectiveWorkspace, sessionId);
+        stripTrailingFailedPair(sessionPersistenceDataDir, activeWorkspaceId, sessionId);
       }
 
-      // Add user message to history and persist to disk
-      history.push({ role: 'user', content: message });
-      persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'user', content: message });
+      // Current-message-only packaging is safe only when there is no prior
+      // conversation to erase. Capability classifiers above separately keep
+      // workspace, memory, connector, and web evidence requests tool-capable.
+      toolFreeAdvisory = toolFreeAdvisoryCandidate && history.length === 0;
+      allowMemoryPersistence = !toolFreeAdvisory && turnPersistence.allowMemoryPersistence;
+      allowDerivedPersistence = !toolFreeAdvisory && turnPersistence.allowDerivedPersistence;
+      allowResponseDecoration = !toolFreeAdvisory && turnAllowsResponseDecoration;
 
-      // ── Workspace session (Phase A.1 — Option Y per-session orchestrator) ──
-      // Create or reuse a WorkspaceSession so this chat call's orchestrator
-      // operates on its own workspace-mind instance, never the shared singleton.
-      // Non-workspace chats (no workspace set, or 'default') fall back to the
-      // shared orchestrator (personal mind only). Failures are non-fatal and
-      // also fall back to the shared orchestrator.
-      let sessionOrch: Orchestrator = orchestrator;
-      let wsSession: WorkspaceSession | undefined;
-      if (!hasCustomRunner && workspace && workspace !== 'default') {
-        try {
-          const mind = server.agentState.getWorkspaceMindDb(effectiveWorkspace);
-          if (mind) {
-            wsSession = server.sessionManager.getOrCreate(
-              effectiveWorkspace,
-              // Pin the shared cache handle for this session's lifetime so a
-              // fan-out over many workspaces cannot evict (and close) this mind
-              // mid-turn while we hold it across the LLM await.
-              () => server.mindCache.acquire(effectiveWorkspace),
-              (m) => server.agentState.createSessionOrchestrator(m),
-              // Phase B.2: pass effectiveWorkspace as the source workspace ID
-              // so cross-workspace read tools scope their grants correctly.
-              (m, o) => server.agentState.buildToolsForSession(o, workspacePath ?? effectiveWorkspace, effectiveWorkspace),
-              server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
-              () => server.mindCache.release(effectiveWorkspace),
-            );
-            sessionOrch = wsSession.orchestrator;
-          }
-        } catch (err) {
-          log.warn(`[session] Failed to create workspace session for "${effectiveWorkspace}": ${(err as Error).message}`);
-        }
-      }
-      // Pin the shared orchestrator's workspace mind for this turn. The named-
-      // workspace path above pins via WorkspaceSession (1f7186a0), but the
-      // default path kept the boot-time handle unpinned — a >20-workspace
-      // fan-out mid-turn could evict and close it across the LLM await
-      // ("The database connection is not open"). acquire() also reopens a
-      // handle that was already closed out-of-band, so re-bind it.
-      if (!wsSession && !hasCustomRunner) {
-        const sharedWsId = server.agentState.activeWorkspaceId;
-        if (sharedWsId && server.mindCache) {
-          try {
-            const freshMind = server.mindCache.acquire(sharedWsId);
-            pinnedSharedMindId = sharedWsId;
-            orchestrator.setWorkspaceMind(freshMind);
-          } catch (err) {
-            // Best-effort: an unpinned turn is the pre-fix behavior.
-            log.warn(`[chat] Could not pin shared workspace mind "${sharedWsId}": ${(err as Error).message}`);
-          }
-        }
+      // A saved-history opt-out is both a read and retention boundary for this turn.
+      if (!turnMutationPolicy.denyConversationHistory) {
+        history.push({ role: 'user', content: message });
+        persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
       }
 
-      // #3 (launch-blocker): expose the resolved orchestrator to the outer
-      // catch so a failed generation still persists the raw user turn.
-      activeSessionOrch = sessionOrch;
-
-      // Check if LiteLLM is available — if not, use echo mode
-      // F2 fix: When using the built-in Anthropic proxy, the /health/liveliness
-      // endpoint doesn't exist — so the HTTP probe always fails, dropping into
-      // echo mode even when an API key is configured. Instead, trust the
-      // provider status that was determined at startup (or updated at runtime).
-      let litellmAvailable = hasCustomRunner; // trust injected runners
-      if (!hasCustomRunner) {
+      // Check whether the configured LLM path can serve a completion. Process
+      // liveness is insufficient for the built-in proxy because it also runs
+      // normally before a cloud credential or local model has been configured.
+      // resolveUsableModel() only returns an ollama/* selection after the tag
+      // is observed locally, so it remains authoritative even if startup's
+      // cloud-provider status has not yet caught up with onboarding.
+      const resolvedLocalOllama = resolvedModel.toLowerCase().startsWith('ollama/');
+      let litellmAvailable = hasCustomRunner || resolvedLocalOllama; // trust injected runners and verified local models
+      if (!hasCustomRunner && !resolvedLocalOllama) {
         const llmStatus = server.agentState.llmProvider;
         if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
           // Healthy tracked provider — skip HTTP probe. For litellm the
@@ -982,8 +1733,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             if (token) {
               healthHeaders['Authorization'] = `Bearer ${token}`;
             }
-            const healthRes = await fetch(`${getLitellmUrl()}/health/liveliness`, {
-              signal: AbortSignal.timeout(3000),
+            const healthPath = llmStatus.provider === 'anthropic-proxy'
+              ? '/health/readiness'
+              : '/health/liveliness';
+            const healthRes = await fetch(`${getLitellmUrl()}${healthPath}`, {
+              signal: AbortSignal.any([turnSignal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
             litellmAvailable = healthRes.ok;
@@ -994,13 +1748,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // ── Slash command routing (works even in echo mode) ──
+      if (turnSignal.aborted) return;
       const { commandRegistry } = server.agentState;
       if (commandRegistry.isCommand(message)) {
         // Build a lightweight command context (same as commands.ts route)
         const cmdContext = {
-          workspaceId: effectiveWorkspace,
+          // Command handlers interpolate this value into user-facing agent
+          // instructions. Keep the non-workspace observability sentinel out of
+          // those prompts so personal commands cannot target a fake workspace.
+          workspaceId: executionWorkspaceId ?? PERSONAL_CHAT_COMMAND_CONTEXT,
           sessionId,
           searchMemory: async (query: string): Promise<string> => {
+            if (!persistedMemoryReadAllowed) return 'Persisted memory access is disabled for this turn.';
             try {
               const recall = await sessionOrch.recallMemory(query);
               if (recall.count === 0) return 'No relevant memories found.';
@@ -1011,6 +1770,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
           },
           getWorkspaceState: async (): Promise<string> => {
+            if (!persistedMemoryReadAllowed) return 'Persisted workspace state is disabled for this turn.';
+            if (!allowsConversationHistory(turnMutationPolicy)) {
+              return 'Conversation-derived workspace state is disabled for this turn.';
+            }
+            if (!effectiveWorkspace) return 'No workspace state available.';
             const block = buildWorkspaceNowBlock({
               dataDir: server.localConfig.dataDir,
               workspaceId: effectiveWorkspace,
@@ -1022,10 +1786,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             return formatWorkspaceNowPrompt(block);
           },
           listSkills: (): string[] => {
-            return server.agentState.skills.map(s => s.name);
+            return persistedMemoryReadAllowed
+              ? server.agentState.skills.map(s => s.name)
+              : [];
           },
         };
-        const cmdResult = await commandRegistry.execute(message, cmdContext);
+        const marketplaceSubcommand = message.trim().match(
+          /^\/(?:marketplace|mp|market)\s+(installed|install|sync)\b/i,
+        )?.[1]?.toLowerCase();
+        const blocksMarketplaceRead = marketplaceSubcommand === 'installed'
+          && !persistedMemoryReadAllowed;
+        const blocksMarketplaceMutation = (marketplaceSubcommand === 'install'
+          || marketplaceSubcommand === 'sync')
+          && (!persistedMemoryReadAllowed || !allowDerivedPersistence);
+        const cmdResult = blocksMarketplaceRead || blocksMarketplaceMutation
+          ? 'Persisted marketplace state is disabled for this turn.'
+          : await commandRegistry.execute(message, cmdContext);
 
         // B1-B7: Check if the command wants to be re-processed through the agent loop
         if (cmdResult.startsWith(AGENT_LOOP_REROUTE_PREFIX) && litellmAvailable) {
@@ -1042,11 +1818,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           const words = friendlyError.split(' ');
           for (const word of words) {
+            if (turnSignal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
-          history.push({ role: 'assistant', content: friendlyError });
-          persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: friendlyError });
+          if (turnSignal.aborted) return;
+          if (!turnMutationPolicy.denyConversationHistory) {
+            history.push({ role: 'assistant', content: friendlyError });
+            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: friendlyError });
+          }
           sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
           raw.end();
           return; // Review Major #5: explicit terminal — don't fall through to agent loop
@@ -1054,12 +1834,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Stream the command result as SSE tokens
           const cmdWords = cmdResult.split(' ');
           for (const word of cmdWords) {
+            if (turnSignal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
+          if (turnSignal.aborted) return;
           // Persist command result
-          history.push({ role: 'assistant', content: cmdResult });
-          persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: cmdResult });
+          if (!turnMutationPolicy.denyConversationHistory) {
+            history.push({ role: 'assistant', content: cmdResult });
+            persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: cmdResult });
+          }
           sendEvent('done', {
             content: cmdResult,
             usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -1075,16 +1859,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const shouldEchoMode = !reroutedMessage && !commandRegistry.isCommand(message) && !litellmAvailable;
 
       if (shouldEchoMode) {
-        // Echo mode — respond without LLM so the UI is functional
-        const echoResponse = `**Waggle is running in local mode** (no LLM proxy connected).\n\nYour message: "${message}"\n\nTo enable AI responses, configure an API key in Settings > API Keys.`;
+        // Setup-required mode — respond without pretending the user's input
+        // was answered. The raw turn is still persisted for continuity.
+        const echoResponse = '**No AI model is ready.**\n\nConfigure a provider key in Settings > API Keys, or install and verify a local model in Settings > Models, then try again.';
         const words = echoResponse.split(' ');
         for (const word of words) {
+          if (turnSignal.aborted) return;
           sendEvent('token', { content: word + ' ' });
           await new Promise((r) => setTimeout(r, 15));
         }
+        if (turnSignal.aborted) return;
         // Persist echo response so session continuity is maintained
-        history.push({ role: 'assistant', content: echoResponse });
-        persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: echoResponse });
+        if (!turnMutationPolicy.denyConversationHistory) {
+          history.push({ role: 'assistant', content: echoResponse });
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'assistant', content: echoResponse });
+        }
         sendEvent('done', {
           content: echoResponse,
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -1095,12 +1884,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       if (shouldRunAgentLoop) {
         // Use rerouted message if from a slash command, otherwise use original
         const agentMessage = reroutedMessage ?? message;
+        const closedWorldRewrite = requestClosedWorldRewrite
+          || isClosedWorldRewriteRequest(agentMessage);
 
         // Waggle Dance: emit agent start signal
-        emitWaggleSignal({ type: 'agent:started', workspaceId: effectiveWorkspace, content: agentMessage.slice(0, 200) });
+      emitWaggleSignal({ type: 'agent:started', workspaceId: executionScopeId, content: retainedTurnText(agentMessage).slice(0, 200) });
 
-        // ── Budget check — warn if workspace is over budget ──
-        if (!hasCustomRunner && effectiveWorkspace !== 'default') {
+      // ── Budget check — warn if workspace is over budget ──
+      if (!hasCustomRunner && effectiveWorkspace) {
           const wsBudgetConfig = server.workspaceManager?.get(effectiveWorkspace);
           if (wsBudgetConfig?.budget != null && wsBudgetConfig.budget > 0) {
             const wsUsage = costTracker.getWorkspaceCost(effectiveWorkspace);
@@ -1116,7 +1907,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // shared-orchestrator activation only fires as a fallback when
         // session creation failed (wsSession is undefined) — matches the
         // old behavior for default/personal-only chats and broken workspaces.
-        if (!hasCustomRunner && workspace && !wsSession) {
+      if (!hasCustomRunner && usesNamedWorkspace && !wsSession && effectiveWorkspace) {
           const activated = server.agentState.activateWorkspaceMind(effectiveWorkspace);
           if (!activated) {
             sendEvent('step', { content: `Warning: could not activate workspace memory for "${effectiveWorkspace}". Using personal memory only.` });
@@ -1124,12 +1915,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // ── Automatic memory recall ─────────────────────────────
-        if (!hasCustomRunner) {
+        if (!hasCustomRunner
+          && !closedWorldRewrite
+          && !toolFreeAdvisory
+          && allowsAutomaticRecall(turnMutationPolicy)) {
           try {
             sendEvent('step', { content: 'Recalling relevant memories...' });
             sendEvent('tool', { name: 'auto_recall', input: { query: agentMessage } });
             const recallStart = Date.now();
             const recall = await sessionOrch.recallMemory(agentMessage);
+            throwIfTurnAborted();
             const recallDuration = Date.now() - recallStart;
             if (recall.count > 0) {
               // Minor #3: scan recalled memory for injection payloads before injecting into prompt
@@ -1167,6 +1962,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               sendEvent('tool_result', { name: 'auto_recall', result: 'No relevant memories found', duration: recallDuration, isError: false });
             }
           } catch {
+            throwIfTurnAborted();
             // Non-blocking — if recall fails, continue without it
           }
         }
@@ -1185,11 +1981,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // GEPA has no conversation context and will misinterpret them as standalone
         // vague requests, generating phantom instructions the user never intended.
         let gepaExpanded: string | null = null;
-        if (!hasCustomRunner && isFirstUserMessage) {
+        if (!hasCustomRunner
+          && isFirstUserMessage
+          && !closedWorldRewrite
+          && !toolFreeAdvisory
+          && allowDerivedPersistence
+          && turnMutationPolicy.contextScope === 'default') {
           try {
             const optimizer = await getOptimizerService(server);
             if (optimizer) {
               const result = await optimizer.expandWithChoices(agentMessage);
+              throwIfTurnAborted();
               if (result.isVague && result.expanded) {
                 gepaExpanded = result.expanded;
                 sendEvent('step', { content: `GEPA: Expanded prompt for better results` });
@@ -1205,35 +2007,44 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             }
           } catch {
+            throwIfTurnAborted();
             // Non-blocking — optimizer failure doesn't affect chat
           }
         }
 
         // Build system prompt (with workspace path awareness + recalled memories)
         // GAP-006: Prepend ambiguity guard when user message is too brief/vague
-        const shouldCheckAmbiguity = isFirstUserMessage && !gepaExpanded; // Skip ambiguity check if GEPA already expanded
+        const shouldCheckAmbiguity = isFirstUserMessage
+          && !gepaExpanded
+          && !closedWorldRewrite
+          && turnMutationPolicy.contextScope === 'default'; // Skip when expansion or an explicit evidence boundary already resolves intent
         const ambiguityPrefix = (!hasCustomRunner && shouldCheckAmbiguity && isAmbiguousMessage(agentMessage)) ? AMBIGUITY_PROMPT : '';
 
         // M2-7: Track session start on first user message
-        if (isFirstUserMessage && server.telemetry) {
-          server.telemetry.track('session_start', {
-            workspaceId: effectiveWorkspace,
-            templateId: server.workspaceManager?.get(effectiveWorkspace)?.templateId ?? null,
-          });
+      if (isFirstUserMessage && server.telemetry) {
+        server.telemetry.track('session_start', {
+          workspaceId: executionScopeId,
+          templateId: effectiveWorkspace
+            ? server.workspaceManager?.get(effectiveWorkspace)?.templateId ?? null
+            : null,
+        });
         }
 
         // Template welcome context — inject on first message in a workspace with a template
         let templateContext = '';
-        if (!hasCustomRunner && isFirstUserMessage) {
-          const wsTemplateId = server.workspaceManager?.get(effectiveWorkspace)?.templateId;
+        if (!hasCustomRunner
+          && isFirstUserMessage
+          && !closedWorldRewrite
+          && !toolFreeAdvisory
+          && turnMutationPolicy.contextScope === 'default') {
+        const wsTemplateId = effectiveWorkspace
+          ? server.workspaceManager?.get(effectiveWorkspace)?.templateId
+          : undefined;
           if (wsTemplateId) {
             const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
             const tpl = BUILT_IN_TEMPLATES?.find?.((t) => t.id === wsTemplateId);
             if (tpl) {
-              templateContext = `\n\n# Workspace Template: ${tpl.name}\nThis workspace uses the "${tpl.name}" template. ${tpl.description ?? ''}\nGreet the user with a warm, template-appropriate welcome that shows you understand their domain.\n`;
-              if (tpl.starterMemory?.length) {
-                templateContext += '\nStarter context:\n' + tpl.starterMemory.map((m: string) => `- ${m}`).join('\n') + '\n';
-              }
+              templateContext = buildTemplateWelcomePrompt(tpl);
             }
           }
         }
@@ -1242,21 +2053,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // The assembler runs sixth-layer prompt packaging (Identity + Persona +
         // memory sections + task-shape scaffold). Failures fall back gracefully
         // to the static system prompt — never block a chat turn on assembler errors.
+        const turnTaskShape = detectTaskShape(agentMessage);
         let assembled: AssembledPrompt | null = null;
-        if (!hasCustomRunner && isEnabled('PROMPT_ASSEMBLER')) {
+        if (!hasCustomRunner
+          && turnMutationPolicy.contextScope === 'default'
+          && persistedMemoryReadAllowed
+          && !toolFreeAdvisory
+          && isEnabled('PROMPT_ASSEMBLER')) {
           try {
-            const wsConfigForAssembler = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
-            const personaIdForAssembler = personaOverride ?? wsConfigForAssembler?.personaId ?? null;
-            const personaForAssembler = personaIdForAssembler ? resolvePersona(personaIdForAssembler) : null;
-            const taskShape = detectTaskShape(agentMessage);
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape, turnId, recalledText: recallTextForAssembler });
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
+              taskShape: turnTaskShape,
+              turnId,
+              recalledText: recallTextForAssembler,
+              model: resolvedModel,
+            });
+            throwIfTurnAborted();
             log.info(
               `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
-              + `shape=${taskShape.type ?? 'none'} conf=${taskShape.confidence.toFixed(2)} `
+              + `shape=${turnTaskShape.type ?? 'none'} conf=${turnTaskShape.confidence.toFixed(2)} `
               + `tier=${assembled.debug.tier} sections=${assembled.debug.sectionsIncluded.length} `
               + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`
             );
           } catch (err) {
+            throwIfTurnAborted();
             log.warn(`[prompt-assembler] failed, falling back to static prompt: ${(err as Error).message}`);
             assembled = null;
           }
@@ -1265,13 +2084,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // W4.5 (plan bug #9-1, double-inject): when the assembler ran, the
         // recall block is already INSIDE the assembled prompt — appending
         // recalledContext again injected every recalled memory twice.
-        const systemPrompt = hasCustomRunner
-          ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix
-            + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled)
-            + templateContext
-            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel)
-            + (assembled ? '' : recalledContext);
+        let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
+        const initialPromptModel = resolvedModel;
+        let rebuildSystemPromptForModel: ((logicalModel: string) => Promise<string>) | null = null;
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -1279,29 +2094,46 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Assignment (not declaration) — unregisterHook is declared at outer try scope
         // so the outer finally can always clean up regardless of which path we exit on.
         unregisterHook = requestHookRegistry?.on('pre:tool', async (ctx) => {
+          if (turnSignal.aborted) {
+            return { cancel: true, reason: 'Chat or workspace cancelled' };
+          }
           if (!ctx.toolName) return;
           const args = (ctx.args ?? {}) as Record<string, unknown>;
+          const trustedRiskLevel = typeof ctx.riskLevel === 'string'
+            && (RISK_LEVELS as readonly string[]).includes(ctx.riskLevel)
+            ? ctx.riskLevel as RiskLevel
+            : undefined;
+          const grantRiskLevel = resolveGrantRiskLevel(
+            ctx.toolName,
+            args,
+            trustedRiskLevel,
+          );
 
           // Phase B.5: autonomy-aware gate. If the user has Trusted or YOLO set
           // for this session, the tool may auto-pass. Critical blacklist still
           // blocks even at YOLO (see isCriticalNeverAutopass).
-          if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel)) {
+          const requiresBaseConfirmation = needsConfirmation(
+            ctx.toolName,
+            args,
+            trustedRiskLevel,
+          );
+          if (!needsConfirmationWithAutonomy(ctx.toolName, args, autonomyLevel, trustedRiskLevel)) {
             // Surface an audit-visible step when elevated autonomy pre-approved
             // so users can see WHY the tool ran without a prompt.
-            if (autonomyLevel !== 'normal' && needsConfirmation(ctx.toolName, args)) {
+            if (autonomyLevel !== 'normal' && requiresBaseConfirmation) {
               sendEvent('step', { content: `\u26a1 ${ctx.toolName} auto-approved (${autonomyLevel})` });
               // Tag the audit input with the autonomy level so forensics can
               // see WHY the tool was auto-approved.
               emitAuditEvent(server, {
-                workspaceId: effectiveWorkspace,
+                workspaceId: executionScopeId,
                 eventType: 'approval_auto',
                 toolName: ctx.toolName,
-                input: JSON.stringify({ args, _autonomy: autonomyLevel }),
+                input: retainedTurnJson({ args, _autonomy: autonomyLevel }),
                 sessionId,
                 approved: true,
               });
             }
-            return;
+            return requiresBaseConfirmation ? { authorize: true } : undefined;
           }
 
           // Headless channel/review turn: no interactive client is watching this
@@ -1312,6 +2144,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // NOT let a headless reviewer write a skill to disk. The trust boundary:
           // the reviewer can never persist a skill without explicit human approval.
           if (proposeHeldTurn) {
+            if (!allowDerivedPersistence) {
+              sendEvent('step', { content: 'Tool proposal denied because memory is disabled for this turn.' });
+              return { cancel: true, reason: 'Cannot retain an approval while memory is disabled' };
+            }
             const heldSource = sessionId.startsWith('channel-')
               ? `channel:${sessionId}`
               : `session-reviewer:${sessionId}`;
@@ -1338,15 +2174,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // H3: Auto-approve all tool requests when WAGGLE_AUTO_APPROVE=1 (testing only)
           if (autoApprove) {
             sendEvent('step', { content: `\u2714 ${ctx.toolName} auto-approved (test mode)` });
-            return;
+            return { authorize: true };
           }
 
           // Phase B.3: check the persistent grant store — if the user previously
           // chose "Always allow" for this (tool, target) combination, skip the
           // approval prompt silently.
-          if (server.agentState.approvalGrantStore.has(ctx.toolName, args, effectiveWorkspace || null)) {
+          if (
+            !isCriticalNeverAutopass(ctx.toolName, args, grantRiskLevel)
+            && server.agentState.approvalGrantStore.has(
+              ctx.toolName,
+              args,
+              effectiveWorkspace || null,
+              grantRiskLevel,
+            )
+          ) {
             sendEvent('step', { content: `\u2714 ${ctx.toolName} allowed by saved grant` });
-            return;
+            return { authorize: true };
           }
 
           const requestId = crypto.randomUUID();
@@ -1391,7 +2235,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // 'local_user' was a false claim on the trust surface (review #3).
           if (!trustMeta) {
             try {
-              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input);
+              const { riskLevel, approvalClass } = classifyGatedToolRisk(toolName, input, trustedRiskLevel);
               trustMeta = {
                 riskLevel,
                 approvalClass,
@@ -1412,10 +2256,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           });
             // F2: Audit trail — approval requested
             emitAuditEvent(server, {
-              workspaceId: effectiveWorkspace,
+              workspaceId: executionScopeId,
               eventType: 'approval_requested',
               toolName,
-              input: JSON.stringify(input),
+              input: retainedTurnJson(input),
               sessionId,
             });
 
@@ -1423,7 +2267,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // still cancels this live execution, but preserves the proposed call
           // in the durable Approvals inbox for an explicit later decision.
           const summary = typeof trustMeta?.description === 'string' ? trustMeta.description : describeToolUse(toolName, input);
-          const riskLevel = typeof trustMeta?.riskLevel === 'string' ? trustMeta.riskLevel : 'medium';
+          const riskLevel = typeof trustMeta?.riskLevel === 'string'
+            && (RISK_LEVELS as readonly string[]).includes(trustMeta.riskLevel)
+            ? trustMeta.riskLevel as RiskLevel
+            : grantRiskLevel;
           const approvalClass = typeof trustMeta?.approvalClass === 'string' ? trustMeta.approvalClass : 'elevated';
           const { approved, held, timedOut } = await waitForApprovalDecision({
             pendingApprovals: server.agentState.pendingApprovals,
@@ -1431,38 +2278,45 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             requestId,
             toolName,
             input,
+            riskLevel,
             heldAction: {
               workspaceId: effectiveWorkspace || null,
               toolName,
-              argsJson: JSON.stringify(input),
-              summary,
+              argsJson: retainedTurnJson(input),
+              summary: retainedTurnText(summary),
               riskLevel,
               approvalClass,
             },
             heldEvent: {
               requestId,
               toolName,
-              input,
+              input: allowDerivedPersistence ? input : { redacted: NON_RETAINED_TURN_CONTENT },
               sourceWorkspaceId: effectiveWorkspace || null,
               held: true,
               message: 'Moved to Approvals inbox',
               ...trustMeta,
             },
-            policy: approvalTimeoutPolicy,
+            policy: allowDerivedPersistence
+              ? approvalTimeoutPolicy
+              : { ...approvalTimeoutPolicy, action: 'deny' },
             sendEvent,
+            signal: turnSignal,
             onHeld: (expiresAt) => {
               log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — moved to Approvals inbox`);
               emitAuditEvent(server, {
-                workspaceId: effectiveWorkspace,
+                workspaceId: executionScopeId,
                 eventType: 'approval_held',
                 toolName,
-                input: JSON.stringify(input),
+                input: retainedTurnJson(input),
                 sessionId,
               });
               sendEvent('step', { content: `\u23f8 ${toolName} moved to Approvals inbox`, expiresAt });
             },
           });
 
+          if (turnSignal.aborted) {
+            return { cancel: true, reason: 'Chat or workspace cancelled' };
+          }
           if (!approved) {
             if (held) {
               return { cancel: true, reason: `Approval for ${toolName} moved to Approvals inbox` };
@@ -1471,20 +2325,36 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — auto-denied for safety`);
             }
             sendEvent('step', { content: `\u2716 ${toolName} denied by user` });
-            emitAuditEvent(server, { workspaceId: effectiveWorkspace, eventType: 'approval_denied', toolName, sessionId, approved: false });
+            emitAuditEvent(server, { workspaceId: executionScopeId, eventType: 'approval_denied', toolName, sessionId, approved: false });
             return { cancel: true, reason: `User denied ${toolName}` };
           }
           sendEvent('step', { content: `\u2714 ${toolName} approved` });
-            emitAuditEvent(server, { workspaceId: effectiveWorkspace, eventType: 'approval_granted', toolName, sessionId, approved: true });
+            emitAuditEvent(server, { workspaceId: executionScopeId, eventType: 'approval_granted', toolName, sessionId, approved: true });
+          return { authorize: true };
         });
 
         // Use workspace-scoped tools if a workspacePath was specified
+      if (!hasCustomRunner && usesNamedWorkspace && !sessionTools) {
+          throw new Error('Workspace chat runtime is unavailable.');
+        }
         let effectiveTools = hasCustomRunner
           ? []
-          : workspacePath
-            ? wsSession?.tools
-              ?? server.agentState.buildToolsForWorkspace(workspacePath, sessionOrch, effectiveWorkspace)
-            : allTools;
+          : sessionTools
+            ?? (executionWorkspacePath
+              ? server.agentState.buildToolsForWorkspace(
+                  executionWorkspacePath,
+                  sessionOrch,
+                  authorizedWorkspace ?? effectiveWorkspace,
+                )
+              : allTools);
+        const catalogToolNames = new Set(effectiveTools.map(tool => tool.name));
+        let toolCatalogCount = catalogToolNames.size;
+        let toolEligibleCount = 0;
+        let toolSelectedCount = 0;
+        let toolOmittedCount = 0;
+        let transmittedToolSchemaChars = 0;
+        let selectorLatencyMs = 0;
+        let packageMode: ChatPromptPackageMode | 'custom' = 'custom';
         let spawnAvailableTools = effectiveTools;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
@@ -1495,12 +2365,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Resolution order matches buildSystemPrompt (Phase A.2): per-window
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
-        const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
-        if (!hasCustomRunner && activePersonaId) {
-          const persona = resolvePersona(activePersonaId);
-          if (persona) {
-            effectiveTools = applyPersonaToolFilter(effectiveTools, persona);
-          }
+        const activePersonaId = turnPersonaId;
+        const activePersona = turnPersona;
+        if (!hasCustomRunner && activePersona) {
+          effectiveTools = applyPersonaToolFilter(effectiveTools, activePersona);
+        }
+        if (closedWorldRewrite || toolFreeAdvisory) {
+          effectiveTools = [];
+          spawnAvailableTools = [];
         }
 
         // #17: schedule-originated turns must not schedule further work — an
@@ -1520,8 +2392,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // conversational narrowing (a UX heuristic) must not shrink a
         // sub-agent's legitimate toolset for its explicit task.
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
-        if (!hasCustomRunner) {
+        const externalToolNames = new Set<string>();
+        const retrievedToolNames = new Set<string>();
+        if (!hasCustomRunner && !closedWorldRewrite && !toolFreeAdvisory) {
           effectiveTools = filterAvailableTools(effectiveTools);
+          spawnAvailableTools = effectiveTools;
 
           // Steal #6: relevance-gate connected MCP tools into the pool. This is
           // the FIRST point MCP tools enter effectiveTools. Runs after
@@ -1530,58 +2405,60 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // sub-agent inherits the selected MCP tools. Below the threshold the
           // retriever injects them all; above it, the conversation's union-only
           // accumulated top-k. Persona denylist / read-only rails still apply.
-          const runningMcpTools = server.agentState.mcpRuntime.getAllTools();
+          // Evidence-bounded turns use only built-in, workspace-rooted reads;
+          // do not spend retrieval work or expose ambient external metadata.
+          const runningMcpTools = persistedMemoryReadAllowed
+            ? server.agentState.mcpRuntime.getToolsForWorkspace(executionScopeId)
+            : [];
+          for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();
-            let selectedMcp = await server.agentState.mcpToolRetriever.selectTools(
-              runningMcpTools, history, sessionId, retrievalCfg,
+            const retrieval = await server.agentState.mcpToolRetriever.selectToolsWithDetails(
+              runningMcpTools, history, sessionStateKey, retrievalCfg,
             );
-            const mcpPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
-            if (mcpPersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, mcpPersona);
+            throwIfTurnAborted();
+            let selectedMcp = retrieval.tools;
+            if (activePersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, activePersona);
+            selectedMcp = filterAvailableTools(selectedMcp);
             if (selectedMcp.length > 0) {
               const present = new Set(effectiveTools.map(t => t.name));
-              effectiveTools = [...effectiveTools, ...selectedMcp.filter(t => !present.has(t.name))];
+              const additions = selectedMcp.filter(t => !present.has(t.name));
+              const retrievedThisTurn = new Set(retrieval.retrievedToolNames);
+              for (const candidate of additions) {
+                externalToolNames.add(candidate.name);
+                if (retrievedThisTurn.has(candidate.name)) retrievedToolNames.add(candidate.name);
+              }
+              effectiveTools = [...effectiveTools, ...additions];
             }
           }
 
+          // Plugins remain parent-only. Materialize exactly once, apply the
+          // same unknown-external persona rails as MCP, and keep native names
+          // first so a plugin cannot shadow a built-in implementation.
           spawnAvailableTools = effectiveTools;
-          spawnAllowedToolNames = new Set(effectiveTools.map(t => t.name));
-          const beforeNarrowing = effectiveTools.length;
-          effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
-          if (effectiveTools.length !== beforeNarrowing) {
-            log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          let materializedPlugins: ToolDefinition[] = persistedMemoryReadAllowed
+            ? server.agentState.pluginRuntimeManager.getAllTools()
+            : [];
+          for (const tool of materializedPlugins) catalogToolNames.add(tool.name);
+          if (activePersona) {
+            materializedPlugins = filterMcpToolsForPersona(materializedPlugins, activePersona);
+          }
+          materializedPlugins = filterAvailableTools(materializedPlugins);
+          if (materializedPlugins.length > 0) {
+            const present = new Set(effectiveTools.map(t => t.name));
+            const additions = materializedPlugins.filter(t => !present.has(t.name));
+            for (const candidate of additions) externalToolNames.add(candidate.name);
+            effectiveTools = [...effectiveTools, ...additions];
           }
         }
-        const pluginTools = hasCustomRunner
-          ? undefined
-          : filterPluginToolsForConversationalTurn(
-            server.agentState.pluginRuntimeManager,
-            agentMessage,
-            autonomyLevel,
-            (count) => log.info(`[chat] conversational turn: withheld ${count} deferred plugin tools until explicitly requested`),
-          );
 
         // Track tool execution times for duration reporting
         const toolStartTimes = new Map<string, number>();
         let toolStartCounter = 0;
 
-        // Build capability router for intelligent tool-not-found handling
-        const capabilityRouter = hasCustomRunner ? undefined : new CapabilityRouter({
-          toolNames: effectiveTools.map(t => t.name),
-          skills: server.agentState.skills,
-          plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
-            name: p.getManifest().name,
-            description: p.getManifest().description ?? '',
-            skills: p.getContributedSkills(),
-          })),
-          mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
-          subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
-          mcpRuntime: server.agentState.mcpRuntime,
-        });
-
         // B1-B7: If this is a rerouted slash command, replace the last user message
         // with the enriched agent prompt so the LLM gets better instructions
-        if (reroutedMessage) {
+        if (reroutedMessage && !turnMutationPolicy.denyConversationHistory) {
           // The original slash command is already persisted to disk at line 724.
           // For the agent loop, swap in the rerouted message so the LLM sees the
           // enhanced prompt (e.g., "Draft the following. Search memory first...")
@@ -1598,32 +2475,65 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // When conversation exceeds 50% of context window: prune tool results,
         // protect head/tail, LLM-summarize the middle using budget model ($0 cost).
         let windowedMessages: Array<{ role: string; content: string }>;
-        if (budgetModel) {
+        let compressionModel = budgetModel
+          && canUseBudgetModelWithoutCloudEgress(resolvedModel, budgetModel)
+          ? budgetModel
+          : null;
+        const liveModelBudget = costTracker.getBudget();
+        const paidCompressionBlocked = liveModelBudget.mode === 'hard'
+          && liveModelBudget.dailyBudgetUsd !== null;
+        if (compressionModel
+          && paidCompressionBlocked
+          && !isOfflineOllamaModelReference(compressionModel)) {
+          compressionModel = null;
+        }
+        const discoveredWindow = getModelContextWindow(resolvedModel);
+        const isLocalModel = isOfflineOllamaModelReference(resolvedModel);
+        const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
+          conservativeDefault: isLocalModel ? 8192 : 128_000,
+        });
+        if (!closedWorldRewrite
+          && turnMutationPolicy.contextScope === 'default'
+          && compressionModel
+          && isLocalModel
+          && needsCompression(history, { maxContextTokens, compressionThreshold: 0.5 })) {
+          const verifiedCompressionModel = await resolveExplicitRoutableModel(server, compressionModel);
+          throwIfTurnAborted();
+          compressionModel = verifiedCompressionModel
+            && isOfflineOllamaModelReference(verifiedCompressionModel)
+            ? verifiedCompressionModel
+            : null;
+        }
+        if (closedWorldRewrite || toolFreeAdvisory) {
+          windowedMessages = [{ role: 'user', content: agentMessage }];
+        } else if (!allowsConversationHistory(turnMutationPolicy)) {
+          windowedMessages = buildTurnMessageWindow(history, agentMessage, turnMutationPolicy);
+        } else if (compressionModel) {
           // §B: size compaction to the actual model window so a local 4k/8k model
           // is not treated as a 128k model. Local (ollama/*) models with an unknown
           // window get a conservative 8k floor; non-local/unknown cloud ids we don't
           // map yet (deepseek/mistral/openrouter/…) keep the prior 128k baseline so
           // they aren't over-compacted.
-          const discoveredWindow = getModelContextWindow(resolvedModel);
-          const isLocalModel = resolvedModel.trim().toLowerCase().startsWith('ollama/');
-          const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
-            conservativeDefault: isLocalModel ? 8192 : 128_000,
-          });
+          const compressionUsesOllama = compressionModel.trim().toLowerCase().startsWith('ollama/');
+          const ollamaHost = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
           const compressionConfig = createDefaultCompressionConfig({
-            budgetModel,
-            litellmUrl: getLitellmUrl(),
+            budgetModel: compressionUsesOllama
+              ? compressionModel.slice('ollama/'.length)
+              : compressionModel,
+            litellmUrl: compressionUsesOllama ? ollamaHost : getLitellmUrl(),
             litellmApiKey: server.agentState.litellmApiKey,
             maxContextTokens,
           });
-          const previousSummary = compressionSummaries.get(sessionId) ?? null;
+          const previousSummary = compressionSummaries.get(sessionStateKey) ?? null;
           const compressionResult = await compressConversation(history, compressionConfig, previousSummary);
+          throwIfTurnAborted();
           windowedMessages = compressionResult.messages;
 
           if (compressionResult.compressed) {
             log.info(`[context-compression] Compressed ${compressionResult.originalTokens}→${compressionResult.compressedTokens} tokens (session=${sessionId})`);
             sendEvent('step', { content: `Context compressed: ${compressionResult.originalTokens}→${compressionResult.compressedTokens} tokens` });
             if (compressionResult.summary) {
-              compressionSummaries.set(sessionId, compressionResult.summary);
+              compressionSummaries.set(sessionStateKey, compressionResult.summary);
 
               // #12: dual-use — persist the summary the compressor already
               // paid for as a durable memory frame (skipped for automated
@@ -1632,20 +2542,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               // tool/connector output, so scan it before it can enter durable
               // memory; fail-soft with the W4A closed-DB guard so persistence
               // never fails the turn.
-              if (!hasCustomRunner && !isAutomatedTurn) {
+              if (!hasCustomRunner && allowMemoryPersistence) {
                 const summaryScan = scanForInjection(compressionResult.summary, 'tool_output');
                 if (summaryScan.score >= 0.7) {
                   log.warn(`[context-compression] summary NOT persisted — injection score ${summaryScan.score} (session=${sessionId})`);
                 } else {
                   try {
                     const frameId = await sessionOrch.persistCompactionSummary(
-                      compressionResult.summary, sessionId, compactionFrameIds.get(sessionId) ?? null,
+                      compressionResult.summary, sessionId, compactionFrameIds.get(sessionStateKey) ?? null,
                     );
+                    throwIfTurnAborted();
                     if (frameId != null) {
-                      compactionFrameIds.set(sessionId, frameId);
+                      compactionFrameIds.set(sessionStateKey, frameId);
                       sendEvent('step', { content: 'Session summary saved to memory' });
                     }
                   } catch (e) {
+                    throwIfTurnAborted();
                     if (isClosedDbError(e)) {
                       log.warn(`[context-compression] summary persist skipped — mind handle closed mid-turn (session=${sessionId})`);
                     } else {
@@ -1674,62 +2586,337 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Governance policies for team workspaces — direct call (no HTTP loopback)
         let governancePolicies: { blockedTools?: string[]; allowedSources?: string[] } | undefined;
-        if (wsConfig?.teamId) {
+        if (wsConfig?.teamId && effectiveWorkspace) {
           try {
             governancePolicies = await getGovernancePermissions(
               server.localConfig.dataDir,
               effectiveWorkspace,
               wsConfig.teamRole,
             );
-          } catch { /* governance not available — allow all */ }
+            throwIfTurnAborted();
+          } catch {
+            throwIfTurnAborted();
+            // Governance not available — allow all.
+          }
+        }
+
+        if (!hasCustomRunner) {
+          // Remove governance-blocked definitions before serialization, while
+          // retaining the executor's deny check as defense in depth.
+          const blockedTools = new Set(governancePolicies?.blockedTools ?? []);
+          if (blockedTools.size > 0) {
+            effectiveTools = effectiveTools.filter(tool => !blockedTools.has(tool.name));
+            spawnAvailableTools = spawnAvailableTools.filter(tool => !blockedTools.has(tool.name));
+          }
+          effectiveTools = filterToolsByTurnMutationPolicy(
+            effectiveTools,
+            turnMutationPolicy,
+            externalToolNames,
+          );
+          spawnAvailableTools = filterToolsByTurnMutationPolicy(
+            spawnAvailableTools,
+            turnMutationPolicy,
+            externalToolNames,
+          );
+          spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
+
+          const beforeNarrowing = effectiveTools.length;
+          effectiveTools = filterGatedToolsForConversationalTurn(
+            effectiveTools,
+            agentMessage,
+            autonomyLevel,
+            turnMutationPolicy,
+            externalToolNames,
+          );
+          if (effectiveTools.length !== beforeNarrowing) {
+            log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          }
+        }
+
+        if (workspaceTurnScope) {
+          effectiveTools = workspaceTurnScope.wrapTools(effectiveTools, externalToolNames);
+          spawnAvailableTools = workspaceTurnScope.wrapTools(spawnAvailableTools, externalToolNames);
         }
 
         // Bind collaboration producers to THIS request's workspace, session,
         // security policy, and runner. Static startup tools are replaced only
         // when their names survived persona/availability/intent filtering.
         if (!hasCustomRunner) {
+          const childAgentRunner = bindModelSpendBudget(
+            agentRunner,
+            costTracker,
+            executionScopeId,
+            listOllamaChatModelIds,
+            () => traceHandle?.id,
+          );
           effectiveTools = bindChatCollaborationTools({
             server,
             visibleTools: effectiveTools,
             workerTools: spawnAvailableTools,
-            workspaceId: effectiveWorkspace,
+            workspaceId: executionScopeId,
             parentSessionId: sessionId,
             parentTask: agentMessage,
             model: resolvedModel,
-            runLoop: agentRunner,
+            runLoop: childAgentRunner,
+            runWorkerTransaction: workspaceTurnScope
+              ? (tools, operation) => workspaceTurnScope!.runChildTransaction(
+                  tools,
+                  operation,
+                  externalToolNames,
+                )
+              : undefined,
+            allowDerivedPersistence,
             securityContext: {
               hooks: requestHookRegistry,
               blockedTools: governancePolicies?.blockedTools,
               allowedToolNames: spawnAllowedToolNames,
             },
+            parentSignal: turnSignal,
+            turnOrigin: {
+              session: sessionId,
+              workspace: effectiveWorkspace ?? null,
+              ...(channelMeta?.platform && channelMeta?.chatId
+                ? { channel: { platform: channelMeta.platform, chatId: channelMeta.chatId } }
+                : {}),
+            },
           });
         }
 
         // Iteration budget — prevents runaway agent loops
+        if (!hasCustomRunner) {
+          toolCatalogCount = catalogToolNames.size;
+          toolEligibleCount = effectiveTools.length;
+          const sequenceHistory = sessionToolSequences.get(sessionStateKey);
+          const previousToolSequence = allowsConversationHistory(turnMutationPolicy)
+            ? sequenceHistory?.[sequenceHistory.length - 1] ?? []
+            : [];
+          const recentMessages = allowsConversationHistory(turnMutationPolicy)
+            ? history
+              .slice(0, -1)
+              .filter(entry => entry.role === 'user' || entry.role === 'assistant')
+              .slice(-8)
+              .map(entry => ({ role: entry.role, content: entry.content }))
+            : [];
+          const selectorStartedAt = performance.now();
+          const selection = selectToolsForTurn(effectiveTools, {
+            message: agentMessage,
+            recentMessages,
+            recentToolNames: previousToolSequence,
+            preferredToolNames: activePersona?.tools ?? [],
+            mandatoryToolNames: [
+              ...(isExplicitMemoryRecallRequest(agentMessage) ? ['search_memory'] : []),
+              ...(shouldRequireCapabilityAcquisitionTools(agentMessage)
+                && !turnMutationPolicy.denyAllMutations
+                && !activePersona?.isReadOnly
+                ? ['search_skills', 'create_skill']
+                : []),
+            ],
+            externalToolNames: [...externalToolNames],
+            retrievedToolNames: [...retrievedToolNames],
+          });
+          selectorLatencyMs = Math.max(0, Math.round(performance.now() - selectorStartedAt));
+          effectiveTools = selection.tools;
+          toolSelectedCount = effectiveTools.length;
+          toolOmittedCount = selection.omittedCount;
+          transmittedToolSchemaChars = toolSelectedCount > 0 ? selection.schemaChars : 0;
+          log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
+        }
+
+        if (workspaceTurnScope) {
+          const workspaceAccess = workspaceTurnScope.classify(effectiveTools, externalToolNames);
+          if (workspaceAccess !== 'none') {
+            let queued = false;
+            await workspaceTurnScope.acquire(workspaceAccess, (queuePosition) => {
+              queued = true;
+              sendEvent('step', {
+                content: 'Waiting for another agent to finish editing this workspace\u2026',
+                phase: 'workspace_queue',
+                queuePosition,
+              });
+            });
+            throwIfTurnAborted();
+            if (queued) {
+              sendEvent('step', {
+                content: 'Workspace is ready; continuing this session.',
+                phase: 'workspace_acquired',
+              });
+            }
+          }
+        }
+
+        // Package the prompt only after the executable tool set is final. A
+        // genuinely conversational turn can stay compact; every tool-bearing,
+        // agentic, sensitive, or complex turn retains the full operating spec.
+        if (shouldPackageSystemPromptForTurn(
+          hasCustomRunner,
+          turnMutationPolicy.contextScope,
+          closedWorldRewrite,
+        )) {
+          const explicitCapabilityRequest = isExplicitGatedToolRequest(agentMessage)
+            || isExplicitMemoryRecallRequest(agentMessage)
+            || isExplicitMemorySaveRequest(agentMessage)
+            || isExplicitExternalResearchRequest(agentMessage);
+          const selectedPackageMode = selectChatPromptPackageMode({
+            message: agentMessage,
+            selectedToolCount: effectiveTools.length,
+            autonomyLevel,
+            isAutomatedTurn,
+            explicitCapabilityRequest,
+            taskComplexity: turnTaskShape.complexity,
+            explicitToolFreeAdvisory: toolFreeAdvisory,
+            exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
+              || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
+          });
+          packageMode = selectedPackageMode;
+          rebuildSystemPromptForModel = async (logicalModel: string): Promise<string> => {
+            let assembledForModel = assembled;
+            if (assembled && logicalModel !== initialPromptModel) {
+              try {
+                assembledForModel = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
+                  taskShape: turnTaskShape,
+                  turnId,
+                  recalledText: recallTextForAssembler,
+                  model: logicalModel,
+                });
+                throwIfTurnAborted();
+                log.info(
+                  `[prompt-assembler] rebuilt turn=${turnId.slice(0, 8)} model=${logicalModel} `
+                  + `tier=${assembledForModel.debug.tier} chars=${assembledForModel.debug.totalChars}`,
+                );
+              } catch (err) {
+                throwIfTurnAborted();
+                log.warn(`[prompt-assembler] fallback rebuild failed, using static prompt: ${(err as Error).message}`);
+                assembledForModel = null;
+              }
+            }
+
+            const packagedSystemPrompt = buildSystemPrompt(
+              sessionOrch,
+          executionWorkspacePath,
+              sessionId,
+              history.length,
+              effectiveWorkspace,
+              personaOverride,
+              assembledForModel,
+              selectedPackageMode,
+              closedWorldRewrite,
+              turnMutationPolicy.contextScope,
+              effectiveTools.length,
+              logicalModel,
+              activeSessionStateWorkspaceId,
+              toolFreeAdvisory,
+              persistedMemoryReadAllowed,
+              allowsConversationHistory(turnMutationPolicy),
+            );
+            return turnMutationPolicy.contextScope !== 'default' || closedWorldRewrite || toolFreeAdvisory
+              ? packagedSystemPrompt
+              : ambiguityPrefix
+                + packagedSystemPrompt
+                + templateContext
+                + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
+                + (assembledForModel ? '' : recalledContext);
+          };
+          systemPrompt = await rebuildSystemPromptForModel(resolvedModel);
+          throwIfTurnAborted();
+          log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
+        }
+
+        // Build routing suggestions from the exact executable/serialized set.
+        const capabilityRouter = hasCustomRunner
+          || toolFreeAdvisory
+          || !persistedMemoryReadAllowed
+          || !allowsConversationHistory(turnMutationPolicy)
+          ? undefined
+          : new CapabilityRouter({
+            toolNames: effectiveTools.map(t => t.name),
+            skills: server.agentState.skills,
+            plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
+              name: p.getManifest().name,
+              description: p.getManifest().description ?? '',
+              skills: p.getContributedSkills(),
+            })),
+            mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
+            subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
+            mcpRuntime: server.agentState.mcpRuntime,
+          });
+
         const iterBudget = new IterationBudget({
           maxIterations: 90,
           freeToolCalls: ['execute_code'],
         });
+        let agentRunBudget = selectAgentRunBudget({
+          taskShape: turnTaskShape.type,
+          complexity: turnTaskShape.complexity,
+          selectedToolNames: effectiveTools.map(tool => tool.name),
+        });
+        let maxOutputTokens: number | undefined;
+        const reasoningForModelAttempt = (logicalModel: string): AgentLoopConfig['reasoning'] =>
+          toolFreeAdvisory
+          && packageMode === 'compact'
+          && logicalModel.trim().toLowerCase() === 'openrouter/anthropic/claude-sonnet-5'
+            ? { enabled: true, effort: 'low' }
+            : undefined;
+        if (toolFreeAdvisory) {
+          agentRunBudget = {
+            ...agentRunBudget,
+            maxTurns: 1,
+            maxToolRounds: 1,
+            maxTokenBudget: 18_000,
+            synthesisReserveTokens: 3_000,
+          };
+          maxOutputTokens = selectAdvisoryMaxOutputTokens(agentMessage);
+        } else if (turnMutationPolicy.contextScope === 'workspace-only') {
+          agentRunBudget = {
+            ...agentRunBudget,
+            maxTurns: 3,
+            maxToolRounds: 2,
+            maxTokenBudget: 19_000,
+            synthesisReserveTokens: 2_500,
+          };
+          maxOutputTokens = 2_500;
+        }
+        log.info(
+          `[chat] agent budget: turns=${agentRunBudget.maxTurns} `
+          + `toolRounds=${agentRunBudget.maxToolRounds} tokens=${agentRunBudget.maxTokenBudget}`,
+        );
+
+        // Persistence carries display-only model provenance. Strip it before
+        // provider serialization so the LLM message schema remains role/content.
+        windowedMessages = windowedMessages.map(({ role, content }) => ({ role, content }));
 
         // Build agent loop config — with windowed conversation history + hooks
+        let bufferedAgentTokens: string[] = [];
+        let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
+        let pendingCapabilityToolResults: Array<{
+          input: Record<string, unknown>;
+          output: string;
+          duration?: number;
+        }> = [];
+
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
           litellmApiKey: server.agentState.litellmApiKey,
           model: resolvedModel,
+          billingModel: resolvedModel,
+          modelSpendBudget: costTracker,
+          modelSpendBillingClass: isOfflineOllamaModelReference(resolvedModel) ? 'free' : 'priced',
+          spendWorkspaceId: executionScopeId,
           systemPrompt,
           tools: effectiveTools,
           messages: windowedMessages,
           stream: true,
-          maxTurns: 200, // Persistent agents need many turns for complex research + document generation
+          ...agentRunBudget,
+          ...(maxOutputTokens ? { maxOutputTokens } : {}),
+          reasoning: reasoningForModelAttempt(resolvedModel),
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
-          pluginTools,
-          signal: abortController.signal,
+          signal: turnSignal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
           onToken: (token: string) => {
-            sendEvent('token', { content: token });
+            if (firstTokenAt === null) firstTokenAt = performance.now();
+            bufferedAgentTokens.push(token);
           },
           onGiveUp: (giveUpMessage: string) => {
             // Steal #9 T3 — the tiered loop-guard aborted the run after a
@@ -1743,15 +2930,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             sendEvent('step', { content: stepText });
             sendEvent('tool', { name, input });
             // Waggle Dance: emit tool call signal
-            emitWaggleSignal({ type: 'tool:called', workspaceId: effectiveWorkspace, content: `${name}(${JSON.stringify(input).slice(0, 100)})` });
+          emitWaggleSignal({ type: 'tool:called', workspaceId: executionScopeId, content: `${name}(${retainedTurnJson(input).slice(0, 100)})` });
             // Track start time for duration calculation
             toolStartTimes.set(name + ':' + toolStartCounter++, Date.now());
-            // F2: Audit trail — log tool call
-            emitAuditEvent(server, {
-              workspaceId: effectiveWorkspace,
+          // F2: Audit trail — log tool call
+          emitAuditEvent(server, {
+            workspaceId: executionScopeId,
               eventType: 'tool_call',
               toolName: name,
-              input: JSON.stringify(input),
+              input: retainedTurnJson(input),
               sessionId,
               model: resolvedModel,
             });
@@ -1770,13 +2957,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
             // Send tool_result SSE event so client can update status + show result
             const isError = result.startsWith('Error:') || result.startsWith('Error ');
-            sendEvent('tool_result', { name, result, duration, isError });
-            // F2: Audit trail — log tool result (truncated output)
-            emitAuditEvent(server, {
-              workspaceId: effectiveWorkspace,
+            if (name === 'acquire_capability') {
+              if (createPersistedCapabilityReceipt(input, result)) {
+                pendingCapabilityToolResults.push({ input, output: result, duration });
+              } else {
+                sendEvent('tool_result', {
+                  name,
+                  result: stripCapabilityRequestMarker(result),
+                  duration,
+                  isError,
+                });
+              }
+            } else {
+              sendEvent('tool_result', { name, result, duration, isError });
+            }
+          // F2: Audit trail — log tool result (truncated output)
+          emitAuditEvent(server, {
+            workspaceId: executionScopeId,
               eventType: 'tool_result',
               toolName: name,
-              output: result.length > 2000 ? result.slice(0, 2000) + '...[truncated]' : result,
+              output: retainedTurnText(result).length > 2000
+                ? retainedTurnText(result).slice(0, 2000) + '...[truncated]'
+                : retainedTurnText(result),
               sessionId,
             });
 
@@ -1792,21 +2994,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               sendEvent('file_created', { filePath, fileAction });
             }
 
-            // TeamSync push — after save_memory in team workspace (fire-and-forget)
-            if (name === 'save_memory' && workspace && !result.startsWith('Error')) {
-              const pushWsConfig = server.workspaceManager?.get(effectiveWorkspace);
+          // TeamSync push — after save_memory in team workspace (fire-and-forget)
+          if (allowMemoryPersistence && name === 'save_memory' && !result.startsWith('Error')) {
+            const pushWsConfig = activeExecutionWorkspaceId
+              ? server.workspaceManager?.get(activeExecutionWorkspaceId)
+              : undefined;
               if (pushWsConfig?.teamId) {
                 try {
                   const waggleConfig = new WaggleConfig(server.localConfig.dataDir);
-                  const teamServer = waggleConfig.getTeamServer();
-                  if (teamServer?.token && pushWsConfig.teamServerUrl) {
+                  const teamServer = getBoundTeamServer(pushWsConfig.teamServerUrl, waggleConfig.getTeamServer());
+                  if (teamServer?.token) {
                     const sync = new TeamSync({
-                      teamServerUrl: pushWsConfig.teamServerUrl,
+                      teamServerUrl: teamServer.url,
                       teamSlug: pushWsConfig.teamId,
                       authToken: teamServer.token,
                       userId: teamServer.userId ?? 'local-user',
                       displayName: teamServer.displayName ?? 'You',
-                    });
+                    }, fetchTeamServer);
                     // Fire-and-forget push — non-blocking
                     sync.pushFrame({
                       id: Date.now(),
@@ -1846,7 +3050,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Lazy-created per request so unit tests with no traceStore decorator
         // (legacy suites) still pass. Assigned to the hoisted outer-scope
         // variables so the outer catch can finalize with outcome='abandoned'
-        // on any exception path (H-07 G4 fix).
+        // on any exception path (H-07 G4 fix). This operational audit trail is
+        // intentionally retained for bounded/read-only turns; it is not learned
+        // memory or a user-work mutation.
         traceRecorder = server.traceStore ? new TraceRecorder(server.traceStore) : null;
         traceHandle = traceRecorder
           ? traceRecorder.start({
@@ -1854,7 +3060,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               personaId: activePersonaId,
               workspaceId: effectiveWorkspace ?? null,
               model: resolvedModel,
-              input: message,
+              input: retainedTurnText(message),
             })
           : null;
 
@@ -1870,7 +3076,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...agentConfig,
           ...(isOllamaModel ? { litellmUrl: ollamaUrl, model: resolvedModel.slice('ollama/'.length) } : {}),
           litellmApiKey: effectiveApiKey,
-          ...(traceRecorder && traceHandle
+          modelSpendTraceId: traceHandle?.id,
+          ...(allowDerivedPersistence && traceRecorder && traceHandle
             ? { traceRecording: { recorder: traceRecorder, handle: traceHandle } }
             : {}),
           // AI-OS Phase 3 — skill diffusion. When the D1 closed
@@ -1878,14 +3085,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // the v2 bus so MCP-consuming external tools can adopt
           // the soon-to-be-authored skill. Failures are swallowed
           // upstream (agent-loop wraps in try/catch).
-          onSkillDistillationFire: server.signalBus
+          onSkillDistillationFire: allowDerivedPersistence && server.signalBus
             ? async ({ patternKey, toolsUsed, directive }) => {
                 const signalBus = server.signalBus;
                 if (!signalBus) return;
                 const now = new Date();
                 signalBus.record({
                   id: `skill-share-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
-                  teamId: `personal::${effectiveWorkspace ?? 'default'}`,
+            teamId: executionScopeId,
                   senderId: `agent-loop:${activePersonaId ?? 'agent'}`,
                   type: 'broadcast',
                   subtype: 'skill_share',
@@ -1905,74 +3112,188 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : undefined,
         };
 
-        // SEC: publish the request-scoped security context so sub-agents /
-        // workflow workers spawned during this run inherit the SAME approval
-        // gate, governance denylist, and persona allowlist as the main loop.
-        // Without this, spawned agents ran the full tool pool with no
-        // confirmation gate (the sub-agent confirmation-bypass). Cleared in the
-        // outer finally so it never leaks into a later run.
-        server.agentState.spawnSecurityContext = hasCustomRunner ? null : {
-          hooks: hookRegistry,
-          blockedTools: governancePolicies?.blockedTools,
-          allowedToolNames: spawnAllowedToolNames,
+        const configForModelAttempt = async (
+          logicalModel: string,
+          apiKey = effectiveApiKey,
+        ): Promise<typeof runConfig> => {
+          const useOllama = logicalModel.trim().toLowerCase().startsWith('ollama/');
+          const systemPromptForAttempt = rebuildSystemPromptForModel
+            ? await rebuildSystemPromptForModel(logicalModel)
+            : runConfig.systemPrompt;
+          throwIfTurnAborted();
+          systemPrompt = systemPromptForAttempt;
+          return {
+            ...runConfig,
+            systemPrompt: systemPromptForAttempt,
+            model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
+            billingModel: logicalModel,
+            modelSpendBillingClass: isOfflineOllamaModelReference(logicalModel) ? 'free' : 'priced',
+            litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
+            litellmApiKey: apiKey,
+            reasoning: reasoningForModelAttempt(logicalModel),
+          };
         };
 
-        // #17: publish the request-scoped turn origin — create_schedule reads
-        // it synchronously at tool-execute time to stamp ai_task delivery
-        // targets (channel meta only ever arrives from the loopback client's
-        // ChannelManager path). Same lifecycle as spawnSecurityContext above;
-        // cleared in the outer finally.
-        server.agentState.turnOrigin = {
-          session: sessionId,
-          workspace: effectiveWorkspace ?? null,
-          ...(channelMeta?.platform && channelMeta?.chatId
-            ? { channel: { platform: channelMeta.platform, chatId: channelMeta.chatId } }
-            : {}),
+        const runAgentAttempt = async (config: typeof runConfig) => {
+          bufferedAgentTokens = [];
+          capabilityReceipt = null;
+          pendingCapabilityToolResults = [];
+          activeAttemptModel = resolvedModel;
+          abortedAttemptUsage = null;
+          const attemptedResult = await agentRunner(config);
+          if (turnSignal.aborted) {
+            abortedAttemptUsage = getBillableUsage(attemptedResult.usage);
+            throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
+          }
+          return attemptedResult;
+        };
+
+        const runModelFallbackChain = async (
+          initialError: unknown,
+          allowNonRetryableConfiguredFallback = false,
+        ) => {
+          // The agent may already have executed tools before detecting a
+          // truncated final completion. Replaying the whole run on another
+          // model would repeat those side effects, so this signal is terminal.
+          if (isIncompleteCompletionError(initialError) || isTerminalModelBudgetError(initialError)) {
+            throw initialError;
+          }
+          let failure = initialError;
+          let failedBudgetModel: string | null = null;
+
+          if (budgetModelSelected && resolvedModel !== primaryModel) {
+            failedBudgetModel = resolvedModel;
+            try {
+              resolvedModel = await resolveUsableModel(server, primaryModel);
+              budgetModelSelected = false;
+              modelSwitchReason = `${failedBudgetModel} failed; primary selected`;
+            } catch (primaryResolutionError) {
+              failure = primaryResolutionError;
+              budgetModelSelected = false;
+              if (!fallbackModel || fallbackModel === failedBudgetModel) throw failure;
+              resolvedModel = await resolveUsableModel(server, fallbackModel);
+              modelSwitchReason = `${failedBudgetModel} failed and ${primaryModel} unavailable; configured fallback selected`;
+              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
+            }
+
+            try {
+              return await runAgentAttempt(await configForModelAttempt(resolvedModel));
+            } catch (primaryRunError) {
+              if (isIncompleteCompletionError(primaryRunError)
+                || isTerminalModelBudgetError(primaryRunError)) {
+                throw primaryRunError;
+              }
+              failure = primaryRunError;
+            }
+          }
+
+          if ((allowNonRetryableConfiguredFallback || isRetryableError(failure))
+            && fallbackModel
+            && fallbackModel !== failedBudgetModel
+            && resolvedModel !== fallbackModel) {
+            const failedModel = resolvedModel;
+            resolvedModel = await resolveUsableModel(server, fallbackModel);
+            modelSwitchReason = `${failedModel} failed (${(failure as { status?: number }).status ?? 'timeout'}); configured fallback selected`;
+            return await runAgentAttempt(await configForModelAttempt(resolvedModel));
+          }
+
+          throw failure;
         };
 
         // ── Run agent with credential pool + fallback chain ──
-        let result;
+        let result: AgentResponse;
+        const agentStartedAt = performance.now();
+        let agentLatencyMs = 0;
         try {
-          result = await agentRunner(runConfig);
+          result = await runAgentAttempt(runConfig);
           // Report success to credential pool
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
-          // Report error to credential pool and try next key
-          const errStatus = extractStatusCode(primaryErr);
-          if (credPool && poolKey && errStatus) {
-            const keyName = credPool.getNameForKey(poolKey) ?? poolKey;
-            const hasMore = credPool.reportError(poolKey, errStatus, (primaryErr as Error).message);
-            log.warn(`[credential-pool] Key ${keyName} failed (${errStatus}), cooldown applied. More keys: ${hasMore}`);
-
-            if (hasMore) {
-              const nextKey = credPool.getKey();
-              if (nextKey) {
-                sendEvent('step', { content: `API key rotated — retrying with next credential` });
-                result = await agentRunner({ ...runConfig, litellmApiKey: nextKey });
-                credPool.reportSuccess(nextKey);
-              } else {
-                throw primaryErr;
-              }
-            } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
-              // No pool keys left — fall back to different model
-              modelSwitchReason = `${resolvedModel} failed (${errStatus}), all keys exhausted`;
-              resolvedModel = fallbackModel;
-              // #4: the fallback is a LiteLLM/cloud model — reset litellmUrl in
-              // case the original was an Ollama model routed to the local endpoint.
-              result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
-            } else {
-              throw primaryErr;
-            }
-          } else if (isRetryableError(primaryErr) && fallbackModel && resolvedModel !== fallbackModel) {
-            modelSwitchReason = `${resolvedModel} failed (${(primaryErr as { status?: number }).status ?? 'timeout'})`;
-            resolvedModel = fallbackModel;
-            // #4: reset litellmUrl — the fallback is a LiteLLM/cloud model even
-            // if the original selection was a local Ollama model.
-            result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
-          } else {
+          if (turnSignal.aborted) throw primaryErr;
+          if (isIncompleteCompletionError(primaryErr) || isTerminalModelBudgetError(primaryErr)) {
             throw primaryErr;
           }
+          // Report error to credential pool and try next key
+          if (credPool && poolKey) {
+            let failedKey = poolKey;
+            let credentialError = primaryErr;
+            let credentialResult: AgentResponse | null = null;
+            let poolExhausted = false;
+
+            for (let failureIndex = 0; failureIndex < credPool.size; failureIndex++) {
+              const errorStatus = extractStatusCode(credentialError);
+              if (!errorStatus) break;
+
+              const keyName = credPool.getNameForKey(failedKey) ?? failedKey;
+              const hasMore = credPool.reportError(
+                failedKey,
+                errorStatus,
+                (credentialError as Error).message,
+              );
+              log.warn(`[credential-pool] Key ${keyName} failed (${errorStatus}), cooldown applied. More keys: ${hasMore}`);
+
+              if (!hasMore || failureIndex === credPool.size - 1) {
+                poolExhausted = true;
+                break;
+              }
+
+              const nextKey = credPool.getKey();
+              if (!nextKey) {
+                poolExhausted = true;
+                break;
+              }
+              sendEvent('step', { content: `API key rotated — retrying with next credential` });
+              try {
+                credentialResult = await runAgentAttempt({ ...runConfig, litellmApiKey: nextKey });
+                credPool.reportSuccess(nextKey);
+                break;
+              } catch (nextCredentialError) {
+                if (turnSignal.aborted) throw nextCredentialError;
+                if (isIncompleteCompletionError(nextCredentialError)
+                  || isTerminalModelBudgetError(nextCredentialError)) {
+                  throw nextCredentialError;
+                }
+                failedKey = nextKey;
+                credentialError = nextCredentialError;
+              }
+            }
+
+            result = credentialResult
+              ?? await runModelFallbackChain(credentialError, poolExhausted);
+          } else {
+            result = await runModelFallbackChain(primaryErr);
+          }
+        } finally {
+          agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));
         }
+
+        const capabilityToolResults = pendingCapabilityToolResults as Array<{
+          input: Record<string, unknown>;
+          output: string;
+          duration?: number;
+        }>;
+        for (const capabilityToolResult of capabilityToolResults) {
+          const issued = await issueCapabilityProposalFromToolResult({
+            store: server.capabilityProposalStore,
+            workspaceId: activeWorkspaceId,
+            sessionId,
+            output: capabilityToolResult.output,
+            resolveIdentity: (packageId) => resolveMarketplaceApprovalIdentity(server, packageId),
+          });
+          // Marketplace output is proposal-bound; bundled starter-pack output
+          // remains a trusted completed receipt without marketplace lifecycle.
+          capabilityReceipt = createPersistedCapabilityReceipt(
+            capabilityToolResult.input,
+            issued.output,
+          ) ?? capabilityReceipt;
+          sendEvent('tool_result', {
+            name: 'acquire_capability',
+            result: issued.output,
+            duration: capabilityToolResult.duration,
+            isError: false,
+          });
+        }
+        pendingCapabilityToolResults = [];
 
         // Notify client of model switch
         if (modelSwitchReason) {
@@ -1995,15 +3316,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Track cost with the ACTUALLY used model
-        costTracker.addUsage(resolvedModel, result.usage.inputTokens, result.usage.outputTokens, effectiveWorkspace);
+        const resultCost = costTracker.calculateCost(
+          result.usage.inputTokens,
+          result.usage.outputTokens,
+          resolvedModel,
+        );
+        if (hasCustomRunner) {
+          costTracker.addUsage(
+          resolvedModel,
+          result.usage.inputTokens,
+          result.usage.outputTokens,
+          executionScopeId,
+          );
+        }
 
         // L-17 C3: per-session token accumulation for /api/fleet visibility.
         // costTracker is per-workspace cost; sessionManager holds per-session
         // token totals that persist for the life of the active session.
+      if (effectiveWorkspace) {
         server.sessionManager?.addTokens(
           effectiveWorkspace,
           (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
         );
+      }
 
         // ── Finalize the execution trace (self-evolution substrate) ──
         // Default outcome is 'success'; correction-detector may downgrade to
@@ -2012,25 +3347,27 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           try {
             traceRecorder.finalize(traceHandle, {
               outcome: 'success',
-              output: result.content ?? '',
+              output: retainedTurnText(result.content ?? ''),
+              model: activeAttemptModel ?? resolvedModel,
               tokens: {
                 input: result.usage.inputTokens,
                 output: result.usage.outputTokens,
               },
+              costUsd: resultCost,
             });
             traceFinalized = true;
           } catch { /* tracing is best-effort — don't fail the response */ }
         }
 
         // M8: commit deferred signal markings now that model call succeeded
-        if (!hasCustomRunner) sessionOrch.commitSurfacedSignals();
+        if (!hasCustomRunner && allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
 
         // ── Post-response memory write-back ──────────────────────
         // If the agent didn't save memory itself, check if the exchange
         // contains save-worthy content and auto-save it.
-        // #13: skipped for automated turns — a headless re-analysis of an old
-        // transcript must not re-save its decision patterns as fresh memory.
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        // Skipped for automated, evidence-bounded, and persona-read-only turns:
+        // none may re-save this exchange as learned memory.
+        if (!hasCustomRunner && allowMemoryPersistence) {
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
@@ -2040,10 +3377,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 // memory here?". Undefined when no trace recorder (legacy/tests).
                 traceId: traceHandle ? String(traceHandle.id) : undefined,
               });
+              throwIfTurnAborted();
               if (saved.length > 0) {
                 sendEvent('step', { content: `Auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} from this exchange.` });
               }
             } catch (e) {
+              throwIfTurnAborted();
               // Non-blocking. W4A: a closed-handle failure here is the signature
               // of the MultiMindCache evicting this turn's mind mid-flight — log
               // it with context so the flake is observable, but still fail soft.
@@ -2067,8 +3406,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // end: a refusal / self-incapacity turn yields no plan. The signal
         // is recorded idempotently (skill_promotion) so recurring workflows
         // bubble up through the existing actionable-signal substrate.
-        // #13: skipped for automated turns (no real workflow to distill).
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        // Skipped whenever learned/derived persistence is disabled.
+        if (!hasCustomRunner && allowDerivedPersistence) {
           const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
           if (distillPlan) {
             sendEvent('step', { content: distillPlan.directive });
@@ -2089,9 +3428,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Extract named entities from the agent response and add them to the
         // knowledge graph of the active workspace mind.
         // Non-blocking — KG enrichment never fails the response.
-        // #13: skipped for automated turns — review-turn output re-mentions
-        // transcript entities; re-extracting them inflates the graph.
-        if (!hasCustomRunner && !isAutomatedTurn && result.content && result.content.length > 100) {
+        // Skipped whenever learned/derived persistence is disabled; review and
+        // evidence-bounded output must not inflate the knowledge graph.
+        if (!hasCustomRunner && allowDerivedPersistence && result.content && result.content.length > 100) {
           try {
             const knowledge = sessionOrch.getKnowledge();
             const entities = extractEntities(result.content);
@@ -2123,10 +3462,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // ── Correction detection ──────────────────────────────────
         // Analyze user message for corrections and record improvement signals.
         // Non-blocking — detection failure shouldn't affect the response.
-        // #13: skipped for automated turns — a review instruction embedding a
-        // transcript's old "no, that's wrong" lines would re-fire as fresh
-        // correction signals against the agent.
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        // Skipped whenever learned/derived persistence is disabled; a review
+        // instruction can quote old corrections that must not re-fire.
+        if (!hasCustomRunner && allowDerivedPersistence) {
           try {
             const signalStore = sessionOrch.getImprovementSignals();
             analyzeAndRecordCorrection(signalStore, message);
@@ -2145,17 +3483,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // ── Auto skill capture — detect repeatable workflow patterns ──
-        if (!hasCustomRunner && result.toolsUsed && result.toolsUsed.length > 0) {
+        if (!hasCustomRunner
+          && allowDerivedPersistence
+          && result.toolsUsed
+          && result.toolsUsed.length > 0) {
           try {
             // Track this session's tool sequence
-            if (!sessionToolSequences.has(sessionId)) {
-              sessionToolSequences.set(sessionId, []);
+            if (!sessionToolSequences.has(sessionStateKey)) {
+              sessionToolSequences.set(sessionStateKey, []);
             }
-            sessionToolSequences.get(sessionId)!.push(result.toolsUsed);
+            sessionToolSequences.get(sessionStateKey)!.push(result.toolsUsed);
 
-            // Build session history from other sessions' tool sequences
+            // Build history from other sessions in this workspace only.
             const otherSessions = [...sessionToolSequences.entries()]
-              .filter(([id]) => id !== sessionId)
+              .filter(([id]) => id !== sessionStateKey
+                && isChatSessionStateKeyForWorkspace(id, activeSessionStateWorkspaceId))
               .map(([, seqs]) => ({ toolSequence: seqs.flat() }));
 
             if (otherSessions.length >= 2) {
@@ -2193,21 +3535,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           'legal-professional': '\n\n---\n*This is AI-assisted legal analysis, not legal advice. This does not create an attorney-client relationship. Consult a licensed attorney for binding legal guidance.*',
           'finance-owner': '\n\n---\n*Financial figures are estimates based on available data. Verify with your accountant or financial advisor before making decisions.*',
         };
-        if (activePersonaId && REGULATED_DISCLAIMER_MAP[activePersonaId] && finalContent) {
+        if (allowResponseDecoration
+          && activePersonaId
+          && REGULATED_DISCLAIMER_MAP[activePersonaId]
+          && finalContent) {
           if (isRegulatedContent(finalContent, activePersonaId)) {
-            const hasDisclaimer = finalContent.toLowerCase().includes('not legal advice') ||
-              finalContent.toLowerCase().includes('attorney-client') ||
-              finalContent.toLowerCase().includes('verify with your accountant') ||
-              finalContent.toLowerCase().includes('financial advisor') ||
-              finalContent.toLowerCase().includes('legal team');
-            if (!hasDisclaimer) {
+            if (!hasRegulatedDisclaimer(finalContent, activePersonaId)) {
               finalContent += REGULATED_DISCLAIMER_MAP[activePersonaId];
             }
           }
         }
 
         // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
-        if (!hasCustomRunner && finalContent && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [])) {
+        if (!hasCustomRunner
+          && allowResponseDecoration
+          && finalContent
+          && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
           finalContent += SCHEDULE_SUGGESTION;
         }
 
@@ -2219,7 +3562,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // honest hedge note; durations/percents only inform the log signal
         // (noisier — advice timelines like "2 weeks" would false-positive). The
         // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
-        if (!hasCustomRunner && finalContent && recalledContext) {
+        if (!hasCustomRunner && allowResponseDecoration && finalContent && recalledContext) {
           const grounding = checkGrounding(finalContent, recalledContext + '\n' + message);
           if (grounding.ungrounded.length > 0) {
             log.info('[grounding] reply asserts specifics absent from recalled memory', {
@@ -2235,38 +3578,80 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
-        // Add assistant response to history (maintains context for next turn) and persist
-        history.push({ role: 'assistant', content: finalContent });
-        persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: finalContent });
+        // The agent loop streams every model turn, including provisional prose
+        // before tools, retries, and completion-gate corrections. Reconcile at
+        // the HTTP boundary so token events contain only the exact content in
+        // the authoritative done event. Preserve the original chunking when it
+        // already matches the fully post-processed response.
+        if (turnSignal.aborted) return;
+        const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
+          ? bufferedAgentTokens
+          : finalContent ? [finalContent] : [];
+        for (const token of finalTokenChunks) {
+          sendEvent('token', { content: token });
+        }
+        bufferedAgentTokens = [];
+
+        // Add assistant response to history (maintains context for next turn) and persist.
+        const assistantMessage = {
+          role: 'assistant',
+          content: finalContent,
+          model: resolvedModel,
+          ...(capabilityReceipt ? { tools: [capabilityReceipt] } : {}),
+        };
+        if (!turnMutationPolicy.denyConversationHistory) {
+          history.push(assistantMessage);
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, assistantMessage);
+        }
 
         // Send the done event with full response + model info + per-message cost
         const messageCost = result.usage
           ? costTracker.calculateCost(result.usage.inputTokens, result.usage.outputTokens, resolvedModel)
           : undefined;
+        const doneAt = performance.now();
         sendEvent('done', {
           content: finalContent,
           usage: result.usage,
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
+          contextMetrics: {
+            toolCatalogCount,
+            toolEligibleCount,
+            toolSelectedCount,
+            toolOmittedCount,
+            transmittedToolSchemaChars,
+            estimatedToolSchemaTokens: Math.ceil(transmittedToolSchemaChars / 4),
+            finalSystemPromptChars: systemPrompt.length,
+            estimatedSystemPromptTokens: Math.ceil(systemPrompt.length / 4),
+            packageMode,
+            selectorLatencyMs,
+            timeToFirstTokenMs: firstTokenAt === null
+              ? null
+              : Math.max(0, Math.round(firstTokenAt - totalServerStartedAt)),
+            agentLatencyMs,
+            totalServerLatencyMs: Math.max(0, Math.round(doneAt - totalServerStartedAt)),
+            providerInputTokens: result.usage.inputTokens,
+            providerOutputTokens: result.usage.outputTokens,
+          },
           ...(messageCost !== undefined && {
             cost: Math.round(messageCost * 1_000_000) / 1_000_000,
             tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
           }),
         });
 
-        // Waggle Dance: emit agent completion signal
-        emitWaggleSignal({
-          type: 'agent:completed',
-          workspaceId: effectiveWorkspace,
+      // Waggle Dance: emit agent completion signal
+      emitWaggleSignal({
+        type: 'agent:completed',
+        workspaceId: executionScopeId,
           content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${result.usage?.outputTokens ?? 0} tokens`,
           metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
         });
 
         // Enriched so the notification identifies which agent/workspace/task and
         // deep-links to the output (was a generic "Your agent has completed the task").
-        const wsName =
-          server.agentState.listWorkspaces?.().find((w) => w.id === effectiveWorkspace)?.name ??
-          effectiveWorkspace;
+      const wsName =
+        server.agentState.listWorkspaces?.().find((w) => w.id === effectiveWorkspace)?.name ??
+        'Personal';
         const agentName = personaOverride ? (resolvePersona(personaOverride)?.name ?? 'Agent') : 'Agent';
         const toolCount = (result.toolsUsed ?? []).length;
         emitNotification(server, {
@@ -2275,10 +3660,44 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
             : `${resolvedModel} · response ready`,
           category: 'agent',
-          actionUrl: `/workspaces/${effectiveWorkspace}/chat`,
+        actionUrl: effectiveWorkspace
+          ? `/workspaces/${effectiveWorkspace}/chat`
+          : '/',
         });
       }
     } catch (err) {
+      const incompleteUsage = getIncompleteCompletionUsage(err);
+      const billableFailureUsage = incompleteUsage
+        ?? (turnSignal.aborted ? abortedAttemptUsage : null);
+      let failureCostUsd: number | undefined;
+      if (billableFailureUsage && activeAttemptModel) {
+        try {
+          failureCostUsd = costTracker.calculateCost(
+            billableFailureUsage.inputTokens,
+            billableFailureUsage.outputTokens,
+            activeAttemptModel,
+          );
+          if (hasCustomRunner) {
+            costTracker.addUsage(
+              activeAttemptModel,
+              billableFailureUsage.inputTokens,
+              billableFailureUsage.outputTokens,
+              activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
+            );
+          }
+          if (activeExecutionWorkspaceId) {
+            server.sessionManager?.addTokens(
+              activeExecutionWorkspaceId,
+              billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,
+            );
+          }
+        } catch (accountingError) {
+          log.warn(
+            '[chat] incomplete completion usage accounting failed:',
+            accountingError instanceof Error ? accountingError.message : String(accountingError),
+          );
+        }
+      }
       // H-07 G4: finalize aborted trace so the evolution dataset builder can
       // mine it as a negative example. Without this the row stays 'pending'
       // and GEPA never sees it — starving the loop of counterexamples.
@@ -2288,10 +3707,26 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           traceRecorder.finalize(traceHandle, {
             outcome: 'abandoned',
             output: '',
-            correctionFeedback: errMsg.slice(0, 500),
+            model: activeAttemptModel ?? undefined,
+            tokens: billableFailureUsage ? {
+              input: billableFailureUsage.inputTokens,
+              output: billableFailureUsage.outputTokens,
+            } : undefined,
+            costUsd: failureCostUsd,
+            ...(!turnSignal.aborted && {
+              correctionFeedback: retainedTurnText(errMsg).slice(0, 500),
+            }),
           });
           traceFinalized = true;
         } catch { /* best-effort */ }
+      }
+      // A user Stop/client disconnect is not an assistant answer or generation
+      // failure. Keep the already-persisted user turn, but never fabricate an
+      // authoritative assistant/error turn from partial work.
+      if (turnSignal.aborted) {
+        log.info(`[chat] turn ${turnId} cancelled by client or workspace lifecycle`);
+        if (!raw.destroyed && !raw.writableEnded) raw.end();
+        return;
       }
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
@@ -2312,7 +3747,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         errorMessage = 'Something went wrong. Try sending your message again.';
       }
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
-      sendEvent('error', { message: errorMessage });
+      const budgetCode = isTerminalModelBudgetError(err)
+        ? (err as { code: string }).code
+        : undefined;
+      sendEvent('error', { message: errorMessage, ...(budgetCode ? { code: budgetCode } : {}) });
 
       // Persist the assistant-side failure as a real conversation turn. The UI
       // already shows the SSE error while the stream is live, but without this
@@ -2322,7 +3760,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const assistantError = `${GENERATION_FAILED_PREFIX}${errorMessage}`;
         try {
           activeHistory.push({ role: 'assistant', content: assistantError });
-          persistMessage(server.localConfig.dataDir, activeWorkspaceId, activeSessionId, {
+          persistMessage(sessionPersistenceDataDir, activeWorkspaceId, activeSessionId, {
             role: 'assistant',
             content: assistantError,
           });
@@ -2340,12 +3778,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // HybridSearch now; embedded on the next cognify/distill pass). The 8-char
       // floor skips trivial acks ("ok", "thanks"). Best-effort: a persistence
       // failure must never mask the original error or break the SSE stream.
-      // #13: gated for automated turns — an idle-watcher review instruction
-      // embeds the ENTIRE session transcript, and review turns are the most
-      // likely to fail on context_length; persisting that here as a
-      // 'user_stated' frame would dump the transcript into memory at highest
-      // trust, exactly the pollution #13 exists to stop.
-      if (activeSessionOrch && !isAutomatedTurn && message.trim().length >= 8) {
+      // Gated by the resolved persistence policy for automated, bounded, and
+      // persona-read-only turns. Persisting one of those prompts here as a
+      // 'user_stated' frame would bypass the happy-path memory boundary.
+      if (activeSessionOrch && allowMemoryPersistence && message.trim().length >= 8) {
         try {
           const frames = activeSessionOrch.getFrames();
           const sessions = activeSessionOrch.getSessions();
@@ -2360,17 +3796,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
+      if (workspaceTurnScope) {
+        try { await workspaceTurnScope.release(); } catch { /* lease already released */ }
+      }
+      if (activeChatRuntime) {
+        releaseChatRuntime(
+          activeChatRuntime.workspaceSession,
+          activeChatRuntime.sessionId,
+          activeChatRuntime.runtime,
+        );
+      }
+      if (pinnedWorkspaceMindId) {
+        try { server.mindCache.release(pinnedWorkspaceMindId); } catch { /* cache already torn down */ }
+      }
       // Un-pin the shared orchestrator's workspace mind (see acquire above).
       if (pinnedSharedMindId) {
         try { server.mindCache.release(pinnedSharedMindId); } catch { /* cache already torn down */ }
       }
-      // SEC: drop the request-scoped spawn security context. It must not leak
-      // into a later run, which could otherwise apply a stale workspace's
-      // governance / persona restrictions to a freshly spawned sub-agent.
-      server.agentState.spawnSecurityContext = null;
-      // #17: same for the turn origin — a stale origin would stamp a later
-      // turn's schedules with the wrong delivery channel.
-      server.agentState.turnOrigin = null;
       // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
       // already unregisters and sets to undefined; this guarantees we never leak the
       // hook into the shared hookRegistry on any exception path.
@@ -2383,14 +3825,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // output — the correction-detector can upgrade it later if appropriate.
       if (traceRecorder && traceHandle && !traceFinalized) {
         try {
-          traceRecorder.finalize(traceHandle, { outcome: 'abandoned', output: '' });
+          traceRecorder.finalize(traceHandle, {
+            outcome: 'abandoned',
+            output: retainedTurnText(''),
+            model: activeAttemptModel ?? undefined,
+          });
           traceFinalized = true;
         } catch { /* best-effort */ }
       }
+      activeChatTurns.delete(activeSessionStateKey);
     }
 
     // End the SSE stream
-    raw.end();
+    if (!raw.destroyed && !raw.writableEnded) raw.end();
   });
 
   // DELETE /api/chat/history — clear session history AND all per-session in-process state.
@@ -2398,14 +3845,73 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
   // (systemPromptCache, compressionSummaries, sessionToolSequences) grew unbounded
   // across the sidecar's lifetime, compounding in heavy-use instances.
   server.delete<{
-    Querystring: { session?: string };
+    Querystring: { session?: string; workspace?: string };
   }>('/api/chat/history', async (request, reply) => {
     const sessionId = request.query.session ?? 'default';
-    sessionHistories.delete(sessionId);
-    systemPromptCache.delete(sessionId);
-    compressionSummaries.delete(sessionId);
-    compactionFrameIds.delete(sessionId); // #12: next compaction starts a fresh frame
-    sessionToolSequences.delete(sessionId);
+    const workspaceId = request.query.workspace;
+    assertSafeSegment(sessionId, 'session');
+    if (workspaceId) assertSafeSegment(workspaceId, 'workspace');
+
+    const historyTarget = resolveChatHistoryTarget(
+      server.localConfig.dataDir,
+      workspaceId,
+      !!server.workspaceManager?.get('default'),
+    );
+    const historyWorkspaceId = historyTarget.workspaceId;
+    if (historyWorkspaceId === 'default') {
+      const currentChatHistoryLayout = getChatHistoryLayout();
+      if (currentChatHistoryLayout.status === 'recovery-required') {
+        return reply.status(409).send({
+          error: 'Default chat history needs recovery before it can be cleared.',
+          code: currentChatHistoryLayout.code,
+        });
+      }
+    }
+    const scopedStateKey = chatSessionStateKey(
+      historyTarget.stateWorkspaceId,
+      sessionId,
+    );
+    if (
+      activeChatTurns.has(scopedStateKey)
+      || (!workspaceId && activeChatTurns.has(sessionId))
+    ) {
+      return reply.status(409).send({
+        error: 'Cannot clear history while this session has an active turn.',
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+    }
+
+    const evictSessionState = <T>(state: Map<string, T>): void => {
+      state.delete(scopedStateKey);
+      if (!workspaceId) state.delete(sessionId);
+    };
+
+    fs.rmSync(
+      path.join(
+        historyTarget.dataDir,
+        'workspaces',
+        historyWorkspaceId,
+        'sessions',
+        `${sessionId}.jsonl`,
+      ),
+      { force: true },
+    );
+
+    evictSessionState(sessionHistories);
+    evictSessionState(systemPromptCache);
+    evictSessionState(compressionSummaries);
+    evictSessionState(compactionFrameIds); // #12: next compaction starts a fresh frame
+    evictSessionState(sessionToolSequences);
+
+    if (
+      historyTarget.isManagedWorkspace
+      || historyWorkspaceId !== 'default'
+    ) {
+      const workspaceSession = server.sessionManager.get(historyWorkspaceId);
+      if (workspaceSession) {
+        chatRuntimes.get(workspaceSession)?.delete(sessionId);
+      }
+    }
     return reply.send({ ok: true, cleared: sessionId });
   });
 };

@@ -23,7 +23,12 @@ describe('skill-write-service (P5/D4 iii)', () => {
     onChange = vi.fn();
     deps = { skillsDir, auditStore: auditStore as never, onChange };
   });
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => fs.rmSync(dir, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 100,
+  }));
 
   it('creates a skill, stamps provenance, audits installed, fires onChange', () => {
     const res = writeSkill(deps, { name: 'my-skill', content: '# Hello\nbody', initiator: 'agent', source: 'chat' });

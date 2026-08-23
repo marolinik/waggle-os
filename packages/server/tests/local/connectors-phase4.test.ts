@@ -7,15 +7,24 @@
  * server.inject — same harness style as the Phase-3 suites.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { MindDB, InstallAuditStore, VaultStore } from '@waggle/core';
-import { ConnectorRegistry, BaseConnector, type ConnectorAction, type ConnectorResult } from '@waggle/agent';
+import {
+  ConnectorRegistry,
+  BaseConnector,
+  GoogleCalendarConnector,
+  JiraConnector,
+  SalesforceConnector,
+  type ConnectorAction,
+  type ConnectorResult,
+} from '@waggle/agent';
 import type { ConnectorHealth } from '@waggle/shared';
 import { connectorRoutes } from '../../src/local/routes/connectors.js';
+import { registerConnectors } from '../../src/local/setup-connectors.js';
 
 class TestConnector extends BaseConnector {
   readonly id = 'test-conn';
@@ -28,11 +37,26 @@ class TestConnector extends BaseConnector {
     { name: 'read_data', description: 'Read', inputSchema: { properties: {} }, riskLevel: 'low' },
   ];
   healthStatus: ConnectorHealth['status'] = 'connected';
-  async connect(): Promise<void> { /* no-op */ }
+  connectCalls = 0;
+  executeCalls = 0;
+  healthCheckCalls = 0;
+  connectCallsObservedByHealth: number[] = [];
+  credentialValue: string | null = null;
+  connectGate: Promise<void> | null = null;
+  connectError: Error | null = null;
+  async connect(vault: VaultStore): Promise<void> {
+    this.connectCalls += 1;
+    if (this.connectGate) await this.connectGate;
+    if (this.connectError) throw this.connectError;
+    this.credentialValue = vault.getConnectorCredential(this.id)?.value ?? null;
+  }
   async healthCheck(): Promise<ConnectorHealth> {
+    this.healthCheckCalls += 1;
+    this.connectCallsObservedByHealth.push(this.connectCalls);
     return { id: this.id, name: this.name, status: this.healthStatus, lastChecked: new Date().toISOString() };
   }
   async execute(action: string, params: Record<string, unknown>): Promise<ConnectorResult> {
+    this.executeCalls += 1;
     return { success: true, data: { action, ...params } };
   }
 }
@@ -63,6 +87,7 @@ describe('Connector routes — Phase 4 extensions', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await server.close();
     db.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -71,12 +96,15 @@ describe('Connector routes — Phase 4 extensions', () => {
   // ── connect → audit ──────────────────────────────────────────────────
 
   it('connect stores credentials AND records an install-audit entry', async () => {
+    expect(connector.connectCalls).toBe(1);
     const res = await server.inject({
       method: 'POST', url: '/api/connectors/test-conn/connect',
       payload: { token: 'tok-123' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ connected: true, connectorId: 'test-conn' });
+    expect(connector.connectCalls).toBe(2);
+    expect(connector.credentialValue).toBe('tok-123');
 
     const audit = auditStore.getByCapability('test-conn');
     expect(audit).toHaveLength(1);
@@ -89,7 +117,367 @@ describe('Connector routes — Phase 4 extensions', () => {
     expect(audit[0].detail).toContain('bearer');
   });
 
+  it('reports connector hydration failure without claiming the connector is connected', async () => {
+    connector.connectError = new Error('internal vault detail');
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/test-conn/connect',
+      payload: { token: 'tok-123' },
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toEqual({ error: 'Connector initialization failed' });
+    expect(res.body).not.toContain('internal vault detail');
+    expect(registry.getDefinitions().find(def => def.id === 'test-conn')?.status)
+      .toBe('disconnected');
+  });
+
+  it('rejects an unsafe Salesforce instance URL before writing any credential or metadata', async () => {
+    registry.register(new SalesforceConnector());
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/salesforce/connect',
+      payload: {
+        token: 'secret-token',
+        instanceUrl: 'https://salesforce.com.evil.test',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'Valid Salesforce instanceUrl required' });
+    expect(vault.getConnectorCredential('salesforce')).toBeNull();
+    expect(vault.get('connector:salesforce:instance_url')).toBeNull();
+  });
+
+  it('normalizes and stores a valid Salesforce origin before hydrating the connector', async () => {
+    const salesforce = new SalesforceConnector();
+    registry.register(salesforce);
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/salesforce/connect',
+      payload: {
+        token: 'secret-token',
+        instanceUrl: ' HTTPS://Acme--Dev.Sandbox.My.Salesforce.Com/ ',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(vault.get('connector:salesforce:instance_url')?.value)
+      .toBe('https://acme--dev.sandbox.my.salesforce.com');
+    const result = await salesforce.execute('search', { query: '   ' });
+    expect(result.error).toBe('Invalid Salesforce SOQL query');
+    expect(registry.getDefinitions().find(def => def.id === 'salesforce')?.status).toBe('connected');
+  });
+
+  it('rehydrates persisted Salesforce state on restart and hides incomplete legacy state', async () => {
+    vault.setConnectorCredential('salesforce', { type: 'bearer', value: 'persisted-token' });
+    vault.set('connector:salesforce:instance_url', 'https://acme.my.salesforce.com');
+
+    const restarted = registerConnectors(vault);
+    const salesforce = restarted.get('salesforce')!;
+    const result = await salesforce.execute('search', { query: '   ' });
+
+    expect(result.error).toBe('Invalid Salesforce SOQL query');
+    expect(restarted.getDefinitions().find(def => def.id === 'salesforce')?.status).toBe('connected');
+
+    vault.delete('connector:salesforce:instance_url');
+    const incompleteRestart = registerConnectors(vault);
+    await incompleteRestart.hydrate('salesforce');
+    expect(incompleteRestart.getDefinitions().find(def => def.id === 'salesforce')?.status).toBe('disconnected');
+    expect(incompleteRestart.getConnected().some(connector => connector.id === 'salesforce')).toBe(false);
+  });
+
+  it('rejects unsafe Jira site origins without partial writes, then accepts a corrected retry', async () => {
+    const jira = new JiraConnector();
+    registry.register(jira);
+    vault.setConnectorCredential('jira', { type: 'bearer', value: 'old-token' });
+    vault.set('connector:jira:email', 'old@example.com');
+    vault.set('connector:jira:base_url', 'https://old-team.atlassian.net');
+    await registry.hydrate('jira');
+
+    const blankToken = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/jira/connect',
+      payload: {
+        token: '   ',
+        email: 'new@example.com',
+        baseUrl: 'https://new-team.atlassian.net',
+      },
+    });
+
+    expect(blankToken.statusCode).toBe(400);
+    expect(blankToken.json()).toEqual({ error: 'token or apiKey required' });
+    expect(vault.getConnectorCredential('jira')?.value).toBe('old-token');
+    expect(vault.get('connector:jira:email')?.value).toBe('old@example.com');
+    expect(vault.get('connector:jira:base_url')?.value).toBe('https://old-team.atlassian.net');
+
+    const rejected = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/jira/connect',
+      payload: {
+        token: 'new-token',
+        email: 'new@example.com',
+        baseUrl: 'https://new-team.atlassian.net.evil.test',
+      },
+    });
+
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json()).toEqual({ error: 'Valid Jira baseUrl required' });
+    expect(vault.getConnectorCredential('jira')?.value).toBe('old-token');
+    expect(vault.get('connector:jira:email')?.value).toBe('old@example.com');
+    expect(vault.get('connector:jira:base_url')?.value).toBe('https://old-team.atlassian.net');
+
+    const accepted = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/jira/connect',
+      payload: {
+        token: ' new-token ',
+        email: ' new@example.com ',
+        baseUrl: ' HTTPS://New-Team.Atlassian.Net/ ',
+      },
+    });
+
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({ connected: true, connectorId: 'jira' });
+    expect(vault.getConnectorCredential('jira')?.value).toBe('new-token');
+    expect(vault.get('connector:jira:email')?.value).toBe('new@example.com');
+    expect(vault.get('connector:jira:base_url')?.value).toBe('https://new-team.atlassian.net');
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('connected');
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ issues: [{ key: 'WG-1' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await jira.execute('search', { jql: 'project = WG' });
+
+    expect(result).toEqual({ success: true, data: { issues: [{ key: 'WG-1' }] } });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://new-team.atlassian.net/rest/api/3/search',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: `Basic ${Buffer.from('new@example.com:new-token').toString('base64')}`,
+        }),
+      }),
+    );
+  });
+
+  it('does not advertise Jira as usable when email or a safe site origin is missing', async () => {
+    const jira = new JiraConnector();
+    registry.register(jira);
+    vault.setConnectorCredential('jira', { type: 'bearer', value: 'jira-token' });
+    vault.set('connector:jira:base_url', 'https://team.atlassian.net');
+    await registry.hydrate('jira');
+
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('disconnected');
+    expect(registry.getConnected()).not.toContain(jira);
+
+    vault.set('connector:jira:email', 'user@example.com');
+    vault.set('connector:jira:base_url', 'https://team.atlassian.net.evil.test');
+    await registry.hydrate('jira');
+
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('disconnected');
+    expect(registry.getConnected()).not.toContain(jira);
+    await expect(jira.execute('list_issues', {})).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('Not connected'),
+    });
+
+    vault.setConnectorCredential('jira', { type: 'bearer', value: '   ' });
+    vault.set('connector:jira:base_url', 'https://team.atlassian.net');
+    await registry.hydrate('jira');
+
+    expect(registry.getDefinitions().find(def => def.id === 'jira')?.status).toBe('disconnected');
+    expect(registry.getConnected()).not.toContain(jira);
+    expect(registry.generateTools().some(tool => tool.name.startsWith('connector_jira_'))).toBe(false);
+  });
+
+  it('waits for startup hydration before health checks or issued-tool execution', async () => {
+    vault.setConnectorCredential('test-conn', { type: 'bearer', value: 'persisted-token' });
+    let releaseHydration!: () => void;
+    const hydrationGate = new Promise<void>((resolve) => {
+      releaseHydration = resolve;
+    });
+    const delayedConnector = new TestConnector();
+    delayedConnector.connectGate = hydrationGate;
+    const restarted = new ConnectorRegistry(vault);
+    restarted.register(delayedConnector);
+
+    const healthPending = restarted.healthCheck('test-conn');
+    const rehydrationPending = restarted.hydrate('test-conn');
+    let releaseRehydration!: () => void;
+    delayedConnector.connectGate = new Promise<void>((resolve) => {
+      releaseRehydration = resolve;
+    });
+    await Promise.resolve();
+
+    expect(restarted.getConnected()).toEqual([]);
+    expect(restarted.generateTools()).toEqual([]);
+    expect(delayedConnector.healthCheckCalls).toBe(0);
+    expect(delayedConnector.executeCalls).toBe(0);
+
+    releaseHydration();
+    await vi.waitFor(() => expect(delayedConnector.connectCalls).toBe(2));
+    expect(delayedConnector.healthCheckCalls).toBe(0);
+    releaseRehydration();
+    const [health, rehydrated] = await Promise.all([healthPending, rehydrationPending]);
+    const issuedTool = restarted.generateTools().find(tool => tool.name === 'connector_test-conn_read_data')!;
+    const serializedResult = await issuedTool.execute({});
+    expect(health?.status).toBe('connected');
+    expect(rehydrated).toBe(true);
+    expect(delayedConnector.connectCallsObservedByHealth).toEqual([2]);
+    expect(restarted.getConnected()).toEqual([delayedConnector]);
+    expect(JSON.parse(serializedResult).success).toBe(true);
+    expect(delayedConnector.credentialValue).toBe('persisted-token');
+  });
+
+  it('blocks an already-issued connector tool after its Vault credential is disconnected', async () => {
+    await server.inject({
+      method: 'POST',
+      url: '/api/connectors/test-conn/connect',
+      payload: { token: 'secret-token' },
+    });
+    const issuedTool = registry.generateTools().find(tool => tool.name === 'connector_test-conn_read_data')!;
+
+    const disconnected = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/test-conn/disconnect',
+    });
+    const result = JSON.parse(await issuedTool.execute({}));
+
+    expect(disconnected.statusCode).toBe(200);
+    expect(result).toEqual({ success: false, error: 'Connector is not connected' });
+    expect(connector.credentialValue).toBeNull();
+    expect(connector.connectCalls).toBe(3);
+    expect(connector.executeCalls).toBe(0);
+  });
+
+  it('fails closed without leaking Vault errors from an already-issued connector tool', async () => {
+    await server.inject({
+      method: 'POST',
+      url: '/api/connectors/test-conn/connect',
+      payload: { token: 'secret-token' },
+    });
+    const issuedTool = registry.generateTools().find(tool => tool.name === 'connector_test-conn_read_data')!;
+    const credentialRead = vi.spyOn(vault, 'getConnectorCredential').mockImplementation(() => {
+      throw new Error('vault offline');
+    });
+
+    let serializedResult: string;
+    try {
+      serializedResult = await issuedTool.execute({});
+    } finally {
+      credentialRead.mockRestore();
+    }
+
+    expect(JSON.parse(serializedResult)).toEqual({
+      success: false,
+      error: 'Connector is not connected',
+    });
+    expect(connector.executeCalls).toBe(0);
+  });
+
   // ── sync (C16) ───────────────────────────────────────────────────────
+
+  it.each(['disconnect', 'revoke'] as const)(
+    '%s clears Google Calendar runtime tokens before a direct health path can use them',
+    async (lifecycleAction) => {
+      registry.register(new GoogleCalendarConnector());
+      const connected = await server.inject({
+        method: 'POST',
+        url: '/api/connectors/gcal/connect',
+        payload: {
+          token: 'old-access-token',
+          refreshToken: 'old-refresh-token',
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        },
+      });
+      expect(connected.statusCode).toBe(200);
+
+      const originalFetch = globalThis.fetch;
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ items: [] }),
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      let healthResponse;
+      try {
+        const lifecycleResponse = await server.inject({
+          method: 'POST',
+          url: `/api/connectors/gcal/${lifecycleAction}`,
+        });
+        expect(lifecycleResponse.statusCode).toBe(200);
+        healthResponse = await server.inject({
+          method: 'GET',
+          url: '/api/connectors/gcal/health',
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+
+      expect(healthResponse.statusCode).toBe(200);
+      expect(healthResponse.json().status).toBe('disconnected');
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not resurrect a revoked Google Calendar credential from an in-flight refresh', async () => {
+    registry.register(new GoogleCalendarConnector());
+    vault.set('connector:gcal:client_id', 'client-id');
+    vault.set('connector:gcal:client_secret', 'client-secret');
+    const connected = await server.inject({
+      method: 'POST',
+      url: '/api/connectors/gcal/connect',
+      payload: {
+        token: 'expired-access-token',
+        refreshToken: 'old-refresh-token',
+        expiresAt: '2020-01-01T00:00:00.000Z',
+      },
+    });
+    expect(connected.statusCode).toBe(200);
+
+    let notifyRefreshStarted!: () => void;
+    const refreshStarted = new Promise<void>((resolve) => {
+      notifyRefreshStarted = resolve;
+    });
+    let releaseRefresh!: () => void;
+    const refreshGate = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async () => {
+      notifyRefreshStarted();
+      await refreshGate;
+      return {
+        ok: true,
+        json: async () => ({ access_token: 'resurrected-token', expires_in: 3600 }),
+      };
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    let healthResponse;
+    try {
+      const healthPending = server.inject({ method: 'GET', url: '/api/connectors/gcal/health' });
+      await refreshStarted;
+      const revoked = await server.inject({ method: 'POST', url: '/api/connectors/gcal/revoke' });
+      expect(revoked.statusCode).toBe(200);
+      releaseRefresh();
+      healthResponse = await healthPending;
+    } finally {
+      releaseRefresh();
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(healthResponse.statusCode).toBe(200);
+    expect(healthResponse.json().status).toBe('error');
+    expect(vault.getConnectorCredential('gcal')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 
   it('sync re-probes health, stamps lastSyncAt in the vault and audits', async () => {
     await server.inject({ method: 'POST', url: '/api/connectors/test-conn/connect', payload: { token: 't' } });

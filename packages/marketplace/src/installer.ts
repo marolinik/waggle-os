@@ -13,17 +13,24 @@
  *          Write plugin.json manifest, copy skill files, register in registry.json.
  *          Then call POST /api/plugins/install if server is running.
  * 
- * MCP:     Add server config to .mcp.json (or bundle inside a plugin).
- *          Optionally install npm package via npx.
+ * MCP:     Add an exact curated npx/uvx server config to .mcp.json.
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { homedir } from 'os';
-import { execSync } from 'child_process';
+import { createHash } from 'node:crypto';
 import { MarketplaceDB } from './db.js';
 import { SecurityGate, type ScanResult, type SecurityGateConfig } from './security.js';
 import { type FetchFn, defaultFetch } from './fetcher.js';
+import {
+  assertSafeConfiguredMarketplaceMcpConfig,
+  assertSafeMarketplaceInstallManifest,
+  assertSafeMarketplaceMcpConfig,
+  configureMarketplaceMcpServer,
+  createMarketplaceMcpProvenance,
+  resolveManagedInstallPath,
+} from './install-security.js';
 import type {
   MarketplacePackage,
   InstallManifest,
@@ -31,15 +38,49 @@ import type {
   InstallResult,
   PackInstallResult,
   InstallationType,
+  MarketplaceMcpProvenance,
+  MarketplaceApprovalIdentity,
   McpServerConfig,
   PluginManifest,
-  PostInstallHook,
 } from './types.js';
 
 const WAGGLE_DIR = join(homedir(), '.waggle');
 const SKILLS_DIR = join(WAGGLE_DIR, 'skills');
 const PLUGINS_DIR = join(WAGGLE_DIR, 'plugins');
 const REGISTRY_PATH = join(PLUGINS_DIR, 'registry.json');
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+function identityChangedResult(
+  pkg: MarketplacePackage,
+  installType: InstallationType,
+): InstallResult {
+  const message = 'Marketplace package changed after approval; review a fresh proposal';
+  return {
+    success: false,
+    packageId: pkg.id,
+    packageName: pkg.name,
+    installType,
+    installPath: pkg.waggle_install_path,
+    message,
+    errors: [message],
+    errorCode: 'PACKAGE_IDENTITY_CHANGED',
+  };
+}
+
+function isPluginRegistryPath(candidate: string): boolean {
+  // Reserve the same namespace on every platform; Windows aliases path casing.
+  return resolve(candidate).toLowerCase() === resolve(REGISTRY_PATH).toLowerCase();
+}
+
 // UX-Refactor Phase 4 (C4): the sidecar boot loader reads <dataDir>/.mcp.json
 // (dataDir = WAGGLE_DATA_DIR or ~/.waggle — see server local/mcp-config.ts).
 // This previously wrote to process.cwd(), a file nothing ever read.
@@ -57,6 +98,7 @@ interface McpConfigEntry {
   command: string;
   args: string[];
   env?: Record<string, string>;
+  provenance?: MarketplaceMcpProvenance;
 }
 
 /** Shape of the `.mcp.json` config file we read/write. */
@@ -78,6 +120,96 @@ export class MarketplaceInstaller {
     this.ensureDirectories();
   }
 
+  static configureMcpServer(
+    source: McpServerConfig,
+    settings?: Record<string, string>,
+  ): McpServerConfig {
+    return configureMarketplaceMcpServer(source, settings);
+  }
+
+  static mcpProvenanceMatches(
+    actual: MarketplaceMcpProvenance,
+    expected: MarketplaceMcpProvenance,
+  ): boolean {
+    return actual.kind === expected.kind
+      && actual.schemaVersion === expected.schemaVersion
+      && actual.sourceName === expected.sourceName
+      && actual.packageName === expected.packageName
+      && actual.packageVersion === expected.packageVersion
+      && actual.npmPackage === expected.npmPackage
+      && actual.profileDigest === expected.profileDigest;
+  }
+
+  static createApprovalIdentity(
+    pkg: MarketplacePackage,
+    scan: ScanResult,
+  ): MarketplaceApprovalIdentity {
+    const digest = (value: unknown): `sha256:${string}` => `sha256:${createHash('sha256')
+      .update(stableJson(value))
+      .digest('hex')}`;
+    const riskSnapshot = {
+      status: scan.overall_severity,
+      score: scan.security_score,
+      blocked: scan.blocked,
+      contentHash: scan.content_hash,
+      engines: scan.engines_used,
+      findings: scan.findings,
+    };
+    return {
+      schemaVersion: 1,
+      packageId: pkg.id,
+      sourceId: pkg.source_id,
+      name: pkg.name,
+      publisher: pkg.author,
+      version: pkg.version,
+      installType: pkg.waggle_install_type,
+      manifestDigest: digest(pkg.install_manifest ?? null),
+      riskStatus: scan.overall_severity,
+      riskScore: scan.security_score,
+      riskContentHash: scan.content_hash,
+      riskBlocked: scan.blocked,
+      riskDigest: digest(riskSnapshot),
+    };
+  }
+
+  private static approvalPackageMatches(
+    pkg: MarketplacePackage,
+    requestedPackageId: number,
+    expected: MarketplaceApprovalIdentity,
+  ): boolean {
+    const digest = `sha256:${createHash('sha256')
+      .update(stableJson(pkg.install_manifest ?? null))
+      .digest('hex')}`;
+    return expected.schemaVersion === 1
+      && requestedPackageId === expected.packageId
+      && pkg.id === expected.packageId
+      && pkg.source_id === expected.sourceId
+      && pkg.name === expected.name
+      && pkg.author === expected.publisher
+      && pkg.version === expected.version
+      && pkg.waggle_install_type === expected.installType
+      && digest === expected.manifestDigest;
+  }
+
+  private static approvalIdentityMatches(
+    actual: MarketplaceApprovalIdentity,
+    expected: MarketplaceApprovalIdentity,
+  ): boolean {
+    return actual.schemaVersion === expected.schemaVersion
+      && actual.packageId === expected.packageId
+      && actual.sourceId === expected.sourceId
+      && actual.name === expected.name
+      && actual.publisher === expected.publisher
+      && actual.version === expected.version
+      && actual.installType === expected.installType
+      && actual.manifestDigest === expected.manifestDigest
+      && actual.riskStatus === expected.riskStatus
+      && actual.riskScore === expected.riskScore
+      && actual.riskContentHash === expected.riskContentHash
+      && actual.riskBlocked === expected.riskBlocked
+      && actual.riskDigest === expected.riskDigest;
+  }
+
   // ─── Public API ───────────────────────────────────────────────────
 
   /**
@@ -97,8 +229,108 @@ export class MarketplaceInstaller {
       };
     }
 
+    const installType = pkg.waggle_install_type as InstallationType;
+    const approvalIdentity = request.expectedApprovalIdentity;
+    if (approvalIdentity && !MarketplaceInstaller.approvalPackageMatches(
+      pkg,
+      request.packageId,
+      approvalIdentity,
+    )) {
+      return identityChangedResult(pkg, installType);
+    }
+    if (request.expectedInstallType && installType !== request.expectedInstallType) {
+      const error = `Expected ${request.expectedInstallType} package but installer loaded ${installType}`;
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: error,
+        errors: [error],
+      };
+    }
+    if (request.installPath !== undefined) {
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: request.installPath,
+        message: 'Custom install paths are not supported. Marketplace packages install only to Waggle-managed destinations.',
+        errors: ['Custom install paths are not supported'],
+      };
+    }
+
+    try {
+      assertSafeMarketplaceInstallManifest(
+        installType,
+        pkg.install_manifest as InstallManifest | null,
+      );
+    } catch (err) {
+      const error = (err as Error).message;
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: `Rejected marketplace manifest: ${error}`,
+        errors: [error],
+      };
+    }
+
+    let mcpProvenance: MarketplaceMcpProvenance | undefined;
+    if (installType === 'mcp') {
+      const manifest = pkg.install_manifest as InstallManifest;
+      try {
+        mcpProvenance = createMarketplaceMcpProvenance(
+          this.db.getSource(pkg.source_id),
+          { name: pkg.name, version: pkg.version },
+          manifest.mcp_config!,
+        );
+      } catch (err) {
+        const provenanceError = (err as Error).message;
+        const identityChanged = request.expectedMcpProvenance !== undefined;
+        const error = identityChanged
+          ? 'Marketplace MCP package changed during installation; retry from the refreshed catalog'
+          : provenanceError;
+        return {
+          success: false,
+          packageId: pkg.id,
+          packageName: pkg.name,
+          installType,
+          installPath: pkg.waggle_install_path,
+          message: identityChanged ? error : `Rejected marketplace MCP provenance: ${error}`,
+          errors: [identityChanged ? `${error}: ${provenanceError}` : error],
+          ...(identityChanged && { errorCode: 'PACKAGE_IDENTITY_CHANGED' as const }),
+        };
+      }
+    }
+
+    if (
+      request.expectedMcpProvenance
+      && (!mcpProvenance || !MarketplaceInstaller.mcpProvenanceMatches(
+        mcpProvenance,
+        request.expectedMcpProvenance,
+      ))
+    ) {
+      const error = 'Marketplace MCP package changed during installation; retry from the refreshed catalog';
+      return {
+        success: false,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: error,
+        errors: [error],
+        errorCode: 'PACKAGE_IDENTITY_CHANGED',
+      };
+    }
+
     // Check if already installed
-    if (!request.force && this.db.isInstalled(pkg.id)) {
+    const wasInstalled = this.db.isInstalled(pkg.id);
+    if (installType !== 'mcp' && !request.force && wasInstalled && !approvalIdentity) {
       return {
         success: true,
         packageId: pkg.id,
@@ -119,7 +351,25 @@ export class MarketplaceInstaller {
     }
 
     const scanResult = await this.security.scan(pkg, contentToScan);
+    if (approvalIdentity) {
+      const currentIdentity = MarketplaceInstaller.createApprovalIdentity(pkg, scanResult);
+      if (!MarketplaceInstaller.approvalIdentityMatches(currentIdentity, approvalIdentity)) {
+        return identityChangedResult(pkg, installType);
+      }
+    }
     this.recordScanResult(pkg.id, scanResult);
+
+    if (installType !== 'mcp' && !request.force && wasInstalled) {
+      return {
+        success: true,
+        packageId: pkg.id,
+        packageName: pkg.name,
+        installType,
+        installPath: pkg.waggle_install_path,
+        message: `${pkg.display_name} is already installed. Use force=true to reinstall.`,
+        scanResult,
+      };
+    }
 
     if (scanResult.blocked && !request.forceInsecure) {
       return {
@@ -136,18 +386,17 @@ export class MarketplaceInstaller {
     // ─── END SECURITY GATE ─────────────────────────────────────
 
     // Dispatch to type-specific installer
-    const installType = pkg.waggle_install_type as InstallationType;
     let result: InstallResult;
 
     switch (installType) {
       case 'skill':
-        result = await this.installSkill(pkg, request);
+        result = await this.installSkill(pkg, request, contentToScan);
         break;
       case 'plugin':
         result = await this.installPlugin(pkg, request);
         break;
       case 'mcp':
-        result = await this.installMcp(pkg, request);
+        result = await this.installMcp(pkg, request, mcpProvenance!);
         break;
       default:
         result = {
@@ -170,12 +419,14 @@ export class MarketplaceInstaller {
       const settingKeys = Object.fromEntries(
         Object.keys(request.settings ?? {}).map((k) => [k, '[redacted]']),
       );
-      this.db.recordInstallation(
-        pkg.id,
-        pkg.version,
-        result.installPath,
-        settingKeys,
-      );
+      if (!(installType === 'mcp' && wasInstalled)) {
+        this.db.recordInstallation(
+          pkg.id,
+          pkg.version,
+          result.installPath,
+          settingKeys,
+        );
+      }
       // Attach scan result to install result
       result.scanResult = scanResult;
     }
@@ -311,28 +562,23 @@ export class MarketplaceInstaller {
 
   // ─── Skill Installation ───────────────────────────────────────────
 
-  private async installSkill(pkg: MarketplacePackage, request: InstallRequest): Promise<InstallResult> {
+  private async installSkill(
+    pkg: MarketplacePackage,
+    request: InstallRequest,
+    scannedContent: string | undefined,
+  ): Promise<InstallResult> {
     const skillName = pkg.name;
-    const installPath = request.installPath || join(SKILLS_DIR, `${skillName}.md`);
-    const manifest = pkg.install_manifest as InstallManifest | null;
+    let installPath = request.installPath || '';
 
     try {
-      let content: string;
-
-      if (manifest?.skill_content) {
-        // Inline content from database
-        content = manifest.skill_content;
-      } else if (manifest?.skill_url) {
-        // Fetch from URL (GitHub raw, ClawHub API, etc.)
-        content = await this.fetchContent(manifest.skill_url);
-      } else if (pkg.repository_url) {
-        // Try to fetch SKILL.md from repository
-        const rawUrl = this.githubRawUrl(pkg.repository_url, 'SKILL.md');
-        content = await this.fetchContent(rawUrl);
-      } else {
-        // Generate a stub skill file from package metadata
-        content = this.generateSkillStub(pkg);
+      installPath = resolveManagedInstallPath(SKILLS_DIR, request.installPath || `${skillName}.md`);
+      if (existsSync(installPath) && !request.force) {
+        throw new Error(`Skill destination already exists: ${installPath}`);
       }
+      if (scannedContent === undefined) {
+        throw new Error('Unable to resolve the exact skill content for security scanning.');
+      }
+      const content = scannedContent;
 
       // Ensure skills directory exists
       mkdirSync(dirname(installPath), { recursive: true });
@@ -371,56 +617,42 @@ export class MarketplaceInstaller {
 
   private async installPlugin(pkg: MarketplacePackage, request: InstallRequest): Promise<InstallResult> {
     const pluginName = pkg.name;
-    const pluginDir = request.installPath || join(PLUGINS_DIR, pluginName);
+    let pluginDir = '';
+    let createdPluginDir = false;
     const manifest = pkg.install_manifest as InstallManifest | null;
 
     try {
-      mkdirSync(pluginDir, { recursive: true });
-
-      // Step 1: Clone repo, install npm package, or create from metadata
-      if (manifest?.git_url) {
-        execSync(`git clone --depth 1 ${manifest.git_url} ${pluginDir}`, {
-          stdio: 'pipe',
-          timeout: 60_000,
-        });
-      } else if (manifest?.npm_package) {
-        // Install npm package into plugin directory
-        try {
-          writeFileSync(join(pluginDir, 'package.json'), JSON.stringify({ name: pluginName, private: true }), 'utf-8');
-          execSync(`npm install ${manifest.npm_package} --save`, {
-            cwd: pluginDir,
-            stdio: 'pipe',
-            timeout: 120_000,
-          });
-        } catch {
-          // npm install failed — continue with metadata-only plugin
+      pluginDir = resolveManagedInstallPath(PLUGINS_DIR, request.installPath || pluginName);
+      if (isPluginRegistryPath(pluginDir)) {
+        throw new Error('Plugin destination conflicts with the marketplace registry');
+      }
+      if (existsSync(pluginDir)) {
+        if (!request.force) {
+          throw new Error(`Plugin destination already exists: ${pluginDir}`);
         }
+      } else {
+        mkdirSync(pluginDir, { recursive: true });
+        createdPluginDir = true;
       }
 
-      // Step 2: Write plugin.json
-      const pluginManifest: PluginManifest = manifest?.plugin_manifest || {
+      // Step 1: Write plugin.json from preflight-validated metadata.
+      const sourcePluginManifest: PluginManifest = manifest?.plugin_manifest || {
         name: pluginName,
         version: pkg.version,
         description: pkg.description,
         skills: [],
         mcpServers: [],
       };
-
-      // Apply user settings to the manifest
-      if (request.settings && pluginManifest.settingsSchema) {
-        for (const [key, value] of Object.entries(request.settings)) {
-          // Inject settings into MCP server env vars
-          pluginManifest.mcpServers?.forEach(server => {
-            if (server.env) {
-              for (const envKey of Object.keys(server.env)) {
-                if (server.env[envKey] === `\${${key}}`) {
-                  server.env[envKey] = value;
-                }
-              }
-            }
-          });
-        }
-      }
+      const pluginSettings = sourcePluginManifest.settingsSchema ? request.settings : undefined;
+      const pluginManifest: PluginManifest = {
+        ...sourcePluginManifest,
+        ...(sourcePluginManifest.skills && { skills: [...sourcePluginManifest.skills] }),
+        ...(sourcePluginManifest.mcpServers && {
+          mcpServers: sourcePluginManifest.mcpServers.map(server => (
+            configureMarketplaceMcpServer(server, pluginSettings)
+          )),
+        }),
+      };
 
       writeFileSync(
         join(pluginDir, 'plugin.json'),
@@ -428,38 +660,10 @@ export class MarketplaceInstaller {
         'utf-8',
       );
 
-      // Step 3: Install bundled skills
-      if (pluginManifest.skills && pluginManifest.skills.length > 0) {
-        const skillsDir = join(pluginDir, 'skills');
-        mkdirSync(skillsDir, { recursive: true });
-
-        for (const skillName of pluginManifest.skills) {
-          const skillPath = join(skillsDir, `${skillName}.md`);
-          if (!existsSync(skillPath)) {
-            // Try to find the skill in marketplace and install it into the plugin
-            const skillPkg = this.db.getPackageByName(skillName);
-            if (skillPkg?.install_manifest) {
-              const skillManifest = skillPkg.install_manifest as InstallManifest;
-              if (skillManifest.skill_url) {
-                const content = await this.fetchContent(skillManifest.skill_url);
-                writeFileSync(skillPath, content, 'utf-8');
-              }
-            }
-          }
-        }
-      }
-
-      // Step 4: Update registry.json
+      // Step 2: Update registry.json
       this.updatePluginRegistry(pluginName, pluginManifest);
 
-      // Step 5: Run post-install hooks
-      if (manifest?.post_install) {
-        for (const hook of manifest.post_install) {
-          await this.runPostInstallHook(hook, pluginDir);
-        }
-      }
-
-      // Step 6: Notify server
+      // Step 3: Notify server
       await this.notifyServer('POST', '/api/plugins/install', {
         path: pluginDir,
       });
@@ -474,7 +678,7 @@ export class MarketplaceInstaller {
       };
     } catch (err) {
       // Clean up on failure
-      if (existsSync(pluginDir)) {
+      if (createdPluginDir && pluginDir && existsSync(pluginDir)) {
         rmSync(pluginDir, { recursive: true, force: true });
       }
       return {
@@ -491,7 +695,11 @@ export class MarketplaceInstaller {
 
   // ─── MCP Server Installation ──────────────────────────────────────
 
-  private async installMcp(pkg: MarketplacePackage, request: InstallRequest): Promise<InstallResult> {
+  private async installMcp(
+    pkg: MarketplacePackage,
+    request: InstallRequest,
+    provenance: MarketplaceMcpProvenance,
+  ): Promise<InstallResult> {
     const manifest = pkg.install_manifest as InstallManifest | null;
     const mcpConfig = manifest?.mcp_config;
 
@@ -508,29 +716,15 @@ export class MarketplaceInstaller {
     }
 
     try {
-      // Step 1: Install npm package if needed
-      if (manifest?.npm_package) {
-        const args = manifest.npm_args?.join(' ') || '';
-        execSync(`npm install -g ${manifest.npm_package} ${args}`, {
-          stdio: 'pipe',
-          timeout: 120_000,
-        });
-      }
+      assertSafeMarketplaceMcpConfig(mcpConfig);
 
-      // Step 2: Apply user settings to env vars
-      const serverConfig = { ...mcpConfig };
-      if (request.settings && serverConfig.env) {
-        for (const [key, value] of Object.entries(request.settings)) {
-          for (const envKey of Object.keys(serverConfig.env)) {
-            if (serverConfig.env[envKey] === `\${${key}}` || serverConfig.env[envKey] === '') {
-              serverConfig.env[envKey] = value;
-            }
-          }
-        }
-      }
+      // Step 1: Apply user settings to the exact matching env vars. npx/uvx
+      // resolves the curated package when the MCP process starts; installation
+      // must not execute package lifecycle scripts.
+      const serverConfig = configureMarketplaceMcpServer(mcpConfig, request.settings);
 
-      // Step 3: Update .mcp.json
-      this.updateMcpConfig(serverConfig);
+      // Step 2: Update .mcp.json
+      this.updateMcpConfig(serverConfig, mcpConfig, request.settings, provenance);
 
       return {
         success: true,
@@ -539,6 +733,13 @@ export class MarketplaceInstaller {
         installType: 'mcp',
         installPath: mcpConfigPath(),
         message: `MCP server "${pkg.display_name}" added to ${mcpConfigPath()}`,
+        mcpSourceConfig: {
+          name: mcpConfig.name,
+          command: mcpConfig.command,
+          args: [...mcpConfig.args],
+          ...(mcpConfig.env && { env: { ...mcpConfig.env } }),
+        },
+        mcpProvenance: provenance,
       };
     } catch (err) {
       return {
@@ -556,7 +757,7 @@ export class MarketplaceInstaller {
   // ─── Uninstallation ───────────────────────────────────────────────
 
   private async uninstallSkill(pkg: MarketplacePackage): Promise<void> {
-    const skillPath = join(SKILLS_DIR, `${pkg.name}.md`);
+    const skillPath = resolveManagedInstallPath(SKILLS_DIR, `${pkg.name}.md`);
     if (existsSync(skillPath)) {
       rmSync(skillPath);
     }
@@ -564,7 +765,7 @@ export class MarketplaceInstaller {
   }
 
   private async uninstallPlugin(pkg: MarketplacePackage): Promise<void> {
-    const pluginDir = join(PLUGINS_DIR, pkg.name);
+    const pluginDir = resolveManagedInstallPath(PLUGINS_DIR, pkg.name);
     if (existsSync(pluginDir)) {
       rmSync(pluginDir, { recursive: true, force: true });
     }
@@ -597,20 +798,21 @@ export class MarketplaceInstaller {
     }
 
     if (pkg.waggle_install_type === 'mcp') {
-      // For MCPs, "content" is the config + description for scanning
       return JSON.stringify({
-        name: manifest?.mcp_config?.name || pkg.name,
+        name: pkg.name,
         description: pkg.description,
-        args: manifest?.mcp_config?.args || [],
-        env: manifest?.mcp_config?.env || {},
+        install_type: pkg.waggle_install_type,
+        install_manifest: manifest,
       });
     }
 
     if (pkg.waggle_install_type === 'plugin') {
-      // For plugins, return the manifest as content
-      if (manifest?.plugin_manifest) {
-        return JSON.stringify(manifest.plugin_manifest);
-      }
+      return JSON.stringify({
+        name: pkg.name,
+        description: pkg.description,
+        install_type: pkg.waggle_install_type,
+        install_manifest: manifest,
+      });
     }
 
     return undefined;
@@ -728,7 +930,13 @@ This skill was installed from the marketplace. Configure or extend it as needed 
     writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2), 'utf-8');
   }
 
-  private updateMcpConfig(serverConfig: McpServerConfig): void {
+  private updateMcpConfig(
+    serverConfig: McpServerConfig,
+    sourceConfig: McpServerConfig,
+    settings: Record<string, string> | undefined,
+    provenance: MarketplaceMcpProvenance,
+  ): void {
+    assertSafeConfiguredMarketplaceMcpConfig(serverConfig, sourceConfig, settings);
     let mcpJson: McpConfigFile = { mcpServers: {} };
     if (existsSync(mcpConfigPath())) {
       mcpJson = JSON.parse(readFileSync(mcpConfigPath(), 'utf-8')) as McpConfigFile;
@@ -737,6 +945,7 @@ This skill was installed from the marketplace. Configure or extend it as needed 
       command: serverConfig.command,
       args: serverConfig.args,
       ...(serverConfig.env && { env: serverConfig.env }),
+      provenance,
     };
     writeFileSync(mcpConfigPath(), JSON.stringify(mcpJson, null, 2), 'utf-8');
   }
@@ -746,26 +955,6 @@ This skill was installed from the marketplace. Configure or extend it as needed 
     const mcpJson = JSON.parse(readFileSync(mcpConfigPath(), 'utf-8')) as McpConfigFile;
     delete mcpJson.mcpServers[serverName];
     writeFileSync(mcpConfigPath(), JSON.stringify(mcpJson, null, 2), 'utf-8');
-  }
-
-  private async runPostInstallHook(hook: PostInstallHook, cwd: string): Promise<void> {
-    switch (hook.type) {
-      case 'run_command':
-        if (hook.command) {
-          execSync(hook.command, { cwd, stdio: 'pipe', timeout: 30_000 });
-        }
-        break;
-      case 'create_file':
-        if (hook.path && hook.content) {
-          const fullPath = join(cwd, hook.path);
-          mkdirSync(dirname(fullPath), { recursive: true });
-          writeFileSync(fullPath, hook.content, 'utf-8');
-        }
-        break;
-      case 'append_config':
-        // Append to workspace config
-        break;
-    }
   }
 
   private async notifyServer(method: string, path: string, body?: unknown): Promise<void> {

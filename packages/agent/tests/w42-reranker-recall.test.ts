@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { MindDB, type Reranker } from '@waggle/core';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createInProcessReranker, MindDB, type Reranker } from '@waggle/core';
 import { Orchestrator } from '../src/orchestrator.js';
 import { MockEmbedder } from '../../hive-mind-core/tests/mind/helpers/mock-embedder.js';
+
+vi.mock('@waggle/core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@waggle/core')>(),
+  createInProcessReranker: vi.fn(),
+}));
 
 /**
  * W4.2 — reranker wiring in recallMemory (W4-PRODUCTION-PORT-PLAN §5 W4.2).
@@ -19,6 +24,8 @@ describe('W4.2 — recallMemory reranker wiring', () => {
 
   afterEach(() => {
     db.close();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   function markerReranker(marker: string, calls: { n: number }): Reranker {
@@ -28,6 +35,27 @@ describe('W4.2 — recallMemory reranker wiring', () => {
       scoreBatch: async (_q, docs) => { calls.n++; return docs.map(scoreOf); },
     };
   }
+
+  it('skips embedding and lazy reranker startup when both minds are empty', async () => {
+    vi.stubEnv('WAGGLE_RERANKER', '1');
+    const embedder = new MockEmbedder();
+    const embedSpy = vi.spyOn(embedder, 'embed');
+    const embedBatchSpy = vi.spyOn(embedder, 'embedBatch');
+    const workspaceDb = new MindDB(':memory:');
+    const orchestrator = new Orchestrator({ db, embedder });
+    orchestrator.setWorkspaceMind(workspaceDb);
+
+    try {
+      const result = await orchestrator.recallMemory('weekly report');
+
+      expect(result).toEqual({ text: '', count: 0, recalled: [], recalledFrames: [] });
+      expect(createInProcessReranker).not.toHaveBeenCalled();
+      expect(embedSpy).not.toHaveBeenCalled();
+      expect(embedBatchSpy).not.toHaveBeenCalled();
+    } finally {
+      workspaceDb.close();
+    }
+  });
 
   it('uses an injected reranker to order recall results', async () => {
     const calls = { n: 0 };
@@ -65,5 +93,25 @@ describe('W4.2 — recallMemory reranker wiring', () => {
     // Must not attempt the ~22MB model load — recall just works RRF-only.
     const result = await orchestrator.recallMemory('weekly report');
     expect(result.count).toBeGreaterThan(0);
+  });
+
+  it('passes the managed cache directory to the lazy reranker factory', async () => {
+    vi.stubEnv('WAGGLE_RERANKER', '1');
+    const calls = { n: 0 };
+    vi.mocked(createInProcessReranker).mockResolvedValueOnce(markerReranker('Fridays', calls));
+    const rerankerCacheDir = 'C:\\Waggle\\models\\reranker';
+    const orchestrator = new Orchestrator({
+      db,
+      embedder: new MockEmbedder(),
+      rerankerCacheDir,
+    });
+    await orchestrator.executeTool('save_memory', {
+      content: 'User preference: weekly report goes out on Fridays',
+      importance: 'normal',
+    });
+
+    await orchestrator.recallMemory('weekly report');
+
+    expect(createInProcessReranker).toHaveBeenCalledWith({ cacheDir: rerankerCacheDir });
   });
 });

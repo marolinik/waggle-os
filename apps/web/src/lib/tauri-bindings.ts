@@ -313,6 +313,90 @@ export function resetFirstLaunch(): Promise<void> {
 
 // Desktop shell events
 
+export interface DesktopServiceEndpoint {
+  port: number;
+  instanceId: string;
+  /** Per-launch secret delivered only through Tauri IPC. */
+  bootstrapToken?: string;
+}
+
+export type DesktopServiceLifecycleEvent =
+  | { status: 'restarting' }
+  | { status: 'ready'; endpoint: DesktopServiceEndpoint }
+  | { status: 'failed'; error?: string };
+
+function parseDesktopServiceEndpoint(value: unknown): DesktopServiceEndpoint | null {
+  const record = recordPayload(value);
+  const port = record?.port;
+  const instanceId = record?.instanceId;
+  const bootstrapToken = record?.bootstrapToken;
+  return Number.isInteger(port) && (port as number) > 0 && (port as number) <= 65535
+    && typeof instanceId === 'string' && instanceId.trim().length > 0
+    ? {
+        port: port as number,
+        instanceId,
+        ...(typeof bootstrapToken === 'string'
+          && bootstrapToken.length >= 32
+          && bootstrapToken.length <= 200
+          ? { bootstrapToken }
+          : {}),
+      }
+    : null;
+}
+
+export async function ensureDesktopService(): Promise<DesktopServiceEndpoint> {
+  if (!isTauri()) throw new Error('Desktop service IPC is unavailable outside Tauri');
+  const endpoint = parseDesktopServiceEndpoint(await invoke<unknown>('ensure_service'));
+  if (!endpoint) throw new Error('Tauri returned an invalid desktop service endpoint');
+  return endpoint;
+}
+
+export async function listenDesktopServiceLifecycle(
+  onEvent: (event: DesktopServiceLifecycleEvent) => void,
+): Promise<UnlistenFn> {
+  let restartPending = false;
+  const emitRestarting = () => {
+    if (restartPending) return;
+    restartPending = true;
+    onEvent({ status: 'restarting' });
+  };
+  const statusListener = listen<unknown>('waggle://service-status', (event) => {
+    const payload = recordPayload(event.payload);
+    if (payload?.status === 'restarting') {
+      emitRestarting();
+    } else if (payload?.status === 'failed') {
+      restartPending = false;
+      onEvent({ status: 'failed' });
+    } else if (payload?.status === 'ready') {
+      restartPending = false;
+      const endpoint = parseDesktopServiceEndpoint(payload.endpoint);
+      onEvent(endpoint
+        ? { status: 'ready', endpoint }
+        : { status: 'failed', error: 'Tauri emitted an invalid desktop service endpoint' });
+    }
+  });
+  const restartListener = listen<unknown>('waggle://service-restart-needed', () => {
+    emitRestarting();
+  });
+
+  const [statusResult, restartResult] = await Promise.allSettled([
+    statusListener,
+    restartListener,
+  ]);
+  if (statusResult.status === 'rejected') {
+    if (restartResult.status === 'fulfilled') restartResult.value();
+    throw statusResult.reason;
+  }
+  if (restartResult.status === 'rejected') {
+    statusResult.value();
+    throw restartResult.reason;
+  }
+  return () => {
+    statusResult.value();
+    restartResult.value();
+  };
+}
+
 export type DesktopNavigationPath = '/settings';
 
 const DESKTOP_NAVIGATION_PATHS = new Set<DesktopNavigationPath>(['/settings']);
@@ -402,7 +486,7 @@ export function describeDesktopShellNotice(
 export async function listenDesktopShellEvents(
   onNotice: (notice: DesktopShellNotice) => void,
 ): Promise<UnlistenFn> {
-  const unlisteners = await Promise.all(
+  const listenerResults = await Promise.allSettled(
     DESKTOP_SHELL_EVENTS.map((eventName) =>
       listen<unknown>(eventName, (event) => {
         const notice = describeDesktopShellNotice(eventName, event.payload);
@@ -412,6 +496,21 @@ export async function listenDesktopShellEvents(
       }),
     ),
   );
+  const unlisteners: UnlistenFn[] = [];
+  let registrationError: PromiseRejectedResult | undefined;
+  for (const result of listenerResults) {
+    if (result.status === 'fulfilled') {
+      unlisteners.push(result.value);
+    } else if (!registrationError) {
+      registrationError = result;
+    }
+  }
+  if (registrationError) {
+    for (const unlisten of unlisteners) {
+      unlisten();
+    }
+    throw registrationError.reason;
+  }
 
   return () => {
     for (const unlisten of unlisteners) {

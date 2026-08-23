@@ -11,9 +11,9 @@
  *       message: "Backend is offline. Connect to a Waggle server to start chatting."
  *
  *   (b) the body simply ENDS without a `done` event → the reader yields
- *       done=true, the while loop at adapter.ts:360 exits, sendMessage()
- *       returns normally, and no error is shown but the partial tokens that DID
- *       arrive remain rendered (graceful truncation, no crash/hang).
+ *       done=true, useChat rejects the non-terminal stream, clears the
+ *       uncommitted token draft, and renders a retryable incomplete-response
+ *       error (fail closed, no crash/hang).
  *
  * The client does NOT auto-retry (by design). These tests assert the RECOVERY /
  * ERROR contract for both shapes, plus that a user can re-send after a drop and
@@ -122,9 +122,9 @@ test('chat SSE connection dropped → shows offline error, does not hang or cras
   await expect(input).toBeVisible();
 });
 
-// ── Test 2 · Mid-stream truncation (token then close) → token kept, no crash ──
+// ── Test 2 · Mid-stream truncation → draft rejected, retry offered, no crash ──
 
-test('chat SSE truncated after one token → partial token rendered, no hang or crash', async ({ page }) => {
+test('chat SSE truncated after one token → incomplete draft rejected, retryable error shown', async ({ page }) => {
   await gotoDesktop(page);
   const input = await openChatInput(page);
 
@@ -142,12 +142,15 @@ test('chat SSE truncated after one token → partial token rendered, no hang or 
   await input.fill('trigger a truncated stream');
   await input.press('Enter');
 
-  // (1) The token that arrived before the drop must be rendered (proves the drop
-  // happened mid-token, not before any data).
-  await expect(page.locator('text=MIDSTREAM_TOKEN_PROBE').first()).toBeVisible({ timeout: 15_000 });
+  // A stream without a terminal event is not authoritative. The client must
+  // discard the token draft and expose a visible, actionable retry state.
+  const incompleteError = page.getByText(/response ended before completion/i);
+  await expect(incompleteError.first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: 'Retry' }).first()).toBeVisible();
+  await expect(page.locator('text=MIDSTREAM_TOKEN_PROBE')).toHaveCount(0);
 
-  // (3) No hang: reader hit done=true, sendMessage() returned, loading cleared —
-  // the composer is editable again.
+  // No hang: the incomplete-stream failure settles and clears loading, so the
+  // composer is editable again.
   await expect(input).toBeEditable({ timeout: 10_000 });
 
   // (3b) No crash, no infinite loop: desktop + input still present.

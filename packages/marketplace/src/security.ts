@@ -629,7 +629,9 @@ export class SecurityGate {
         const descToScan = [
           mcpConfig.name,
           pkg.description,
+          mcpConfig.command,
           ...(mcpConfig.args || []),
+          ...Object.entries(mcpConfig.env || {}).flatMap(([key, value]) => [key, value]),
         ].join(' ');
 
         const result = guardian.scanToolDescription(mcpConfig.name, descToScan);
@@ -693,7 +695,13 @@ export class SecurityGate {
    */
   private mcpPatternScan(config: McpServerConfig, description: string): SecurityFinding[] {
     const findings: SecurityFinding[] = [];
-    const allText = [config.name, description, ...(config.args || [])].join(' ').toLowerCase();
+    const allText = [
+      config.name,
+      description,
+      config.command,
+      ...(config.args || []),
+      ...Object.entries(config.env || {}).flatMap(([key, value]) => [key, value]),
+    ].join(' ').toLowerCase();
 
     // ── Critical: Cross-tool instructions ──
     const crossToolPatterns = [

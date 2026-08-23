@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { MindDB } from '@waggle/hive-mind-core';
-import { FrameStore } from '@waggle/hive-mind-core';
+import { evaluateExternalMemoryIngress, FrameStore } from '@waggle/hive-mind-core';
 import { SessionStore } from '@waggle/hive-mind-core';
 
 const FILE_INDEX_TABLE_SQL = `
@@ -57,7 +57,7 @@ export interface FileIndexRow {
 }
 
 export type FileIndexResult =
-  | { skipped: true; reason: 'unsupported_format' | 'unchanged' | 'empty' }
+  | { skipped: true; reason: 'unsupported_format' | 'unchanged' | 'empty' | 'unsafe_content' }
   | { skipped: false; frameId: number; truncated: boolean };
 
 export class FileIndexer {
@@ -121,13 +121,21 @@ export class FileIndexer {
       | Record<string, unknown>
       | undefined;
 
-    if (existingRow && existingRow.content_hash === hash) {
-      return { skipped: true, reason: 'unchanged' };
-    }
-
     const normalized = this.normalizeText(content);
     const truncated = content.length > MAX_CONTENT_BYTES;
     const frameBody = this.buildFrameContent(filePath, normalized, truncated, mime);
+    if (evaluateExternalMemoryIngress({ content: frameBody }).action === 'block') {
+      // An unchanged row may pre-date this guard. Remove that already-indexed
+      // unsafe projection atomically; on a new unsafe overwrite, retain the
+      // prior benign index while the file write itself remains successful.
+      if (existingRow && existingRow.content_hash === hash) {
+        raw.transaction(() => this.removeFile(filePath))();
+      }
+      return { skipped: true, reason: 'unsafe_content' };
+    }
+    if (existingRow && existingRow.content_hash === hash) {
+      return { skipped: true, reason: 'unchanged' };
+    }
     const gopId = this.ensureSession();
     // Atomicity contract (L-20 BLOCKER-1 fix): createIFrame → (conditional
     // old-frame delete) → UPDATE/INSERT on file_index must commit as one unit.

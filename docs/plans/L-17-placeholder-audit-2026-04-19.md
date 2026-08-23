@@ -5,14 +5,12 @@ HTML `placeholder="..."` attributes).
 
 Grep pattern: `// (MOCK|TODO|FIXME|XXX):` or the `/* … */` equivalent.
 
-Current count: **6** lines (revision history below). All 6 are intentional
-subtree-split STUB markers in the `hive-mind-hooks-*` packages introduced
-by the Phase 2 consolidation merge of `feature/hive-mind-monorepo-migration`
-(2026-05-10). They flag hook implementations awaiting Wave 2/3 work; they
-are load-bearing for both waggle-os main and the public hive-mind repo
-subtree-split. Zero new production code may introduce a marker without
-updating `tests/placeholder-audit.test.ts` and this document in the same
-commit.
+Current count: **0** production-path marker lines. The prior hook stub markers
+were removed as the Wave 2/3 implementations landed. Zero new production code
+may introduce a marker without updating `tests/placeholder-audit.test.ts` and
+this document in the same commit.
+
+Revision 2026-07-16: 6 -> 0 after the hook implementations were completed.
 
 **Revision history:**
 - 2026-04-19: 14 → 10 (initial L-17 audit + C2/C3/C4/C5 cleanup)

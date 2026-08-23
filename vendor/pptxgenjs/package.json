@@ -1,0 +1,24 @@
+{
+  "name": "pptxgenjs",
+  "version": "4.0.1-waggle.0",
+  "description": "Waggle-vendored PptxGenJS runtime with image inputs disabled at the tool boundary",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist/pptxgen.cjs.js",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./dist/pptxgen.cjs.js",
+      "require": "./dist/pptxgen.cjs.js"
+    }
+  },
+  "types": "types/index.d.ts",
+  "files": [
+    "dist/pptxgen.cjs.js",
+    "types/index.d.ts",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}

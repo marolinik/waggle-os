@@ -1,16 +1,35 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { Queue } from 'bullmq';
 import { buildServer } from '../src/index.js';
 import { users, teams, teamMembers, cronSchedules, agentJobs } from '../src/db/schema.js';
 import { sql, eq } from 'drizzle-orm';
 import { CronRunner } from '../src/scheduler/cron-runner.js';
+import { CronService } from '../src/services/cron-service.js';
+import { JobService } from '../src/services/job-service.js';
+
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  message: string,
+  timeoutMs = 1_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  throw new Error(message);
+}
 
 describe('Cron Scheduler (Task 3.16)', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
   let ownerId: string;
   let memberId: string;
+  let attackerId: string;
   let teamSlug: string;
   let teamId: string;
+  let attackerTeamSlug: string;
 
   beforeAll(async () => {
     server = await buildServer();
@@ -40,6 +59,13 @@ describe('Cron Scheduler (Task 3.16)', () => {
     }).returning();
     memberId = member.id;
 
+    const [attacker] = await server.db.insert(users).values({
+      clerkId: 'crontest_attacker',
+      displayName: 'Cron Attacker',
+      email: 'crontest_attacker@test.com',
+    }).returning();
+    attackerId = attacker.id;
+
     // Create team
     const [team] = await server.db.insert(teams).values({
       name: 'Cron Test Team',
@@ -49,9 +75,17 @@ describe('Cron Scheduler (Task 3.16)', () => {
     teamId = team.id;
     teamSlug = team.slug;
 
+    const [attackerTeam] = await server.db.insert(teams).values({
+      name: 'Cron Attacker Team',
+      slug: 'crontest-attacker',
+      ownerId: attackerId,
+    }).returning();
+    attackerTeamSlug = attackerTeam.slug;
+
     await server.db.insert(teamMembers).values([
       { teamId, userId: ownerId, role: 'owner' },
       { teamId, userId: memberId, role: 'member' },
+      { teamId: attackerTeam.id, userId: attackerId, role: 'owner' },
     ]);
 
     // Override auth handler for testing
@@ -126,6 +160,43 @@ describe('Cron Scheduler (Task 3.16)', () => {
     expect(body.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('returns the same not-found response for missing and foreign-team schedule ids without mutation', async () => {
+    const createRes = await server.inject({
+      method: 'POST',
+      url: `/api/teams/${teamSlug}/cron`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: {
+        name: 'Victim Schedule',
+        cronExpr: '15 * * * *',
+        jobType: 'task',
+      },
+    });
+    const schedule = JSON.parse(createRes.body);
+
+    const foreignRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/teams/${attackerTeamSlug}/cron/${schedule.id}`,
+      headers: { 'x-test-user-id': attackerId },
+      payload: { name: 'Hijacked Schedule', enabled: false },
+    });
+    const missingRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/teams/${attackerTeamSlug}/cron/00000000-0000-4000-8000-000000000001`,
+      headers: { 'x-test-user-id': attackerId },
+      payload: { enabled: false },
+    });
+
+    expect(foreignRes.statusCode).toBe(404);
+    expect(foreignRes.json()).toEqual({ error: 'Schedule not found' });
+    expect(missingRes.statusCode).toBe(404);
+    expect(missingRes.json()).toEqual(foreignRes.json());
+
+    const [persisted] = await server.db.select().from(cronSchedules)
+      .where(eq(cronSchedules.id, schedule.id));
+    expect(persisted.name).toBe('Victim Schedule');
+    expect(persisted.enabled).toBe(true);
+  });
+
   it('disables a schedule via PATCH', async () => {
     // Create a schedule to disable
     const createRes = await server.inject({
@@ -151,6 +222,39 @@ describe('Cron Scheduler (Task 3.16)', () => {
     expect(patchRes.statusCode).toBe(200);
     const updated = JSON.parse(patchRes.body);
     expect(updated.enabled).toBe(false);
+  });
+
+  it.each(['cron', 'shell'])('rejects unsupported scheduled job type %s before persistence', async (jobType) => {
+    const name = `Unsupported ${jobType}`;
+    const response = await server.inject({
+      method: 'POST',
+      url: `/api/teams/${teamSlug}/cron`,
+      headers: { 'x-test-user-id': ownerId },
+      payload: {
+        name,
+        cronExpr: '0 4 * * *',
+        jobType,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const schedules = await server.db.select().from(cronSchedules)
+      .where(eq(cronSchedules.teamId, teamId));
+    expect(schedules.some(schedule => schedule.name === name)).toBe(false);
+  });
+
+  it('CronService refuses unsupported job types outside route validation', async () => {
+    const cronService = new CronService(server.db);
+
+    await expect(cronService.create(teamId, ownerId, {
+      name: 'Direct Unsafe Schedule',
+      cronExpr: '0 5 * * *',
+      jobType: 'shell',
+    })).rejects.toThrow('Unsupported scheduled job type: shell');
+
+    const schedules = await server.db.select().from(cronSchedules)
+      .where(eq(cronSchedules.teamId, teamId));
+    expect(schedules.some(schedule => schedule.name === 'Direct Unsafe Schedule')).toBe(false);
   });
 
   it('CronRunner.tick() picks up due schedule and queues job', async () => {
@@ -212,6 +316,270 @@ describe('Cron Scheduler (Task 3.16)', () => {
     expect(new Date(updated.lastRunAt!).getTime()).toBeGreaterThan(pastDate.getTime());
     expect(updated.nextRunAt).toBeTruthy();
     expect(new Date(updated.nextRunAt!).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('runs due schedules through the Fastify lifecycle without a manual tick', async () => {
+    const lifecycleConfig = { port: 0 };
+    const lifecycleServer = await buildServer(lifecycleConfig);
+    const marker = `lifecycle-${Date.now()}`;
+    let scheduleId: string | undefined;
+
+    try {
+      const [schedule] = await lifecycleServer.db.insert(cronSchedules).values({
+        teamId,
+        createdBy: ownerId,
+        name: 'Lifecycle Due Schedule',
+        cronExpr: '* * * * *',
+        jobType: 'task',
+        jobConfig: { marker, prompt: 'Lifecycle cron test' },
+        enabled: true,
+        nextRunAt: new Date(Date.now() - 60_000),
+      }).returning();
+      scheduleId = schedule.id;
+      expect(schedule.lastRunAt).toBeNull();
+
+      await lifecycleServer.ready();
+      await waitFor(async () => {
+        const [persisted] = await lifecycleServer.db.select().from(cronSchedules)
+          .where(eq(cronSchedules.id, schedule.id));
+        return persisted?.lastRunAt !== null;
+      }, 'Fastify lifecycle did not advance the due cron schedule');
+
+      const [advanced] = await lifecycleServer.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, schedule.id));
+      expect(advanced.nextRunAt?.getTime()).toBeGreaterThan(Date.now());
+
+      const jobs = await lifecycleServer.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      expect(jobs.some(job => (job.input as { marker?: string }).marker === marker)).toBe(true);
+    } finally {
+      const jobs = await lifecycleServer.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      for (const job of jobs.filter(item => (item.input as { marker?: string }).marker === marker)) {
+        await lifecycleServer.jobService.cancelJob(job.id);
+      }
+      if (scheduleId) {
+        await lifecycleServer.db.delete(cronSchedules)
+          .where(eq(cronSchedules.id, scheduleId));
+      }
+      await lifecycleServer.close();
+    }
+  });
+
+  it('skips a legacy invalid cron expression before queueing and continues later schedules', async () => {
+    const pastDate = new Date(Date.now() - 60_000);
+    const invalidMarker = `invalid-cron-${Date.now()}`;
+    const validMarker = `valid-after-invalid-${Date.now()}`;
+    const [invalidSchedule] = await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Legacy Invalid Cron',
+      cronExpr: 'not a cron expression',
+      jobType: 'task',
+      jobConfig: { marker: invalidMarker },
+      enabled: true,
+      nextRunAt: pastDate,
+    }).returning();
+    const [validSchedule] = await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Valid After Invalid Cron',
+      cronExpr: '* * * * *',
+      jobType: 'task',
+      jobConfig: { marker: validMarker },
+      enabled: true,
+      nextRunAt: pastDate,
+    }).returning();
+    const errors: unknown[] = [];
+    const runner = new CronRunner(server.db, server.jobService, error => errors.push(error));
+    let validJob: typeof agentJobs.$inferSelect | undefined;
+
+    try {
+      await expect(runner.tick()).resolves.toBe(1);
+      const jobs = await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      expect(jobs.some(job => (job.input as { marker?: string }).marker === invalidMarker)).toBe(false);
+      validJob = jobs.find(job => (job.input as { marker?: string }).marker === validMarker);
+      expect(validJob?.status).toBe('queued');
+      expect(errors).toHaveLength(1);
+
+      const [persistedInvalid] = await server.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, invalidSchedule.id));
+      expect(persistedInvalid.lastRunAt).toBeNull();
+      expect(persistedInvalid.nextRunAt?.getTime()).toBe(pastDate.getTime());
+    } finally {
+      if (validJob) await server.jobService.cancelJob(validJob.id);
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, invalidSchedule.id));
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, validSchedule.id));
+    }
+  });
+
+  it('deduplicates one due occurrence across concurrent runners', async () => {
+    const marker = `concurrent-occurrence-${Date.now()}`;
+    const [schedule] = await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Concurrent Occurrence',
+      cronExpr: '* * * * *',
+      jobType: 'task',
+      jobConfig: { marker },
+      enabled: true,
+      nextRunAt: new Date(Date.now() - 60_000),
+    }).returning();
+
+    const originalCreate = server.jobService.createJob.bind(server.jobService);
+    let arrivals = 0;
+    let release!: () => void;
+    const bothSelected = new Promise<void>(resolve => { release = resolve; });
+    const createSpy = vi.spyOn(server.jobService, 'createJob').mockImplementation(async (...args) => {
+      arrivals++;
+      if (arrivals === 2) release();
+      await bothSelected;
+      return originalCreate(...args);
+    });
+    let jobs: Array<typeof agentJobs.$inferSelect> = [];
+
+    try {
+      const first = new CronRunner(server.db, server.jobService);
+      const second = new CronRunner(server.db, server.jobService);
+      const counts = await Promise.all([first.tick(), second.tick()]);
+
+      jobs = (await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId)))
+        .filter(job => (job.input as { marker?: string }).marker === marker);
+      expect(jobs).toHaveLength(1);
+      expect(counts[0] + counts[1]).toBe(1);
+    } finally {
+      createSpy.mockRestore();
+      for (const job of jobs) await server.jobService.cancelJob(job.id);
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, schedule.id));
+    }
+  });
+
+  it('reuses the same occurrence job after a post-enqueue schedule-update failure', async () => {
+    const marker = `retry-occurrence-${Date.now()}`;
+    const [schedule] = await server.db.insert(cronSchedules).values({
+      teamId,
+      createdBy: ownerId,
+      name: 'Retry Occurrence',
+      cronExpr: '* * * * *',
+      jobType: 'task',
+      jobConfig: { marker },
+      enabled: true,
+      nextRunAt: new Date(Date.now() - 60_000),
+    }).returning();
+    const errors: unknown[] = [];
+    const runner = new CronRunner(server.db, server.jobService, error => errors.push(error));
+    const updateSpy = vi.spyOn(server.db, 'update').mockImplementationOnce(() => {
+      throw new Error('simulated schedule update failure');
+    });
+    let jobs: Array<typeof agentJobs.$inferSelect> = [];
+
+    try {
+      try {
+        expect(await runner.tick()).toBe(0);
+        expect(errors).toHaveLength(1);
+      } finally {
+        updateSpy.mockRestore();
+      }
+
+      expect(await runner.tick()).toBe(1);
+      jobs = (await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId)))
+        .filter(job => (job.input as { marker?: string }).marker === marker);
+      expect(jobs).toHaveLength(1);
+    } finally {
+      for (const job of jobs) await server.jobService.cancelJob(job.id);
+      await server.db.delete(cronSchedules).where(eq(cronSchedules.id, schedule.id));
+    }
+  });
+
+  it('queues the persisted canonical payload when an occurrence retry input differs', async () => {
+    const queueName = `cron-canonical-${Date.now()}`;
+    const redisUrl = new URL(process.env.REDIS_URL ?? 'redis://localhost:6381');
+    const jobService = new JobService(server.db, redisUrl.href, queueName);
+    const queue = new Queue(queueName, {
+      connection: {
+        host: redisUrl.hostname,
+        port: parseInt(redisUrl.port || '6379', 10),
+      },
+    });
+    const jobId = randomUUID();
+
+    try {
+      await jobService.createJob(teamId, ownerId, 'task', { marker: 'canonical' }, jobId);
+      const firstQueueJob = await queue.getJob(jobId);
+      expect(firstQueueJob).toBeTruthy();
+      await firstQueueJob!.remove();
+
+      await jobService.createJob(teamId, ownerId, 'task', { marker: 'conflicting-retry' }, jobId);
+      const [persisted] = await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.id, jobId));
+      const retriedQueueJob = await queue.getJob(jobId);
+
+      expect(persisted.input).toEqual({ marker: 'canonical' });
+      expect(retriedQueueJob?.data.input).toEqual(persisted.input);
+    } finally {
+      const queued = await queue.getJob(jobId);
+      if (queued) await queued.remove();
+      await server.db.delete(agentJobs).where(eq(agentJobs.id, jobId));
+      await queue.close();
+      await jobService.close();
+    }
+  });
+
+  it('skips an unsafe legacy schedule while queueing an allowed due schedule', async () => {
+    const pastDate = new Date(Date.now() - 60_000);
+    const [unsafeSchedule, validSchedule] = await server.db.insert(cronSchedules).values([
+      {
+        teamId,
+        createdBy: ownerId,
+        name: 'Legacy Recursive Cron',
+        cronExpr: '* * * * *',
+        jobType: 'cron',
+        jobConfig: { marker: 'blocked-recursive-cron' },
+        enabled: true,
+        nextRunAt: pastDate,
+      },
+      {
+        teamId,
+        createdBy: ownerId,
+        name: 'Allowed Due Chat',
+        cronExpr: '* * * * *',
+        jobType: 'chat',
+        jobConfig: { marker: 'allowed-due-chat', message: 'Scheduled read-only check' },
+        enabled: true,
+        nextRunAt: pastDate,
+      },
+    ]).returning();
+
+    const runner = new CronRunner(server.db, server.jobService);
+    let unsafeJob: typeof agentJobs.$inferSelect | undefined;
+    let validJob: typeof agentJobs.$inferSelect | undefined;
+
+    try {
+      const count = await runner.tick();
+      const jobs = await server.db.select().from(agentJobs)
+        .where(eq(agentJobs.teamId, teamId));
+      unsafeJob = jobs.find(job => (job.input as { marker?: string }).marker === 'blocked-recursive-cron');
+      validJob = jobs.find(job => (job.input as { marker?: string }).marker === 'allowed-due-chat');
+
+      expect(count).toBe(1);
+      expect(unsafeJob).toBeUndefined();
+      expect(validJob?.jobType).toBe('chat');
+
+      const [persistedUnsafe] = await server.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, unsafeSchedule.id));
+      const [persistedValid] = await server.db.select().from(cronSchedules)
+        .where(eq(cronSchedules.id, validSchedule.id));
+      expect(persistedUnsafe.lastRunAt).toBeNull();
+      expect(persistedUnsafe.nextRunAt?.getTime()).toBe(pastDate.getTime());
+      expect(persistedValid.lastRunAt).toBeTruthy();
+      expect(persistedValid.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+    } finally {
+      if (unsafeJob) await server.jobService.cancelJob(unsafeJob.id);
+      if (validJob) await server.jobService.cancelJob(validJob.id);
+    }
   });
 
   it('rejects invalid cron expression', async () => {

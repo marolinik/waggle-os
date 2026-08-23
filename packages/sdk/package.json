@@ -13,6 +13,9 @@
     "build": "tsc",
     "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/sdk/tests"
   },
+  "dependencies": {
+    "@waggle/shared": "*"
+  },
   "devDependencies": {
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

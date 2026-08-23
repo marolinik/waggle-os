@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -161,6 +161,7 @@ describe('workspace-state', () => {
     });
 
     it('returns state with decisions from memory frames', () => {
+      const activateWorkspaceMind = vi.fn(() => true);
       setupWorkspace('ws1', {
         frames: [
           { content: 'Decision: Use SQLite for local storage', importance: 'critical' },
@@ -172,10 +173,11 @@ describe('workspace-state', () => {
         dataDir: tmpDir,
         workspaceId: 'ws1',
         wsManager: makeManager(new Map([['ws1', { id: 'ws1', name: 'Project Alpha' }]])),
-        activateWorkspaceMind: noopActivate,
+        activateWorkspaceMind,
       });
 
       expect(result).not.toBeNull();
+      expect(activateWorkspaceMind).not.toHaveBeenCalled();
       expect(result!.recentDecisions.length).toBeGreaterThanOrEqual(1);
       expect(result!.recentDecisions[0].content).toContain('SQLite');
       expect(result!.recentDecisions[0].source).toBe('memory');

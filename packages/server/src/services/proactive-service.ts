@@ -85,10 +85,17 @@ export class ProactiveService {
       .orderBy(desc(suggestionsLog.createdAt));
   }
 
-  async updateStatus(suggestionId: string, status: 'accepted' | 'dismissed' | 'snoozed') {
+  async updateStatus(
+    suggestionId: string,
+    userId: string,
+    status: 'accepted' | 'dismissed' | 'snoozed',
+  ) {
     const [updated] = await this.db.update(suggestionsLog)
       .set({ status })
-      .where(eq(suggestionsLog.id, suggestionId))
+      .where(and(
+        eq(suggestionsLog.id, suggestionId),
+        eq(suggestionsLog.userId, userId),
+      ))
       .returning();
     return updated ?? null;
   }

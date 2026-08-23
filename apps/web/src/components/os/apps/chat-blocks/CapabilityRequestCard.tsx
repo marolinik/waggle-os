@@ -1,103 +1,118 @@
-import { useId, useState } from 'react';
-import { Loader2, Download, Plug, Zap, CheckCircle2, XCircle, Package, ShieldCheck } from 'lucide-react';
-import { adapter } from '@/lib/adapter';
+import { useRef, useState } from 'react';
+import { Loader2, Download, CheckCircle2, XCircle, Package, ShieldCheck } from 'lucide-react';
+import { adapter, AdapterHttpError } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
-import { Input } from '@/components/ui/input';
 import { useInstallStore } from '@/providers/InstallProvider';
-import { describeError, type InstallOutcome, type InstallTarget } from '@/lib/install-store';
+import { describeError } from '@/lib/install-store';
 
 export interface CapabilityRequest {
   name: string;
   source: string;
   kind?: 'skill' | 'marketplace' | 'connector' | 'mcp';
   reason?: string;
-  /** Connector registry id (kind 'connector'); defaults to `name`. */
+  proposalId?: string;
+  expiresAt?: string;
+  packageId?: number;
+  sourceId?: number;
+  publisher?: string;
+  version?: string;
+  installType?: 'skill' | 'plugin' | 'mcp';
+  manifestDigest?: string;
+  riskStatus?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'CLEAN';
+  riskScore?: number;
+  riskContentHash?: string;
+  riskBlocked?: boolean;
+  riskDigest?: string;
+  /** Reserved parser metadata; not authorized by the current card contract. */
   connectorId?: string;
-  /** Connector auth method — token-paste vs OAuth-redirect (kind 'connector'). */
+  /** Reserved parser metadata; not authorized by the current card contract. */
   authType?: string;
 }
 
 interface CapabilityRequestCardProps {
   request: CapabilityRequest;
+  workspaceId?: string | null;
+  sessionId?: string | null;
 }
 
 type Phase = 'pending' | 'installing' | 'installed' | 'declined' | 'failed';
 
 /**
  * Inline install affordance for agent capability requests (PR4 Variation B,
- * screen 09). Parsed out of agent text by TextBlock from a
- * `<!--waggle:capability_request {…}-->` marker (or the legacy phrasing) so the
- * user can act without leaving the conversation.
+ * screen 09). Rendered only from a completed acquire_capability tool result so
+ * the user can act without leaving the conversation.
  *
- * Type-aware, routed through the SHARED install store so a chat install
- * reflects in the Marketplace grid + count bar immediately ("sync"):
- *   connector → vault-aware token-paste (OAuth → Hub, D3); FE-direct connect —
- *               the token NEVER transits the boolean approval channel.
- *   mcp       → store enable (PRO + SecurityGate ride along server-side).
- *   marketplace → resolve packageId by name, then store install.
- *   starter   → installPack (bundled; the store does not track on-disk skills).
+ * The current trusted producer contract supports bundled starter-pack skills
+ * and exact-name marketplace packages. Connector and MCP proposals use their
+ * dedicated flows and are rejected here until they carry canonical IDs.
  */
-export default function CapabilityRequestCard({ request }: CapabilityRequestCardProps) {
+const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export default function CapabilityRequestCard({
+  request,
+  workspaceId,
+  sessionId,
+}: CapabilityRequestCardProps) {
   const [phase, setPhase] = useState<Phase>('pending');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showToken, setShowToken] = useState(false);
-  const [token, setToken] = useState('');
-  const tokenInputId = useId();
+  const installStarted = useRef(false);
   const { toast } = useToast();
-  const { install } = useInstallStore();
+  const { confirmPackageProposal } = useInstallStore();
 
-  const kind: NonNullable<CapabilityRequest['kind']> =
-    request.kind ?? (request.source === 'marketplace' ? 'marketplace' : 'skill');
-  const isConnector = kind === 'connector';
-  const isMcp = kind === 'mcp';
-  const isMarketplace = kind === 'marketplace' || request.source === 'marketplace';
-  const isStarter = !isConnector && !isMcp && !isMarketplace;
+  const kind = request.kind;
+  const marketplaceIdentity = Number.isSafeInteger(request.packageId)
+    && (request.packageId ?? 0) > 0
+    && Number.isSafeInteger(request.sourceId)
+    && (request.sourceId ?? 0) > 0
+    && typeof request.proposalId === 'string'
+    && UUID_V4_RE.test(request.proposalId)
+    && typeof request.expiresAt === 'string'
+    && Number.isFinite(Date.parse(request.expiresAt))
+    && Date.parse(request.expiresAt) > Date.now()
+    && typeof request.publisher === 'string'
+    && request.publisher.trim().length > 0
+    && typeof request.version === 'string'
+    && request.version.trim().length > 0
+    && typeof request.manifestDigest === 'string'
+    && /^sha256:[0-9a-f]{64}$/i.test(request.manifestDigest)
+    && typeof request.riskStatus === 'string'
+    && ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'CLEAN'].includes(request.riskStatus)
+    && typeof request.riskScore === 'number'
+    && Number.isFinite(request.riskScore)
+    && typeof request.riskContentHash === 'string'
+    && /^(?:|[0-9a-f]{64})$/i.test(request.riskContentHash)
+    && typeof request.riskBlocked === 'boolean'
+    && typeof request.riskDigest === 'string'
+    && /^sha256:[0-9a-f]{64}$/i.test(request.riskDigest)
+    && typeof workspaceId === 'string'
+    && workspaceId.length > 0
+    && typeof sessionId === 'string'
+    && sessionId.length > 0
+    && (request.installType === 'skill'
+      || request.installType === 'plugin'
+      || request.installType === 'mcp');
+  const supportedRoute = (request.source === 'starter-pack' && kind === 'skill')
+    || (request.source === 'marketplace' && kind === 'marketplace' && marketplaceIdentity);
+  const isMarketplace = request.source === 'marketplace' && kind === 'marketplace';
+  const isStarter = request.source === 'starter-pack' && kind === 'skill';
 
-  const verb = isConnector ? 'Connect' : isMcp ? 'Enable' : 'Install';
-
-  /** Map a store outcome → the card's terminal phase (the store already
-   *  toasted; tier dispatched the upgrade event via the adapter). */
-  const applyOutcome = (outcome: InstallOutcome) => {
-    if (outcome.ok) { setPhase('installed'); return; }
-    setPhase('failed');
-    setErrorMessage(
-      outcome.reason === 'tier' ? 'Upgrade required'
-        : outcome.reason === 'security' ? 'Blocked by the security scan'
-          : outcome.reason === 'needs-credentials' ? 'A token is required'
-            : 'Install failed',
-    );
-  };
+  if (!supportedRoute) return null;
 
   const handleInstall = async () => {
-    // Connector: OAuth can't finish inline (D3) → hand off to the Hub; token
-    // connectors reveal an inline paste row (the actual connect runs on submit).
-    if (isConnector) {
-      if (request.authType === 'oauth2') {
-        window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId: 'connectors' } }));
-        return;
-      }
-      setShowToken(true);
-      return;
-    }
-
+    if (installStarted.current) return;
+    installStarted.current = true;
     setPhase('installing');
     setErrorMessage(null);
     try {
-      if (isMcp) {
-        applyOutcome(await install({ id: `mcp:${request.name}`, type: 'mcp', kind: 'federated', name: request.name }));
-        return;
-      }
       if (isMarketplace) {
-        // The agent knows the name, not the numeric package id — resolve it.
-        const searchRes = await adapter.searchMarketplace(request.name, 1);
-        const searchData = await searchRes.json().catch(() => ({ packages: [] }));
-        const pkg = (searchData.packages ?? [])[0] as { id?: number; waggle_install_type?: string } | undefined;
-        if (!pkg?.id) throw new Error(`Marketplace package "${request.name}" not found`);
-        const target: InstallTarget = {
-          id: `pkg:${pkg.id}`, type: pkg.waggle_install_type === 'mcp' ? 'mcp' : 'skill',
-          kind: 'package', name: request.name, packageId: pkg.id,
-        };
-        applyOutcome(await install(target));
+        await confirmPackageProposal(
+          request.packageId!,
+          request.proposalId!,
+          workspaceId!,
+          sessionId!,
+        );
+        setPhase('installed');
+        toast({ title: 'Installed', description: `${request.name} is now active.` });
         return;
       }
       // Starter pack — bundled, no auth; not store-tracked (on-disk skill).
@@ -105,28 +120,23 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
       setPhase('installed');
       toast({ title: 'Installed', description: `${request.name} is now active.` });
     } catch (err) {
-      const message = describeError(err);
+      const proposalMessage = err instanceof AdapterHttpError
+        ? ({
+          CAPABILITY_PROPOSAL_NOT_AVAILABLE: 'This install request is no longer available.',
+          CAPABILITY_PROPOSAL_EXPIRED: 'This install request expired. Ask Waggle to find it again.',
+          CAPABILITY_PROPOSAL_ALREADY_USED: 'This install request was already used.',
+        } as const)[err.code as 'CAPABILITY_PROPOSAL_NOT_AVAILABLE'
+          | 'CAPABILITY_PROPOSAL_EXPIRED'
+          | 'CAPABILITY_PROPOSAL_ALREADY_USED']
+        : undefined;
+      const message = proposalMessage ?? describeError(err);
       setPhase('failed');
       setErrorMessage(message);
       toast({ title: 'Install failed', description: message, variant: 'destructive' });
     }
   };
 
-  const submitToken = async () => {
-    setPhase('installing');
-    setErrorMessage(null);
-    const outcome = await install(
-      { id: `connector:${request.connectorId ?? request.name}`, type: 'connector', kind: 'federated', name: request.name },
-      { token: token.trim() },
-    );
-    setShowToken(false);
-    setToken('');
-    applyOutcome(outcome);
-  };
-
   const handleDecline = () => setPhase('declined');
-
-  const VerbIcon = isConnector ? Plug : isMcp ? Zap : Download;
 
   return (
     <div
@@ -140,7 +150,7 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-display font-semibold text-foreground">
-              {verb} <span className="text-honey">{request.name}</span>?
+              Install <span className="text-honey">{request.name}</span>?
             </span>
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground font-display">
               {kind}
@@ -150,46 +160,8 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
             <p className="text-xs text-muted-foreground mt-1">{request.reason}</p>
           )}
 
-          {/* Vault-aware connector token-paste — FE-direct connect; the token
-              never touches the boolean approval channel (D3). */}
-          {showToken && (
-            <div className="flex items-center gap-1.5 mt-2">
-              <label htmlFor={tokenInputId} className="sr-only">
-                {request.name} API token
-              </label>
-              <Input
-                id={tokenInputId}
-                name="capabilityConnectorToken"
-                autoComplete="off"
-                type="password"
-                value={token}
-                onChange={e => setToken(e.target.value)}
-                placeholder="Paste API token — stored in your vault"
-                data-testid="capability-connector-token-input"
-                className="flex-1 h-7 text-[11px]"
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => void submitToken()}
-                disabled={token.trim() === '' || phase === 'installing'}
-                data-testid="capability-connector-token-submit"
-                className="px-2 py-1 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors disabled:opacity-50"
-              >
-                Connect
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShowToken(false); setToken(''); }}
-                className="px-2 py-1 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-
           <div className="flex items-center gap-2 mt-2.5">
-            {phase === 'pending' && !showToken && (
+            {phase === 'pending' && (
               <>
                 <button
                   type="button"
@@ -197,7 +169,7 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
                   data-testid="capability-request-install"
                   className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 font-display transition-colors"
                 >
-                  <VerbIcon className="w-3 h-3" /> {verb}
+                  <Download className="w-3 h-3" /> Install
                 </button>
                 <button
                   type="button"

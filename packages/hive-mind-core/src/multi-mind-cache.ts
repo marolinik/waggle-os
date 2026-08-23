@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { MindDB } from './mind/db.js';
 import { createCoreLogger } from './logger.js';
@@ -61,8 +62,20 @@ export class MultiMindCache {
       this.cache.delete(workspaceId);
     }
 
-    const mindPath = this.getMindPath(workspaceId);
-    if (!mindPath) return null;
+    try {
+      const mindPath = this.getMindPath(workspaceId);
+      if (!mindPath) return null;
+      if (mindPath === ':memory:') {
+        if (this.cache.size >= this.maxOpen) this.evictLRU();
+        const recheck = this.cache.get(workspaceId);
+        if (recheck?.db.isOpen()) {
+          recheck.lastAccessed = Date.now();
+          return recheck.db;
+        }
+        const db = new MindDB(mindPath);
+        this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins });
+        return db;
+      }
 
     // Review Critical #2: path-traversal guard. Defense-in-depth against an
     // attacker-controlled workspaceId (e.g. from an LLM tool call with a misconfigured
@@ -78,9 +91,6 @@ export class MultiMindCache {
       }
     }
 
-    // Review Major #5: re-check after evictLRU — a concurrent call may have just
-    // inserted the same workspaceId between our initial .get() and here.
-    try {
       if (this.cache.size >= this.maxOpen) {
         this.evictLRU();
       }
@@ -89,7 +99,23 @@ export class MultiMindCache {
         recheck.lastAccessed = Date.now();
         return recheck.db;
       }
-      const db = new MindDB(mindPath);
+      const mindStat = fs.lstatSync(mindPath, { throwIfNoEntry: false });
+      let canonicalMind: string;
+      if (mindStat) {
+        if (!mindStat.isFile() || mindStat.isSymbolicLink() || mindStat.nlink !== 1) return null;
+        canonicalMind = fs.realpathSync.native(mindPath);
+      } else {
+        const canonicalParent = fs.realpathSync.native(path.dirname(mindPath));
+        canonicalMind = path.join(canonicalParent, path.basename(mindPath));
+      }
+      if (this.allowedRoot) {
+        const canonicalRoot = fs.realpathSync.native(this.allowedRoot);
+        const relative = path.relative(canonicalRoot, canonicalMind);
+        if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+          return null;
+        }
+      }
+      const db = new MindDB(canonicalMind);
       this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins });
       return db;
     } catch (err) {
@@ -130,7 +156,12 @@ export class MultiMindCache {
    */
   release(workspaceId: string): void {
     const entry = this.cache.get(workspaceId);
-    if (entry && entry.pins > 0) entry.pins -= 1;
+    if (!entry || entry.pins === 0) return;
+
+    entry.pins -= 1;
+    if (entry.pins === 0 && this.cache.size > this.maxOpen) {
+      this.evictLRU();
+    }
   }
 
   has(workspaceId: string): boolean {

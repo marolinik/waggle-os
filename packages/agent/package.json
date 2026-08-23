@@ -9,13 +9,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./external-process-env": {
+      "types": "./dist/external-process-env.d.ts",
+      "import": "./dist/external-process-env.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --build --force && node ../../scripts/stage-agent-pptx-runtime.mjs",
+    "prepack": "tsc --build --force && node ../../scripts/stage-agent-pptx-runtime.mjs",
     "test": "vitest run"
   },
   "dependencies": {
@@ -25,11 +30,13 @@
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",
     "glob": "^13.0.6",
+    "jszip": "^3.10.1",
     "pdfmake": "^0.3.7",
-    "pptxgenjs": "^4.0.1"
+    "undici": "^6.27.0"
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/pdfmake": "^0.3.2"
+    "@types/pdfmake": "^0.3.2",
+    "pptxgenjs": "file:../../vendor/pptxgenjs"
   }
 }

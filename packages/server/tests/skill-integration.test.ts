@@ -57,6 +57,18 @@ describe('Skill Integration — System Prompt', () => {
     expect(section).toContain('Draft memo steps.');
     expect(section).toContain('Research steps.');
   });
+
+  it('lists skill summaries without embedding full workflow bodies', () => {
+    const section = buildSkillPromptSection([{
+      name: 'meeting-prep',
+      content: '# Meeting Prep\n\nPrepare a focused meeting agenda from available context.\n\n## Workflow\n1. Read every prior note.\n2. Generate all supporting artifacts.',
+    }]);
+
+    expect(section).toContain('Prepare a focused meeting agenda from available context.');
+    expect(section).toContain('read_skill');
+    expect(section).not.toContain('Read every prior note.');
+    expect(section).not.toContain('Generate all supporting artifacts.');
+  });
 });
 
 describe('Skill Integration — Starter Skills Auto-Install', () => {

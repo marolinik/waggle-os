@@ -28,11 +28,10 @@ async function mockProcesses(page: Page): Promise<void> {
 
 const HOOK_RENDER_CASES = [
   { id: 'claude-code', displayName: 'Claude Code', packageName: '@waggle/hive-mind-hooks-claude-code', configDir: '.claude', configFile: 'settings.json' },
+  { id: 'claude-desktop', displayName: 'Claude Desktop', packageName: '@waggle/hive-mind-hooks-claude-desktop', configDir: '.waggle/claude-desktop', configFile: 'claude_desktop_config.json' },
   { id: 'codex', displayName: 'Codex CLI', packageName: '@waggle/hive-mind-hooks-codex', configDir: '.codex', configFile: 'hooks.json' },
   { id: 'codex-desktop', displayName: 'Codex Desktop', packageName: '@waggle/hive-mind-hooks-codex-desktop', configDir: '.codex', configFile: 'hooks.json' },
-  { id: 'cursor', displayName: 'Cursor', packageName: '@waggle/hive-mind-hooks-cursor', configDir: '.cursor', configFile: 'hooks.json' },
   { id: 'hermes', displayName: 'Hermes Agent', packageName: '@waggle/hive-mind-hooks-hermes', configDir: '.hermes', configFile: 'config.yaml' },
-  { id: 'openclaw', displayName: 'OpenClaw', packageName: '@waggle/hive-mind-hooks-openclaw', configDir: '.openclaw', configFile: 'openclaw.json' },
 ] as const;
 
 test.describe('Launcher rendered states', () => {

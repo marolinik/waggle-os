@@ -25,7 +25,6 @@ import { dirname } from 'node:path';
 import { createLogger, type Logger } from '@waggle/hive-mind-shim-core';
 import {
   backupByteIdentical,
-  hookCommandFor,
   hookScriptPath,
   jsonRegister,
   normalizeCliPath,
@@ -34,7 +33,13 @@ import {
   type JsonRegisterEntry,
   type Lifecycle,
 } from '@waggle/hive-mind-hooks-core';
-import { resolvePaths, allHookBasenames, type CodexPaths, type ResolvePathsOptions } from './paths.js';
+import {
+  resolvePaths,
+  allHookBasenames,
+  hookCommandFor,
+  type CodexPaths,
+  type ResolvePathsOptions,
+} from './paths.js';
 import { codexRegisterSpec } from './adapter.js';
 
 export interface InstallResult {

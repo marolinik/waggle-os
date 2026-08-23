@@ -27,6 +27,7 @@ import {
   type MindDB,
   type TeamSync,
   createCoreLogger,
+  evaluateExternalMemoryIngress,
 } from '@waggle/core';
 import { isSelfIncapacityAssertion } from './memory-sign-gate.js';
 import type { CognifyPipeline } from './cognify.js';
@@ -164,6 +165,8 @@ export async function runPatternWriteBack(
     // pass 'user_stated' explicitly at their call sites.
     source: FrameSource = 'agent_inferred',
   ): Promise<MemoryFrame | null> => {
+    if (evaluateExternalMemoryIngress({ content }).action !== 'allow') return null;
+
     // R2 sign gate (DEFECT-2): self-incapacity assertions persist at
     // 'temporary' so they're audit-visible but cannot re-enter the prompt as
     // authoritative recall (recall path excludes 'temporary').
@@ -325,18 +328,19 @@ export async function runPatternWriteBack(
     let savedStructured = false;
 
     // Inline decisions (different patterns than the explicit decision block above)
-    for (const pat of INLINE_DECISION_PATTERNS) {
-      const decisionLines = lines.filter(l => pat.test(l));
-      if (decisionLines.length > 0 && saved.length < 5) {
-        const text = decisionLines[0].replace(/^[-*\d.#]+\s*/, '').trim();
-        if (text.length > 20) {
-          // Confabulation-persistence guard: this is the AGENT's own assertion,
-          // not a user-stated fact. Persist it audit-visible but at 'temporary'
-          // so the recall path (which excludes 'temporary') can't re-surface a
-          // confabulated specific as authoritative memory on a later turn.
-          await save(`Recommendation: ${text.slice(0, RECALL_LINE_LENGTH)}`, 'temporary');
+    inlineDecision: for (const pat of INLINE_DECISION_PATTERNS) {
+      if (saved.length >= 5) break;
+      for (const decisionLine of lines) {
+        if (!pat.test(decisionLine)) continue;
+        const text = decisionLine.replace(/^[-*\d.#]+\s*/, '').trim();
+        if (text.length <= 20) continue;
+        // Confabulation-persistence guard: this is the AGENT's own assertion,
+        // not a user-stated fact. Persist it audit-visible but at 'temporary'
+        // so the recall path (which excludes 'temporary') can't re-surface a
+        // confabulated specific as authoritative memory on a later turn.
+        if ((await save(`Recommendation: ${text.slice(0, RECALL_LINE_LENGTH)}`, 'temporary')) !== null) {
           savedStructured = true;
-          break;
+          break inlineDecision;
         }
       }
     }
@@ -347,8 +351,9 @@ export async function runPatternWriteBack(
         s.startsWith('User preference:') || s.startsWith('Correction from user:') || s.startsWith('Decision:')
       );
       if (!alreadyCapturedUser) {
-        await save(`User asked: ${userMsg.slice(0, RECALL_LINE_LENGTH)}`, 'temporary');
-        savedStructured = true;
+        if ((await save(`User asked: ${userMsg.slice(0, RECALL_LINE_LENGTH)}`, 'temporary')) !== null) {
+          savedStructured = true;
+        }
       }
     }
 
@@ -365,8 +370,9 @@ export async function runPatternWriteBack(
         const prefix = heading ? `${heading}: ` : 'Key points: ';
         // Agent-extracted bullets from its own reply — audit-visible but
         // 'temporary' (recall-excluded) so confabulated specifics can't loop back.
-        await save(`${prefix}${keyPoints.slice(0, FINDINGS_SLICE_LENGTH)}`, 'temporary');
-        savedStructured = true;
+        if ((await save(`${prefix}${keyPoints.slice(0, FINDINGS_SLICE_LENGTH)}`, 'temporary')) !== null) {
+          savedStructured = true;
+        }
       }
     }
 

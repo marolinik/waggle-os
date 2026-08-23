@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MindDB, FrameStore, SessionStore, type LLMCallFn } from '@waggle/core';
+import { parseOpenAiTextCompletion } from '@waggle/agent';
 import { runMemoryLaneExtraction } from '../../src/local/memory-lane-cron.js';
 
 /**
@@ -116,5 +117,49 @@ describe('runMemoryLaneExtraction', () => {
     const r2 = await runMemoryLaneExtraction(db, mockLLM);
     expect(r2.skipped).toBe(false);
     expect(r2.framesProcessed).toBe(6);
+  });
+
+  it('holds the watermark and commits nothing until every completion is terminal', async () => {
+    seedSourceFrames(8);
+    let truncateFacts = true;
+    const integrityCheckedLLM: LLMCallFn = async (prompt: string) => {
+      const content = await mockLLM(prompt);
+      return parseOpenAiTextCompletion({
+        choices: [{
+          finish_reason: truncateFacts && prompt.includes('synthesis-level memory facts')
+            ? 'length'
+            : 'stop',
+          message: { content },
+        }],
+      }).content;
+    };
+
+    const failed = await runMemoryLaneExtraction(db, integrityCheckedLLM);
+    expect(failed.skipped).toBe(false);
+    expect(failed.framesProcessed).toBe(8);
+    expect(failed.watermark).toBe(0);
+    expect(failed.written).toBeUndefined();
+    expect(failed.kgEntitiesWritten).toBe(0);
+    expect(failed.errors.join(' ')).toMatch(/facts:.*finish_reason=length/i);
+
+    const raw = db.getDatabase();
+    const laneCount = raw.prepare(
+      `SELECT COUNT(*) AS count FROM memory_frames WHERE content LIKE '[mind-%'`
+    ).get() as { count: number };
+    const entityCount = raw.prepare(
+      'SELECT COUNT(*) AS count FROM knowledge_entities'
+    ).get() as { count: number };
+    expect(laneCount.count).toBe(0);
+    expect(entityCount.count).toBe(0);
+
+    truncateFacts = false;
+    const retried = await runMemoryLaneExtraction(db, integrityCheckedLLM);
+    expect(retried.framesProcessed).toBe(8);
+    expect(retried.watermark).toBeGreaterThan(0);
+    expect(retried.written).toMatchObject({ factsWritten: 1, eventsWritten: 1, profilesWritten: 1 });
+    expect(retried.kgEntitiesWritten).toBe(2);
+
+    const settled = await runMemoryLaneExtraction(db, integrityCheckedLLM);
+    expect(settled.skipped).toBe(true);
   });
 });

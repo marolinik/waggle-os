@@ -1,9 +1,29 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { agents, agentGroups, agentGroupMembers, agentJobs } from '../db/schema.js';
 import type { Db } from '../db/connection.js';
 
+export class AgentGroupMemberNotFoundError extends Error {}
+
 export class AgentService {
   constructor(private db: Db) {}
+
+  private async groupMembersOwned(userId: string, agentIds: string[]): Promise<boolean> {
+    const uniqueAgentIds = [...new Set(agentIds)];
+    if (uniqueAgentIds.length === 0) return true;
+
+    const ownedAgents = await this.db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.userId, userId), inArray(agents.id, uniqueAgentIds)));
+
+    return ownedAgents.length === uniqueAgentIds.length;
+  }
+
+  private async assertGroupMembersOwned(userId: string, agentIds: string[]): Promise<void> {
+    if (!(await this.groupMembersOwned(userId, agentIds))) {
+      throw new AgentGroupMemberNotFoundError();
+    }
+  }
 
   async create(userId: string, data: {
     name: string;
@@ -88,6 +108,8 @@ export class AgentService {
     strategy: string;
     members: Array<{ agentId: string; roleInGroup?: string; executionOrder?: number }>;
   }) {
+    await this.assertGroupMembersOwned(userId, data.members.map((member) => member.agentId));
+
     return this.db.transaction(async (tx) => {
       const [group] = await tx.insert(agentGroups).values({
         userId,
@@ -137,6 +159,10 @@ export class AgentService {
       .from(agentGroupMembers)
       .where(eq(agentGroupMembers.groupId, groupId));
 
+    if (!(await this.groupMembersOwned(userId, members.map((member) => member.agentId)))) {
+      return null;
+    }
+
     return { ...group, members };
   }
 
@@ -149,6 +175,9 @@ export class AgentService {
     // Verify ownership
     const existing = await this.getGroup(groupId, userId);
     if (!existing) return null;
+    if (data.members) {
+      await this.assertGroupMembersOwned(userId, data.members.map((member) => member.agentId));
+    }
 
     return this.db.transaction(async (tx) => {
       // Update group fields if any provided

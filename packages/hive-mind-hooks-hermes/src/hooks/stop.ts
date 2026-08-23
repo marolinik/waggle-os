@@ -16,6 +16,7 @@
  */
 
 import {
+  isDirectExecution,
   makeStopHandler,
   runHook,
   type HookRunOptions,
@@ -54,15 +55,6 @@ export async function runStop(opts: HermesStopOptions = {}): Promise<void> {
   });
 }
 
-const isMain = (() => {
-  try {
-    if (typeof process.argv[1] !== 'string') return false;
-    const url = new URL(`file://${process.argv[1].replace(/\\/g, '/')}`);
-    return url.href === import.meta.url;
-  } catch {
-    return false;
-  }
-})();
-if (isMain) {
+if (isDirectExecution(import.meta.url)) {
   void runStop();
 }

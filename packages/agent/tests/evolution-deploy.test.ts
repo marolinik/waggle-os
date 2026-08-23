@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -25,6 +25,7 @@ describe('evolution-deploy', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch { /* Windows lock cleanup racy; ignore */ }
@@ -185,6 +186,74 @@ describe('evolution-deploy', () => {
       });
       expect(second.backupPath).not.toBeNull();
       expect(JSON.parse(fs.readFileSync(second.backupPath!, 'utf-8')).text).toBe('v1');
+    });
+
+    it('retries transient Windows rename locks before replacing an override', () => {
+      const first = deployBehavioralSpecOverride(tmpDir, {
+        section: 'coreLoop', text: 'v1',
+      });
+      const rename = vi.spyOn(fs, 'renameSync')
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('locked'), { code: 'EPERM' });
+        })
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+        })
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('locked again'), { code: 'EPERM' });
+        })
+        .mockImplementationOnce(() => {
+          throw Object.assign(new Error('still busy'), { code: 'EBUSY' });
+        });
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      const second = deployBehavioralSpecOverride(tmpDir, {
+        section: 'coreLoop', text: 'v2',
+      });
+
+      expect(rename).toHaveBeenCalledTimes(5);
+      expect(wait).toHaveBeenCalledTimes(4);
+      expect(JSON.parse(fs.readFileSync(second.path, 'utf-8')).text).toBe('v2');
+      expect(JSON.parse(fs.readFileSync(second.backupPath!, 'utf-8')).text).toBe('v1');
+      expect(fs.existsSync(`${first.path}.tmp`)).toBe(false);
+    });
+
+    it('preserves the current override when transient rename retries are exhausted', () => {
+      const first = deployBehavioralSpecOverride(tmpDir, {
+        section: 'coreLoop', text: 'v1',
+      });
+      const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+        throw Object.assign(new Error('still locked'), { code: 'EACCES' });
+      });
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      expect(() => deployBehavioralSpecOverride(tmpDir, {
+        section: 'coreLoop', text: 'v2',
+      })).toThrow(/still locked/);
+
+      expect(rename).toHaveBeenCalledTimes(10);
+      expect(wait).toHaveBeenCalledTimes(9);
+      expect(JSON.parse(fs.readFileSync(first.path, 'utf-8')).text).toBe('v1');
+      expect(fs.existsSync(`${first.path}.tmp`)).toBe(false);
+    });
+
+    it('does not retry non-transient rename failures', () => {
+      const first = deployBehavioralSpecOverride(tmpDir, {
+        section: 'coreLoop', text: 'v1',
+      });
+      const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+        throw Object.assign(new Error('disk error'), { code: 'EIO' });
+      });
+      const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+      expect(() => deployBehavioralSpecOverride(tmpDir, {
+        section: 'coreLoop', text: 'v2',
+      })).toThrow(/disk error/);
+
+      expect(rename).toHaveBeenCalledOnce();
+      expect(wait).not.toHaveBeenCalled();
+      expect(JSON.parse(fs.readFileSync(first.path, 'utf-8')).text).toBe('v1');
+      expect(fs.existsSync(`${first.path}.tmp`)).toBe(false);
     });
 
     it('rejects unknown sections', () => {

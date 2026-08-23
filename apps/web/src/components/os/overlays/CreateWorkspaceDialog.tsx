@@ -805,7 +805,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   }, [selectedTemplate, templates]);
 
   const handleCreate = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || (storageType === 'local' && !storagePath.trim())) return;
     onCreate({
       name: name.trim(), group,
       persona: agentMode === 'single' ? selectedPersona : undefined,
@@ -1316,7 +1316,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
 
           <div className="flex justify-end gap-2 px-6 py-4 border-t border-border/30">
             <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-display rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-            <button type="button" onClick={handleCreate} disabled={!name.trim()} aria-label="Create workspace"
+            <button type="button" onClick={handleCreate} disabled={!name.trim() || (storageType === 'local' && !storagePath.trim())} aria-label="Create workspace"
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
               <Plus className="w-3.5 h-3.5" /> Create
             </button>

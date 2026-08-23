@@ -18,8 +18,15 @@
 export interface TauriBundleWindows {
   certificateThumbprint?: string;
   digestAlgorithm?: string;
+  signCommand?: TauriSignCommand;
   timestampUrl?: string;
+  tsp?: boolean;
   [key: string]: unknown;
+}
+
+export interface TauriSignCommand {
+  cmd: string;
+  args: string[];
 }
 
 export interface TauriBundleMacOS {
@@ -34,6 +41,7 @@ export interface TauriBundle {
 }
 
 export interface TauriOverrideConfig {
+  build?: Record<string, unknown>;
   bundle?: TauriBundle;
   [key: string]: unknown;
 }
@@ -50,6 +58,39 @@ const DEFAULT_TIMESTAMP_URL = 'http://timestamp.digicert.com';
 const MACOS_ADHOC_IDENTITY = '-';
 const THUMBPRINT_LENGTH = 40;
 const HEX_PATTERN = /^[0-9A-F]+$/;
+const WINDOWS_ABSOLUTE_PATH_PATTERN = /^[A-Za-z]:[\\/]/;
+const WINDOWS_POWERSHELL_PATH =
+  String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
+
+function containsControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127;
+  });
+}
+
+function assertCanonicalWindowsFilePath(value: string): void {
+  if (containsControlCharacter(value)) {
+    throw new Error('Artifact Signing wrapper path contains control characters.');
+  }
+  if (!WINDOWS_ABSOLUTE_PATH_PATTERN.test(value)) {
+    throw new Error('Artifact Signing wrapper must use an absolute Windows path.');
+  }
+  const pathTail = value.slice(3);
+  const segments = pathTail.split(/[\\/]/);
+  if (
+    pathTail.length === 0
+    || value.slice(2).includes(':')
+    || segments.some(
+      (segment) => segment.length === 0
+        || segment === '.'
+        || segment === '..'
+        || /[. ]$/.test(segment),
+    )
+  ) {
+    throw new Error('Artifact Signing wrapper must use a canonical local Windows file path.');
+  }
+}
 
 // ─── parseThumbprintString ──────────────────────────────────────────────────
 
@@ -82,7 +123,7 @@ export function parseThumbprintString(raw: string): string {
  * Return a new override config with Windows code-signing fields applied.
  *
  * Preserves all existing top-level and bundle fields; replaces only the
- * three signing-specific keys under `bundle.windows`. Idempotent — calling
+ * signing-specific keys under `bundle.windows`. Idempotent — calling
  * twice with the same thumbprint yields an equal result.
  */
 export function addWindowsSigningToOverride<T extends TauriOverrideConfig>(
@@ -96,9 +137,11 @@ export function addWindowsSigningToOverride<T extends TauriOverrideConfig>(
 
   const existingBundle: TauriBundle = config.bundle ?? {};
   const existingWindows: TauriBundleWindows = existingBundle.windows ?? {};
+  const nonCustomCommandWindows: TauriBundleWindows = { ...existingWindows };
+  delete nonCustomCommandWindows.signCommand;
 
   const nextWindows: TauriBundleWindows = {
-    ...existingWindows,
+    ...nonCustomCommandWindows,
     certificateThumbprint: normalisedThumbprint,
     digestAlgorithm,
     timestampUrl,
@@ -112,6 +155,73 @@ export function addWindowsSigningToOverride<T extends TauriOverrideConfig>(
   return {
     ...config,
     bundle: nextBundle,
+  };
+}
+
+// ─── addWindowsArtifactSigningToOverride ───────────────────────────────────
+
+/**
+ * Return a new override config that delegates every Tauri Windows signing
+ * target to the fail-closed Azure Artifact Signing wrapper.
+ *
+ * Tauri replaces `%1` with each binary path. Object form keeps the absolute
+ * wrapper path intact when the checkout contains spaces. Certificate-store
+ * fields are removed because Tauri must not combine them with `signCommand`.
+ */
+export function addWindowsArtifactSigningToOverride<
+  T extends TauriOverrideConfig,
+>(config: Readonly<T>, wrapperPath: string): T {
+  assertCanonicalWindowsFilePath(wrapperPath);
+  if (wrapperPath.includes('%1')) {
+    throw new Error('Artifact Signing wrapper path cannot contain the %1 placeholder.');
+  }
+  const existingBuild = config.build ?? {};
+  const existingBundle: TauriBundle = config.bundle ?? {};
+  const existingWindows: TauriBundleWindows = existingBundle.windows ?? {};
+  const nonSigningWindows: TauriBundleWindows = { ...existingWindows };
+  delete nonSigningWindows.certificateThumbprint;
+  delete nonSigningWindows.digestAlgorithm;
+  delete nonSigningWindows.timestampUrl;
+  delete nonSigningWindows.tsp;
+
+  const nextWindows: TauriBundleWindows = {
+    ...nonSigningWindows,
+    signCommand: {
+      cmd: WINDOWS_POWERSHELL_PATH,
+      args: [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        wrapperPath,
+        '-ArtifactPath',
+        '%1',
+      ],
+    },
+  };
+  const placeholderCount = [
+    nextWindows.signCommand?.cmd,
+    ...(nextWindows.signCommand?.args ?? []),
+  ].flatMap((part) => part?.match(/%1/g) ?? []).length;
+  if (placeholderCount !== 1) {
+    throw new Error('Artifact Signing command must contain exactly one %1 placeholder.');
+  }
+
+  return {
+    ...config,
+    build: {
+      ...existingBuild,
+      beforeBuildCommand: '',
+      beforeBundleCommand: '',
+    },
+    bundle: {
+      ...existingBundle,
+      active: true,
+      targets: ['nsis'],
+      windows: nextWindows,
+    },
   };
 }
 

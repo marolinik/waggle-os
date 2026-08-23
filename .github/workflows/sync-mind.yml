@@ -3,15 +3,16 @@ name: sync-mind-to-hive-mind
 # DEPRECATED 2026-04-30 — CC Sesija B monorepo migration §2.6 Task B22.
 #
 # This workflow was the bidirectional-sync mechanism between waggle-os and the
-# now-archived `marolinik/hive-mind` repo while substrate code lived in BOTH
+# public `marolinik/hive-mind` repo while substrate code lived in BOTH
 # places (packages/core/src/mind/ + packages/core/src/harvest/ in waggle-os,
 # duplicated in hive-mind/packages/core/src/{mind,harvest}/).
 #
 # After CC Sesija B migration (commits ff5b4aa..b59d188 on
 # feature/hive-mind-monorepo-migration), the substrate lives ONLY in
-# waggle-os/packages/hive-mind-core/. The OSS distribution mechanism is now
-# `git subtree split` from waggle-os monorepo to public mirror — see
-# `scripts/oss-subtree-split.sh` and `packages/hive-mind-core/CONTRIBUTING.md`.
+# waggle-os/packages/hive-mind-core/. The public mirror now has a curated layout
+# and is updated through a maintainer-reviewed forward-port that removes excluded
+# files and interleaved `install_audit` logic. Raw subtree branches are unsafe
+# publish sources; see `packages/hive-mind-core/CONTRIBUTING.md`.
 #
 # This workflow is preserved for AUDIT TRAIL purposes (the historical
 # trigger paths and concurrency settings are referenced in EXTRACTION.md and
@@ -21,9 +22,9 @@ name: sync-mind-to-hive-mind
 # on commit 3b556c0.
 #
 # DO NOT delete this file as part of cleanup — leave it as the deprecation
-# anchor. If the workflow ever needs reactivation, trigger paths must be
-# updated to the new packages/hive-mind-core/ location AND the
-# @hive-mind ↔ @waggle name remapping must be added.
+# anchor. Do not reactivate it by changing trigger paths: its filtered-patch
+# model cannot safely remove interleaved proprietary schema logic. Build any
+# future automation from the curated-forward-port contract instead.
 
 # Memory Sync Repair Step 3.2 — waggle-os → hive-mind direction.
 #
@@ -59,6 +60,8 @@ concurrency:
 
 jobs:
   open-hive-mind-pr:
+    # Permanently inert deprecation anchor. This filtered-patch publisher cannot
+    # enforce the current interleaved proprietary-content boundary.
     name: Open auto-sync PR to marolinik/hive-mind
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -68,7 +71,7 @@ jobs:
     # Configured by Marko via `gh secret set HIVE_MIND_SYNC_TOKEN`.
     # Without the secret, the job fails fast with a documented error
     # rather than silently skipping.
-    if: ${{ vars.MIND_SYNC_ENABLED == 'true' }}
+    if: ${{ false }}
 
     steps:
       - name: Checkout waggle-os (full history for the diff)

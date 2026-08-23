@@ -11,15 +11,18 @@ import type { ToolDefinition } from './tools.js';
 // Minimal surface of the pdfmake static we use (the lib's own type export is
 // browser/vfs-coupled; we only call createPdf().getBuffer()).
 interface PdfPrinter {
-  getBuffer(cb: (buffer: Buffer) => void): void;
+  getBuffer(cb?: (buffer: Buffer) => void): Promise<Buffer> | void;
 }
 interface PdfMakeStatic {
   createPdf(docDef: TDocumentDefinitions): PdfPrinter;
+  addVirtualFileSystem?(vfs: Record<string, string>): void;
 }
 
 function resolveSafe(workspace: string, filePath: string): string {
-  const resolved = path.resolve(workspace, filePath);
-  if (!resolved.startsWith(path.resolve(workspace))) {
+  const root = path.resolve(workspace);
+  const resolved = path.resolve(root, filePath);
+  const relative = path.relative(root, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error(`Path resolves outside workspace: ${filePath}`);
   }
   return resolved;
@@ -198,14 +201,27 @@ export function createPdfTools(workspace: string): ToolDefinition[] {
 
           const pdfMakeModule = await import('pdfmake/build/pdfmake.js');
           const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as unknown as PdfMakeStatic;
+          const vfsModule = await import('pdfmake/build/vfs_fonts.js');
+          const vfs = (vfsModule.default ?? vfsModule) as unknown as Record<string, string>;
+          pdfMake.addVirtualFileSystem?.(vfs);
           const printer = pdfMake.createPdf(docDef);
 
-          const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-            printer.getBuffer((buffer: Buffer) => {
-              if (buffer) resolve(buffer);
-              else reject(new Error('PDF generation returned empty buffer'));
+          const pdfBuffer = await (async () => {
+            // pdfmake 0.3 exposes getBuffer() as a Promise; retain the
+            // callback fallback for older bundled runtimes.
+            if (printer.getBuffer.length === 0) {
+              const result = printer.getBuffer();
+              if (result && typeof (result as Promise<Buffer>).then === 'function') {
+                return result as Promise<Buffer>;
+              }
+            }
+            return new Promise<Buffer>((resolve, reject) => {
+              printer.getBuffer((buffer: Buffer) => {
+                if (buffer) resolve(buffer);
+                else reject(new Error('PDF generation returned empty buffer'));
+              });
             });
-          });
+          })();
 
           fs.mkdirSync(path.dirname(resolved), { recursive: true });
           fs.writeFileSync(resolved, pdfBuffer);

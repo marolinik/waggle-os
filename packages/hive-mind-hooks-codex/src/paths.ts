@@ -5,15 +5,17 @@
  * Codex's standalone `~/.codex/hooks.json` (NOT `~/.codex/config.toml` —
  * we stay out of the user's TOML and away from protected
  * `notify`/`profile`/`model_providers` keys). The Windows-safe backup
- * path + `--cli-path` quoting + hooks-dir resolution are reused verbatim
- * from `@waggle/hive-mind-hooks-core` so codex reads like the reference.
+ * path + hooks-dir resolution reuse `@waggle/hive-mind-hooks-core`. Codex
+ * needs its own Windows command encoder because its Rust runtime passes the
+ * whole handler string through the selected host shell (PowerShell for a
+ * normal local thread, with `cmd.exe /C` as the fallback).
  */
 
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, win32 } from 'node:path';
 import {
   backupPathFor,
-  hookCommandFor,
+  hookCommandFor as sharedHookCommandFor,
   hooksDirFromModuleUrl,
 } from '@waggle/hive-mind-hooks-core';
 
@@ -69,5 +71,77 @@ export function resolvePaths(opts: ResolvePathsOptions = {}): CodexPaths {
   return { codexDir, configPath, pointerPath, hooksDir };
 }
 
-/** Re-export the shared Windows-safe helpers so codex modules read like CC. */
-export { backupPathFor, hookCommandFor };
+export interface HookCommandOptions {
+  /** Explicit seam for cross-platform command-shape tests. */
+  platform?: NodeJS.Platform;
+  /** Explicit Windows runtime seam; production normally uses the launcher env override. */
+  nodePath?: string;
+  /** Explicit Windows root seam; production reads the OS-provided SystemRoot. */
+  systemRoot?: string;
+}
+
+function powershellLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function windowsPowerShellPath(systemRoot?: string): string {
+  const root = win32.normalize(
+    systemRoot?.trim()
+      || process.env.SystemRoot?.trim()
+      || 'C:\\Windows',
+  );
+  if (!/^[A-Za-z]:\\[A-Za-z0-9._\\-]+$/.test(root)) {
+    throw new Error('Windows SystemRoot must be an absolute shell-safe path');
+  }
+  return win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+
+function windowsHookCommand(
+  nodePath: string,
+  scriptPath: string,
+  cliPath?: string,
+  systemRoot?: string,
+): string {
+  const args = [nodePath, scriptPath];
+  if (cliPath && cliPath.length > 0) args.push('--cli-path', cliPath);
+
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    'try {',
+    `  & ${args.map(powershellLiteral).join(' ')}`,
+    '  if ($null -eq $LASTEXITCODE) { exit 1 }',
+    '  exit $LASTEXITCODE',
+    '} catch {',
+    '  [Console]::Error.WriteLine($_.Exception.Message)',
+    '  exit 1',
+    '}',
+  ].join('\r\n');
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return `${windowsPowerShellPath(systemRoot)} -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+}
+
+/**
+ * Build a Codex command that survives the host's exact shell dispatch.
+ * POSIX keeps the shared `node "script" --cli-path "cli"` contract. On
+ * Windows the trusted invocation is UTF-16LE encoded inside PowerShell so
+ * both Codex's PowerShell host and its `cmd.exe /C` fallback can parse the
+ * same command. The system PowerShell path is resolved to a validated
+ * absolute literal so an untrusted workspace cannot win command lookup with
+ * a repo-local `powershell.exe`.
+ */
+export function hookCommandFor(
+  scriptPath: string,
+  cliPath?: string,
+  opts: HookCommandOptions = {},
+): string {
+  if ((opts.platform ?? process.platform) !== 'win32') {
+    return sharedHookCommandFor(scriptPath, cliPath);
+  }
+
+  const nodePath = opts.nodePath?.trim()
+    || process.env.WAGGLE_HOOK_NODE_PATH?.trim()
+    || process.execPath;
+  return windowsHookCommand(nodePath, scriptPath, cliPath, opts.systemRoot);
+}
+
+export { backupPathFor };

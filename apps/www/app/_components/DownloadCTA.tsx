@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { detectOSFromUserAgent, type OSId } from '../_lib/os-detection';
 import { emit, events } from '../_lib/event-taxonomy';
@@ -14,6 +14,10 @@ interface DownloadCTAProps {
 }
 
 const DOWNLOAD_URL = '/download';
+
+const subscribeToClientEnvironment = () => () => {};
+const getClientOS = () => detectOSFromUserAgent(navigator.userAgent);
+const getServerOS = (): null => null;
 
 /**
  * OS-aware download CTA. Renders a generic "Download" label at SSR + first
@@ -33,13 +37,11 @@ export default function DownloadCTA({
   style,
 }: DownloadCTAProps) {
   const t = useTranslations('landing.download_cta');
-  const [os, setOS] = useState<OSId | null>(null);
-
-  useEffect(() => {
-    if (typeof navigator !== 'undefined') {
-      setOS(detectOSFromUserAgent(navigator.userAgent));
-    }
-  }, []);
+  const os = useSyncExternalStore<OSId | null>(
+    subscribeToClientEnvironment,
+    getClientOS,
+    getServerOS,
+  );
 
   const label = children ?? (os ? t('with_os', { os }) : t('default'));
 

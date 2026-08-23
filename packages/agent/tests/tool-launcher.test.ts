@@ -5,6 +5,8 @@
  * spawns are injected so the test never actually executes a binary.
  */
 
+import { execFileSync, type ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi } from 'vitest';
 import { join, resolve } from 'node:path';
 import {
@@ -12,6 +14,8 @@ import {
   runHookCommand,
   hookPackageFor,
   HOOKS_COHORT,
+  createObservedHandle,
+  defaultSpawnObserved,
   resolveHookRuntime,
   resolveSpawnInvocation,
   type HookRuntimePaths,
@@ -87,19 +91,76 @@ describe('launchTool', () => {
   it('injects WAGGLE_WORKSPACE_ID env when provided', () => {
     const { calls, spawnDetached } = captureSpawn();
     launchTool({
-      id: 'cursor',
-      installedPath: '/Applications/Cursor.app/Contents/MacOS/Cursor',
+      id: 'codex-desktop',
+      installedPath: '/Applications/Codex.app/Contents/MacOS/Codex',
       workspaceId: 'ws-kvark',
       deps: { spawnDetached },
     });
     expect(calls[0].options.env?.WAGGLE_WORKSPACE_ID).toBe('ws-kvark');
   });
 
+  it('fails closed against ambient provider and infrastructure secrets', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: 'C:\\tools\\claude.exe',
+      workspaceId: 'ws-isolated',
+      runId: 'run-1',
+      roomId: 'room-1',
+      runToken: 'narrow-room-token',
+      deps: {
+        platform: 'win32',
+        baseEnv: {
+          PATH: 'C:\\Windows\\System32',
+          PATHEXT: '.COM;.EXE;.CMD',
+          USERPROFILE: 'C:\\Users\\tester',
+          APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+          LOCALAPPDATA: 'C:\\Redirected\\Local',
+          HERMES_HOME: 'D:\\Hermes Data',
+          TERM: 'xterm-256color',
+          ANTHROPIC_API_KEY: 'anthropic-secret',
+          OPENAI_API_KEY: 'openai-secret',
+          OPENROUTER_API_KEY: 'openrouter-secret',
+          GEMINI_API_KEY: 'gemini-secret',
+          STRIPE_SECRET_KEY: 'stripe-secret',
+          AWS_SECRET_ACCESS_KEY: 'aws-secret',
+          DATABASE_URL: 'database-secret',
+          SSH_AUTH_SOCK: 'credential-socket',
+          GIT_ASKPASS: 'credential-helper',
+          HTTPS_PROXY: 'https://user:secret@proxy.invalid',
+          NODE_OPTIONS: '--require C:\\malicious.js',
+          WAGGLE_RUN_TOKEN: 'stale-ambient-token',
+        },
+        spawnDetached,
+      },
+    });
+
+    expect(calls[0].options.env).toMatchObject({
+      PATH: 'C:\\Windows\\System32',
+      PATHEXT: '.COM;.EXE;.CMD',
+      USERPROFILE: 'C:\\Users\\tester',
+      APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Redirected\\Local',
+      HERMES_HOME: 'D:\\Hermes Data',
+      TERM: 'xterm-256color',
+      WAGGLE_WORKSPACE_ID: 'ws-isolated',
+      WAGGLE_RUN_TOKEN: 'narrow-room-token',
+    });
+    for (const name of [
+      'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY',
+      'GEMINI_API_KEY', 'STRIPE_SECRET_KEY', 'AWS_SECRET_ACCESS_KEY',
+      'DATABASE_URL', 'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'HTTPS_PROXY',
+      'NODE_OPTIONS',
+    ]) {
+      expect(calls[0].options.env?.[name], name).toBeUndefined();
+    }
+  });
+
   it('does not inject env when workspaceId is absent', () => {
     const { calls, spawnDetached } = captureSpawn();
     launchTool({
-      id: 'cursor',
-      installedPath: '/Applications/Cursor.app/Contents/MacOS/Cursor',
+      id: 'codex-desktop',
+      installedPath: '/Applications/Codex.app/Contents/MacOS/Codex',
       deps: { spawnDetached },
     });
     expect(calls[0].options.env?.WAGGLE_WORKSPACE_ID).toBeUndefined();
@@ -133,9 +194,8 @@ describe('launchTool', () => {
   });
 
   it.each<ToolId>([
-    'claude-code', 'cursor', 'claude-desktop',
-    'codex', 'codex-desktop', 'hermes', 'openclaw',
-  ])('accepts every cohort tool (%s) after Phase 4 expansion', (id) => {
+    'claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'hermes', 'hermes-desktop',
+  ])('accepts every release-supported launch cohort tool (%s)', (id) => {
     const { spawnDetached } = captureSpawn();
     const result = launchTool({
       id,
@@ -145,6 +205,21 @@ describe('launchTool', () => {
     expect(result.ok).toBe(true);
     expect(result.pid).toBe(12345);
   });
+
+  it.each<ToolId>(['cursor', 'openclaw'])(
+    'rejects roadmap tool %s without spawning it',
+    (id) => {
+      const { calls, spawnDetached } = captureSpawn();
+      const result = launchTool({
+        id,
+        installedPath: `/somewhere/${id}`,
+        deps: { spawnDetached },
+      });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('not launchable');
+      expect(calls).toHaveLength(0);
+    },
+  );
 
   it('rejects empty installedPath', () => {
     const { spawnDetached } = captureSpawn();
@@ -279,7 +354,14 @@ describe('runHookCommand', () => {
       action: 'install',
       runtime,
       dataDir: '/waggle-data',
-      deps: { execCapture },
+      deps: {
+        baseEnv: {
+          LOCALAPPDATA: 'C:\\Redirected\\Local',
+          HERMES_HOME: 'D:\\Hermes Data',
+          OPENAI_API_KEY: 'must-not-cross',
+        },
+        execCapture,
+      },
     });
     expect(result.ok).toBe(true);
     expect(calls[0].binary).toBe(runtime.nodePath);
@@ -290,17 +372,22 @@ describe('runHookCommand', () => {
       runtime.cliEntry,
     ]);
     expect(calls[0].options?.env).toMatchObject({
+      LOCALAPPDATA: 'C:\\Redirected\\Local',
+      HERMES_HOME: 'D:\\Hermes Data',
       WAGGLE_HOOK_NODE_PATH: runtime.nodePath,
       HIVE_MIND_DATA_DIR: '/waggle-data',
     });
+    expect(calls[0].options?.env?.OPENAI_API_KEY).toBeUndefined();
   });
 
-  it('routes verify and uninstall without install-only CLI arguments', async () => {
+  it('pins the packaged CLI for install but not verify or uninstall', async () => {
     const { calls, execCapture } = captureExec();
     const runtime = testHookRuntime();
+    await runHookCommand({ id: 'claude-code', action: 'install', runtime, deps: { execCapture } });
     await runHookCommand({ id: 'claude-code', action: 'verify', runtime, deps: { execCapture } });
     await runHookCommand({ id: 'claude-code', action: 'uninstall', runtime, deps: { execCapture } });
     expect(calls.map((call) => call.args)).toEqual([
+      [runtime.hookEntry, 'install', '--cli-path', runtime.cliEntry],
       [runtime.hookEntry, 'verify'],
       [runtime.hookEntry, 'uninstall'],
     ]);
@@ -352,9 +439,8 @@ describe('runHookCommand', () => {
     expect(result.error).toContain('exec failed');
   });
 
-  // R8-001: hook management is gated on HOOKS_COHORT. All seven built-ins now
-  // ship real bins, including Claude Desktop's MCP bridge, so they all route.
-  it.each<ToolId>(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'])(
+  // R8-001: hook management is gated on the release-supported HOOKS_COHORT.
+  it.each<ToolId>(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'hermes'])(
     'routes the hook command for HOOKS_COHORT tool (%s)',
     async (id) => {
       const { calls, execCapture } = captureExec();
@@ -362,6 +448,17 @@ describe('runHookCommand', () => {
       const result = await runHookCommand({ id, action: 'install', runtime, deps: { execCapture } });
       expect(result.ok).toBe(true);
       expect(calls[0].args).toEqual([runtime.hookEntry, 'install', '--cli-path', runtime.cliEntry]);
+    },
+  );
+
+  it.each<ToolId>(['cursor', 'openclaw'])(
+    'refuses hook commands for roadmap tool %s without invoking exec',
+    async (id) => {
+      const { calls, execCapture } = captureExec();
+      const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('not supported');
+      expect(calls).toHaveLength(0);
     },
   );
 
@@ -397,6 +494,62 @@ describe('hookPackageFor', () => {
 });
 
 describe('launchTool observe mode', () => {
+  it('preserves a target signal receipt instead of exposing the supervisor exit code', () => {
+    const child = new EventEmitter() as ChildProcess;
+    const handle = createObservedHandle(child);
+    const onExit = vi.fn();
+    handle.onExit(onExit);
+
+    child.emit('message', {
+      type: 'waggle-sidecar-owned-process-exit',
+      code: null,
+      signal: 'SIGTERM',
+    });
+    child.emit('exit', 1, null);
+
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onExit).toHaveBeenCalledWith(null);
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'keeps the production observed target under a sidecar-owned supervisor',
+    async () => {
+      const result = defaultSpawnObserved(process.execPath, [
+        '-e',
+        "setTimeout(() => console.log(JSON.stringify({ pid: process.pid, ppid: process.ppid })), 100); setInterval(() => {}, 1000)",
+      ], { env: process.env });
+      expect(result.pid).toBeTypeOf('number');
+      expect(result.handle).toBeDefined();
+      const supervisorPid = result.pid!;
+
+      try {
+        const payload = await new Promise<{ pid: number; ppid: number }>((resolvePayload, reject) => {
+          const timer = setTimeout(() => reject(new Error('Observed target produced no ownership receipt')), 5_000);
+          let output = '';
+          result.handle!.onData((chunk) => {
+            output += chunk;
+            const line = output.split(/\r?\n/, 1)[0];
+            try {
+              const parsed = JSON.parse(line) as { pid: number; ppid: number };
+              clearTimeout(timer);
+              resolvePayload(parsed);
+            } catch { /* wait for a complete JSON line */ }
+          });
+        });
+        expect(payload.pid).not.toBe(supervisorPid);
+        expect(payload.ppid).toBe(supervisorPid);
+      } finally {
+        const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR ?? 'C:\\Windows';
+        try {
+          execFileSync(join(windowsRoot, 'System32', 'taskkill.exe'), [
+            '/PID', String(supervisorPid), '/T', '/F',
+          ], { stdio: 'ignore', windowsHide: true });
+        } catch { /* best-effort fixture cleanup */ }
+      }
+    },
+    15_000,
+  );
+
   it('uses spawnObserved and returns its handle when observe:true', () => {
     const handle: ObservedHandle = { onData: () => {}, onExit: () => {} };
     const spawnObserved = vi.fn(() => ({ pid: 4242, handle }));
@@ -487,21 +640,12 @@ describe('resolveHookRuntime', () => {
 });
 
 describe('resolveSpawnInvocation', () => {
-  it('wraps Windows cmd shims through cmd.exe', () => {
-    const invocation = resolveSpawnInvocation(
+  it('rejects unrecognized Windows batch shims instead of invoking cmd.exe', () => {
+    expect(() => resolveSpawnInvocation(
       'C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd',
-      ['--version'],
+      ['safe" & echo injected & rem'],
       'win32',
-    );
-    expect(invocation.binary).toBe('cmd.exe');
-    expect(invocation.args).toEqual([
-      '/d',
-      '/v:off',
-      '/s',
-      '/c',
-      'call "C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd" "--version"',
-    ]);
-    expect(invocation.windowsVerbatimArguments).toBe(true);
+    )).toThrow(/UNSAFE_WINDOWS_BATCH_SHIM/);
   });
 
   it('leaves Windows exe launches untouched', () => {

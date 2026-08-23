@@ -101,6 +101,74 @@ describe('McpToolRetriever embedding top-k', () => {
     expect(out.length).toBeLessThanOrEqual(2);
     expect(names).not.toContain('mcp_slack_send');
   });
+
+  it('lets the newest user intent dominate while retaining recent context', async () => {
+    const retriever = new McpToolRetriever({ embedder: overlapEmbedder });
+    const tools = [
+      makeTool('mcp_github_create_issue', '[MCP: github] Create a github issue'),
+      makeTool('mcp_slack_send', '[MCP: slack] Send a slack message'),
+      makeTool('mcp_postgres_query', '[MCP: postgres] Run a postgres query'),
+      ...fillerTools(25),
+    ];
+
+    await retriever.selectTools(
+      tools, [userMsg('open a github issue')], 'conv', { threshold: 20, topK: 1 },
+    );
+    const slackTurn = await retriever.selectTools(
+      tools,
+      [userMsg('open a github issue'), userMsg('send a slack message')],
+      'conv',
+      { threshold: 20, topK: 1 },
+    );
+    const postgresTurn = await retriever.selectTools(
+      tools,
+      [
+        userMsg('open a github issue'),
+        userMsg('send a slack message'),
+        userMsg('query postgres'),
+      ],
+      'conv',
+      { threshold: 20, topK: 1 },
+    );
+
+    expect(slackTurn.map(tool => tool.name)).toEqual([
+      'mcp_github_create_issue',
+      'mcp_slack_send',
+    ]);
+    expect(postgresTurn.map(tool => tool.name)).toEqual([
+      'mcp_github_create_issue',
+      'mcp_slack_send',
+      'mcp_postgres_query',
+    ]);
+  });
+
+  it('reports only latest-turn semantic matches while retaining history in the union pool', async () => {
+    const retriever = new McpToolRetriever({ embedder: overlapEmbedder });
+    const tools = [
+      makeTool('mcp_github_create_issue', '[MCP: github] Create a github issue'),
+      makeTool('mcp_slack_send', '[MCP: slack] Send a slack message'),
+      makeTool('mcp_postgres_query', '[MCP: postgres] Run a postgres query'),
+      ...fillerTools(25),
+    ];
+
+    const selection = await retriever.selectToolsWithDetails(
+      tools,
+      [
+        userMsg('open a github issue'),
+        userMsg('send a slack message'),
+        userMsg('query postgres'),
+      ],
+      'conv',
+      { threshold: 20 },
+    );
+
+    expect(selection.tools.map(tool => tool.name)).toEqual([
+      'mcp_github_create_issue',
+      'mcp_slack_send',
+      'mcp_postgres_query',
+    ]);
+    expect(selection.retrievedToolNames).toEqual(['mcp_postgres_query']);
+  });
 });
 
 describe('McpToolRetriever union-only accumulation', () => {
@@ -163,6 +231,59 @@ describe('McpToolRetriever mock-embedder degrade', () => {
     const out = await retriever.selectTools(tools, [userMsg('search notion')], 'c1', { threshold: 20, topK: 3 });
     expect(out.map(t => t.name)).toContain('mcp_notion_search');
     expect(out.length).toBeLessThanOrEqual(3);
+  });
+
+  it('weights the newest intent in keyword fallback too', async () => {
+    const retriever = new McpToolRetriever({ embedder: null });
+    const tools = [
+      makeTool('mcp_github', '[MCP] github'),
+      makeTool('mcp_slack', '[MCP] slack'),
+      makeTool('mcp_postgres', '[MCP] postgres'),
+      ...fillerTools(25),
+    ];
+
+    await retriever.selectTools(
+      tools, [userMsg('github')], 'conv', { threshold: 20, topK: 1 },
+    );
+    const slackTurn = await retriever.selectTools(
+      tools,
+      [userMsg('github'), userMsg('slack')],
+      'conv',
+      { threshold: 20, topK: 1 },
+    );
+    const postgresTurn = await retriever.selectTools(
+      tools,
+      [userMsg('github'), userMsg('slack'), userMsg('postgres')],
+      'conv',
+      { threshold: 20, topK: 1 },
+    );
+
+    expect(slackTurn.map(tool => tool.name)).toContain('mcp_slack');
+    expect(postgresTurn.map(tool => tool.name)).toContain('mcp_postgres');
+  });
+
+  it('reports only latest-turn keyword matches while retaining history in the union pool', async () => {
+    const retriever = new McpToolRetriever({ embedder: null });
+    const tools = [
+      makeTool('mcp_github', '[MCP] github'),
+      makeTool('mcp_slack', '[MCP] slack'),
+      makeTool('mcp_postgres', '[MCP] postgres'),
+      ...fillerTools(25),
+    ];
+
+    const selection = await retriever.selectToolsWithDetails(
+      tools,
+      [userMsg('github'), userMsg('slack'), userMsg('postgres')],
+      'conv',
+      { threshold: 20 },
+    );
+
+    expect(selection.tools.map(tool => tool.name)).toEqual([
+      'mcp_github',
+      'mcp_slack',
+      'mcp_postgres',
+    ]);
+    expect(selection.retrievedToolNames).toEqual(['mcp_postgres']);
   });
 });
 

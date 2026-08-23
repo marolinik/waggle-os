@@ -64,6 +64,7 @@ export interface PreCompactExtracted {
 const DEFAULT_RECALL_LIMIT = 20;
 const PER_HIT_CONTENT_BUDGET = 240;
 const DEFAULT_SUMMARY_BUDGET_CHARS = 400;
+const DEFAULT_HOOK_SIGNAL_TIMEOUT_MS = 500;
 
 export interface SessionStartOpts {
   recallLimit?: number;
@@ -213,7 +214,10 @@ export async function runStopBody(
         memoryWorkspace: result.workspace,
         cwd: payload.cwd,
       },
-      { senderId: `${a.source}-hook` },
+      {
+        senderId: `${a.source}-hook`,
+        timeoutMs: DEFAULT_HOOK_SIGNAL_TIMEOUT_MS,
+      },
     );
     if (emitted) ctx.logger.debug('stop signal emitted', { id: emitted.id });
   }

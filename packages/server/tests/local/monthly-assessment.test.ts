@@ -8,7 +8,14 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { MindDB, CronStore, FrameStore, OptimizationLogStore, ImprovementSignalStore } from '@waggle/core';
+import {
+  MindDB,
+  CronStore,
+  FrameStore,
+  OptimizationLogStore,
+  ImprovementSignalStore,
+  InstallAuditStore,
+} from '@waggle/core';
 import { generateMonthlyAssessment, saveAssessmentToMind, type MonthlyAssessment } from '../../src/local/monthly-assessment.js';
 
 describe('Monthly Self-Assessment', () => {
@@ -78,6 +85,91 @@ describe('Monthly Self-Assessment', () => {
 
       expect(assessment.totalInteractions).toBe(2);
       expect(assessment.correctionRate).toBe(0.5);
+    });
+
+    it('uses local calendar boundaries for UTC-backed monthly data', () => {
+      const previousTimezone = process.env.TZ;
+      process.env.TZ = 'Europe/Budapest';
+
+      try {
+        const raw = db.getDatabase();
+        const optStore = new OptimizationLogStore(db);
+        const insideInteraction = optStore.insert({
+          sessionId: 'inside-august',
+          workspaceId: 'w1',
+          systemPrompt: 'test',
+          toolsUsed: [],
+          turnCount: 1,
+          wasCorrection: true,
+        });
+        const outsideInteraction = optStore.insert({
+          sessionId: 'outside-august',
+          workspaceId: 'w1',
+          systemPrompt: 'test',
+          toolsUsed: [],
+          turnCount: 1,
+          wasCorrection: false,
+        });
+        raw.prepare('UPDATE optimization_log SET timestamp = ? WHERE id = ?')
+          .run('2026-07-31 22:30:00', insideInteraction.id);
+        raw.prepare('UPDATE optimization_log SET timestamp = ? WHERE id = ?')
+          .run('2026-08-31 22:30:00', outsideInteraction.id);
+
+        raw.exec(`
+          CREATE TABLE feedback_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            message_index INTEGER NOT NULL,
+            rating TEXT NOT NULL,
+            reason TEXT,
+            detail TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+          )
+        `);
+        raw.prepare(`
+          INSERT INTO feedback_entries
+            (session_id, message_index, rating, reason, created_at)
+          VALUES (?, 0, ?, ?, ?)
+        `).run('inside-august', 'up', null, '2026-07-31 22:30:00');
+        raw.prepare(`
+          INSERT INTO feedback_entries
+            (session_id, message_index, rating, reason, created_at)
+          VALUES (?, 0, ?, ?, ?)
+        `).run('outside-august', 'down', 'wrong_answer', '2026-08-31 22:30:00');
+
+        const auditStore = new InstallAuditStore(db);
+        const recordInstall = (capabilityName: string) => auditStore.record({
+          capabilityName,
+          capabilityType: 'skill',
+          source: 'starter-pack',
+          riskLevel: 'low',
+          trustSource: 'starter_pack',
+          approvalClass: 'standard',
+          action: 'installed',
+          initiator: 'agent',
+        });
+        const insideInstallA = recordInstall('inside-skill-a');
+        const insideInstallB = recordInstall('inside-skill-b');
+        const outsideInstall = recordInstall('outside-skill');
+        raw.prepare('UPDATE install_audit SET timestamp = ? WHERE id = ?')
+          .run('2026-07-31 22:30:00', insideInstallA.id);
+        raw.prepare('UPDATE install_audit SET timestamp = ? WHERE id = ?')
+          .run('2026-07-31 23:30:00', insideInstallB.id);
+        raw.prepare('UPDATE install_audit SET timestamp = ? WHERE id = ?')
+          .run('2026-08-31 22:30:00', outsideInstall.id);
+
+        const config = { port: 3333, host: '127.0.0.1', dataDir: '/tmp/test', litellmUrl: 'http://localhost:4000' };
+        const assessment = generateMonthlyAssessment(config, db, '2026-08');
+
+        expect(assessment.totalInteractions).toBe(1);
+        expect(assessment.correctionRate).toBe(1);
+        expect(assessment.topStrengths).toContain('Consistent positive user feedback');
+        expect(assessment.topWeaknesses).not.toContain('wrong answer');
+        expect(assessment.skillsInstalled).toBe(2);
+      } finally {
+        if (previousTimezone === undefined) delete process.env.TZ;
+        else process.env.TZ = previousTimezone;
+      }
     });
 
     it('includes capability gaps from improvement signals', () => {

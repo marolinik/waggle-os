@@ -2,8 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastif
 import fp from 'fastify-plugin';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { FrameStore, SessionStore } from '@waggle/core';
-import { scanForInjection } from '@waggle/agent';
+import { evaluateExternalMemoryIngress, FrameStore, SessionStore } from '@waggle/core';
 import {
   validateMessageTypeCombo,
   WaggleDanceDispatcher,
@@ -85,6 +84,8 @@ const signalsQuerySchema = z.object({
   since: z.string().optional(),
 });
 
+const QUARANTINED_AGENT_SIGNAL = '[Quarantined agent signal]';
+
 declare module 'fastify' {
   interface FastifyInstance {
     /** AI-OS Phase 1B signal bus — shared across waggle-dance routes. */
@@ -139,6 +140,12 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
     }
     const senderId = runAuth ? `run::${runAuth.id}` : (body.senderId ?? 'local');
     const teamId = runAuth ? `room::${runAuth.roomId}` : (body.teamId ?? `personal::${senderId}`);
+    const signalContent = runAuth && isDurableAuthenticatedSignal(
+      body.type as MessageType,
+      body.subtype as MessageSubtype,
+    )
+      ? guardAuthenticatedSignalSummary(body.content)
+      : body.content;
 
     const message: WaggleMessage = {
       id: randomUUID(),
@@ -147,11 +154,11 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
       type: body.type as MessageType,
       subtype: body.subtype as MessageSubtype,
       content: runAuth ? {
-        ...body.content,
+        ...signalContent,
         roomId: runAuth.roomId,
         runId: runAuth.id,
         workspaceId: runAuth.workspaceId,
-      } : body.content,
+      } : signalContent,
       referenceId: body.referenceId ?? null,
       routing: body.routing ?? null,
       createdAt: new Date(),
@@ -243,13 +250,13 @@ function recordAuthenticatedRunSignal(
   run: CollaborationWorkerRun,
   message: WaggleMessage,
 ): void {
-  if (message.type === 'request' || message.subtype === 'task_claim') return;
+  if (!isDurableAuthenticatedSignal(message.type, message.subtype)) return;
   const summary = signalSummary(message.content);
   if (!summary) return;
-  const scan = scanForInjection(summary, 'tool_output');
-  const safeSummary = scan.safe
-    ? summary.slice(0, 4_000)
-    : `[Quarantined agent signal: ${scan.flags.join(', ') || 'injection risk'}]`;
+  const durableSummary = summary.slice(0, 4_000);
+  const safeSummary = evaluateExternalMemoryIngress({ content: durableSummary }).action === 'allow'
+    ? durableSummary
+    : QUARANTINED_AGENT_SIGNAL;
   const current = server.agentRunRegistry.get(run.id);
   if (!current || current.kind !== 'worker') return;
 
@@ -274,7 +281,6 @@ function recordAuthenticatedRunSignal(
       workspaceId: run.workspaceId,
       toolId: run.executor.toolId ?? null,
       subtype: message.subtype,
-      injection: scan,
     }));
     if (!personalFrameIds.includes(frame.id)) personalFrameIds.push(frame.id);
     personalStored = true;
@@ -304,6 +310,27 @@ function recordAuthenticatedRunSignal(
       workspaceFrameIds,
     },
   });
+}
+
+function isDurableAuthenticatedSignal(type: MessageType, subtype: MessageSubtype): boolean {
+  return type !== 'request' && subtype !== 'task_claim';
+}
+
+function guardAuthenticatedSignalSummary(content: Record<string, unknown>): Record<string, unknown> {
+  for (const key of ['summary', 'result', 'text', 'topic', 'message']) {
+    const value = content[key];
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const reflectedSummary = value.trim();
+    const durableSummary = reflectedSummary.slice(0, 4_000);
+    const durableDecision = evaluateExternalMemoryIngress({ content: durableSummary });
+    const reflectedDecision = reflectedSummary === durableSummary
+      ? durableDecision
+      : evaluateExternalMemoryIngress({ content: reflectedSummary });
+    return durableDecision.action === 'allow' && reflectedDecision.action === 'allow'
+      ? content
+      : { ...content, [key]: QUARANTINED_AGENT_SIGNAL };
+  }
+  return content;
 }
 
 function signalSummary(content: Record<string, unknown>): string | undefined {

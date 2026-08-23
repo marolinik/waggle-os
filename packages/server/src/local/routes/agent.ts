@@ -2,6 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { resolveUsableModel } from '../model-availability.js';
+import {
+  chatSessionStateKey,
+  isolateLegacyDefaultChatSessions,
+  normalizePersistedCapabilityTools,
+  resolveChatHistoryTarget,
+  type ChatHistoryMessage,
+} from './chat-persistence.js';
+import { assertSafeSegment } from './validate.js';
 
 /**
  * Agent routes — status, cost tracking, model management.
@@ -9,6 +17,17 @@ import { resolveUsableModel } from '../model-availability.js';
  */
 export const agentRoutes: FastifyPluginAsync = async (server) => {
   const { costTracker } = server.agentState;
+  let chatHistoryLayout = isolateLegacyDefaultChatSessions(
+    server.localConfig.dataDir,
+  );
+  const getChatHistoryLayout = () => {
+    if (chatHistoryLayout.status === 'recovery-required') {
+      chatHistoryLayout = isolateLegacyDefaultChatSessions(
+        server.localConfig.dataDir,
+      );
+    }
+    return chatHistoryLayout;
+  };
 
   // GET /api/agent/status — agent status including cost stats
   server.get('/api/agent/status', async () => {
@@ -77,33 +96,73 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
   // Loads from disk (.jsonl files) if not in RAM, ensuring persistence across restarts
   server.get<{
     Querystring: { session?: string; workspace?: string };
-  }>('/api/history', async (request) => {
-    const sessionId = request.query.session ?? request.query.workspace ?? 'default';
-    const workspaceId = request.query.workspace ?? 'default';
+  }>('/api/history', async (request, reply) => {
+    const suppliedWorkspaceId = request.query.workspace;
+    const sessionId = request.query.session ?? suppliedWorkspaceId ?? 'default';
+    const workspaceId = suppliedWorkspaceId ?? 'default';
+    assertSafeSegment(sessionId, 'session');
+    assertSafeSegment(workspaceId, 'workspace');
+    const historyTarget = resolveChatHistoryTarget(
+      server.localConfig.dataDir,
+      suppliedWorkspaceId,
+      !!server.workspaceManager?.get('default'),
+    );
+    if (workspaceId === 'default') {
+      const currentChatHistoryLayout = getChatHistoryLayout();
+      if (currentChatHistoryLayout.status === 'recovery-required') {
+        return reply.status(409).send({
+          error: 'Default chat history needs recovery before it can be read.',
+          code: currentChatHistoryLayout.code,
+        });
+      }
+    }
+    const sessionStateKey = chatSessionStateKey(
+      historyTarget.stateWorkspaceId,
+      sessionId,
+    );
 
     // Try in-memory first
-    let history = server.agentState.sessionHistories.get(sessionId);
+    let history = server.agentState.sessionHistories.get(sessionStateKey);
 
     // If not in RAM, load from disk
     if (!history || history.length === 0) {
       const filePath = path.join(
-        server.localConfig.dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`
+        historyTarget.dataDir,
+        'workspaces',
+        workspaceId,
+        'sessions',
+        `${sessionId}.jsonl`,
       );
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8').trim();
-        const messages: Array<{ role: string; content: string; timestamp?: string }> = [];
+        const messages: Array<ChatHistoryMessage & { timestamp?: string }> = [];
         for (const line of content.split('\n')) {
           if (!line.trim()) continue;
           try {
             const parsed = JSON.parse(line);
             if (parsed.type === 'meta') continue;
             if (parsed.role && parsed.content !== undefined) {
-              messages.push({ role: parsed.role, content: parsed.content, timestamp: parsed.timestamp });
+              const model = typeof parsed.model === 'string' && parsed.model.trim()
+                ? parsed.model
+                : undefined;
+              const tools = normalizePersistedCapabilityTools(parsed.tools);
+              messages.push({
+                role: parsed.role,
+                content: parsed.content,
+                timestamp: parsed.timestamp,
+                ...(model ? { model } : {}),
+                ...(tools ? { tools } : {}),
+              });
             }
           } catch { /* skip */ }
         }
         // Cache in RAM for subsequent requests
-        server.agentState.sessionHistories.set(sessionId, messages.map(m => ({ role: m.role, content: m.content })));
+        server.agentState.sessionHistories.set(sessionStateKey, messages.map(m => ({
+          role: m.role,
+          content: m.content,
+          ...(m.model ? { model: m.model } : {}),
+          ...(m.tools ? { tools: m.tools } : {}),
+        })));
         return {
           sessionId,
           messages: messages.map((m, i) => ({
@@ -111,6 +170,8 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
             role: m.role,
             content: m.content,
             timestamp: m.timestamp ?? new Date().toISOString(),
+            ...(m.model ? { model: m.model } : {}),
+            ...(m.tools ? { tools: m.tools } : {}),
           })),
           count: messages.length,
         };
@@ -125,6 +186,8 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
         role: m.role,
         content: m.content,
         timestamp: new Date().toISOString(),
+        ...(m.model ? { model: m.model } : {}),
+        ...(m.tools ? { tools: m.tools } : {}),
       })),
       count: history.length,
     };

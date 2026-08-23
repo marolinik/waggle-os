@@ -40,6 +40,8 @@ describe('ModelPilotCard', () => {
 
     const threshold = screen.getByRole('slider', { name: /budget saver activation threshold/i });
     expect(threshold).toHaveAttribute('name', 'budgetThreshold');
+    expect(threshold).toHaveAttribute('min', '0.5');
+    expect(threshold).toHaveAttribute('max', '0.95');
     expect(threshold.className).toContain('focus-visible:ring-2');
 
     fireEvent.change(threshold, { target: { value: '0.75' } });

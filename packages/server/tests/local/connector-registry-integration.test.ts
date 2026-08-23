@@ -58,10 +58,11 @@ function createMockVault(credentials: Record<string, { value: string; isExpired:
 // ─── Integration Tests ───────────────────────────────────────────────
 
 describe('ConnectorRegistry integration', () => {
-  it('registry getDefinitions() returns correct status from vault', () => {
+  it('registry getDefinitions() returns correct status from vault', async () => {
     const vault = createMockVault({ test: { value: 'tok', isExpired: false } });
     const registry = new ConnectorRegistry(vault);
     registry.register(new TestConnector());
+    expect(await registry.hydrate('test')).toBe(true);
 
     const defs = registry.getDefinitions();
     expect(defs).toHaveLength(1);
@@ -70,20 +71,22 @@ describe('ConnectorRegistry integration', () => {
     expect(defs[0].tools).toEqual(['connector_test_read_data', 'connector_test_create_item']);
   });
 
-  it('connector tools are included in generated tools when connected', () => {
+  it('connector tools are included in generated tools when connected', async () => {
     const vault = createMockVault({ test: { value: 'tok', isExpired: false } });
     const registry = new ConnectorRegistry(vault);
     registry.register(new TestConnector());
+    expect(await registry.hydrate('test')).toBe(true);
 
     const tools = registry.generateTools();
     expect(tools).toHaveLength(2);
     expect(tools.map(t => t.name)).toEqual(['connector_test_read_data', 'connector_test_create_item']);
   });
 
-  it('no connector tools generated when disconnected', () => {
+  it('no connector tools generated when disconnected', async () => {
     const vault = createMockVault(); // no credentials
     const registry = new ConnectorRegistry(vault);
     registry.register(new TestConnector());
+    expect(await registry.hydrate('test')).toBe(true);
 
     expect(registry.generateTools()).toEqual([]);
   });

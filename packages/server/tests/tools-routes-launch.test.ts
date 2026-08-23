@@ -75,8 +75,9 @@ vi.mock('@waggle/agent', async (importOriginal) => {
 
 import { buildLocalServer } from '../src/local/index.js';
 import { injectWithAuth } from './test-utils.js';
-import { launchTool, runHookCommand } from '@waggle/agent';
+import { detectInstalledTools, launchTool, runHookCommand } from '@waggle/agent';
 import { loopbackSidecarUrl } from '../src/local/routes/tools.js';
+import { resolveWorkspaceExecutionRoot } from '../src/local/workspace-execution-root.js';
 
 function createTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `waggle-launch-${prefix}-`));
@@ -102,6 +103,12 @@ async function stopChild(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill();
   await once(child, 'exit');
+}
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
 describe('POST /api/tools/launch', () => {
@@ -233,6 +240,36 @@ describe('POST /api/tools/launch', () => {
     );
   });
 
+  it('rejects a dynamically blocked executable before creating a run or process', async () => {
+    vi.mocked(launchTool).mockClear();
+    const runCountBefore = server.agentRunRegistry.snapshot().runs.length;
+    vi.mocked(detectInstalledTools).mockResolvedValueOnce({
+      platform: 'win32',
+      detectedAt: new Date().toISOString(),
+      tools: [{
+        id: 'codex', displayName: 'Codex CLI', installed: true,
+        installedPath: 'C:\\Program Files\\WindowsApps\\OpenAI.Codex\\resources\\codex.exe',
+        version: null, hooksInstalled: false, hookPointerPath: null,
+        launchable: false, diagnostic: 'The Store resource CLI cannot launch outside its package.',
+      }],
+    });
+
+    const response = await injectWithAuth(server, {
+      method: 'POST', url: '/api/tools/launch',
+      headers: { 'content-type': 'application/json' },
+      payload: { id: 'codex', workspaceId },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: 'tool_not_launchable',
+      toolId: 'codex',
+      message: 'The Store resource CLI cannot launch outside its package.',
+    });
+    expect(launchTool).not.toHaveBeenCalled();
+    expect(server.agentRunRegistry.snapshot().runs).toHaveLength(runCountBefore);
+  });
+
   it('rejects unknown tool id', async () => {
     const res = await injectWithAuth(server, {
       method: 'POST',
@@ -282,33 +319,501 @@ describe('POST /api/tools/launch', () => {
     expect(res.json().error).toBe('outside cohort');
   });
 
-  it('registers the spawned pid in the process tracker', async () => {
-    // Use this test runner's pid as the spawned-pid stub — it is
-    // guaranteed alive so the tracker's default liveness probe
-    // (process.kill 0) doesn't GC the entry before we read it.
-    const fakePid = process.pid;
+  it('terminates a spawned process and settles the run when bookkeeping throws', async () => {
+    vi.mocked(launchTool).mockClear();
+    const sleeper = spawnSleeper();
+    const update = vi.spyOn(server.agentRunRegistry, 'update');
+    update.mockImplementationOnce(() => {
+      throw new Error('simulated registry persistence failure');
+    });
     vi.mocked(launchTool).mockReturnValueOnce({
       ok: true,
-      pid: fakePid,
-      executed: { binary: '/somewhere', args: [] },
+      pid: sleeper.pid!,
+      executed: { binary: '/server-detected/claude-code', args: [] },
     });
-    server.toolProcessTracker?.clear();
-    const res = await injectWithAuth(server, {
+    const workerIdsBefore = new Set(
+      server.agentRunRegistry
+        .list({ workspaceId, source: 'external_tool', limit: 1_000 })
+        .filter((run) => run.kind === 'worker')
+        .map((run) => run.id),
+    );
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'claude-code', workspaceId },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({
+        ok: false,
+        error: 'tool_launch_failed',
+      });
+      await vi.waitFor(() => {
+        expect(sleeper.exitCode !== null || sleeper.signalCode !== null).toBe(true);
+      });
+      expect(server.toolProcessTracker?.list().some(({ pid }) => pid === sleeper.pid)).toBe(false);
+      const failedWorker = server.agentRunRegistry
+        .list({ workspaceId, source: 'external_tool', limit: 1_000 })
+        .find((run) => run.kind === 'worker' && !workerIdsBefore.has(run.id));
+      expect(failedWorker).toMatchObject({ kind: 'worker', status: 'failed' });
+    } finally {
+      update.mockRestore();
+      await stopChild(sleeper);
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+    }
+  });
+
+  it('registers the spawned pid in the process tracker', async () => {
+    const sleeper = spawnSleeper();
+    try {
+      const fakePid = sleeper.pid!;
+      vi.mocked(launchTool).mockReturnValueOnce({
+        ok: true,
+        pid: fakePid,
+        executed: { binary: '/somewhere', args: [] },
+      });
+      server.toolProcessTracker?.clear();
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          id: 'claude-code',
+          installedPath: '/server-detected/claude-code',
+          workspaceId,
+        },
+      });
+      expect(res.statusCode).toBe(202);
+      const tracked = server.toolProcessTracker?.list() ?? [];
+      const match = tracked.find((p) => p.pid === fakePid);
+      expect(match).toBeDefined();
+      expect(match?.toolId).toBe('claude-code');
+      expect(match?.workspaceId).toBe(workspaceId);
+    } finally {
+      await stopChild(sleeper);
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+    }
+  });
+
+  it('keeps explicit cancellation authoritative when reconciliation observes process exit first', async () => {
+    vi.mocked(launchTool).mockClear();
+    const sleeper = spawnSleeper();
+    const exitListeners: Array<(code: number | null) => void> = [];
+    vi.mocked(launchTool).mockReturnValueOnce({
+      ok: true,
+      pid: sleeper.pid!,
+      executed: { binary: '/server-detected/claude-code', args: [] },
+      output: {
+        onData: () => {},
+        onExit: (listener) => { exitListeners.push(listener); },
+      },
+    });
+    const launched = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/tools/launch',
       headers: { 'content-type': 'application/json' },
-      payload: {
-        id: 'claude-code',
-        installedPath: '/server-detected/claude-code',
-        workspaceId,
-      },
+      payload: { id: 'claude-code', workspaceId, observe: true },
     });
-    expect(res.statusCode).toBe(202);
-    const tracked = server.toolProcessTracker?.list() ?? [];
-    const match = tracked.find((p) => p.pid === fakePid);
-    expect(match).toBeDefined();
-    expect(match?.toolId).toBe('claude-code');
-    expect(match?.workspaceId).toBe(workspaceId);
+    expect(launched.statusCode).toBe(202);
+    const { runId } = launched.json() as { runId: string };
+
+    const killStarted = deferred();
+    const allowKillToSettle = deferred();
+    const kill = vi.spyOn(server.toolProcessTracker!, 'kill').mockImplementationOnce(async (pid) => {
+      killStarted.resolve();
+      await allowKillToSettle.promise;
+      return { ok: true, pid, reason: 'tree-kill-ok' };
+    });
+    let killRequest: ReturnType<typeof injectWithAuth> | undefined;
+
+    try {
+      killRequest = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/kill',
+        headers: { 'content-type': 'application/json' },
+        payload: { pid: sleeper.pid },
+      });
+      await killStarted.promise;
+      const workspace = server.workspaceManager.get(workspaceId)!;
+      const workspaceRoot = resolveWorkspaceExecutionRoot(tmpDir, workspace);
+      expect(
+        server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+      ).toBeUndefined();
+
+      await stopChild(sleeper);
+      for (const listener of exitListeners) listener(0);
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+
+      expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+      expect(
+        server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+      ).toBeUndefined();
+      allowKillToSettle.resolve();
+      expect((await killRequest).statusCode).toBe(200);
+      expect(server.agentRunRegistry.get(runId)?.status).toBe('cancelled');
+      const releaseAfterTreeCleanup =
+        server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write');
+      expect(releaseAfterTreeCleanup).toEqual(expect.any(Function));
+      releaseAfterTreeCleanup?.();
+    } finally {
+      allowKillToSettle.resolve();
+      if (killRequest) await killRequest;
+      kill.mockRestore();
+      await stopChild(sleeper);
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+    }
+  });
+
+  it.each(['route', 'registry'] as const)(
+    'keeps cancellation intent while %s termination remains ambiguous',
+    async (surface) => {
+      vi.mocked(launchTool).mockClear();
+      const sleeper = spawnSleeper();
+      vi.mocked(launchTool).mockReturnValueOnce({
+        ok: true,
+        pid: sleeper.pid!,
+        executed: { binary: '/server-detected/claude-code', args: [] },
+      });
+      const launched = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'claude-code', workspaceId },
+      });
+      expect(launched.statusCode).toBe(202);
+      const { runId } = launched.json() as { runId: string };
+      const kill = vi.spyOn(server.toolProcessTracker!, 'kill').mockResolvedValueOnce({
+        ok: false,
+        pid: sleeper.pid!,
+        reason: 'tree-kill-failed',
+      });
+      let cleanupCompleted = false;
+
+      try {
+        if (surface === 'route') {
+          const response = await injectWithAuth(server, {
+            method: 'POST',
+            url: '/api/tools/kill',
+            headers: { 'content-type': 'application/json' },
+            payload: { pid: sleeper.pid },
+          });
+          expect(response.statusCode).toBe(500);
+          expect(response.json()).toMatchObject({
+            ok: false,
+            pid: sleeper.pid,
+            reason: 'tree-kill-failed',
+          });
+        } else {
+          await expect(server.agentRunRegistry.control(runId, 'cancel')).rejects.toThrow(
+            `Could not stop process ${sleeper.pid}`,
+          );
+        }
+
+        expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+        const workspace = server.workspaceManager.get(workspaceId)!;
+        const workspaceRoot = resolveWorkspaceExecutionRoot(tmpDir, workspace);
+        expect(
+          server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+        ).toBeUndefined();
+        const launchCallsBeforeCompeting = vi.mocked(launchTool).mock.calls.length;
+        const competing = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/tools/launch',
+          headers: { 'content-type': 'application/json' },
+          payload: { id: 'hermes', workspaceId },
+        });
+        expect(competing.statusCode).toBe(409);
+        expect(launchTool).toHaveBeenCalledTimes(launchCallsBeforeCompeting);
+
+        await stopChild(sleeper);
+        await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+        expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+        expect(
+          server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+        ).toBeUndefined();
+
+        const retry = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/tools/kill',
+          headers: { 'content-type': 'application/json' },
+          payload: { pid: sleeper.pid },
+        });
+        expect(retry.statusCode).toBe(404);
+        expect(retry.json().reason).toBe('not-tracked');
+        await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+        expect(server.agentRunRegistry.get(runId)?.status).toBe('running');
+        expect(
+          server.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write'),
+        ).toBeUndefined();
+
+        kill.mockResolvedValueOnce({
+          ok: true,
+          pid: sleeper.pid!,
+          reason: 'tree-kill-ok',
+        });
+        const cleanup = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/tools/kill',
+          headers: { 'content-type': 'application/json' },
+          payload: { pid: sleeper.pid },
+        });
+        expect(cleanup.statusCode).toBe(200);
+        expect(server.agentRunRegistry.get(runId)?.status).toBe('cancelled');
+        cleanupCompleted = true;
+      } finally {
+        if (!cleanupCompleted) {
+          kill.mockResolvedValueOnce({
+            ok: true,
+            pid: sleeper.pid!,
+            reason: 'tree-kill-ok',
+          });
+          await injectWithAuth(server, {
+            method: 'POST',
+            url: '/api/tools/kill',
+            headers: { 'content-type': 'application/json' },
+            payload: { pid: sleeper.pid },
+          });
+        }
+        kill.mockRestore();
+        await stopChild(sleeper);
+        await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+      }
+    },
+  );
+
+  it('keeps the workspace leased when the registry becomes terminal before the process exits', async () => {
+    vi.mocked(launchTool).mockClear();
+    const sleeper = spawnSleeper();
+    vi.mocked(launchTool).mockReturnValueOnce({
+      ok: true,
+      pid: sleeper.pid!,
+      executed: { binary: '/server-detected/claude-code', args: [] },
+    });
+
+    try {
+      const launched = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'claude-code', workspaceId },
+      });
+      expect(launched.statusCode).toBe(202);
+      const { runId } = launched.json() as { runId: string };
+      server.agentRunRegistry.update(runId, {
+        status: 'completed',
+        result: { summary: 'Premature terminal registry state' },
+      });
+
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+      const launchCallsBeforeCompeting = vi.mocked(launchTool).mock.calls.length;
+      const competing = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'hermes', workspaceId },
+      });
+
+      expect(competing.statusCode).toBe(409);
+      expect(competing.json()).toMatchObject({ error: 'workspace_busy', workspaceId });
+      expect(launchTool).toHaveBeenCalledTimes(launchCallsBeforeCompeting);
+    } finally {
+      await stopChild(sleeper);
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+    }
+  });
+
+  it('rejects a second interactive agent until the first releases the same workspace checkout', async () => {
+    vi.mocked(launchTool).mockClear();
+    const sleeper = spawnSleeper();
+    try {
+      const exitListeners: Array<(code: number | null) => void> = [];
+      vi.mocked(launchTool).mockReturnValueOnce({
+        ok: true,
+        pid: sleeper.pid!,
+        executed: { binary: '/server-detected/claude-code', args: [] },
+        output: {
+          onData: () => {},
+          onExit: (listener) => { exitListeners.push(listener); },
+        },
+      });
+
+      const first = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          id: 'claude-code',
+          workspaceId,
+          observe: true,
+        },
+      });
+      expect(first.statusCode).toBe(202);
+
+      const workspace = server.workspaceManager.get(workspaceId)!;
+      const workspaceRoot = resolveWorkspaceExecutionRoot(tmpDir, workspace);
+      const queuedScope = server.agentState.workspaceTurnCoordinator.createScope(workspaceRoot);
+      let queuedScopeAcquired = false;
+      const queuedAcquire = queuedScope.acquire('write').then(() => {
+        queuedScopeAcquired = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(queuedScopeAcquired).toBe(false);
+
+      const runCountBeforeCompeting = server.agentRunRegistry.snapshot().runs.length;
+      const processCountBeforeCompeting = server.toolProcessTracker?.list().length;
+      const competing = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          id: 'hermes',
+          workspaceId,
+        },
+      });
+      expect(competing.statusCode).toBe(409);
+      expect(competing.json()).toMatchObject({
+        error: 'workspace_busy',
+        workspaceId,
+      });
+      expect(launchTool).toHaveBeenCalledTimes(1);
+      expect(server.agentRunRegistry.snapshot().runs).toHaveLength(runCountBeforeCompeting);
+      expect(server.toolProcessTracker?.list()).toHaveLength(processCountBeforeCompeting ?? 0);
+
+      await stopChild(sleeper);
+      for (const listener of exitListeners) listener(0);
+      await queuedAcquire;
+      expect(queuedScopeAcquired).toBe(true);
+      await queuedScope.release();
+
+      vi.mocked(launchTool).mockReturnValueOnce({
+        ok: true,
+        pid: null,
+        executed: { binary: '/server-detected/hermes', args: [] },
+      });
+      const afterRelease = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          id: 'hermes',
+          workspaceId,
+        },
+      });
+      expect(afterRelease.statusCode).toBe(500);
+      expect(afterRelease.json()).toMatchObject({
+        ok: false,
+        error: 'tool_launch_missing_pid',
+      });
+      expect(launchTool).toHaveBeenCalledTimes(2);
+    } finally {
+      await stopChild(sleeper);
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+    }
+  });
+
+  it('serializes aliases of one physical root but permits a different checkout', async () => {
+    vi.mocked(launchTool).mockClear();
+    const rootA = fs.mkdtempSync(path.join(tmpDir, 'interactive-root-a-'));
+    const rootB = fs.mkdtempSync(path.join(tmpDir, 'interactive-root-b-'));
+    const workspaceA = server.workspaceManager.create({
+      name: `Interactive root A ${Date.now()}`,
+      group: 'test',
+      directory: rootA,
+    });
+    const workspaceAlias = server.workspaceManager.create({
+      name: `Interactive root A alias ${Date.now()}`,
+      group: 'test',
+      directory: path.join(rootA, '.'),
+    });
+    const workspaceB = server.workspaceManager.create({
+      name: `Interactive root B ${Date.now()}`,
+      group: 'test',
+      directory: rootB,
+    });
+    const sleeperA = spawnSleeper();
+    const sleeperB = spawnSleeper();
+
+    try {
+      vi.mocked(launchTool)
+        .mockReturnValueOnce({
+          ok: true,
+          pid: sleeperA.pid!,
+          executed: { binary: '/server-detected/claude-code', args: [] },
+        })
+        .mockReturnValueOnce({
+          ok: true,
+          pid: sleeperB.pid!,
+          executed: { binary: '/server-detected/hermes', args: [] },
+        });
+
+      const first = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'claude-code', workspaceId: workspaceA.id },
+      });
+      expect(first.statusCode).toBe(202);
+
+      const alias = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'hermes', workspaceId: workspaceAlias.id },
+      });
+      expect(alias.statusCode).toBe(409);
+      expect(alias.json()).toMatchObject({
+        error: 'workspace_busy',
+        workspaceId: workspaceAlias.id,
+      });
+
+      const differentRoot = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'hermes', workspaceId: workspaceB.id },
+      });
+      expect(differentRoot.statusCode).toBe(202);
+      expect(launchTool).toHaveBeenCalledTimes(2);
+    } finally {
+      await Promise.all([stopChild(sleeperA), stopChild(sleeperB)]);
+      await injectWithAuth(server, { method: 'GET', url: '/api/tools/processes' });
+      fs.rmSync(rootA, { recursive: true, force: true });
+      fs.rmSync(rootB, { recursive: true, force: true });
+    }
+  });
+
+  it('shares the same nonblocking checkout lease with chat and worker execution', async () => {
+    vi.mocked(launchTool).mockClear();
+    const workspace = server.workspaceManager.get(workspaceId)!;
+    const workspaceRoot = resolveWorkspaceExecutionRoot(tmpDir, workspace);
+    const competingScope = server.agentState.workspaceTurnCoordinator.createScope(workspaceRoot);
+    await competingScope.acquire('write');
+    const runCountBefore = server.agentRunRegistry.snapshot().runs.length;
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          id: 'claude-code',
+          workspaceId,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        error: 'workspace_busy',
+        workspaceId,
+      });
+      expect(launchTool).not.toHaveBeenCalled();
+      expect(server.agentRunRegistry.snapshot().runs).toHaveLength(runCountBefore);
+    } finally {
+      await competingScope.release();
+    }
   });
 });
 
@@ -415,11 +920,12 @@ describe('POST /api/tools/kill', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('returns 200 + reason=already-dead when the tracked pid is already gone', async () => {
+  it('does not overclaim process-tree cleanup when the tracked pid is already gone', async () => {
     // Use this test runner's pid + an injected isAlive=false would
     // require swapping the tracker entirely. Simpler: register a
     // synthetic pid that the default isAlive (process.kill 0) will
-    // immediately fail on, so the route surfaces 'already-dead'.
+    // immediately fail on. Windows cannot prove that the dead root left no
+    // descendants; POSIX retains its existing already-dead behavior.
     server.toolProcessTracker?.clear();
     const SYNTHETIC_DEAD_PID = 2147483646; // near max int32, very unlikely to be alive
     server.toolProcessTracker?.register(SYNTHETIC_DEAD_PID, 'claude-code');
@@ -429,8 +935,10 @@ describe('POST /api/tools/kill', () => {
       headers: { 'content-type': 'application/json' },
       payload: { pid: SYNTHETIC_DEAD_PID },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().reason).toBe('already-dead');
+    expect(res.statusCode).toBe(process.platform === 'win32' ? 500 : 200);
+    expect(res.json().reason).toBe(
+      process.platform === 'win32' ? 'tree-cleanup-unverified' : 'already-dead',
+    );
     expect(server.toolProcessTracker?.list().find((p) => p.pid === SYNTHETIC_DEAD_PID)).toBeUndefined();
   });
 });
@@ -645,15 +1153,130 @@ describe('POST /api/tools/launch — persistence + reconcile', () => {
       expect(server2.agentRunRegistry.authenticateCredential(runToken)).toBeUndefined();
       expect(server2.toolProcessTracker?.list().some((process) => process.pid === child.pid)).toBe(true);
 
+      const launchCallsBeforeCompeting = vi.mocked(launchTool).mock.calls.length;
+      const competing = await injectWithAuth(server2, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'hermes', workspaceId },
+      });
+      expect(competing.statusCode).toBe(409);
+      expect(competing.json()).toMatchObject({ error: 'workspace_busy', workspaceId });
+      expect(launchTool).toHaveBeenCalledTimes(launchCallsBeforeCompeting);
+
       const cancelled = await server2.agentRunRegistry.control(runId, 'cancel');
       expect(cancelled.status).toBe('cancelled');
       expect(server2.toolProcessTracker?.list().some((process) => process.pid === child.pid)).toBe(false);
+      const restoredWorkspace = server2.workspaceManager.get(workspaceId)!;
+      const restoredRoot = resolveWorkspaceExecutionRoot(tmpDir, restoredWorkspace);
+      const releaseAfterCancel =
+        server2.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(restoredRoot, 'write');
+      expect(releaseAfterCancel).toEqual(expect.any(Function));
+      releaseAfterCancel?.();
     } finally {
       if (server1) await server1.close();
       if (server2) await server2.close();
       await stopChild(child);
     }
-  }, 10_000);
+  }, 30_000);
+
+  it('adopts a workspace lease for a live persisted tracker row without a registry worker', async () => {
+    const child = spawnSleeper();
+    let server1: FastifyInstance | undefined;
+    let server2: FastifyInstance | undefined;
+    try {
+      vi.mocked(launchTool).mockClear();
+      server1 = await buildLocalServer({ dataDir: tmpDir });
+      await server1.ready();
+      const workspaceId =
+        server1.workspaceManager.getDefault() ?? server1.workspaceManager.list()[0]!.id;
+      server1.toolProcessTracker?.register(child.pid!, 'claude-code', workspaceId);
+      await server1.close();
+      server1 = undefined;
+
+      server2 = await buildLocalServer({ dataDir: tmpDir });
+      await server2.ready();
+      const launchCallsBefore = vi.mocked(launchTool).mock.calls.length;
+      const competing = await injectWithAuth(server2, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'hermes', workspaceId },
+      });
+      expect(competing.statusCode).toBe(409);
+      expect(competing.json()).toMatchObject({ error: 'workspace_busy', workspaceId });
+      expect(launchTool).toHaveBeenCalledTimes(launchCallsBefore);
+
+      const killed = await injectWithAuth(server2, {
+        method: 'POST',
+        url: '/api/tools/kill',
+        headers: { 'content-type': 'application/json' },
+        payload: { pid: child.pid },
+      });
+      expect(killed.statusCode).toBe(200);
+      const workspace = server2.workspaceManager.get(workspaceId)!;
+      const workspaceRoot = resolveWorkspaceExecutionRoot(tmpDir, workspace);
+      const release =
+        server2.agentState.workspaceTurnCoordinator.tryAcquireWorkspace(workspaceRoot, 'write');
+      expect(release).toEqual(expect.any(Function));
+      release?.();
+    } finally {
+      if (server1) await server1.close();
+      if (server2) await server2.close();
+      await stopChild(child);
+    }
+  }, 30_000);
+
+  it('rebuilds a corrupt process tracker from an alive external-tool registry run', async () => {
+    const child = spawnSleeper();
+    let server1: FastifyInstance | undefined;
+    let server2: FastifyInstance | undefined;
+    try {
+      vi.mocked(launchTool).mockClear();
+      vi.mocked(launchTool).mockReturnValueOnce({
+        ok: true,
+        pid: child.pid!,
+        executed: { binary: '/x', args: [] },
+      });
+      server1 = await buildLocalServer({ dataDir: tmpDir });
+      await server1.ready();
+      const workspaceId =
+        server1.workspaceManager.getDefault() ?? server1.workspaceManager.list()[0]!.id;
+      const launched = await injectWithAuth(server1, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'claude-code', installedPath: '/x', workspaceId },
+      });
+      expect(launched.statusCode).toBe(202);
+      const { runId } = launched.json() as { runId: string };
+      await server1.close();
+      server1 = undefined;
+      fs.writeFileSync(path.join(tmpDir, 'launched-processes.json'), '{"truncated":', 'utf8');
+
+      server2 = await buildLocalServer({ dataDir: tmpDir });
+      await server2.ready();
+      expect(server2.agentRunRegistry.get(runId)?.status).toBe('running');
+      expect(
+        server2.toolProcessTracker?.list().some((process) => process.pid === child.pid),
+      ).toBe(true);
+
+      const launchCallsBefore = vi.mocked(launchTool).mock.calls.length;
+      const competing = await injectWithAuth(server2, {
+        method: 'POST',
+        url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'hermes', workspaceId },
+      });
+      expect(competing.statusCode).toBe(409);
+      expect(competing.json()).toMatchObject({ error: 'workspace_busy', workspaceId });
+      expect(launchTool).toHaveBeenCalledTimes(launchCallsBefore);
+    } finally {
+      if (server1) await server1.close();
+      if (server2) await server2.close();
+      await stopChild(child);
+    }
+  }, 30_000);
 
   it('marks a detached run interrupted when its process disappeared during restart', async () => {
     const child = spawnSleeper();

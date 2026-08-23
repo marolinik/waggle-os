@@ -1,59 +1,144 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { adapter } from '@/lib/adapter';
 import { useProviders } from './useProviders';
 
 /**
- * useHasWorkingModel — the shared "≥1 working model" signal for the PR5 model
- * gate (Onboarding step 3's HARD gate AND the Settings→Models banner). A model
- * is "working" if either a cloud provider has a key configured OR a local model
- * is detected. This is a UX affordance, not a security boundary — the real
- * LLM-availability enforcement happens server-side at chat time — so it derives
- * from already-fetched data (no live key-probe required to compute readiness).
- *
- * Composing useProviders keeps a single source of truth (the same /api/providers
- * hasKey data the Settings Models tab reads), so the gate and the banner can
- * never disagree about what counts as ready.
+ * Shared model-readiness signal for the onboarding hard gate and Models banner.
+ * Cloud keys are live-probed; a detected local model is independently sufficient.
  */
 export interface WorkingModelState {
-  /** cloudReady || localReady — the hard-gate predicate. */
   hasWorkingModel: boolean;
-  /** ≥1 cloud provider has a key in the vault. */
   cloudReady: boolean;
-  /** ≥1 local model detected (Ollama/vLLM). */
   localReady: boolean;
   loading: boolean;
   refresh: () => void;
 }
 
 export function useHasWorkingModel(): WorkingModelState {
-  const { activeProviders, loading: providersLoading, refresh: refreshProviders } = useProviders();
+  const { providers, activeProviders, loading: providersLoading, refresh: refreshProviders } = useProviders();
   const [localModelCount, setLocalModelCount] = useState(0);
   const [localLoading, setLocalLoading] = useState(true);
+  const [cloud, setCloud] = useState({ ready: false, loading: true });
+  const mounted = useRef(true);
+  const localGeneration = useRef(0);
+  const cloudGeneration = useRef(0);
+  const explicitCloudRefresh = useRef<number | null>(null);
+  const explicitProviders = useRef<unknown>(null);
+  const activeProviderIds = useRef<string[]>([]);
+  activeProviderIds.current = activeProviders.map((provider) => provider.id);
 
   const refreshLocal = useCallback(async () => {
-    setLocalLoading(true);
+    const generation = ++localGeneration.current;
+    if (mounted.current) {
+      setLocalModelCount(0);
+      setLocalLoading(true);
+    }
     try {
       const status = await adapter.getLocalInferenceStatus();
-      setLocalModelCount(status?.totalLocalModels ?? 0);
+      if (mounted.current && generation === localGeneration.current) setLocalModelCount(status?.totalLocalModels ?? 0);
     } catch {
-      // Local-inference probe failed (Ollama not installed / unreachable) —
-      // treat as "no local model"; a cloud key can still make the gate pass.
-      setLocalModelCount(0);
+      if (mounted.current && generation === localGeneration.current) setLocalModelCount(0);
     } finally {
-      setLocalLoading(false);
+      if (mounted.current && generation === localGeneration.current) setLocalLoading(false);
     }
   }, []);
 
-  useEffect(() => { void refreshLocal(); }, [refreshLocal]);
+  const probeCloud = useCallback(async (providerIds: string[], generation: number) => {
+    const setCloudForGeneration = (next: { ready: boolean; loading: boolean }) => {
+      if (mounted.current && generation === cloudGeneration.current) setCloud(next);
+    };
+    if (!mounted.current || generation !== cloudGeneration.current) return;
+    setCloudForGeneration({ ready: false, loading: true });
 
-  const cloudReady = activeProviders.length > 0;
+    if (providerIds.length === 0) {
+      setCloudForGeneration({ ready: false, loading: false });
+      return;
+    }
+
+    let defaultProbe: Awaited<ReturnType<typeof adapter.probeModel>> | null = null;
+    try {
+      defaultProbe = await adapter.probeModel();
+    } catch {
+      // An unavailable default-model probe falls back to the keyed providers.
+    }
+    if (!mounted.current || generation !== cloudGeneration.current) return;
+
+    if (defaultProbe?.configured) {
+      if (defaultProbe.verified) {
+        setCloudForGeneration({ ready: true, loading: false });
+        return;
+      }
+      if (defaultProbe.rejected) {
+        setCloudForGeneration({ ready: false, loading: false });
+        return;
+      }
+      setCloudForGeneration({ ready: true, loading: false });
+      return;
+    }
+
+    const outcomes = await Promise.allSettled(providerIds.map((id) => adapter.probeProvider(id)));
+    if (!mounted.current || generation !== cloudGeneration.current) return;
+    const probes = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
+    const verified = probes.some((probe) => probe.configured && probe.valid !== false && probe.verified);
+    const rejected = probes.some((probe) => probe.configured && probe.valid === false);
+    const transient = outcomes.some((outcome) => outcome.status === 'rejected')
+      || probes.some((probe) => probe.configured && probe.valid !== false);
+    setCloudForGeneration({ ready: verified || (!rejected && transient), loading: false });
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      cloudGeneration.current += 1;
+      localGeneration.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (providersLoading) return;
+    if (explicitCloudRefresh.current === cloudGeneration.current) {
+      if (explicitProviders.current === providers) {
+        explicitCloudRefresh.current = null;
+        explicitProviders.current = null;
+        return;
+      }
+      explicitCloudRefresh.current = null;
+      explicitProviders.current = null;
+    }
+    const generation = ++cloudGeneration.current;
+    void probeCloud(activeProviderIds.current, generation);
+  }, [probeCloud, providers, providersLoading]);
+
+  useEffect(() => {
+    void refreshLocal();
+  }, [refreshLocal]);
+
+  const refresh = useCallback(() => {
+    const generation = ++cloudGeneration.current;
+    explicitCloudRefresh.current = generation;
+    if (mounted.current) setCloud({ ready: false, loading: true });
+    void refreshLocal();
+    void (async () => {
+      const data = await refreshProviders();
+      if (!mounted.current || generation !== cloudGeneration.current) return;
+      const ids = data
+        ? data.providers.filter((provider) => provider.hasKey && provider.requiresKey).map((provider) => provider.id)
+        : activeProviderIds.current;
+      explicitProviders.current = data?.providers ?? null;
+      await probeCloud(ids, generation);
+      if (mounted.current && generation === cloudGeneration.current && !data) explicitCloudRefresh.current = null;
+    })();
+  }, [probeCloud, refreshLocal, refreshProviders]);
+
+  const cloudReady = cloud.ready;
   const localReady = localModelCount > 0;
 
   return {
     hasWorkingModel: cloudReady || localReady,
     cloudReady,
     localReady,
-    loading: providersLoading || localLoading,
-    refresh: () => { refreshProviders(); void refreshLocal(); },
+    loading: providersLoading || cloud.loading || localLoading,
+    refresh,
   };
 }

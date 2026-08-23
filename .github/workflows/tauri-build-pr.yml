@@ -24,6 +24,7 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
+      - '.github/workflows/release.yml'
       - '.github/workflows/tauri-build-pr.yml'
   push:
     branches:
@@ -35,34 +36,59 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/tauri-build-pr.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   verify-windows:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22.23.2
           cache: npm
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: 1.94.0
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: app/src-tauri
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Verify Windows skill-audit and vault regressions
+        shell: pwsh
+        run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/agent/tests/skill-audit-store.test.ts packages/core/tests/vault.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: Verify Windows release-mode and publication guards
+        shell: pwsh
+        env:
+          WAGGLE_REQUIRE_PWSH7: '1'
+        run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/server/tests/tauri-config.test.ts -t "CI/CD Configuration"
+
+      - name: Install locked Tauri CLI
+        run: npm ci --prefix app --ignore-scripts
 
       - name: Build packages (shared → core → agent → server)
         run: npm run build:packages
+
+      - name: Bundle Node.js runtime
+        run: node scripts/bundle-node.mjs
 
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs
@@ -70,109 +96,191 @@ jobs:
       - name: Bundle native dependencies
         run: node scripts/bundle-native-deps.mjs
 
-      - name: Bundle Node.js runtime
-        run: node scripts/bundle-node.mjs
-
       - name: Stage sidecar dependencies
         run: node scripts/stage-sidecar-deps.mjs
+
+      - name: Verify packaged hook lifecycles
+        run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/agent/tests/hook-packages-runtime.test.ts -t "runs staged Tauri hook lifecycles"
+        env:
+          WAGGLE_VERIFY_STAGED_HOOK_RUNTIME: '1'
 
       - name: Build frontend
         run: cd apps/web && npx vite build
 
+      - name: Verify repository cleanliness before Tauri build
+        shell: pwsh
+        run: |
+          $sourceStatus = @(& git status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect repository source state before Tauri build.' }
+          if ($sourceStatus.Count -ne 0) {
+            $sourceDetails = $sourceStatus -join [Environment]::NewLine
+            throw "Repository must be clean before Windows Tauri build.$([Environment]::NewLine)$sourceDetails"
+          }
+
       - name: Build Tauri (Windows)
-        # @tauri-apps/cli is declared in app/package.json devDeps but is absent
-        # from package-lock.json, so `npm install` never installs it and a bare
-        # `npx tauri` errors "could not determine executable to run". Fetch the
-        # CLI explicitly by package name (npx resolves the win32 binary).
-        run: cd app && npx --yes @tauri-apps/cli@2 build
+        id: tauri-build-windows
+        # app/package-lock.json pins the CLI and platform binary. Invoke that
+        # local copy so verification builds cannot drift to a newer 2.x release.
+        run: cd app && node node_modules/@tauri-apps/cli/tauri.js build --bundles nsis
         env:
           # Skip code signing for PR verification — release.yml handles signing
           # only on tag push.
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
 
+      - name: Report repository changes after Tauri build
+        if: ${{ always() && steps.tauri-build-windows.outcome != 'skipped' }}
+        shell: pwsh
+        run: |
+          $sourceStatus = @(& git status --porcelain=v1 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect repository source state after Tauri build.' }
+          if ($sourceStatus.Count -ne 0) {
+            $trackedPaths = @(& git diff --name-only --diff-filter=ACDMRTUXB)
+            if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate tracked Tauri build mutations.' }
+            foreach ($trackedPath in $trackedPaths) {
+              Write-Host "::group::Tracked mutation: $trackedPath"
+              $headBlob = @(& git rev-parse "HEAD:$trackedPath" 2>&1) -join ''
+              $headBlobExit = $LASTEXITCODE
+              $indexBlob = @(& git rev-parse ":$trackedPath" 2>&1) -join ''
+              $indexBlobExit = $LASTEXITCODE
+              if (Test-Path -LiteralPath $trackedPath -PathType Leaf) {
+                $worktreeHash = (Get-FileHash -LiteralPath $trackedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $filteredBlob = @(& git hash-object "--path=$trackedPath" -- $trackedPath 2>&1) -join ''
+                $filteredBlobExit = $LASTEXITCODE
+                $resolvedPath = (Resolve-Path -LiteralPath $trackedPath).Path
+                $bytes = [IO.File]::ReadAllBytes($resolvedPath)
+                $crlfCount = 0
+                $lfOnlyCount = 0
+                for ($index = 0; $index -lt $bytes.Length; $index += 1) {
+                  if ($bytes[$index] -ne 10) { continue }
+                  if ($index -gt 0 -and $bytes[$index - 1] -eq 13) { $crlfCount += 1 }
+                  else { $lfOnlyCount += 1 }
+                }
+              } else {
+                $worktreeHash = '<missing>'
+                $filteredBlob = '<missing>'
+                $filteredBlobExit = 0
+                $crlfCount = 0
+                $lfOnlyCount = 0
+              }
+              Write-Host "HEAD blob (exit $headBlobExit): $headBlob"
+              Write-Host "Index blob (exit $indexBlobExit): $indexBlob"
+              Write-Host "Git-filtered worktree blob (exit $filteredBlobExit): $filteredBlob"
+              Write-Host "Raw worktree SHA256: $worktreeHash; CRLF=$crlfCount; LF-only=$lfOnlyCount"
+              $changeSummary = @(& git diff --numstat -- $trackedPath)
+              $changeSummaryExit = $LASTEXITCODE
+              if ($changeSummaryExit -ne 0) {
+                Write-Host "Could not render numeric diff summary (exit $changeSummaryExit)."
+              } else {
+                Write-Host "Numeric diff summary: $($changeSummary -join '; ')"
+              }
+              Write-Host '::endgroup::'
+            }
+            $sourceDetails = $sourceStatus -join [Environment]::NewLine
+            throw "Windows Tauri build mutated repository worktree.$([Environment]::NewLine)$sourceDetails"
+          }
+
+      - name: Certify Windows Solo installer lifecycle
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath 'app/src-tauri/target' -Recurse -Filter '*-setup.exe' -File | Where-Object { $_.DirectoryName -match '[\\/]bundle[\\/]nsis$' })
+          if ($installers.Count -ne 1) { throw "Expected exactly one NSIS setup executable, found $($installers.Count)" }
+          $installer = $installers[0]
+          & ./scripts/certify-windows-installer.ps1 -InstallerPath $installer.FullName -ExpectedSourceRevision $env:GITHUB_SHA
+
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: waggle-windows-${{ github.sha }}
           path: |
-            app/src-tauri/target/release/bundle/nsis/*.exe
-            app/src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: warn
+            app/src-tauri/target/**/bundle/nsis/*.exe
+            app/src-tauri/target/**/bundle/nsis/windows-installer-certificate.json
+          if-no-files-found: error
           retention-days: 7
 
   verify-macos:
-    runs-on: macos-latest
     timeout-minutes: 60
     strategy:
       # Per-arch, matching release.yml. Universal builds are rejected by the
       # bundle scripts (sqlite-vec / onnxruntime / node ship per-arch binaries),
       # so each arch is staged and built separately.
       matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+        include:
+          - target: aarch64-apple-darwin
+            arch: arm64
+            runner: macos-15
+            bundles: dmg
+            artifact_path: app/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          - target: x86_64-apple-darwin
+            arch: x64
+            runner: macos-15-intel
+            bundles: app
+            artifact_path: app/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
+    runs-on: ${{ matrix.runner }}
+    env:
+      TARGET_ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22.23.2
           cache: npm
 
+      - name: Verify runner architecture
+        run: node -e "if (process.arch !== process.env.TARGET_ARCH) { console.error('Expected ' + process.env.TARGET_ARCH + ' runner, got ' + process.arch); process.exit(1); }"
+
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.94.0
           targets: ${{ matrix.target }}
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: app/src-tauri
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Install locked Tauri CLI
+        run: npm ci --prefix app --ignore-scripts
 
       - name: Build packages (shared → core → agent → server)
         run: npm run build:packages
+
+      - name: Bundle Node.js runtime
+        run: node scripts/bundle-node.mjs
 
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs
 
       - name: Bundle native dependencies
         run: node scripts/bundle-native-deps.mjs
-        env:
-          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
-
-      - name: Bundle Node.js runtime
-        run: node scripts/bundle-node.mjs
-        env:
-          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
 
       - name: Stage sidecar dependencies
         run: node scripts/stage-sidecar-deps.mjs
-        env:
-          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
 
       - name: Build frontend
         run: cd apps/web && npx vite build
 
       - name: Build Tauri (macOS ${{ matrix.target }})
-        # See verify-windows note: fetch @tauri-apps/cli by package name (absent
-        # from the lockfile). Built per-arch — universal is rejected by the
-        # bundle scripts (per-arch native modules), matching release.yml.
-        run: cd app && npx --yes @tauri-apps/cli@2 build --target ${{ matrix.target }}
+        # See verify-windows note: use the app-local lockfile-pinned CLI.
+        # Built per-arch — universal is rejected by the bundle scripts
+        # (per-arch native modules), matching release.yml.
+        run: cd app && node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: waggle-macos-${{ matrix.target }}-${{ github.sha }}
-          path: |
-            app/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
-          if-no-files-found: warn
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
           retention-days: 7

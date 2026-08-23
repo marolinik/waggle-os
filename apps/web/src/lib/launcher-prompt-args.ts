@@ -12,7 +12,8 @@
  *   claude-code        → ['--print', prompt]
  *   openclaw           → ['--print', prompt]   (Claude Code fork)
  *   codex              → [prompt]               (positional arg)
- *   hermes             → [prompt]               (positional arg — best-effort)
+ *   hermes             → null                   (captured-task API only)
+ *   hermes-desktop     → null                   (GUI only)
  *   cursor             → null                   (folder-based; no CLI prompt)
  *   claude-desktop     → null                   (GUI only)
  *   codex-desktop      → null                   (GUI only)
@@ -63,20 +64,17 @@ export function promptArgsForTool(toolId: string, prompt: string): string[] | nu
     case 'codex':
       return [p];
 
-    // Hermes Agent CLI: positional-arg convention by analogy. The
-    // hive-mind-hooks-hermes package is a Wave 2/3 stub; this entry
-    // is documented as best-effort and should be verified once the
-    // Hermes CLI is exercised against a real binary.
-    case 'hermes':
-      return [p];
-
-    // GUI-only tools: no CLI prompt surface.
+    // GUI-only tools and Hermes interactive launch: no verified inline-prompt
+    // surface. Hermes captured tasks use the shared headless task contract,
+    // not this dock-launch helper.
     //   cursor: opens a folder (`cursor /path`), no --prompt flag.
     //   claude-desktop / codex-desktop: GUI binaries with no
     //     prompt-from-CLI handoff documented.
     case 'cursor':
     case 'claude-desktop':
     case 'codex-desktop':
+    case 'hermes':
+    case 'hermes-desktop':
       return null;
 
     default:

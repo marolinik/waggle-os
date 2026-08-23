@@ -1,9 +1,9 @@
 /**
  * Filesystem path helpers for the Hermes hive-mind hook install lifecycle.
  *
- * Mirrors the Codex/Cursor `paths.ts` shape, but targets Hermes's
- * `~/.hermes/config.yaml` (the path `hermes_cli/config.py get_config_path`
- * resolves to). We touch ONLY the top-level `hooks:` block (the SHELL-HOOKS
+ * Mirrors the Codex/Cursor `paths.ts` shape, but targets Hermes's platform
+ * config root (`HERMES_HOME`, `%LOCALAPPDATA%/hermes`, or `~/.hermes`). We
+ * touch ONLY the top-level `hooks:` block in `config.yaml` (the SHELL-HOOKS
  * system) — never the gateway dir-hooks (`~/.hermes/hooks/<name>/`) nor the
  * in-process plugin hooks. Hermes ships only THREE lifecycle hooks (there is
  * no PreCompact event), so the basename set omits `pre-compact`.
@@ -14,7 +14,7 @@
  */
 
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { posix, resolve, win32 } from 'node:path';
 import {
   backupPathFor,
   hookCommandFor,
@@ -22,11 +22,11 @@ import {
 } from '@waggle/hive-mind-hooks-core';
 
 export interface HermesPaths {
-  /** Hermes config root (`~/.hermes/`). */
+  /** Hermes config root for the active platform and environment. */
   hermesDir: string;
-  /** `~/.hermes/config.yaml` — the shell-hooks config (top-level `hooks:`). */
+  /** Hermes shell-hooks config (`config.yaml`, top-level `hooks:`). */
   configPath: string;
-  /** `~/.hermes/hive-mind-install.json` — pointer to the active backup. */
+  /** Pointer to the active backup (`hive-mind-install.json`). */
   pointerPath: string;
   /** Directory where compiled hook scripts live (`dist/hooks/`). */
   hooksDir: string;
@@ -35,6 +35,10 @@ export interface HermesPaths {
 export interface ResolvePathsOptions {
   /** Override $HOME for tests. */
   home?: string;
+  /** Override the host platform for deterministic path tests. */
+  platform?: NodeJS.Platform;
+  /** Override environment lookup for deterministic path tests. */
+  env?: NodeJS.ProcessEnv;
   /** Override the URL used to locate dist/hooks (defaults to import.meta.url at runtime). */
   moduleUrl?: string;
   /** Override hooks directory directly (wins over moduleUrl). */
@@ -58,11 +62,38 @@ export function allHookBasenames(): readonly HookBasename[] {
   return HOOK_BASENAMES;
 }
 
-export function resolvePaths(opts: ResolvePathsOptions = {}): HermesPaths {
+export interface ResolveHermesHomeOptions {
+  platform?: NodeJS.Platform;
+  home?: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+/** Match Hermes's own config-root precedence on every supported platform. */
+export function resolveHermesHome(opts: ResolveHermesHomeOptions = {}): string {
+  const platform = opts.platform ?? process.platform;
+  const pathApi = platform === 'win32' ? win32 : posix;
+  const env = opts.env ?? process.env;
+  const configuredHome = env.HERMES_HOME?.trim();
+  if (configuredHome) return pathApi.normalize(configuredHome);
+
   const home = opts.home ?? homedir();
-  const hermesDir = join(home, '.hermes');
-  const configPath = join(hermesDir, 'config.yaml');
-  const pointerPath = join(hermesDir, 'hive-mind-install.json');
+  if (platform === 'win32') {
+    const localAppData = env.LOCALAPPDATA?.trim();
+    return localAppData
+      ? pathApi.join(localAppData, 'hermes')
+      : pathApi.join(home, 'AppData', 'Local', 'hermes');
+  }
+  return pathApi.join(home, '.hermes');
+}
+
+export function resolvePaths(opts: ResolvePathsOptions = {}): HermesPaths {
+  const platform = opts.platform ?? process.platform;
+  const pathApi = platform === 'win32' ? win32 : posix;
+  const hermesDir = opts.home === undefined
+    ? resolveHermesHome({ platform, env: opts.env })
+    : pathApi.join(opts.home, '.hermes');
+  const configPath = pathApi.join(hermesDir, 'config.yaml');
+  const pointerPath = pathApi.join(hermesDir, 'hive-mind-install.json');
 
   let hooksDir: string;
   if (opts.hooksDir) {

@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Hoisted mock for node:child_process so static imports in vault.ts are intercepted.
 // Defaults to the real implementation; individual tests override via mockImplementation.
@@ -16,6 +17,36 @@ import { VaultStore, type VaultEntry } from '../src/vault.js';
 describe('VaultStore', () => {
   const tempDirs: string[] = [];
 
+  beforeEach(() => {
+    const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+    const powershellPath = path.win32.join(
+      systemRoot,
+      'System32',
+      'WindowsPowerShell',
+      'v1.0',
+      'powershell.exe',
+    );
+    mockExecFileSync.mockImplementation((
+      cmd: string,
+      _args: unknown,
+      options?: { env?: NodeJS.ProcessEnv; input?: string | Buffer },
+    ) => {
+      if (cmd === powershellPath) {
+        const env = options?.env as NodeJS.ProcessEnv | undefined;
+        if (env?.WAGGLE_VAULT_CREATE_KEY === '1') {
+          const keyPath = env.WAGGLE_VAULT_KEY_PATH;
+          if (!keyPath) throw new Error('missing mocked vault key path');
+          const input = Buffer.isBuffer(options?.input)
+            ? options.input.toString('utf-8')
+            : String(options?.input ?? '');
+          fs.writeFileSync(keyPath, input, { flag: 'wx' });
+        }
+        return '';
+      }
+      throw new Error(`unexpected executable: ${cmd}`);
+    });
+  });
+
   function makeTempDir(): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-vault-test-'));
     tempDirs.push(dir);
@@ -27,6 +58,7 @@ describe('VaultStore', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
     tempDirs.length = 0;
+    mockExecFileSync.mockReset();
   });
 
   it('set and get — store a secret, retrieve it, value matches', () => {
@@ -328,64 +360,192 @@ describe('VaultStore', () => {
     );
   });
 
-  it('Windows key protection — icacls is attempted on win32', () => {
+  it('Windows key protection — uses absolute System32 tools even with an isolated PATH', () => {
     const dir = makeTempDir();
     const keyPath = path.join(dir, '.vault-key');
+    const systemRoot = 'C:\\Windows';
+    const powershellPath = path.win32.join(
+      systemRoot,
+      'System32',
+      'WindowsPowerShell',
+      'v1.0',
+      'powershell.exe',
+    );
 
-    // Ensure no key file exists so ensureKey() will generate one
-    if (fs.existsSync(keyPath)) fs.unlinkSync(keyPath);
-
-    // Mock process.platform to 'win32'
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    const originalSystemRoot = process.env.SystemRoot;
+    const originalPath = process.env.PATH;
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-
-    // Use the hoisted mock: first call = whoami, second call = icacls
-    mockExecFileSync.mockImplementation((cmd: string) => {
-      if (cmd === 'whoami') return 'DOMAIN\\testuser';
-      return undefined;
+    process.env.SystemRoot = systemRoot;
+    process.env.PATH = path.join(dir, 'sentinel-path');
+    mockExecFileSync.mockImplementation((
+      cmd: string,
+      _args: unknown,
+      options?: { env?: NodeJS.ProcessEnv; input?: string | Buffer },
+    ) => {
+      if (cmd === powershellPath) {
+        const mockedPath = options?.env?.WAGGLE_VAULT_KEY_PATH;
+        if (!mockedPath) throw new Error('missing mocked vault key path');
+        const input = Buffer.isBuffer(options?.input)
+          ? options.input.toString('utf-8')
+          : String(options?.input ?? '');
+        fs.writeFileSync(mockedPath, input, { flag: 'wx' });
+        return '';
+      }
+      throw new Error(`unexpected executable: ${cmd}`);
     });
 
     try {
       new VaultStore(dir);
 
-      // Verify whoami was called first, then icacls with the resolved user
-      expect(mockExecFileSync).toHaveBeenCalledWith('whoami', expect.objectContaining({ encoding: 'utf-8' }));
       expect(mockExecFileSync).toHaveBeenCalledWith(
-        'icacls',
-        expect.arrayContaining([keyPath, '/inheritance:r', '/grant:r']),
-        expect.objectContaining({ stdio: 'ignore' })
+        powershellPath,
+        expect.arrayContaining(['-NoProfile', '-NonInteractive', '-EncodedCommand']),
+        expect.objectContaining({
+          env: expect.objectContaining({
+            WAGGLE_VAULT_KEY_PATH: keyPath,
+            WAGGLE_VAULT_CREATE_KEY: '1',
+          }),
+          input: expect.stringMatching(/^[0-9a-f]{64}$/),
+          stdio: ['pipe', 'ignore', 'pipe'],
+        }),
+      );
+      const powerShellCall = mockExecFileSync.mock.calls.find(([cmd]) => cmd === powershellPath)!;
+      const args = powerShellCall[1] as string[];
+      const options = powerShellCall[2] as { input: string };
+      expect(args.join(' ')).not.toContain(options.input);
+      expect(fs.readFileSync(keyPath, 'utf-8')).toBe(options.input);
+    } finally {
+      Object.defineProperty(process, 'platform', originalPlatform);
+      if (originalSystemRoot === undefined) delete process.env.SystemRoot;
+      else process.env.SystemRoot = originalSystemRoot;
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      mockExecFileSync.mockReset();
+    }
+  });
+
+  it('Windows key protection — ACL failure removes a newly generated key and fails closed', () => {
+    const dir = makeTempDir();
+    const keyPath = path.join(dir, '.vault-key');
+    const systemRoot = 'C:\\Windows';
+
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    const originalSystemRoot = process.env.SystemRoot;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    process.env.SystemRoot = systemRoot;
+    mockExecFileSync.mockImplementation(() => { throw new Error('Set-Acl failed'); });
+
+    try {
+      expect(() => new VaultStore(dir)).toThrow(/restrict vault key permissions/i);
+      expect(fs.existsSync(keyPath)).toBe(false);
+    } finally {
+      Object.defineProperty(process, 'platform', originalPlatform);
+      if (originalSystemRoot === undefined) delete process.env.SystemRoot;
+      else process.env.SystemRoot = originalSystemRoot;
+      mockExecFileSync.mockReset();
+    }
+  });
+
+  it('Windows key protection — a failed create collision never deletes the winning key', () => {
+    const dir = makeTempDir();
+    const keyPath = path.join(dir, '.vault-key');
+    const winnerKey = 'ef'.repeat(32);
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    const originalSystemRoot = process.env.SystemRoot;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    process.env.SystemRoot = 'C:\\Windows';
+    mockExecFileSync.mockImplementation(() => {
+      fs.writeFileSync(keyPath, winnerKey, { flag: 'wx' });
+      throw new Error('CreateNew collision');
+    });
+
+    try {
+      expect(() => new VaultStore(dir)).toThrow(/restrict vault key permissions/i);
+      expect(fs.readFileSync(keyPath, 'utf-8')).toBe(winnerKey);
+    } finally {
+      Object.defineProperty(process, 'platform', originalPlatform);
+      if (originalSystemRoot === undefined) delete process.env.SystemRoot;
+      else process.env.SystemRoot = originalSystemRoot;
+      mockExecFileSync.mockReset();
+    }
+  });
+
+  it('Windows key protection — existing keys are re-hardened and retained on failure', () => {
+    const dir = makeTempDir();
+    const keyPath = path.join(dir, '.vault-key');
+    const keyHex = 'ab'.repeat(32);
+    const systemRoot = 'C:\\Windows';
+    fs.writeFileSync(keyPath, keyHex, { mode: 0o600 });
+
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    const originalSystemRoot = process.env.SystemRoot;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    process.env.SystemRoot = systemRoot;
+    mockExecFileSync.mockImplementation(() => { throw new Error('Set-Acl denied'); });
+
+    try {
+      expect(() => new VaultStore(dir)).toThrow(/restrict vault key permissions/i);
+      expect(fs.readFileSync(keyPath, 'utf-8')).toBe(keyHex);
+      expect(mockExecFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('powershell.exe'),
+        expect.arrayContaining(['-EncodedCommand']),
+        expect.objectContaining({
+          env: expect.objectContaining({ WAGGLE_VAULT_CREATE_KEY: '0' }),
+        }),
       );
     } finally {
       Object.defineProperty(process, 'platform', originalPlatform);
+      if (originalSystemRoot === undefined) delete process.env.SystemRoot;
+      else process.env.SystemRoot = originalSystemRoot;
       mockExecFileSync.mockReset();
     }
   });
 
-  it('Windows key protection — icacls failure does not prevent vault creation', () => {
-    const dir = makeTempDir();
-    const keyPath = path.join(dir, '.vault-key');
-    if (fs.existsSync(keyPath)) fs.unlinkSync(keyPath);
+  it.runIf(process.platform === 'win32')(
+    'Windows key protection — removes a pre-existing explicit Everyone allow ACE',
+    async () => {
+      const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
+      const dir = makeTempDir();
+      const probePath = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        'vault-acl-probe.ts',
+      );
+      const probeMarkerPath = path.join(dir, '.acl-probe-ok');
 
-    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
-    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-
-    // Mock: whoami succeeds but icacls throws
-    mockExecFileSync.mockImplementation((cmd: string) => {
-      if (cmd === 'whoami') return 'DOMAIN\\testuser';
-      throw new Error('icacls not found');
-    });
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    try {
-      const vault = new VaultStore(dir);
-      // Vault should still work despite icacls failure
-      vault.set('test', 'value');
-      expect(vault.get('test')!.value).toBe('value');
-    } finally {
-      Object.defineProperty(process, 'platform', originalPlatform);
-      mockExecFileSync.mockReset();
-      warnSpy.mockRestore();
-    }
-  });
+      await new Promise<void>((resolve, reject) => {
+        actual.execFile(
+          process.execPath,
+          [
+            path.resolve('node_modules/vite-node/vite-node.mjs'),
+            '--root',
+            process.cwd(),
+            '--config',
+            path.resolve('vitest.config.ts'),
+            probePath,
+          ],
+          {
+            cwd: process.cwd(),
+            env: { ...process.env, WAGGLE_VAULT_TEST_DIR: dir },
+            encoding: 'utf-8',
+            timeout: 180_000,
+            windowsHide: true,
+          },
+          (error, stdout, stderr) => {
+            if (error) {
+              reject(new Error(`Windows ACL probe failed: ${stderr || stdout || error.message}`));
+            } else if (
+              !fs.existsSync(probeMarkerPath)
+              || fs.readFileSync(probeMarkerPath, 'utf-8') !== 'acl-remediated\n'
+            ) {
+              reject(new Error('Windows ACL probe exited without a verified completion marker'));
+            } else {
+              resolve();
+            }
+          },
+        );
+      });
+    },
+    210_000,
+  );
 });

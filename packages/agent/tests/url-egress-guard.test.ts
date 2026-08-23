@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { describe, it, expect, vi } from 'vitest';
 import {
   classifyAddress,
   assertUrlAllowed,
@@ -6,6 +7,7 @@ import {
   EgressBlockedError,
   type LookupFn,
   type ResolvedAddress,
+  type SafeFetchOptions,
 } from '../src/url-egress-guard.js';
 
 /** Build a mock resolver from a hostname -> addresses map. */
@@ -18,6 +20,42 @@ function mockLookup(map: Record<string, ResolvedAddress[]>): LookupFn {
 }
 
 const v4 = (address: string): ResolvedAddress => ({ address, family: 4 });
+
+async function readRequestBody(request: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function startHttpServer(
+  handler: (request: IncomingMessage, response: ServerResponse) => void | Promise<void>,
+): Promise<{ port: number; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    void Promise.resolve(handler(request, response)).catch((error: unknown) => {
+      response.statusCode = 500;
+      response.end(error instanceof Error ? error.message : String(error));
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Expected an IPv4 test listener');
+  }
+  return {
+    port: address.port,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    }),
+  };
+}
 
 describe('classifyAddress', () => {
   it('classifies IPv4 loopback / private / link-local / public', () => {
@@ -116,55 +154,290 @@ describe('assertUrlAllowed', () => {
 });
 
 describe('safeFetch', () => {
-  const publicLookup = mockLookup({
-    'safe.example.com': [v4('93.184.216.34')],
-    'a.example.com': [v4('93.184.216.34')],
+  it('connects to the exact validated peer and preserves request semantics and Host', async () => {
+    const seen: { method?: string; host?: string; authorization?: string; body?: string } = {};
+    const server = await startHttpServer(async (request, response) => {
+      seen.method = request.method;
+      seen.host = request.headers.host;
+      seen.authorization = request.headers.authorization;
+      seen.body = await readRequestBody(request);
+      response.end('hello world');
+    });
+    const lookup = vi.fn<LookupFn>().mockResolvedValue([v4('127.0.0.1')]);
+    const signal = new AbortController().signal;
+
+    try {
+      const res = await safeFetch(
+        `http://safe.invalid:${server.port}/submit`,
+        {
+          method: 'POST',
+          headers: { authorization: 'Bearer test-token' },
+          body: JSON.stringify({ ok: true }),
+          signal,
+        },
+        { lookup, allowLocal: true, maxRedirects: 0 },
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('hello world');
+    } finally {
+      await server.close();
+    }
+
+    expect(seen).toEqual({
+      method: 'POST',
+      host: `safe.invalid:${server.port}`,
+      authorization: 'Bearer test-token',
+      body: JSON.stringify({ ok: true }),
+    });
+    expect(lookup).toHaveBeenCalledTimes(2);
   });
 
-  it('returns the response for a normal public URL', async () => {
-    const fetchImpl = (async () => new Response('hello world', { status: 200 })) as unknown as typeof fetch;
-    const res = await safeFetch('https://safe.example.com/', {}, { lookup: publicLookup, fetchImpl });
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe('hello world');
+  it('blocks a public-to-loopback DNS flip at socket connect', async () => {
+    const lookup = vi.fn<LookupFn>()
+      .mockResolvedValueOnce([v4('93.184.216.34')])
+      .mockResolvedValueOnce([v4('127.0.0.1')]);
+
+    await expect(
+      safeFetch('http://rebind.invalid/', {}, { lookup, maxRedirects: 0 }),
+    ).rejects.toMatchObject({
+      name: 'EgressBlockedError',
+      url: 'http://rebind.invalid/',
+      addressClass: 'loopback',
+    });
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('blocks a public-to-metadata DNS flip at socket connect', async () => {
+    const lookup = vi.fn<LookupFn>()
+      .mockResolvedValueOnce([v4('93.184.216.34')])
+      .mockResolvedValueOnce([v4('169.254.169.254')]);
+
+    await expect(
+      safeFetch('http://metadata-rebind.invalid/', {}, { lookup, maxRedirects: 0 }),
+    ).rejects.toMatchObject({
+      name: 'EgressBlockedError',
+      url: 'http://metadata-rebind.invalid/',
+      addressClass: 'link-local',
+    });
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('pins every redirect hop against a resolver flip', async () => {
+    const requests: string[] = [];
+    const server = await startHttpServer((request, response) => {
+      requests.push(request.url ?? '');
+      response.writeHead(302, {
+        location: `http://flip.invalid:${server.port}/final`,
+      });
+      response.end();
+    });
+    const lookup = vi.fn<LookupFn>(async (hostname) => {
+      if (hostname === 'safe.invalid') return [v4('127.0.0.1')];
+      const flipCalls = lookup.mock.calls.filter(([host]) => host === 'flip.invalid').length;
+      return flipCalls === 1
+        ? [v4('93.184.216.34')]
+        : [v4('169.254.169.254')];
+    });
+
+    try {
+      await expect(
+        safeFetch(
+          `http://safe.invalid:${server.port}/start`,
+          {},
+          { lookup, allowLocal: true },
+        ),
+      ).rejects.toMatchObject({
+        name: 'EgressBlockedError',
+        url: `http://flip.invalid:${server.port}/final`,
+        addressClass: 'link-local',
+      });
+    } finally {
+      await server.close();
+    }
+
+    expect(requests).toEqual(['/start']);
+    expect(lookup).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects mixed public/private records at socket lookup', async () => {
+    const lookup = vi.fn<LookupFn>()
+      .mockResolvedValueOnce([v4('93.184.216.34')])
+      .mockResolvedValueOnce([v4('93.184.216.34'), v4('10.0.0.5')]);
+
+    await expect(
+      safeFetch('http://mixed.invalid/', {}, { lookup, maxRedirects: 0 }),
+    ).rejects.toMatchObject({
+      name: 'EgressBlockedError',
+      url: 'http://mixed.invalid/',
+      addressClass: 'private',
+    });
+    expect(lookup).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an injected fetch implementation instead of silently bypassing pinning', async () => {
+    const fetchImpl = vi.fn(async () => new Response('unsafe'));
+    const unsafeOptions = {
+      lookup: mockLookup({ 'safe.invalid': [v4('93.184.216.34')] }),
+      fetchImpl,
+    } as unknown as SafeFetchOptions;
+
+    await expect(
+      safeFetch('http://safe.invalid/', {}, unsafeOptions),
+    ).rejects.toThrow(/fetchImpl.*not supported/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('rejects a redirect that points at a private/link-local IP', async () => {
     let calls = 0;
-    const fetchImpl = (async () => {
+    const server = await startHttpServer((_request, response) => {
       calls++;
-      return new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest/meta-data/' } });
-    }) as unknown as typeof fetch;
+      response.writeHead(302, {
+        location: 'http://169.254.169.254/latest/meta-data/',
+      });
+      response.end();
+    });
+    const lookup = mockLookup({ 'safe.invalid': [v4('127.0.0.1')] });
 
-    await expect(
-      safeFetch('https://safe.example.com/', {}, { lookup: publicLookup, fetchImpl }),
-    ).rejects.toThrow(/link-local/);
-    // The private target was refused before a second request went out.
+    try {
+      await expect(
+        safeFetch(
+          `http://safe.invalid:${server.port}/`,
+          {},
+          { lookup, allowLocal: true },
+        ),
+      ).rejects.toThrow(/link-local/);
+    } finally {
+      await server.close();
+    }
     expect(calls).toBe(1);
   });
 
-  it('follows a public redirect to a public target', async () => {
-    let calls = 0;
-    const fetchImpl = (async (input: string | URL) => {
-      calls++;
-      const u = String(input);
-      if (u.includes('safe.example.com')) {
-        return new Response(null, { status: 301, headers: { location: 'https://a.example.com/final' } });
+  it('applies Fetch redirect policy and strips credentials across origins', async () => {
+    const requests: Array<{
+      host?: string;
+      method?: string;
+      authorization?: string;
+      cookie?: string;
+      contentType?: string;
+      safeHeader?: string;
+      body: string;
+    }> = [];
+    const server = await startHttpServer(async (request, response) => {
+      requests.push({
+        host: request.headers.host,
+        method: request.method,
+        authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
+        contentType: request.headers['content-type'],
+        safeHeader: request.headers['x-safe'] as string | undefined,
+        body: await readRequestBody(request),
+      });
+      if (requests.length === 1) {
+        response.writeHead(302, {
+          location: `http://second.invalid:${server.port}/final`,
+        });
+        response.end();
+        return;
       }
-      return new Response('final page', { status: 200 });
-    }) as unknown as typeof fetch;
+      response.end('final page');
+    });
+    const lookup = mockLookup({
+      'first.invalid': [v4('127.0.0.1')],
+      'second.invalid': [v4('127.0.0.1')],
+    });
 
-    const res = await safeFetch('https://safe.example.com/', {}, { lookup: publicLookup, fetchImpl });
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe('final page');
-    expect(calls).toBe(2);
+    try {
+      const res = await safeFetch(
+        `http://first.invalid:${server.port}/start`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer secret',
+            cookie: 'session=secret',
+            'content-type': 'application/json',
+            'x-safe': 'preserve-me',
+          },
+          body: JSON.stringify({ secret: true }),
+        },
+        { lookup, allowLocal: true },
+      );
+      expect(await res.text()).toBe('final page');
+    } finally {
+      await server.close();
+    }
+
+    expect(requests).toEqual([
+      {
+        host: `first.invalid:${server.port}`,
+        method: 'POST',
+        authorization: 'Bearer secret',
+        cookie: 'session=secret',
+        contentType: 'application/json',
+        safeHeader: 'preserve-me',
+        body: JSON.stringify({ secret: true }),
+      },
+      {
+        host: `second.invalid:${server.port}`,
+        method: 'GET',
+        authorization: undefined,
+        cookie: undefined,
+        contentType: undefined,
+        safeHeader: 'preserve-me',
+        body: '',
+      },
+    ]);
+  });
+
+  it('refuses to replay a streamed request body across a preserving redirect', async () => {
+    let calls = 0;
+    const server = await startHttpServer(async (request, response) => {
+      calls++;
+      await readRequestBody(request);
+      response.writeHead(307, { location: '/retry' });
+      response.end();
+    });
+    const lookup = mockLookup({ 'safe.invalid': [v4('127.0.0.1')] });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('one-shot'));
+        controller.close();
+      },
+    });
+
+    try {
+      await expect(
+        safeFetch(
+          `http://safe.invalid:${server.port}/stream`,
+          { method: 'POST', body, duplex: 'half' } as RequestInit,
+          { lookup, allowLocal: true },
+        ),
+      ).rejects.toThrow(/Cannot replay a streamed request body/i);
+    } finally {
+      await server.close();
+    }
+    expect(calls).toBe(1);
   });
 
   it('throws after exceeding the redirect cap', async () => {
-    const fetchImpl = (async () =>
-      new Response(null, { status: 302, headers: { location: 'https://safe.example.com/loop' } })) as unknown as typeof fetch;
+    let calls = 0;
+    const server = await startHttpServer((_request, response) => {
+      calls++;
+      response.writeHead(302, { location: '/loop' });
+      response.end();
+    });
+    const lookup = mockLookup({ 'safe.invalid': [v4('127.0.0.1')] });
 
-    await expect(
-      safeFetch('https://safe.example.com/', {}, { lookup: publicLookup, fetchImpl, maxRedirects: 2 }),
-    ).rejects.toThrow(/redirect/i);
+    try {
+      await expect(
+        safeFetch(
+          `http://safe.invalid:${server.port}/loop`,
+          {},
+          { lookup, allowLocal: true, maxRedirects: 2 },
+        ),
+      ).rejects.toThrow(/redirect/i);
+    } finally {
+      await server.close();
+    }
+    expect(calls).toBe(3);
   });
 });

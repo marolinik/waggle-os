@@ -179,11 +179,20 @@ export class LinearConnector extends BaseConnector {
 
   private async listIssues(params: Record<string, unknown>): Promise<ConnectorResult> {
     const first = (params.first as number) ?? 50;
-    const filter: string[] = [];
-    if (params.teamId) filter.push(`team: { id: { eq: "${params.teamId}" } }`);
-    if (params.state) filter.push(`state: { name: { eq: "${params.state}" } }`);
-    const filterClause = filter.length ? `(filter: { ${filter.join(', ')} }, first: ${first})` : `(first: ${first})`;
-    return this.graphql(`{ issues${filterClause} { nodes { id identifier title state { name } priority assignee { name } createdAt } } }`);
+    const filter: Record<string, unknown> = {};
+    if (params.teamId) filter.team = { id: { eq: params.teamId } };
+    if (params.state) filter.state = { name: { eq: params.state } };
+
+    const hasFilter = Object.keys(filter).length > 0;
+    const variables: Record<string, unknown> = { first };
+    if (hasFilter) variables.filter = filter;
+    const filterDefinition = hasFilter ? ', $filter: IssueFilter' : '';
+    const filterArgument = hasFilter ? ', filter: $filter' : '';
+
+    return this.graphql(
+      `query ListIssues($first: Int${filterDefinition}) { issues(first: $first${filterArgument}) { nodes { id identifier title state { name } priority assignee { name } createdAt } } }`,
+      variables,
+    );
   }
 
   private async createIssue(params: Record<string, unknown>): Promise<ConnectorResult> {
@@ -227,11 +236,17 @@ export class LinearConnector extends BaseConnector {
 
   private async listProjects(params: Record<string, unknown>): Promise<ConnectorResult> {
     const first = (params.first as number) ?? 50;
-    return this.graphql(`{ projects(first: ${first}) { nodes { id name state startDate targetDate } } }`);
+    return this.graphql(
+      `query ListProjects($first: Int) { projects(first: $first) { nodes { id name state startDate targetDate } } }`,
+      { first },
+    );
   }
 
   private async listTeams(params: Record<string, unknown>): Promise<ConnectorResult> {
     const first = (params.first as number) ?? 50;
-    return this.graphql(`{ teams(first: ${first}) { nodes { id name key description } } }`);
+    return this.graphql(
+      `query ListTeams($first: Int) { teams(first: $first) { nodes { id name key description } } }`,
+      { first },
+    );
   }
 }

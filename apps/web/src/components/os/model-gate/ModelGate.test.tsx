@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   adapter: {
     getProviders: vi.fn(),
     getLocalInferenceStatus: vi.fn(),
+    getLocalInferenceModels: vi.fn(),
+    bootstrapLocalRuntime: vi.fn(),
     testApiKey: vi.fn(),
     setProviderKey: vi.fn(),
     restartModelRouter: vi.fn(),
@@ -46,13 +48,44 @@ const providersResp = (...defs: {
   activeSearch: 'duckduckgo',
 });
 
-const noLocal = { servers: [], ollamaInstalled: false, totalLocalModels: 0 };
+const noLocal = {
+  servers: [{ type: 'ollama' }],
+  ollamaInstalled: true,
+  ollamaRunning: true,
+  totalLocalModels: 0,
+  offlineReady: false,
+  dockerRequired: false,
+  managedRuntime: {
+    source: 'waggle-managed',
+    supported: true,
+    installed: true,
+    running: true,
+    targetVersion: '0.32.0',
+    version: '0.32.0',
+    artifactSizeBytes: 1_503_047_573,
+    downloadRequired: false,
+    dockerRequired: false,
+  },
+  setupRequired: true,
+  setupMessage: null,
+};
 
 beforeEach(() => {
   mocks.adapter.getProviders.mockResolvedValue(
     providersResp({ id: 'anthropic', hasKey: false }, { id: 'openai', hasKey: false }, { id: 'ollama', hasKey: false }),
   );
   mocks.adapter.getLocalInferenceStatus.mockResolvedValue(noLocal);
+  mocks.adapter.getLocalInferenceModels.mockResolvedValue({
+    source: 'native',
+    models: [{ name: 'qwen3:1.7b', fitLevel: 'perfect', estimatedTps: 32, runMode: 'gpu' }],
+  });
+  mocks.adapter.bootstrapLocalRuntime.mockResolvedValue({
+    ok: true,
+    installedNow: true,
+    startedNow: true,
+    endpoint: 'http://127.0.0.1:11434',
+    dockerRequired: false,
+  });
   mocks.adapter.testApiKey.mockResolvedValue({ valid: true, verified: true });
   mocks.adapter.setProviderKey.mockResolvedValue({ router: { managed: true, ready: true } });
   mocks.adapter.restartModelRouter.mockResolvedValue({
@@ -62,7 +95,11 @@ beforeEach(() => {
     unavailableProviders: [],
   });
   mocks.adapter.saveSettings.mockResolvedValue(undefined);
-  mocks.adapter.pullLocalModel.mockResolvedValue({ ok: true });
+  mocks.adapter.pullLocalModel.mockResolvedValue({
+    ok: true,
+    model: 'llama3.2:latest',
+    verifiedGeneration: true,
+  });
   // F3: default probe = network-degrade neutral (valid, not verified) so the
   // key-presence tests keep their "You have a working model" wording.
   mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
@@ -95,7 +132,7 @@ describe('ModelGate', () => {
     expect(key).toHaveAttribute('autocomplete', 'off');
 
     fireEvent.click(screen.getByRole('tab', { name: /local model/i }));
-    const pull = await screen.findByLabelText(/pull a model/i);
+    const pull = await screen.findByLabelText(/download and verify a model/i);
     expect(pull).toHaveAttribute('name', 'modelPullName');
     expect(pull).toHaveAttribute('autocomplete', 'off');
   });
@@ -373,15 +410,82 @@ describe('ModelGate', () => {
     expect(mocks.adapter.probeProvider).toHaveBeenCalledWith('anthropic');
   });
 
-  it('the local tab pulls a model and fires onModelReady', async () => {
+  it('installs and starts Waggle’s managed runtime without Docker or a system Ollama install', async () => {
+    mocks.adapter.getLocalInferenceStatus
+      .mockResolvedValueOnce({
+        ...noLocal,
+        servers: [],
+        ollamaInstalled: false,
+        ollamaRunning: false,
+        managedRuntime: {
+          ...noLocal.managedRuntime,
+          installed: false,
+          running: false,
+          version: null,
+          downloadRequired: true,
+        },
+      })
+      .mockResolvedValue(noLocal);
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('tab', { name: /local model/i }));
+
+    expect(await screen.findByText(/1\.4 GB/i)).toBeInTheDocument();
+    expect(screen.getByText(/no Docker, administrator access, or system Ollama install required/i)).toBeInTheDocument();
+    expect(screen.queryByText(/install Ollama to run models/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^install runtime$/i }));
+
+    await waitFor(() => expect(mocks.adapter.bootstrapLocalRuntime).toHaveBeenCalledOnce());
+    expect(await screen.findByText(/private runtime ready/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/download and verify a model/i)).toBeInTheDocument();
+  });
+
+  it('does not offer a fake managed install on an unsupported platform', async () => {
+    mocks.adapter.getLocalInferenceStatus.mockResolvedValue({
+      ...noLocal,
+      servers: [],
+      ollamaInstalled: false,
+      ollamaRunning: false,
+      managedRuntime: {
+        ...noLocal.managedRuntime,
+        supported: false,
+        installed: false,
+        running: false,
+        version: null,
+        downloadRequired: true,
+        reason: 'No managed Ollama artifact for linux/x64',
+      },
+    });
+    render(<ModelGate />);
+    fireEvent.click(await screen.findByRole('tab', { name: /local model/i }));
+
+    expect(await screen.findByText(/no managed Ollama artifact for linux\/x64/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /install runtime/i })).not.toBeInTheDocument();
+  });
+
+  it('downloads, generation-verifies, and selects the local model before reporting ready', async () => {
     const onModelReady = vi.fn();
     render(<ModelGate onModelReady={onModelReady} />);
     fireEvent.click(await screen.findByRole('tab', { name: /local model/i }));
-    const input = await screen.findByLabelText(/pull a model/i);
+    const input = await screen.findByLabelText(/download and verify a model/i);
     fireEvent.change(input, { target: { value: 'llama3.2' } });
-    fireEvent.click(screen.getByRole('button', { name: /^pull$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^install model$/i }));
 
     await waitFor(() => expect(mocks.adapter.pullLocalModel).toHaveBeenCalledWith('llama3.2'));
+    expect(mocks.adapter.saveSettings).toHaveBeenCalledWith({ defaultModel: 'ollama/llama3.2:latest' });
+    expect(await screen.findByText(/installed and verified "llama3\.2:latest"/i)).toBeInTheDocument();
     expect(onModelReady).toHaveBeenCalled();
+  });
+
+  it('does not report ready when the verified model cannot be selected as default', async () => {
+    const onModelReady = vi.fn();
+    mocks.adapter.saveSettings.mockRejectedValueOnce(new Error('settings unavailable'));
+    render(<ModelGate onModelReady={onModelReady} />);
+    fireEvent.click(await screen.findByRole('tab', { name: /local model/i }));
+    const input = await screen.findByLabelText(/download and verify a model/i);
+    fireEvent.change(input, { target: { value: 'llama3.2' } });
+    fireEvent.click(screen.getByRole('button', { name: /^install model$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not select it as the default/i);
+    expect(onModelReady).not.toHaveBeenCalled();
   });
 });

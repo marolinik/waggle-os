@@ -27,3 +27,6 @@ export * from './handlers-core.js';
 
 // Fail-open hook runner + stdin/argv helpers (re-authored from the CC _shared.ts).
 export * from './hook-shared.js';
+
+// Cross-platform entrypoint detection for executable hook modules.
+export { isDirectExecution } from '@waggle/hive-mind-shim-core';

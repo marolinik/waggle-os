@@ -435,6 +435,8 @@ export interface ChatMessage {
   feedback?: 'up' | 'down' | null;
   pinned?: boolean;
   persona?: string;
+  /** The model that actually produced this turn, as reported by the server. */
+  model?: string;
   /**
    * Lane C (Pillar 2.2/2.5): an optimistic user turn that was typed+sent while a
    * previous reply was still streaming. It renders immediately with a truthful
@@ -442,6 +444,18 @@ export interface ChatMessage {
    * never errors, never drops. Cleared to `false`/absent once dispatched.
    */
   queued?: boolean;
+  /**
+   * Non-authoritative streaming preview. Draft text is display-only: it must
+   * never feed copy/pin/feedback, conversation context, or the settled cache.
+   * `done.content` is authoritative; legacy token streams that omit it settle
+   * from their accumulated token preview for backward compatibility.
+   */
+  draft?: {
+    turnId: string;
+    revision: number;
+    content: string;
+    status: 'streaming' | 'stopped';
+  };
 }
 
 export interface ToolExecution {
@@ -724,7 +738,7 @@ export interface SystemHealth {
 // `@waggle/shared` instead (richer status union incl. 'expired', category, authType).
 
 export interface StreamEvent {
-  type: 'token' | 'step' | 'tool_start' | 'tool_end' | 'done' | 'error' | 'approval_request' | 'approval_required' | 'model_switch' | 'notification';
+  type: 'token' | 'draft_update' | 'step' | 'tool_start' | 'tool_end' | 'done' | 'error' | 'approval_request' | 'approval_required' | 'model_switch' | 'notification';
   data: unknown;
 }
 

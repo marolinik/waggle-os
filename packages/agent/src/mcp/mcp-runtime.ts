@@ -1,7 +1,12 @@
 import { EventEmitter } from 'events';
-import { spawn, type StdioOptions } from 'node:child_process';
+import { ChildProcess, type StdioOptions } from 'node:child_process';
 import type { Readable, Writable } from 'stream';
+import type { RiskLevel } from '@waggle/shared';
 import type { ToolDefinition } from '../tools.js';
+import { scanForInjection } from '../injection-scanner.js';
+import { resolveToolCommandInvocationFromPath } from '../tool-command.js';
+import { createSanitizedEnv, terminateProcessTreeAndWait } from '../system-tools-helpers.js';
+import { spawnSidecarOwnedProcess } from '../sidecar-owned-process.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -19,6 +24,26 @@ export interface McpToolInfo {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function classifyMcpToolRisk(tool: McpToolInfo): RiskLevel {
+  // MCP servers currently have no independently verified trust provenance.
+  // Their annotations may elevate risk, but can never lower the high floor
+  // required by automated/sub-agent execution contexts without a human gate.
+  return tool.annotations?.destructiveHint === true ? 'critical' : 'high';
 }
 
 /** JSON-RPC 2.0 request/response types */
@@ -51,8 +76,15 @@ export interface McpProcess {
 export type SpawnFn = (
   command: string,
   args: string[],
-  options: { env?: Record<string, string>; stdio: string[] },
+  options: {
+    env?: Record<string, string>;
+    stdio: string[];
+    windowsVerbatimArguments?: boolean;
+  },
 ) => McpProcess;
+
+/** Returns true only when process settlement has been confirmed. */
+export type McpTerminateFn = (process: McpProcess) => boolean | Promise<boolean>;
 
 // ── McpServerInstance ──────────────────────────────────────────────────
 
@@ -61,6 +93,7 @@ export class McpServerInstance extends EventEmitter {
   private state: McpServerState = 'stopped';
   private process: McpProcess | null = null;
   private spawnFn: SpawnFn;
+  private terminateFn: McpTerminateFn;
   private nextId = 1;
   private pendingRequests = new Map<number, {
     resolve: (value: unknown) => void;
@@ -69,6 +102,7 @@ export class McpServerInstance extends EventEmitter {
   }>();
   private tools: McpToolInfo[] = [];
   private stdoutBuffer = '';
+  private lifecycleGeneration = 0;
   private autoRestart: boolean;
   private toolCallTimeoutMs: number;
 
@@ -76,6 +110,7 @@ export class McpServerInstance extends EventEmitter {
     config: McpServerConfig,
     options?: {
       spawn?: SpawnFn;
+      terminate?: McpTerminateFn;
       autoRestart?: boolean;
       toolCallTimeoutMs?: number;
     },
@@ -83,6 +118,7 @@ export class McpServerInstance extends EventEmitter {
     super();
     this.config = config;
     this.spawnFn = options?.spawn ?? defaultSpawn;
+    this.terminateFn = options?.terminate ?? defaultTerminate;
     this.autoRestart = options?.autoRestart ?? false;
     this.toolCallTimeoutMs = options?.toolCallTimeoutMs ?? 30_000;
   }
@@ -101,16 +137,31 @@ export class McpServerInstance extends EventEmitter {
 
   async start(): Promise<void> {
     if (this.state === 'ready' || this.state === 'starting') return;
+    if (this.process) {
+      throw new Error(
+        `Cannot start MCP server "${this.config.name}": previous process termination is unconfirmed`,
+      );
+    }
 
+    const generation = ++this.lifecycleGeneration;
     this.setState('starting');
 
     try {
-      this.process = this.spawnFn(
+      const env = createMcpEnvironment(this.config.env);
+      const invocation = await resolveToolCommandInvocationFromPath(
         this.config.command,
         this.config.args ?? [],
+        process.platform,
+        { env },
+      );
+      if (generation !== this.lifecycleGeneration) return;
+      this.process = this.spawnFn(
+        invocation.binary,
+        invocation.args,
         {
-          env: this.config.env ? { ...process.env, ...this.config.env } as Record<string, string> : undefined,
+          env,
           stdio: ['pipe', 'pipe', 'pipe'],
+          windowsVerbatimArguments: invocation.windowsVerbatimArguments,
         },
       );
 
@@ -161,8 +212,13 @@ export class McpServerInstance extends EventEmitter {
           this.process.stdout?.removeAllListeners('data');
           this.process.removeAllListeners('exit');
           this.process.removeAllListeners('error');
-          this.process.kill();
-          this.process = null;
+          const failedProcess = this.process;
+          try {
+            const settled = await this.terminateFn(failedProcess);
+            if (settled && this.process === failedProcess) this.process = null;
+          } catch {
+            // Retain the handle so a later stop/remove can retry revocation.
+          }
         }
         this.tools = [];
         this.stdoutBuffer = '';
@@ -189,25 +245,36 @@ export class McpServerInstance extends EventEmitter {
   async stop(): Promise<void> {
     if (this.state === 'stopped') return;
 
+    this.lifecycleGeneration++;
     // Prevent auto-restart during intentional stop
     const wasAutoRestart = this.autoRestart;
     this.autoRestart = false;
 
-    this.rejectAllPending(new Error('Server stopping'));
+    try {
+      this.rejectAllPending(new Error('Server stopping'));
 
-    if (this.process) {
-      this.process.stdout?.removeAllListeners('data');
-      this.process.removeAllListeners('exit');
-      this.process.removeAllListeners('error');
-      this.process.stdin?.end();
-      this.process.kill();
-      this.process = null;
+      if (this.process) {
+        this.process.stdout?.removeAllListeners('data');
+        this.process.removeAllListeners('exit');
+        this.process.removeAllListeners('error');
+        this.process.stdin?.end();
+        const stoppingProcess = this.process;
+        const settled = await this.terminateFn(stoppingProcess);
+        if (!settled) {
+          throw new Error('MCP process termination could not be confirmed');
+        }
+        if (this.process === stoppingProcess) this.process = null;
+      }
+
+      this.tools = [];
+      this.stdoutBuffer = '';
+      this.setState('stopped');
+    } catch (err) {
+      this.setState('error');
+      throw err;
+    } finally {
+      this.autoRestart = wasAutoRestart;
     }
-
-    this.tools = [];
-    this.stdoutBuffer = '';
-    this.setState('stopped');
-    this.autoRestart = wasAutoRestart;
   }
 
   async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
@@ -326,16 +393,19 @@ export class McpRuntime extends EventEmitter {
   private servers = new Map<string, McpServerInstance>();
   private configs = new Map<string, McpServerConfig>();
   private spawnFn: SpawnFn;
+  private terminateFn: McpTerminateFn;
   private autoRestart: boolean;
   private toolCallTimeoutMs: number;
 
   constructor(options?: {
     spawn?: SpawnFn;
+    terminate?: McpTerminateFn;
     autoRestart?: boolean;
     toolCallTimeoutMs?: number;
   }) {
     super();
     this.spawnFn = options?.spawn ?? defaultSpawn;
+    this.terminateFn = options?.terminate ?? defaultTerminate;
     this.autoRestart = options?.autoRestart ?? false;
     this.toolCallTimeoutMs = options?.toolCallTimeoutMs ?? 30_000;
   }
@@ -347,6 +417,7 @@ export class McpRuntime extends EventEmitter {
     this.configs.set(config.name, config);
     const instance = new McpServerInstance(config, {
       spawn: this.spawnFn,
+      terminate: this.terminateFn,
       autoRestart: this.autoRestart,
       toolCallTimeoutMs: this.toolCallTimeoutMs,
     });
@@ -359,13 +430,13 @@ export class McpRuntime extends EventEmitter {
     this.servers.set(config.name, instance);
   }
 
-  removeServer(name: string): Promise<void> {
+  async removeServer(name: string): Promise<void> {
     const server = this.servers.get(name);
-    if (!server) return Promise.resolve();
+    if (!server) return;
 
+    await server.stop();
     this.servers.delete(name);
     this.configs.delete(name);
-    return server.stop();
   }
 
   getServer(name: string): McpServerInstance | undefined {
@@ -440,15 +511,35 @@ export class McpRuntime extends EventEmitter {
 
   private wrapServerTools(server: McpServerInstance): ToolDefinition[] {
     const serverName = server.config.name;
-    return server.getTools().map((tool) => ({
-      name: `mcp_${serverName}_${tool.name}`,
-      description: `[MCP: ${serverName}] ${tool.description}`,
-      parameters: tool.inputSchema,
-      execute: async (args: Record<string, unknown>) => {
-        const result = await server.callTool(tool.name, args);
-        return typeof result === 'string' ? result : JSON.stringify(result);
-      },
-    }));
+    const tools: ToolDefinition[] = [];
+    for (const tool of server.getTools()) {
+      if (typeof tool.description !== 'string' || !isPlainRecord(tool.inputSchema)) continue;
+
+      let serializedInputSchema: string;
+      let normalizedInputSchema: unknown;
+      try {
+        serializedInputSchema = JSON.stringify(tool.inputSchema);
+        normalizedInputSchema = JSON.parse(serializedInputSchema) as unknown;
+      } catch {
+        continue;
+      }
+      if (!isPlainRecord(normalizedInputSchema)) continue;
+
+      const description = tool.description;
+      if (!scanForInjection(`${description}\n${serializedInputSchema}`, 'tool_output').safe) continue;
+
+      tools.push({
+        name: `mcp_${serverName}_${tool.name}`,
+        description: `[UNTRUSTED MCP: ${serverName}] ${description}`,
+        parameters: normalizedInputSchema,
+        riskLevel: classifyMcpToolRisk(tool),
+        execute: async (args: Record<string, unknown>) => {
+          const result = await server.callTool(tool.name, args);
+          return typeof result === 'string' ? result : JSON.stringify(result);
+        },
+      });
+    }
+    return tools;
   }
 }
 
@@ -457,10 +548,31 @@ export class McpRuntime extends EventEmitter {
 function defaultSpawn(
   command: string,
   args: string[],
-  options: { env?: Record<string, string>; stdio: string[] },
+  options: {
+    env?: Record<string, string>;
+    stdio: string[];
+    windowsVerbatimArguments?: boolean;
+  },
 ): McpProcess {
-  return spawn(command, args, {
+  return spawnSidecarOwnedProcess(command, args, {
     env: options.env as NodeJS.ProcessEnv | undefined,
     stdio: options.stdio as StdioOptions,
+    windowsHide: true,
+    windowsVerbatimArguments: options.windowsVerbatimArguments === true,
   }) as unknown as McpProcess;
+}
+
+function createMcpEnvironment(explicit?: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(createSanitizedEnv())) {
+    if (value !== undefined) env[key] = value;
+  }
+  return { ...env, ...(explicit ?? {}) };
+}
+
+async function defaultTerminate(process: McpProcess): Promise<boolean> {
+  if (process instanceof ChildProcess) {
+    return terminateProcessTreeAndWait(process);
+  }
+  return process.kill();
 }

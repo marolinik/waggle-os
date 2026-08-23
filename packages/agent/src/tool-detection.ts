@@ -53,6 +53,7 @@ import {
   type ToolManifest,
 } from '@waggle/shared';
 import { resolveToolCommandInvocation } from './tool-command.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
 import { getToolRegistry } from './tool-registry.js';
 import type { ManifestLoaderDeps } from './tool-manifest-loader.js';
 import { resolveShellEnv, resolvedShellPath, mergePathValue } from './shell-env.js';
@@ -60,6 +61,30 @@ import { resolveShellEnv, resolvedShellPath, mergePathValue } from './shell-env.
 const execFileAsync = promisify(execFile);
 const CODEX_WINDOWS_APPS_DIAGNOSTIC =
   'Codex was found in WindowsApps, but Windows blocks command-line launch from that app alias. Install a PATH CLI build of Codex or launch Codex from Start, then refresh.';
+const HERMES_WINDOWS_HEALTH_DIAGNOSTIC =
+  'Hermes is installed but failed its --version health check. Run "hermes doctor" or reinstall Hermes, then refresh.';
+type WindowsAppExecutables = Readonly<Record<string, readonly string[]>>;
+const EMPTY_WINDOWS_APP_EXECUTABLES: WindowsAppExecutables = {};
+const WINDOWS_APPX_QUERY = [
+  "$ErrorActionPreference = 'Stop'",
+  "$targets = @(@{ Id = 'claude-desktop'; Name = 'Claude' }, @{ Id = 'codex-desktop'; Name = 'OpenAI.Codex' })",
+  '$result = @{}',
+  'foreach ($target in $targets) {',
+  '  $paths = @()',
+  '  Get-AppxPackage -Name $target.Name -ErrorAction SilentlyContinue | ForEach-Object {',
+  '    $package = $_',
+  '    $manifest = Get-AppxPackageManifest -Package $package.PackageFullName',
+  '    foreach ($app in @($manifest.Package.Applications.Application)) {',
+  '      $executable = [string]$app.Executable',
+  '      if (-not [string]::IsNullOrWhiteSpace($executable)) {',
+  '        $paths += [IO.Path]::GetFullPath((Join-Path $package.InstallLocation $executable))',
+  '      }',
+  '    }',
+  '  }',
+  '  $result[$target.Id] = @($paths)',
+  '}',
+  '$result | ConvertTo-Json -Compress -Depth 3',
+].join('\n');
 
 function isBlockedWindowsAppsCodexPath(
   id: string,
@@ -84,6 +109,8 @@ export interface ToolDetectionDeps {
   platform?: NodeJS.Platform;
   /** $HOME override (defaults to os.homedir()). */
   home?: string;
+  /** Environment override for platform-specific config roots. */
+  env?: NodeJS.ProcessEnv;
   /** Working directory override (defaults to process.cwd()). */
   cwd?: string;
   /**
@@ -110,6 +137,12 @@ export interface ToolDetectionDeps {
    * `where.exe` on win32 and `which` on POSIX.
    */
   pathFromEnv?: (name: string) => string | Promise<string | null> | null;
+  /**
+   * Registered Windows Store application executables, keyed by built-in tool
+   * id. Injected so AppX discovery stays hermetic in tests.
+   */
+  windowsAppExecutables?: () =>
+    WindowsAppExecutables | Promise<WindowsAppExecutables>;
 }
 
 // ── Default deps (production-only paths) ────────────────────────────
@@ -123,14 +156,21 @@ async function defaultExists(p: string): Promise<boolean> {
   }
 }
 
-async function defaultExecVersion(
+export async function defaultExecVersion(
   binary: string,
   args: string[],
 ): Promise<string | null> {
   try {
-    const invocation = resolveToolCommandInvocation(binary, args);
+    const env = buildExternalProcessEnv(process.env);
+    const invocation = resolveToolCommandInvocation(
+      binary,
+      args,
+      process.platform,
+      { env },
+    );
     const { stdout } = await execFileAsync(invocation.binary, invocation.args, {
       timeout: 5000,
+      env,
       // Don't allow shell expansion; binary paths must be literal.
       shell: false,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
@@ -152,34 +192,96 @@ async function defaultReadJson(p: string): Promise<unknown> {
 }
 
 /**
- * Env for the `which`/`where` lookup. On POSIX, merge the resolved login-shell
+ * Env for the `which`/`where` lookup. Fail closed to the non-secret external
+ * process environment. On POSIX, merge the resolved login-shell
  * PATH (GUI-launched sidecars inherit a bare PATH) so `which claude`
- * can find CLIs installed behind shell-profile shims. Returns `undefined` (keep
- * the inherited env) on Windows or when no login-shell PATH is available yet.
+ * can find CLIs installed behind shell-profile shims.
  */
 export function pathLookupEnv(
   platform: NodeJS.Platform = process.platform,
   base: NodeJS.ProcessEnv = process.env,
-): NodeJS.ProcessEnv | undefined {
-  if (platform === 'win32') return undefined;
+): NodeJS.ProcessEnv {
+  const env = buildExternalProcessEnv(base, {}, platform);
+  if (platform === 'win32') return env;
   const shellPath = resolvedShellPath();
-  if (!shellPath) return undefined;
-  return { ...base, PATH: mergePathValue(shellPath, base.PATH) };
+  if (shellPath) env.PATH = mergePathValue(shellPath, env.PATH);
+  return env;
+}
+
+function envValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const match = Object.entries(env).find(([key]) => key.toUpperCase() === name);
+  return match?.[1];
+}
+
+export function pathLookupCommand(
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): string {
+  if (platform !== 'win32') return 'which';
+  const windowsRoot = envValue(env, 'SYSTEMROOT') ?? envValue(env, 'WINDIR') ?? 'C:\\Windows';
+  return pathWin32.join(windowsRoot, 'System32', 'where.exe');
+}
+
+export function pathLookupArgs(
+  platform: NodeJS.Platform,
+  name: string,
+): string[] {
+  // Windows `where.exe name` searches the current directory before PATH. The
+  // $PATH: prefix confines lookup to PATH and prevents launch-cwd hijacks.
+  return [platform === 'win32' ? `$PATH:${name}` : name];
 }
 
 async function defaultPathFromEnv(name: string): Promise<string | null> {
-  const isWin = process.platform === 'win32';
-  const cmd = isWin ? 'where.exe' : 'which';
   const env = pathLookupEnv(process.platform);
+  const cmd = pathLookupCommand(process.platform, env);
   try {
-    const { stdout } = await execFileAsync(cmd, [name], {
+    const { stdout } = await execFileAsync(cmd, pathLookupArgs(process.platform, name), {
       timeout: 3000,
       shell: false,
-      ...(env ? { env } : {}),
+      env,
+      windowsHide: true,
     });
     return selectPathLookupCandidate(stdout, process.platform);
   } catch {
     return null;
+  }
+}
+
+async function defaultWindowsAppExecutables(): Promise<WindowsAppExecutables> {
+  if (process.platform !== 'win32') return EMPTY_WINDOWS_APP_EXECUTABLES;
+  const systemRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  if (!systemRoot) return EMPTY_WINDOWS_APP_EXECUTABLES;
+  const powershell = pathWin32.join(
+    systemRoot,
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  );
+  try {
+    const { stdout } = await execFileAsync(
+      powershell,
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_APPX_QUERY],
+      { timeout: 5000, shell: false, windowsHide: true },
+    );
+    const parsed = JSON.parse(stdout) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return EMPTY_WINDOWS_APP_EXECUTABLES;
+    }
+    const record = parsed as Record<string, unknown>;
+    const result: Record<string, string[]> = {};
+    for (const id of ['claude-desktop', 'codex-desktop']) {
+      const values = record[id];
+      result[id] = Array.isArray(values)
+        ? values.filter(
+            (value): value is string =>
+              typeof value === 'string' && pathWin32.isAbsolute(value),
+          )
+        : [];
+    }
+    return result;
+  } catch {
+    return EMPTY_WINDOWS_APP_EXECUTABLES;
   }
 }
 
@@ -204,18 +306,22 @@ export function selectPathLookupCandidate(
 interface ResolvedDeps {
   platform: NodeJS.Platform;
   home: string;
+  env: NodeJS.ProcessEnv;
   cwd: string;
   exists: (p: string) => Promise<boolean>;
   execVersion: (binary: string, args: string[]) => Promise<string | null>;
   readJson: (p: string) => Promise<unknown>;
   pathFromEnv: (name: string) => Promise<string | null>;
+  windowsAppExecutables: () => Promise<WindowsAppExecutables>;
 }
 
 function resolveDeps(opts: ToolDetectionDeps): ResolvedDeps {
   const pathFromEnvOpt = opts.pathFromEnv;
+  let windowsAppExecutablesPromise: Promise<WindowsAppExecutables> | undefined;
   return {
     platform: opts.platform ?? osPlatform(),
     home: opts.home ?? homedir(),
+    env: opts.env ?? process.env,
     cwd: opts.cwd ?? process.cwd(),
     exists: opts.exists ?? defaultExists,
     execVersion: opts.execVersion ?? defaultExecVersion,
@@ -227,23 +333,181 @@ function resolveDeps(opts: ToolDetectionDeps): ResolvedDeps {
             const result = pathFromEnvOpt(name);
             return result instanceof Promise ? await result : result;
           },
+    windowsAppExecutables: () => {
+      windowsAppExecutablesPromise ??= Promise.resolve()
+        .then(() => opts.windowsAppExecutables?.() ?? defaultWindowsAppExecutables())
+        .catch(() => EMPTY_WINDOWS_APP_EXECUTABLES);
+      return windowsAppExecutablesPromise;
+    },
   };
 }
 
 // ── Hook status (shared across all tools) ───────────────────────────
 
-// Hook-pointer paths + display names come from each tool's ToolManifest
-// (the registry — #5). probeHooks takes the resolved relative pointer directly,
-// so third-party adapters and the Claude Desktop MCP bridge need no per-tool map.
+// Hook-pointer paths + roots come from each tool's ToolManifest (the registry —
+// #5), so third-party adapters and the Claude Desktop MCP bridge need no map.
 
 interface HookProbe {
   hooksInstalled: boolean;
   hookPointerPath: string | null;
 }
 
-async function probeHooks(rel: string, deps: ResolvedDeps): Promise<HookProbe> {
+const CLAUDE_CODE_HOOKS = [
+  ['SessionStart', 'session-start'],
+  ['UserPromptSubmit', 'user-prompt-submit'],
+  ['Stop', 'stop'],
+  ['PreCompact', 'pre-compact'],
+] as const;
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function tokenizeHookCommand(command: string): string[] | null {
+  if (/[\r\n\0]/.test(command)) return null;
+
+  const tokens: string[] = [];
+  let index = 0;
+  while (index < command.length) {
+    while (command[index] === ' ' || command[index] === '\t') index += 1;
+    if (index >= command.length) break;
+
+    if (command[index] === '"') {
+      const end = command.indexOf('"', index + 1);
+      if (end === -1 || end === index + 1) return null;
+      const token = command.slice(index + 1, end);
+      if (/[$`%!]/.test(token)) return null;
+      tokens.push(token);
+      index = end + 1;
+      if (index < command.length && command[index] !== ' ' && command[index] !== '\t') return null;
+      continue;
+    }
+
+    const start = index;
+    while (index < command.length && command[index] !== ' ' && command[index] !== '\t') {
+      if (/['";&|<>`^#$%!*?()[\]{}]/.test(command[index])) return null;
+      index += 1;
+    }
+    if (index === start) return null;
+    tokens.push(command.slice(start, index));
+  }
+
+  return tokens;
+}
+
+function isAbsolutePathForPlatform(platform: NodeJS.Platform, candidate: string): boolean {
+  return platform === 'win32'
+    ? pathWin32.isAbsolute(candidate)
+    : pathPosix.isAbsolute(candidate);
+}
+
+function normalizedHookPath(platform: NodeJS.Platform, candidate: string): string {
+  const normalized = platform === 'win32' ? candidate.replace(/\\/g, '/') : candidate;
+  return platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isNodeExecutable(platform: NodeJS.Platform, candidate: string): boolean {
+  const normalized = platform === 'win32' ? candidate.toLowerCase() : candidate;
+  const allowedBasenames = platform === 'win32' ? ['node', 'node.exe'] : ['node'];
+  if (allowedBasenames.includes(normalized)) return true;
+  if (!isAbsolutePathForPlatform(platform, candidate)) return false;
+  const basename = platform === 'win32'
+    ? pathWin32.basename(candidate).toLowerCase()
+    : pathPosix.basename(candidate);
+  return allowedBasenames.includes(basename);
+}
+
+function isClaudeCodeHookCommand(
+  command: string,
+  basename: string,
+  platform: NodeJS.Platform,
+): boolean {
+  const tokens = tokenizeHookCommand(command);
+  if (!tokens || (tokens.length !== 2 && tokens.length !== 4)) return false;
+  if (!isNodeExecutable(platform, tokens[0])) return false;
+  if (!isAbsolutePathForPlatform(platform, tokens[1])) return false;
+  if (tokens.length === 4) {
+    if (tokens[2] !== '--cli-path' || !isAbsolutePathForPlatform(platform, tokens[3])) return false;
+  }
+
+  const scriptPath = normalizedHookPath(platform, tokens[1]);
+  const expected = `/hive-mind-hooks-claude-code/dist/hooks/${basename}.js`;
+  const normalizedExpected = platform === 'win32' ? expected.toLowerCase() : expected;
+  return scriptPath.endsWith(normalizedExpected);
+}
+
+function hasActiveClaudeCodeHooks(settings: unknown, platform: NodeJS.Platform): boolean {
+  const settingsRecord = objectRecord(settings);
+  const hooks = objectRecord(settingsRecord?.hooks);
+  if (!hooks) return false;
+
+  return CLAUDE_CODE_HOOKS.every(([eventName, basename]) => {
+    const groups = hooks[eventName];
+    if (!Array.isArray(groups)) return false;
+    return groups.some((group) => {
+      const groupRecord = objectRecord(group);
+      if (!groupRecord) return false;
+      const entries = groupRecord.hooks;
+      if (!Array.isArray(entries)) return false;
+      return entries.some((entry) => {
+        const entryRecord = objectRecord(entry);
+        const command = entryRecord?.command;
+        return entryRecord?.type === 'command'
+          && typeof command === 'string'
+          && isClaudeCodeHookCommand(command, basename, platform);
+      });
+    });
+  });
+}
+
+async function activeClaudeCodeHooksHealthy(deps: ResolvedDeps): Promise<boolean> {
+  const settingsPath = joinForPlatform(deps.platform, deps.home, '.claude', 'settings.json');
+  if (!(await deps.exists(settingsPath))) return false;
+  return hasActiveClaudeCodeHooks(await deps.readJson(settingsPath), deps.platform);
+}
+
+async function activeHooksHealthy(
+  pointerHealthy: boolean,
+  toolId: string | undefined,
+  deps: ResolvedDeps,
+): Promise<boolean> {
+  if (!pointerHealthy) return false;
+  return toolId !== 'claude-code' || activeClaudeCodeHooksHealthy(deps);
+}
+
+function nonBlankEnv(deps: ResolvedDeps, name: string): string | null {
+  const value = deps.env[name]?.trim();
+  return value ? value : null;
+}
+
+function localAppDataRoot(deps: ResolvedDeps): string {
+  return nonBlankEnv(deps, 'LOCALAPPDATA')
+    ?? joinForPlatform(deps.platform, deps.home, 'AppData', 'Local');
+}
+
+function hermesHome(deps: ResolvedDeps): string {
+  const configured = nonBlankEnv(deps, 'HERMES_HOME');
+  if (configured) {
+    return deps.platform === 'win32'
+      ? pathWin32.normalize(configured)
+      : pathPosix.normalize(configured);
+  }
+  return deps.platform === 'win32'
+    ? joinForPlatform(deps.platform, localAppDataRoot(deps), 'hermes')
+    : joinForPlatform(deps.platform, deps.home, '.hermes');
+}
+
+async function probeHooks(
+  rel: string,
+  deps: ResolvedDeps,
+  hookRoot: ToolManifest['hookRoot'] = 'user-home',
+  toolId?: string,
+): Promise<HookProbe> {
   if (!rel) return { hooksInstalled: false, hookPointerPath: null };
-  const pointerPath = joinForPlatform(deps.platform, deps.home, rel);
+  const root = hookRoot === 'hermes-home' ? hermesHome(deps) : deps.home;
+  const pointerPath = joinForPlatform(deps.platform, root, rel);
   if (!(await deps.exists(pointerPath))) {
     return { hooksInstalled: false, hookPointerPath: null };
   }
@@ -263,13 +527,20 @@ async function probeHooks(rel: string, deps: ResolvedDeps): Promise<HookProbe> {
     : typeof hooksDir === 'string' && hooksDir.length > 0 && await deps.exists(hooksDir);
   if (!hooksDirValid) return { hooksInstalled: false, hookPointerPath: pointerPath };
   if (typeof backup === 'string' && backup.length > 0) {
-    return { hooksInstalled: await deps.exists(backup), hookPointerPath: pointerPath };
+    return {
+      hooksInstalled: await activeHooksHealthy(await deps.exists(backup), toolId, deps),
+      hookPointerPath: pointerPath,
+    };
   }
   // Create-if-missing adapters correctly have no backup. Their pointer is
   // healthy only while the config they created still exists.
   if (backup === null && pointer.created_by_us === true && typeof pointer.config_path === 'string') {
     return {
-      hooksInstalled: await deps.exists(pointer.config_path),
+      hooksInstalled: await activeHooksHealthy(
+        await deps.exists(pointer.config_path),
+        toolId,
+        deps,
+      ),
       hookPointerPath: pointerPath,
     };
   }
@@ -293,6 +564,7 @@ async function detectByPath(
   deps: ResolvedDeps,
   hookPointer: string,
   displayName: string,
+  hookRoot?: ToolManifest['hookRoot'],
 ): Promise<DetectedTool> {
   const base: DetectedTool = {
     id,
@@ -304,12 +576,12 @@ async function detectByPath(
     hookPointerPath: null,
   };
   const resolved = await deps.pathFromEnv(binaryName);
-  if (!resolved) return { ...base, ...(await probeHooks(hookPointer, deps)) };
+  if (!resolved) return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot, id)) };
   if (!(await deps.exists(resolved))) {
-    return { ...base, ...(await probeHooks(hookPointer, deps)) };
+    return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot, id)) };
   }
   const versionRaw = await deps.execVersion(resolved, ['--version']);
-  const hookProbe = await probeHooks(hookPointer, deps);
+  const hookProbe = await probeHooks(hookPointer, deps, hookRoot, id);
   const blockedWindowsAppsCodex =
     versionRaw === null && isBlockedWindowsAppsCodexPath(id, deps.platform, resolved);
   return {
@@ -322,6 +594,57 @@ async function detectByPath(
       ? CODEX_WINDOWS_APPS_DIAGNOSTIC
       : versionRaw ? undefined : '--version exec failed',
     ...hookProbe,
+  };
+}
+
+function hermesWindowsCandidatePaths(deps: ResolvedDeps): string[] {
+  const base = hermesHome(deps);
+  return [
+    joinForPlatform(deps.platform, base, 'bin', 'hermes.cmd'),
+    joinForPlatform(deps.platform, base, 'hermes-agent', 'venv', 'Scripts', 'hermes.exe'),
+    joinForPlatform(deps.platform, base, 'hermes-agent', 'venv', 'Scripts', 'hermes-agent.exe'),
+  ];
+}
+
+async function detectHealthyWindowsHermes(
+  binaryName: string,
+  deps: ResolvedDeps,
+  hookPointer: string,
+  displayName: string,
+  hookRoot?: ToolManifest['hookRoot'],
+): Promise<DetectedTool> {
+  const pathCandidate = await deps.pathFromEnv(binaryName);
+  const candidates = [pathCandidate, ...hermesWindowsCandidatePaths(deps)]
+    .filter((candidate): candidate is string => Boolean(candidate));
+  const uniqueCandidates = candidates.filter((candidate, index) =>
+    candidates.findIndex((value) => value.toLowerCase() === candidate.toLowerCase()) === index);
+  let firstExisting: string | null = null;
+
+  for (const candidate of uniqueCandidates) {
+    if (!(await deps.exists(candidate))) continue;
+    firstExisting ??= candidate;
+    const version = await deps.execVersion(candidate, ['--version']);
+    if (version) {
+      return {
+        id: 'hermes',
+        displayName,
+        installed: true,
+        installedPath: candidate,
+        version,
+        ...(await probeHooks(hookPointer, deps, hookRoot, 'hermes')),
+      };
+    }
+  }
+
+  return {
+    id: 'hermes',
+    displayName,
+    installed: firstExisting !== null,
+    installedPath: firstExisting,
+    version: null,
+    launchable: firstExisting ? false : undefined,
+    diagnostic: firstExisting ? HERMES_WINDOWS_HEALTH_DIAGNOSTIC : undefined,
+    ...(await probeHooks(hookPointer, deps, hookRoot, 'hermes')),
   };
 }
 
@@ -345,9 +668,11 @@ function cursorCandidatePaths(deps: ResolvedDeps): string[] {
   ];
 }
 
-function claudeDesktopCandidatePaths(deps: ResolvedDeps): string[] {
+async function claudeDesktopCandidatePaths(deps: ResolvedDeps): Promise<string[]> {
   if (deps.platform === 'win32') {
+    const registered = await deps.windowsAppExecutables();
     return [
+      ...(registered['claude-desktop'] ?? []),
       joinForPlatform(deps.platform, deps.home, 'AppData', 'Local', 'AnthropicClaude', 'Claude.exe'),
       'C:\\Program Files\\AnthropicClaude\\Claude.exe',
     ];
@@ -364,13 +689,45 @@ function claudeDesktopCandidatePaths(deps: ResolvedDeps): string[] {
   ];
 }
 
-function codexDesktopCandidatePaths(deps: ResolvedDeps): string[] {
-  // OpenAI Codex Desktop is unreleased at time of writing (May 2026)
-  // but the hook package already targets it. Use the conventional
-  // per-platform vendor paths so a future official install is
-  // detected automatically.
+function hermesDesktopCandidatePaths(deps: ResolvedDeps): string[] {
   if (deps.platform === 'win32') {
+    const localAppData = localAppDataRoot(deps);
     return [
+      joinForPlatform(
+        deps.platform,
+        hermesHome(deps),
+        'hermes-agent',
+        'apps',
+        'desktop',
+        'release',
+        'win-unpacked',
+        'Hermes.exe',
+      ),
+      joinForPlatform(deps.platform, localAppData, 'Programs', 'Hermes', 'Hermes.exe'),
+      joinForPlatform(deps.platform, localAppData, 'Programs', 'hermes', 'Hermes.exe'),
+      'C:\\Program Files\\Hermes\\Hermes.exe',
+    ];
+  }
+  if (deps.platform === 'darwin') {
+    return ['/Applications/Hermes.app/Contents/MacOS/Hermes'];
+  }
+  return [
+    joinForPlatform(deps.platform, deps.home, '.local', 'share', 'Hermes', 'Hermes'),
+    '/opt/Hermes/Hermes',
+  ];
+}
+
+async function codexDesktopCandidatePaths(deps: ResolvedDeps): Promise<string[]> {
+  if (deps.platform === 'win32') {
+    const registered = await deps.windowsAppExecutables();
+    const codexPath = await deps.pathFromEnv('codex');
+    const normalized = codexPath?.replace(/\//g, '\\') ?? '';
+    const storeDesktopPath = /\\WindowsApps\\OpenAI\.Codex_[^\\]+\\app\\resources\\codex(?:\.exe)?$/i.test(normalized)
+      ? pathWin32.join(pathWin32.dirname(pathWin32.dirname(normalized)), 'ChatGPT.exe')
+      : null;
+    return [
+      ...(registered['codex-desktop'] ?? []),
+      ...(storeDesktopPath ? [storeDesktopPath] : []),
       joinForPlatform(deps.platform, deps.home, 'AppData', 'Local', 'OpenAI', 'Codex.exe'),
       'C:\\Program Files\\OpenAI\\Codex.exe',
     ];
@@ -395,6 +752,7 @@ async function detectByCandidates(
   withVersion: boolean,
   hookPointer: string,
   displayName: string,
+  hookRoot?: ToolManifest['hookRoot'],
 ): Promise<DetectedTool> {
   const base: DetectedTool = {
     id,
@@ -410,7 +768,7 @@ async function detectByCandidates(
       const versionRaw = withVersion
         ? await deps.execVersion(candidate, ['--version'])
         : null;
-      const hookProbe = await probeHooks(hookPointer, deps);
+      const hookProbe = await probeHooks(hookPointer, deps, hookRoot, id);
       return {
         ...base,
         installed: true,
@@ -422,7 +780,7 @@ async function detectByCandidates(
       };
     }
   }
-  return { ...base, ...(await probeHooks(hookPointer, deps)) };
+  return { ...base, ...(await probeHooks(hookPointer, deps, hookRoot, id)) };
 }
 
 // ── Registry-driven detection ───────────────────────────────────────
@@ -432,15 +790,17 @@ async function detectByCandidates(
  * whose paths are platform-branching code, not declarative data). Keyed by
  * built-in id; third-party adapters are PATH-only so never need an entry.
  */
-const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[]> = {
+const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[] | Promise<string[]>> = {
   'cursor': cursorCandidatePaths,
   'claude-desktop': claudeDesktopCandidatePaths,
   'codex-desktop': codexDesktopCandidatePaths,
+  'hermes-desktop': hermesDesktopCandidatePaths,
 };
 
 function withManifestMetadata(tool: DetectedTool, manifest: ToolManifest): DetectedTool {
   return {
     ...tool,
+    releaseStatus: manifest.releaseStatus,
     launchable: tool.launchable ?? manifest.launchable,
     hookCapable: manifest.hookCapable,
     builtin: manifest.builtin === true,
@@ -453,15 +813,35 @@ function withManifestMetadata(tool: DetectedTool, manifest: ToolManifest): Detec
 /** Detect one tool from its manifest: PATH lookup, or the candidate resolver. */
 async function detectFromManifest(m: ToolManifest, deps: ResolvedDeps): Promise<DetectedTool> {
   if (m.detect.kind === 'path') {
+    if (m.id === 'hermes' && deps.platform === 'win32') {
+      return withManifestMetadata(
+        await detectHealthyWindowsHermes(
+          m.detect.binaryName,
+          deps,
+          m.hookPointer,
+          m.displayName,
+          m.hookRoot,
+        ),
+        m,
+      );
+    }
     return withManifestMetadata(
-      await detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName),
+      await detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName, m.hookRoot),
       m,
     );
   }
   const resolver = CANDIDATE_RESOLVERS[m.id];
-  const candidates = resolver ? resolver(deps) : [];
+  const candidates = resolver ? await resolver(deps) : [];
   return withManifestMetadata(
-    await detectByCandidates(m.id, candidates, deps, /* withVersion */ false, m.hookPointer, m.displayName),
+    await detectByCandidates(
+      m.id,
+      candidates,
+      deps,
+      /* withVersion */ false,
+      m.hookPointer,
+      m.displayName,
+      m.hookRoot,
+    ),
     m,
   );
 }
