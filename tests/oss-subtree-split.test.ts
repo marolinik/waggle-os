@@ -351,7 +351,9 @@ describe('hive-mind publication boundary', () => {
       mkdirSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', 'mind'), { recursive: true });
       mkdirSync(join(monoRepo, 'scripts'), { recursive: true });
       mkdirSync(join(ossRepo, 'packages', 'core', 'src', 'mind'), { recursive: true });
-      copyFileSync(DRIFT_SCRIPT_PATH, join(monoRepo, 'scripts', 'oss-drift-check.sh'));
+      const copiedDriftScript = join(monoRepo, 'scripts', 'oss-drift-check.sh');
+      copyFileSync(DRIFT_SCRIPT_PATH, copiedDriftScript);
+      chmodSync(copiedDriftScript, 0o755);
       writeFileSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', excluded), 'private\n');
       execFileSync('git', ['init'], { cwd: monoRepo, stdio: 'ignore' });
       execFileSync('git', ['init'], { cwd: ossRepo, stdio: 'ignore' });
