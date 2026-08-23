@@ -1,6 +1,8 @@
 # Code-Signing Playbook — Pilot + Public Day 0
 
 > [!CAUTION]
+> Only `tauri:build:win:pilot-signed` below is current internal-pilot guidance.
+> macOS is deferred; its historical commands are not release certification.
 > **PARTIALLY SUPERSEDED — DO NOT USE THE PUBLIC-SIGNING SECTIONS.** The pilot
 > history remains valid for internal RC evidence. Public Windows signing now
 > uses the protected exact-tag GitHub workflow with Azure OIDC/federated identity;
@@ -32,8 +34,9 @@ npm run tauri:sign:pilot:win:setup
 npm run tauri:sign:pilot:win:apply
 
 # 3. Build — Tauri's MSI/NSIS bundlers pick up the thumbprint from the
-#    override config and sign automatically.
-npm run tauri:build:win
+#    explicitly passed override config and sign automatically. The plain
+#    tauri:build:win command does not load this override.
+npm run tauri:build:win:pilot-signed
 
 # 4. (Optional, redundant safety) Re-sign the produced MSI explicitly
 #    via signtool. Useful if you want to apply timestamp at a different time
@@ -53,7 +56,10 @@ npm run tauri:sign:pilot:win:sign -- src-tauri/target/release/bundle/msi/Waggle_
 
 ### 1.2 macOS self-sign (ad-hoc)
 
-**Already wired (LAUNCH-06).** `app/src-tauri/tauri.build-override.conf.json` ships with `bundle.macOS.signingIdentity = "-"`, so every `npm run tauri:build:mac` produces an ad-hoc-signed `.app` automatically — no operator step required.
+> **HISTORICAL / ROADMAP ONLY.** macOS is outside the Windows-first launch cohort
+> and has no current package certification. `npm run tauri:build:mac` does not
+> automatically load `tauri.build-override.conf.json`; do not label its output
+> signed merely because the override contains `signingIdentity = "-"`.
 
 **Re-sign + verify wrapper.** For nested helpers (sidecar, native deps) Tauri's bundler may miss, run:
 
@@ -296,5 +302,5 @@ Renewals: ~$348/yr ongoing. Tauri auto-updater also expects signed binaries — 
 
 ---
 
-Last updated: 2026-05-10 — LAUNCH-06 self-sign automation landed (Phase 2 Step 4). §1.1 now points to the npm-wrapped scripts (`tauri:sign:pilot:win:setup` / `:apply` / `:sign`) backed by `app/scripts/sign-windows-pilot.ps1`, `apply-signing-config.mjs`, and the tested `signing-config.ts` utility. §1.2 ships the macOS ad-hoc identity in the build-override config by default; `tauri:sign:pilot:mac:adhoc` re-signs nested helpers post-build.
+Last updated: 2026-08-22 — Windows internal-pilot builds must use `tauri:build:win:pilot-signed`. macOS packaging remains deferred; an ordinary macOS build is not signed by the unused override and must be explicitly signed and verified before it is described as an internal artifact.
 Owner: Marko Marković (driving via CC); pilot self-sign actionable T+5; real cert procurement actionable T+14.

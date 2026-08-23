@@ -7,11 +7,10 @@
 # Usage:
 #   ./sign-macos-adhoc.sh <path-to-Waggle.app>
 #
-# Tauri's bundle config (tauri.build-override.conf.json) already passes
-# `signingIdentity: "-"` to codesign at build time, so the produced .app is
-# already ad-hoc-signed. This script:
+# Ordinary `npm run tauri:build:mac` does not load the optional build override.
+# Treat the input as unsigned until this script signs and verifies it. This script:
 #
-#   1. Re-signs the bundle with --force --deep to catch any nested helpers
+#   1. Signs or re-signs the bundle with --force --deep to catch nested helpers
 #      (sidecar binary, native deps) that Tauri's pass missed.
 #   2. Verifies the signature with --verify --deep --strict.
 #

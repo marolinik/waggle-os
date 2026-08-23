@@ -155,9 +155,8 @@ if ($Mode -eq 'Setup') {
     Write-Host "[setup] thumbprint -> $ThumbprintFile" -ForegroundColor Green
     Write-Host ''
     Write-Host 'Next:' -ForegroundColor Cyan
-    Write-Host '  1. cd app && npm run tauri:sign:pilot:win:apply'
-    Write-Host '  2. npm run tauri:build:win'
-    Write-Host '  3. .\scripts\sign-windows-pilot.ps1 -Mode Sign -ArtifactPath <path-to-msi>'
+    Write-Host '  1. npm run tauri:build:win:pilot-signed'
+    Write-Host '  2. .\scripts\sign-windows-pilot.ps1 -Mode Sign -ArtifactPath <path-to-msi>  # optional'
     return
 }
 
