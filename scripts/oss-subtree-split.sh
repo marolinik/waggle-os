@@ -14,7 +14,7 @@
 #   1. PROPRIETARY FILES. `packages/hive-mind-core/src/mind/` contains
 #      evolution-runs.ts, execution-traces.ts, improvement-signals.ts — Waggle
 #      proprietary, EXCLUDED from the public mirror. A raw split carries them.
-#      (The hard abort guard below refuses to emit a branch that contains them,
+#      (The hard abort guard below refuses to publish a ref that contains them,
 #      so the leak can't happen silently — but the guard is a backstop, not the
 #      sync mechanism.)
 #   2. INTERLEAVED PROPRIETARY CONTENT. The `install_audit` table DDL + its
@@ -43,12 +43,15 @@
 #   bash scripts/oss-subtree-split.sh                   # split all hive-mind-* packages
 #   bash scripts/oss-subtree-split.sh hive-mind-core    # split only one package
 #
-# Idempotent: re-running drops + recreates the export branches with current state.
+# Idempotent: re-running replaces export refs only after a candidate passes every guard.
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
+
+VALIDATED_BRANCHES=()
+VALIDATED_SHAS=()
 
 # Default: split all hive-mind-* packages. Override via CLI args for targeted split.
 if [[ $# -gt 0 ]]; then
@@ -74,22 +77,20 @@ for pkg in "${PACKAGES[@]}"; do
   BRANCH="oss-${pkg}-export"
 
   if [[ ! -d "$PREFIX" ]]; then
-    echo "[oss-subtree-split] SKIP $pkg — directory $PREFIX not found." >&2
-    continue
+    echo "[oss-subtree-split] ERROR: requested package directory $PREFIX was not found." >&2
+    exit 2
   fi
 
-  # Drop existing export branch if present (idempotent).
-  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-    echo "[oss-subtree-split] Dropping existing branch $BRANCH"
-    git branch -D "$BRANCH" >/dev/null
+  echo "[oss-subtree-split] Splitting $PREFIX → detached candidate commit"
+  CANDIDATE_SHA=$(git subtree split --prefix="$PREFIX" | tail -n 1)
+  if ! git cat-file -e "${CANDIDATE_SHA}^{commit}" 2>/dev/null; then
+    echo "[oss-subtree-split]   ERROR: subtree split did not return a valid commit." >&2
+    exit 2
   fi
-
-  echo "[oss-subtree-split] Splitting $PREFIX → $BRANCH"
-  git subtree split --prefix="$PREFIX" --branch="$BRANCH"
 
   # Top-level summary for audit.
-  TOP_LEVEL=$(git ls-tree --name-only "$BRANCH" | sort | tr '\n' ' ')
-  echo "[oss-subtree-split]   $BRANCH HEAD top-level: $TOP_LEVEL"
+  TOP_LEVEL=$(git ls-tree --name-only "$CANDIDATE_SHA" | sort | tr '\n' ' ')
+  echo "[oss-subtree-split]   candidate HEAD top-level: $TOP_LEVEL"
 
   # Negative assertion: monorepo-bleed sentinel. The subtree-split's prefix=
   # arg already guarantees the export contains ONLY the subtree, but we
@@ -98,9 +99,9 @@ for pkg in "${PACKAGES[@]}"; do
   # Forbidden = paths that ONLY exist as monorepo siblings, never as package contents.
   for forbidden in apps packages sidecar .planning .scratch .mind benchmarks; do
     if echo "$TOP_LEVEL" | grep -qE "(^| )$forbidden( |$)"; then
-      echo "[oss-subtree-split]   ERROR: $BRANCH contains forbidden monorepo-level entry '$forbidden'." >&2
+      echo "[oss-subtree-split]   ERROR: candidate contains forbidden monorepo-level entry '$forbidden'." >&2
       echo "[oss-subtree-split]   This indicates the subtree-split misbehaved or proprietary content leaked." >&2
-      echo "[oss-subtree-split]   Inspect with: git checkout $BRANCH && ls" >&2
+      echo "[oss-subtree-split]   No export refs were changed." >&2
       exit 2
     fi
   done
@@ -120,10 +121,10 @@ for pkg in "${PACKAGES[@]}"; do
     "src/vault.ts"
     "src/compliance"
   )
-  BRANCH_FILES=$(git ls-tree -r --name-only "$BRANCH")
+  BRANCH_FILES=$(git ls-tree -r --name-only "$CANDIDATE_SHA")
   for pf in "${FORBIDDEN_FILES[@]}"; do
     if echo "$BRANCH_FILES" | grep -qE "(^|/)${pf}(/|\$|\.ts\$)"; then
-      echo "[oss-subtree-split]   ERROR: $BRANCH contains PROPRIETARY path '$pf'." >&2
+      echo "[oss-subtree-split]   ERROR: candidate contains PROPRIETARY path '$pf'." >&2
       echo "[oss-subtree-split]   This export is NOT safe to push to the public OSS mirror." >&2
       echo "[oss-subtree-split]   These files are Waggle-proprietary (§7.5) and must be removed" >&2
       echo "[oss-subtree-split]   by the curated forward-port, not pushed raw. ABORTING." >&2
@@ -132,15 +133,52 @@ for pkg in "${PACKAGES[@]}"; do
     fi
   done
 
-  echo "[oss-subtree-split]   ✓ $BRANCH split complete (no monorepo-level leak, no proprietary files)"
+  VALIDATED_BRANCHES+=("$BRANCH")
+  VALIDATED_SHAS+=("$CANDIDATE_SHA")
+  echo "[oss-subtree-split]   ✓ candidate validated (no monorepo-level leak, no proprietary files)"
   echo "[oss-subtree-split]   NOTE: this is a RAW history branch — NOT OSS-publishable as-is"
   echo "[oss-subtree-split]   (wrong layout + interleaved install_audit). Curate before any push."
   echo
 done
 
+# Update stable LOCAL inspection refs only after every requested package passes.
+# Preflight checked-out refs, capture expected old OIDs, then use one compare-and-
+# swap transaction so a lock/race/failure cannot leave a partially updated set.
+ZERO_OID=$(printf '%040d' 0)
+EXPECTED_OLD_SHAS=()
+if ! WORKTREE_LIST=$(git worktree list --porcelain); then
+  echo "[oss-subtree-split] ERROR: could not inventory checked-out worktree refs." >&2
+  exit 4
+fi
+for i in "${!VALIDATED_BRANCHES[@]}"; do
+  ref="refs/heads/${VALIDATED_BRANCHES[$i]}"
+  if grep -Fxq "branch $ref" <<< "$WORKTREE_LIST"; then
+    echo "[oss-subtree-split] ERROR: refusing to update checked-out ref $ref." >&2
+    exit 4
+  fi
+  if git show-ref --verify --quiet "$ref"; then
+    EXPECTED_OLD_SHAS+=("$(git rev-parse "$ref")")
+  else
+    EXPECTED_OLD_SHAS+=("$ZERO_OID")
+  fi
+done
+
+if ! {
+  echo start
+  for i in "${!VALIDATED_BRANCHES[@]}"; do
+    printf 'update refs/heads/%s %s %s\n' \
+      "${VALIDATED_BRANCHES[$i]}" "${VALIDATED_SHAS[$i]}" "${EXPECTED_OLD_SHAS[$i]}"
+  done
+  echo prepare
+  echo commit
+} | git update-ref --stdin; then
+  echo "[oss-subtree-split] ERROR: atomic export-ref transaction failed; no refs were changed." >&2
+  exit 4
+fi
+
 echo "[oss-subtree-split] All splits complete. Local branches ready:"
-for pkg in "${PACKAGES[@]}"; do
-  echo "  oss-${pkg}-export"
+for branch in "${VALIDATED_BRANCHES[@]}"; do
+  echo "  $branch"
 done
 echo
 echo "[oss-subtree-split] These branches are for INSPECTION / as a curation starting"

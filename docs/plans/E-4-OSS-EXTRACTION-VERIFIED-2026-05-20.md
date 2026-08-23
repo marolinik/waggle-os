@@ -1,6 +1,16 @@
 # E-4 — OSS Subtree-Split Extraction Verified (2026-05-20)
 
-## Status: ✅ Verified-working, ready for Day 0 push
+## Status: ⛔ SUPERSEDED — DO NOT FOLLOW
+
+This is a historical verification record. Its former publication instructions
+were invalidated by the 2026-06-12 drift analysis: raw subtree branches have the
+wrong public-repository layout and can contain Waggle-only files plus interleaved
+`install_audit` logic. They are inspection inputs only, never publication sources.
+
+The current authoritative process is in `AGENTS.md` §7.5 and
+`packages/hive-mind-core/CONTRIBUTING.md`: prepare a maintainer-curated
+forward-port in the OSS checkout, strip every documented exclusion, adapt layout
+and imports, review the complete diff, then run `scripts/oss-drift-check.sh`.
 
 `scripts/oss-subtree-split.sh` was previously listed as "scaffold done, code copy TODO" (CR-6 in `BACKLOG-CONSOLIDATED-2026-04-17.md`). This session ran the script locally against all 12 `packages/hive-mind-*` packages and confirmed:
 
@@ -25,11 +35,13 @@ oss-hive-mind-shim-core-export
 oss-hive-mind-wiki-compiler-export
 ```
 
-All 12 are local-only refs — **NOT pushed to any remote** (per the script's design: `git push` is a manual step).
+All 12 were local-only refs and were not published. Their existence did not make
+them safe publication artifacts.
 
 ## Regression guards added
 
-`tests/oss-subtree-split.test.ts` — 44 static-analysis tests that lock down:
+`tests/oss-subtree-split.test.ts` now includes static guards plus an executable
+temporary-repository rollback test. It locks down:
 
 - Script exists with bash shebang + `set -euo pipefail`
 - Dynamic `packages/hive-mind-*` discovery (Wave 2/3 auto-inclusion)
@@ -39,29 +51,15 @@ All 12 are local-only refs — **NOT pushed to any remote** (per the script's de
 
 The first run flagged a stale forbidden entry (`cowork/` — listed in the script but no longer at the repo root). Removed; commit landed in this same change.
 
-## What "Day 0 push" means
+## Invalidated publication guidance
 
-For each export branch, the maintainer (Marko) pushes to a remote:
-
-```bash
-# Either per-package, to dedicated OSS mirror repos:
-git push <oss-mirror-remote> oss-hive-mind-core-export:main
-
-# Or to a consolidated repo as a subdirectory:
-git push origin-hive-mind oss-hive-mind-core-export:packages/hive-mind-core
-```
-
-Per `packages/hive-mind-core/CONTRIBUTING.md`, the consolidated-repo model is at `github.com/marolinik/hive-mind`. Adding a remote for that:
-
-```bash
-git remote add origin-hive-mind https://github.com/marolinik/hive-mind.git
-git push origin-hive-mind oss-hive-mind-core-export:main
-# ... repeat per package, mapping to its directory in the consolidated repo
-```
+The former “Day 0” raw-branch publication commands were removed because they
+could expose proprietary content and cannot produce the curated mirror layout.
+Do not reconstruct or use them from repository history.
 
 ## What's NOT done (deliberate)
 
-- **No remote pushes.** The script + this verification produce export branches; pushing is manual + Day-0-gated per the OSS launch playbook.
+- **No remote publication.** The script produces local inspection branches only.
 - **No CI workflow that runs splits.** Each split processes hundreds-to-thousands of commits and takes minutes per package; running this on every PR would be wasteful. The static-guard test (`oss-subtree-split.test.ts`) catches the regressions that matter (forbidden list drift, script syntax, package-shape) without paying the split cost.
 - **No automatic reverse-sync.** OSS upstream changes don't flow back automatically; that's a manual cherry-pick following `.github/sync.md`.
 
@@ -71,7 +69,7 @@ git push origin-hive-mind oss-hive-mind-core-export:main
 # Run the static guards (fast):
 npx vitest run tests/oss-subtree-split.test.ts
 
-# Re-split + verify all 12 packages (slow — 5-10 minutes total):
+# Re-split all packages for local inspection only (slow — 5-10 minutes total):
 bash scripts/oss-subtree-split.sh
 
 # Single-package re-split (fastest spot-check):
@@ -82,6 +80,7 @@ git checkout oss-hive-mind-core-export && ls
 git checkout -  # return
 ```
 
-## CR-6 ✅ CLOSED
+## CR-6 historical disposition
 
-The original CR-6 was "hive-mind actual source extraction — scaffold done, code copy TODO." The scaffold + the working extraction mechanism + a regression guard now all exist. The remaining "code copy" step is the manual Day-0 `git push` to the OSS mirror, which is correctly out of session scope.
+The original CR-6 proved isolated-history extraction, not a safe OSS release
+mechanism. Any future mirror release remains a separate curated-forward-port task.

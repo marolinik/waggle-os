@@ -18,7 +18,7 @@
 #   lockfiles, and docs churn excluded) between the monorepo and a local
 #   checkout of the OSS repo. Reports per-file status:
 #     ONLY-IN-OSS   → candidate reverse-port (the W4.2 failure mode)
-#     ONLY-IN-MONO  → not yet exported (fine if a split is pending)
+#     ONLY-IN-MONO  → intentional exclusion or forward-port candidate
 #     DIFFERS       → divergent edits — inspect immediately
 #   Exit 0 = clean, exit 1 = drift found, exit 2 = setup error.
 #
@@ -58,7 +58,11 @@ MAPPINGS=(
 #  - *.test.ts — test LAYOUT is a permanent convention difference (OSS
 #    co-locates tests beside src; the monorepo keeps them in tests/), so
 #    co-located tests would be unfixable noise. Source drift is the target.
-IGNORE_RE='(^|/)(dist|node_modules|\.tsbuildinfo)(/|$)|\.test\.ts$'
+IGNORE_RE='(^|/)(dist|node_modules|[.]tsbuildinfo)(/|$)|[.]test[.]ts$'
+
+# Whole files intentionally retained only in the private monorepo. Interleaved
+# install_audit logic in mind/{db,schema}.ts is reviewed as DIFFERS instead.
+OSS_EXCLUDED_ONLY_MONO_RE='^(mind/(evolution-runs|execution-traces|improvement-signals)\.ts|vault\.ts|compliance(/|$))'
 
 drift=0
 
@@ -77,22 +81,60 @@ for mapping in "${MAPPINGS[@]}"; do
   fi
 
   # File inventories (relative paths), excluding build artifacts.
-  mono_files=$(cd "$mono_dir" && find . -type f | sed 's|^\./||' | grep -Ev "$IGNORE_RE" | sort)
-  oss_files=$(cd "$OSS_DIR/$oss_dir" && find . -type f | sed 's|^\./||' | grep -Ev "$IGNORE_RE" | sort)
+  if ! mono_files=$(cd "$mono_dir" && find . -type f | sed 's|^\./||' \
+    | awk -v ignore_re="$IGNORE_RE" '$0 !~ ignore_re' | sort); then
+    echo "[oss-drift-check]   ERROR: failed to inventory monorepo dir: $mono_dir" >&2
+    exit 2
+  fi
+  if ! oss_files=$(cd "$OSS_DIR/$oss_dir" && find . -type f | sed 's|^\./||' \
+    | awk -v ignore_re="$IGNORE_RE" '$0 !~ ignore_re' | sort); then
+    echo "[oss-drift-check]   ERROR: failed to inventory OSS dir: $OSS_DIR/$oss_dir" >&2
+    exit 2
+  fi
 
   only_oss=$(comm -13 <(echo "$mono_files") <(echo "$oss_files"))
   only_mono=$(comm -23 <(echo "$mono_files") <(echo "$oss_files"))
   common=$(comm -12 <(echo "$mono_files") <(echo "$oss_files"))
+
+  forbidden_oss_files=""
+  if [[ -n "$oss_files" ]]; then
+    forbidden_oss_files=$(printf '%s\n' "$oss_files" | grep -E "$OSS_EXCLUDED_ONLY_MONO_RE" || true)
+  fi
+  if [[ -n "$forbidden_oss_files" ]]; then
+    drift=1
+    echo "  FORBIDDEN-OSS-CONTENT (private Waggle-only files leaked into mirror):"
+    echo "$forbidden_oss_files" | sed 's/^/    /'
+  fi
+
+  forbidden_oss_markers=$(grep -HnE '(^|[^[:alnum:]_])install_audit([^[:alnum:]_]|$)' \
+    "$OSS_DIR/$oss_dir/mind/db.ts" "$OSS_DIR/$oss_dir/mind/schema.ts" 2>/dev/null \
+    | grep -Ev ':[0-9]+:[[:space:]]*(//|/\*|\*|#)' || true)
+  if [[ -n "$forbidden_oss_markers" ]]; then
+    drift=1
+    echo "  FORBIDDEN-OSS-MARKER (private interleaved install_audit content leaked):"
+    echo "$forbidden_oss_markers" | sed 's/^/    /'
+  fi
+
+  only_mono_excluded=""
+  only_mono_candidates=""
+  if [[ -n "$only_mono" ]]; then
+    only_mono_excluded=$(printf '%s\n' "$only_mono" | grep -E "$OSS_EXCLUDED_ONLY_MONO_RE" || true)
+    only_mono_candidates=$(printf '%s\n' "$only_mono" | grep -Ev "$OSS_EXCLUDED_ONLY_MONO_RE" || true)
+  fi
 
   if [[ -n "$only_oss" ]]; then
     drift=1
     echo "  ONLY-IN-OSS (candidate reverse-port — the W4.2 failure mode):"
     echo "$only_oss" | sed 's/^/    /'
   fi
-  if [[ -n "$only_mono" ]]; then
+  if [[ -n "$only_mono_excluded" ]]; then
+    echo "  INTENTIONAL-OSS-EXCLUSION (private Waggle-only files; do not export):"
+    echo "$only_mono_excluded" | sed 's/^/    /'
+  fi
+  if [[ -n "$only_mono_candidates" ]]; then
     drift=1
-    echo "  ONLY-IN-MONO (pending export — fine if a split is queued):"
-    echo "$only_mono" | sed 's/^/    /'
+    echo "  FORWARD-PORT-CANDIDATE (classify and curate before an OSS release):"
+    echo "$only_mono_candidates" | sed 's/^/    /'
   fi
 
   differing=""
@@ -109,7 +151,8 @@ for mapping in "${MAPPINGS[@]}"; do
     printf '%s' "$differing"
   fi
 
-  if [[ -z "$only_oss" && -z "$only_mono" && -z "$differing" ]]; then
+  if [[ -z "$only_oss" && -z "$only_mono_candidates" && -z "$differing" && \
+        -z "$forbidden_oss_files" && -z "$forbidden_oss_markers" ]]; then
     echo "  ✓ clean"
   fi
   echo
@@ -118,8 +161,8 @@ done
 if [[ $drift -eq 1 ]]; then
   echo "[oss-drift-check] DRIFT DETECTED. Policy (§7.5): the monorepo is the"
   echo "[oss-drift-check] sole source — reverse-port ONLY-IN-OSS work here first,"
-    echo "[oss-drift-check] then prepare a maintainer-curated forward-port."
-    echo "[oss-drift-check] scripts/oss-subtree-split.sh is inspection-only; never push its raw branches."
+  echo "[oss-drift-check] then prepare a maintainer-curated forward-port."
+  echo "[oss-drift-check] scripts/oss-subtree-split.sh is inspection-only; never push its raw branches."
   exit 1
 fi
 echo "[oss-drift-check] All mapped surfaces clean."

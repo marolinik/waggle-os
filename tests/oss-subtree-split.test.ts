@@ -22,13 +22,57 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
+import {
+  copyFileSync,
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const REPO_ROOT = resolve(__dirname, '..');
 const SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'oss-subtree-split.sh');
 const DRIFT_SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'oss-drift-check.sh');
+const RETIRED_PARITY_SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'parity-check.sh');
+const SUPERSEDED_PLAN_PATH = join(
+  REPO_ROOT,
+  'docs',
+  'plans',
+  'E-4-OSS-EXTRACTION-VERIFIED-2026-05-20.md',
+);
 const PACKAGES_DIR = join(REPO_ROOT, 'packages');
+
+function resolveBashExecutable(): string {
+  if (process.platform !== 'win32') return 'bash';
+
+  let current = resolve(execFileSync('git', ['--exec-path'], { encoding: 'utf-8' }).trim());
+  for (let depth = 0; depth < 6; depth += 1) {
+    for (const candidate of [
+      join(current, 'bash.exe'),
+      join(current, 'bin', 'bash.exe'),
+      join(current, 'usr', 'bin', 'bash.exe'),
+    ]) {
+      if (existsSync(candidate)) return candidate;
+    }
+    current = resolve(current, '..');
+  }
+
+  throw new Error('Git Bash was not found relative to the active git.exe installation.');
+}
+
+function toBashPath(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
+  if (process.platform !== 'win32') return normalized;
+  return `/${normalized[0]?.toLowerCase()}${normalized.slice(2)}`;
+}
 
 describe('oss-subtree-split.sh — static guards', () => {
   it('script exists at the documented path', () => {
@@ -168,5 +212,203 @@ describe('hive-mind publication boundary', () => {
     expect(driftScript).not.toContain(
       'regenerate the mirror via scripts/oss-subtree-split.sh',
     );
+  });
+
+  it('validates detached split commits before replacing named export branches', () => {
+    const content = readFileSync(SCRIPT_PATH, 'utf-8');
+    const splitAt = content.indexOf('CANDIDATE_SHA=$(git subtree split --prefix="$PREFIX" | tail -n 1)');
+    const promoteAt = content.indexOf('git update-ref --stdin');
+
+    expect(content).not.toContain('git subtree split --prefix="$PREFIX" --branch=');
+    expect(content).toContain('VALIDATED_BRANCHES+=("$BRANCH")');
+    expect(content).toContain('EXPECTED_OLD_SHAS');
+    expect(content).toContain('if ! WORKTREE_LIST=$(git worktree list --porcelain); then');
+    expect(content).not.toMatch(/git worktree list --porcelain\s*\|/);
+    expect(splitAt).toBeGreaterThan(-1);
+    expect(promoteAt).toBeGreaterThan(splitAt);
+  });
+
+  it('preserves the last validated ref and removes a rejected candidate', () => {
+    const tempRepo = mkdtempSync(join(tmpdir(), 'waggle-oss-split-'));
+    const bash = resolveBashExecutable();
+    const runGit = (...args: string[]): string =>
+      execFileSync('git', args, { cwd: tempRepo, encoding: 'utf-8' }).trim();
+
+    try {
+      mkdirSync(join(tempRepo, 'packages', 'hive-mind-test', 'src'), { recursive: true });
+      mkdirSync(join(tempRepo, 'packages', 'hive-mind-bad', 'src'), { recursive: true });
+      mkdirSync(join(tempRepo, 'scripts'), { recursive: true });
+      writeFileSync(join(tempRepo, 'packages', 'hive-mind-test', 'src', 'index.ts'), 'export {};\n');
+      writeFileSync(join(tempRepo, 'packages', 'hive-mind-bad', 'src', 'index.ts'), 'export {};\n');
+      copyFileSync(SCRIPT_PATH, join(tempRepo, 'scripts', 'oss-subtree-split.sh'));
+      runGit('init');
+      runGit('config', 'user.email', 'oss-guard@example.invalid');
+      runGit('config', 'user.name', 'OSS Guard Test');
+      runGit('add', '.');
+      runGit('commit', '-m', 'initial safe package');
+
+      const first = spawnSync(
+        bash,
+        ['scripts/oss-subtree-split.sh', 'hive-mind-test', 'hive-mind-bad'],
+        { cwd: tempRepo, encoding: 'utf-8' },
+      );
+      expect(first.status, first.stderr).toBe(0);
+      const stableBefore = runGit('rev-parse', 'oss-hive-mind-test-export');
+      const secondStableBefore = runGit('rev-parse', 'oss-hive-mind-bad-export');
+
+      writeFileSync(
+        join(tempRepo, 'packages', 'hive-mind-test', 'src', 'index.ts'),
+        'export const changed = true;\n',
+      );
+      mkdirSync(join(tempRepo, 'packages', 'hive-mind-bad', 'packages'), { recursive: true });
+      writeFileSync(
+        join(tempRepo, 'packages', 'hive-mind-bad', 'packages', 'leak.txt'),
+        'must be rejected\n',
+      );
+      runGit('add', '.');
+      runGit('commit', '-m', 'introduce forbidden top-level path');
+
+      const rejected = spawnSync(
+        bash,
+        ['scripts/oss-subtree-split.sh', 'hive-mind-test', 'hive-mind-bad'],
+        { cwd: tempRepo, encoding: 'utf-8' },
+      );
+      expect(rejected.status, rejected.stderr).toBe(2);
+      expect(runGit('rev-parse', 'oss-hive-mind-test-export')).toBe(stableBefore);
+      expect(runGit('rev-parse', 'oss-hive-mind-bad-export')).toBe(secondStableBefore);
+      expect(runGit('branch', '--list', '*-candidate-*')).toBe('');
+
+      const missingPackage = spawnSync(
+        bash,
+        ['scripts/oss-subtree-split.sh', 'hive-mind-missing'],
+        { cwd: tempRepo, encoding: 'utf-8' },
+      );
+      expect(missingPackage.status, missingPackage.stderr).toBe(2);
+      expect(runGit('rev-parse', 'oss-hive-mind-test-export')).toBe(stableBefore);
+
+      rmSync(join(tempRepo, 'packages', 'hive-mind-bad', 'packages'), {
+        recursive: true,
+        force: true,
+      });
+      writeFileSync(
+        join(tempRepo, 'packages', 'hive-mind-bad', 'src', 'index.ts'),
+        'export const changedToo = true;\n',
+      );
+      runGit('add', '.');
+      runGit('commit', '-m', 'make both candidates safe');
+
+      const blockedRefLock = join(
+        tempRepo,
+        '.git',
+        'refs',
+        'heads',
+        'oss-hive-mind-bad-export.lock',
+      );
+      writeFileSync(blockedRefLock, 'locked\n');
+      const rejectedTransaction = spawnSync(
+        bash,
+        ['scripts/oss-subtree-split.sh', 'hive-mind-test', 'hive-mind-bad'],
+        { cwd: tempRepo, encoding: 'utf-8' },
+      );
+      expect(rejectedTransaction.status, rejectedTransaction.stderr).toBe(4);
+      expect(runGit('rev-parse', 'oss-hive-mind-test-export')).toBe(stableBefore);
+      expect(runGit('rev-parse', 'oss-hive-mind-bad-export')).toBe(secondStableBefore);
+    } finally {
+      rmSync(tempRepo, { recursive: true, force: true });
+    }
+  });
+
+  it('invalidates the historical raw-push plan', () => {
+    const content = readFileSync(SUPERSEDED_PLAN_PATH, 'utf-8');
+
+    expect(content).toContain('SUPERSEDED');
+    expect(content).toContain('DO NOT FOLLOW');
+    expect(content).not.toMatch(/git push\s/);
+  });
+
+  it('classifies intentional exclusions separately from forward-port candidates', () => {
+    const content = readFileSync(DRIFT_SCRIPT_PATH, 'utf-8');
+
+    expect(content).toContain('INTENTIONAL-OSS-EXCLUSION');
+    expect(content).toContain('FORWARD-PORT-CANDIDATE');
+    expect(content).not.toContain('pending export');
+  });
+
+  it('fails closed when excluded files or install_audit markers exist in the OSS mirror', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'waggle-oss-drift-'));
+    const monoRepo = join(tempRoot, 'mono');
+    const ossRepo = join(tempRoot, 'oss');
+    const bash = resolveBashExecutable();
+    const excluded = join('mind', 'evolution-runs.ts');
+    const runDrift = (env: NodeJS.ProcessEnv = process.env) =>
+      spawnSync(bash, ['scripts/oss-drift-check.sh', ossRepo.replace(/\\/g, '/')], {
+        cwd: monoRepo,
+        encoding: 'utf-8',
+        env,
+      });
+
+    try {
+      mkdirSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', 'mind'), { recursive: true });
+      mkdirSync(join(monoRepo, 'scripts'), { recursive: true });
+      mkdirSync(join(ossRepo, 'packages', 'core', 'src', 'mind'), { recursive: true });
+      copyFileSync(DRIFT_SCRIPT_PATH, join(monoRepo, 'scripts', 'oss-drift-check.sh'));
+      writeFileSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', excluded), 'private\n');
+      execFileSync('git', ['init'], { cwd: monoRepo, stdio: 'ignore' });
+      execFileSync('git', ['init'], { cwd: ossRepo, stdio: 'ignore' });
+
+      const expectedExclusion = runDrift();
+      expect(
+        expectedExclusion.status,
+        `${expectedExclusion.stdout}\n${expectedExclusion.stderr}`,
+      ).toBe(0);
+      expect(expectedExclusion.stdout).toContain('INTENTIONAL-OSS-EXCLUSION');
+
+      writeFileSync(join(ossRepo, 'packages', 'core', 'src', excluded), 'private\n');
+      const leakedFile = runDrift();
+      expect(leakedFile.status, leakedFile.stderr).toBe(1);
+      expect(leakedFile.stdout).toContain('FORBIDDEN-OSS-CONTENT');
+
+      rmSync(join(ossRepo, 'packages', 'core', 'src', excluded));
+      writeFileSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', 'mind', 'db.ts'), 'install_audit\n');
+      writeFileSync(join(ossRepo, 'packages', 'core', 'src', 'mind', 'db.ts'), 'install_audit\n');
+      const leakedMarker = runDrift();
+      expect(leakedMarker.status, leakedMarker.stderr).toBe(1);
+      expect(leakedMarker.stdout).toContain('FORBIDDEN-OSS-MARKER');
+
+      rmSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', 'mind', 'db.ts'));
+      rmSync(join(ossRepo, 'packages', 'core', 'src', 'mind', 'db.ts'));
+
+      const failingBin = join(tempRoot, 'failing-bin');
+      const failingFind = join(failingBin, 'find');
+      mkdirSync(failingBin, { recursive: true });
+      writeFileSync(failingFind, '#!/usr/bin/env bash\nexit 7\n');
+      chmodSync(failingFind, 0o755);
+      const inventoryFailure = spawnSync(
+        bash,
+        [
+          '-c',
+          'PATH="$WAGGLE_FAIL_BIN:$PATH"; export PATH; exec scripts/oss-drift-check.sh "$1"',
+          'drift-inventory-test',
+          ossRepo.replace(/\\/g, '/'),
+        ],
+        {
+          cwd: monoRepo,
+          encoding: 'utf-8',
+          env: { ...process.env, WAGGLE_FAIL_BIN: toBashPath(failingBin) },
+        },
+      );
+      expect(inventoryFailure.status, inventoryFailure.stderr).toBe(2);
+      expect(inventoryFailure.stderr).toContain('ERROR: failed to inventory');
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('fails closed instead of executing the retired pre-migration parity workflow', () => {
+    const content = readFileSync(RETIRED_PARITY_SCRIPT_PATH, 'utf-8');
+
+    expect(content).toContain('RETIRED');
+    expect(content).toContain('exit 2');
+    expect(content).not.toContain('packages/core/src/mind');
   });
 });
