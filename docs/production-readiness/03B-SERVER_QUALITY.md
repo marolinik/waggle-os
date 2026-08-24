@@ -1,5 +1,10 @@
 # Phase 3B: Server & API Layer — Production Readiness Audit
 
+> **Historical snapshot — superseded.** This report records evidence as of
+> 2026-03-20 and is not current launch authority. See
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the current
+> Windows-first Solo scope, external gates, and recommendation.
+
 **Date**: 2026-03-20
 **Scope**: `@waggle/server` — local server (Fastify), routes, SSE, WebSocket, KVARK client, security middleware
 **Auditor**: Claude Opus 4.6 (automated code review)
