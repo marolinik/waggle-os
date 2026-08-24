@@ -1,4 +1,4 @@
-# Windows Solo security review — evidence refreshed 2026-08-22
+# Windows Solo security review — evidence refreshed 2026-08-24
 
 ## Status
 
@@ -21,7 +21,7 @@ launch recommendation remains **NOT YET PUBLIC RELEASE-APPROVED**.
 | Dependency fix compatibility | Exact two-file patch; `onnxruntime-node` rebuild succeeded with tar 7.5.22; 31/31 Transformers/embedding tests and Hive Mind Core typecheck passed; independent review approved with no P0-P2 | Pass |
 | Packaged runtime | Exact `b9a871cc` internally pilot-signed NSIS, SHA-256 `9DB493F31E30DF0D252B1959B31DAE77E6499992A4E4EBEAFC72565510AF1095`; 64/64 clean-profile checks; FREE/Solo; managed Ollama 0.32.3 and `qwen2.5:0.5b`; model chat; proxy restart; repair; preservation; cleanup; uninstall | Pass internal runtime; public trust remains open |
 | Managed-runtime download hardening | Transient 408/425/429/500/502/503/504 retry, same-run Range resume with exact `Content-Range` validation, safe restart when Range is ignored, shared deadline, pinned size and full SHA-256 before extraction; 66/66 relevant tests, server typecheck, lint and independent security/Windows reviews approved | Pass; exact installer certifier exercised the hardened path |
-| Broad and security-critical regression | Historical `af19b387` baseline: 714 files and 11,586 tests passed with five skipped; the sealed 341-test critical lane covered vault ACL, approval, origin, injection and protected routes. This is not mislabeled as an exact-candidate broad run | Historical baseline plus later focused gates; final remote PR CI remains mandatory |
+| Broad and security-critical regression | Historical `af19b387` baseline: 714 files and 11,586 tests passed with five skipped; the sealed 341-test critical lane covered vault ACL, approval, origin, injection and protected routes. This is not mislabeled as an exact-candidate broad run | Historical baseline plus later focused gates; PR #58 merged as `df727114`, whose exact merge commit has 13 successful checks, one expected deploy skip, and no failed or pending checks |
 | Local-server boundary | Bearer session token, desktop bootstrap credential, loopback Host allowlist and restricted CORS are wired in `security-middleware.ts` and `local/index.ts` | Pass by source/test evidence |
 | Chat boundary | 50,000-character cap, user-input injection scan, tool-output/retrieval scan, workspace-root resolution and fail-closed approval timeout | Pass by source/test evidence |
 | Command/tool boundary | Bash chain operators require confirmation; CLI and marketplace execution use argument-vector APIs; timeout cleanup and Windows command-shim boundaries have focused tests | Pass by source/test evidence |

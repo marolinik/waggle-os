@@ -41,8 +41,9 @@ separately installed Ollama were not prerequisites.
   copied no credential files.
 - The historical broad regression baseline at `af19b387` passed 714 files and 11,586
   tests. It is not relabeled as an exact-candidate run; focused tests, exact installer
-  certification and dependency audits cover subsequent changes, and final private-PR
-  CI must pass before integration.
+  certification, and dependency audits cover subsequent changes. Private PR #58 merged
+  as `df727114` after its head checks passed; the exact merge commit has 13 successful
+  checks, one expected deploy skip, and no failed or pending checks.
 
 Detailed local receipt paths, hashes, limitations, and integration gates are recorded in
 the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md).

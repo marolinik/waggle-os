@@ -1,6 +1,6 @@
 # Launch Recommendation — Windows Solo
 
-Updated: 2026-08-22
+Updated: 2026-08-24
 
 ## Current verdict: INTERNAL RC QUALIFIED; NOT YET PUBLIC RELEASE-APPROVED
 
@@ -44,6 +44,11 @@ public repository links or downloadable release assets.
 | Broad application regression | **Historical baseline, not exact-candidate evidence** — at `af19b387`, 714 test files and 11,586 tests passed with five skipped. Subsequent phases have focused gates; final integration still requires every check on the final pushed private-PR descendant to pass | `output/readiness-broad-af19b387-20260813T115524.log`; SHA-256 `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E` |
 | Hosted-signing implementation | **PASS implementation gate, bounded carry-forward** — 266/266 PowerShell signing-policy tests; 86/86 workflow/Tauri tests; app/server typechecks, targeted lint, YAML and PowerShell 7/5.1 parsing; independent security, compatibility and test reviews with no P0-P2 finding. Later commit `db4e5bec` changed only macOS artifact handling, not the Windows signing control surface | Preserved Windows release-control receipts through `d455aa80`; public hosted signing has not executed |
 
+> **Integration status update (2026-08-24):** PR #58 merged as `df727114`; the
+> exact merge commit has 13 successful checks, one expected deploy skip, and no
+> failed or pending checks. This supersedes pending-integration wording in the
+> historical broad-regression row above.
+
 ## Remaining production GO gates
 
 1. **Public Authenticode:** the current artifact uses the private internal-pilot
@@ -53,14 +58,15 @@ public repository links or downloadable release assets.
    the eventual release tag. Historical scans cover other revisions; permission,
    policy and artifact-workflow failures are not no-finding results. Static review,
    dependency audit and focused security review are not substitutes.
-3. **Private repository integration:** PR #58 is the review vehicle. The final pushed
-   descendant must pass all remote CI/Tauri/install-smoke/review checks before merge.
-   Merge must preserve repository privacy and use the reviewed PR; no direct main push.
+
+Private repository integration is complete: PR #58 merged as `df727114` after its
+head checks passed. The exact merge commit has 13 successful checks, one expected
+deploy skip, and no failed or pending checks. The repository remains private.
 
 ## Repository and Hive Mind hygiene
 
 The private Waggle repository is the product source of truth. Its tracked release
-documentation and operating contracts must be consistent before PR #58 merges. Local
+documentation and operating contracts now describe the merged product state. Local
 builds, receipts, caches, secrets, databases and nested research checkouts are not source
 and must never be swept into Git with a broad clean/add operation.
 
@@ -86,6 +92,6 @@ forward-port is a separate future publication operation.
 
 Change the public Windows binary verdict to **GO** only after a publicly trusted
 Authenticode artifact and a formal managed Deep Security seal cover the approved
-release candidate with no unresolved Critical or High findings, and the final private
-PR checks are green. Until then, do not describe Waggle as production-ready, claim an
+release candidate with no unresolved Critical or High findings, and protected
+release-tag checks are green. Until then, do not describe Waggle as production-ready, claim an
 overall 9.5/10, or claim superiority over competing products.
