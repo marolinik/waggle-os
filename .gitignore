@@ -15,6 +15,11 @@ dist
 dist-ssr
 *.local
 
+# Local generated analysis and runtime build artifacts
+coverage/
+dist-analyze/
+node-compile-cache/
+
 # Environment
 .env
 .env.local

@@ -1,5 +1,10 @@
 # Phase 1B: Deployment, Phases & PM Features Audit
 
+> **Historical snapshot — superseded.** This report records evidence as of
+> 2026-03-20 and is not current launch authority. See
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the current
+> Windows-first Solo scope, external gates, and recommendation.
+
 **Date**: 2026-03-20
 **Auditor**: Claude (automated analysis)
 **Scope**: Wave 9D (Deployment), Phase 7 (KVARK), Phase 8 status, PM Features (6)

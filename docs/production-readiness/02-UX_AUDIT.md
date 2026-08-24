@@ -1,5 +1,10 @@
 # Phase 2: UX Audit — View-by-View Code Review
 
+> **Historical snapshot — superseded.** This report records evidence as of
+> 2026-03-20 and is not current launch authority. See
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the current
+> Windows-first Solo scope, external gates, and recommendation.
+
 **Date:** 2026-03-20
 **Auditor:** Production Readiness Automation (Phase 2)
 **Scope:** All 7 views, sidebar, onboarding, Direction D compliance, emotional assessment

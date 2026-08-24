@@ -1,5 +1,10 @@
 # Phase 1A: Feature Wave Audit — Built vs Not Built
 
+> **Historical snapshot — superseded.** This report records evidence as of
+> 2026-03-20 and is not current launch authority. See
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the current
+> Windows-first Solo scope, external gates, and recommendation.
+
 **Date**: 2026-03-20
 **Auditor**: Claude (automated codebase cross-reference)
 **Plan document**: `docs/plans/2026-03-19-phase9-completion-plan.md`
