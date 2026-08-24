@@ -98,6 +98,15 @@ Subject: **Welcome to Waggle Wave-1 — install + first-run notes**
 
 ---
 
+<details>
+<summary><strong>Archived public-signing history — do not execute</strong></summary>
+
+> The remainder of this document preserves obsolete vendor, local-thumbprint,
+> client-secret, timeline, and cost notes for audit history only. Current public
+> Windows signing is the protected exact-tag Azure OIDC workflow in
+> `.github/workflows/release.yml`; current ship authority is
+> `docs/production-readiness/09-LAUNCH_RECOMMENDATION.md`.
+
 ## 2. Public Day 0 prep — real certificates (start by T+15 = 2026-05-21)
 
 ### 2.1 Windows Authenticode
@@ -304,3 +313,5 @@ Renewals: ~$348/yr ongoing. Tauri auto-updater also expects signed binaries — 
 
 Last updated: 2026-08-22 — Windows internal-pilot builds must use `tauri:build:win:pilot-signed`. macOS packaging remains deferred; an ordinary macOS build is not signed by the unused override and must be explicitly signed and verified before it is described as an internal artifact.
 Owner: Marko Marković (driving via CC); pilot self-sign actionable T+5; real cert procurement actionable T+14.
+
+</details>

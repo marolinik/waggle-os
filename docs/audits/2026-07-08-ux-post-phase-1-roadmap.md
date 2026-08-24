@@ -1,5 +1,11 @@
 # UX Post-Phase-1 Roadmap
 
+> **Historical roadmap — superseded.** This 2026-07-08 planning artifact predates
+> the Windows-first Solo launch scope and its ten-persona acceptance evidence. Cursor,
+> OpenClaw, and macOS are roadmap items, not current internal-RC blockers. See
+> [`../production-readiness/09-LAUNCH_RECOMMENDATION.md`](../production-readiness/09-LAUNCH_RECOMMENDATION.md)
+> for current launch authority.
+
 Status: analysis artifact. This roadmap sequences the remaining correction work after Phase 1. It is not approved for implementation yet.
 
 ## Purpose
