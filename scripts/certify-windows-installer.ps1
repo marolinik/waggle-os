@@ -463,10 +463,11 @@ function Start-InstalledApp {
 function Invoke-JsonRequest {
   param(
     [Parameter(Mandatory = $true)] [string]$Uri,
-    [hashtable]$Headers = @{}
+    [hashtable]$Headers = @{},
+    [ValidateRange(1, 30)] [int]$TimeoutSeconds = 5
   )
 
-  return Invoke-RestMethod -Uri $Uri -Method Get -Headers $Headers -TimeoutSec 5
+  return Invoke-RestMethod -Uri $Uri -Method Get -Headers $Headers -TimeoutSec $TimeoutSeconds
 }
 
 function Invoke-JsonPostRequest {
@@ -2782,7 +2783,8 @@ try {
     }
     $marketplace = Invoke-JsonRequest `
       "$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100" `
-      $headers
+      $headers `
+      -TimeoutSeconds 30
     $marketplacePackages = @($marketplace.packages)
     Assert-True ($marketplacePackages.Count -ge 1) `
       'Clean installed marketplace API returned no trusted MCP catalog entries.'

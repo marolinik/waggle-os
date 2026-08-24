@@ -7,6 +7,7 @@
 import { beforeEach, describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawnSync } from 'node:child_process';
@@ -4387,6 +4388,23 @@ Expect-Rejection {
     expect(script).toContain('install-ran.txt');
     expect(script).toContain("$receipt.Contains('scratchCleanupError')");
     expect(script).toContain("Join-Path $dataDir 'marketplace.db'");
+    const jsonRequestHelper = script.slice(
+      script.indexOf('function Invoke-JsonRequest {'),
+      script.indexOf('\nfunction Invoke-JsonPostRequest {'),
+    );
+    expect(jsonRequestHelper).toContain(
+      '[ValidateRange(1, 30)] [int]$TimeoutSeconds = 5',
+    );
+    expect(jsonRequestHelper).toContain('-TimeoutSec $TimeoutSeconds');
+
+    const marketplaceProbeStart = script.indexOf(
+      '$marketplace = Invoke-JsonRequest',
+    );
+    const marketplaceProbe = script.slice(
+      marketplaceProbeStart,
+      script.indexOf('$marketplacePackages =', marketplaceProbeStart),
+    );
+    expect(marketplaceProbe).toContain('-TimeoutSeconds 30');
     expect(script).toContain(
       '$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100',
     );
@@ -6934,6 +6952,63 @@ try {
     },
     120_000,
   );
+});
+
+describe('Windows installer certifier timeout contract', () => {
+  it('honors one bounded JSON GET timeout override and still fails closed', async () => {
+    if (process.platform !== 'win32') return;
+
+    const pwsh = powershellProbeExecutable();
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    const helperStart = script.indexOf('function Invoke-JsonRequest {');
+    const helperEnd = script.indexOf('\nfunction Invoke-JsonPostRequest {');
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helper = script.slice(helperStart, helperEnd);
+
+    let responseDelayMs = 1_200;
+    const server = http.createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{"ok":true}');
+      }, responseDelayMs);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      server.close();
+      throw new Error('Could not bind delayed loopback probe server');
+    }
+    const uri = `http://127.0.0.1:${address.port}/`;
+    const runProbe = (timeoutSeconds: number) =>
+      new Promise<void>((resolve, reject) => {
+        execFile(
+          pwsh,
+          [
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `${helper}\n$result = Invoke-JsonRequest -Uri '${uri}' -Headers @{} -TimeoutSeconds ${timeoutSeconds}\nif (-not $result.ok) { throw 'Unexpected JSON payload' }`,
+          ],
+          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+
+    try {
+      await expect(runProbe(2)).resolves.toBeUndefined();
+      responseDelayMs = 1_500;
+      await expect(runProbe(1)).rejects.toBeDefined();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
 });
 
 describe('Playwright Visual Regression Setup', () => {
