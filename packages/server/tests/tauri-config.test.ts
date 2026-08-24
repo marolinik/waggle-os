@@ -543,19 +543,20 @@ describe('Tauri Production Configuration', () => {
       fs.writeFileSync(target, content);
       return target;
     };
+    const runResult = (command: string, args: string[]) => spawnSync(command, args, {
+      cwd: fixtureRoot,
+      env: {
+        ...process.env,
+        TEMP: fixtureRoot,
+        TMP: fixtureRoot,
+        TMPDIR: fixtureRoot,
+      },
+      encoding: 'utf8',
+      timeout: 60_000,
+      windowsHide: true,
+    });
     const run = (command: string, args: string[]) => {
-      const result = spawnSync(command, args, {
-        cwd: fixtureRoot,
-        env: {
-          ...process.env,
-          TEMP: fixtureRoot,
-          TMP: fixtureRoot,
-          TMPDIR: fixtureRoot,
-        },
-        encoding: 'utf8',
-        timeout: 60_000,
-        windowsHide: true,
-      });
+      const result = runResult(command, args);
       expect(result.status, result.stderr || result.stdout).toBe(0);
       return result;
     };
@@ -640,6 +641,41 @@ describe('Tauri Production Configuration', () => {
           'tsconfig.shared.json',
         ]),
       );
+      const marketplacePath = path.join(
+        fixtureRoot,
+        'packages',
+        'marketplace',
+        'marketplace.db',
+      );
+      const marketplaceResourcePath = path.join(
+        fixtureRoot,
+        'app',
+        'src-tauri',
+        'resources',
+        'marketplace.db',
+      );
+      const committedMarketplace = Buffer.from(
+        trackedFiles.get('packages/marketplace/marketplace.db')!,
+      );
+      expect(fs.readFileSync(marketplaceResourcePath)).toEqual(committedMarketplace);
+
+      fs.writeFileSync(marketplacePath, 'dirty worktree database');
+      const dirtyMarketplaceResult = runResult(
+        process.execPath,
+        ['scripts/build-sidecar.mjs'],
+      );
+      expect(
+        dirtyMarketplaceResult.status,
+        dirtyMarketplaceResult.stderr || dirtyMarketplaceResult.stdout,
+      ).toBe(1);
+      expect(dirtyMarketplaceResult.stderr).toContain(
+        'canonical marketplace database does not match exact source revision',
+      );
+      expect(fs.readFileSync(marketplaceResourcePath)).toEqual(committedMarketplace);
+      expect(
+        fs.readdirSync(path.dirname(marketplaceResourcePath))
+          .filter((name) => name.startsWith('marketplace.db.stage-')),
+      ).toEqual([]);
     } finally {
       fs.rmSync(fixtureRoot, { recursive: true, force: true });
     }
@@ -1038,6 +1074,16 @@ describe('Tauri Production Configuration', () => {
         fs.writeFileSync(target, content, 'utf-8');
         return target;
       };
+      const runFixtureGit = (args: string[]) => {
+        const result = spawnSync('git', args, {
+          cwd: fixtureRoot,
+          encoding: 'utf-8',
+          timeout: 30_000,
+          windowsHide: true,
+        });
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+        return result.stdout.trim();
+      };
 
       try {
         fs.mkdirSync(fixtureScripts, { recursive: true });
@@ -1050,7 +1096,7 @@ describe('Tauri Production Configuration', () => {
         // A hardlink shares the running Vitest executable's Windows image lock,
         // so fixture cleanup cannot delete it until the parent test process exits.
         fs.copyFileSync(process.execPath, fixtureNode);
-      const fixtureSourceRevision = 'a'.repeat(40);
+      let fixtureSourceRevision = 'a'.repeat(40);
       const fixtureSourceContents = new Map<string, string>([
         ['package-lock.json', '{"lockfileVersion":3}\n'],
         ['package.json', '{"name":"waggle-sidecar-fixture"}\n'],
@@ -1080,7 +1126,7 @@ describe('Tauri Production Configuration', () => {
           sha256: createHash('sha256').update(fixtureServicePayload).digest('hex'),
         },
       };
-      const certifiedFixtureService = Buffer.concat([
+      let certifiedFixtureService = Buffer.concat([
         Buffer.from(
           `// Waggle-Sidecar-Provenance: ${Buffer.from(JSON.stringify(fixtureServiceProvenance)).toString('base64')}\n`,
           'utf8',
@@ -1108,6 +1154,27 @@ describe('Tauri Production Configuration', () => {
         fixtureMarketplace.close();
         const fixtureMarketplaceResource = path.join(fixtureResources, 'marketplace.db');
         fs.copyFileSync(fixtureMarketplaceSource, fixtureMarketplaceResource);
+        runFixtureGit(['init']);
+        runFixtureGit(['config', 'user.email', 'sidecar-preflight@waggle.invalid']);
+        runFixtureGit(['config', 'user.name', 'Waggle Fixture']);
+        runFixtureGit([
+          'add',
+          '--',
+          'scripts/check-sidecar-resources.mjs',
+          ...fixtureSourceContents.keys(),
+          'packages/marketplace/marketplace.db',
+        ]);
+        runFixtureGit(['commit', '-m', 'fixture']);
+        fixtureSourceRevision = runFixtureGit(['rev-parse', 'HEAD']).toLowerCase();
+        fixtureServiceProvenance.sourceRevision = fixtureSourceRevision;
+        certifiedFixtureService = Buffer.concat([
+          Buffer.from(
+            `// Waggle-Sidecar-Provenance: ${Buffer.from(JSON.stringify(fixtureServiceProvenance)).toString('base64')}\n`,
+            'utf8',
+          ),
+          fixtureServicePayload,
+        ]);
+        fs.writeFileSync(fixtureServicePath, certifiedFixtureService);
         const fixtureNpmVersion = '0.0.0-fixture';
         const fixtureNpmRuntimeRoot = 'node_modules/waggle-node-runtime';
         const fixtureNpmCli = `process.stdout.write(${JSON.stringify(fixtureNpmVersion)} + '\\n');\n`;
@@ -1399,6 +1466,16 @@ describe('Tauri Production Configuration', () => {
         ).toBe(0);
         expect(fs.readFileSync(fixtureMarketplaceResource)).toEqual(fixtureMarketplaceBeforeProbe);
 
+        fs.appendFileSync(fixtureMarketplaceSource, 'dirty worktree database');
+        fs.copyFileSync(fixtureMarketplaceSource, fixtureMarketplaceResource);
+        const dirtyMarketplaceResult = await runChecker();
+        expect(dirtyMarketplaceResult.status).toBe(1);
+        expect(dirtyMarketplaceResult.stderr).toContain(
+          'canonical marketplace database does not match exact source revision',
+        );
+        fs.writeFileSync(fixtureMarketplaceSource, fixtureMarketplaceBeforeProbe);
+        fs.writeFileSync(fixtureMarketplaceResource, fixtureMarketplaceBeforeProbe);
+
         fs.appendFileSync(fixtureServicePath, '// stale payload\n');
         const staleServiceResult = await runChecker();
         expect(staleServiceResult.status).toBe(1);
@@ -1447,6 +1524,14 @@ describe('Tauri Production Configuration', () => {
         expect(staleRevisionResult.stderr).toContain(
           'resources/service.js source revision does not match expected revision',
         );
+        const nestedResourceDb = path.join(
+          fixtureResources,
+          'node_modules',
+          'fixture-package',
+          'state',
+          'cache.DB',
+        );
+        fs.mkdirSync(path.dirname(nestedResourceDb), { recursive: true });
         const staleSidecars: Array<{
           path: string;
           label: string;
@@ -1463,6 +1548,11 @@ describe('Tauri Production Configuration', () => {
             path: fixtureMarketplaceSource,
             label: 'packages/marketplace/marketplace.db',
             diagnostic: 'must not be present while staging',
+          },
+          {
+            path: nestedResourceDb,
+            label: 'resources/node_modules/fixture-package/state/cache.DB',
+            diagnostic: 'must not be packaged',
           },
         ]) {
           for (const suffix of ['-wal', '-shm', '-journal']) {
