@@ -458,11 +458,26 @@ describe('Tauri Production Configuration', () => {
       fs.readFileSync(path.join(ROOT, 'app', 'package.json'), 'utf-8'),
     );
     const signedBuild = manifest.scripts?.['tauri:build:win:pilot-signed'];
+    const windowsBuild = manifest.scripts?.['tauri:build:win'];
+    const override = JSON.parse(
+      fs.readFileSync(
+        path.join(TAURI_DIR, 'tauri.build-override.conf.json'),
+        'utf-8',
+      ),
+    );
 
     expect(signedBuild).toContain('npm run tauri:sign:pilot:win:apply');
     expect(signedBuild).toContain(
       'npm run tauri:build:win -- --config src-tauri/tauri.build-override.conf.json',
     );
+    expect(override.build.beforeBuildCommand).toBe('');
+
+    const stageIndex = windowsBuild.indexOf('stage-sidecar-deps.mjs');
+    const preflightIndex = windowsBuild.indexOf('check-sidecar-resources.mjs');
+    const tauriIndex = windowsBuild.indexOf('npx tauri build');
+    expect(stageIndex).toBeGreaterThanOrEqual(0);
+    expect(preflightIndex).toBeGreaterThan(stageIndex);
+    expect(tauriIndex).toBeGreaterThan(preflightIndex);
   });
 
   it('icon.ico exists', () => {
