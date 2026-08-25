@@ -28,6 +28,7 @@ const stagedDepsDir = path.join(resourcesDir, 'node_modules');
 const bundledNpmRuntimeDir = path.join(stagedDepsDir, 'waggle-node-runtime');
 const bundledNpmBinDir = path.join(bundledNpmRuntimeDir, 'bin');
 const bundledNpmPackageDir = path.join(bundledNpmRuntimeDir, 'node_modules', 'npm');
+const marketplaceDbRelative = 'packages/marketplace/marketplace.db';
 const targetArch = process.env.TARGET_ARCH || process.arch;
 const SIDECAR_PROVENANCE_PREFIX = '// Waggle-Sidecar-Provenance: ';
 const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
@@ -67,6 +68,29 @@ function resourceRelative(file) {
 
 function sha256File(file) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function readGitBlob(revision, relative) {
+  return execFileSync(
+    'git',
+    ['-C', root, 'cat-file', 'blob', `${revision}:${relative}`],
+    { maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+  );
+}
+
+function listSqliteSidecars(dir) {
+  if (!fs.existsSync(dir)) return [];
+  const sidecars = [];
+  const stack = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (/\.db-(?:wal|shm|journal)$/i.test(entry.name)) sidecars.push(full);
+      if (entry.isDirectory()) stack.push(full);
+    }
+  }
+  return sidecars.sort();
 }
 
 function parseSidecarProvenance(serviceBuffer) {
@@ -384,6 +408,13 @@ if (dependencyOnlyIndex >= 0) {
   process.exit(0);
 }
 
+let expectedRevision = null;
+try {
+  expectedRevision = expectedSourceRevision();
+} catch (err) {
+  unsafe.push(err instanceof Error ? err.message : String(err));
+}
+
 const servicePath = path.join(resourcesDir, 'service.js');
 if (!fs.existsSync(servicePath)) {
   missing.push('resources/service.js (run: node scripts/build-sidecar.mjs)');
@@ -395,8 +426,7 @@ if (!fs.existsSync(servicePath)) {
   }
   try {
     const provenance = parseSidecarProvenance(serviceBuffer);
-    const expectedRevision = expectedSourceRevision();
-    if (provenance.sourceRevision !== expectedRevision) {
+    if (expectedRevision && provenance.sourceRevision !== expectedRevision) {
       throw new Error('resources/service.js source revision does not match expected revision');
     }
     for (const input of provenance.sourceInputs) {
@@ -423,15 +453,15 @@ if (!fs.existsSync(servicePath)) {
   }
 }
 
-const canonicalMarketplaceDb = path.join(root, 'packages', 'marketplace', 'marketplace.db');
+const canonicalMarketplaceDb = path.join(root, ...marketplaceDbRelative.split('/'));
 const marketplaceResource = path.join(resourcesDir, 'marketplace.db');
 for (const suffix of ['-wal', '-shm', '-journal']) {
   if (fs.existsSync(`${canonicalMarketplaceDb}${suffix}`)) {
     unsafe.push(`packages/marketplace/marketplace.db${suffix} must not be present while staging`);
   }
-  if (fs.existsSync(`${marketplaceResource}${suffix}`)) {
-    unsafe.push(`resources/marketplace.db${suffix} must not be packaged`);
-  }
+}
+for (const sidecar of listSqliteSidecars(resourcesDir)) {
+  unsafe.push(`resources/${resourceRelative(sidecar)} must not be packaged`);
 }
 const canonicalMarketplaceIsRegular = fs.existsSync(canonicalMarketplaceDb)
   && fs.lstatSync(canonicalMarketplaceDb).isFile()
@@ -442,15 +472,42 @@ const marketplaceResourceIsRegular = fs.existsSync(marketplaceResource)
 if (!canonicalMarketplaceIsRegular) {
   missing.push('packages/marketplace/marketplace.db canonical build input');
 }
+let marketplaceGitBlob = null;
+if (expectedRevision) {
+  try {
+    marketplaceGitBlob = readGitBlob(expectedRevision, marketplaceDbRelative);
+  } catch {
+    unsafe.push('canonical marketplace database is missing from exact source revision');
+  }
+}
+const canonicalMarketplaceBytes = canonicalMarketplaceIsRegular
+  ? fs.readFileSync(canonicalMarketplaceDb)
+  : null;
+if (
+  marketplaceGitBlob
+  && canonicalMarketplaceBytes
+  && !canonicalMarketplaceBytes.equals(marketplaceGitBlob)
+) {
+  unsafe.push(
+    'packages/marketplace/marketplace.db canonical marketplace database does not match exact source revision',
+  );
+}
 if (!fs.existsSync(marketplaceResource)) {
   missing.push('resources/marketplace.db (run: node scripts/build-sidecar.mjs)');
 } else if (!marketplaceResourceIsRegular) {
   unsafe.push('resources/marketplace.db must be a regular file');
-} else if (
-  canonicalMarketplaceIsRegular
-  && sha256File(marketplaceResource) !== sha256File(canonicalMarketplaceDb)
-) {
-  unsafe.push('resources/marketplace.db does not match the canonical marketplace database');
+} else {
+  const marketplaceResourceBytes = fs.readFileSync(marketplaceResource);
+  if (marketplaceGitBlob && !marketplaceResourceBytes.equals(marketplaceGitBlob)) {
+    unsafe.push(
+      'resources/marketplace.db does not match the canonical marketplace database at the exact source revision',
+    );
+  } else if (
+    canonicalMarketplaceBytes
+    && !marketplaceResourceBytes.equals(canonicalMarketplaceBytes)
+  ) {
+    unsafe.push('resources/marketplace.db does not match the canonical marketplace database');
+  }
 }
 
 const sourceArtifacts = fs.existsSync(resourcesDir)

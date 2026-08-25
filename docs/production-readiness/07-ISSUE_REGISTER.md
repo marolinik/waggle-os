@@ -1,5 +1,10 @@
 # Issue Register — Waggle V1 Pre-Production Qualification
 
+> **Historical snapshot — superseded.** This register records findings as of
+> 2026-03-20 and is not the current open-issue or launch authority. See
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the current
+> Windows-first Solo scope, external gates, and recommendation.
+
 Generated: 2026-03-20 | Branch: `phase8-wave-8f-ui-ux` | Tests: 3,895 passing
 
 ---

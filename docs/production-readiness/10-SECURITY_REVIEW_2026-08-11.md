@@ -1,14 +1,13 @@
-# Windows Solo security review — evidence refreshed 2026-08-22
+# Windows Solo security review — evidence refreshed 2026-08-25
 
 ## Status
 
-This review layers exact internal-installer evidence at
-`b9a871cced6ce43120e34e2cf2f656d21de9d3c7`, exact-candidate dependency audits,
-focused runtime/dependency reviews, historical broad-regression evidence, and scoped
-persona/router/auth receipts. Older receipts are carried only where their covered
-surface was unchanged or a later focused gate directly exercised it. Post-candidate
-descendants include documentation and reviewed non-runtime OSS publication tooling/tests;
-they do not relabel the `b9a871cc` installer as a binary built from a later commit.
+This review layers the exact current internal-installer evidence identified by the
+launch recommendation, bounded dependency-audit evidence, focused runtime/dependency
+reviews, historical broad-regression evidence, and scoped persona/router/auth receipts.
+Older receipts are carried only where their covered surface was unchanged or a later
+focused gate directly exercised it. The launch recommendation is the sole authority for
+the exact candidate revision, installer digest, receipt digest, and current verdict.
 
 This review is **not** a replacement for a sealed Codex Security Deep Scan. The active
 launch recommendation remains **NOT YET PUBLIC RELEASE-APPROVED**.
@@ -17,11 +16,12 @@ launch recommendation remains **NOT YET PUBLIC RELEASE-APPROVED**.
 
 | Surface | Evidence | Result |
 |---|---|---|
-| Dependency severity | Exact candidate: full audit 0 Critical/0 High/21 Moderate/1 Low; production audit 0 Critical/0 High/17 Moderate/2 Low. Both high-threshold commands exit 0. A 2026-08-22 `node-tar` High advisory was reproduced, then closed by raising the existing override floor to the first fixed range and locking tar 7.5.22 | Pass Critical/High dependency gate; lower-severity maintenance remains |
+| Dependency severity | Frozen dependency baseline: full audit 0 Critical/0 High/21 Moderate/1 Low; production audit 0 Critical/0 High/17 Moderate/2 Low. Both high-threshold commands exited 0. A 2026-08-22 `node-tar` High advisory was reproduced, then closed by raising the existing override floor to the first fixed range and locking tar 7.5.22. The dependency graph is unchanged through the current internal candidate | Pass Critical/High as bounded carry-forward; lower-severity maintenance remains |
 | Dependency fix compatibility | Exact two-file patch; `onnxruntime-node` rebuild succeeded with tar 7.5.22; 31/31 Transformers/embedding tests and Hive Mind Core typecheck passed; independent review approved with no P0-P2 | Pass |
-| Packaged runtime | Exact `b9a871cc` internally pilot-signed NSIS, SHA-256 `9DB493F31E30DF0D252B1959B31DAE77E6499992A4E4EBEAFC72565510AF1095`; 64/64 clean-profile checks; FREE/Solo; managed Ollama 0.32.3 and `qwen2.5:0.5b`; model chat; proxy restart; repair; preservation; cleanup; uninstall | Pass internal runtime; public trust remains open |
+| Packaged runtime | Exact current internally pilot-signed NSIS identified by the launch recommendation; 64/64 clean-profile checks; FREE/Solo; managed Ollama 0.32.3 and `qwen2.5:0.5b`; model chat; proxy restart; repair; preservation; cleanup; uninstall | Pass internal runtime; public trust remains open |
 | Managed-runtime download hardening | Transient 408/425/429/500/502/503/504 retry, same-run Range resume with exact `Content-Range` validation, safe restart when Range is ignored, shared deadline, pinned size and full SHA-256 before extraction; 66/66 relevant tests, server typecheck, lint and independent security/Windows reviews approved | Pass; exact installer certifier exercised the hardened path |
-| Broad and security-critical regression | Historical `af19b387` baseline: 714 files and 11,586 tests passed with five skipped; the sealed 341-test critical lane covered vault ACL, approval, origin, injection and protected routes. This is not mislabeled as an exact-candidate broad run | Historical baseline plus later focused gates; final remote PR CI remains mandatory |
+| Desktop session bootstrap hardening | Read-only session-token bootstrap retries at most one transient transport/408/425/429/500/502/503/504 failure; 401/403 remain fail-closed and are never retried. Focused and full certifier tests, app/server typechecks, lint, parser checks, and independent security/Windows/test reviews approved | Pass; exact installer certification closed the prior transient timeout |
+| Broad and security-critical regression | Historical `af19b387` baseline: 714 files and 11,586 tests passed with five skipped; the sealed 341-test critical lane covered vault ACL, approval, origin, injection and protected routes. This is not mislabeled as an exact-candidate broad run | Historical baseline plus later focused gates; PR #58 merged as `df727114`, whose exact merge commit has 13 successful checks, one expected deploy skip, and no failed or pending checks |
 | Local-server boundary | Bearer session token, desktop bootstrap credential, loopback Host allowlist and restricted CORS are wired in `security-middleware.ts` and `local/index.ts` | Pass by source/test evidence |
 | Chat boundary | 50,000-character cap, user-input injection scan, tool-output/retrieval scan, workspace-root resolution and fail-closed approval timeout | Pass by source/test evidence |
 | Command/tool boundary | Bash chain operators require confirmation; CLI and marketplace execution use argument-vector APIs; timeout cleanup and Windows command-shim boundaries have focused tests | Pass by source/test evidence |
@@ -47,8 +47,9 @@ finding discovery and validation are still required.
    does not trust that private root publicly. The signature and DigiCert timestamp prove
    the pilot pipeline, not public Authenticode. Exact-tag Azure OIDC signing with a
    publicly trusted identity remains open.
-2. No sealed managed Deep Scan covers `b9a871cc` or the eventual release tag. Historical
-   scans cover other revisions; blocked permission/policy/artifact attempts are not
+2. No sealed managed Deep Scan covers the current frozen internal candidate or the
+   eventual release tag. Historical scans cover other revisions; blocked
+   permission/policy/artifact attempts are not
    no-finding results. No current formal zero-finding claim is made.
 3. The Docker/Postgres/Redis infrastructure lane was not run because it is outside the
    Windows Solo no-Docker launch contract.
@@ -64,7 +65,7 @@ finding discovery and validation are still required.
 
 The combined exact-installer, dependency, focused security and bounded carry-forward
 receipts support **no known unresolved Critical/High finding in the checked Windows Solo
-surfaces at candidate `b9a871cc`**. This is not a formal repository-wide no-finding
+surfaces at the current frozen internal candidate**. This is not a formal repository-wide no-finding
 result and does not authorize a production-ready, public GO or 9.5/10 claim. Public GO
 requires the exact approved release artifact to have publicly trusted Authenticode and
 a sealed managed Deep Security report with no unresolved Critical/High findings.

@@ -1,5 +1,10 @@
 # 04A Application Security Audit
 
+> **Historical snapshot — superseded.** This report records evidence as of
+> 2026-03-20 and is not current launch authority. See
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the current
+> Windows-first Solo scope, external gates, and recommendation.
+
 **Date**: 2026-03-20
 **Auditor**: Automated (Claude Opus 4.6)
 **Scope**: Waggle desktop app + local server — CSP, vault crypto, agent tools, input validation, sessions, connectors, dangerous patterns

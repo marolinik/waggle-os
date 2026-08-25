@@ -23,6 +23,7 @@ const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 const outFile = path.join(resourcesDir, 'service.js');
 const sourceMapFile = `${outFile}.map`;
 const entryPoint = path.join(root, 'packages', 'server', 'src', 'local', 'service.ts');
+const marketplaceDbRelative = 'packages/marketplace/marketplace.db';
 const marketplaceDb = path.join(root, 'packages', 'marketplace', 'marketplace.db');
 const marketplaceResource = path.join(resourcesDir, 'marketplace.db');
 const provenancePrefix = '// Waggle-Sidecar-Provenance: ';
@@ -31,6 +32,14 @@ const entryPointRelative = 'packages/server/src/local/service.ts';
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function readGitBlob(revision, relative) {
+  return execFileSync(
+    'git',
+    ['-C', root, 'cat-file', 'blob', `${revision}:${relative}`],
+    { maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+  );
 }
 
 function repositoryRelative(absolutePath) {
@@ -133,6 +142,18 @@ try {
   ) {
     throw new Error(`Required marketplace database is missing or unsafe: ${marketplaceDb}`);
   }
+  const sourceRevision = execFileSync(
+    'git',
+    ['-C', root, 'rev-parse', 'HEAD'],
+    { encoding: 'utf8', windowsHide: true },
+  ).trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
+    throw new Error(`Could not resolve an exact source revision: ${sourceRevision}`);
+  }
+  const marketplaceGitBlob = readGitBlob(sourceRevision, marketplaceDbRelative);
+  if (!fs.readFileSync(marketplaceDb).equals(marketplaceGitBlob)) {
+    throw new Error('canonical marketplace database does not match exact source revision');
+  }
 
   // Dynamic import esbuild (available via vite dependency)
   const esbuild = await import('esbuild');
@@ -192,15 +213,6 @@ try {
 
   fs.writeFileSync(metaFile, JSON.stringify(result.metafile));
   console.log('[build-sidecar] Wrote esbuild metafile', metaFile);
-
-  const sourceRevision = execFileSync(
-    'git',
-    ['-C', root, 'rev-parse', 'HEAD'],
-    { encoding: 'utf8', windowsHide: true },
-  ).trim().toLowerCase();
-  if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
-    throw new Error(`Could not resolve an exact source revision: ${sourceRevision}`);
-  }
 
   const trackedFiles = new Set(
     execFileSync(
@@ -268,10 +280,15 @@ try {
   console.log(`[build-sidecar] Done. Output: ${sizeMB} MB`);
 
   // Production startup seeds the user's writable DB from this immutable
-  // packaged resource. Remove a stale destination (including a symlink)
-  // before copying the tracked canonical database byte-for-byte.
-  fs.rmSync(marketplaceResource, { force: true });
-  fs.copyFileSync(marketplaceDb, marketplaceResource);
+  // packaged resource. Publish the exact Git blob through a temporary file so
+  // a failed write can never leave a partial database in the bundle.
+  const marketplaceTemp = `${marketplaceResource}.stage-${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(marketplaceTemp, marketplaceGitBlob, { flag: 'wx' });
+    fs.renameSync(marketplaceTemp, marketplaceResource);
+  } finally {
+    fs.rmSync(marketplaceTemp, { force: true });
+  }
   console.log('[build-sidecar] Copied canonical marketplace.db');
 } catch (err) {
   console.error('[build-sidecar] Build failed:', err.message);

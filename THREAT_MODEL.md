@@ -149,10 +149,11 @@ Coverage:
    preamble (`orchestrator.ts`) but is not yet wrapped in the same structural fence;
    harvest content is scanned at ingest but not re-fenced per frame. Extending the fence to
    recall is a low-marginal-value follow-up.
-4. **`isReadOnly` persona gating is fail-open.** Read-only personas filter write tools by
-   denylist rather than an inverse allowlist; a tool missing from the denylist is not
-   blocked. Flip to allowlist + static mutator backstop when persona governance is next
-   touched.
+4. **Read-only persona gating depends on explicit classification.** Built-in tools are
+   filtered through `READ_ONLY_ALLOWED_TOOLS`; dynamic connector and MCP tools are dropped
+   wholesale for read-only personas. The residual risk is governance drift if a stateful
+   tool is incorrectly classified as side-effect-free and added to the allowlist; focused
+   tests guard known mutators and the MCP-denial boundary.
 5. **Connector endpoint URLs are not redacted before logging.** userinfo/query/fragment
    on LiteLLM/connector URLs can leak credentials into logs — fold a `redactUrl` pass into
    the next compliance/logging pass.

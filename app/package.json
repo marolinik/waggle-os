@@ -11,7 +11,7 @@
     "tauri": "tauri",
     "tauri:build": "node ../scripts/bundle-node.mjs && node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/stage-sidecar-deps.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build",
     "tauri:build:local": "node ../scripts/bundle-node.mjs && node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/stage-sidecar-deps.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build --debug",
-    "tauri:build:win": "node ../scripts/bundle-node.mjs && node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/stage-sidecar-deps.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build --target x86_64-pc-windows-msvc",
+    "tauri:build:win": "node ../scripts/bundle-node.mjs && node ../scripts/build-sidecar.mjs && node ../scripts/bundle-native-deps.mjs && node ../scripts/stage-sidecar-deps.mjs && node ../scripts/check-sidecar-resources.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build --target x86_64-pc-windows-msvc",
     "tauri:build:win:pilot-signed": "npm run tauri:sign:pilot:win:apply && npm run tauri:build:win -- --config src-tauri/tauri.build-override.conf.json",
     "tauri:build:mac": "npm run tauri:build:mac:arm64 && npm run tauri:build:mac:x64",
     "tauri:build:mac:arm64": "TARGET_ARCH=arm64 node ../scripts/bundle-node.mjs && node ../scripts/build-sidecar.mjs && TARGET_ARCH=arm64 node ../scripts/bundle-native-deps.mjs && TARGET_ARCH=arm64 node ../scripts/stage-sidecar-deps.mjs && cd ../apps/web && npx vite build && cd ../../app && npx tauri build --target aarch64-apple-darwin",

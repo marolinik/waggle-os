@@ -463,10 +463,85 @@ function Start-InstalledApp {
 function Invoke-JsonRequest {
   param(
     [Parameter(Mandatory = $true)] [string]$Uri,
-    [hashtable]$Headers = @{}
+    [hashtable]$Headers = @{},
+    [ValidateRange(1, 30)] [int]$TimeoutSeconds = 5
   )
 
-  return Invoke-RestMethod -Uri $Uri -Method Get -Headers $Headers -TimeoutSec 5
+  return Invoke-RestMethod -Uri $Uri -Method Get -Headers $Headers -TimeoutSec $TimeoutSeconds
+}
+
+function Invoke-BuiltInProxyLivenessProbe {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Uri,
+    [ValidateRange(1, 30)] [int]$AttemptTimeoutSeconds = 5,
+    [ValidateRange(1, 2)] [int]$MaxAttempts = 2,
+    [ValidateRange(0, 2000)] [int]$RetryDelayMilliseconds = 250
+  )
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt += 1) {
+    try {
+      return Invoke-JsonRequest -Uri $Uri -TimeoutSeconds $AttemptTimeoutSeconds
+    } catch {
+      if ($attempt -ge $MaxAttempts) { throw }
+      if ($RetryDelayMilliseconds -gt 0) {
+        Start-Sleep -Milliseconds $RetryDelayMilliseconds
+      }
+    }
+  }
+}
+
+function Test-TransientLoopbackRequestFailure {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Management.Automation.ErrorRecord]$ErrorRecord
+  )
+
+  $responseProperty = $ErrorRecord.Exception.PSObject.Properties['Response']
+  if ($null -ne $responseProperty) {
+    $response = $responseProperty.Value
+    try {
+      return @(408, 425, 429, 500, 502, 503, 504) -contains [int]$response.StatusCode
+    } catch {
+      return $false
+    }
+  }
+
+  $exception = $ErrorRecord.Exception
+  return (
+    $exception -is [System.Net.Http.HttpRequestException] -or
+    $exception -is [System.Net.WebException] -or
+    $exception -is [System.Threading.Tasks.TaskCanceledException] -or
+    $exception -is [System.TimeoutException]
+  )
+}
+
+function Invoke-SessionTokenBootstrapProbe {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Uri,
+    [hashtable]$Headers = @{},
+    [ValidateRange(1, 30)] [int]$AttemptTimeoutSeconds = 5,
+    [ValidateRange(1, 2)] [int]$MaxAttempts = 2,
+    [ValidateRange(0, 2000)] [int]$RetryDelayMilliseconds = 250
+  )
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt += 1) {
+    try {
+      return Invoke-JsonRequest `
+        -Uri $Uri `
+        -Headers $Headers `
+        -TimeoutSeconds $AttemptTimeoutSeconds
+    } catch {
+      if (
+        $attempt -ge $MaxAttempts -or
+        -not (Test-TransientLoopbackRequestFailure -ErrorRecord $_)
+      ) {
+        throw
+      }
+      if ($RetryDelayMilliseconds -gt 0) {
+        Start-Sleep -Milliseconds $RetryDelayMilliseconds
+      }
+    }
+  }
 }
 
 function Invoke-JsonPostRequest {
@@ -565,9 +640,9 @@ function Get-CertificateSessionHeaders {
     $bootstrapToken = [string]$bootstrapTokenProperty.Value
     Assert-True ($bootstrapToken.Length -ge 32 -and $bootstrapToken.Length -le 200) `
       'Tauri bootstrap IPC helper returned an invalid credential.'
-    $tokenResponse = Invoke-JsonRequest `
-      "$BaseUrl/api/auth/session-token" `
-      @{ 'x-waggle-desktop-bootstrap' = $bootstrapToken }
+    $tokenResponse = Invoke-SessionTokenBootstrapProbe `
+      -Uri "$BaseUrl/api/auth/session-token" `
+      -Headers @{ 'x-waggle-desktop-bootstrap' = $bootstrapToken }
   } finally {
     if (Test-Path -LiteralPath $stderrPath) {
       Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
@@ -2756,7 +2831,7 @@ try {
       $receipt.checks['candidateLaunch'] = $true
       $receipt.checks['relaunchAfterUpgrade'] = $true
     }
-    $proxy = Invoke-JsonRequest "$baseUrl/v1/health/liveliness"
+    $proxy = Invoke-BuiltInProxyLivenessProbe -Uri "$baseUrl/v1/health/liveliness"
     Assert-True ($proxy.status -eq 'healthy') 'Built-in provider proxy is not healthy'
     Assert-True ((Get-HttpStatusCode "$baseUrl/api/tier") -eq 401) `
       'A protected API route did not reject an unauthenticated loopback request'
@@ -2782,7 +2857,8 @@ try {
     }
     $marketplace = Invoke-JsonRequest `
       "$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100" `
-      $headers
+      $headers `
+      -TimeoutSeconds 30
     $marketplacePackages = @($marketplace.packages)
     Assert-True ($marketplacePackages.Count -ge 1) `
       'Clean installed marketplace API returned no trusted MCP catalog entries.'
@@ -3218,9 +3294,9 @@ try {
 } catch {
   $receipt.status = 'failed'
   $receipt.error = $_.Exception.Message
-  $serverLog = Join-Path $dataDir 'server.log'
-  if (Test-Path -LiteralPath $serverLog -PathType Leaf) {
-    $receipt['serverLogTail'] = @(Get-Content -LiteralPath $serverLog -Tail 80)
+  $serviceLog = Join-Path $dataDir 'logs\service.log'
+  if (Test-Path -LiteralPath $serviceLog -PathType Leaf) {
+    $receipt['serviceLogTail'] = @(Get-Content -LiteralPath $serviceLog -Tail 80)
   }
   throw
 } finally {

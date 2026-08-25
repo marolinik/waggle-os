@@ -7,6 +7,7 @@
 import { beforeEach, describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawnSync } from 'node:child_process';
@@ -457,11 +458,26 @@ describe('Tauri Production Configuration', () => {
       fs.readFileSync(path.join(ROOT, 'app', 'package.json'), 'utf-8'),
     );
     const signedBuild = manifest.scripts?.['tauri:build:win:pilot-signed'];
+    const windowsBuild = manifest.scripts?.['tauri:build:win'];
+    const override = JSON.parse(
+      fs.readFileSync(
+        path.join(TAURI_DIR, 'tauri.build-override.conf.json'),
+        'utf-8',
+      ),
+    );
 
     expect(signedBuild).toContain('npm run tauri:sign:pilot:win:apply');
     expect(signedBuild).toContain(
       'npm run tauri:build:win -- --config src-tauri/tauri.build-override.conf.json',
     );
+    expect(override.build.beforeBuildCommand).toBe('');
+
+    const stageIndex = windowsBuild.indexOf('stage-sidecar-deps.mjs');
+    const preflightIndex = windowsBuild.indexOf('check-sidecar-resources.mjs');
+    const tauriIndex = windowsBuild.indexOf('npx tauri build');
+    expect(stageIndex).toBeGreaterThanOrEqual(0);
+    expect(preflightIndex).toBeGreaterThan(stageIndex);
+    expect(tauriIndex).toBeGreaterThan(preflightIndex);
   });
 
   it('icon.ico exists', () => {
@@ -527,19 +543,20 @@ describe('Tauri Production Configuration', () => {
       fs.writeFileSync(target, content);
       return target;
     };
+    const runResult = (command: string, args: string[]) => spawnSync(command, args, {
+      cwd: fixtureRoot,
+      env: {
+        ...process.env,
+        TEMP: fixtureRoot,
+        TMP: fixtureRoot,
+        TMPDIR: fixtureRoot,
+      },
+      encoding: 'utf8',
+      timeout: 60_000,
+      windowsHide: true,
+    });
     const run = (command: string, args: string[]) => {
-      const result = spawnSync(command, args, {
-        cwd: fixtureRoot,
-        env: {
-          ...process.env,
-          TEMP: fixtureRoot,
-          TMP: fixtureRoot,
-          TMPDIR: fixtureRoot,
-        },
-        encoding: 'utf8',
-        timeout: 60_000,
-        windowsHide: true,
-      });
+      const result = runResult(command, args);
       expect(result.status, result.stderr || result.stdout).toBe(0);
       return result;
     };
@@ -624,6 +641,41 @@ describe('Tauri Production Configuration', () => {
           'tsconfig.shared.json',
         ]),
       );
+      const marketplacePath = path.join(
+        fixtureRoot,
+        'packages',
+        'marketplace',
+        'marketplace.db',
+      );
+      const marketplaceResourcePath = path.join(
+        fixtureRoot,
+        'app',
+        'src-tauri',
+        'resources',
+        'marketplace.db',
+      );
+      const committedMarketplace = Buffer.from(
+        trackedFiles.get('packages/marketplace/marketplace.db')!,
+      );
+      expect(fs.readFileSync(marketplaceResourcePath)).toEqual(committedMarketplace);
+
+      fs.writeFileSync(marketplacePath, 'dirty worktree database');
+      const dirtyMarketplaceResult = runResult(
+        process.execPath,
+        ['scripts/build-sidecar.mjs'],
+      );
+      expect(
+        dirtyMarketplaceResult.status,
+        dirtyMarketplaceResult.stderr || dirtyMarketplaceResult.stdout,
+      ).toBe(1);
+      expect(dirtyMarketplaceResult.stderr).toContain(
+        'canonical marketplace database does not match exact source revision',
+      );
+      expect(fs.readFileSync(marketplaceResourcePath)).toEqual(committedMarketplace);
+      expect(
+        fs.readdirSync(path.dirname(marketplaceResourcePath))
+          .filter((name) => name.startsWith('marketplace.db.stage-')),
+      ).toEqual([]);
     } finally {
       fs.rmSync(fixtureRoot, { recursive: true, force: true });
     }
@@ -1022,6 +1074,16 @@ describe('Tauri Production Configuration', () => {
         fs.writeFileSync(target, content, 'utf-8');
         return target;
       };
+      const runFixtureGit = (args: string[]) => {
+        const result = spawnSync('git', args, {
+          cwd: fixtureRoot,
+          encoding: 'utf-8',
+          timeout: 30_000,
+          windowsHide: true,
+        });
+        expect(result.status, result.stderr || result.stdout).toBe(0);
+        return result.stdout.trim();
+      };
 
       try {
         fs.mkdirSync(fixtureScripts, { recursive: true });
@@ -1034,7 +1096,7 @@ describe('Tauri Production Configuration', () => {
         // A hardlink shares the running Vitest executable's Windows image lock,
         // so fixture cleanup cannot delete it until the parent test process exits.
         fs.copyFileSync(process.execPath, fixtureNode);
-      const fixtureSourceRevision = 'a'.repeat(40);
+      let fixtureSourceRevision = 'a'.repeat(40);
       const fixtureSourceContents = new Map<string, string>([
         ['package-lock.json', '{"lockfileVersion":3}\n'],
         ['package.json', '{"name":"waggle-sidecar-fixture"}\n'],
@@ -1064,7 +1126,7 @@ describe('Tauri Production Configuration', () => {
           sha256: createHash('sha256').update(fixtureServicePayload).digest('hex'),
         },
       };
-      const certifiedFixtureService = Buffer.concat([
+      let certifiedFixtureService = Buffer.concat([
         Buffer.from(
           `// Waggle-Sidecar-Provenance: ${Buffer.from(JSON.stringify(fixtureServiceProvenance)).toString('base64')}\n`,
           'utf8',
@@ -1092,6 +1154,27 @@ describe('Tauri Production Configuration', () => {
         fixtureMarketplace.close();
         const fixtureMarketplaceResource = path.join(fixtureResources, 'marketplace.db');
         fs.copyFileSync(fixtureMarketplaceSource, fixtureMarketplaceResource);
+        runFixtureGit(['init']);
+        runFixtureGit(['config', 'user.email', 'sidecar-preflight@waggle.invalid']);
+        runFixtureGit(['config', 'user.name', 'Waggle Fixture']);
+        runFixtureGit([
+          'add',
+          '--',
+          'scripts/check-sidecar-resources.mjs',
+          ...fixtureSourceContents.keys(),
+          'packages/marketplace/marketplace.db',
+        ]);
+        runFixtureGit(['commit', '-m', 'fixture']);
+        fixtureSourceRevision = runFixtureGit(['rev-parse', 'HEAD']).toLowerCase();
+        fixtureServiceProvenance.sourceRevision = fixtureSourceRevision;
+        certifiedFixtureService = Buffer.concat([
+          Buffer.from(
+            `// Waggle-Sidecar-Provenance: ${Buffer.from(JSON.stringify(fixtureServiceProvenance)).toString('base64')}\n`,
+            'utf8',
+          ),
+          fixtureServicePayload,
+        ]);
+        fs.writeFileSync(fixtureServicePath, certifiedFixtureService);
         const fixtureNpmVersion = '0.0.0-fixture';
         const fixtureNpmRuntimeRoot = 'node_modules/waggle-node-runtime';
         const fixtureNpmCli = `process.stdout.write(${JSON.stringify(fixtureNpmVersion)} + '\\n');\n`;
@@ -1383,6 +1466,16 @@ describe('Tauri Production Configuration', () => {
         ).toBe(0);
         expect(fs.readFileSync(fixtureMarketplaceResource)).toEqual(fixtureMarketplaceBeforeProbe);
 
+        fs.appendFileSync(fixtureMarketplaceSource, 'dirty worktree database');
+        fs.copyFileSync(fixtureMarketplaceSource, fixtureMarketplaceResource);
+        const dirtyMarketplaceResult = await runChecker();
+        expect(dirtyMarketplaceResult.status).toBe(1);
+        expect(dirtyMarketplaceResult.stderr).toContain(
+          'canonical marketplace database does not match exact source revision',
+        );
+        fs.writeFileSync(fixtureMarketplaceSource, fixtureMarketplaceBeforeProbe);
+        fs.writeFileSync(fixtureMarketplaceResource, fixtureMarketplaceBeforeProbe);
+
         fs.appendFileSync(fixtureServicePath, '// stale payload\n');
         const staleServiceResult = await runChecker();
         expect(staleServiceResult.status).toBe(1);
@@ -1431,6 +1524,14 @@ describe('Tauri Production Configuration', () => {
         expect(staleRevisionResult.stderr).toContain(
           'resources/service.js source revision does not match expected revision',
         );
+        const nestedResourceDb = path.join(
+          fixtureResources,
+          'node_modules',
+          'fixture-package',
+          'state',
+          'cache.DB',
+        );
+        fs.mkdirSync(path.dirname(nestedResourceDb), { recursive: true });
         const staleSidecars: Array<{
           path: string;
           label: string;
@@ -1447,6 +1548,11 @@ describe('Tauri Production Configuration', () => {
             path: fixtureMarketplaceSource,
             label: 'packages/marketplace/marketplace.db',
             diagnostic: 'must not be present while staging',
+          },
+          {
+            path: nestedResourceDb,
+            label: 'resources/node_modules/fixture-package/state/cache.DB',
+            diagnostic: 'must not be packaged',
           },
         ]) {
           for (const suffix of ['-wal', '-shm', '-journal']) {
@@ -4387,6 +4493,23 @@ Expect-Rejection {
     expect(script).toContain('install-ran.txt');
     expect(script).toContain("$receipt.Contains('scratchCleanupError')");
     expect(script).toContain("Join-Path $dataDir 'marketplace.db'");
+    const jsonRequestHelper = script.slice(
+      script.indexOf('function Invoke-JsonRequest {'),
+      script.indexOf('\nfunction Invoke-JsonPostRequest {'),
+    );
+    expect(jsonRequestHelper).toContain(
+      '[ValidateRange(1, 30)] [int]$TimeoutSeconds = 5',
+    );
+    expect(jsonRequestHelper).toContain('-TimeoutSec $TimeoutSeconds');
+
+    const marketplaceProbeStart = script.indexOf(
+      '$marketplace = Invoke-JsonRequest',
+    );
+    const marketplaceProbe = script.slice(
+      marketplaceProbeStart,
+      script.indexOf('$marketplacePackages =', marketplaceProbeStart),
+    );
+    expect(marketplaceProbe).toContain('-TimeoutSeconds 30');
     expect(script).toContain(
       '$baseUrl/api/marketplace/search?type=mcp&source=mcp_registry&limit=100',
     );
@@ -4395,6 +4518,9 @@ Expect-Rejection {
     expect(script).toContain("$receipt.checks['marketplaceApi']");
     expect(script).toContain('Same-version repair did not restore resources/marketplace.db');
     expect(script).toContain('/v1/health/liveliness');
+    expect(script).toContain(
+      '$proxy = Invoke-BuiltInProxyLivenessProbe -Uri "$baseUrl/v1/health/liveliness"',
+    );
     expect(script).toContain('/api/auth/session-token');
     expect(script).toContain('$BaseUrl/api/workspaces');
     expect(script).toContain('$BaseUrl/api/memory/frames?extract=false');
@@ -6934,6 +7060,219 @@ try {
     },
     120_000,
   );
+});
+
+describe('Windows installer certifier timeout contract', () => {
+  it('honors one bounded JSON GET timeout override and still fails closed', async () => {
+    if (process.platform !== 'win32') return;
+
+    const pwsh = powershellProbeExecutable();
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    const helperStart = script.indexOf('function Invoke-JsonRequest {');
+    const helperEnd = script.indexOf('\nfunction Invoke-JsonPostRequest {');
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helper = script.slice(helperStart, helperEnd);
+
+    let responseDelayMs = 1_200;
+    const server = http.createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{"ok":true}');
+      }, responseDelayMs);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      server.close();
+      throw new Error('Could not bind delayed loopback probe server');
+    }
+    const uri = `http://127.0.0.1:${address.port}/`;
+    const runProbe = (timeoutSeconds: number) =>
+      new Promise<void>((resolve, reject) => {
+        execFile(
+          pwsh,
+          [
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `${helper}\n$result = Invoke-JsonRequest -Uri '${uri}' -Headers @{} -TimeoutSeconds ${timeoutSeconds}\nif (-not $result.ok) { throw 'Unexpected JSON payload' }`,
+          ],
+          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+
+    try {
+      await expect(runProbe(2)).resolves.toBeUndefined();
+      responseDelayMs = 1_500;
+      await expect(runProbe(1)).rejects.toBeDefined();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
+
+  it('retries one transient built-in proxy liveness timeout and stays bounded', async () => {
+    if (process.platform !== 'win32') return;
+
+    const pwsh = powershellProbeExecutable();
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    const helperStart = script.indexOf('function Invoke-JsonRequest {');
+    const helperEnd = script.indexOf('\nfunction Invoke-JsonPostRequest {');
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helpers = script.slice(helperStart, helperEnd);
+    expect(helpers).toContain('function Invoke-BuiltInProxyLivenessProbe {');
+    expect(helpers).toContain('[int]$AttemptTimeoutSeconds = 5');
+    expect(helpers).toContain('[int]$MaxAttempts = 2');
+
+    const runProbe = (mode: 'recover' | 'fail') =>
+      new Promise<void>((resolve, reject) => {
+        const stub = mode === 'recover'
+          ? `
+$script:requestCount = 0
+function Invoke-JsonRequest {
+  param([string]$Uri, [int]$TimeoutSeconds)
+  $script:requestCount += 1
+  if ($script:requestCount -eq 1) { throw 'simulated timeout' }
+  return [pscustomobject]@{ status = 'healthy' }
+}
+$result = Invoke-BuiltInProxyLivenessProbe -Uri 'http://127.0.0.1:1/' -AttemptTimeoutSeconds 1 -MaxAttempts 2 -RetryDelayMilliseconds 0
+if ($result.status -cne 'healthy') { throw 'Unexpected liveness payload' }
+if ($script:requestCount -ne 2) { throw "Expected two liveness requests, got $script:requestCount" }
+`
+          : `
+$script:requestCount = 0
+function Invoke-JsonRequest {
+  param([string]$Uri, [int]$TimeoutSeconds)
+  $script:requestCount += 1
+  throw 'simulated timeout'
+}
+$failed = $false
+try {
+  [void](Invoke-BuiltInProxyLivenessProbe -Uri 'http://127.0.0.1:1/' -AttemptTimeoutSeconds 1 -MaxAttempts 2 -RetryDelayMilliseconds 0)
+} catch {
+  $failed = $true
+  if ($_.Exception.Message -cne 'simulated timeout') { throw }
+}
+if (-not $failed) { throw 'Persistent liveness failure was not rethrown' }
+if ($script:requestCount -ne 2) { throw "Expected two liveness requests, got $script:requestCount" }
+`;
+        execFile(
+          pwsh,
+          [
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `${helpers}\n${stub}`,
+          ],
+          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+
+    await expect(runProbe('recover')).resolves.toBeUndefined();
+    await expect(runProbe('fail')).resolves.toBeUndefined();
+  });
+
+  it('retries only transient desktop session bootstrap failures and preserves the service log', async () => {
+    if (process.platform !== 'win32') return;
+
+    const pwsh = powershellProbeExecutable();
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    const helperStart = script.indexOf('function Invoke-JsonRequest {');
+    const helperEnd = script.indexOf('\nfunction Invoke-JsonPostRequest {');
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helpers = script.slice(helperStart, helperEnd);
+    const sessionHelperStart = helpers.indexOf('function Invoke-SessionTokenBootstrapProbe {');
+    expect(sessionHelperStart).toBeGreaterThanOrEqual(0);
+    const sessionHelper = helpers.slice(sessionHelperStart);
+    expect(sessionHelper).toContain('[int]$AttemptTimeoutSeconds = 5');
+    expect(sessionHelper).toContain('[int]$MaxAttempts = 2');
+    expect(script).toContain(
+      '$tokenResponse = Invoke-SessionTokenBootstrapProbe `',
+    );
+    expect(script).toContain(
+      "-Headers @{ 'x-waggle-desktop-bootstrap' = $bootstrapToken }",
+    );
+    expect(script).toContain("$serviceLog = Join-Path $dataDir 'logs\\service.log'");
+
+    const runProbe = (mode: 'recover' | 'persistent' | 'forbidden') =>
+      new Promise<void>((resolve, reject) => {
+        const stub = `
+$script:requests = @()
+function Invoke-JsonRequest {
+  param([string]$Uri, [hashtable]$Headers, [int]$TimeoutSeconds)
+  $script:requests += [pscustomobject]@{
+    Uri = $Uri
+    Bootstrap = [string]$Headers['x-waggle-desktop-bootstrap']
+    TimeoutSeconds = $TimeoutSeconds
+  }
+  if ('${mode}' -eq 'recover' -and $script:requests.Count -gt 1) {
+    return [pscustomobject]@{ token = 'certifier-session-token' }
+  }
+  if ('${mode}' -eq 'forbidden') {
+    $exception = [System.Exception]::new('simulated HTTP 403')
+    $exception | Add-Member -NotePropertyName Response -NotePropertyValue (
+      [pscustomobject]@{ StatusCode = 403 }
+    )
+    throw $exception
+  }
+  throw [System.Threading.Tasks.TaskCanceledException]::new('simulated timeout')
+}
+$failed = $false
+try {
+  $result = Invoke-SessionTokenBootstrapProbe -Uri 'http://127.0.0.1:1/api/auth/session-token' -Headers @{ 'x-waggle-desktop-bootstrap' = 'sentinel-bootstrap' } -AttemptTimeoutSeconds 1 -MaxAttempts 2 -RetryDelayMilliseconds 0
+  if ('${mode}' -ne 'recover') { throw 'Expected session bootstrap failure' }
+  if ($result.token -cne 'certifier-session-token') { throw 'Unexpected token payload' }
+} catch {
+  $failed = $true
+  if ('${mode}' -eq 'recover') { throw }
+  if ('${mode}' -eq 'forbidden' -and [int]$_.Exception.Response.StatusCode -ne 403) { throw }
+}
+if ('${mode}' -ne 'recover' -and -not $failed) { throw 'Failure was not rethrown' }
+$expectedCount = if ('${mode}' -eq 'forbidden') { 1 } else { 2 }
+if ($script:requests.Count -ne $expectedCount) {
+  throw "Expected $expectedCount session bootstrap requests, got $($script:requests.Count)"
+}
+foreach ($request in $script:requests) {
+  if ($request.Uri -cne 'http://127.0.0.1:1/api/auth/session-token') { throw 'Session bootstrap URI was not forwarded' }
+  if ($request.Bootstrap -cne 'sentinel-bootstrap') { throw 'Session bootstrap header was not forwarded' }
+  if ($request.TimeoutSeconds -ne 1) { throw 'Session bootstrap timeout was not forwarded' }
+}
+`;
+        execFile(
+          pwsh,
+          [
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `Set-StrictMode -Version Latest\n${helpers}\n${stub}`,
+          ],
+          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+
+    await expect(runProbe('recover')).resolves.toBeUndefined();
+    await expect(runProbe('persistent')).resolves.toBeUndefined();
+    await expect(runProbe('forbidden')).resolves.toBeUndefined();
+  });
 });
 
 describe('Playwright Visual Regression Setup', () => {

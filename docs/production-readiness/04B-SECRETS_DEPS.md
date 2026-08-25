@@ -1,5 +1,10 @@
 # 04B — Secret Scanning & Dependency Audit
 
+> **Historical snapshot — superseded.** This report records evidence as of
+> 2026-03-20 and is not current launch authority. See
+> [`09-LAUNCH_RECOMMENDATION.md`](./09-LAUNCH_RECOMMENDATION.md) for the current
+> Windows-first Solo scope, external gates, and recommendation.
+
 **Auditor:** Claude Opus 4.6 (automated)
 **Date:** 2026-03-20
 **Scope:** Full codebase secret scan, git history review, npm dependency audit, .gitignore assessment
