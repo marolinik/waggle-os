@@ -470,6 +470,26 @@ function Invoke-JsonRequest {
   return Invoke-RestMethod -Uri $Uri -Method Get -Headers $Headers -TimeoutSec $TimeoutSeconds
 }
 
+function Invoke-BuiltInProxyLivenessProbe {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Uri,
+    [ValidateRange(1, 30)] [int]$AttemptTimeoutSeconds = 5,
+    [ValidateRange(1, 2)] [int]$MaxAttempts = 2,
+    [ValidateRange(0, 2000)] [int]$RetryDelayMilliseconds = 250
+  )
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt += 1) {
+    try {
+      return Invoke-JsonRequest -Uri $Uri -TimeoutSeconds $AttemptTimeoutSeconds
+    } catch {
+      if ($attempt -ge $MaxAttempts) { throw }
+      if ($RetryDelayMilliseconds -gt 0) {
+        Start-Sleep -Milliseconds $RetryDelayMilliseconds
+      }
+    }
+  }
+}
+
 function Invoke-JsonPostRequest {
   param(
     [Parameter(Mandatory = $true)] [string]$Uri,
@@ -2757,7 +2777,7 @@ try {
       $receipt.checks['candidateLaunch'] = $true
       $receipt.checks['relaunchAfterUpgrade'] = $true
     }
-    $proxy = Invoke-JsonRequest "$baseUrl/v1/health/liveliness"
+    $proxy = Invoke-BuiltInProxyLivenessProbe -Uri "$baseUrl/v1/health/liveliness"
     Assert-True ($proxy.status -eq 'healthy') 'Built-in provider proxy is not healthy'
     Assert-True ((Get-HttpStatusCode "$baseUrl/api/tier") -eq 401) `
       'A protected API route did not reject an unauthenticated loopback request'

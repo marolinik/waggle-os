@@ -4518,6 +4518,9 @@ Expect-Rejection {
     expect(script).toContain("$receipt.checks['marketplaceApi']");
     expect(script).toContain('Same-version repair did not restore resources/marketplace.db');
     expect(script).toContain('/v1/health/liveliness');
+    expect(script).toContain(
+      '$proxy = Invoke-BuiltInProxyLivenessProbe -Uri "$baseUrl/v1/health/liveliness"',
+    );
     expect(script).toContain('/api/auth/session-token');
     expect(script).toContain('$BaseUrl/api/workspaces');
     expect(script).toContain('$BaseUrl/api/memory/frames?extract=false');
@@ -7113,6 +7116,73 @@ describe('Windows installer certifier timeout contract', () => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
     }
+  });
+
+  it('retries one transient built-in proxy liveness timeout and stays bounded', async () => {
+    if (process.platform !== 'win32') return;
+
+    const pwsh = powershellProbeExecutable();
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    const helperStart = script.indexOf('function Invoke-JsonRequest {');
+    const helperEnd = script.indexOf('\nfunction Invoke-JsonPostRequest {');
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helpers = script.slice(helperStart, helperEnd);
+    expect(helpers).toContain('function Invoke-BuiltInProxyLivenessProbe {');
+    expect(helpers).toContain('[int]$AttemptTimeoutSeconds = 5');
+    expect(helpers).toContain('[int]$MaxAttempts = 2');
+
+    const runProbe = (mode: 'recover' | 'fail') =>
+      new Promise<void>((resolve, reject) => {
+        const stub = mode === 'recover'
+          ? `
+$script:requestCount = 0
+function Invoke-JsonRequest {
+  param([string]$Uri, [int]$TimeoutSeconds)
+  $script:requestCount += 1
+  if ($script:requestCount -eq 1) { throw 'simulated timeout' }
+  return [pscustomobject]@{ status = 'healthy' }
+}
+$result = Invoke-BuiltInProxyLivenessProbe -Uri 'http://127.0.0.1:1/' -AttemptTimeoutSeconds 1 -MaxAttempts 2 -RetryDelayMilliseconds 0
+if ($result.status -cne 'healthy') { throw 'Unexpected liveness payload' }
+if ($script:requestCount -ne 2) { throw "Expected two liveness requests, got $script:requestCount" }
+`
+          : `
+$script:requestCount = 0
+function Invoke-JsonRequest {
+  param([string]$Uri, [int]$TimeoutSeconds)
+  $script:requestCount += 1
+  throw 'simulated timeout'
+}
+$failed = $false
+try {
+  [void](Invoke-BuiltInProxyLivenessProbe -Uri 'http://127.0.0.1:1/' -AttemptTimeoutSeconds 1 -MaxAttempts 2 -RetryDelayMilliseconds 0)
+} catch {
+  $failed = $true
+  if ($_.Exception.Message -cne 'simulated timeout') { throw }
+}
+if (-not $failed) { throw 'Persistent liveness failure was not rethrown' }
+if ($script:requestCount -ne 2) { throw "Expected two liveness requests, got $script:requestCount" }
+`;
+        execFile(
+          pwsh,
+          [
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `${helpers}\n${stub}`,
+          ],
+          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+
+    await expect(runProbe('recover')).resolves.toBeUndefined();
+    await expect(runProbe('fail')).resolves.toBeUndefined();
   });
 });
 
