@@ -7184,6 +7184,95 @@ if ($script:requestCount -ne 2) { throw "Expected two liveness requests, got $sc
     await expect(runProbe('recover')).resolves.toBeUndefined();
     await expect(runProbe('fail')).resolves.toBeUndefined();
   });
+
+  it('retries only transient desktop session bootstrap failures and preserves the service log', async () => {
+    if (process.platform !== 'win32') return;
+
+    const pwsh = powershellProbeExecutable();
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+    const helperStart = script.indexOf('function Invoke-JsonRequest {');
+    const helperEnd = script.indexOf('\nfunction Invoke-JsonPostRequest {');
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helpers = script.slice(helperStart, helperEnd);
+    const sessionHelperStart = helpers.indexOf('function Invoke-SessionTokenBootstrapProbe {');
+    expect(sessionHelperStart).toBeGreaterThanOrEqual(0);
+    const sessionHelper = helpers.slice(sessionHelperStart);
+    expect(sessionHelper).toContain('[int]$AttemptTimeoutSeconds = 5');
+    expect(sessionHelper).toContain('[int]$MaxAttempts = 2');
+    expect(script).toContain(
+      '$tokenResponse = Invoke-SessionTokenBootstrapProbe `',
+    );
+    expect(script).toContain(
+      "-Headers @{ 'x-waggle-desktop-bootstrap' = $bootstrapToken }",
+    );
+    expect(script).toContain("$serviceLog = Join-Path $dataDir 'logs\\service.log'");
+
+    const runProbe = (mode: 'recover' | 'persistent' | 'forbidden') =>
+      new Promise<void>((resolve, reject) => {
+        const stub = `
+$script:requests = @()
+function Invoke-JsonRequest {
+  param([string]$Uri, [hashtable]$Headers, [int]$TimeoutSeconds)
+  $script:requests += [pscustomobject]@{
+    Uri = $Uri
+    Bootstrap = [string]$Headers['x-waggle-desktop-bootstrap']
+    TimeoutSeconds = $TimeoutSeconds
+  }
+  if ('${mode}' -eq 'recover' -and $script:requests.Count -gt 1) {
+    return [pscustomobject]@{ token = 'certifier-session-token' }
+  }
+  if ('${mode}' -eq 'forbidden') {
+    $exception = [System.Exception]::new('simulated HTTP 403')
+    $exception | Add-Member -NotePropertyName Response -NotePropertyValue (
+      [pscustomobject]@{ StatusCode = 403 }
+    )
+    throw $exception
+  }
+  throw [System.Threading.Tasks.TaskCanceledException]::new('simulated timeout')
+}
+$failed = $false
+try {
+  $result = Invoke-SessionTokenBootstrapProbe -Uri 'http://127.0.0.1:1/api/auth/session-token' -Headers @{ 'x-waggle-desktop-bootstrap' = 'sentinel-bootstrap' } -AttemptTimeoutSeconds 1 -MaxAttempts 2 -RetryDelayMilliseconds 0
+  if ('${mode}' -ne 'recover') { throw 'Expected session bootstrap failure' }
+  if ($result.token -cne 'certifier-session-token') { throw 'Unexpected token payload' }
+} catch {
+  $failed = $true
+  if ('${mode}' -eq 'recover') { throw }
+  if ('${mode}' -eq 'forbidden' -and [int]$_.Exception.Response.StatusCode -ne 403) { throw }
+}
+if ('${mode}' -ne 'recover' -and -not $failed) { throw 'Failure was not rethrown' }
+$expectedCount = if ('${mode}' -eq 'forbidden') { 1 } else { 2 }
+if ($script:requests.Count -ne $expectedCount) {
+  throw "Expected $expectedCount session bootstrap requests, got $($script:requests.Count)"
+}
+foreach ($request in $script:requests) {
+  if ($request.Uri -cne 'http://127.0.0.1:1/api/auth/session-token') { throw 'Session bootstrap URI was not forwarded' }
+  if ($request.Bootstrap -cne 'sentinel-bootstrap') { throw 'Session bootstrap header was not forwarded' }
+  if ($request.TimeoutSeconds -ne 1) { throw 'Session bootstrap timeout was not forwarded' }
+}
+`;
+        execFile(
+          pwsh,
+          [
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `Set-StrictMode -Version Latest\n${helpers}\n${stub}`,
+          ],
+          { encoding: 'utf-8', timeout: 10_000, windowsHide: true },
+          (error) => (error ? reject(error) : resolve()),
+        );
+      });
+
+    await expect(runProbe('recover')).resolves.toBeUndefined();
+    await expect(runProbe('persistent')).resolves.toBeUndefined();
+    await expect(runProbe('forbidden')).resolves.toBeUndefined();
+  });
 });
 
 describe('Playwright Visual Regression Setup', () => {

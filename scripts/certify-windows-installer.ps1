@@ -490,6 +490,60 @@ function Invoke-BuiltInProxyLivenessProbe {
   }
 }
 
+function Test-TransientLoopbackRequestFailure {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Management.Automation.ErrorRecord]$ErrorRecord
+  )
+
+  $responseProperty = $ErrorRecord.Exception.PSObject.Properties['Response']
+  if ($null -ne $responseProperty) {
+    $response = $responseProperty.Value
+    try {
+      return @(408, 425, 429, 500, 502, 503, 504) -contains [int]$response.StatusCode
+    } catch {
+      return $false
+    }
+  }
+
+  $exception = $ErrorRecord.Exception
+  return (
+    $exception -is [System.Net.Http.HttpRequestException] -or
+    $exception -is [System.Net.WebException] -or
+    $exception -is [System.Threading.Tasks.TaskCanceledException] -or
+    $exception -is [System.TimeoutException]
+  )
+}
+
+function Invoke-SessionTokenBootstrapProbe {
+  param(
+    [Parameter(Mandatory = $true)] [string]$Uri,
+    [hashtable]$Headers = @{},
+    [ValidateRange(1, 30)] [int]$AttemptTimeoutSeconds = 5,
+    [ValidateRange(1, 2)] [int]$MaxAttempts = 2,
+    [ValidateRange(0, 2000)] [int]$RetryDelayMilliseconds = 250
+  )
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt += 1) {
+    try {
+      return Invoke-JsonRequest `
+        -Uri $Uri `
+        -Headers $Headers `
+        -TimeoutSeconds $AttemptTimeoutSeconds
+    } catch {
+      if (
+        $attempt -ge $MaxAttempts -or
+        -not (Test-TransientLoopbackRequestFailure -ErrorRecord $_)
+      ) {
+        throw
+      }
+      if ($RetryDelayMilliseconds -gt 0) {
+        Start-Sleep -Milliseconds $RetryDelayMilliseconds
+      }
+    }
+  }
+}
+
 function Invoke-JsonPostRequest {
   param(
     [Parameter(Mandatory = $true)] [string]$Uri,
@@ -586,9 +640,9 @@ function Get-CertificateSessionHeaders {
     $bootstrapToken = [string]$bootstrapTokenProperty.Value
     Assert-True ($bootstrapToken.Length -ge 32 -and $bootstrapToken.Length -le 200) `
       'Tauri bootstrap IPC helper returned an invalid credential.'
-    $tokenResponse = Invoke-JsonRequest `
-      "$BaseUrl/api/auth/session-token" `
-      @{ 'x-waggle-desktop-bootstrap' = $bootstrapToken }
+    $tokenResponse = Invoke-SessionTokenBootstrapProbe `
+      -Uri "$BaseUrl/api/auth/session-token" `
+      -Headers @{ 'x-waggle-desktop-bootstrap' = $bootstrapToken }
   } finally {
     if (Test-Path -LiteralPath $stderrPath) {
       Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
@@ -3240,9 +3294,9 @@ try {
 } catch {
   $receipt.status = 'failed'
   $receipt.error = $_.Exception.Message
-  $serverLog = Join-Path $dataDir 'server.log'
-  if (Test-Path -LiteralPath $serverLog -PathType Leaf) {
-    $receipt['serverLogTail'] = @(Get-Content -LiteralPath $serverLog -Tail 80)
+  $serviceLog = Join-Path $dataDir 'logs\service.log'
+  if (Test-Path -LiteralPath $serviceLog -PathType Leaf) {
+    $receipt['serviceLogTail'] = @(Get-Content -LiteralPath $serviceLog -Tail 80)
   }
   throw
 } finally {
