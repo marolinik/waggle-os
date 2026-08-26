@@ -20,6 +20,7 @@ function mockLookup(map: Record<string, ResolvedAddress[]>): LookupFn {
 }
 
 const v4 = (address: string): ResolvedAddress => ({ address, family: 4 });
+const v6 = (address: string): ResolvedAddress => ({ address, family: 6 });
 
 async function readRequestBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -71,6 +72,10 @@ describe('classifyAddress', () => {
     expect(classifyAddress('0.0.0.0')).toBe('unspecified');
     expect(classifyAddress('224.0.0.1')).toBe('multicast');
     expect(classifyAddress('255.255.255.255')).toBe('reserved');
+    expect(classifyAddress('192.88.99.0')).toBe('reserved');
+    expect(classifyAddress('192.88.99.255')).toBe('reserved');
+    expect(classifyAddress('192.88.98.255')).toBe('public');
+    expect(classifyAddress('192.88.100.0')).toBe('public');
     expect(classifyAddress('8.8.8.8')).toBe('public');
     expect(classifyAddress('93.184.216.34')).toBe('public');
   });
@@ -84,7 +89,24 @@ describe('classifyAddress', () => {
     expect(classifyAddress('fd12:3456::1')).toBe('unique-local');
     expect(classifyAddress('ff02::1')).toBe('multicast');
     expect(classifyAddress('2001:db8::1')).toBe('reserved');
+    expect(classifyAddress('fec0::1')).toBe('reserved');
+    expect(classifyAddress('feff:ffff::1')).toBe('reserved');
+    expect(classifyAddress('64:ff9b::1')).toBe('reserved');
+    expect(classifyAddress('64:ff9b:1::1')).toBe('reserved');
+    expect(classifyAddress('100::1')).toBe('reserved');
+    expect(classifyAddress('100:0:0:1::1')).toBe('reserved');
+    expect(classifyAddress('2001:2::1')).toBe('reserved');
+    expect(classifyAddress('2002::1')).toBe('reserved');
+    expect(classifyAddress('3fff::1')).toBe('reserved');
+    expect(classifyAddress('3fff:fff::1')).toBe('reserved');
+    expect(classifyAddress('5f00::1')).toBe('reserved');
+    expect(classifyAddress('64:ff9b:2::1')).toBe('public');
+    expect(classifyAddress('100:0:0:2::1')).toBe('public');
+    expect(classifyAddress('2001:2:1::1')).toBe('public');
+    expect(classifyAddress('3fff:1000::1')).toBe('public');
+    expect(classifyAddress('5f01::1')).toBe('public');
     expect(classifyAddress('2606:4700:4700::1111')).toBe('public'); // Cloudflare
+    expect(classifyAddress('2001:4860:4860::8888')).toBe('public'); // Google
   });
 
   it('unwraps IPv4-mapped IPv6 and classifies the embedded v4', () => {
@@ -129,11 +151,23 @@ describe('assertUrlAllowed', () => {
     await expect(assertUrlAllowed('http://mixed.example.com/', { lookup })).rejects.toThrow(/private/);
   });
 
+  it('rejects when any resolved address is special-use IPv6', async () => {
+    const lookup = mockLookup({
+      'mixed-v6.example.com': [v4('93.184.216.34'), v6('2002::1')],
+    });
+    await expect(assertUrlAllowed('http://mixed-v6.example.com/', { lookup })).rejects.toThrow(/reserved/);
+  });
+
   it('blocks a decimal-obfuscated host once the resolver normalizes it to loopback', async () => {
     // getaddrinfo normalizes 2130706433 -> 127.0.0.1 in production; the guard
     // then classifies + blocks it. Mock that normalization here (no network).
     const lookup = mockLookup({ '2130706433': [v4('127.0.0.1')] });
     await expect(assertUrlAllowed('http://2130706433/', { lookup })).rejects.toThrow(/loopback/);
+  });
+
+  it('blocks alternate IPv4 forms that normalize into a special-use range', async () => {
+    await expect(assertUrlAllowed('http://0300.0130.0143.1/')).rejects.toThrow(/reserved/);
+    await expect(assertUrlAllowed('http://[::ffff:192.88.99.1]/')).rejects.toThrow(/reserved/);
   });
 
   it('allows a public URL', async () => {
@@ -150,6 +184,7 @@ describe('assertUrlAllowed', () => {
 
   it('does not unlock private addresses even with allowLocal', async () => {
     await expect(assertUrlAllowed('http://10.0.0.5/', { allowLocal: true })).rejects.toThrow(/private/);
+    await expect(assertUrlAllowed('http://[fec0::1]/', { allowLocal: true })).rejects.toThrow(/reserved/);
   });
 });
 

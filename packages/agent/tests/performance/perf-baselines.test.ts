@@ -67,6 +67,14 @@ function timeMs(fn: () => void): number {
   return performance.now() - start;
 }
 
+// Shared CI runners add scheduler noise to sub-millisecond wall-clock samples.
+// Keep strict local budgets while still catching gross regressions in CI.
+const PERF_SCALE = process.env.CI ? 6 : 1;
+
+function perfBudget(baseMs: number): number {
+  return baseMs * PERF_SCALE;
+}
+
 async function timeMsAsync(fn: () => Promise<void>): Promise<number> {
   const start = performance.now();
   await fn();
@@ -84,7 +92,7 @@ describe('Performance Baselines', () => {
     }
 
     const ms = timeMs(() => { registry.generateTools(); });
-    expect(ms).toBeLessThan(50);
+    expect(ms).toBeLessThan(perfBudget(50));
   });
 
   it('capability router resolve < 10ms with 10 connectors', () => {
@@ -101,7 +109,7 @@ describe('Performance Baselines', () => {
     });
 
     const ms = timeMs(() => { router.resolve('research something'); });
-    expect(ms).toBeLessThan(10);
+    expect(ms).toBeLessThan(perfBudget(10));
   });
 
   it('persona prompt composition < 1ms', () => {
@@ -109,7 +117,7 @@ describe('Performance Baselines', () => {
     const persona = getPersona('researcher')!;
 
     const ms = timeMs(() => { composePersonaPrompt(core, persona); });
-    expect(ms).toBeLessThan(1);
+    expect(ms).toBeLessThan(perfBudget(1));
   });
 
   it('message bus send + receive < 1ms for 100 messages', () => {
@@ -121,7 +129,7 @@ describe('Performance Baselines', () => {
       }
       bus.receive('ws-2');
     });
-    expect(ms).toBeLessThan(5); // 100 sends + 1 receive
+    expect(ms).toBeLessThan(perfBudget(5)); // 100 sends + 1 receive
   });
 
   it('confirmation gate check < 0.5ms per call', () => {
@@ -141,7 +149,7 @@ describe('Performance Baselines', () => {
       }
     });
     // 2000 checks in < 5ms = <0.0025ms each
-    expect(ms).toBeLessThan(5);
+    expect(ms).toBeLessThan(perfBudget(5));
   });
 
   it('workspace session create + close < 5ms', () => {
@@ -153,7 +161,7 @@ describe('Performance Baselines', () => {
       manager.create('ws-perf', mind, tools);
       manager.close('ws-perf');
     });
-    expect(ms).toBeLessThan(5);
+    expect(ms).toBeLessThan(perfBudget(5));
   });
 
   it('connector registry getDefinitions < 2ms for 5 connectors', () => {
@@ -164,7 +172,7 @@ describe('Performance Baselines', () => {
     }
 
     const ms = timeMs(() => { registry.getDefinitions(); });
-    expect(ms).toBeLessThan(2);
+    expect(ms).toBeLessThan(perfBudget(2));
   });
 
   it('message bus cleanup < 2ms for 1000 expired messages', () => {
@@ -177,6 +185,6 @@ describe('Performance Baselines', () => {
     while (Date.now() - start < 5) { /* spin */ }
 
     const ms = timeMs(() => { bus.cleanup(); });
-    expect(ms).toBeLessThan(5);
+    expect(ms).toBeLessThan(perfBudget(5));
   });
 });

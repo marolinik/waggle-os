@@ -104,6 +104,7 @@ function classifyIpv4(ip: string): AddressClass {
   // Documentation / benchmark / protocol-assignment blocks — non-routable.
   if (a === 192 && b === 0 && c === 0) return 'reserved'; // 192.0.0.0/24
   if (a === 192 && b === 0 && c === 2) return 'reserved'; // TEST-NET-1
+  if (a === 192 && b === 88 && c === 99) return 'reserved'; // Deprecated 6to4 relay anycast
   if (a === 198 && (b === 18 || b === 19)) return 'reserved'; // 198.18.0.0/15
   if (a === 198 && b === 51 && c === 100) return 'reserved'; // TEST-NET-2
   if (a === 203 && b === 0 && c === 113) return 'reserved'; // TEST-NET-3
@@ -171,11 +172,20 @@ function classifyIpv6(ip: string): AddressClass {
   }
 
   if ((h[0] & 0xffc0) === 0xfe80) return 'link-local'; // fe80::/10
+  if ((h[0] & 0xffc0) === 0xfec0) return 'reserved'; // fec0::/10 deprecated site-local
   if ((h[0] & 0xfe00) === 0xfc00) return 'unique-local'; // fc00::/7 (ULA)
   if ((h[0] & 0xff00) === 0xff00) return 'multicast'; // ff00::/8
   if (h[0] === 0x2001 && h[1] === 0x0db8) return 'reserved'; // 2001:db8::/32 docs
-  if (h[0] === 0x0064 && h[1] === 0xff9b) return 'reserved'; // 64:ff9b::/96 NAT64
+  if (
+    h[0] === 0x0064 && h[1] === 0xff9b
+    && ((h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0) || h[2] === 1)
+  ) return 'reserved'; // 64:ff9b::/96 and 64:ff9b:1::/48 translation prefixes
   if (h[0] === 0x0100 && h[1] === 0 && h[2] === 0 && h[3] === 0) return 'reserved'; // 100::/64 discard
+  if (h[0] === 0x0100 && h[1] === 0 && h[2] === 0 && h[3] === 1) return 'reserved'; // 100:0:0:1::/64 dummy
+  if (h[0] === 0x2001 && h[1] === 2 && h[2] === 0) return 'reserved'; // 2001:2::/48 benchmark
+  if (h[0] === 0x2002) return 'reserved'; // 2002::/16 deprecated 6to4
+  if (h[0] === 0x3fff && (h[1] & 0xf000) === 0) return 'reserved'; // 3fff::/20 docs
+  if (h[0] === 0x5f00) return 'reserved'; // 5f00::/16 SRv6 SIDs
   return 'public';
 }
 
