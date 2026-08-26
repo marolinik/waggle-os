@@ -354,6 +354,10 @@ export async function assertUrlAllowed(
     );
   }
 
+  if (parsed.username || parsed.password) {
+    throw new EgressBlockedError('Blocked URL credentials', rawUrl);
+  }
+
   // url.hostname keeps the surrounding brackets on an IPv6 literal ("[::1]"),
   // which isIP() does not recognize — strip them so the literal is classified
   // directly (loopback/private/link-local/…) instead of falling through to a DNS

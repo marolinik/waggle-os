@@ -102,6 +102,15 @@ describe('url-egress-guard (hive-mind-core)', () => {
     await expect(assertUrlAllowed('file:///etc/passwd')).rejects.toThrow(/scheme/i);
   });
 
+  it('rejects URL credentials before DNS resolution', async () => {
+    const lookup = vi.fn<LookupFn>();
+
+    await expect(
+      assertUrlAllowed('https://user:password@public.invalid/path', { lookup }),
+    ).rejects.toThrow(/credentials/i);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it('rejects a hostname that resolves to a private address', async () => {
     const lookup = mockLookup({ 'internal.example.com': [v4('10.1.2.3')] });
     await expect(assertUrlAllowed('http://internal.example.com/', { lookup })).rejects.toThrow(/private/);
@@ -112,8 +121,19 @@ describe('url-egress-guard (hive-mind-core)', () => {
       'mixed-v6.example.com': [v4('93.184.216.34'), v6('2002::1')],
     });
     await expect(assertUrlAllowed('http://[fec0::1]/', { allowLocal: true })).rejects.toThrow(/reserved/);
-    await expect(assertUrlAllowed('http://0300.0130.0143.1/')).rejects.toThrow(/reserved/);
-    await expect(assertUrlAllowed('http://[::ffff:192.88.99.1]/')).rejects.toThrow(/reserved/);
+    for (const target of [
+      'http://0300.0130.0143.1/',
+      'http://2130706433/',
+      'http://0x7f000001/',
+      'http://127.1/',
+      'http://[::ffff:127.0.0.1]/',
+      'http://[::ffff:10.0.0.1]/',
+      'http://[::ffff:169.254.169.254]/',
+      'http://[::ffff:192.88.99.1]/',
+    ]) {
+      await expect(assertUrlAllowed(target)).rejects.toThrow(/blocked/i);
+    }
+    await expect(assertUrlAllowed('http://[::ffff:8.8.8.8]/')).resolves.toBeInstanceOf(URL);
     await expect(assertUrlAllowed('http://mixed-v6.example.com/', { lookup })).rejects.toThrow(/reserved/);
   });
 
@@ -327,6 +347,54 @@ describe('url-egress-guard (hive-mind-core)', () => {
 
 describe('UrlAdapter.fetchAndParse SSRF guard', () => {
   const adapter = new UrlAdapter();
+
+  it('fetches and parses one explicitly allowed local page', async () => {
+    const previous = process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+    process.env.WAGGLE_ALLOW_LOCAL_FETCH = 'true';
+    let hits = 0;
+    const server = await startHttpServer((_request, response) => {
+      hits++;
+      response.setHeader('content-type', 'text/html');
+      response.end('<html><head><title>Local Ready</title></head><body><h1>Ready</h1><p>Validated local content for the Hive Mind URL adapter.</p></body></html>');
+    });
+
+    try {
+      const items = await adapter.fetchAndParse(`http://127.0.0.1:${server.port}/ready`);
+      expect(items).toHaveLength(1);
+      expect(items[0].title).toBe('Local Ready');
+      expect(items[0].content).toContain('Validated local content');
+      expect(hits).toBe(1);
+    } finally {
+      await server.close();
+      if (previous === undefined) delete process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+      else process.env.WAGGLE_ALLOW_LOCAL_FETCH = previous;
+    }
+  });
+
+  it('applies the 15-second timeout signal before fetching', async () => {
+    const previous = process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+    process.env.WAGGLE_ALLOW_LOCAL_FETCH = 'true';
+    const timeoutSignal = AbortSignal.abort(new DOMException('timed out', 'TimeoutError'));
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutSignal);
+    let hits = 0;
+    const server = await startHttpServer((_request, response) => {
+      hits++;
+      response.end('unexpected');
+    });
+
+    try {
+      await expect(
+        adapter.fetchAndParse(`http://127.0.0.1:${server.port}/slow`),
+      ).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(timeoutSpy).toHaveBeenCalledWith(15_000);
+      expect(hits).toBe(0);
+    } finally {
+      timeoutSpy.mockRestore();
+      await server.close();
+      if (previous === undefined) delete process.env.WAGGLE_ALLOW_LOCAL_FETCH;
+      else process.env.WAGGLE_ALLOW_LOCAL_FETCH = previous;
+    }
+  });
 
   it('refuses cloud-metadata / loopback / private targets before fetching', async () => {
     await expect(adapter.fetchAndParse('http://169.254.169.254/latest/meta-data/')).rejects.toBeInstanceOf(EgressBlockedError);
