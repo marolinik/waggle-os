@@ -20,6 +20,7 @@ function mockLookup(map: Record<string, ResolvedAddress[]>): LookupFn {
 }
 
 const v4 = (address: string): ResolvedAddress => ({ address, family: 4 });
+const v6 = (address: string): ResolvedAddress => ({ address, family: 6 });
 
 async function readRequestBody(request: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -65,7 +66,29 @@ describe('url-egress-guard (hive-mind-core)', () => {
     expect(classifyAddress('192.168.1.1')).toBe('private');
     expect(classifyAddress('::1')).toBe('loopback');
     expect(classifyAddress('::ffff:169.254.169.254')).toBe('link-local');
+    expect(classifyAddress('192.88.99.0')).toBe('reserved');
+    expect(classifyAddress('192.88.99.255')).toBe('reserved');
+    expect(classifyAddress('192.88.98.255')).toBe('public');
+    expect(classifyAddress('192.88.100.0')).toBe('public');
+    expect(classifyAddress('fec0::1')).toBe('reserved');
+    expect(classifyAddress('feff:ffff::1')).toBe('reserved');
+    expect(classifyAddress('64:ff9b::1')).toBe('reserved');
+    expect(classifyAddress('64:ff9b:1::1')).toBe('reserved');
+    expect(classifyAddress('100::1')).toBe('reserved');
+    expect(classifyAddress('100:0:0:1::1')).toBe('reserved');
+    expect(classifyAddress('2001:2::1')).toBe('reserved');
+    expect(classifyAddress('2002::1')).toBe('reserved');
+    expect(classifyAddress('3fff::1')).toBe('reserved');
+    expect(classifyAddress('3fff:fff::1')).toBe('reserved');
+    expect(classifyAddress('5f00::1')).toBe('reserved');
+    expect(classifyAddress('64:ff9b:2::1')).toBe('public');
+    expect(classifyAddress('100:0:0:2::1')).toBe('public');
+    expect(classifyAddress('2001:2:1::1')).toBe('public');
+    expect(classifyAddress('3fff:1000::1')).toBe('public');
+    expect(classifyAddress('5f01::1')).toBe('public');
     expect(classifyAddress('8.8.8.8')).toBe('public');
+    expect(classifyAddress('2606:4700:4700::1111')).toBe('public');
+    expect(classifyAddress('2001:4860:4860::8888')).toBe('public');
   });
 
   it('rejects literal loopback / metadata / private / IPv6-loopback (no DNS)', async () => {
@@ -82,6 +105,16 @@ describe('url-egress-guard (hive-mind-core)', () => {
   it('rejects a hostname that resolves to a private address', async () => {
     const lookup = mockLookup({ 'internal.example.com': [v4('10.1.2.3')] });
     await expect(assertUrlAllowed('http://internal.example.com/', { lookup })).rejects.toThrow(/private/);
+  });
+
+  it('rejects special-use literals, aliases, and mixed DNS answers', async () => {
+    const lookup = mockLookup({
+      'mixed-v6.example.com': [v4('93.184.216.34'), v6('2002::1')],
+    });
+    await expect(assertUrlAllowed('http://[fec0::1]/', { allowLocal: true })).rejects.toThrow(/reserved/);
+    await expect(assertUrlAllowed('http://0300.0130.0143.1/')).rejects.toThrow(/reserved/);
+    await expect(assertUrlAllowed('http://[::ffff:192.88.99.1]/')).rejects.toThrow(/reserved/);
+    await expect(assertUrlAllowed('http://mixed-v6.example.com/', { lookup })).rejects.toThrow(/reserved/);
   });
 
   it('allows a public URL', async () => {
