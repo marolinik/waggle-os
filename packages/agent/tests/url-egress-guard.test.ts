@@ -134,6 +134,15 @@ describe('assertUrlAllowed', () => {
     await expect(assertUrlAllowed('not a url')).rejects.toThrow(/Invalid URL/);
   });
 
+  it('rejects URL credentials before DNS resolution', async () => {
+    const lookup = vi.fn<LookupFn>();
+
+    await expect(
+      assertUrlAllowed('https://user:password@public.invalid/path', { lookup }),
+    ).rejects.toThrow(/credentials/i);
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
   it('rejects literal loopback / metadata / private / IPv6-loopback targets (no DNS)', async () => {
     await expect(assertUrlAllowed('http://127.0.0.1/')).rejects.toThrow(/loopback/);
     await expect(assertUrlAllowed('http://169.254.169.254/latest/meta-data/')).rejects.toThrow(/link-local/);
@@ -166,8 +175,20 @@ describe('assertUrlAllowed', () => {
   });
 
   it('blocks alternate IPv4 forms that normalize into a special-use range', async () => {
-    await expect(assertUrlAllowed('http://0300.0130.0143.1/')).rejects.toThrow(/reserved/);
-    await expect(assertUrlAllowed('http://[::ffff:192.88.99.1]/')).rejects.toThrow(/reserved/);
+    for (const target of [
+      'http://0300.0130.0143.1/',
+      'http://2130706433/',
+      'http://0x7f000001/',
+      'http://127.1/',
+      'http://[::ffff:127.0.0.1]/',
+      'http://[::ffff:10.0.0.1]/',
+      'http://[::ffff:169.254.169.254]/',
+      'http://[::ffff:192.88.99.1]/',
+    ]) {
+      await expect(assertUrlAllowed(target)).rejects.toThrow(/blocked/i);
+    }
+
+    await expect(assertUrlAllowed('http://[::ffff:8.8.8.8]/')).resolves.toBeInstanceOf(URL);
   });
 
   it('allows a public URL', async () => {
