@@ -14,7 +14,7 @@ The active launch gate is **Windows Solo**. Its in-scope external-agent release 
 
 Release status, revision-bound receipts, and any bounded carry-forward attestations are governed only by the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md). If it does not say **GO**, do not describe Waggle as production-ready or reuse historical scores or receipts as current release evidence.
 
-### Current Windows Solo internal RC evidence — 2026-08-25
+### Current Windows Solo internal RC evidence — 2026-08-26
 
 The current frozen internal runtime/binary candidate named in the
 [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md)
@@ -25,8 +25,9 @@ cleanup, and uninstall. Docker, Python, developer Node.js, external LiteLLM, and
 separately installed Ollama were not prerequisites.
 
 - The latest frozen dependency-audit baseline contains **0 Critical and 0 High**
-  findings. The dependency graph did not change between that baseline and the current
-  internal candidate; lower-severity maintenance remains documented.
+  findings. Dependency declarations and the lockfile graph did not change through
+  source commit `470a5e87`; the sole manifest edit adds a packaging-safety script.
+  Lower-severity maintenance remains documented.
 - Persona quality evidence at `4c712ff6` contains all ten personas x3: **30/30 are at
   least 95/100 after two independent semantic adjudications**, with no critical failure.
   The artifact is explicitly a non-gating collection, not a canonical deterministic
@@ -38,11 +39,17 @@ separately installed Ollama were not prerequisites.
   carry-forward evidence under the reviewed no-impact rule. The auth harness read or
   copied no credential files.
 - The historical broad regression baseline at `af19b387` passed 714 files and 11,586
-  tests. It is not relabeled as an exact-candidate run; focused tests, exact installer
-  certification, and bounded dependency evidence cover subsequent changes. Private PR
-  #58 merged into `main` as `df727114` after green checks; the current cleanup/runtime
-  hardening descendant is not yet pushed or integrated and must pass a new private-PR
-  remote CI run before merge.
+  tests. It is not relabeled as an exact-candidate run. Private PR #64 exact head passed
+  primary CI, full Playwright E2E, blocking smoke, Windows Tauri lifecycle, both macOS
+  builds, and Hive install/smoke on Windows, Ubuntu and macOS before merge as
+  `e00664d1`. The only later runtime-source delta is `470a5e87`, a reviewed
+  no-observable-behavior Hive parity cleanup.
+- The curated public Hive Mind mirror is hardened through `master` `43dd4429`: its
+  production dependency audit is zero and the canonical-first SSRF/DNS/socket-pinning
+  forward-port passed build/test on Windows, macOS and Ubuntu plus Ubuntu first-run
+  smoke. Two no-fix High vulnerability entries stemming from one upstream `sharp`
+  advisory remain visible in the development/optional
+  `@huggingface/transformers -> sharp` path; they are not production dependencies.
 
 Detailed local receipt paths, hashes, limitations, and integration gates are recorded in
 the current [launch recommendation](docs/production-readiness/09-LAUNCH_RECOMMENDATION.md).
