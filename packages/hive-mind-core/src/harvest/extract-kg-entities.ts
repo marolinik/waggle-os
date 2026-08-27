@@ -138,6 +138,7 @@ function unwrapFencedBlock(text: string): string {
  */
 function parseJsonlOutput(raw: string, validFrameIds: ReadonlySet<number>): KgEntity[] {
   const entities: KgEntity[] = [];
+  const seenEntityFrames = new Set<string>();
   const cleaned = unwrapFencedBlock(raw);
 
   for (const line of cleaned.split('\n')) {
@@ -146,13 +147,16 @@ function parseJsonlOutput(raw: string, validFrameIds: ReadonlySet<number>): KgEn
 
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const value: unknown = JSON.parse(trimmed);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      parsed = value as Record<string, unknown>;
     } catch {
       continue;
     }
 
-    const frameId = Number(parsed.frame_id);
-    if (!Number.isFinite(frameId) || !validFrameIds.has(frameId)) continue;
+    const frameId = parsed.frame_id;
+    if (typeof frameId !== 'number' || !Number.isSafeInteger(frameId) ||
+        !validFrameIds.has(frameId)) continue;
 
     const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
     if (name.length < 2) continue;
@@ -169,6 +173,9 @@ function parseJsonlOutput(raw: string, validFrameIds: ReadonlySet<number>): KgEn
       continue;
     }
 
+    const entityFrameKey = JSON.stringify([frameId, normalizeEntityName(name)]);
+    if (seenEntityFrames.has(entityFrameKey)) continue;
+    seenEntityFrames.add(entityFrameKey);
     entities.push({ frameId, name, type: rawType as KgEntityType });
   }
 
@@ -214,7 +221,14 @@ export interface WriteKgEntitiesResult {
 
 function safeParseProps(raw: string | undefined | null): Record<string, unknown> {
   if (!raw) return {};
-  try { return JSON.parse(raw) as Record<string, unknown>; } catch { return {}; }
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -231,37 +245,54 @@ export function writeKgEntities(
   kg: KnowledgeGraph,
   extraction: KgEntityExtraction,
 ): WriteKgEntitiesResult {
-  const result: WriteKgEntitiesResult = { created: 0, updated: 0 };
+  return kg.runInTransaction(() => {
+    const result: WriteKgEntitiesResult = { created: 0, updated: 0 };
 
-  for (const entity of extraction.entities) {
-    // Defense at the write seam (mirrors the cognify CLI): callers other than
-    // extractKgEntities may not have noise-filtered.
-    if (isNoiseName(entity.name)) continue;
-    if (normalizeEntityName(entity.name).length < 3) continue;
+    for (const entity of extraction.entities) {
+      if (!entity || typeof entity !== 'object') continue;
+      if (!Number.isSafeInteger(entity.frameId) || entity.frameId <= 0) continue;
+      const name = typeof entity.name === 'string' ? entity.name.trim() : '';
+      if (isNoiseName(name)) continue;
+      if (normalizeEntityName(name).length < 3) continue;
+      if (!(KG_ENTITY_TYPES as readonly string[]).includes(entity.type)) continue;
+      if (!scanForInjection(name, 'tool_output').safe) continue;
 
-    const existing = kg.findEntityByName(entity.name);
-    if (existing) {
-      const existingProps = safeParseProps(existing.properties);
-      const seenCount = Number(existingProps.seen_count ?? 1) + 1;
-      kg.updateEntity(existing.id, {
-        properties: { ...existingProps, seen_count: seenCount },
-      });
-      kg.linkEntityToFrame(existing.id, entity.frameId);
-      result.updated++;
-    } else {
-      try {
-        const created = kg.createEntity(entity.type, entity.name, { seen_count: 1, source: 'cognify-llm' });
-        kg.linkEntityToFrame(created.id, entity.frameId);
-        result.created++;
-      } catch (e: unknown) {
-        // Ontology validation may reject — skip this entity, never abort the pass.
-        log.warn('createEntity rejected extracted entity', {
-          name: entity.name,
-          error: e instanceof Error ? e.message : String(e),
+      const existing = kg.findEntityByName(name);
+      if (existing) {
+        if (!kg.linkEntityToFrameStrict(existing.id, entity.frameId)) continue;
+        const existingProps = safeParseProps(existing.properties);
+        const previousSeenCount = Number(existingProps.seen_count ?? 1);
+        const seenCount = (Number.isFinite(previousSeenCount) && previousSeenCount >= 0
+          ? previousSeenCount
+          : 1) + 1;
+        kg.updateEntity(existing.id, {
+          properties: { ...existingProps, seen_count: seenCount },
         });
+        result.updated++;
+      } else {
+        let created: { id: number };
+        try {
+          created = kg.createEntity(entity.type, name, {
+            seen_count: 1,
+            source: 'cognify-llm',
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Validation failed:')) {
+            log.warn('createEntity rejected extracted entity', {
+              name,
+              error: error.message,
+            });
+            continue;
+          }
+          throw error;
+        }
+        if (!kg.linkEntityToFrameStrict(created.id, entity.frameId)) {
+          throw new Error(`KG writer failed to link entity ${created.id} to frame ${entity.frameId}`);
+        }
+        result.created++;
       }
     }
-  }
 
-  return result;
+    return result;
+  });
 }

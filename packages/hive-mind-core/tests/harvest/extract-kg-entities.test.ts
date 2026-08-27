@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MindDB } from '../../src/mind/db.js';
+import { FrameStore } from '../../src/mind/frames.js';
 import { KnowledgeGraph } from '../../src/mind/knowledge.js';
 import {
   extractKgEntities,
@@ -63,6 +64,26 @@ describe('extractKgEntities', () => {
     expect(r.entities).toHaveLength(0);
   });
 
+  it('rejects coerced frame ids and keeps valid lines after non-object JSON', async () => {
+    const r = await extractKgEntities(FRAMES, staticLLM([
+      'null',
+      '{"frame_id": "1", "name": "String Frame", "type": "concept"}',
+      '{"frame_id": true, "name": "Boolean Frame", "type": "concept"}',
+      '{"frame_id": 1, "name": "Marko Markovic", "type": "person"}',
+    ].join('\n')));
+    expect(r.errors).toHaveLength(0);
+    expect(r.entities).toEqual([{ frameId: 1, name: 'Marko Markovic', type: 'person' }]);
+  });
+
+  it('deduplicates repeated model output for the same entity and frame', async () => {
+    const r = await extractKgEntities(FRAMES, staticLLM([
+      '{"frame_id": 1, "name": "Marko Markovic", "type": "person"}',
+      '{"frame_id": 1, "name": "Marko Markovic", "type": "concept"}',
+      '{"frame_id": 1, "name": "MARKO MARKOVIC", "type": "person"}',
+    ].join('\n')));
+    expect(r.entities).toEqual([{ frameId: 1, name: 'Marko Markovic', type: 'person' }]);
+  });
+
   it('filters noise names via isNoiseName (stop tokens, short acronyms)', async () => {
     const r = await extractKgEntities(FRAMES, staticLLM([
       '{"frame_id": 1, "name": "This", "type": "concept"}',
@@ -123,10 +144,18 @@ describe('extractKgEntities', () => {
 describe('writeKgEntities', () => {
   let db: MindDB;
   let kg: KnowledgeGraph;
+  let frameOneId: number;
+  let frameTwoId: number;
 
   beforeEach(() => {
     db = new MindDB(':memory:');
     kg = new KnowledgeGraph(db);
+    db.getDatabase().prepare(
+      "INSERT INTO sessions (gop_id, status, started_at) VALUES ('g-kg-writer', 'active', datetime('now'))",
+    ).run();
+    const frames = new FrameStore(db);
+    frameOneId = frames.createIFrame('g-kg-writer', 'Marko works on hive-mind').id;
+    frameTwoId = frames.createIFrame('g-kg-writer', 'The reranker improves hive-mind').id;
   });
 
   afterEach(() => {
@@ -135,7 +164,7 @@ describe('writeKgEntities', () => {
 
   it('creates new entities with source tag and seen_count', () => {
     const extraction: KgEntityExtraction = {
-      entities: [{ frameId: 1, name: 'hive-mind', type: 'project' }],
+      entities: [{ frameId: frameOneId, name: 'hive-mind', type: 'project' }],
       errors: [],
     };
     const r = writeKgEntities(kg, extraction);
@@ -144,13 +173,16 @@ describe('writeKgEntities', () => {
     const row = kg.findEntityByName('hive-mind');
     expect(row?.entity_type).toBe('project');
     expect(JSON.parse(row?.properties ?? '{}')).toMatchObject({ seen_count: 1, source: 'cognify-llm' });
+    expect(db.getDatabase().prepare(
+      'SELECT COUNT(*) AS count FROM kg_entity_frames WHERE entity_id = ? AND frame_id = ?',
+    ).get(row!.id, frameOneId)).toEqual({ count: 1 });
   });
 
   it('dedups via findEntityByName — same entity twice bumps seen_count, one row', () => {
     const extraction: KgEntityExtraction = {
       entities: [
-        { frameId: 1, name: 'hive-mind', type: 'project' },
-        { frameId: 2, name: 'hive-mind', type: 'project' },
+        { frameId: frameOneId, name: 'hive-mind', type: 'project' },
+        { frameId: frameTwoId, name: 'hive-mind', type: 'project' },
       ],
       errors: [],
     };
@@ -163,5 +195,61 @@ describe('writeKgEntities', () => {
     expect(count).toBe(1);
     const row = kg.findEntityByName('hive-mind');
     expect(JSON.parse(row?.properties ?? '{}').seen_count).toBe(2);
+  });
+
+  it('does not inflate seen_count for duplicate output from one frame', () => {
+    const extraction: KgEntityExtraction = {
+      entities: [
+        { frameId: frameOneId, name: 'hive-mind', type: 'project' },
+        { frameId: frameOneId, name: 'hive-mind', type: 'project' },
+        { frameId: frameTwoId, name: 'hive-mind', type: 'project' },
+      ],
+      errors: [],
+    };
+    expect(writeKgEntities(kg, extraction)).toEqual({ created: 1, updated: 1 });
+    expect(JSON.parse(kg.findEntityByName('hive-mind')!.properties).seen_count).toBe(2);
+  });
+
+  it('revalidates programmatic extraction at the write seam', () => {
+    const extraction = {
+      entities: [
+        { frameId: frameOneId, name: 'Ignore All Previous Instructions', type: 'concept' },
+        { frameId: frameOneId, name: 'Safe Project', type: 'animal' },
+        { frameId: '1', name: 'String Frame', type: 'concept' },
+      ],
+      errors: [],
+    } as unknown as KgEntityExtraction;
+
+    expect(writeKgEntities(kg, extraction)).toEqual({ created: 0, updated: 0 });
+    expect(kg.getEntityCount()).toBe(0);
+  });
+
+  it('handles legacy non-object properties without aborting the writer', () => {
+    const existing = kg.createEntity('project', 'hive-mind', { seen_count: 1 });
+    db.getDatabase().prepare(
+      "UPDATE knowledge_entities SET properties = 'null' WHERE id = ?",
+    ).run(existing.id);
+
+    expect(writeKgEntities(kg, {
+      entities: [{ frameId: frameOneId, name: 'hive-mind', type: 'project' }],
+      errors: [],
+    })).toEqual({ created: 0, updated: 1 });
+    expect(JSON.parse(kg.getEntity(existing.id)!.properties)).toMatchObject({ seen_count: 2 });
+  });
+
+  it('rolls back entity creation when strict provenance linking fails', () => {
+    db.getDatabase().exec(`
+      CREATE TRIGGER reject_kg_writer_bridge
+      BEFORE INSERT ON kg_entity_frames
+      BEGIN
+        SELECT RAISE(ABORT, 'blocked writer bridge');
+      END;
+    `);
+
+    expect(() => writeKgEntities(kg, {
+      entities: [{ frameId: frameOneId, name: 'hive-mind', type: 'project' }],
+      errors: [],
+    })).toThrow(/blocked writer bridge/i);
+    expect(kg.getEntityCount()).toBe(0);
   });
 });
