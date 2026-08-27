@@ -1,109 +1,109 @@
 # Launch Recommendation — Windows Solo
 
-Updated: 2026-08-26
+Updated: 2026-08-27
 
-## Current verdict: INTERNAL RC QUALIFIED; NOT YET PUBLIC RELEASE-APPROVED
+## Current verdict: INSTALLER/LIFECYCLE INTERNAL RC QUALIFIED; RELEASE QUALIFICATION INCOMPLETE
 
-The launch scope is intentionally narrow: **Windows Solo**, with **Claude Code,
-Codex, and Hermes** as the supported external-agent cohort. Cursor, OpenClaw,
-and macOS packaging/certification remain roadmap work and do not block this
-scope. This document is the ship authority; older readiness reports are
-historical evidence only.
+The supported launch scope is Windows Solo with Claude Code, Codex, and Hermes using
+their official user-owned installations and authentication. Cursor, OpenClaw, and macOS
+packaging/certification remain roadmap work and do not block this internal RC.
 
-## Frozen internal candidate and integrated source
+This document is the release-status authority. Historical receipts are evidence only;
+they do not certify a later behavior-changing revision unless a bounded no-impact review
+explicitly says so.
 
-The exact internal runtime/binary evidence revision is:
+## Frozen runtime candidate
 
-`f7ca7860a34be6a396ccc48ffcdf5a50dc7745a4`
+- Source revision: `23ad3fa5f99bddce648b84750a41365299aeb0da`
+- Source tree: `aab548f77ec64b181086664dad29c32e6bc78779`
+- Integration: private Waggle PR #66, tested head
+  `587e259166db69ff86e806fa8393a5f8974ea0a1`, merged 2026-08-27
+- Tree equivalence: the tested PR head and merge commit resolve to the same source tree
+- Repository state after merge: private `main` equals `origin/main`
 
-The current integrated source baseline is Waggle PR #64 merge commit
-`e00664d14955959eb4a33f297d18a694b59c933d`; its tested head
-`1e6c91ef58af69876558a2e193f9bef1e37d8667` and synthetic PR merge
-`7c3d517ef9869531f40c572fae200cc23c44e727` share tree
-`4494b6266514715631c3ed1055f1c2d9749758bd`. The only later runtime-source
-delta in this documentation descendant is `470a5e8792899d484fd8865d4efc30b0bb7cf3cb`,
-which removes an immediately overwritten empty-array initializer. Focused tests,
-typecheck, lint and independent review confirmed no observable behavior change.
+The documentation-only descendant that updates this record does not replace the runtime
+candidate. Before it is merged, its diff must be limited to documentation and all required
+remote checks must remain green.
 
-The exact local NSIS candidate is 102,943,440 bytes with SHA-256
-`9808623569183C93E09A2D2407AA9C132DD733DE95121CC61726864DD54C8C56`.
-It is Authenticode-signed by the private internal identity
-`CN=Egzakta Internal Pilot, O=Egzakta Group, C=RS` (thumbprint
-`E2F028541E7A4D1FE80FFFF02079060D36579846`) and carries a DigiCert RFC3161
-timestamp. Windows reports the chain as untrusted because the pilot root is not
-publicly trusted. This is intentional internal-RC evidence, not a public artifact.
+## Exact-current Windows installer
 
-Any release-record-only documentation descendant does not change this frozen binary
-revision and must not relabel the installer as if it were built from a later commit.
+- NSIS artifact:
+  `app/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/Waggle_0.2.0_x64-setup.exe`
+- Size: 102,923,936 bytes
+- SHA-256: `7BFA9F9B13633A51CD3336B42E3EF904B7F7A568C6DEE4F6CED967CBD4F40A59`
+- Internal signer: `CN=Egzakta Internal Pilot, O=Egzakta Group, C=RS`
+- Signer thumbprint: `E2F028541E7A4D1FE80FFFF02079060D36579846`
+- RFC 3161 timestamp authority: DigiCert SHA256 RSA4096 Timestamp Responder 2025 1
+- Trust classification: internal pilot only; the self-signed root is not public trust
 
-Receipt paths below are machine-local evidence locations outside tracked source. Their
-SHA-256 digests are recorded deliberately; they are not public repository links or
-downloadable release assets.
+Clean-profile certification passed **64/64** checks in 450.199 seconds:
 
-## Current gate evidence
+- Receipt:
+  `output/installer-certification/23ad3fa5-20260827T123917Z-exact-main-clean-profile/windows-installer-certification.json`
+- Receipt SHA-256:
+  `AC2A1C54119E28CC22DA931EB43E2815862B01832DD6097CE03F8F79D9D3DF4D`
+- Receipt source and bundled-sidecar revision: exact `23ad3fa5`
+- Tier: FREE/Solo
+- Managed model: `qwen2.5:0.5b`
+- Managed-model digest:
+  `sha256:a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67`
 
-| Gate | Result | Receipt / evidence |
-|---|---|---|
-| Windows installer lifecycle + managed model | **PASS internal RC, exact `f7ca7860`** — 64/64 checks; FREE/Solo; bundled Node sidecar and npm; in-process embeddings; Waggle-managed Ollama 0.32.3 and `qwen2.5:0.5b`; model chat; built-in proxy restart; same-version repair; data preservation; managed cleanup; uninstall; no Docker/Python/developer Node/external LiteLLM/separate Ollama prerequisite | `D:/Projects/waggle-os-internal-rc/f7ca7860-20260825T221139Z/windows-installer-certificate-managed.json`; SHA-256 `3ACB05337F4E84BB3AA942E9DF8D19453B25BBB5EE68A3DD81B190A995BE1052` |
-| Current-tree Windows packaging + basic lifecycle | **PASS unsigned verification artifact** — PR #64 Windows build and clean-profile lifecycle passed for synthetic merge `7c3d517e`, whose tree is identical to tested head `1e6c91ef` and merged source `e00664d1`. This job did not request managed-model verification or a trusted signature and cannot replace the internal managed-model receipt or public Authenticode | Tauri run `32962042362`; artifact `9604939362`, `waggle-windows-7c3d517ef9869531f40c572fae200cc23c44e727`; archive SHA-256 `62D408726622F551654F9A2014E81F77438DC581E0E2204B9FBC6C0D350FA225` (ZIP digest, not installer digest; retention through 2026-09-02) |
-| Dependency severity | **PASS Critical/High as bounded carry-forward** — at `b9a871cc`, both full and production audit commands exited 0; full tree 0 Critical/0 High/21 Moderate/1 Low; production tree 0 Critical/0 High/17 Moderate/2 Low. Dependency declarations and the lockfile graph are unchanged through source commit `470a5e87`; the sole manifest edit adds a packaging-safety script | `npm audit --audit-level=high --json`; `npm audit --omit=dev --audit-level=high --json`; fix commit `bdaf5e09`; bounded diff review through `470a5e87` |
-| Ten-persona acceptance | **PASS for the agreed persona-quality gate, bounded carry-forward** — at `4c712ff6`, 30/30 across ten personas x3 are at least 95/100 after two independent semantic adjudications; 28 deterministic passes, two 90-point results adjudicated to 100, zero critical failures. The artifact explicitly remains a non-gating collection, not a canonical deterministic seal. Changes through `470a5e87` do not touch persona prompts/scoring, chat behavior, provider authentication or launcher authentication | `D:/Projects/waggle-os-readiness-main-20260716/output/playwright/persona-acceptance-schema7-20260822T073743Z-4c712ff6/semantic-adjudication.json`; SHA-256 `F2318DBBD187D075AC7BE78957822FDF04A1EBB78A549D67EF6928C452D93129`; receipt-set digest `b714705d574a397f72b19c5f30eda7dcf68e403488c5baf89d525ef526768d43` |
-| Smart router and compact tool context | **PASS as scoped carry-forward evidence** — primary, compact-tool-context, durable-budget and fallback paths; managed local runtime; Docker not invoked; clean teardown. Later router-surface changes were covered by focused tests; the final managed-runtime path is independently exercised by the exact installer receipt above | `D:/Projects/waggle-os-readiness-main-20260716/output/smart-router/qualification-20260813T022319Z-692c69b9.json`; SHA-256 `973DBDF718156A049486894DD1E2892E2C7F518834AEBA33F91F9CE3C7BD1D9A` |
-| Official user-auth cohort | **PASS as scoped carry-forward evidence** — Claude Code, Codex and Hermes; three serial model calls; zero auth files read/copied; tracked tree unchanged. The post-persona candidate delta does not touch official-auth logic | `C:/tmp/waggle-readiness-evidence/official-auth-692c69b9-20260813T024840Z/official-auth-receipt.json`; SHA-256 `2D27609067E4703969F0AD6055F5A0414B00E9F3B271CE3B917E0860E4393ABD` |
-| Broad application regression | **PASS remote integrated-tree gates plus historical breadth** — at `af19b387`, 714 test files and 11,586 tests passed with five skipped. PR #64 exact head then passed primary CI, full Playwright E2E, blocking E2E smoke, Windows Tauri lifecycle, both macOS builds, and Hive install/smoke on Windows, Ubuntu and macOS before merge as `e00664d1` | Historical receipt `D:/Projects/waggle-os-readiness-main-20260716/output/readiness-broad-af19b387-20260813T115524.log`, SHA-256 `9C0EC313649CFA1941279AFAA41E771FB1898E1243C71BE9F843173B5F05C21E`; CI runs `32962042351`, `32962042362`, `32962042347` |
-| Hosted-signing implementation | **PASS implementation gate, bounded carry-forward** — 266/266 PowerShell signing-policy tests; 86/86 workflow/Tauri tests; app/server typechecks, targeted lint, YAML and PowerShell 7/5.1 parsing; independent security, compatibility and test reviews with no P0-P2 finding. Later commit `db4e5bec` changed only macOS artifact handling, not the Windows signing control surface | Preserved Windows release-control receipts through `d455aa80`; public hosted signing has not executed |
-| Hive Mind source hygiene | **PASS source hardening and curated parity** — dependency lock hardening merged through PR #43; the canonical-first SSRF/DNS/socket-pinning forward-port merged through PR #44. Production audit is zero; full audit retains exactly two no-fix High vulnerability entries stemming from one `sharp` advisory in the development/optional `@huggingface/transformers -> sharp` path | Public `master` `43dd4429c39f5ac52d3e4892f946b8e4b4d5ce85`; PR #43 and #44 build/test on Windows/macOS/Ubuntu plus Ubuntu first-run smoke all green |
+The receipt proves silent install, bundled Node/npm and offline package execution,
+first boot, in-process embeddings, built-in proxy/session authentication, workspace and
+memory persistence, managed runtime/model pull and chat, proxy-restart chat, same-version
+repair, relaunch, data preservation, Exit/owned-process cleanup, uninstall, registry
+cleanup, and preservation of external `.hive-mind` and `.ollama` roots. It also proves
+that developer Node.js, Python, Docker, external LiteLLM, and a separately installed
+Ollama are not prerequisites.
 
-> **Integration status update (2026-08-26):** PR #58 merged as `df727114`, PR #63
-> merged as `048cc3cb`, and PR #64 merged as `e00664d1` after all exact-head remote
-> checks passed. The only later runtime-source delta is the independently reviewed,
-> no-observable-behavior parity commit `470a5e87`; subsequent documentation commits
-> are release-record-only descendants.
+## Integrated test and security evidence
 
-## Remaining production GO gates
+- PR #66: every blocking remote check passed — primary CI, Playwright smoke and full
+  E2E, Windows and both macOS Tauri verification targets, Wave 1, and Hive Mind
+  install/smoke on Windows, Ubuntu, and macOS.
+- Exact-current dependency audits: 0 Critical and 0 High in both full and production
+  dependency trees. Lower-severity maintenance remains tracked.
+- The security-hardening integration covers workspace path/link boundaries, hook/database
+  hard-link boundaries, normalized ingress, atomic consolidation/cognify, deprecated-frame
+  search exclusion before limits, and knowledge-graph provenance.
+- Hosted signing policy and workflow tests remain green, but no publicly trusted hosted
+  artifact has been produced.
 
-1. **Public Authenticode:** the frozen internal artifact uses the private-pilot
-   identity and the PR #64 verification artifact is unsigned; neither is publicly
-   trusted. A protected exact-tag Azure OIDC run must build, sign, timestamp,
-   certify and attest the approved release commit with a publicly trusted identity.
-   The requested Azure identity evidence has been uploaded for Microsoft review;
-   submission is not certificate approval.
-2. **Formal deep security seal:** no sealed managed Deep Scan covers the eventual
-   release tag. Historical scans cover other revisions; permission,
-   policy and artifact-workflow failures are not no-finding results. Static review,
-   dependency audit and focused security review are not substitutes.
+## Persona, router, and authentication evidence
 
-The scoped source-integration gate is closed through `e00664d1` plus the bounded
-no-runtime-behavior parity/documentation descendant. The repository remains private.
+The historical ten-persona collection at `4c712ff6` contains 30/30 results at or above
+95/100 after documented independent semantic adjudication. It is not relabeled as an
+exact-current deterministic seal: PR #66 changed memory behavior, so public release
+qualification requires either a fresh exact-candidate collection or an explicit bounded
+semantic-impact attestation.
 
-## Repository and Hive Mind hygiene
+Smart-router primary, compact-tool-context, durable-budget/fallback, and official-user-auth
+canaries for Claude Code, Codex, and Hermes remain scoped historical evidence. No PR #66
+change altered provider credential ownership or copied/read provider credential files.
 
-The private Waggle repository is the product source of truth. Its tracked release
-documentation and operating contracts now describe the merged product state. Local
-builds, receipts, caches, secrets, databases and nested research checkouts are not source
-and must never be swept into Git with a broad clean/add operation.
+## Hive Mind repository state
 
-The Hive Mind substrate remains monorepo-first. Its reviewed dependency and SSRF
-forward-port phases are merged to public `master` `43dd4429`; explicit proprietary
-exclusions were rechecked. Raw subtree output remains forbidden. Draft package-version
-PR #42 is a separate publication decision and is not part of this source-hardening seal.
+Curated public-mirror hardening PR #53 merged to `marolinik/hive-mind` `master` as
+`3410327800db3ea23f875d547a0c7f4d08826b7e`; Linux, Windows, macOS, and Ubuntu
+first-run smoke passed. The immutable drift checker still reports reviewed blockers and
+one unreviewed difference, with zero forbidden exports. Therefore the Windows Solo RC is
+not blocked, but the next Hive Mind package release remains a separate maintainer-curated
+operation. Raw subtree publication remains forbidden.
 
-## Installation contract
+## Public GO blockers
 
-Windows Solo must run without Docker, Python, developer Node.js, external LiteLLM,
-or a separately installed Ollama. The bundled Node sidecar and no-Python
-OpenAI-compatible proxy are required; in-process embeddings are the default and a
-local Ollama runtime/model is Waggle-managed. A user-installed Ollama remains optional.
+Public release may be called **GO** only after all of these are closed for the approved
+release-tag commit:
 
-## Deferred scope
+1. A protected hosted build produces a publicly trusted Authenticode artifact.
+2. The managed Codex Security workflow produces a sealed Deep Security report with no
+   unresolved Critical or High findings.
+3. Current persona qualification is sealed by a fresh exact-candidate receipt or an
+   independently reviewed bounded semantic-impact attestation.
+4. Smart-router and Claude Code/Codex/Hermes official-auth qualification is either rerun
+   on the exact candidate or covered by a concrete independently reviewed no-impact
+   attestation.
+5. Protected release-tag checks are green and the exact artifact hashes are recorded.
 
-Cursor and OpenClaw remain roadmap integrations. macOS packaging, signing,
-notarization and runtime certification are roadmap work.
-
-## Approval rule
-
-Change the public Windows binary verdict to **GO** only after a publicly trusted
-Authenticode artifact and a formal managed Deep Security seal cover the approved
-release candidate with no unresolved Critical or High findings, and protected
-release-tag checks are green. Until then, do not describe Waggle as production-ready, claim an
-overall 9.5/10, or claim superiority over competing products.
+Until then, the installer is suitable for controlled internal testing, not public
+distribution, and Waggle must not be described as publicly production-ready or GO.
