@@ -966,6 +966,7 @@ describe('Anthropic Proxy Routes', () => {
       expectedStatus,
       expectedDisposition,
     }) => {
+      vi.stubEnv('OPENAI_API_KEY', '');
       const costTracker = new CostTracker();
       costTracker.setBudget(0.07, 'hard');
       const traceStore = {
