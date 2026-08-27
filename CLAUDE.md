@@ -537,8 +537,10 @@ reverse-ported in W4.2 (`f47ee8f`). Rules:
    through a reviewed, maintainer-curated forward-port afterward.
 2. Benchmark/experiment work in a `D:/Projects/hive-mind` checkout is throwaway unless
    reverse-ported here — port it the same arc, don't let it sit.
-3. Run **`scripts/oss-drift-check.sh`** (file-level diff of the mapped src trees) before every
-   OSS release push and after any arc that touched a hive-mind checkout.
+3. Run **`node scripts/oss-drift-check.mjs D:/Projects/hive-mind`** before every OSS release
+   push and after any arc that touched a hive-mind checkout. The checker compares the live
+   mapped trees with an immutable reviewed baseline: parity and reviewed adaptations are
+   allowed, while known blockers, unreviewed differences, or forbidden exports keep exit 1.
 4. External PRs on the OSS repo are fine — the maintainer intentionally ports accepted changes
    back here first, then prepares the next curated forward-port.
 === END CRITICAL ===
@@ -571,9 +573,10 @@ The prior text here claimed the mirror is produced by `scripts/oss-subtree-split
 **To work on the substrate or publish the OSS mirror:** see
 [`packages/hive-mind-core/CONTRIBUTING.md`](./packages/hive-mind-core/CONTRIBUTING.md),
 [`scripts/oss-subtree-split.sh`](./scripts/oss-subtree-split.sh) (inspection/guard only), and
-[`scripts/oss-drift-check.sh`](./scripts/oss-drift-check.sh) (run before every release; its
-snapshot-dependent `ONLY-IN-*`/`DIFFERS` results include expected layout, import, logger, and
-branding adaptations, but every entry must still be classified before an OSS release).
+[`scripts/oss-drift-check.mjs`](./scripts/oss-drift-check.mjs) (run before every release; its
+immutable baseline distinguishes parity, reviewed adaptations, known blockers, unreviewed
+differences, and forbidden exports; every blocker or unreviewed entry must be resolved or
+explicitly re-baselined through maintainer review before an OSS release).
 
 **Deprecated (do not rely on; do not delete):** the old dual-repo bidirectional-sync workflows
 `.github/workflows/{mind-parity-check,sync-mind}.yml` and the `.github/sync.md` manual are **preserved
