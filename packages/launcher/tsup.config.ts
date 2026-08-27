@@ -14,6 +14,8 @@ export default defineConfig({
   noExternal: [/^@waggle\//],
   // Runtime packages that cannot be bundled safely.
   external: [
+    '@huggingface/transformers',
+    'onnxruntime-node',
     'adm-zip',
     'playwright-core',
     'chromium-bidi',

@@ -430,6 +430,7 @@ describe('Waggle CLI Launcher', () => {
         const pkg = JSON.parse(
           fs.readFileSync(path.join(extractDir, 'package', 'package.json'), 'utf8'),
         );
+        const distFiles = fs.readdirSync(path.join(extractDir, 'package', 'dist'));
         const result = await run(
           process.execPath,
           [path.join(extractDir, 'package', 'dist', 'cli.js'), '--help'],
@@ -437,6 +438,15 @@ describe('Waggle CLI Launcher', () => {
         );
 
         expect(pkg.bin.waggle).toBe('./dist/cli.js');
+        expect({
+          transformersDependency: pkg.dependencies?.['@huggingface/transformers'],
+          bundledNativeBindings: distFiles.filter((file) => /^onnxruntime_binding-.*\.node$/.test(file)),
+          bundledTransformersRuntime: distFiles.filter((file) => /^transformers\.node-.*\.js$/.test(file)),
+        }).toEqual({
+          transformersDependency: '3.8.1',
+          bundledNativeBindings: [],
+          bundledTransformersRuntime: [],
+        });
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('Usage:');
         expect(result.stdout).not.toContain('[waggle:service]');
@@ -482,6 +492,19 @@ describe('Waggle CLI Launcher', () => {
           home,
         );
         expect(install.status).toBe(0);
+
+        const nativeEmbeddingRuntime = await runInCwd(
+          process.execPath,
+          [
+            '--input-type=module',
+            '--eval',
+            "const runtime = await import('@huggingface/transformers'); if (typeof runtime.pipeline !== 'function') throw new Error('Transformers pipeline API is unavailable');",
+          ],
+          projectDir,
+          home,
+        );
+        expect(nativeEmbeddingRuntime.status).toBe(0);
+        expect(nativeEmbeddingRuntime.stderr).toBe('');
 
         const help = await runInCwd(bin('npx'), ['waggle', '--help'], projectDir, home);
         expect(help.status).toBe(0);
