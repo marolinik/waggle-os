@@ -35,12 +35,16 @@ features only in the public mirror.
 2. Reverse-port accepted public contributions into the private monorepo before
    the next curated export.
 3. Run `scripts/oss-drift-check.sh` before every OSS release and after any arc
-   that touched a Hive Mind checkout. It distinguishes `ONLY-IN-OSS`
-   reverse-port candidates, intentional private-only exclusions,
-   `FORWARD-PORT-CANDIDATE` files, divergent edits, forbidden whole-file leaks,
-   and interleaved `install_audit` markers.
-4. Treat any nonzero drift result as release-blocking until every item is
-   classified and the curated diff is independently reviewed.
+   that touched a Hive Mind checkout. The thin shell entrypoint delegates to
+   the cross-platform Node 20 checker, which validates
+   `scripts/oss-drift-baseline.json` without updating or accepting it. Separate
+   sections identify reviewed adaptations, intentional private exclusions,
+   known reviewed blockers, unreviewed differences, forbidden whole-file
+   leaks, and any interleaved `install_audit` marker, including comments.
+4. Treat exit `1` as release-blocking source drift and exit `2` as an
+   untrustworthy setup/configuration result. Exit `0` means the mapped bytes
+   exactly match the reviewed clean baseline; it is not a substitute for
+   maintainer review of a new forward-port.
 
 ## Development setup
 

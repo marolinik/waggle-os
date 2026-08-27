@@ -24,23 +24,27 @@
 import { describe, it, expect } from 'vitest';
 import {
   copyFileSync,
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const REPO_ROOT = resolve(__dirname, '..');
 const SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'oss-subtree-split.sh');
 const DRIFT_SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'oss-drift-check.sh');
+const DRIFT_NODE_PATH = join(REPO_ROOT, 'scripts', 'oss-drift-check.mjs');
+const DRIFT_BASELINE_PATH = join(REPO_ROOT, 'scripts', 'oss-drift-baseline.json');
 const RETIRED_PARITY_SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'parity-check.sh');
 const SUPERSEDED_PLAN_PATH = join(
   REPO_ROOT,
@@ -49,6 +53,107 @@ const SUPERSEDED_PLAN_PATH = join(
   'E-4-OSS-EXTRACTION-VERIFIED-2026-05-20.md',
 );
 const PACKAGES_DIR = join(REPO_ROOT, 'packages');
+
+function normalizedDriftHash(content: string): string {
+  return createHash('sha256')
+    .update(content.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'), 'utf-8')
+    .digest('hex');
+}
+
+function commitFixtureRepo(repo: string): void {
+  execFileSync('git', ['init', '--quiet'], { cwd: repo, stdio: 'ignore' });
+  execFileSync('git', ['config', 'core.autocrlf', 'false'], { cwd: repo, stdio: 'ignore' });
+  execFileSync('git', ['config', 'user.email', 'drift-test@example.invalid'], {
+    cwd: repo,
+    stdio: 'ignore',
+  });
+  execFileSync('git', ['config', 'user.name', 'Drift Test'], { cwd: repo, stdio: 'ignore' });
+  execFileSync('git', ['add', '--all'], { cwd: repo, stdio: 'ignore' });
+  execFileSync('git', ['commit', '--quiet', '-m', 'fixture'], { cwd: repo, stdio: 'ignore' });
+}
+
+function createDriftFixture() {
+  const tempRoot = mkdtempSync(join(tmpdir(), 'waggle oss drift-'));
+  const monoRepo = join(tempRoot, 'mono');
+  const ossRepo = join(tempRoot, 'oss');
+  const canonicalRoot = join(monoRepo, 'packages', 'hive-mind-core', 'src');
+  const ossRoot = join(ossRepo, 'packages', 'core', 'src');
+  const scriptsRoot = join(monoRepo, 'scripts');
+  const canonicalAdaptation = "import { logger } from '@waggle/core';\n";
+  const ossAdaptation = "import { logger } from './logger.js';\r\n";
+  const baseline = {
+    schemaVersion: 1,
+    mapping: {
+      canonical: 'packages/hive-mind-core/src',
+      oss: 'packages/core/src',
+      ignoredDirectories: ['dist', 'node_modules'],
+      ignoredFileSuffixes: ['.test.ts', '.tsbuildinfo'],
+    },
+    parityPaths: [
+      {
+        path: 'equal.ts',
+        sha256: normalizedDriftHash('export const equal = true;\n'),
+      },
+    ],
+    intentionalAdaptations: [
+      {
+        path: 'logger.ts',
+        kinds: ['import', 'logger'],
+        canonicalSha256: normalizedDriftHash(canonicalAdaptation),
+        ossSha256: normalizedDriftHash(ossAdaptation),
+      },
+    ],
+    knownReviewedBlockers: [] as Array<Record<string, string>>,
+    unreviewedDifferences: [] as Array<Record<string, string>>,
+    forbiddenExports: {
+      paths: [
+        'mind/evolution-runs.ts',
+        'mind/execution-traces.ts',
+        'mind/improvement-signals.ts',
+      ],
+      pathPrefixes: ['vault.ts', 'compliance/'],
+      markers: [
+        { path: 'mind/db.ts', token: 'install_audit' },
+        { path: 'mind/schema.ts', token: 'install_audit' },
+      ],
+    },
+  };
+
+  mkdirSync(join(canonicalRoot, 'mind'), { recursive: true });
+  mkdirSync(join(ossRoot, 'mind'), { recursive: true });
+  mkdirSync(scriptsRoot, { recursive: true });
+  copyFileSync(DRIFT_NODE_PATH, join(scriptsRoot, 'oss-drift-check.mjs'));
+  writeFileSync(join(canonicalRoot, 'equal.ts'), 'export const equal = true;\n');
+  writeFileSync(join(ossRoot, 'equal.ts'), 'export const equal = true;\r\n');
+  writeFileSync(join(canonicalRoot, 'logger.ts'), canonicalAdaptation);
+  writeFileSync(join(ossRoot, 'logger.ts'), ossAdaptation);
+  writeFileSync(join(canonicalRoot, 'mind', 'evolution-runs.ts'), 'private implementation\n');
+
+  const writeBaseline = () =>
+    writeFileSync(
+      join(scriptsRoot, 'oss-drift-baseline.json'),
+      `${JSON.stringify(baseline, null, 2)}\n`,
+    );
+  writeBaseline();
+  commitFixtureRepo(monoRepo);
+  commitFixtureRepo(ossRepo);
+
+  return {
+    tempRoot,
+    monoRepo,
+    ossRepo,
+    canonicalRoot,
+    ossRoot,
+    baseline,
+    writeBaseline,
+    run: () =>
+      spawnSync(process.execPath, ['scripts/oss-drift-check.mjs', ossRepo], {
+        cwd: monoRepo,
+        encoding: 'utf-8',
+        env: { ...process.env, OSS_HIVE_MIND_DIR: undefined },
+      }),
+  };
+}
 
 function resolveBashExecutable(): string {
   if (process.platform !== 'win32') return 'bash';
@@ -66,12 +171,6 @@ function resolveBashExecutable(): string {
   }
 
   throw new Error('Git Bash was not found relative to the active git.exe installation.');
-}
-
-function toBashPath(path: string): string {
-  const normalized = path.replace(/\\/g, '/');
-  if (process.platform !== 'win32') return normalized;
-  return `/${normalized[0]?.toLowerCase()}${normalized.slice(2)}`;
 }
 
 describe('oss-subtree-split.sh — static guards', () => {
@@ -204,7 +303,7 @@ describe('hive-mind publication boundary', () => {
 
   it('routes mirror remediation through a curated forward-port, never a raw split push', () => {
     const splitScript = readFileSync(SCRIPT_PATH, 'utf-8');
-    const driftScript = readFileSync(DRIFT_SCRIPT_PATH, 'utf-8');
+    const driftScript = readFileSync(DRIFT_NODE_PATH, 'utf-8');
 
     expect(splitScript).toContain('DO NOT push them raw');
     expect(splitScript).toContain('NOT OSS-publishable as-is');
@@ -326,83 +425,251 @@ describe('hive-mind publication boundary', () => {
     expect(content).not.toMatch(/git push\s/);
   });
 
-  it('classifies intentional exclusions separately from forward-port candidates', () => {
-    const content = readFileSync(DRIFT_SCRIPT_PATH, 'utf-8');
+  it('uses Node as the primary drift checker and keeps the shell entrypoint thin', () => {
+    const wrapper = readFileSync(DRIFT_SCRIPT_PATH, 'utf-8');
+    const checker = readFileSync(DRIFT_NODE_PATH, 'utf-8');
 
-    expect(content).toContain('INTENTIONAL-OSS-EXCLUSION');
-    expect(content).toContain('FORWARD-PORT-CANDIDATE');
-    expect(content).not.toContain('pending export');
+    expect(wrapper).toContain('oss-drift-check.mjs');
+    expect(wrapper).not.toMatch(/\b(find|awk|comm|diff)\b/);
+    expect(checker).toContain('KNOWN REVIEWED BLOCKERS');
+    expect(checker).toContain('UNREVIEWED DIFFERENCES');
+    expect(checker).toContain('FORBIDDEN EXPORTS');
   });
 
-  it('fails closed when excluded files or install_audit markers exist in the OSS mirror', () => {
-    const tempRoot = mkdtempSync(join(tmpdir(), 'waggle-oss-drift-'));
-    const monoRepo = join(tempRoot, 'mono');
-    const ossRepo = join(tempRoot, 'oss');
-    const bash = resolveBashExecutable();
-    const excluded = join('mind', 'evolution-runs.ts');
-    const runDrift = (env: NodeJS.ProcessEnv = process.env) =>
-      spawnSync(bash, ['scripts/oss-drift-check.sh', ossRepo.replace(/\\/g, '/')], {
-        cwd: monoRepo,
-        encoding: 'utf-8',
-        env,
-      });
+  it('pins parity and reviewed adaptations without storing proprietary source', () => {
+    const baseline = JSON.parse(readFileSync(DRIFT_BASELINE_PATH, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    const serializedBaseline = JSON.stringify(baseline);
 
+    expect(serializedBaseline.match(/[Ss]ha256/g)).toHaveLength(
+      ((baseline.intentionalAdaptations as unknown[])?.length ?? 0) * 2 +
+        ((baseline.parityPaths as unknown[])?.length ?? 0),
+    );
+    expect(serializedBaseline).not.toMatch(/"(content|source|excerpt)"\s*:/);
+  });
+
+  it('accepts only the exact reviewed adaptation and intentional exclusion state', () => {
+    const fixture = createDriftFixture();
     try {
-      mkdirSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', 'mind'), { recursive: true });
-      mkdirSync(join(monoRepo, 'scripts'), { recursive: true });
-      mkdirSync(join(ossRepo, 'packages', 'core', 'src', 'mind'), { recursive: true });
-      const copiedDriftScript = join(monoRepo, 'scripts', 'oss-drift-check.sh');
-      copyFileSync(DRIFT_SCRIPT_PATH, copiedDriftScript);
-      chmodSync(copiedDriftScript, 0o755);
-      writeFileSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', excluded), 'private\n');
-      execFileSync('git', ['init'], { cwd: monoRepo, stdio: 'ignore' });
-      execFileSync('git', ['init'], { cwd: ossRepo, stdio: 'ignore' });
+      const clean = fixture.run();
+      expect(clean.status, `${clean.stdout}\n${clean.stderr}`).toBe(0);
+      expect(clean.stdout).toContain('REVIEWED ADAPTATIONS: 1');
+      expect(clean.stdout).toContain('INTENTIONAL OSS EXCLUSIONS: 1');
 
-      const expectedExclusion = runDrift();
-      expect(
-        expectedExclusion.status,
-        `${expectedExclusion.stdout}\n${expectedExclusion.stderr}`,
-      ).toBe(0);
-      expect(expectedExclusion.stdout).toContain('INTENTIONAL-OSS-EXCLUSION');
+      writeFileSync(join(fixture.canonicalRoot, 'equal.ts'), 'export const changed = true;\n');
+      writeFileSync(join(fixture.ossRoot, 'equal.ts'), 'export const changed = true;\n');
+      const changedParity = fixture.run();
+      expect(changedParity.status, changedParity.stderr).toBe(1);
+      expect(changedParity.stdout).toContain('equal.ts');
 
-      writeFileSync(join(ossRepo, 'packages', 'core', 'src', excluded), 'private\n');
-      const leakedFile = runDrift();
-      expect(leakedFile.status, leakedFile.stderr).toBe(1);
-      expect(leakedFile.stdout).toContain('FORBIDDEN-OSS-CONTENT');
+      writeFileSync(join(fixture.canonicalRoot, 'equal.ts'), 'export const equal = true;\n');
+      writeFileSync(join(fixture.ossRoot, 'equal.ts'), 'export const equal = true;\r\n');
+      writeFileSync(join(fixture.ossRoot, 'logger.ts'), 'changed after review\n');
+      const changedHash = fixture.run();
+      expect(changedHash.status, changedHash.stderr).toBe(1);
+      expect(changedHash.stdout).toContain('UNREVIEWED DIFFERENCES');
+      expect(changedHash.stdout).toContain('logger.ts');
+    } finally {
+      rmSync(fixture.tempRoot, { recursive: true, force: true });
+    }
+  });
 
-      rmSync(join(ossRepo, 'packages', 'core', 'src', excluded));
-      writeFileSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', 'mind', 'db.ts'), 'install_audit\n');
-      writeFileSync(join(ossRepo, 'packages', 'core', 'src', 'mind', 'db.ts'), 'install_audit\n');
-      const leakedMarker = runDrift();
-      expect(leakedMarker.status, leakedMarker.stderr).toBe(1);
-      expect(leakedMarker.stdout).toContain('FORBIDDEN-OSS-MARKER');
+  it('separates known blockers, new differences, and forbidden exports', () => {
+    const fixture = createDriftFixture();
+    try {
+      writeFileSync(join(fixture.canonicalRoot, 'blocker.ts'), 'canonical\n');
+      writeFileSync(join(fixture.ossRoot, 'blocker.ts'), 'oss\n');
+      fixture.baseline.knownReviewedBlockers.push({
+        path: 'blocker.ts',
+        state: 'different',
+        disposition: 'forward-port',
+      });
+      fixture.writeBaseline();
+      const blocker = fixture.run();
+      expect(blocker.status, blocker.stderr).toBe(1);
+      expect(blocker.stdout).toContain('KNOWN REVIEWED BLOCKERS');
+      expect(blocker.stdout).toContain('blocker.ts');
 
-      rmSync(join(monoRepo, 'packages', 'hive-mind-core', 'src', 'mind', 'db.ts'));
-      rmSync(join(ossRepo, 'packages', 'core', 'src', 'mind', 'db.ts'));
+      writeFileSync(join(fixture.canonicalRoot, 'listed-unreviewed.ts'), 'canonical\n');
+      writeFileSync(join(fixture.ossRoot, 'listed-unreviewed.ts'), 'oss\n');
+      fixture.baseline.unreviewedDifferences.push({
+        path: 'listed-unreviewed.ts',
+        state: 'different',
+      });
+      fixture.writeBaseline();
+      const listedUnreviewed = fixture.run();
+      expect(listedUnreviewed.status, listedUnreviewed.stderr).toBe(1);
+      expect(listedUnreviewed.stdout).toContain('listed-unreviewed.ts');
 
-      const failingBin = join(tempRoot, 'failing-bin');
-      const failingFind = join(failingBin, 'find');
-      mkdirSync(failingBin, { recursive: true });
-      writeFileSync(failingFind, '#!/usr/bin/env bash\nexit 7\n');
-      chmodSync(failingFind, 0o755);
-      const inventoryFailure = spawnSync(
-        bash,
-        [
-          '-c',
-          'PATH="$WAGGLE_FAIL_BIN:$PATH"; export PATH; exec scripts/oss-drift-check.sh "$1"',
-          'drift-inventory-test',
-          ossRepo.replace(/\\/g, '/'),
-        ],
+      writeFileSync(join(fixture.ossRoot, 'new-drift.ts'), 'unreviewed\n');
+      const unreviewed = fixture.run();
+      expect(unreviewed.status, unreviewed.stderr).toBe(1);
+      expect(unreviewed.stdout).toContain('UNREVIEWED DIFFERENCES');
+      expect(unreviewed.stdout).toContain('new-drift.ts');
+
+      writeFileSync(
+        join(fixture.ossRoot, 'mind', 'evolution-runs.ts'),
+        'forbidden implementation\n',
+      );
+      writeFileSync(join(fixture.ossRoot, 'mind', 'db.ts'), 'const install_audit = true;\n');
+      const forbidden = fixture.run();
+      expect(forbidden.status, forbidden.stderr).toBe(1);
+      expect(forbidden.stdout).toContain('FORBIDDEN EXPORTS');
+      expect(forbidden.stdout).toContain('FORBIDDEN-OSS-CONTENT');
+      expect(forbidden.stdout).toContain('FORBIDDEN-OSS-MARKER');
+
+      rmSync(join(fixture.ossRoot, 'mind', 'evolution-runs.ts'));
+      writeFileSync(join(fixture.ossRoot, 'mind', 'db.ts'), '// install_audit is private\n');
+      const commentMention = fixture.run();
+      expect(commentMention.status, commentMention.stderr).toBe(1);
+      expect(commentMention.stdout).toContain('FORBIDDEN-OSS-MARKER');
+
+      writeFileSync(
+        join(fixture.ossRoot, 'mind', 'db.ts'),
+        '/* install_audit is private */ const install_audit = true;\n',
+      );
+      const afterClosedComment = fixture.run();
+      expect(afterClosedComment.status, afterClosedComment.stderr).toBe(1);
+      expect(afterClosedComment.stdout).toContain('FORBIDDEN-OSS-MARKER');
+
+      for (const source of [
+        'const INSTALL_AUDIT = true;\n',
+        '// decoy\u2028const install_audit = true;\n',
+        '// decoy\u2029const install_audit = true;\n',
+        'const matcher = /[//]/; const INSTALL_AUDIT = true;\n',
+        'const matcher = /[/*]/; const install_audit = true;\n',
+        'const sql = `\n// install_audit\n`;\n',
+        'const sql = "\\\n// install_audit";\n',
+      ]) {
+        writeFileSync(join(fixture.ossRoot, 'mind', 'db.ts'), source);
+        const bypassAttempt = fixture.run();
+        expect(bypassAttempt.status, bypassAttempt.stderr).toBe(1);
+        expect(bypassAttempt.stdout).toContain('FORBIDDEN-OSS-MARKER');
+      }
+    } finally {
+      rmSync(fixture.tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns configuration error for a non-worktree or any mapped symlink', () => {
+    const fixture = createDriftFixture();
+    try {
+      const plainDirectory = join(fixture.tempRoot, 'plain');
+      mkdirSync(join(plainDirectory, 'packages', 'core', 'src'), { recursive: true });
+      writeFileSync(join(plainDirectory, 'packages', 'core', 'src', 'file.ts'), 'export {};\n');
+      const nonWorktree = spawnSync(
+        process.execPath,
+        ['scripts/oss-drift-check.mjs', plainDirectory],
         {
-          cwd: monoRepo,
+          cwd: fixture.monoRepo,
           encoding: 'utf-8',
-          env: { ...process.env, WAGGLE_FAIL_BIN: toBashPath(failingBin) },
+          env: { ...process.env, GIT_CEILING_DIRECTORIES: fixture.tempRoot },
         },
       );
-      expect(inventoryFailure.status, inventoryFailure.stderr).toBe(2);
-      expect(inventoryFailure.stderr).toContain('ERROR: failed to inventory');
+      expect(nonWorktree.status).toBe(2);
+      expect(nonWorktree.stderr).toContain('Git worktree');
+
+      const target = join(fixture.canonicalRoot, 'junction-target');
+      mkdirSync(target);
+      symlinkSync(
+        target,
+        join(fixture.canonicalRoot, 'mapped-link'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      const symlink = fixture.run();
+      expect(symlink.status, symlink.stdout).toBe(2);
+      expect(symlink.stderr).toContain('symlink');
+
+      rmSync(join(fixture.canonicalRoot, 'mapped-link'), { recursive: true, force: true });
+      const ossTarget = join(fixture.ossRoot, 'junction-target');
+      mkdirSync(ossTarget);
+      symlinkSync(
+        ossTarget,
+        join(fixture.ossRoot, 'mapped-link'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      const ossSymlink = fixture.run();
+      expect(ossSymlink.status, ossSymlink.stdout).toBe(2);
+      expect(ossSymlink.stderr).toContain('symlink');
+
+      rmSync(join(fixture.ossRoot, 'mapped-link'), { recursive: true, force: true });
+      writeFileSync(join(fixture.canonicalRoot, 'CaseCollision.ts'), 'canonical\n');
+      writeFileSync(join(fixture.ossRoot, 'casecollision.ts'), 'oss\n');
+      const caseCollision = fixture.run();
+      expect(caseCollision.status, caseCollision.stdout).toBe(2);
+      expect(caseCollision.stderr).toContain('case collision');
     } finally {
-      rmSync(tempRoot, { recursive: true, force: true });
+      rmSync(fixture.tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['canonical', 'oss'] as const)(
+    'rejects a symlink in the %s mapped-path ancestry',
+    (side) => {
+      const fixture = createDriftFixture();
+      try {
+        const mappedPackage =
+          side === 'canonical'
+            ? join(fixture.monoRepo, 'packages', 'hive-mind-core')
+            : join(fixture.ossRepo, 'packages', 'core');
+        const outsidePackage = join(fixture.tempRoot, `${side}-outside-package`);
+        renameSync(mappedPackage, outsidePackage);
+        symlinkSync(
+          outsidePackage,
+          mappedPackage,
+          process.platform === 'win32' ? 'junction' : 'dir',
+        );
+
+        const result = fixture.run();
+        expect(result.status, result.stdout).toBe(2);
+        expect(result.stderr).toContain('ancestor symlink');
+      } finally {
+        rmSync(fixture.tempRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('rejects baseline policy tampering and unknown schema fields', () => {
+    const fixture = createDriftFixture();
+    try {
+      fixture.baseline.forbiddenExports.paths.pop();
+      fixture.writeBaseline();
+      const weakenedPolicy = fixture.run();
+      expect(weakenedPolicy.status).toBe(2);
+      expect(weakenedPolicy.stderr).toContain('forbiddenExports.paths');
+
+      fixture.baseline.forbiddenExports.paths.push('mind/improvement-signals.ts');
+      const malformed = fixture.baseline as typeof fixture.baseline & { source?: string };
+      malformed.source = 'private source must never be accepted';
+      fixture.writeBaseline();
+      const extraField = fixture.run();
+      expect(extraField.status).toBe(2);
+      expect(extraField.stderr).toContain('unexpected keys');
+    } finally {
+      rmSync(fixture.tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks dirty mapped bytes even when the editable baseline is changed to match them', () => {
+    const fixture = createDriftFixture();
+    try {
+      const changedCanonical = "import { logger } from '@waggle/changed';\n";
+      const changedOss = "import { logger } from './changed.js';\n";
+      writeFileSync(join(fixture.canonicalRoot, 'logger.ts'), changedCanonical);
+      writeFileSync(join(fixture.ossRoot, 'logger.ts'), changedOss);
+      fixture.baseline.intentionalAdaptations[0].canonicalSha256 =
+        normalizedDriftHash(changedCanonical);
+      fixture.baseline.intentionalAdaptations[0].ossSha256 = normalizedDriftHash(changedOss);
+      fixture.writeBaseline();
+
+      const tampered = fixture.run();
+      expect(tampered.status, tampered.stderr).toBe(1);
+      expect(tampered.stdout).toContain('SCOPED-DIRTY canonical');
+      expect(tampered.stdout).toContain('SCOPED-DIRTY OSS');
+    } finally {
+      rmSync(fixture.tempRoot, { recursive: true, force: true });
     }
   });
 
