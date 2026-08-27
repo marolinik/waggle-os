@@ -104,8 +104,8 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
 
     case 'cognify': {
       const result = await runCognify({
-        since: intArg(values, 'since'),
-        limit: intArg(values, 'limit'),
+        since: suppliedNumberArg(values, 'since'),
+        limit: suppliedNumberArg(values, 'limit'),
         env,
       });
       return fmt === 'json' ? json(result) : (

@@ -171,6 +171,18 @@ describe('cli dispatch', () => {
     expect(parsed.entitiesCreated + 0).toBeGreaterThan(0);
   });
 
+  it.each([
+    ['since', 'bogus'],
+    ['limit', 'also-bogus'],
+  ])('cognify rejects an invalid --%s value', async (key, value) => {
+    await expect(dispatch({
+      subcommand: 'cognify',
+      values: { [key]: value },
+      positionals: [],
+      env,
+    })).rejects.toThrow(new RegExp(`${key}.*safe integer`, 'i'));
+  });
+
   it('compile-wiki runs against the real core + wiki-compiler (echo synthesizer)', async () => {
     // No ANTHROPIC_API_KEY / OLLAMA_URL in the test env → echo fallback.
     delete process.env.ANTHROPIC_API_KEY;
