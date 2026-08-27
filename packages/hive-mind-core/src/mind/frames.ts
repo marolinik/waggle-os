@@ -70,6 +70,22 @@ export class FrameStore {
     this.db = db;
   }
 
+  /**
+   * Run a write unit atomically. Top-level callers acquire the write lock up
+   * front and retry the whole closure on transient cross-process contention.
+   * Nested callers use better-sqlite3's savepoint behavior and never retry an
+   * inner closure against the same ambient snapshot.
+   */
+  runInTransaction<T>(fn: () => T): T {
+    if (typeof fn !== 'function') {
+      throw new TypeError('FrameStore.runInTransaction requires a function');
+    }
+    const raw = this.db.getDatabase();
+    const transaction = raw.transaction(fn);
+    if (raw.inTransaction) return transaction();
+    return this.db.runWithBusyRetry(() => transaction.immediate());
+  }
+
   createIFrame(
     gopId: string,
     content: string,
@@ -287,6 +303,13 @@ export class FrameStore {
     if (!existing) return undefined;
 
     const newImportance = importance ?? existing.importance;
+    if (content === existing.content) {
+      if (newImportance !== existing.importance) {
+        raw.prepare('UPDATE memory_frames SET importance = ? WHERE id = ?')
+          .run(newImportance, id);
+      }
+      return this.getById(id);
+    }
 
     // Update main table (content_hash maintained — oss-drift D3)
     raw.prepare(`

@@ -18,7 +18,7 @@
  *
  * Adapted imports: `./db.js`, `./frames.js` → `../../src/mind/...`.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync, existsSync } from 'node:fs';
@@ -142,6 +142,62 @@ describe('FrameStore (hive-mind port)', () => {
       .prepare('SELECT rowid FROM memory_frames_fts WHERE memory_frames_fts MATCH ?')
       .all('revised') as { rowid: number }[];
     expect(ftsHit.map((r) => r.rowid)).toContain(iframe.id);
+  });
+
+  it('update() preserves all indexes when only importance changes', () => {
+    const iframe = frames.createIFrame('gop-test', 'indexed content', 'normal');
+    const raw = db.getDatabase();
+    const vector = new Uint8Array(new Float32Array(1024).fill(0.1).buffer);
+    raw.prepare(`INSERT INTO memory_frames_vec (rowid, embedding) VALUES (${iframe.id}, ?)`)
+      .run(vector);
+    const chunk = raw.prepare(
+      'INSERT INTO memory_frame_chunks (frame_id, chunk_idx, content, char_start, char_end) VALUES (?, 0, ?, 0, ?)',
+    ).run(iframe.id, 'indexed chunk', 'indexed chunk'.length);
+    const chunkId = Number(chunk.lastInsertRowid);
+    raw.prepare(`INSERT INTO memory_frame_chunks_vec (rowid, embedding) VALUES (${chunkId}, ?)`)
+      .run(vector);
+
+    const updated = frames.update(iframe.id, iframe.content, 'critical');
+
+    expect(updated?.importance).toBe('critical');
+    expect(updated?.content_hash).toBe(iframe.content_hash);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM memory_frames_fts WHERE rowid = ?').get(iframe.id) as { n: number }).n).toBe(1);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM memory_frames_vec WHERE rowid = ?').get(iframe.id) as { n: number }).n).toBe(1);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM memory_frame_chunks WHERE id = ?').get(chunkId) as { n: number }).n).toBe(1);
+    expect((raw.prepare('SELECT COUNT(*) AS n FROM memory_frame_chunks_vec WHERE rowid = ?').get(chunkId) as { n: number }).n).toBe(1);
+  });
+
+  it('runInTransaction acquires the write lock before the first statement', () => {
+    const competing = new MindDB(dbPath);
+    competing.getDatabase().pragma('busy_timeout = 1');
+    try {
+      frames.runInTransaction(() => {
+        expect(db.getDatabase().inTransaction).toBe(true);
+        expect(() => competing.getDatabase().prepare(
+          "UPDATE sessions SET summary = 'competing write' WHERE gop_id = 'gop-test'",
+        ).run()).toThrow(/locked/i);
+      });
+    } finally {
+      competing.close();
+    }
+  });
+
+  it('runInTransaction uses a nested savepoint without retrying the inner closure', () => {
+    const retry = vi.spyOn(db, 'runWithBusyRetry');
+    let outerId = 0;
+    expect(() => frames.runInTransaction(() => {
+      outerId = frames.createIFrame('gop-test', 'outer transaction frame').id;
+      expect(() => frames.runInTransaction(() => {
+        frames.createIFrame('gop-test', 'inner transaction frame');
+        throw new Error('rollback inner');
+      })).toThrow('rollback inner');
+      expect(db.getDatabase().prepare(
+        "SELECT COUNT(*) AS n FROM memory_frames WHERE content = 'inner transaction frame'",
+      ).get()).toEqual({ n: 0 });
+    })).not.toThrow();
+
+    expect(frames.getById(outerId)?.content).toBe('outer transaction frame');
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it('delete() removes the row, FTS entry, and clears back-references', () => {
