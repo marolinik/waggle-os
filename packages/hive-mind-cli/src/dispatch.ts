@@ -42,6 +42,11 @@ function intArg(values: Record<string, unknown>, key: string): number | undefine
   return Number.isFinite(n) ? n : undefined;
 }
 
+function suppliedNumberArg(values: Record<string, unknown>, key: string): number | undefined {
+  const value = values[key];
+  return value === undefined ? undefined : Number(value);
+}
+
 function formatOf(values: Record<string, unknown>): OutputFormat {
   return values['json'] ? 'json' : 'plain';
 }
@@ -99,8 +104,8 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
 
     case 'cognify': {
       const result = await runCognify({
-        since: intArg(values, 'since'),
-        limit: intArg(values, 'limit'),
+        since: suppliedNumberArg(values, 'since'),
+        limit: suppliedNumberArg(values, 'limit'),
         env,
       });
       return fmt === 'json' ? json(result) : (
@@ -132,7 +137,7 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
         dedupeEntities: Boolean(values['dedupe-entities']),
         consolidate: Boolean(values['consolidate']),
         consolidateModel: typeof values['consolidate-model'] === 'string' ? values['consolidate-model'] : undefined,
-        consolidateLimit: intArg(values, 'consolidate-limit'),
+        consolidateLimit: suppliedNumberArg(values, 'consolidate-limit'),
         cognify: Boolean(values['cognify']),
         wiki: Boolean(values['wiki']),
         maxTempAgeDays: intArg(values, 'max-temp-age-days'),

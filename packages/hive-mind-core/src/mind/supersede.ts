@@ -51,6 +51,19 @@
 
 import type { MindDB } from './db.js';
 import type { FrameStore, FrameSource, MemoryFrame } from './frames.js';
+import { evaluateExternalMemoryIngress } from '../memory-ingress-guard.js';
+
+export const MAX_CONSOLIDATION_OBSERVATIONS = 400;
+const MAX_PROMPT_CHARS = 100_000;
+const MAX_RESPONSE_CHARS = 100_000;
+const MAX_LABEL_CHARS = 256;
+const MAX_CURRENT_VALUE_CHARS = 4_000;
+const CREATED_AT_SORT_EXPR = `julianday(CASE
+  WHEN created_at GLOB '*[+-][0-9][0-9][0-9][0-9]'
+  THEN substr(created_at, 1, length(created_at) - 5)
+    || substr(created_at, -5, 3) || ':' || substr(created_at, -2)
+  ELSE created_at
+END)`;
 
 /**
  * LLM callback the consolidation passes inject. Given a system + user message,
@@ -98,7 +111,7 @@ export interface ConsolidationResult {
 export interface CollectObservationsOptions {
   /** Scope to a single GOP session; omit for the whole mind. */
   gopId?: string;
-  /** Cap the number of observations (keeps the LLM prompt bounded). */
+  /** Select the latest N eligible observations, returned chronologically. */
   limit?: number;
   /**
    * Which frame source to include. Defaults to 'agent_inferred' (the
@@ -124,19 +137,26 @@ const GROUP_SYSTEM =
  * an empty object when nothing parses — the callers treat "no intents" as a
  * valid, non-fatal outcome rather than throwing on model chatter.
  */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function parseLlmJson(raw: string): Record<string, unknown> {
   if (typeof raw !== 'string') return {};
+  if (raw.length > MAX_RESPONSE_CHARS) return {};
   const trimmed = raw.trim();
   if (!trimmed) return {};
   try {
-    return JSON.parse(trimmed) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(trimmed);
+    return isRecord(parsed) ? parsed : {};
   } catch {
     // Not a bare JSON document — try to recover an embedded object below.
   }
   const match = trimmed.match(/\{[\s\S]*\}/);
   if (match) {
     try {
-      return JSON.parse(match[0]) as Record<string, unknown>;
+      const parsed: unknown = JSON.parse(match[0]);
+      return isRecord(parsed) ? parsed : {};
     } catch {
       // Embedded block was also malformed — fall through to the empty result.
     }
@@ -154,20 +174,83 @@ function assertObservations(observations: unknown): asserts observations is Obse
       throw new TypeError('consolidate: each observation must be an object');
     }
     const rec = o as Record<string, unknown>;
-    if (!Number.isInteger(rec.id)) {
-      throw new TypeError('consolidate: observation.id must be an integer');
+    if (!Number.isSafeInteger(rec.id) || Number(rec.id) <= 0) {
+      throw new TypeError('consolidate: observation.id must be a positive safe integer');
     }
     if (typeof rec.content !== 'string') {
       throw new TypeError('consolidate: observation.content must be a string');
     }
+    if (typeof rec.created_at !== 'string') {
+      throw new TypeError('consolidate: observation.created_at must be a string');
+    }
+    if (!Number.isFinite(observationTime(rec.created_at))) {
+      throw new TypeError('consolidate: observation.created_at must be a valid timestamp');
+    }
   }
 }
 
-/** Render the observations as a `N. [YYYY-MM-DD] content` numbered list. */
-function numberObservations(observations: Observation[]): string {
-  return observations
-    .map((o, idx) => `${idx + 1}. [${String(o.created_at ?? '').slice(0, 10)}] ${o.content}`)
-    .join('\n');
+const SQLITE_TIMESTAMP_RE =
+  /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):?(\d{2}))?$/;
+
+function observationTime(value: string): number {
+  const match = SQLITE_TIMESTAMP_RE.exec(value.trim());
+  if (!match) return Number.NaN;
+
+  const [, date, time, fraction = '', sign, hour, minute] = match;
+  if (hour && (Number(hour) > 14 || Number(minute) > 59)) return Number.NaN;
+
+  const firstThree = Number((fraction + '000').slice(0, 3));
+  const millis = Math.min(999, firstThree + ((fraction[3] ?? '0') >= '5' ? 1 : 0));
+  const zone = sign ? `${sign}${hour}:${minute}` : 'Z';
+  return Date.parse(`${date}T${time}.${String(millis).padStart(3, '0')}${zone}`);
+}
+
+function normalizeObservations(observations: Observation[]): Observation[] {
+  const sorted = [...observations].sort((a, b) => {
+    const timeDelta = observationTime(a.created_at) - observationTime(b.created_at);
+    return timeDelta || a.id - b.id;
+  });
+  const seen = new Set<number>();
+  return sorted.filter(({ id }) => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function prepareDetectionPrompt(
+  observations: Observation[],
+  system: string,
+  operation: string,
+): { normalized: Observation[]; user: string } {
+  assertObservations(observations);
+  if (observations.length > MAX_CONSOLIDATION_OBSERVATIONS) {
+    throw new RangeError(
+      `${operation}: at most ${MAX_CONSOLIDATION_OBSERVATIONS} observations are allowed`,
+    );
+  }
+  const normalized = normalizeObservations(observations);
+  const lines: string[] = [];
+  let userChars = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    const observation = normalized[index];
+    const prefix = `${index + 1}. [${observation.created_at.slice(0, 10)}] `;
+    const addedChars = (index > 0 ? 1 : 0) + prefix.length + observation.content.length;
+    if (system.length + userChars + addedChars > MAX_PROMPT_CHARS) {
+      throw new RangeError(`${operation}: prompt exceeds ${MAX_PROMPT_CHARS} characters`);
+    }
+    lines.push(prefix + observation.content);
+    userChars += addedChars;
+  }
+  return { normalized, user: lines.join('\n') };
+}
+
+function safeModelText(value: unknown, maxChars: number): string | null {
+  if (typeof value !== 'string') return '';
+  const text = value.trim();
+  if (text.length > maxChars) return null;
+  if (text && evaluateExternalMemoryIngress({ content: text }).action !== 'allow') return null;
+  return text;
 }
 
 /**
@@ -186,8 +269,9 @@ function mapNumbersToFrameIds(
   const indices: number[] = [];
   const seen = new Set<number>();
   for (const n of numbers) {
-    const idx = Number(n);
-    if (!Number.isInteger(idx) || idx < 1 || idx > observations.length) continue;
+    if (typeof n !== 'number' || !Number.isSafeInteger(n)) continue;
+    const idx = n;
+    if (idx < 1 || idx > observations.length) continue;
     if (seen.has(idx)) continue;
     seen.add(idx);
     indices.push(idx);
@@ -208,13 +292,17 @@ export async function detectSupersessionChains(
   observations: Observation[],
   llm: ConsolidationLlm,
 ): Promise<SupersessionChain[]> {
-  assertObservations(observations);
   if (typeof llm !== 'function') {
     throw new TypeError('detectSupersessionChains: llm must be a function');
   }
-  if (observations.length < 2) return [];
+  const { normalized, user } = prepareDetectionPrompt(
+    observations,
+    SUPERSESSION_SYSTEM,
+    'detectSupersessionChains',
+  );
+  if (normalized.length < 2) return [];
 
-  const raw = await llm(SUPERSESSION_SYSTEM, numberObservations(observations));
+  const raw = await llm(SUPERSESSION_SYSTEM, user);
   const parsed = parseLlmJson(raw);
   const rawChains = Array.isArray(parsed.chains) ? parsed.chains : [];
 
@@ -222,10 +310,11 @@ export async function detectSupersessionChains(
   for (const entry of rawChains) {
     if (!entry || typeof entry !== 'object') continue;
     const rec = entry as Record<string, unknown>;
-    const frameIds = mapNumbersToFrameIds(rec.ids, observations, true);
+    const frameIds = mapNumbersToFrameIds(rec.ids, normalized, true);
     if (frameIds.length < 2) continue;
-    const attribute = typeof rec.attribute === 'string' ? rec.attribute.trim() : '';
-    const currentValue = typeof rec.current_value === 'string' ? rec.current_value.trim() : '';
+    const attribute = safeModelText(rec.attribute, MAX_LABEL_CHARS);
+    const currentValue = safeModelText(rec.current_value, MAX_CURRENT_VALUE_CHARS);
+    if (attribute === null || currentValue === null) continue;
     chains.push({ attribute: attribute || 'value', currentValue, frameIds });
   }
   return chains;
@@ -240,13 +329,17 @@ export async function detectEntityGroups(
   observations: Observation[],
   llm: ConsolidationLlm,
 ): Promise<EntityGroup[]> {
-  assertObservations(observations);
   if (typeof llm !== 'function') {
     throw new TypeError('detectEntityGroups: llm must be a function');
   }
-  if (observations.length < 2) return [];
+  const { normalized, user } = prepareDetectionPrompt(
+    observations,
+    GROUP_SYSTEM,
+    'detectEntityGroups',
+  );
+  if (normalized.length < 2) return [];
 
-  const raw = await llm(GROUP_SYSTEM, numberObservations(observations));
+  const raw = await llm(GROUP_SYSTEM, user);
   const parsed = parseLlmJson(raw);
   const rawGroups = Array.isArray(parsed.groups) ? parsed.groups : [];
 
@@ -254,9 +347,10 @@ export async function detectEntityGroups(
   for (const entry of rawGroups) {
     if (!entry || typeof entry !== 'object') continue;
     const rec = entry as Record<string, unknown>;
-    const frameIds = mapNumbersToFrameIds(rec.ids, observations, false);
+    const frameIds = mapNumbersToFrameIds(rec.ids, normalized, false);
     if (frameIds.length < 2) continue;
-    const label = typeof rec.label === 'string' ? rec.label.trim() : '';
+    const label = safeModelText(rec.label, MAX_LABEL_CHARS);
+    if (label === null) continue;
     groups.push({ label: label || 'group', frameIds });
   }
   return groups;
@@ -284,54 +378,201 @@ export function applyConsolidation(
   groups: EntityGroup[],
   gopId: string,
 ): ConsolidationResult {
-  if (!frames || typeof frames.createPFrame !== 'function') {
+  if (
+    !frames
+    || typeof frames.createPFrame !== 'function'
+    || typeof frames.runInTransaction !== 'function'
+  ) {
     throw new TypeError('applyConsolidation: frames must be a FrameStore');
   }
   if (typeof gopId !== 'string' || !gopId) {
     throw new Error('applyConsolidation: gopId is required');
   }
 
-  const pframes: MemoryFrame[] = [];
-  const bframes: MemoryFrame[] = [];
-  const deprecated: number[] = [];
-
-  for (const chain of chains ?? []) {
-    const ids = chain.frameIds;
-    if (!Array.isArray(ids) || ids.length < 2) continue;
-
-    const baseId = ids[0];
-    const newestId = ids[ids.length - 1];
-    const newest = frames.getById(newestId);
-    if (!newest) continue; // newest member gone — cannot anchor a current value
-
-    // Deprecate every stale member (all but the newest).
-    for (const staleId of ids.slice(0, -1)) {
-      const stale = frames.getById(staleId);
-      if (!stale) continue;
-      frames.update(staleId, stale.content, 'deprecated');
-      deprecated.push(staleId);
+  return frames.runInTransaction(() => {
+    if (!Array.isArray(chains) || chains.length > MAX_CONSOLIDATION_OBSERVATIONS) {
+      throw new TypeError('applyConsolidation: chains must be a bounded array');
     }
-    // Boost the surviving newest so it wins recall ties.
-    frames.update(newestId, newest.content, 'critical');
+    if (!Array.isArray(groups) || groups.length > MAX_CONSOLIDATION_OBSERVATIONS) {
+      throw new TypeError('applyConsolidation: groups must be a bounded array');
+    }
+    if (!frames.hasSession(gopId)) {
+      throw new Error(`applyConsolidation: destination session does not exist: ${gopId}`);
+    }
 
-    // Emit the current-value P-frame (base = oldest), preferring the model's
-    // clean value and falling back to the newest frame's raw content.
-    const cleanValue = chain.currentValue.trim() ? chain.currentValue.trim() : newest.content;
-    const attribute = chain.attribute.trim() ? chain.attribute.trim() : 'value';
-    const asOf = String(newest.created_at).slice(0, 10);
-    const pContent = `[current] ${attribute}: ${cleanValue}  (as of ${asOf})`;
-    pframes.push(frames.createPFrame(gopId, pContent, baseId, 'critical', 'agent_inferred'));
-  }
+    const frameCache = new Map<number, MemoryFrame>();
+    const requireFrame = (id: number): MemoryFrame => {
+      const cached = frameCache.get(id);
+      if (cached) return cached;
+      const frame = frames.getById(id);
+      if (!frame) throw new Error(`applyConsolidation: missing frame ${id}`);
+      if (frame.importance === 'deprecated') {
+        throw new Error(`applyConsolidation: frame ${id} is deprecated`);
+      }
+      frameCache.set(id, frame);
+      return frame;
+    };
+    const requireIds = (value: unknown, kind: string): number[] => {
+      if (
+        !Array.isArray(value)
+        || value.length < 2
+        || value.length > MAX_CONSOLIDATION_OBSERVATIONS
+      ) {
+        throw new TypeError(`applyConsolidation: ${kind}.frameIds must contain 2-${MAX_CONSOLIDATION_OBSERVATIONS} ids`);
+      }
+      const seen = new Set<number>();
+      for (const id of value) {
+        if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) {
+          throw new TypeError(`applyConsolidation: ${kind}.frameIds must be positive safe integers`);
+        }
+        if (seen.has(id)) {
+          throw new TypeError(`applyConsolidation: ${kind}.frameIds must be unique`);
+        }
+        seen.add(id);
+      }
+      return [...value] as number[];
+    };
 
-  for (const group of groups ?? []) {
-    const ids = group.frameIds;
-    if (!Array.isArray(ids) || ids.length < 2) continue;
-    const label = group.label.trim() ? group.label.trim() : 'group';
-    const desc = `${label} (${ids.length} members)`;
-    bframes.push(frames.createBFrame(gopId, desc, ids[0], ids));
-  }
+    const chainPlans: Array<{
+      baseId: number;
+      pContent: string;
+    }> = [];
+    const groupPlans: Array<{ ids: number[]; desc: string }> = [];
+    const chainPlanByIdentity = new Map<string, { pContent: string }>();
+    const groupPlanByIdentity = new Map<string, { desc: string }>();
+    const staleRoles = new Set<number>();
+    const newestRoles = new Set<number>();
 
-  return { pframes, bframes, deprecated };
+    for (const entry of chains) {
+      if (!isRecord(entry)) {
+        throw new TypeError('applyConsolidation: each chain must be an object');
+      }
+      if (typeof entry.attribute !== 'string' || typeof entry.currentValue !== 'string') {
+        throw new TypeError('applyConsolidation: chain labels and values must be strings');
+      }
+      const ids = requireIds(entry.frameIds, 'chain');
+      const members = ids.map(requireFrame);
+      for (let index = 1; index < members.length; index += 1) {
+        const previous = members[index - 1];
+        const current = members[index];
+        const previousTime = observationTime(previous.created_at);
+        const currentTime = observationTime(current.created_at);
+        if (
+          !Number.isFinite(previousTime)
+          || !Number.isFinite(currentTime)
+          || previousTime > currentTime
+          || (previousTime === currentTime && previous.id >= current.id)
+        ) {
+          throw new Error('applyConsolidation: chain ids must be chronological oldest to newest');
+        }
+      }
+
+      const newest = members[members.length - 1];
+      const cleanValue = safeModelText(entry.currentValue, MAX_CURRENT_VALUE_CHARS);
+      const cleanAttribute = safeModelText(entry.attribute, MAX_LABEL_CHARS);
+      if (cleanValue === null || cleanAttribute === null) {
+        throw new Error('applyConsolidation: unsafe chain label or value');
+      }
+      const value = cleanValue || newest.content;
+      const attribute = cleanAttribute || 'value';
+      const asOf = String(newest.created_at).slice(0, 10);
+      const pContent = `[current] ${attribute}: ${value}  (as of ${asOf})`;
+      if (evaluateExternalMemoryIngress({ content: pContent }).action !== 'allow') {
+        throw new Error('applyConsolidation: unsafe P-frame payload');
+      }
+
+      const chainIdentity = JSON.stringify([
+        attribute.normalize('NFKC').replace(/\s+/g, ' ').toLowerCase(),
+        ids,
+      ]);
+      const existingChain = chainPlanByIdentity.get(chainIdentity);
+      if (existingChain) {
+        if (existingChain.pContent !== pContent) {
+          throw new Error('applyConsolidation: conflicting duplicate chain');
+        }
+        continue;
+      }
+      chainPlanByIdentity.set(chainIdentity, { pContent });
+
+      const staleIds = ids.slice(0, -1);
+      for (const staleId of staleIds) staleRoles.add(staleId);
+      newestRoles.add(newest.id);
+      chainPlans.push({ baseId: ids[0], pContent });
+    }
+
+    for (const staleId of staleRoles) {
+      if (newestRoles.has(staleId)) {
+        throw new Error(`applyConsolidation: conflicting stale/newest role for frame ${staleId}`);
+      }
+    }
+
+    for (const entry of groups) {
+      if (!isRecord(entry)) {
+        throw new TypeError('applyConsolidation: each group must be an object');
+      }
+      if (typeof entry.label !== 'string') {
+        throw new TypeError('applyConsolidation: group label must be a string');
+      }
+      const ids = requireIds(entry.frameIds, 'group');
+      ids.forEach(requireFrame);
+      const canonicalIds = [...ids].sort((a, b) => a - b);
+      const cleanLabel = safeModelText(entry.label, MAX_LABEL_CHARS);
+      if (cleanLabel === null) {
+        throw new Error('applyConsolidation: unsafe group label');
+      }
+      const desc = `${cleanLabel || 'group'} (${ids.length} members)`;
+      const persisted = JSON.stringify({ description: desc, references: canonicalIds });
+      if (
+        evaluateExternalMemoryIngress({ content: desc }).action !== 'allow'
+        || evaluateExternalMemoryIngress({ content: persisted }).action !== 'allow'
+      ) {
+        throw new Error('applyConsolidation: unsafe B-frame payload');
+      }
+
+      const groupIdentity = JSON.stringify([
+        (cleanLabel || 'group').normalize('NFKC').replace(/\s+/g, ' ').toLowerCase(),
+        canonicalIds,
+      ]);
+      const existingGroup = groupPlanByIdentity.get(groupIdentity);
+      if (existingGroup) {
+        if (existingGroup.desc !== desc) {
+          throw new Error('applyConsolidation: conflicting duplicate group');
+        }
+        continue;
+      }
+      groupPlanByIdentity.set(groupIdentity, { desc });
+      groupPlans.push({ ids: canonicalIds, desc });
+    }
+
+    const pframes: MemoryFrame[] = [];
+    const bframes: MemoryFrame[] = [];
+    const deprecated = [...staleRoles];
+    for (const staleId of staleRoles) {
+      const stale = frameCache.get(staleId)!;
+      if (!frames.update(staleId, stale.content, 'deprecated')) {
+        throw new Error(`applyConsolidation: frame ${staleId} disappeared during update`);
+      }
+    }
+    for (const newestId of newestRoles) {
+      const newest = frameCache.get(newestId)!;
+      if (!frames.update(newestId, newest.content, 'critical')) {
+        throw new Error(`applyConsolidation: frame ${newestId} disappeared during update`);
+      }
+    }
+    for (const plan of chainPlans) {
+      pframes.push(frames.createPFrame(
+        gopId,
+        plan.pContent,
+        plan.baseId,
+        'critical',
+        'agent_inferred',
+      ));
+    }
+    for (const plan of groupPlans) {
+      bframes.push(frames.createBFrame(gopId, plan.desc, plan.ids[0], plan.ids));
+    }
+    return { pframes, bframes, deprecated };
+  });
 }
 
 // ── Read helpers ───────────────────────────────────────────────────────────
@@ -359,11 +600,22 @@ export function collectObservations(
     params.push(options.gopId);
   }
 
-  let sql = `SELECT id, content, created_at FROM memory_frames WHERE ${conditions.join(' AND ')} ORDER BY created_at, id`;
   if (options.limit && options.limit > 0) {
-    sql += ' LIMIT ?';
     params.push(options.limit);
+    const sql = `
+      SELECT id, content, created_at
+      FROM (
+        SELECT id, content, created_at
+        FROM memory_frames
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY ${CREATED_AT_SORT_EXPR} DESC, id DESC
+        LIMIT ?
+      )
+      ORDER BY ${CREATED_AT_SORT_EXPR} ASC, id ASC
+    `;
+    return raw.prepare(sql).all(...params) as Observation[];
   }
+  const sql = `SELECT id, content, created_at FROM memory_frames WHERE ${conditions.join(' AND ')} ORDER BY ${CREATED_AT_SORT_EXPR}, id`;
   return raw.prepare(sql).all(...params) as Observation[];
 }
 
@@ -379,15 +631,25 @@ export function getCurrentValues(db: MindDB, gopId?: string): string[] {
     gopId
       ? raw
           .prepare(
-            "SELECT content FROM memory_frames WHERE frame_type = 'P' AND gop_id = ? ORDER BY created_at, id",
+            `SELECT content, importance FROM memory_frames WHERE frame_type = 'P' AND substr(content, 1, 10) = '[current] ' AND gop_id = ? ORDER BY ${CREATED_AT_SORT_EXPR} DESC, id DESC`,
           )
           .all(gopId)
       : raw
-          .prepare("SELECT content FROM memory_frames WHERE frame_type = 'P' ORDER BY created_at, id")
+          .prepare(`SELECT content, importance FROM memory_frames WHERE frame_type = 'P' AND substr(content, 1, 10) = '[current] ' ORDER BY ${CREATED_AT_SORT_EXPR} DESC, id DESC`)
           .all()
-  ) as Array<{ content: string }>;
+  ) as Array<{ content: string; importance: string }>;
 
-  return rows
-    .map((r) => String(r.content).replace(/^\[current\]\s*/, '').trim())
-    .filter(Boolean);
+  const seen = new Set<string>();
+  const current: string[] = [];
+  for (const row of rows) {
+    const line = String(row.content).replace(/^\[current\]\s*/, '').trim();
+    const colon = line.indexOf(':');
+    if (colon <= 0) continue;
+    const key = line.slice(0, colon).trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    if (row.importance === 'deprecated') continue;
+    current.push(line);
+  }
+  return current.reverse();
 }

@@ -171,6 +171,18 @@ describe('cli dispatch', () => {
     expect(parsed.entitiesCreated + 0).toBeGreaterThan(0);
   });
 
+  it.each([
+    ['since', 'bogus'],
+    ['limit', 'also-bogus'],
+  ])('cognify rejects an invalid --%s value', async (key, value) => {
+    await expect(dispatch({
+      subcommand: 'cognify',
+      values: { [key]: value },
+      positionals: [],
+      env,
+    })).rejects.toThrow(new RegExp(`${key}.*safe integer`, 'i'));
+  });
+
   it('compile-wiki runs against the real core + wiki-compiler (echo synthesizer)', async () => {
     // No ANTHROPIC_API_KEY / OLLAMA_URL in the test env → echo fallback.
     delete process.env.ANTHROPIC_API_KEY;
@@ -210,6 +222,15 @@ describe('cli dispatch', () => {
     expect(parsed.wipeImports).toBeDefined();
     expect(parsed.cognify).toBeDefined();
     expect(parsed.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('rejects a malformed supplied consolidate limit instead of using the default', async () => {
+    await expect(dispatch({
+      subcommand: 'maintenance',
+      values: { consolidate: true, 'consolidate-limit': 'abc' },
+      positionals: [],
+      env,
+    })).rejects.toThrow(/consolidate-limit.*1.*400/i);
   });
 
   it('dispatches a scoped WaggleDance message with the run credential header', async () => {

@@ -342,6 +342,38 @@ describe('local Transformers model loading', () => {
     )).toHaveLength(1);
   });
 
+  it('contains asynchronous quarantine notification failures', async () => {
+    const cacheDir = path.join(makeTempRoot('transformers-async-notify'), 'cache');
+    const model = 'Xenova/async-notify-model';
+    const modelDir = path.join(cacheDir, ...model.split('/'));
+    const onnxPath = path.join(modelDir, 'model.onnx');
+    fs.mkdirSync(modelDir, { recursive: true });
+    fs.writeFileSync(onnxPath, 'corrupt');
+
+    const unhandled = vi.fn();
+    process.once('unhandledRejection', unhandled);
+    try {
+      const load = vi.fn()
+        .mockRejectedValueOnce(corruptError(fs.realpathSync.native(onnxPath)))
+        .mockResolvedValueOnce('recovered');
+
+      await expect(withTransformersModelLoad({
+        cacheDir,
+        model,
+        load,
+        onQuarantine: async () => {
+          throw new Error('async callback rejected');
+        },
+      })).resolves.toBe('recovered');
+      await nextTurn();
+      await nextTurn();
+
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('recovers a valid single-segment Hugging Face model ID', async () => {
     const cacheDir = path.join(makeTempRoot('transformers-single-segment'), 'cache');
     const model = 'bert-base-uncased';

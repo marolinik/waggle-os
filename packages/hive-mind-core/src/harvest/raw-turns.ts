@@ -44,6 +44,7 @@ export const MIND_RAWTURN_PREFIX = '[mind-rawturn';
 /** Hard per-conversation cap — backstop against pathological exports.
  *  LoCoMo conversations run ~600 turns; 2000 leaves generous headroom. */
 export const MAX_TURNS_PER_ITEM = 2000;
+const MAX_INJECTION_DROP_LOGS = 8;
 
 /** Env kill switch (checked by CALLERS, mirrored here for the recall lane). */
 export const RAWDETAIL_KILL_SWITCH = 'WAGGLE_RAWDETAIL';
@@ -127,24 +128,31 @@ export function writeRawTurnFrames(
   const itemTs = isIsoTimestamp(item.timestamp) ? item.timestamp : undefined;
 
   let turn = 0;
+  let inspected = 0;
+  let suppressedInjectionLogs = 0;
   for (const msg of messages) {
     if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+    if (inspected >= MAX_TURNS_PER_ITEM) {
+      result.capped = true;
+      break;
+    }
+    inspected++;
     const text = (msg.text ?? '').trim();
     if (text.length === 0) {
       result.skippedEmpty++;
       continue;
     }
-    if (turn >= MAX_TURNS_PER_ITEM) {
-      result.capped = true;
-      break;
-    }
     const storedText = text.slice(0, HARVEST_FRAME_CONTENT_CAP);
     const decision = evaluateExternalMemoryIngress({ content: storedText });
     if (decision.action === 'block') {
       result.injectionDropped++;
-      log.warn('dropping raw turn with injection payload', {
-        conv: convKey, turn, flags: decision.scan.flags,
-      });
+      if (result.injectionDropped <= MAX_INJECTION_DROP_LOGS) {
+        log.warn('dropping raw turn with injection payload', {
+          conv: convKey, turn, flags: decision.scan.flags,
+        });
+      } else {
+        suppressedInjectionLogs++;
+      }
       continue;
     }
     const speaker = sanitizeToken(msg.role, 24);
@@ -160,9 +168,14 @@ export function writeRawTurnFrames(
     turn++;
   }
 
+  if (suppressedInjectionLogs > 0) {
+    log.warn('additional raw-turn injection warnings suppressed', {
+      conv: convKey, suppressed: suppressedInjectionLogs,
+    });
+  }
   if (result.capped) {
     log.warn('raw-turn storage capped — conversation exceeds MAX_TURNS_PER_ITEM', {
-      conv: convKey, stored: result.written, totalMessages: messages.length,
+      conv: convKey, inspected, stored: result.written, totalMessages: messages.length,
     });
   }
   return result;

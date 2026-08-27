@@ -139,6 +139,7 @@ function isContained(root: string, candidate: string): boolean {
  */
 export class WorkspaceManager {
   private readonly workspacesDir: string;
+  private readonly canonicalWorkspacesDir: string;
   private readonly metaPath: string;
 
   constructor(private readonly baseDir: string) {
@@ -148,6 +149,18 @@ export class WorkspaceManager {
     if (!fs.existsSync(this.workspacesDir)) {
       fs.mkdirSync(this.workspacesDir, { recursive: true });
     }
+    const rootStat = fs.lstatSync(this.workspacesDir);
+    const canonicalBase = fs.realpathSync.native(baseDir);
+    const canonicalRoot = fs.realpathSync.native(this.workspacesDir);
+    if (
+      rootStat.isSymbolicLink()
+      || !rootStat.isDirectory()
+      || canonicalRoot === canonicalBase
+      || !isContained(canonicalBase, canonicalRoot)
+    ) {
+      throw new Error('Workspace root must be a regular directory inside the data directory');
+    }
+    this.canonicalWorkspacesDir = canonicalRoot;
   }
 
   /**
@@ -174,7 +187,7 @@ export class WorkspaceManager {
     this.assertWorkspaceId(id);
     const existing = this.get(id);
     if (existing) return existing;
-    const workspacePath = path.join(this.workspacesDir, id);
+    const workspacePath = path.join(this.resolveWorkspaceRoot(), id);
     const workspaceStat = fs.lstatSync(workspacePath, { throwIfNoEntry: false });
     if (workspaceStat) {
       if (id !== 'default' || !this.isEmptyLegacyWorkspaceDirectory(workspacePath, workspaceStat)) {
@@ -197,10 +210,10 @@ export class WorkspaceManager {
    */
   private createWithId(id: string, options: CreateWorkspaceOptions): WorkspaceConfig {
     this.assertWorkspaceId(id);
-    const wsDir = path.join(this.workspacesDir, id);
+    const canonicalRoot = this.resolveWorkspaceRoot();
+    const wsDir = path.join(canonicalRoot, id);
 
     fs.mkdirSync(wsDir);
-    const canonicalRoot = fs.realpathSync.native(this.workspacesDir);
     const canonicalWorkspace = fs.realpathSync.native(wsDir);
     if (!isContained(canonicalRoot, canonicalWorkspace)) {
       throw new Error(`Workspace path escapes workspace root: ${id}`);
@@ -250,18 +263,14 @@ export class WorkspaceManager {
    * List all workspaces by reading workspace.json from each subdirectory.
    */
   list(): WorkspaceConfig[] {
-    if (!fs.existsSync(this.workspacesDir)) return [];
-
-    const entries = fs.readdirSync(this.workspacesDir, { withFileTypes: true });
+    const root = this.resolveWorkspaceRoot();
+    const entries = fs.readdirSync(root, { withFileTypes: true });
     const configs: WorkspaceConfig[] = [];
 
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const configPath = path.join(this.workspacesDir, entry.name, 'workspace.json');
-      if (fs.existsSync(configPath)) {
-        const raw = fs.readFileSync(configPath, 'utf-8');
-        configs.push(JSON.parse(raw) as WorkspaceConfig);
-      }
+      if (!entry.isDirectory() || !WORKSPACE_ID.test(entry.name)) continue;
+      const config = this.get(entry.name);
+      if (config) configs.push(config);
     }
 
     return configs;
@@ -328,10 +337,11 @@ export class WorkspaceManager {
    * Delete a workspace by removing its entire directory.
    */
   delete(id: string): void {
-    const wsDir = path.join(this.workspacesDir, id);
-    if (fs.existsSync(wsDir)) {
-      fs.rmSync(wsDir, { recursive: true, force: true });
-    }
+    this.assertWorkspaceId(id);
+    if (!this.get(id)) return;
+    const workspaceDir = this.resolveWorkspaceDir(id);
+    if (!workspaceDir) return;
+    fs.rmSync(workspaceDir, { recursive: true, force: true });
   }
 
   /**
@@ -389,7 +399,7 @@ export class WorkspaceManager {
 
   private isEmptyLegacyWorkspaceDirectory(workspacePath: string, stat: fs.Stats): boolean {
     if (stat.isSymbolicLink() || !stat.isDirectory()) return false;
-    const canonicalRoot = fs.realpathSync.native(this.workspacesDir);
+    const canonicalRoot = this.resolveWorkspaceRoot();
     const canonicalWorkspace = fs.realpathSync.native(workspacePath);
     if (!isContained(canonicalRoot, canonicalWorkspace)) return false;
     const entries = fs.readdirSync(workspacePath, { withFileTypes: true });
@@ -404,7 +414,7 @@ export class WorkspaceManager {
 
   private resolveWorkspaceDir(id: string): string | null {
     this.assertWorkspaceId(id);
-    const lexicalRoot = path.resolve(this.workspacesDir);
+    const lexicalRoot = this.resolveWorkspaceRoot();
     const lexicalWorkspace = path.resolve(lexicalRoot, id);
     if (!isContained(lexicalRoot, lexicalWorkspace)) {
       throw new Error(`Workspace path escapes workspace root: ${id}`);
@@ -415,12 +425,23 @@ export class WorkspaceManager {
       throw new Error(`Workspace path is not a regular directory: ${id}`);
     }
 
-    const canonicalRoot = fs.realpathSync.native(lexicalRoot);
     const canonicalWorkspace = fs.realpathSync.native(lexicalWorkspace);
-    if (!isContained(canonicalRoot, canonicalWorkspace)) {
+    if (!isContained(this.canonicalWorkspacesDir, canonicalWorkspace)) {
       throw new Error(`Workspace path escapes workspace root: ${id}`);
     }
     return canonicalWorkspace;
+  }
+
+  private resolveWorkspaceRoot(): string {
+    const rootStat = fs.lstatSync(this.workspacesDir, { throwIfNoEntry: false });
+    if (!rootStat?.isDirectory() || rootStat.isSymbolicLink()) {
+      throw new Error('Workspace root is not a regular directory');
+    }
+    const canonicalRoot = fs.realpathSync.native(this.workspacesDir);
+    if (canonicalRoot !== this.canonicalWorkspacesDir) {
+      throw new Error('Workspace root changed after initialization');
+    }
+    return canonicalRoot;
   }
 
   /**
@@ -483,7 +504,7 @@ export class WorkspaceManager {
   }
 
   private workspaceExists(id: string): boolean {
-    return fs.existsSync(path.join(this.workspacesDir, id));
+    return fs.existsSync(path.join(this.resolveWorkspaceRoot(), id));
   }
 
   private loadMeta(): WorkspacesMeta {

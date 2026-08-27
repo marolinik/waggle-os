@@ -511,6 +511,60 @@ describe('Hybrid Search (FTS5 + sqlite-vec + RRF + Relevance)', () => {
     expect(ids).not.toContain(stale.id);
     expect(ids).toContain(fresh.id);
   });
+
+  it('excludes deprecated candidates before keyword and vector lane limits', async () => {
+    const session = sessions.create();
+    const query = 'crowdout-token';
+    const indexed: Array<{ id: number; content: string }> = [];
+
+    for (let index = 0; index < 5; index += 1) {
+      const stale = frames.createIFrame(session.gop_id, `${query} obsolete-${index}`);
+      indexed.push({ id: stale.id, content: stale.content });
+      frames.update(stale.id, stale.content, 'deprecated');
+    }
+    const live = frames.createIFrame(
+      session.gop_id,
+      `${query} live candidate with deliberately lower raw lane similarity`,
+    );
+    indexed.push({ id: live.id, content: live.content });
+    await search.indexFramesBatch(indexed);
+
+    await expect(search.keywordSearch(query, 1, undefined, true)).resolves.toEqual([live.id]);
+    await expect(search.vectorSearch(query, 1, undefined, true)).resolves.toEqual([live.id]);
+    const hybrid = await search.search(query, { limit: 1, excludeDeprecated: true });
+    expect(hybrid.map((result) => result.frame.id)).toEqual([live.id]);
+
+    const otherSession = sessions.create();
+    const outOfScopeDecoy = frames.createIFrame(otherSession.gop_id, query);
+    await search.indexFrame(outOfScopeDecoy.id, outOfScopeDecoy.content);
+    await expect(search.keywordSearch(query, 1, session.gop_id, true)).resolves.toEqual([live.id]);
+    await expect(search.vectorSearch(query, 1, session.gop_id, true)).resolves.toEqual([live.id]);
+    const scopedHybrid = await search.search(query, {
+      limit: 1,
+      gopId: session.gop_id,
+      excludeDeprecated: true,
+    });
+    expect(scopedHybrid.map((result) => result.frame.id)).toEqual([live.id]);
+  });
+
+  it('excludes deprecated candidates before the LIKE fallback limit', async () => {
+    const session = sessions.create();
+    const live = frames.createIFrame(session.gop_id, '北京旅行 正常记录');
+    const stale = frames.createIFrame(session.gop_id, '北京旅行 旧记录');
+    const raw = db.getDatabase();
+    raw.prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run('2026-01-01 00:00:00', live.id);
+    raw.prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run('2026-02-01 00:00:00', stale.id);
+    frames.update(stale.id, stale.content, 'deprecated');
+    const otherSession = sessions.create();
+    const outOfScopeDecoy = frames.createIFrame(otherSession.gop_id, '北京旅行');
+    raw.prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run('2026-03-01 00:00:00', outOfScopeDecoy.id);
+
+    await expect(search.keywordSearch('北京旅行', 1, undefined, true)).resolves.toEqual([outOfScopeDecoy.id]);
+    await expect(search.keywordSearch('北京旅行', 1, session.gop_id, true)).resolves.toEqual([live.id]);
+  });
 });
 
 function getTopicContent(i: number): string {

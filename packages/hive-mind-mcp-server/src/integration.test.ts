@@ -8,7 +8,17 @@ import { registerIdentityTools } from './tools/identity.js';
 import { registerAwarenessTools } from './tools/awareness.js';
 import { registerWorkspaceTools } from './tools/workspace.js';
 import { registerHarvestTools } from './tools/harvest.js';
-import { buildClaudeLaunch, registerCleanupTools } from './tools/cleanup.js';
+import {
+  buildClaudeLaunch,
+  registerCleanupTools,
+  resolveConsolidationGop,
+} from './tools/cleanup.js';
+import {
+  collectObservations,
+  FrameStore,
+  MindDB,
+  SessionStore,
+} from '@waggle/hive-mind-core';
 import { registerIngestTools } from './tools/ingest.js';
 import { registerWikiTools } from './tools/wiki.js';
 import { registerResources } from './resources/memory.js';
@@ -164,5 +174,85 @@ describe('@waggle/hive-mind-mcp-server registration wiring', () => {
     // Every tool name is unique — duplicates would cause MCP registration errors at runtime.
     const names = new Set(tools.map((t) => t.name));
     expect(names.size).toBe(tools.length);
+  });
+});
+
+describe('@waggle/hive-mind-mcp-server consolidation GOP anchor', () => {
+  function fixture(): { db: MindDB; frames: FrameStore; sessions: SessionStore } {
+    const db = new MindDB(':memory:');
+    return { db, frames: new FrameStore(db), sessions: new SessionStore(db) };
+  }
+
+  function setCreatedAt(db: MindDB, id: number, createdAt: string): void {
+    db.getDatabase().prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run(createdAt, id);
+  }
+
+  it('ignores a newer excluded-source frame', () => {
+    const { db, frames, sessions } = fixture();
+    try {
+      const target = sessions.create();
+      const decoy = sessions.create();
+      const first = frames.createIFrame(target.gop_id, 'eligible first', 'normal', 'agent_inferred');
+      const second = frames.createIFrame(target.gop_id, 'eligible second', 'normal', 'agent_inferred');
+      const excluded = frames.createIFrame(decoy.gop_id, 'excluded future', 'normal', 'user_stated');
+      setCreatedAt(db, first.id, '2026-01-01 00:00:00');
+      setCreatedAt(db, second.id, '2026-01-02 00:00:00');
+      setCreatedAt(db, excluded.id, '2026-12-01 00:00:00');
+      const observations = collectObservations(db, { limit: 400 });
+
+      expect(resolveConsolidationGop(frames, observations)).toBe(target.gop_id);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('uses canonical offset chronology instead of textual order', () => {
+    const { db, frames, sessions } = fixture();
+    try {
+      const olderSession = sessions.create();
+      const newerSession = sessions.create();
+      const older = frames.createIFrame(olderSession.gop_id, 'older instant', 'normal', 'agent_inferred');
+      const newer = frames.createIFrame(newerSession.gop_id, 'newer instant', 'normal', 'agent_inferred');
+      setCreatedAt(db, older.id, '2026-01-01 01:00:00+0200');
+      setCreatedAt(db, newer.id, '2026-01-01 00:30:00+0100');
+      const observations = collectObservations(db, { limit: 400 });
+
+      expect(resolveConsolidationGop(frames, observations)).toBe(newerSession.gop_id);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('breaks equal-instant ties with the higher frame id', () => {
+    const { db, frames, sessions } = fixture();
+    try {
+      const lowerSession = sessions.create();
+      const higherSession = sessions.create();
+      const lower = frames.createIFrame(lowerSession.gop_id, 'equal lower id', 'normal', 'agent_inferred');
+      const higher = frames.createIFrame(higherSession.gop_id, 'equal higher id', 'normal', 'agent_inferred');
+      setCreatedAt(db, lower.id, '2026-01-01 13:00:00+0100');
+      setCreatedAt(db, higher.id, '2026-01-01 12:00:00Z');
+      const observations = collectObservations(db, { limit: 400 });
+
+      expect(resolveConsolidationGop(frames, observations)).toBe(higherSession.gop_id);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('returns no anchor when there are no eligible observations', () => {
+    const { db, frames, sessions } = fixture();
+    try {
+      const session = sessions.create();
+      frames.createIFrame(session.gop_id, 'excluded one', 'normal', 'user_stated');
+      frames.createIFrame(session.gop_id, 'excluded two', 'normal', 'user_stated');
+      const observations = collectObservations(db, { limit: 400 });
+
+      expect(observations).toEqual([]);
+      expect(resolveConsolidationGop(frames, observations)).toBeNull();
+    } finally {
+      db.close();
+    }
   });
 });

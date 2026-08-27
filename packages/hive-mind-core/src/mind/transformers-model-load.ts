@@ -16,7 +16,7 @@ export interface TransformersModelLoadOptions<T> {
   model: string;
   load: (canonicalCacheDir: string) => Promise<T>;
   lockTimeoutMs?: number;
-  onQuarantine?: (quarantineDir: string) => void;
+  onQuarantine?: (quarantineDir: string) => void | Promise<void>;
 }
 
 function normalizeLockKey(value: string): string {
@@ -156,7 +156,10 @@ function notifyQuarantine(
   quarantineDir: string,
 ): void {
   try {
-    callback?.(quarantineDir);
+    const notification = callback?.(quarantineDir);
+    if (notification) {
+      void Promise.resolve(notification).catch(() => undefined);
+    }
   } catch {
     // Notification is advisory and must not alter model recovery control flow.
   }

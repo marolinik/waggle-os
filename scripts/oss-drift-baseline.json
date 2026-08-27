@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "mapping": {
+    "canonical": "packages/hive-mind-core/src",
+    "oss": "packages/core/src",
+    "ignoredDirectories": [
+      "dist",
+      "node_modules"
+    ],
+    "ignoredFileSuffixes": [
+      ".test.ts",
+      ".tsbuildinfo"
+    ]
+  },
+  "parityPaths": [
+    {
+      "path": "harvest/claude-code-adapter.ts",
+      "sha256": "13d4c7965b35c6cc66f53445ed752121cbba1b8b8ab80d196f3357977acc8d03"
+    },
+    {
+      "path": "harvest/decision-derivation.ts",
+      "sha256": "97e026befe980c4f754db5639fd96b715f09c351316f87a41e69899839d55f52"
+    },
+    {
+      "path": "harvest/stable-id.ts",
+      "sha256": "b1d8568bf3799f5054b6f2fc4119db4c8f67a0a49b22ff0b818a95c17a2eba56"
+    },
+    {
+      "path": "mind/erasure.ts",
+      "sha256": "6d5958c1b8e73a774324e1a4ca0348160b4abf3ff338d3cd794ef024d5ec5c5a"
+    },
+    {
+      "path": "mind/inprocess-reranker.ts",
+      "sha256": "0ed4a70147e0f7a17fdd14c3cc1127979bd653e3786a1a70189a5ab0996ec9f9"
+    }
+  ],
+  "intentionalAdaptations": [
+    {
+      "path": "harvest/chatgpt-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "24603b8ecb18f795c5cbbbe483113dbb24f08fab6b1bce2fb19ee7127f8957d0",
+      "ossSha256": "97b4aec1356a98f9ba72ed373954934a657db4579cc67906b7fa9ee52a458c1a"
+    },
+    {
+      "path": "harvest/chunk-utils.ts",
+      "kinds": ["import", "layout"],
+      "canonicalSha256": "868f8ede1f2201d214a012d9cc9c7157a9418205d8bb2eff8ed872d4658f6c6e",
+      "ossSha256": "88d2bf92cae38cc975baff5eb75c5cab89cb6bda2262ec7c381635589b10ea18"
+    },
+    {
+      "path": "harvest/claude-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "3a22d18cf1ef2b12fa8689bd0909c2b34abfae3a9918c5ef8ca9a8cbfba8a522",
+      "ossSha256": "6dad506184e24ba98969fcb0a5885468167fd98da80fd29363ca131a7c7a46e1"
+    },
+    {
+      "path": "harvest/extract-memory-lanes.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "800daac77c81e9daa3ecc0a8efa1f7203f6f41b64ad931e66cb97bc899d5d46d",
+      "ossSha256": "58e36562dfebd95cc1c2243746fcb2e755184fc7e2a5a05f334da2b6200855c1"
+    },
+    {
+      "path": "harvest/gemini-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "e68a34a62653f5387ae204eaa92b8bc861fc11d5b449db1eaa3f08573b95680c",
+      "ossSha256": "c4346791f439c34514b93dd9eef905bda72b255665b97fc14d60469338c32dda"
+    },
+    {
+      "path": "harvest/index.ts",
+      "kinds": ["import", "layout"],
+      "canonicalSha256": "9f7bfdc50c031866071ec998b5eca65ec6ded832fb9ff07bbb654e2ea5b68820",
+      "ossSha256": "fda20a50ba0247808c245397d65e2858b50924cffc6c140668854c70496e580c"
+    },
+    {
+      "path": "harvest/markdown-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "651c7cb76c9634896d69978f3537b74ca7f7fdd14aefe36e1c769aafbcab4e95",
+      "ossSha256": "77f495fcdbca87e90acf791d8c3c0e18021b2fec4dee5c5a827bd2b465b63b9d"
+    },
+    {
+      "path": "harvest/pdf-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "b6be7a2017d96e92eb20f9bffa949a8c433633b9ed9d4e741db089bb9588d07f",
+      "ossSha256": "2896d0425781152eafbd5bc7a3076ca95f587e896ab0f9dea69afe99f6baf094"
+    },
+    {
+      "path": "harvest/perplexity-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "95b54dac195949f2b53c21f908f1f0fc04564b55eac892ce757e81d53f0793cd",
+      "ossSha256": "20d7366d9848916994ac9f834ee3cd03700fde671c632ba5564a7122c8195454"
+    },
+    {
+      "path": "harvest/plaintext-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "14fa80a29642a448391a529a5a8dd0b33460c09e0223b984bb293ec73ede10d0",
+      "ossSha256": "1e24105088181c46302718b886fe9a4400ce05a9e8a64345c7b6bc78b222bcd1"
+    },
+    {
+      "path": "harvest/prompts.ts",
+      "kinds": ["branding"],
+      "canonicalSha256": "c672d702e335af33c6674f4b7b2c3536541fe1f5482b49660d4412d99620baca",
+      "ossSha256": "2730b9cfdfc5fcf3940d7a43b86f3ebce0e53e4ed1127fd665c137434e9e83ac"
+    },
+    {
+      "path": "harvest/raw-types.ts",
+      "kinds": ["import", "layout"],
+      "canonicalSha256": "2a10f0374d91c4f6e3f87c0fd77fc9ade24a669f7d08f2b283c653ca114284c1",
+      "ossSha256": "1bf0a4c45090466589a8b49694fb182deb6ab7e8442b61eb65cb3387bd62f0aa"
+    },
+    {
+      "path": "harvest/run-store.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "3ea55f2884ad8cfa40aaeeb7398f5a962dbe29436396696ba9776038fe5c8ab5",
+      "ossSha256": "956c976f0113c26f1b5c6e9826d96b72203b3b6468f926d6af768342d5cebadc"
+    },
+    {
+      "path": "harvest/source-store.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "5f82788d632dfb85c243313e074a280bd7a49564ec525c9ad90496d12d1fb54d",
+      "ossSha256": "97d12f2c48564c748c394d09343a160c2e526a36830562139fb0cc579d020cc0"
+    },
+    {
+      "path": "harvest/types.ts",
+      "kinds": ["import", "layout"],
+      "canonicalSha256": "16f4757b7049617425e753ba4c14eb54c63ef113e4aaa23990ee6cf2188053ad",
+      "ossSha256": "2eda81e6277c61a8920f60ce1815785de5521f27915f8704577c771b1135a0b7"
+    },
+    {
+      "path": "harvest/universal-adapter.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "a39368bc35d242ec6693b0c4964bac0dcdff80b9f659dccbbd5d18e99a894b32",
+      "ossSha256": "a9dfefd30d367f6d5618baeb1687a2b93074104d907719cae426f9fb1162de2b"
+    },
+    {
+      "path": "harvest/url-egress-guard.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "4940b28d7ea06e460ad97a522214fac27a803e691b4fbfe110bf97e8dfd98ce5",
+      "ossSha256": "eacc5e69ee71b2000e7bf26a8ac2c9e64f15db884978789e24d708aeacc74668"
+    },
+    {
+      "path": "injection-scanner.ts",
+      "kinds": ["layout"],
+      "canonicalSha256": "a1b5db9afc71873262df1db9ae89d0821c4122e1f38d982ef048f3080db51adf",
+      "ossSha256": "beede3f82c66106367a2ae58f3bcfdec4884c5b9fb2b792ea08b88cd7284d9d1"
+    },
+    {
+      "path": "logger.ts",
+      "kinds": ["branding", "logger"],
+      "canonicalSha256": "cca0f01bd7bfaeea7166b4d51ad677320c241f68024885bc688f5d31307b12fe",
+      "ossSha256": "0ce6746ba197b80a067a10388764568bf97477766e924266ee4a48ca6d01a888"
+    },
+    {
+      "path": "memory-ingress-guard.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "5c795775b580d20343471067d060192e5065787f35602713563512b2fde06007",
+      "ossSha256": "a00b66a3814aea50d6926b55996af883f06ee561760d463085847669183b98de"
+    },
+    {
+      "path": "mind/api-embedder.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "16ad89d908dc3810e793d838c6ab8448394a6f7145dde374cd20980b72eb216d",
+      "ossSha256": "9ab9c766e138cf19a9a78a9e8a6f6b42e9f62048371b07a5123e4c0388f79c27"
+    },
+    {
+      "path": "mind/awareness.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "bdc30923a6c753a7749850c9ab436dda111a816d18028c4274521ad08484cf36",
+      "ossSha256": "13fb221475e76fea2fe6ece872a3e34eb3c7bbe3c67d6d2215304878a9ac74b2"
+    },
+    {
+      "path": "mind/chunker.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "f6121b2b1db5a1b5dcce39a909692dc96a997a95331cad1b6d2f3cc49d3d4bbd",
+      "ossSha256": "e5166ce85e1c93fa155e1e9bda636ecc50b56fa41b3f059186520f71fb8302f3"
+    },
+    {
+      "path": "mind/concept-tracker.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "779ab17aad0d3751ea40d8eb558a63a7e36031b3fa97cd29fe211d2551965c51",
+      "ossSha256": "0aba6c53edd4e7357081e1722e08005f328ecbaa8e69add9efb8bf7c76d055a5"
+    },
+    {
+      "path": "mind/content-hash.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "354a9648d480dea048dcd78ca784a56efcc417c7574e1fbea779d3df95da074f",
+      "ossSha256": "e1d34ca9b3cd1ce0351509ab04fdb4a6d96b78f96005b2ca23229b5bcee40bfc"
+    },
+    {
+      "path": "mind/embeddings.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "74ce421fc82964ca8928d40be6cfb91370445692b49758601b3a5057d586a218",
+      "ossSha256": "827a9ec88ef33c7ff5838b9b9ac00fae0d12e0c16d0d2061415e6cbf9520fae1"
+    },
+    {
+      "path": "mind/entity-normalizer.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "936ecb94d368fa1f010a047c3205f09331cfdd77111493af37909b0ae1cce1a2",
+      "ossSha256": "ea4ef0ecb8879eca6241a48a92c0e209fd00a64ef0325ee12ef480195021c695"
+    },
+    {
+      "path": "mind/fts-sanitize.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "4affefd57348f58ef9a0de915e43548c9b13ebb3976b74b60b281798eedaae4e",
+      "ossSha256": "cb24324005ae69d35af69325c545555a2e79d0d71ed5695e7e71a12963ff4b48"
+    },
+    {
+      "path": "mind/litellm-embedder.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "87e1da22f2e0047d2f9b754f5faf353c04654a12392fe1c2dca2ced12a84d712",
+      "ossSha256": "4f2d43f1a17961e8f94bff3a06b3008cd3b69a0807e03232fb96fe386308c1a4"
+    },
+    {
+      "path": "mind/ollama-embedder.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "9fef2d801ab2c6918d0c352fa3b1fcc77f1a1c77070cd166f785d13ccfd4fe30",
+      "ossSha256": "1f2f543ed5d8f97a841bae27dc436f11f21d3dbd55473f303f5ef8f20bb4341a"
+    },
+    {
+      "path": "mind/ontology.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "2c301a0ed4b5aecb470e33e8eba34f03ab985a9d4431e6a5ab5cbc36e3b222a0",
+      "ossSha256": "859ead772389e5854ca1c5681b36ef2f551e3d2bf8f8d9247823eaee68fe8666"
+    },
+    {
+      "path": "mind/parse-date-window.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "4ba482d24958a4188f0e3ba0871f8d8199dc37b2999aa42010bac0631fe89365",
+      "ossSha256": "de0a8e7f59072031d4ff916f8b10c7451ee8607e0351ddf385e687b13633b252"
+    },
+    {
+      "path": "mind/recall-context.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "56f291422e5f4d22c5d0eb5b5dc3a65bf814146963677d63e6378f070da5bcf3",
+      "ossSha256": "30529798ae7669d16a24765689d4f4b24287b8fdb0fa94a87adc19acc99fe5a8"
+    },
+    {
+      "path": "mind/reconcile.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "3defdff6d3d5c831297c54143e525cf2f9539e9726a66f5288c1ea288c54e384",
+      "ossSha256": "6fd2b97b9a18d791dd89c71bd7c155be0719982cd7ee2110ebf1644cea7e5b87"
+    },
+    {
+      "path": "mind/resolve-relative-date.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "bc2d8ec1baa95b12b4a374e6dce851e7290042ebcb27d22389098f0f4a624adc",
+      "ossSha256": "6afaee5857dc533b0a6730d6acd6fd4530291322db5e19c6bd9782cc5aad40f5"
+    },
+    {
+      "path": "mind/scoring.ts",
+      "kinds": ["import"],
+      "canonicalSha256": "8bcc3225c3aba5a9ef98d6db10206b0761c4e06ac94e3644f4881f8b80c4a017",
+      "ossSha256": "6660a2ba157b6e84561222b24ade3bcd68202e722b4a3ce6d9d716f9eba13f98"
+    },
+    {
+      "path": "mind/sessions.ts",
+      "kinds": ["import", "logger"],
+      "canonicalSha256": "4fc4ad9be81016310ce89ef142ed5cd7d7a99224750fb7a664ad2fd7ffe514ab",
+      "ossSha256": "94d56a29840bb317b5391bca8782c6901b88dbf7aafff6bac3f051242e0d8343"
+    },
+    {
+      "path": "mind/transformers-model-load.ts",
+      "kinds": ["branding", "import", "logger"],
+      "canonicalSha256": "43c13897de7ea8eb5ce27d89f9e5a50e58afb6aa47b266efbc2b0517d8920e92",
+      "ossSha256": "3df62eed18a28d0863ae667ea7d79d687e8809114250bd17dfd337972f3d113d"
+    }
+  ],
+  "knownReviewedBlockers": [
+    { "path": "harvest/dedup.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "harvest/extract-kg-entities.ts", "state": "only-canonical", "disposition": "reconcile" },
+    { "path": "harvest/pipeline.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "harvest/url-adapter.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "hook-runtime.ts", "state": "only-canonical", "disposition": "product-curation" },
+    { "path": "index.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/db.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/embedding-provider.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/frames.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/identity.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/inprocess-embedder.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/knowledge.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/llm-extractor.ts", "state": "only-oss", "disposition": "reconcile" },
+    { "path": "mind/raw-archive.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/raw-detail-lane.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/schema.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/search.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "mind/supersede.ts", "state": "only-canonical", "disposition": "product-curation" },
+    { "path": "mind/suppression.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "multi-mind-cache.ts", "state": "different", "disposition": "reconcile" },
+    { "path": "multi-mind.ts", "state": "only-canonical", "disposition": "product-curation" },
+    { "path": "workspace-manager.ts", "state": "different", "disposition": "reconcile" }
+  ],
+  "unreviewedDifferences": [
+    { "path": "harvest/raw-turns.ts", "state": "different" }
+  ],
+  "forbiddenExports": {
+    "paths": [
+      "mind/evolution-runs.ts",
+      "mind/execution-traces.ts",
+      "mind/improvement-signals.ts"
+    ],
+    "pathPrefixes": [
+      "vault.ts",
+      "compliance/"
+    ],
+    "markers": [
+      { "path": "mind/db.ts", "token": "install_audit" },
+      { "path": "mind/schema.ts", "token": "install_audit" }
+    ]
+  }
+}

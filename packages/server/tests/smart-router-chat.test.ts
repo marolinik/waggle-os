@@ -690,6 +690,8 @@ describe('chat smart-router integration', () => {
     config.clearFallbackModel();
     config.save();
     const previousCurrentModel = server.agentState.currentModel;
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     server.agentState.currentModel = primary;
     const session = 'preflight-model-substitution-provenance';
 
@@ -735,6 +737,8 @@ describe('chat smart-router integration', () => {
       expect(persistedTrace.model).toBe('ollama/primary-test-model');
     } finally {
       server.agentState.currentModel = previousCurrentModel;
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
     }
   });
 
@@ -748,6 +752,8 @@ describe('chat smart-router integration', () => {
     config.clearFallbackModel();
     config.save();
     const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     process.env.OPENROUTER_API_KEY = 'sk-openrouter-provider-family-test';
     const previousProvider = server.agentState.llmProvider;
     const previousCurrentModel = server.agentState.currentModel;
@@ -781,6 +787,8 @@ describe('chat smart-router integration', () => {
     } finally {
       server.agentState.llmProvider = previousProvider;
       server.agentState.currentModel = previousCurrentModel;
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
       if (previousOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
       else process.env.OPENROUTER_API_KEY = previousOpenRouterKey;
     }

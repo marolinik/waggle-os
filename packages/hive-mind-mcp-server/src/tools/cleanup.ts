@@ -254,6 +254,16 @@ interface ConsolidationCounts {
   deprecated: number;
 }
 
+export function resolveConsolidationGop(
+  frameStore: FrameStore,
+  observations: readonly { id: number }[],
+): string | null {
+  const newestObservation = observations[observations.length - 1];
+  if (!newestObservation) return null;
+  const anchor = frameStore.getById(newestObservation.id);
+  return anchor?.gop_id ?? null;
+}
+
 /**
  * Run the P/B consolidation pass on a mind: gather I-frame observations,
  * LLM-detect chains + groups, apply (deprecate stale + emit P/B frames), then
@@ -270,20 +280,15 @@ async function runConsolidation(
   const observations = collectObservations(db, { limit });
   if (observations.length < 2) return empty;
 
-  const anchor = db
-    .getDatabase()
-    .prepare(
-      "SELECT gop_id FROM memory_frames WHERE frame_type = 'I' AND importance != 'deprecated' ORDER BY created_at DESC, id DESC LIMIT 1",
-    )
-    .get() as { gop_id: string } | undefined;
-  if (!anchor) return empty;
+  const anchorGop = resolveConsolidationGop(frameStore, observations);
+  if (!anchorGop) return empty;
 
   const llm = buildConsolidationLlm(model);
   const [chains, groups] = await Promise.all([
     detectSupersessionChains(observations, llm),
     detectEntityGroups(observations, llm),
   ]);
-  const { pframes, bframes, deprecated } = applyConsolidation(frameStore, chains, groups, anchor.gop_id);
+  const { pframes, bframes, deprecated } = applyConsolidation(frameStore, chains, groups, anchorGop);
 
   const toIndex = [
     ...pframes.map((f) => ({ id: f.id, content: f.content })),

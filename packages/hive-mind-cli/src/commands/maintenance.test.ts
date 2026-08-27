@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -69,5 +69,101 @@ describe('maintenance (per-mind dispatch)', () => {
     const result = await runMaintenance({ compact: true, env });
     expect(result.compact).toBeDefined();
     expect(typeof result.compact!.temporaryPruned).toBe('number');
+  });
+
+  it('rejects consolidate limits outside the detector contract before model work', async () => {
+    for (const consolidateLimit of [-1, 0, 1.5, 401, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(runMaintenance({ consolidate: true, consolidateLimit, env }))
+        .rejects.toThrow(/consolidate-limit.*1.*400/i);
+    }
+  });
+
+  it('rejects an invalid consolidate limit before workspace dispatch or earlier mutations', async () => {
+    await expect(runMaintenance({
+      allWorkspaces: true,
+      consolidate: true,
+      consolidateLimit: 0,
+      env,
+    })).rejects.toThrow(/consolidate-limit.*1.*400/i);
+
+    const temporary = env.frames.createIFrame(
+      'g-maint',
+      'must survive rejected combined maintenance',
+      'temporary',
+      'agent_inferred',
+    );
+    env.db.getDatabase().prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run('2020-01-01 00:00:00', temporary.id);
+
+    await expect(runMaintenance({
+      compact: true,
+      consolidate: true,
+      consolidateLimit: 0,
+      maxTempAgeDays: 1,
+      env,
+    })).rejects.toThrow(/consolidate-limit.*1.*400/i);
+    expect(env.frames.getById(temporary.id)?.content)
+      .toBe('must survive rejected combined maintenance');
+  });
+
+  it('anchors consolidation output to the newest collected observation session', async () => {
+    env.db.getDatabase().prepare(
+      "INSERT INTO sessions (gop_id, status, started_at) VALUES ('g-excluded', 'active', datetime('now'))",
+    ).run();
+    const older = env.frames.createIFrame(
+      'g-maint',
+      'role was analyst',
+      'normal',
+      'agent_inferred',
+    );
+    const newer = env.frames.createIFrame(
+      'g-maint',
+      'role is director',
+      'normal',
+      'agent_inferred',
+    );
+    const excluded = env.frames.createIFrame(
+      'g-excluded',
+      'user-stated note from an unrelated session',
+      'normal',
+      'user_stated',
+    );
+    const raw = env.db.getDatabase();
+    raw.prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run('2026-01-01 00:00:00', older.id);
+    raw.prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run('2026-03-01T01:00:00+0100', newer.id);
+    raw.prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')
+      .run('2099-04-01 00:00:00', excluded.id);
+
+    const previousKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = 'test-only-key';
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        messages: Array<{ content: string }>;
+      };
+      const isChainRequest = body.messages[0]?.content.includes('UPDATE CHAINS');
+      const content = isChainRequest
+        ? '{"chains":[{"attribute":"role","current_value":"director","ids":[1,2]}]}'
+        : '{"groups":[]}';
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    });
+
+    try {
+      const result = await runMaintenance({
+        consolidate: true,
+        consolidateModel: 'gpt-test',
+        env,
+      });
+      expect(result.consolidate?.pframes).toBe(1);
+      const pframe = raw.prepare(
+        "SELECT gop_id FROM memory_frames WHERE frame_type = 'P' ORDER BY id DESC LIMIT 1",
+      ).get() as { gop_id: string };
+      expect(pframe.gop_id).toBe('g-maint');
+    } finally {
+      fetchMock.mockRestore();
+      if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousKey;
+    }
   });
 });

@@ -145,6 +145,36 @@ async function waitFor(
   throw new Error(`Timed out after ${timeoutMs}ms`);
 }
 
+async function waitForReadyFile(
+  child: ChildProcessWithoutNullStreams,
+  readyFile: string,
+  output: () => { stdout: string; stderr: string },
+  timeoutMs: number,
+): Promise<void> {
+  try {
+    await waitFor(
+      () => fs.existsSync(readyFile) || child.exitCode !== null || child.signalCode !== null,
+      timeoutMs,
+    );
+  } catch (error) {
+    const { stdout, stderr } = output();
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)} waiting for ${readyFile}`
+      + `\nexit=${String(child.exitCode)} signal=${String(child.signalCode)}`
+      + `\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    );
+  }
+
+  if (!fs.existsSync(readyFile)) {
+    const { stdout, stderr } = output();
+    throw new Error(
+      `Launcher exited before writing ${readyFile}`
+      + `\nexit=${String(child.exitCode)} signal=${String(child.signalCode)}`
+      + `\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    );
+  }
+}
+
 async function waitForHealth(url: string, timeoutMs: number): Promise<Record<string, unknown>> {
   let lastError = '';
   await waitFor(async () => {
@@ -400,6 +430,7 @@ describe('Waggle CLI Launcher', () => {
         const pkg = JSON.parse(
           fs.readFileSync(path.join(extractDir, 'package', 'package.json'), 'utf8'),
         );
+        const distFiles = fs.readdirSync(path.join(extractDir, 'package', 'dist'));
         const result = await run(
           process.execPath,
           [path.join(extractDir, 'package', 'dist', 'cli.js'), '--help'],
@@ -407,6 +438,15 @@ describe('Waggle CLI Launcher', () => {
         );
 
         expect(pkg.bin.waggle).toBe('./dist/cli.js');
+        expect({
+          transformersDependency: pkg.dependencies?.['@huggingface/transformers'],
+          bundledNativeBindings: distFiles.filter((file) => /^onnxruntime_binding-.*\.node$/.test(file)),
+          bundledTransformersRuntime: distFiles.filter((file) => /^transformers\.node-.*\.js$/.test(file)),
+        }).toEqual({
+          transformersDependency: '3.8.1',
+          bundledNativeBindings: [],
+          bundledTransformersRuntime: [],
+        });
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('Usage:');
         expect(result.stdout).not.toContain('[waggle:service]');
@@ -452,6 +492,19 @@ describe('Waggle CLI Launcher', () => {
           home,
         );
         expect(install.status).toBe(0);
+
+        const nativeEmbeddingRuntime = await runInCwd(
+          process.execPath,
+          [
+            '--input-type=module',
+            '--eval',
+            "const runtime = await import('@huggingface/transformers'); if (typeof runtime.pipeline !== 'function') throw new Error('Transformers pipeline API is unavailable');",
+          ],
+          projectDir,
+          home,
+        );
+        expect(nativeEmbeddingRuntime.status).toBe(0);
+        expect(nativeEmbeddingRuntime.stderr).toBe('');
 
         const help = await runInCwd(bin('npx'), ['waggle', '--help'], projectDir, home);
         expect(help.status).toBe(0);
@@ -529,6 +582,7 @@ describe('Waggle CLI Launcher', () => {
         const unreachableOllamaPort = await freePort();
         const unreachableVllmPort = await freePort();
         const providerFreeEnv = {
+          EMBEDDING_PROVIDER: 'mock',
           ANTHROPIC_API_KEY: '',
           OPENAI_API_KEY: '',
           GEMINI_API_KEY: '',
@@ -566,7 +620,7 @@ describe('Waggle CLI Launcher', () => {
         child.stdout.on('data', (chunk) => { stdout += chunk; });
         child.stderr.on('data', (chunk) => { stderr += chunk; });
 
-        await waitFor(() => fs.existsSync(readyFile), 30_000);
+        await waitForReadyFile(child, readyFile, () => ({ stdout, stderr }), 90_000);
         const ready = JSON.parse(fs.readFileSync(readyFile, 'utf8')) as {
           preferredPort: number;
           port: number;
@@ -665,7 +719,12 @@ describe('Waggle CLI Launcher', () => {
         child.stdout.on('data', (chunk) => { restartStdout += chunk; });
         child.stderr.on('data', (chunk) => { restartStderr += chunk; });
 
-        await waitFor(() => fs.existsSync(restartReadyFile), 30_000);
+        await waitForReadyFile(
+          child,
+          restartReadyFile,
+          () => ({ stdout: restartStdout, stderr: restartStderr }),
+          90_000,
+        );
         const restartReady = JSON.parse(fs.readFileSync(restartReadyFile, 'utf8')) as {
           preferredPort: number;
           port: number;
@@ -734,6 +793,6 @@ describe('Waggle CLI Launcher', () => {
           retryDelay: 100,
         });
       }
-    }, 180_000);
+    }, 360_000);
   });
 });

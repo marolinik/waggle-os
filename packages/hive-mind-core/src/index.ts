@@ -105,6 +105,7 @@ export {
   applyConsolidation,
   collectObservations,
   getCurrentValues,
+  MAX_CONSOLIDATION_OBSERVATIONS,
 } from './mind/supersede.js';
 export type {
   ConsolidationLlm,
