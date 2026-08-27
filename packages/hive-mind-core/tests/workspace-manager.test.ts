@@ -18,6 +18,22 @@ describe('WorkspaceManager', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  describe('workspace root', () => {
+    it('rejects a pre-existing workspaces junction that escapes the data directory', () => {
+      const workspacesDir = path.join(tmpDir, 'workspaces');
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-ws-root-outside-'));
+      fs.rmSync(workspacesDir, { recursive: true, force: true });
+      fs.symlinkSync(outsideDir, workspacesDir, process.platform === 'win32' ? 'junction' : 'dir');
+
+      try {
+        expect(() => new WorkspaceManager(tmpDir)).toThrow(/workspace root/i);
+      } finally {
+        fs.unlinkSync(workspacesDir);
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('create', () => {
     it('creates workspace with directory, config, mind file, and sessions dir', () => {
       const ws = manager.create({ name: 'My Project', group: 'Work' });
@@ -50,6 +66,34 @@ describe('WorkspaceManager', () => {
 
     it('returns empty array when no workspaces exist', () => {
       expect(manager.list()).toEqual([]);
+    });
+
+    it('omits a workspace whose config is a hard link to an outside file', () => {
+      manager.create({ name: 'Linked Config', group: 'Work' });
+      const configPath = path.join(tmpDir, 'workspaces', 'linked-config', 'workspace.json');
+      const outsidePath = path.join(tmpDir, 'outside-workspace.json');
+      fs.writeFileSync(outsidePath, JSON.stringify({
+        id: 'linked-config',
+        name: 'OUTSIDE-SECRET',
+        group: 'Work',
+        created: new Date().toISOString(),
+      }));
+      fs.unlinkSync(configPath);
+      fs.linkSync(outsidePath, configPath);
+
+      expect(manager.get('linked-config')).toBeNull();
+      expect(manager.list().some((workspace) => workspace.id === 'linked-config')).toBe(false);
+      expect(fs.readFileSync(outsidePath, 'utf8')).toContain('OUTSIDE-SECRET');
+    });
+
+    it('omits a workspace whose config identity does not match its directory', () => {
+      manager.create({ name: 'Expected Config', group: 'Work' });
+      const configPath = path.join(tmpDir, 'workspaces', 'expected-config', 'workspace.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as WorkspaceConfig;
+      fs.writeFileSync(configPath, JSON.stringify({ ...config, id: 'different-config' }));
+
+      expect(manager.get('expected-config')).toBeNull();
+      expect(manager.list().some((workspace) => workspace.id === 'different-config')).toBe(false);
     });
   });
 
@@ -158,6 +202,33 @@ describe('WorkspaceManager', () => {
       expect(manager.get('to-delete')).toBeNull();
       const wsDir = path.join(tmpDir, 'workspaces', 'to-delete');
       expect(fs.existsSync(wsDir)).toBe(false);
+    });
+
+    it.each(['', '.', '..', '../escape', 'nested/escape', 'nested\\escape', 'C:\\escape'])(
+      'rejects unsafe workspace id %j without deleting outside the workspace root',
+      (id) => {
+        const sentinel = path.join(tmpDir, 'sentinel.txt');
+        fs.writeFileSync(sentinel, 'preserve me');
+
+        expect(() => manager.delete(id)).toThrow(/invalid workspace id/i);
+        expect(fs.readFileSync(sentinel, 'utf8')).toBe('preserve me');
+        expect(fs.statSync(path.join(tmpDir, 'workspaces')).isDirectory()).toBe(true);
+      },
+    );
+
+    it('preserves an on-disk directory whose workspace config cannot be validated', () => {
+      manager.create({ name: 'Untrusted Delete', group: 'Work' });
+      const workspaceDir = path.join(tmpDir, 'workspaces', 'untrusted-delete');
+      const configPath = path.join(workspaceDir, 'workspace.json');
+      const outsidePath = path.join(tmpDir, 'outside-delete.json');
+      fs.writeFileSync(outsidePath, JSON.stringify({ id: 'untrusted-delete' }));
+      fs.unlinkSync(configPath);
+      fs.linkSync(outsidePath, configPath);
+
+      manager.delete('untrusted-delete');
+
+      expect(fs.statSync(workspaceDir).isDirectory()).toBe(true);
+      expect(fs.readFileSync(outsidePath, 'utf8')).toContain('untrusted-delete');
     });
   });
 
