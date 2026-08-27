@@ -181,6 +181,12 @@ function decodeUnicodeEscapes(value: string): string {
   );
 }
 
+function decodeHexEscapes(value: string): string {
+  if (!/\\x/i.test(value)) return value;
+  return value.replace(/\\x([0-9a-f]{2})/gi, (_match, hex: string) =>
+    String.fromCharCode(Number.parseInt(hex, 16)));
+}
+
 const MIXED_SCRIPT_CONFUSABLES: Readonly<Record<string, string>> = Object.freeze({
   '\u0391': 'A',
   '\u0392': 'B',
@@ -385,6 +391,15 @@ function replaceHiddenSeparators(value: string, replacement: string): string {
   return projected;
 }
 
+function projectDelimitedWords(value: string): string | undefined {
+  const projected = value.replace(
+    /(\p{L})([\p{P}\p{S}\p{White_Space}]+)(?=\p{L})/gu,
+    (match, letter: string, separators: string) =>
+      /[\p{P}\p{S}]/u.test(separators) ? `${letter} ` : match,
+  );
+  return projected === value ? undefined : projected;
+}
+
 type HtmlTagBoundary =
   | { kind: 'close'; index: number }
   | { kind: 'nested'; index: number }
@@ -552,9 +567,9 @@ function normalizedIngressProjections(value: string, includeBase64 = true): {
   for (let pass = 0; pass < maxPasses; pass++) {
     work += decodedProjection.length;
     if (work > maxWork) break;
-    const decodedText = decodeUnicodeEscapes(
+    const decodedText = decodeUnicodeEscapes(decodeHexEscapes(
       decodeHtmlEntities(decodePercentEncoding(decodedProjection)),
-    );
+    ));
     const decoded = decodedText === decodedProjection
       ? decodedProjection
       : decodedText.normalize('NFKC');
@@ -709,11 +724,20 @@ export function evaluateExternalMemoryIngress(
   if (scan.safe) {
     const normalizedIngress = normalizedIngressProjections(projection);
     for (const normalized of normalizedIngress.projections) {
-      if (normalized === projection) continue;
-      const normalizedScan = scanForInjection(normalized, 'tool_output');
-      if (!normalizedScan.safe) {
-        scan = normalizedScan;
-        break;
+      if (normalized !== projection) {
+        const normalizedScan = scanForInjection(normalized, 'tool_output');
+        if (!normalizedScan.safe) {
+          scan = normalizedScan;
+          break;
+        }
+      }
+      const delimited = projectDelimitedWords(normalized);
+      if (delimited !== undefined) {
+        const delimitedScan = scanForInjection(delimited, 'tool_output');
+        if (!delimitedScan.safe) {
+          scan = delimitedScan;
+          break;
+        }
       }
     }
     if (scan.safe && !normalizedIngress.complete) {
