@@ -20,8 +20,8 @@
  */
 
 import type { LLMCallFn } from './pipeline.js';
-import { scanForInjection } from '../injection-scanner.js';
 import { createCoreLogger } from '../logger.js';
+import { evaluateExternalMemoryIngress } from '../memory-ingress-guard.js';
 import { isNoiseName, normalizeEntityName } from '../mind/entity-normalizer.js';
 import type { KnowledgeGraph } from '../mind/knowledge.js';
 
@@ -167,9 +167,11 @@ function parseJsonlOutput(raw: string, validFrameIds: ReadonlySet<number>): KgEn
     const rawType = typeof parsed.type === 'string' ? parsed.type.toLowerCase().trim() : '';
     if (!(KG_ENTITY_TYPES as readonly string[]).includes(rawType)) continue;
 
-    const scan = scanForInjection(name, 'tool_output');
-    if (!scan.safe) {
-      log.warn('dropping extracted entity name with injection payload', { flags: scan.flags.join(',') });
+    const ingress = evaluateExternalMemoryIngress({ content: name });
+    if (ingress.action !== 'allow') {
+      log.warn('dropping extracted entity name with injection payload', {
+        flags: ingress.scan.flags.join(','),
+      });
       continue;
     }
 
@@ -255,7 +257,7 @@ export function writeKgEntities(
       if (isNoiseName(name)) continue;
       if (normalizeEntityName(name).length < 3) continue;
       if (!(KG_ENTITY_TYPES as readonly string[]).includes(entity.type)) continue;
-      if (!scanForInjection(name, 'tool_output').safe) continue;
+      if (evaluateExternalMemoryIngress({ content: name }).action !== 'allow') continue;
 
       const existing = kg.findEntityByName(name);
       if (existing) {
