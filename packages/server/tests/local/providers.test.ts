@@ -6,8 +6,10 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
+import type { AddressInfo } from 'node:net';
 import { MindDB, SessionStore, FrameStore } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
@@ -32,6 +34,7 @@ interface ProviderResponse {
   badge: string | null;
   models: ProviderModelResponse[];
   modelsSource?: string;
+  baseUrl?: string;
 }
 
 function mockProviderCatalogFetch() {
@@ -124,6 +127,7 @@ describe('Provider API', () => {
 
       expect(ids).toContain('anthropic');
       expect(ids).toContain('openai');
+      expect(ids).toContain('openai-compatible');
       expect(ids).toContain('google');
       expect(ids).toContain('deepseek');
       expect(ids).toContain('xai');
@@ -295,6 +299,93 @@ describe('Provider API', () => {
       const { providers } = res.json();
       const openrouter = providers.find((p: ProviderResponse) => p.id === 'openrouter');
       expect(openrouter.badge).toBe('Provider catalog');
+    });
+
+    it('persists a normalized keyless OpenAI-compatible endpoint and retains it on key-only updates', async () => {
+      const authorizationHeaders: Array<string | undefined> = [];
+      const catalogServer = http.createServer((request, response) => {
+        authorizationHeaders.push(request.headers.authorization);
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ data: [{ id: 'local-qwen', name: 'Local Qwen' }] }));
+      });
+      await new Promise<void>((resolve) => catalogServer.listen(0, '127.0.0.1', resolve));
+      const { port } = catalogServer.address() as AddressInfo;
+      const normalizedBaseUrl = `http://127.0.0.1:${port}/v1`;
+
+      try {
+        const configured = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': { baseUrl: `  ${normalizedBaseUrl}///  ` },
+            },
+          },
+        });
+        expect(configured.statusCode).toBe(200);
+        expect(configured.json().providers['openai-compatible']).toMatchObject({
+          apiKey: '****',
+          baseUrl: normalizedBaseUrl,
+        });
+
+        const discovered = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const compatible = discovered.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        );
+        expect(compatible).toMatchObject({
+          requiresKey: false,
+          hasKey: false,
+          baseUrl: normalizedBaseUrl,
+          modelsSource: 'provider-api',
+        });
+        expect(compatible.models).toContainEqual(expect.objectContaining({
+          id: 'openai-compatible/local-qwen',
+          name: 'Local Qwen',
+        }));
+        expect(authorizationHeaders).toEqual([undefined]);
+
+        const keyOnlyUpdate = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': { apiKey: 'optional-local-secret' },
+            },
+          },
+        });
+        expect(keyOnlyUpdate.statusCode).toBe(200);
+        expect(keyOnlyUpdate.json().providers['openai-compatible'].baseUrl).toBe(normalizedBaseUrl);
+
+        const persisted = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf8')) as {
+          providers?: Record<string, { baseUrl?: string }>;
+        };
+        expect(persisted.providers?.['openai-compatible']?.baseUrl).toBe(normalizedBaseUrl);
+        expect(server.vault?.get('openai-compatible')?.metadata?.baseUrl).toBe(normalizedBaseUrl);
+      } finally {
+        await new Promise<void>((resolve, reject) => catalogServer.close((error) => error ? reject(error) : resolve()));
+        server.vault?.delete('openai-compatible');
+        const configPath = path.join(tmpDir, 'config.json');
+        const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+          providers?: Record<string, unknown>;
+        };
+        delete persisted.providers?.['openai-compatible'];
+        fs.writeFileSync(configPath, JSON.stringify(persisted, null, 2), 'utf8');
+      }
+    });
+
+    it('rejects non-http OpenAI-compatible endpoint URLs', async () => {
+      const res = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          providers: {
+            'openai-compatible': { baseUrl: 'file:///C:/secrets' },
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toMatch(/http/i);
     });
   });
 });

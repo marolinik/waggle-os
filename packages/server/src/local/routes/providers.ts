@@ -6,6 +6,7 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
+import { WaggleConfig } from '@waggle/core';
 import { discoverProviderModels, fetchOllamaModels } from '../provider-model-catalog.js';
 import { getProviderApiKey } from '../provider-env.js';
 
@@ -30,6 +31,7 @@ interface SearchProviderDef {
 const LLM_PROVIDERS: ProviderDef[] = [
   { id: 'anthropic', name: 'Anthropic', keyPrefix: 'sk-ant-', keyUrl: 'https://console.anthropic.com/settings/keys', badge: null, requiresKey: true },
   { id: 'openai', name: 'OpenAI', keyPrefix: 'sk-', keyUrl: 'https://platform.openai.com/api-keys', badge: null, requiresKey: true },
+  { id: 'openai-compatible', name: 'OpenAI-compatible', keyPrefix: null, keyUrl: null, badge: 'Custom endpoint', requiresKey: false },
   { id: 'google', name: 'Google', keyPrefix: null, keyUrl: 'https://aistudio.google.com/apikey', badge: null, requiresKey: true },
   { id: 'deepseek', name: 'DeepSeek', keyPrefix: null, keyUrl: 'https://platform.deepseek.com/api_keys', badge: null, requiresKey: true },
   { id: 'xai', name: 'xAI', keyPrefix: null, keyUrl: 'https://console.x.ai/', badge: null, requiresKey: true },
@@ -56,6 +58,7 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /api/providers — single source of truth for all providers, models, and key status
   fastify.get('/api/providers', async () => {
     const vault = fastify.vault;
+    const configProviders = new WaggleConfig(fastify.localConfig.dataDir).getProviders();
 
     const ollamaPromise = fetchOllamaModels();
     const providers = await Promise.all(LLM_PROVIDERS.map(async (p) => {
@@ -76,15 +79,27 @@ export const providerRoutes: FastifyPluginAsync = async (fastify) => {
       const entry = vault?.get(p.id);
       const apiKey = getProviderApiKey(p.id, vault);
       const hasKey = Boolean(apiKey);
-      if (!apiKey) {
-        return { ...p, hasKey, models: [], modelsSource: 'requires-key' as const };
+      const baseUrl = typeof entry?.metadata?.baseUrl === 'string'
+        ? entry.metadata.baseUrl
+        : configProviders[p.id]?.baseUrl;
+      if (!apiKey && p.requiresKey) {
+        return {
+          ...p,
+          hasKey,
+          models: [],
+          modelsSource: 'requires-key' as const,
+          ...(baseUrl ? { baseUrl } : {}),
+        };
+      }
+      if (p.id === 'openai-compatible' && !baseUrl) {
+        return { ...p, hasKey, models: [], modelsSource: 'requires-endpoint' as const };
       }
 
-      const baseUrl = typeof entry?.metadata?.baseUrl === 'string' ? entry.metadata.baseUrl : undefined;
-      const catalog = await discoverProviderModels(p.id, apiKey, baseUrl);
+      const catalog = await discoverProviderModels(p.id, apiKey ?? '', baseUrl);
       return {
         ...p,
         hasKey,
+        ...(baseUrl ? { baseUrl } : {}),
         models: catalog.models,
         modelsSource: catalog.status,
         ...(catalog.updatedAt ? { modelsUpdatedAt: catalog.updatedAt } : {}),

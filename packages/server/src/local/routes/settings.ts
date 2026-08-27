@@ -44,6 +44,18 @@ function maskApiKey(key: string): string {
   return key.slice(0, 7) + '...' + key.slice(-4);
 }
 
+function normalizeOpenAiCompatibleBaseUrl(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (url.username || url.password || url.search || url.hash) return null;
+    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
 function applyRuntimeTier(server: FastifyInstance, tier: Tier): void {
   server.localConfig.tier = tier;
   server.sessionManager?.setMaxSessions(maxWorkspaceSessionsForTier(tier));
@@ -53,6 +65,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   // GET /api/settings — read config (keys from vault, metadata from vault+config)
   server.get('/api/settings', async () => {
     const config = new WaggleConfig(server.localConfig.dataDir);
+    const configProviders = config.getProviders();
 
     // Build providers response from vault (encrypted) with config fallback
     const providers: Record<string, { apiKey: string; models: string[]; baseUrl?: string }> = {};
@@ -64,15 +77,14 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
         if (full) {
           providers[entry.name] = {
             apiKey: maskApiKey(full.value),
-            models: (full.metadata?.models as string[]) ?? [],
-            baseUrl: full.metadata?.baseUrl as string | undefined,
+            models: (full.metadata?.models as string[]) ?? configProviders[entry.name]?.models ?? [],
+            baseUrl: (full.metadata?.baseUrl as string | undefined) ?? configProviders[entry.name]?.baseUrl,
           };
         }
       }
     }
 
     // Fallback: merge any config.json providers not in vault (backward compat)
-    const configProviders = config.getProviders();
     for (const [name, entry] of Object.entries(configProviders)) {
       if (!providers[name]) {
         providers[name] = { ...entry, apiKey: maskApiKey(entry.apiKey) };
@@ -114,10 +126,20 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       budgetModel?: string | null;
       budgetThreshold?: number;
     };
-  }>('/api/settings', { preHandler: validateBody(settingsUpdateSchema) }, async (request) => {
+  }>('/api/settings', { preHandler: validateBody(settingsUpdateSchema) }, async (request, reply) => {
     const config = new WaggleConfig(server.localConfig.dataDir);
     const { defaultModel, providers, dailyBudget, budgetHardCap, fallbackModel, budgetModel, budgetThreshold } = request.body;
     let providerKeyChanged = false;
+
+    const compatibleEntry = providers?.['openai-compatible'];
+    if (compatibleEntry && typeof compatibleEntry === 'object') {
+      const { baseUrl } = compatibleEntry as { baseUrl?: unknown };
+      if (baseUrl !== undefined && (typeof baseUrl !== 'string' || normalizeOpenAiCompatibleBaseUrl(baseUrl) === null)) {
+        return reply.code(400).send({
+          error: 'OpenAI-compatible base URL must be an http(s) URL without credentials, query, or fragment.',
+        });
+      }
+    }
 
     if (defaultModel) {
       config.setDefaultModel(defaultModel);
@@ -160,10 +182,17 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     if (providers && typeof providers === 'object') {
       for (const [name, entry] of Object.entries(providers)) {
         const { apiKey, models, baseUrl } = entry as { apiKey?: string; models?: string[]; baseUrl?: string };
+        const existingConfig = config.getProviders()[name];
+        const existingVault = server.vault?.get(name);
         const providerModels = Array.isArray(models)
           ? models.filter((model): model is string => typeof model === 'string')
-          : [];
-        const providerBaseUrl = typeof baseUrl === 'string' ? baseUrl : undefined;
+          : (existingVault?.metadata?.models as string[] | undefined) ?? existingConfig?.models ?? [];
+        const submittedBaseUrl = typeof baseUrl === 'string'
+          ? (name === 'openai-compatible' ? normalizeOpenAiCompatibleBaseUrl(baseUrl)! : baseUrl)
+          : undefined;
+        const providerBaseUrl = submittedBaseUrl
+          ?? (existingVault?.metadata?.baseUrl as string | undefined)
+          ?? existingConfig?.baseUrl;
 
         // Save secret to vault (encrypted)
         if (apiKey && server.vault) {
@@ -174,6 +203,8 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
           if (typeof server._invalidateKeyValidationCache === 'function') {
             server._invalidateKeyValidationCache();
           }
+        } else if (existingVault && server.vault && (models !== undefined || baseUrl !== undefined)) {
+          server.vault.set(name, existingVault.value, { models: providerModels, baseUrl: providerBaseUrl });
         }
 
         // Keep only non-secret provider metadata in config.json. The raw key is
@@ -209,14 +240,15 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     // Return providers from vault (same as GET)
     const responseProviders: Record<string, { apiKey: string; models: string[]; baseUrl?: string }> = {};
     if (server.vault) {
+      const configProviders = config.getProviders();
       const vaultEntries = server.vault.list();
       for (const vEntry of vaultEntries) {
         const full = server.vault.get(vEntry.name);
         if (full) {
           responseProviders[vEntry.name] = {
             apiKey: maskApiKey(full.value),
-            models: (full.metadata?.models as string[]) ?? [],
-            baseUrl: full.metadata?.baseUrl as string | undefined,
+            models: (full.metadata?.models as string[]) ?? configProviders[vEntry.name]?.models ?? [],
+            baseUrl: (full.metadata?.baseUrl as string | undefined) ?? configProviders[vEntry.name]?.baseUrl,
           };
         }
       }
