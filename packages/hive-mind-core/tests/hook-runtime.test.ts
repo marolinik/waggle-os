@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   existsSync,
+  linkSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -223,6 +225,48 @@ describe('hook runtime', () => {
       workspace: 'linked-mind',
     })).toThrow(/workspace mind.*link/i);
   });
+
+  it('rejects a hard-linked personal mind before opening the database', () => {
+    const dir = dataDir();
+    const outside = join(dir, 'outside-personal.mind');
+    const mindPath = join(dir, 'personal.mind');
+    writeFileSync(outside, 'outside sentinel');
+    linkSync(outside, mindPath);
+
+    expect(() => saveHookFrame({
+      dataDir: dir,
+      content: 'must not write through a hard link',
+      importance: 'important',
+      source: 'system',
+    })).toThrow(/hard link/i);
+    expect(readFileSync(outside, 'utf8')).toBe('outside sentinel');
+  });
+
+  it.each(['workspace.json', 'workspace.mind', 'workspace.mind-wal'])(
+    'rejects a hard-linked workspace SQLite boundary entry: %s',
+    (entry) => {
+      const dir = dataDir();
+      createWorkspace(dir, 'hard-linked');
+      const workspaceDir = join(dir, 'workspaces', 'hard-linked');
+      const target = join(workspaceDir, entry);
+      const outside = join(dir, `outside-${entry.replaceAll('.', '-')}`);
+      const outsideContent = entry === 'workspace.json'
+        ? JSON.stringify({ id: 'hard-linked', name: 'outside', group: 'test', created: new Date().toISOString() })
+        : 'outside sentinel';
+      writeFileSync(outside, outsideContent);
+      if (existsSync(target)) rmSync(target);
+      linkSync(outside, target);
+
+      expect(() => saveHookFrame({
+        dataDir: dir,
+        workspace: 'hard-linked',
+        content: 'must not cross a hard-link boundary',
+        importance: 'important',
+        source: 'system',
+      })).toThrow(/hard link/i);
+      expect(readFileSync(outside, 'utf8')).toBe(outsideContent);
+    },
+  );
 
   it('rejects personal and workspace mind file symlinks when the platform permits them', ({ skip }) => {
     const outside = dataDir();

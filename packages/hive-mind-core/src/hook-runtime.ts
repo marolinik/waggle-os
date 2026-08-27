@@ -98,6 +98,7 @@ function requireRegularFile(path: string, label: string): void {
   const stat = lstatSync(path);
   if (stat.isSymbolicLink()) throw new Error(`${label} must not be a link`);
   if (!stat.isFile()) throw new Error(`${label} must be a regular file`);
+  if (stat.nlink !== 1) throw new Error(`${label} must not be a hard link`);
 }
 
 function hasRegularFileEntry(path: string, label: string): boolean {
@@ -105,7 +106,16 @@ function hasRegularFileEntry(path: string, label: string): boolean {
   if (stat === undefined) return false;
   if (stat.isSymbolicLink()) throw new Error(`${label} must not be a link`);
   if (!stat.isFile()) throw new Error(`${label} must be a regular file`);
+  if (stat.nlink !== 1) throw new Error(`${label} must not be a hard link`);
   return true;
+}
+
+function requireSafeSqliteEntries(path: string, label: string): boolean {
+  const hasDatabase = hasRegularFileEntry(path, label);
+  for (const suffix of ['-wal', '-shm', '-journal']) {
+    hasRegularFileEntry(`${path}${suffix}`, `${label}${suffix}`);
+  }
+  return hasDatabase;
 }
 
 function resolveMind(options: { dataDir?: string; workspace?: string }): {
@@ -117,7 +127,7 @@ function resolveMind(options: { dataDir?: string; workspace?: string }): {
     mkdirSync(dataDir, { recursive: true });
     const canonicalDataDir = realpathSync(dataDir);
     const personalMind = join(canonicalDataDir, 'personal.mind');
-    if (hasRegularFileEntry(personalMind, 'Personal mind')) {
+    if (requireSafeSqliteEntries(personalMind, 'Personal mind')) {
       const canonicalMind = realpathSync(personalMind);
       if (!isContained(canonicalDataDir, canonicalMind)) {
         throw new Error('Personal mind escapes data directory');
@@ -166,7 +176,7 @@ function resolveMind(options: { dataDir?: string; workspace?: string }): {
   }
   if (configuredId !== id) throw new Error(`Workspace config id mismatch: ${id}`);
   const mindPath = join(canonicalWorkspace, 'workspace.mind');
-  if (hasRegularFileEntry(mindPath, 'Workspace mind')) {
+  if (requireSafeSqliteEntries(mindPath, 'Workspace mind')) {
     const canonicalMind = realpathSync(mindPath);
     if (!isContained(canonicalWorkspace, canonicalMind)) {
       throw new Error(`Workspace mind escapes data directory: ${id}`);
