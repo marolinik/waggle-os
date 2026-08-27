@@ -170,6 +170,12 @@ export class FrameStore {
     return this.db.getDatabase().prepare('SELECT * FROM memory_frames WHERE id = ?').get(id) as MemoryFrame | undefined;
   }
 
+  hasSession(gopId: string): boolean {
+    return this.db.getDatabase().prepare(
+      'SELECT 1 FROM sessions WHERE gop_id = ? LIMIT 1',
+    ).get(gopId) !== undefined;
+  }
+
   getLatestIFrame(gopId: string): MemoryFrame | undefined {
     return this.db.getDatabase().prepare(`
       SELECT * FROM memory_frames

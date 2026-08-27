@@ -378,59 +378,201 @@ export function applyConsolidation(
   groups: EntityGroup[],
   gopId: string,
 ): ConsolidationResult {
-  if (!frames || typeof frames.createPFrame !== 'function') {
+  if (
+    !frames
+    || typeof frames.createPFrame !== 'function'
+    || typeof frames.runInTransaction !== 'function'
+  ) {
     throw new TypeError('applyConsolidation: frames must be a FrameStore');
   }
   if (typeof gopId !== 'string' || !gopId) {
     throw new Error('applyConsolidation: gopId is required');
   }
 
-  const pframes: MemoryFrame[] = [];
-  const bframes: MemoryFrame[] = [];
-  const deprecated: number[] = [];
-
-  for (const chain of chains ?? []) {
-    const ids = chain.frameIds;
-    if (!Array.isArray(ids) || ids.length < 2) continue;
-
-    const baseId = ids[0];
-    const newestId = ids[ids.length - 1];
-    const newest = frames.getById(newestId);
-    if (!newest) continue; // newest member gone — cannot anchor a current value
-
-    const cleanValue = chain.currentValue.trim() ? chain.currentValue.trim() : newest.content;
-    const attribute = chain.attribute.trim() ? chain.attribute.trim() : 'value';
-    const asOf = String(newest.created_at).slice(0, 10);
-    const pContent = `[current] ${attribute}: ${cleanValue}  (as of ${asOf})`;
-    if (evaluateExternalMemoryIngress({ content: pContent }).action !== 'allow') continue;
-
-    // Deprecate every stale member (all but the newest).
-    for (const staleId of ids.slice(0, -1)) {
-      const stale = frames.getById(staleId);
-      if (!stale) continue;
-      frames.update(staleId, stale.content, 'deprecated');
-      deprecated.push(staleId);
+  return frames.runInTransaction(() => {
+    if (!Array.isArray(chains) || chains.length > MAX_CONSOLIDATION_OBSERVATIONS) {
+      throw new TypeError('applyConsolidation: chains must be a bounded array');
     }
-    // Boost the surviving newest so it wins recall ties.
-    frames.update(newestId, newest.content, 'critical');
+    if (!Array.isArray(groups) || groups.length > MAX_CONSOLIDATION_OBSERVATIONS) {
+      throw new TypeError('applyConsolidation: groups must be a bounded array');
+    }
+    if (!frames.hasSession(gopId)) {
+      throw new Error(`applyConsolidation: destination session does not exist: ${gopId}`);
+    }
 
-    pframes.push(frames.createPFrame(gopId, pContent, baseId, 'critical', 'agent_inferred'));
-  }
+    const frameCache = new Map<number, MemoryFrame>();
+    const requireFrame = (id: number): MemoryFrame => {
+      const cached = frameCache.get(id);
+      if (cached) return cached;
+      const frame = frames.getById(id);
+      if (!frame) throw new Error(`applyConsolidation: missing frame ${id}`);
+      if (frame.importance === 'deprecated') {
+        throw new Error(`applyConsolidation: frame ${id} is deprecated`);
+      }
+      frameCache.set(id, frame);
+      return frame;
+    };
+    const requireIds = (value: unknown, kind: string): number[] => {
+      if (
+        !Array.isArray(value)
+        || value.length < 2
+        || value.length > MAX_CONSOLIDATION_OBSERVATIONS
+      ) {
+        throw new TypeError(`applyConsolidation: ${kind}.frameIds must contain 2-${MAX_CONSOLIDATION_OBSERVATIONS} ids`);
+      }
+      const seen = new Set<number>();
+      for (const id of value) {
+        if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) {
+          throw new TypeError(`applyConsolidation: ${kind}.frameIds must be positive safe integers`);
+        }
+        if (seen.has(id)) {
+          throw new TypeError(`applyConsolidation: ${kind}.frameIds must be unique`);
+        }
+        seen.add(id);
+      }
+      return [...value] as number[];
+    };
 
-  for (const group of groups ?? []) {
-    const ids = group.frameIds;
-    if (!Array.isArray(ids) || ids.length < 2) continue;
-    const label = group.label.trim() ? group.label.trim() : 'group';
-    const desc = `${label} (${ids.length} members)`;
-    const persisted = JSON.stringify({ description: desc, references: ids });
-    if (
-      evaluateExternalMemoryIngress({ content: desc }).action !== 'allow'
-      || evaluateExternalMemoryIngress({ content: persisted }).action !== 'allow'
-    ) continue;
-    bframes.push(frames.createBFrame(gopId, desc, ids[0], ids));
-  }
+    const chainPlans: Array<{
+      baseId: number;
+      pContent: string;
+    }> = [];
+    const groupPlans: Array<{ ids: number[]; desc: string }> = [];
+    const chainPlanByIdentity = new Map<string, { pContent: string }>();
+    const groupPlanByIdentity = new Map<string, { desc: string }>();
+    const staleRoles = new Set<number>();
+    const newestRoles = new Set<number>();
 
-  return { pframes, bframes, deprecated };
+    for (const entry of chains) {
+      if (!isRecord(entry)) {
+        throw new TypeError('applyConsolidation: each chain must be an object');
+      }
+      if (typeof entry.attribute !== 'string' || typeof entry.currentValue !== 'string') {
+        throw new TypeError('applyConsolidation: chain labels and values must be strings');
+      }
+      const ids = requireIds(entry.frameIds, 'chain');
+      const members = ids.map(requireFrame);
+      for (let index = 1; index < members.length; index += 1) {
+        const previous = members[index - 1];
+        const current = members[index];
+        const previousTime = observationTime(previous.created_at);
+        const currentTime = observationTime(current.created_at);
+        if (
+          !Number.isFinite(previousTime)
+          || !Number.isFinite(currentTime)
+          || previousTime > currentTime
+          || (previousTime === currentTime && previous.id >= current.id)
+        ) {
+          throw new Error('applyConsolidation: chain ids must be chronological oldest to newest');
+        }
+      }
+
+      const newest = members[members.length - 1];
+      const cleanValue = safeModelText(entry.currentValue, MAX_CURRENT_VALUE_CHARS);
+      const cleanAttribute = safeModelText(entry.attribute, MAX_LABEL_CHARS);
+      if (cleanValue === null || cleanAttribute === null) {
+        throw new Error('applyConsolidation: unsafe chain label or value');
+      }
+      const value = cleanValue || newest.content;
+      const attribute = cleanAttribute || 'value';
+      const asOf = String(newest.created_at).slice(0, 10);
+      const pContent = `[current] ${attribute}: ${value}  (as of ${asOf})`;
+      if (evaluateExternalMemoryIngress({ content: pContent }).action !== 'allow') {
+        throw new Error('applyConsolidation: unsafe P-frame payload');
+      }
+
+      const chainIdentity = JSON.stringify([
+        attribute.normalize('NFKC').replace(/\s+/g, ' ').toLowerCase(),
+        ids,
+      ]);
+      const existingChain = chainPlanByIdentity.get(chainIdentity);
+      if (existingChain) {
+        if (existingChain.pContent !== pContent) {
+          throw new Error('applyConsolidation: conflicting duplicate chain');
+        }
+        continue;
+      }
+      chainPlanByIdentity.set(chainIdentity, { pContent });
+
+      const staleIds = ids.slice(0, -1);
+      for (const staleId of staleIds) staleRoles.add(staleId);
+      newestRoles.add(newest.id);
+      chainPlans.push({ baseId: ids[0], pContent });
+    }
+
+    for (const staleId of staleRoles) {
+      if (newestRoles.has(staleId)) {
+        throw new Error(`applyConsolidation: conflicting stale/newest role for frame ${staleId}`);
+      }
+    }
+
+    for (const entry of groups) {
+      if (!isRecord(entry)) {
+        throw new TypeError('applyConsolidation: each group must be an object');
+      }
+      if (typeof entry.label !== 'string') {
+        throw new TypeError('applyConsolidation: group label must be a string');
+      }
+      const ids = requireIds(entry.frameIds, 'group');
+      ids.forEach(requireFrame);
+      const canonicalIds = [...ids].sort((a, b) => a - b);
+      const cleanLabel = safeModelText(entry.label, MAX_LABEL_CHARS);
+      if (cleanLabel === null) {
+        throw new Error('applyConsolidation: unsafe group label');
+      }
+      const desc = `${cleanLabel || 'group'} (${ids.length} members)`;
+      const persisted = JSON.stringify({ description: desc, references: canonicalIds });
+      if (
+        evaluateExternalMemoryIngress({ content: desc }).action !== 'allow'
+        || evaluateExternalMemoryIngress({ content: persisted }).action !== 'allow'
+      ) {
+        throw new Error('applyConsolidation: unsafe B-frame payload');
+      }
+
+      const groupIdentity = JSON.stringify([
+        (cleanLabel || 'group').normalize('NFKC').replace(/\s+/g, ' ').toLowerCase(),
+        canonicalIds,
+      ]);
+      const existingGroup = groupPlanByIdentity.get(groupIdentity);
+      if (existingGroup) {
+        if (existingGroup.desc !== desc) {
+          throw new Error('applyConsolidation: conflicting duplicate group');
+        }
+        continue;
+      }
+      groupPlanByIdentity.set(groupIdentity, { desc });
+      groupPlans.push({ ids: canonicalIds, desc });
+    }
+
+    const pframes: MemoryFrame[] = [];
+    const bframes: MemoryFrame[] = [];
+    const deprecated = [...staleRoles];
+    for (const staleId of staleRoles) {
+      const stale = frameCache.get(staleId)!;
+      if (!frames.update(staleId, stale.content, 'deprecated')) {
+        throw new Error(`applyConsolidation: frame ${staleId} disappeared during update`);
+      }
+    }
+    for (const newestId of newestRoles) {
+      const newest = frameCache.get(newestId)!;
+      if (!frames.update(newestId, newest.content, 'critical')) {
+        throw new Error(`applyConsolidation: frame ${newestId} disappeared during update`);
+      }
+    }
+    for (const plan of chainPlans) {
+      pframes.push(frames.createPFrame(
+        gopId,
+        plan.pContent,
+        plan.baseId,
+        'critical',
+        'agent_inferred',
+      ));
+    }
+    for (const plan of groupPlans) {
+      bframes.push(frames.createBFrame(gopId, plan.desc, plan.ids[0], plan.ids));
+    }
+    return { pframes, bframes, deprecated };
+  });
 }
 
 // ── Read helpers ───────────────────────────────────────────────────────────
