@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { WaggleConfig } from '@waggle/core';
 import { validateOrigin } from '../cors-config.js';
 import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
 import { isRemoteOllamaAlias, PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
@@ -794,11 +795,21 @@ function translateAnthropicStopReason(
   return stopReason;
 }
 
-function directProviderBaseUrl(server: FastifyInstance, providerId: string): string {
+function configuredProviderBaseUrl(server: FastifyInstance, providerId: string): string {
   const entry = server.vault?.get(providerId);
   const customBaseUrl = typeof entry?.metadata?.baseUrl === 'string'
     ? entry.metadata.baseUrl.trim()
     : '';
+  if (customBaseUrl) return customBaseUrl;
+  try {
+    return new WaggleConfig(server.localConfig.dataDir).getProviders()[providerId]?.baseUrl?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function directProviderBaseUrl(server: FastifyInstance, providerId: string): string {
+  const customBaseUrl = configuredProviderBaseUrl(server, providerId);
   if (customBaseUrl) return customBaseUrl;
   // Google's native catalog is not under its OpenAI-compatibility namespace.
   if (providerId === 'google') return 'https://generativelanguage.googleapis.com/v1beta/openai';
@@ -904,7 +915,10 @@ async function forwardCompatibleProvider(
   reply: FastifyReply,
 ): Promise<unknown> {
   const apiKeys = getProviderApiKeys(route.providerId, server.vault);
-  if (apiKeys.length === 0) {
+  const keylessCompatible = route.providerId === 'openai-compatible'
+    && apiKeys.length === 0
+    && Boolean(configuredProviderBaseUrl(server, route.providerId));
+  if (apiKeys.length === 0 && !keylessCompatible) {
     return reply.status(500).send({
       error: {
         message: `No ${route.providerId} API key configured. Add one in Settings > API Keys.`,
@@ -912,8 +926,14 @@ async function forwardCompatibleProvider(
     });
   }
 
+  const baseUrl = directProviderBaseUrl(server, route.providerId);
+  if (!baseUrl) {
+    return reply.status(500).send({
+      error: { message: `No ${route.providerId} endpoint configured. Add one in Settings.` },
+    });
+  }
   const requestAbort = createCloudProviderAbort(reply);
-  const url = completionEndpoint(directProviderBaseUrl(server, route.providerId));
+  const url = completionEndpoint(baseUrl);
   const outboundBody: Record<string, unknown> = { ...body, model: route.model };
   if (
     route.providerId === 'openai'
@@ -925,15 +945,16 @@ async function forwardCompatibleProvider(
   }
   let upstream: Response | null = null;
   let credentialRejected = false;
-  for (let index = 0; index < apiKeys.length; index += 1) {
-    const apiKey = apiKeys[index];
+  const credentials: Array<string | undefined> = apiKeys.length > 0 ? apiKeys : [undefined];
+  for (let index = 0; index < credentials.length; index += 1) {
+    const apiKey = credentials[index];
     try {
       upstream = await fetch(url, {
         method: 'POST',
         signal: requestAbort.signal,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...(body.stream ? { Accept: 'text/event-stream' } : {}),
         },
         body: JSON.stringify(outboundBody),
@@ -956,18 +977,18 @@ async function forwardCompatibleProvider(
       credentialRejected = /please pass a valid api key|api key (?:is )?(?:invalid|not valid|expired)/i.test(detail);
     }
     if (!credentialRejected) {
-      applyProviderKeyToEnv(route.providerId, apiKey, true);
+      if (apiKey) applyProviderKeyToEnv(route.providerId, apiKey, true);
       if (server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
         server.agentState.llmProvider = {
           provider: 'anthropic-proxy',
           health: 'healthy',
-          detail: `Built-in provider proxy (${route.providerId} credential verified)`,
+          detail: `Built-in provider proxy (${route.providerId} ${apiKey ? 'credential' : 'endpoint'} verified)`,
           checkedAt: new Date().toISOString(),
         };
       }
       break;
     }
-    if (index < apiKeys.length - 1) {
+    if (index < credentials.length - 1) {
       await upstream.body?.cancel().catch(() => undefined);
       upstream = null;
     }
@@ -1054,7 +1075,9 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   server.get('/v1/health/readiness', async (_request, reply) => {
     let hasConfiguredProvider = Boolean(getAnthropicKey(server))
       || Object.keys(PROVIDER_MODEL_CATALOGS)
-        .some((providerId) => getProviderApiKeys(providerId, server.vault).length > 0);
+        .some((providerId) => providerId !== 'openai-compatible'
+          && getProviderApiKeys(providerId, server.vault).length > 0)
+      || Boolean(configuredProviderBaseUrl(server, 'openai-compatible'));
     if (!hasConfiguredProvider) hasConfiguredProvider = await hasReadyOllamaModel();
     if (!hasConfiguredProvider) {
       return reply.status(503).send({
@@ -1120,7 +1143,13 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         error: { message: 'No Anthropic API key configured. Add one in Settings > API Keys.' },
       });
     }
-    if (route.providerId !== 'anthropic' && getProviderApiKeys(route.providerId, server.vault).length === 0) {
+    const keylessCompatible = route.providerId === 'openai-compatible'
+      && Boolean(configuredProviderBaseUrl(server, route.providerId));
+    if (
+      route.providerId !== 'anthropic'
+      && getProviderApiKeys(route.providerId, server.vault).length === 0
+      && !keylessCompatible
+    ) {
       releaseProxySpend(server, claimProxySpendHandoff(server, request, body));
       return reply.status(500).send({
         error: {

@@ -13,8 +13,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { CostTracker, runAgentLoop } from '@waggle/agent';
 import { ExecutionTraceStore, MindDB } from '@waggle/core';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
@@ -2772,6 +2774,95 @@ describe('Anthropic Proxy Routes', () => {
       expect(JSON.parse(String(init?.body)).model).toBe('anthropic/claude-opus-4.8');
     });
 
+    it('routes a persisted keyless OpenAI-compatible model in non-stream and streaming modes', async () => {
+      const captures: Array<{
+        authorization: string | undefined;
+        body: { model: string; stream?: boolean };
+        path: string | undefined;
+      }> = [];
+      const upstreamSse = 'data: {"choices":[{"delta":{"content":"Local stream"}}]}\n\ndata: [DONE]\n\n';
+      const upstream = http.createServer(async (request, response) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { model: string; stream?: boolean };
+        captures.push({
+          authorization: request.headers.authorization,
+          body,
+          path: request.url,
+        });
+        if (body.stream) {
+          response.writeHead(200, { 'content-type': 'text/event-stream' });
+          response.end(upstreamSse);
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'Local response' }, finish_reason: 'stop' }],
+          model: body.model,
+        }));
+      });
+      await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+      const { port } = upstream.address() as AddressInfo;
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-proxy-'));
+      fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+        defaultModel: 'openai-compatible/acme/local-qwen:Q4_K_M',
+        providers: {
+          'openai-compatible': {
+            apiKey: '',
+            models: ['acme/local-qwen:Q4_K_M'],
+            baseUrl: `http://127.0.0.1:${port}/v1`,
+          },
+        },
+      }), 'utf8');
+      server = createTestServer({ dataDir });
+
+      try {
+        const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
+        expect(readiness.statusCode).toBe(200);
+
+        const nonStream = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+        expect(nonStream.statusCode).toBe(200);
+        expect(nonStream.json().choices[0].message.content).toBe('Local response');
+
+        const streaming = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+            messages: [{ role: 'user', content: 'test' }],
+            stream: true,
+          },
+        });
+        expect(streaming.statusCode).toBe(200);
+        expect(streaming.headers['content-type']).toContain('text/event-stream');
+        expect(streaming.body).toBe(upstreamSse);
+
+        expect(captures).toEqual([
+          {
+            authorization: undefined,
+            body: expect.objectContaining({ model: 'acme/local-qwen:Q4_K_M', stream: false }),
+            path: '/v1/chat/completions',
+          },
+          {
+            authorization: undefined,
+            body: expect.objectContaining({ model: 'acme/local-qwen:Q4_K_M', stream: true }),
+            path: '/v1/chat/completions',
+          },
+        ]);
+      } finally {
+        await new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    });
+
     it('uses the Gemini OpenAI-compatibility endpoint with bearer auth', async () => {
       server = createTestServer({
         vaultProviders: { google: { value: 'gemini-vault-key' } },
@@ -2866,7 +2957,9 @@ describe('Anthropic Proxy Routes', () => {
       expect(res.body).toBe(upstream);
     });
 
-    it('rejects unknown providers before making an outbound request', async () => {
+    it.each(['unknown-provider', 'constructor', '__proto__'])(
+      'rejects unknown provider prefix %s before making an outbound request',
+      async (providerPrefix) => {
       server = createTestServer();
       globalThis.fetch = vi.fn();
 
@@ -2874,16 +2967,17 @@ describe('Anthropic Proxy Routes', () => {
         method: 'POST',
         url: '/v1/chat/completions',
         payload: {
-          model: 'unknown-provider/new-model',
+          model: `${providerPrefix}/new-model`,
           messages: [{ role: 'user', content: 'test' }],
           stream: false,
         },
       });
 
       expect(res.statusCode).toBe(400);
-      expect(res.json().error.message).toContain('unknown-provider/new-model');
+      expect(res.json().error.message).toContain(`${providerPrefix}/new-model`);
       expect(globalThis.fetch).not.toHaveBeenCalled();
-    });
+      },
+    );
 
     it('still forwards Claude models (with and without provider prefix)', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-key-model-guard-pass';

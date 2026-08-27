@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { WaggleConfig } from '@waggle/core';
 import { ensureManagedLiteLLMModel } from './litellm-runtime-config.js';
 import { getProviderApiKey } from './provider-env.js';
 import {
@@ -56,6 +57,7 @@ function providerForModel(model: string): string | null {
     const provider = normalized.slice(0, slash);
     if (provider === 'anthropic') return 'anthropic';
     if (provider === 'openai') return 'openai';
+    if (provider === 'openai-compatible') return 'openai-compatible';
     if (provider === 'google') return 'google';
     if (provider === 'deepseek') return 'deepseek';
     if (provider === 'xai') return 'xai';
@@ -87,6 +89,15 @@ function providerForModel(model: string): string | null {
 function providerIsReady(server: FastifyInstance, provider: string | null): boolean {
   if (!provider) return false;
   if (provider === 'ollama') return true;
+  if (provider === 'openai-compatible') {
+    const vaultBaseUrl = server.vault?.get(provider)?.metadata?.baseUrl;
+    if (typeof vaultBaseUrl === 'string' && vaultBaseUrl.trim()) return true;
+    try {
+      return Boolean(new WaggleConfig(server.localConfig.dataDir).getProviders()[provider]?.baseUrl?.trim());
+    } catch {
+      return false;
+    }
+  }
   return Boolean(getProviderApiKey(provider, server.vault));
 }
 

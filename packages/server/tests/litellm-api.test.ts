@@ -622,6 +622,42 @@ describe('LiteLLM Management API', () => {
     }
   });
 
+  it('keeps an explicit keyless OpenAI-compatible model exact when another provider is available', async () => {
+    const requestedModel = 'openai-compatible/acme/local-qwen:Q4_K_M';
+    const configPath = path.join(dataDir, 'config.json');
+    const priorConfig = fs.readFileSync(configPath, 'utf8');
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = 'google/gemini-2.5-flash';
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'Built-in provider proxy',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('google', 'google-fallback-key');
+    fs.writeFileSync(configPath, JSON.stringify({
+      defaultModel: requestedModel,
+      providers: {
+        'openai-compatible': {
+          apiKey: '',
+          models: ['acme/local-qwen:Q4_K_M'],
+          baseUrl: 'http://127.0.0.1:4000/v1',
+        },
+      },
+    }), 'utf8');
+
+    try {
+      await expect(resolveUsableModel(server, requestedModel)).resolves.toBe(requestedModel);
+      await expect(resolveExplicitRoutableModel(server, requestedModel)).resolves.toBe(requestedModel);
+    } finally {
+      fs.writeFileSync(configPath, priorConfig, 'utf8');
+      server.vault.delete('google');
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
+    }
+  });
+
   it('never exposes or selects a remote Ollama cloud alias as a local model', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
