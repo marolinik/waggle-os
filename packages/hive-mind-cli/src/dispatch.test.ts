@@ -212,6 +212,15 @@ describe('cli dispatch', () => {
     expect(parsed.durationMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('rejects a malformed supplied consolidate limit instead of using the default', async () => {
+    await expect(dispatch({
+      subcommand: 'maintenance',
+      values: { consolidate: true, 'consolidate-limit': 'abc' },
+      positionals: [],
+      env,
+    })).rejects.toThrow(/consolidate-limit.*1.*400/i);
+  });
+
   it('dispatches a scoped WaggleDance message with the run credential header', async () => {
     process.env.WAGGLE_DANCE_URL = 'http://127.0.0.1:3333';
     process.env.WAGGLE_RUN_TOKEN = 'run-token-with-enough-entropy-123456789';

@@ -23,6 +23,7 @@ import {
   maxEmbedCharsForModel,
   capEmbedText,
   collectObservations,
+  MAX_CONSOLIDATION_OBSERVATIONS,
   detectSupersessionChains,
   detectEntityGroups,
   applyConsolidation,
@@ -439,16 +440,14 @@ async function runConsolidateOnMind(
   options: MaintenanceOptions,
 ): Promise<NonNullable<MaintenanceResult['consolidate']>> {
   const empty = { chains: 0, groups: 0, pframes: 0, bframes: 0, deprecated: 0 };
-  const observations = collectObservations(db, { limit: options.consolidateLimit ?? 400 });
+  const requestedLimit = options.consolidateLimit ?? MAX_CONSOLIDATION_OBSERVATIONS;
+  const observations = collectObservations(db, { limit: requestedLimit });
   if (observations.length < 2) return empty;
 
-  // Anchor gop = newest non-deprecated I-frame's session.
-  const anchor = db
-    .getDatabase()
-    .prepare(
-      "SELECT gop_id FROM memory_frames WHERE frame_type = 'I' AND importance != 'deprecated' ORDER BY created_at DESC, id DESC LIMIT 1",
-    )
-    .get() as { gop_id: string } | undefined;
+  // Anchor to the newest observation from the exact filtered/ordered set the
+  // detectors saw. A separate newest-I query can select another source/session.
+  const newestObservation = observations[observations.length - 1];
+  const anchor = frames.getById(newestObservation.id);
   if (!anchor) return empty;
 
   const llm = buildConsolidationLlm(options.consolidateModel);
@@ -558,6 +557,18 @@ async function runMaintenanceOnMind(
 }
 
 export async function runMaintenance(options: MaintenanceOptions): Promise<MaintenanceResult> {
+  if (options.consolidate) {
+    const requestedLimit = options.consolidateLimit ?? MAX_CONSOLIDATION_OBSERVATIONS;
+    if (
+      !Number.isSafeInteger(requestedLimit)
+      || requestedLimit < 1
+      || requestedLimit > MAX_CONSOLIDATION_OBSERVATIONS
+    ) {
+      throw new RangeError(
+        `--consolidate-limit must be an integer between 1 and ${MAX_CONSOLIDATION_OBSERVATIONS}`,
+      );
+    }
+  }
   if (options.allWorkspaces) {
     return runMaintenanceAllWorkspaces(options);
   }
