@@ -151,6 +151,58 @@ describe('HybridSearch — chunk-level retrieval lane (D1)', () => {
       expect((ids as number[])[0]).toBe(f.id); // best-matching frame first
     });
 
+    it('excludes deprecated chunk candidates before the KNN limit', async () => {
+      const live = frames.createIFrame(
+        gopId,
+        `${longContent('gardening')} One live kubernetes system record sentence.`,
+        'normal',
+        'user_stated',
+      );
+      const staleFrames = Array.from({ length: 13 }, (_, index) => frames.createIFrame(
+        gopId,
+        `${longContent('kubernetes')} Obsolete source ${index}.`,
+        'normal',
+        'user_stated',
+      ));
+      await search.indexFramesBatch([
+        { id: live.id, content: live.content },
+        ...staleFrames.map((frame) => ({ id: frame.id, content: frame.content })),
+      ]);
+      for (const stale of staleFrames) {
+        frames.update(stale.id, stale.content, 'deprecated');
+      }
+      const otherGop = sessions.create().gop_id;
+      const outOfScopeDecoy = frames.createIFrame(
+        otherGop,
+        longContent('kubernetes'),
+        'normal',
+        'user_stated',
+      );
+      await search.indexFrame(outOfScopeDecoy.id, outOfScopeDecoy.content);
+      const staleChunkCount = db.getDatabase().prepare(`
+        SELECT COUNT(*) AS n
+        FROM memory_frame_chunks c
+        JOIN memory_frames mf ON mf.id = c.frame_id
+        WHERE mf.importance = 'deprecated'
+      `).get() as { n: number };
+      expect(staleChunkCount.n).toBeGreaterThan(25);
+
+      const ids = await search.vectorSearchChunks(
+        'kubernetes system record',
+        1,
+        gopId,
+        true,
+      );
+
+      expect(ids).toEqual([live.id]);
+      await expect(search.vectorSearchChunks(
+        'kubernetes system record',
+        1,
+        undefined,
+        true,
+      )).resolves.toEqual([outOfScopeDecoy.id]);
+    });
+
     it('falls back to whole-frame vectors when the chunk index is empty', async () => {
       // Index with the flag OFF (explicit kill switch — default is ON) so no
       // chunks are written…
