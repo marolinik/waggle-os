@@ -1511,6 +1511,19 @@ const ChatApp = ({
               </HintTooltip>
             )}
 
+            {onNewSession && (
+              <HintTooltip content="New session">
+                <button
+                  type="button"
+                  onClick={onNewSession}
+                  aria-label="New session"
+                  className={STRIP_ICON_PILL}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </HintTooltip>
+            )}
+
             {/* Persona picker */}
             <div className="relative" ref={personaPickerRef}>
               <button

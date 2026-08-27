@@ -63,6 +63,19 @@ const render = (props: ChatAppRenderProps) =>
 afterEach(() => cleanup());
 
 describe('Wave U Lane F fix 1 — message action row presence', () => {
+  it('keeps New session accessible before async session history loads', () => {
+    const onNewSession = vi.fn();
+
+    render({
+      messages: [],
+      sessions: [],
+      onNewSession,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'New session' }));
+    expect(onNewSession).toHaveBeenCalledOnce();
+  });
+
   it('keeps historical assistant attribution when the active persona changes', () => {
     render({
       messages: [{ ...assistantMsg, persona: 'researcher' }],
