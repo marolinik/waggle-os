@@ -751,7 +751,8 @@ describe('Workspace & Session API', () => {
 
   it('probe-model reports verified when the model endpoint answers 200', async () => {
     const restoreModel = configureExactProbeModel();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
     try {
       const res = await injectWithAuth(server, {
         method: 'POST',
@@ -761,8 +762,61 @@ describe('Workspace & Session API', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body).toMatchObject({ model: exactProbeModel, configured: true, verified: true });
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/v1\/chat\/completions$/),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${server.agentState.wsSessionToken}`,
+          }),
+        }),
+      );
     } finally {
       restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('never sends the Waggle session bearer to an Ollama probe endpoint', async () => {
+    const priorOllamaHost = process.env.OLLAMA_HOST;
+    process.env.OLLAMA_HOST = 'http://ollama.example.test';
+    const fetchMock = vi.fn(async (
+      input: Parameters<typeof fetch>[0],
+      _init?: Parameters<typeof fetch>[1],
+    ) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'qwen-test' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: 'ollama/qwen-test' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        model: 'ollama/qwen-test',
+        configured: true,
+        verified: true,
+      });
+      const completionCall = fetchMock.mock.calls.find(([input]) =>
+        String(input).endsWith('/v1/chat/completions'));
+      expect(completionCall).toBeDefined();
+      expect(String(completionCall?.[0])).toBe(
+        'http://ollama.example.test/v1/chat/completions',
+      );
+      const completionHeaders = new Headers(completionCall?.[1]?.headers);
+      expect(completionHeaders.has('authorization')).toBe(false);
+    } finally {
+      if (priorOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+      else process.env.OLLAMA_HOST = priorOllamaHost;
       vi.unstubAllGlobals();
     }
   });

@@ -458,7 +458,12 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       try {
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(!isOllama
+              ? { Authorization: `Bearer ${server.agentState.wsSessionToken}` }
+              : {}),
+          },
           signal: controller.signal,
           body: JSON.stringify({ model: sendModel, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
         });
