@@ -10,9 +10,12 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { createServer as createViteServer, type ProxyOptions } from 'vite';
+import viteConfig from '../../../apps/web/vite.config.js';
 import { buildLocalServer } from '../src/local/index.js';
 import { authInject } from './test-utils.js';
 
@@ -365,5 +368,71 @@ describe('D1 loopback auth + session-token bootstrap', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
+  });
+
+  it('preserves browser authority through the Vite proxy for bootstrap and protected routes', async () => {
+    await server.close();
+    delete process.env.WAGGLE_INSTANCE_ID;
+    delete process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN;
+    server = await buildLocalServer({ dataDir: tmpDir });
+    await server.listen({ host: '127.0.0.1', port: 0 });
+    const sidecarPort = (server.server.address() as AddressInfo).port;
+
+    if (typeof viteConfig !== 'function') {
+      throw new Error('Expected the web Vite config to be a function');
+    }
+    const resolvedConfig = await viteConfig({
+      command: 'serve',
+      mode: 'test',
+      isSsrBuild: false,
+      isPreview: false,
+    });
+    const apiProxy = resolvedConfig.server?.proxy?.['/api'];
+    if (!apiProxy || typeof apiProxy === 'string') {
+      throw new Error('Expected an object /api proxy configuration');
+    }
+
+    const vite = await createViteServer({
+      configFile: false,
+      appType: 'custom',
+      server: {
+        host: '127.0.0.1',
+        port: 0,
+        strictPort: true,
+        proxy: {
+          '/api': {
+            ...(apiProxy as ProxyOptions),
+            target: `http://127.0.0.1:${sidecarPort}`,
+          },
+        },
+      },
+    });
+    await vite.listen();
+
+    try {
+      const browserPort = (vite.httpServer?.address() as AddressInfo).port;
+      const browserOrigin = `http://127.0.0.1:${browserPort}`;
+      const browserHeaders = {
+        referer: `${browserOrigin}/home`,
+        'sec-fetch-site': 'same-origin',
+      };
+
+      const bootstrap = await fetch(`${browserOrigin}/api/auth/session-token`, {
+        headers: browserHeaders,
+      });
+      expect(bootstrap.status).toBe(200);
+      const token = (await bootstrap.json() as { token: string }).token;
+      expect(token.length).toBeGreaterThan(0);
+
+      const protectedRoute = await fetch(`${browserOrigin}/api/tier`, {
+        headers: {
+          ...browserHeaders,
+          authorization: `Bearer ${token}`,
+        },
+      });
+      expect(protectedRoute.status).toBe(200);
+    } finally {
+      await vite.close();
+    }
   });
 });
