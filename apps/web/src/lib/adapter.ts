@@ -2684,8 +2684,9 @@ class LocalAdapter {
     providers: Array<{
       id: string; name: string; hasKey: boolean; badge: string | null;
       keyUrl: string | null; requiresKey: boolean;
+      baseUrl?: string;
       models: Array<{ id: string; name: string; cost: string; speed: string }>;
-      modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'local-runtime';
+      modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'requires-endpoint' | 'local-runtime';
       modelsUpdatedAt?: string;
       modelsError?: string;
     }>;

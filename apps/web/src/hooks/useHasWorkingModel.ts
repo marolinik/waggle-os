@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adapter } from '@/lib/adapter';
-import { useProviders } from './useProviders';
+import { isRoutableCloudProvider, useProviders } from './useProviders';
 
 /**
  * Shared model-readiness signal for the onboarding hard gate and Models banner.
@@ -72,6 +72,13 @@ export function useHasWorkingModel(): WorkingModelState {
         setCloudForGeneration({ ready: false, loading: false });
         return;
       }
+      // A custom endpoint is user-supplied and may point at a transient or
+      // stale service. Unlike a previously accepted keyed cloud provider, it
+      // must answer the exact-model probe before onboarding can continue.
+      if (defaultProbe.model?.startsWith('openai-compatible/')) {
+        setCloudForGeneration({ ready: false, loading: false });
+        return;
+      }
       setCloudForGeneration({ ready: true, loading: false });
       return;
     }
@@ -123,7 +130,7 @@ export function useHasWorkingModel(): WorkingModelState {
       const data = await refreshProviders();
       if (!mounted.current || generation !== cloudGeneration.current) return;
       const ids = data
-        ? data.providers.filter((provider) => provider.hasKey && provider.requiresKey).map((provider) => provider.id)
+        ? data.providers.filter(isRoutableCloudProvider).map((provider) => provider.id)
         : activeProviderIds.current;
       explicitProviders.current = data?.providers ?? null;
       await probeCloud(ids, generation);

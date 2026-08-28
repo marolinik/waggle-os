@@ -13,10 +13,39 @@ vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
 import { useHasWorkingModel } from './useHasWorkingModel';
 
-const providerRows = (...rows: Array<{ id: string; hasKey: boolean; requiresKey: boolean }>) => ({
-  providers: rows.map((row) => ({ ...row, name: row.id, badge: null, keyUrl: null, models: [] })),
+type ProviderRow = {
+  id: string;
+  hasKey: boolean;
+  requiresKey: boolean;
+  baseUrl?: string;
+  models?: Array<{ id: string; name: string; cost: string; speed: string }>;
+  modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'requires-endpoint' | 'local-runtime';
+};
+
+const providerRows = (...rows: ProviderRow[]) => ({
+  providers: rows.map((row) => ({
+    ...row,
+    name: row.id,
+    badge: null,
+    keyUrl: null,
+    models: row.models ?? [],
+  })),
   search: [],
   activeSearch: 'duckduckgo',
+});
+
+const compatibleRow = (): ProviderRow => ({
+  id: 'openai-compatible',
+  hasKey: false,
+  requiresKey: false,
+  baseUrl: 'http://10.33.0.153:4000/v1',
+  models: [{
+    id: 'openai-compatible/qwen3.8-flash-next',
+    name: 'Qwen 3.8 Flash Next',
+    cost: '$',
+    speed: 'fast',
+  }],
+  modelsSource: 'provider-api',
 });
 
 function deferred<T>() {
@@ -48,6 +77,52 @@ describe('useHasWorkingModel', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current).toMatchObject({ hasWorkingModel: true, cloudReady: true });
     expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+  });
+
+  it('a verified keyless compatible default model satisfies the onboarding gate', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providerRows(compatibleRow()));
+    mocks.adapter.probeModel.mockResolvedValue({
+      model: 'openai-compatible/qwen3.8-flash-next',
+      configured: true,
+      verified: true,
+    });
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current).toMatchObject({ hasWorkingModel: true, cloudReady: true, localReady: false });
+    expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+  });
+
+  it('does not pass onboarding when a compatible default model cannot be verified', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providerRows(compatibleRow()));
+    mocks.adapter.probeModel.mockResolvedValue({
+      model: 'openai-compatible/qwen3.8-flash-next',
+      configured: true,
+      verified: false,
+    });
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false });
+  });
+
+  it('does not probe or trust a compatible provider backed only by a stale catalog', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providerRows({
+      ...compatibleRow(),
+      modelsSource: 'stale-provider-api',
+    }));
+    mocks.adapter.probeModel.mockResolvedValue({
+      model: 'openai-compatible/qwen3.8-flash-next',
+      configured: true,
+      verified: true,
+    });
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false });
+    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
   });
 
   it('a rejected default model blocks a keyed provider', async () => {
@@ -153,6 +228,29 @@ describe('useHasWorkingModel', () => {
       .mockResolvedValueOnce({ model: 'p0/model', configured: true, verified: false, rejected: true });
     const { result } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.hasWorkingModel).toBe(true));
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false });
+  });
+
+  it('refresh keeps a keyless compatible endpoint in the exact-model gate', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providerRows(compatibleRow()));
+    mocks.adapter.probeModel
+      .mockResolvedValueOnce({
+        model: 'openai-compatible/qwen3.8-flash-next',
+        configured: true,
+        verified: true,
+      })
+      .mockResolvedValueOnce({
+        model: 'openai-compatible/qwen3.8-flash-next',
+        configured: true,
+        verified: false,
+        rejected: true,
+      });
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.hasWorkingModel).toBe(true));
+
     act(() => { result.current.refresh(); });
     await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.loading).toBe(false));
