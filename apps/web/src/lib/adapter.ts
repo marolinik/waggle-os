@@ -2650,11 +2650,38 @@ class LocalAdapter {
       error?: string;
     };
   }> {
+    return this.setProviderConfig(providerId, { apiKey, models, defaultModel });
+  }
+
+  async setProviderConfig(
+    providerId: string,
+    config: {
+      apiKey?: string;
+      baseUrl?: string;
+      models?: string[];
+      defaultModel?: string;
+    },
+  ): Promise<{
+    router?: {
+      managed: boolean;
+      ready: boolean;
+      port: number;
+      models: string[];
+      unavailableProviders: string[];
+      error?: string;
+    };
+  }> {
     const res = await this.fetch('/api/settings', {
       method: 'PUT',
       body: JSON.stringify({
-        ...(defaultModel ? { defaultModel } : {}),
-        providers: { [providerId]: { apiKey, ...(models ? { models } : {}) } },
+        ...(config.defaultModel ? { defaultModel: config.defaultModel } : {}),
+        providers: {
+          [providerId]: {
+            ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+            ...(config.baseUrl !== undefined ? { baseUrl: config.baseUrl } : {}),
+            ...(config.models !== undefined ? { models: config.models } : {}),
+          },
+        },
       }),
     }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
     return res.json();

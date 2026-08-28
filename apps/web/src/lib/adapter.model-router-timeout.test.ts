@@ -60,6 +60,67 @@ describe('model router request deadlines', () => {
     );
   });
 
+  it('atomically saves compatible endpoint metadata and default model without inventing an empty key', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderConfig('openai-compatible', {
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: ['openai-compatible/qwen3.8-flash-next'],
+      defaultModel: 'openai-compatible/qwen3.8-flash-next',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/settings',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          defaultModel: 'openai-compatible/qwen3.8-flash-next',
+          providers: {
+            'openai-compatible': {
+              baseUrl: 'http://10.33.0.153:4000/v1',
+              models: ['openai-compatible/qwen3.8-flash-next'],
+            },
+          },
+        }),
+      },
+      45_000,
+    );
+  });
+
+  it('preserves the existing keyed-provider settings payload through setProviderKey', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderKey(
+      'openai',
+      'secret-key',
+      ['openai/gpt-4o'],
+      'openai/gpt-4o',
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/settings',
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          defaultModel: 'openai/gpt-4o',
+          providers: {
+            openai: {
+              apiKey: 'secret-key',
+              models: ['openai/gpt-4o'],
+            },
+          },
+        }),
+      },
+      45_000,
+    );
+  });
+
   it('allows chat time-to-first-token to exceed the generic request timeout', async () => {
     const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response([
       'event: done',

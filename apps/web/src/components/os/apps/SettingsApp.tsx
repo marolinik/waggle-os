@@ -577,7 +577,13 @@ const SettingsApp = () => {
                 → vault) OR a local model, with the "≥1 working model" banner. onModelReady
                 refreshes this app's provider list so ModelPilotCard + the key list below
                 reflect a just-added key. */}
-            <ModelGate variant="settings" onModelReady={() => { void refreshProviders(); }} />
+            <ModelGate
+              variant="settings"
+              onModelReady={(modelId) => {
+                if (modelId) setDefaultModel(modelId);
+                void refreshProviders();
+              }}
+            />
 
             <ModelPilotCard
               defaultModel={defaultModel}
