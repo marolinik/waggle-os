@@ -387,6 +387,138 @@ describe('Provider API', () => {
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toMatch(/http/i);
     });
+
+    it('discovers and verifies a keyless compatible model without persisting the candidate endpoint', async () => {
+      const requests: Array<{ url: string; authorization?: string; body?: unknown }> = [];
+      const candidateServer = http.createServer((request, response) => {
+        const chunks: Buffer[] = [];
+        request.on('data', (chunk: Buffer) => chunks.push(chunk));
+        request.on('end', () => {
+          const rawBody = Buffer.concat(chunks).toString('utf8');
+          requests.push({
+            url: request.url ?? '',
+            authorization: request.headers.authorization,
+            ...(rawBody ? { body: JSON.parse(rawBody) } : {}),
+          });
+          response.writeHead(200, { 'content-type': 'application/json' });
+          if (request.url?.endsWith('/models')) {
+            response.end(JSON.stringify({ data: [
+              { id: 'qwen3.8-flash-next', name: 'Qwen 3.8 Flash Next' },
+              { id: 'silent-model', name: 'Silent model' },
+            ] }));
+            return;
+          }
+          const model = (JSON.parse(rawBody) as { model?: string }).model;
+          response.end(JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: model === 'silent-model' ? '' : 'WAGGLE_OK' } }],
+          }));
+        });
+      });
+      await new Promise<void>((resolve) => candidateServer.listen(0, '127.0.0.1', resolve));
+      const { port } = candidateServer.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}/v1`;
+      const configPath = path.join(tmpDir, 'config.json');
+      const configBefore = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+      const nativeFetch = globalThis.fetch;
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => nativeFetch(input, init));
+
+      try {
+        const discovery = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: { baseUrl: ` ${baseUrl}/// ` },
+        });
+        expect(discovery.statusCode).toBe(200);
+        expect(discovery.json()).toMatchObject({
+          valid: true,
+          verified: false,
+          baseUrl,
+          modelsSource: 'provider-api',
+        });
+        expect(discovery.json().models).toContainEqual(expect.objectContaining({
+          id: 'openai-compatible/qwen3.8-flash-next',
+          name: 'Qwen 3.8 Flash Next',
+        }));
+
+        const verification = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: {
+            baseUrl,
+            model: 'openai-compatible/qwen3.8-flash-next',
+          },
+        });
+        expect(verification.statusCode).toBe(200);
+        expect(verification.json()).toMatchObject({
+          valid: true,
+          verified: true,
+          model: 'openai-compatible/qwen3.8-flash-next',
+        });
+
+        const emptyCompletion = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: {
+            baseUrl,
+            model: 'openai-compatible/silent-model',
+          },
+        });
+        expect(emptyCompletion.json()).toMatchObject({
+          valid: false,
+          verified: false,
+          model: 'openai-compatible/silent-model',
+          error: expect.stringMatching(/no assistant response/i),
+        });
+
+        const keyedVerification = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: {
+            baseUrl,
+            apiKey: 'private-local-key',
+            model: 'openai-compatible/qwen3.8-flash-next',
+          },
+        });
+        expect(keyedVerification.json()).toMatchObject({ valid: true, verified: true });
+        expect(keyedVerification.body).not.toContain('private-local-key');
+
+        expect(requests.filter((request) => request.url === '/v1/models')).toHaveLength(4);
+        expect(requests.slice(0, 5).every((request) => request.authorization === undefined)).toBe(true);
+        expect(requests.slice(5).every((request) => request.authorization === 'Bearer private-local-key')).toBe(true);
+        const candidateFetches = fetchSpy.mock.calls.filter(([input]) => String(input).startsWith(baseUrl));
+        expect(candidateFetches).toHaveLength(7);
+        expect(candidateFetches.every(([, init]) => init?.redirect === 'error')).toBe(true);
+        expect(requests).toContainEqual(expect.objectContaining({
+          url: '/v1/chat/completions',
+          body: expect.objectContaining({ model: 'qwen3.8-flash-next', max_tokens: 512 }),
+        }));
+        expect(fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null).toBe(configBefore);
+        expect(server.vault?.get('openai-compatible')).toBeNull();
+      } finally {
+        fetchSpy.mockRestore();
+        await new Promise<void>((resolve, reject) => candidateServer.close((error) => error ? reject(error) : resolve()));
+      }
+    });
+
+    it('rejects an unsafe compatible probe URL without issuing a request or changing settings', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const configPath = path.join(tmpDir, 'config.json');
+      const configBefore = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/test-compatible',
+          payload: { baseUrl: 'file:///C:/secrets' },
+        });
+
+        expect(res.statusCode).toBe(400);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null).toBe(configBefore);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
   });
 });
 

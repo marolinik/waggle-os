@@ -160,6 +160,10 @@ const AUTH_EXEMPT_PATHS = new Set(['/health', '/api/auth/session-token']);
  */
 const CONNECT_DEADLINE_MS = 15000;
 const MODEL_ROUTER_REQUEST_TIMEOUT_MS = 45000;
+// Candidate verification can consume a 5s catalog lookup followed by a 45s
+// cold-model completion. The client deadline must cover that composed server
+// budget instead of cancelling a valid response just before it arrives.
+const COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS = 60000;
 
 /**
  * P1b D3 — settle a promise within `ms` or reject with TimeoutError. Used to
@@ -2558,6 +2562,36 @@ class LocalAdapter {
       method: 'POST',
       body: JSON.stringify({ provider, apiKey: key, live: opts.live }),
     });
+    return res.json();
+  }
+
+  /**
+   * Discover and optionally verify a candidate OpenAI-compatible endpoint
+   * without saving it. `verified:true` means the exact selected model returned
+   * a non-empty assistant response; discovery alone deliberately remains
+   * unverified so onboarding cannot advance on a catalog-only false positive.
+   */
+  async testCompatibleProvider(
+    baseUrl: string,
+    apiKey?: string,
+    model?: string,
+  ): Promise<{
+    valid: boolean;
+    verified: boolean;
+    baseUrl: string;
+    model?: string;
+    models: Array<{ id: string; name: string; cost: string; speed: string }>;
+    modelsSource: 'provider-api' | 'stale-provider-api' | 'unavailable';
+    error?: string;
+  }> {
+    const res = await this.fetch('/api/settings/test-compatible', {
+      method: 'POST',
+      body: JSON.stringify({
+        baseUrl,
+        ...(apiKey ? { apiKey } : {}),
+        ...(model ? { model } : {}),
+      }),
+    }, COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS);
     return res.json();
   }
 

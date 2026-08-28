@@ -9,6 +9,7 @@ import { requireTier } from '../../middleware/assert-tier.js';
 import { validateBody } from '../../validate-body.js';
 import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
 import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
+import { discoverProviderModels } from '../provider-model-catalog.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 import { applyProviderKeyToEnv } from '../provider-env.js';
 import { refreshManagedLiteLLM, type LiteLLMRefreshResult } from '../litellm-runtime-config.js';
@@ -310,6 +311,88 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     const fmt = validateKeyFormat(provider, apiKey);
     return { ...fmt, verified: false };
   });
+
+  // POST /api/settings/test-compatible — discover and optionally verify an
+  // OpenAI-compatible model without mutating config or Vault state. The
+  // candidate secret remains server-side and is sent only to the endpoint the
+  // user supplied. A catalog response proves discovery; `verified` requires a
+  // real non-empty completion from the exact selected model.
+  const compatibleProbeSchema = z.object({
+    baseUrl: z.string().min(1),
+    apiKey: z.string().optional(),
+    model: z.string().min(1).optional(),
+  });
+  server.post<{
+    Body: { baseUrl: string; apiKey?: string; model?: string };
+  }>(
+    '/api/settings/test-compatible',
+    { preHandler: validateBody(compatibleProbeSchema) },
+    async (request, reply) => {
+      const baseUrl = normalizeOpenAiCompatibleBaseUrl(request.body.baseUrl);
+      if (!baseUrl) {
+        return reply.code(400).send({
+          error: 'OpenAI-compatible base URL must be an http(s) URL without credentials, query, or fragment.',
+        });
+      }
+
+      const apiKey = request.body.apiKey?.trim() ?? '';
+      const noRedirectFetch: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
+      const catalog = await discoverProviderModels('openai-compatible', apiKey, baseUrl, {
+        fetchImpl: noRedirectFetch,
+      });
+      const discovered = catalog.status === 'provider-api' && catalog.models.length > 0;
+      const common = {
+        valid: discovered,
+        verified: false,
+        baseUrl,
+        models: catalog.models,
+        modelsSource: catalog.status,
+        ...(catalog.error ? { error: catalog.error } : {}),
+      };
+      if (!request.body.model || !discovered) return common;
+
+      const model = request.body.model.trim();
+      if (!catalog.models.some((candidate) => candidate.id === model)) {
+        return { ...common, valid: false, model, error: 'Selected model was not returned by this endpoint.' };
+      }
+
+      try {
+        const response = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          },
+          signal: AbortSignal.timeout(45_000),
+          redirect: 'error',
+          body: JSON.stringify({
+            model: model.slice('openai-compatible/'.length),
+            max_tokens: 512,
+            stream: false,
+            messages: [{ role: 'user', content: 'Reply with exactly WAGGLE_OK.' }],
+          }),
+        });
+        if (!response.ok) {
+          return { ...common, valid: false, model, error: `Selected model returned HTTP ${response.status}.` };
+        }
+        const payload = await response.json() as {
+          choices?: Array<{ message?: { content?: unknown } }>;
+        };
+        const content = payload.choices?.[0]?.message?.content;
+        if (typeof content !== 'string' || content.trim().length === 0) {
+          return { ...common, valid: false, model, error: 'Selected model returned no assistant response.' };
+        }
+        return { ...common, valid: true, verified: true, model };
+      } catch {
+        return {
+          ...common,
+          valid: false,
+          model,
+          error: 'Selected model could not be reached before the connection test timed out.',
+        };
+      }
+    },
+  );
 
   // POST /api/settings/probe-provider — live-probe a STORED provider key (F3).
   // test-key only probes a RAW key sent in the body (used on key SAVE); this

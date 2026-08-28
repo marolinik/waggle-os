@@ -31,6 +31,35 @@ describe('model router request deadlines', () => {
     ]);
   });
 
+  it('tests a candidate compatible endpoint without saving it and with the model-router deadline', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      valid: true,
+      verified: true,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      model: 'openai-compatible/qwen3.8-flash-next',
+      models: [{ id: 'openai-compatible/qwen3.8-flash-next', name: 'Qwen' }],
+      modelsSource: 'provider-api',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    await client.testCompatibleProvider(
+      'http://10.33.0.153:4000/v1',
+      undefined,
+      'openai-compatible/qwen3.8-flash-next',
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/settings/test-compatible',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          baseUrl: 'http://10.33.0.153:4000/v1',
+          model: 'openai-compatible/qwen3.8-flash-next',
+        }),
+      },
+      60_000,
+    );
+  });
+
   it('allows chat time-to-first-token to exceed the generic request timeout', async () => {
     const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response([
       'event: done',
