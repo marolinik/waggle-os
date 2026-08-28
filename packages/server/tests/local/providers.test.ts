@@ -488,10 +488,19 @@ describe('Provider API', () => {
         const candidateFetches = fetchSpy.mock.calls.filter(([input]) => String(input).startsWith(baseUrl));
         expect(candidateFetches).toHaveLength(7);
         expect(candidateFetches.every(([, init]) => init?.redirect === 'error')).toBe(true);
-        expect(requests).toContainEqual(expect.objectContaining({
-          url: '/v1/chat/completions',
-          body: expect.objectContaining({ model: 'qwen3.8-flash-next', max_tokens: 512 }),
-        }));
+      expect(requests).toContainEqual(expect.objectContaining({
+        url: '/v1/chat/completions',
+        body: expect.objectContaining({
+          model: 'qwen3.8-flash-next',
+          max_tokens: 512,
+          chat_template_kwargs: { enable_thinking: false },
+        }),
+      }));
+      const silentRequest = requests.find((candidate) => (
+        candidate.url === '/v1/chat/completions'
+        && (candidate.body as { model?: string } | undefined)?.model === 'silent-model'
+      ));
+      expect(silentRequest?.body).not.toHaveProperty('chat_template_kwargs');
         expect(fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null).toBe(configBefore);
         expect(server.vault?.get('openai-compatible')).toBeNull();
       } finally {

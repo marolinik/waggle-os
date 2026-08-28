@@ -2777,14 +2777,22 @@ describe('Anthropic Proxy Routes', () => {
     it('routes a persisted keyless OpenAI-compatible model in non-stream and streaming modes', async () => {
       const captures: Array<{
         authorization: string | undefined;
-        body: { model: string; stream?: boolean };
+      body: {
+        model: string;
+        stream?: boolean;
+        chat_template_kwargs?: { enable_thinking?: boolean };
+      };
         path: string | undefined;
       }> = [];
       const upstreamSse = 'data: {"choices":[{"delta":{"content":"Local stream"}}]}\n\ndata: [DONE]\n\n';
       const upstream = http.createServer(async (request, response) => {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { model: string; stream?: boolean };
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+          model: string;
+          stream?: boolean;
+          chat_template_kwargs?: { enable_thinking?: boolean };
+        };
         captures.push({
           authorization: request.headers.authorization,
           body,
@@ -2842,21 +2850,47 @@ describe('Anthropic Proxy Routes', () => {
           },
         });
         expect(streaming.statusCode).toBe(200);
-        expect(streaming.headers['content-type']).toContain('text/event-stream');
-        expect(streaming.body).toBe(upstreamSse);
+      expect(streaming.headers['content-type']).toContain('text/event-stream');
+      expect(streaming.body).toBe(upstreamSse);
 
-        expect(captures).toEqual([
-          {
-            authorization: undefined,
-            body: expect.objectContaining({ model: 'acme/local-qwen:Q4_K_M', stream: false }),
-            path: '/v1/chat/completions',
-          },
-          {
-            authorization: undefined,
-            body: expect.objectContaining({ model: 'acme/local-qwen:Q4_K_M', stream: true }),
-            path: '/v1/chat/completions',
-          },
-        ]);
+      const nonQwen = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/local-llama:Q4_K_M',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
+      expect(nonQwen.statusCode).toBe(200);
+
+      expect(captures).toEqual([
+        {
+          authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: false,
+            chat_template_kwargs: { enable_thinking: false },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: true,
+            chat_template_kwargs: { enable_thinking: false },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
+          body: expect.objectContaining({ model: 'acme/local-llama:Q4_K_M', stream: false }),
+          path: '/v1/chat/completions',
+        },
+      ]);
+      expect(captures[2].body).not.toHaveProperty('chat_template_kwargs');
+      expect(captures[2].body).not.toHaveProperty('extra_body');
       } finally {
         await new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));
         fs.rmSync(dataDir, { recursive: true, force: true });

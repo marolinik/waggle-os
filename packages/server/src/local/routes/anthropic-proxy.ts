@@ -936,6 +936,15 @@ async function forwardCompatibleProvider(
   const url = completionEndpoint(baseUrl);
   const outboundBody: Record<string, unknown> = { ...body, model: route.model };
   if (
+    route.providerId === 'openai-compatible'
+    && /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(route.model)
+  ) {
+    // Qwen-compatible servers commonly default to long hidden reasoning. Keep
+    // interactive Waggle chat responsive while leaving every other provider
+    // byte-for-byte unchanged. A user-facing override is a separate setting.
+    outboundBody.chat_template_kwargs = { enable_thinking: false };
+  }
+  if (
     route.providerId === 'openai'
     && body.max_tokens !== undefined
     && /^(?:gpt-5|o\d|codex-mini-)/i.test(route.model)

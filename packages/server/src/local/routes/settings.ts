@@ -370,6 +370,9 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
             max_tokens: 512,
             stream: false,
             messages: [{ role: 'user', content: 'Reply with exactly WAGGLE_OK.' }],
+            ...(/(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(
+              model.slice('openai-compatible/'.length),
+            ) ? { chat_template_kwargs: { enable_thinking: false } } : {}),
           }),
         });
         if (!response.ok) {
