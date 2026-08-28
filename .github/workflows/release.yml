@@ -2182,7 +2182,7 @@ jobs:
 
       - name: Attest bootstrap Windows artifacts
         if: needs.certify-windows.outputs.release_mode == 'bootstrap'
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             ${{ runner.temp }}/waggle-windows-sealed/release/*-setup.exe
@@ -2194,7 +2194,7 @@ jobs:
 
       - name: Attest upgrade Windows artifacts
         if: needs.certify-windows.outputs.release_mode == 'upgrade'
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             ${{ runner.temp }}/waggle-windows-sealed/release/*-setup.exe
