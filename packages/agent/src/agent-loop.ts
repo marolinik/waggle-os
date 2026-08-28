@@ -100,6 +100,8 @@ export interface AgentLoopConfig {
     enabled: boolean;
     effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   };
+  /** Force one already-authorized tool on the first model turn only. */
+  toolChoice?: string;
   /** Optional abort signal — when aborted, the agent loop exits between turns */
   signal?: AbortSignal;
   /** Team governance policies — blocked tools and allowed sources.
@@ -586,6 +588,18 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     if (currentRequestToolNames.length > 0) {
       body.tools = turnOpenAiTools;
     }
+    const forcedToolChoiceActive = (
+      turn === 0
+      && config.toolChoice
+      && currentRequestToolNames.includes(config.toolChoice)
+    );
+    if (forcedToolChoiceActive) {
+      body.tool_choice = {
+        type: 'function',
+        function: { name: config.toolChoice },
+      };
+      body.parallel_tool_calls = false;
+    }
     // A forced synthesis is the only request in the turn that cannot execute
     // tools. Make it atomic so an upstream SSE truncation cannot discard an
     // otherwise complete evidence-backed answer after all tool work finished.
@@ -973,6 +987,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
 
     // Has tool calls — execute them and continue the loop
+    if (forcedToolChoiceActive && assistantMessage.tool_calls.length > 1) {
+      throw new Error(
+        `Forced tool choice ${config.toolChoice} returned multiple tool calls; refusing to execute any`,
+      );
+    }
+
     toolRoundCount++;
     // Ensure content is never null when tool_calls are present (LiteLLM→Anthropic compat)
     messages.push({
@@ -1019,6 +1039,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         content: capToolResultForModel(r.content, toolContextBudget.maxSingleResultChars),
         tool_call_id: r.toolCallId,
       });
+      if (forcedToolChoiceActive) {
+        forceSynthesis('tool-round-limit');
+      }
 
       // Steal #9 T3 — a critical failure streak: give up rather than burn more
       // turns retrying a tool that keeps failing. Surface the give-up copy and

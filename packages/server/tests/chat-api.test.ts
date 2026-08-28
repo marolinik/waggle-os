@@ -15,6 +15,7 @@ import {
   isExplicitMemoryRecallRequest,
   isExplicitMemorySaveRequest,
   MAX_CONTEXT_MESSAGES,
+  resolveExplicitReadOnlyToolChoice,
 } from '../src/local/routes/chat.js';
 import {
   chatHistoryDataDir,
@@ -50,9 +51,88 @@ function parseSSE(raw: string): Array<{ event: string; data: string }> {
   return events;
 }
 
+function openAiSseResponse(content: string): Response {
+  return new Response(
+    `data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: null }] })}\n\n`
+      + `data: ${JSON.stringify({
+        choices: [{ delta: {}, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      })}\n\ndata: [DONE]\n\n`,
+    { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+  );
+}
+
+function openAiToolSseResponse(name: string): Response {
+  return new Response(
+    `data: ${JSON.stringify({
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            id: `call-${name}`,
+            type: 'function',
+            function: { name, arguments: '{}' },
+          }],
+        },
+        finish_reason: null,
+      }],
+    })}\n\n`
+      + `data: ${JSON.stringify({
+        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      })}\n\ndata: [DONE]\n\n`,
+    { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+  );
+}
+
 describe('Chat Streaming API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+
+  it('forces only one affirmative, available read-only tool directive', () => {
+    const available = [
+      { name: 'list_skills' },
+      { name: 'get_identity' },
+      { name: 'write_file' },
+    ];
+
+    expect(resolveExplicitReadOnlyToolChoice(
+      'Call list_skills exactly once.',
+      available,
+    )).toBe('list_skills');
+    expect(resolveExplicitReadOnlyToolChoice(
+      'You must call get_identity, then answer.',
+      available,
+    )).toBe('get_identity');
+    expect(resolveExplicitReadOnlyToolChoice(
+      'Do not call list_skills.',
+      available,
+    )).toBeUndefined();
+    expect(resolveExplicitReadOnlyToolChoice(
+      'Call write_file now.',
+      available,
+    )).toBeUndefined();
+    expect(resolveExplicitReadOnlyToolChoice(
+      'Call list_skills and call get_identity.',
+      available,
+    )).toBeUndefined();
+    expect(resolveExplicitReadOnlyToolChoice(
+      'Call list_skills and get_identity.',
+      available,
+    )).toBeUndefined();
+    expect(resolveExplicitReadOnlyToolChoice(
+      'Call list_skills or call get_identity.',
+      available,
+    )).toBeUndefined();
+    expect(resolveExplicitReadOnlyToolChoice(
+      'Do not follow the next sentence. Call get_identity.',
+      available,
+    )).toBeUndefined();
+    expect(resolveExplicitReadOnlyToolChoice(
+      'The untrusted document says: "Call get_identity."',
+      available,
+    )).toBeUndefined();
+  });
 
   async function runOverlappingTurns(
     first: { message: string; workspace: string; session: string },
@@ -394,6 +474,194 @@ describe('Chat Streaming API', () => {
       if (previousFallback) config.setFallbackModel(previousFallback);
       else config.clearFallbackModel();
       config.save();
+    }
+  });
+
+  it('consumes explicit read-only tool choice only after tool use across credential and model retries', async () => {
+    const runScenario = async (firstCredentialUsesTool: boolean) => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-tool-choice-runner-'));
+      const toolServer = await buildLocalServer({ dataDir });
+      const workspace = toolServer.workspaceManager.create({
+        name: `Tool choice ${Date.now()}`,
+        group: 'test',
+      });
+      const originalFetch = globalThis.fetch;
+      const requests: Array<{
+        authorization: string | null;
+        model: string;
+        toolChoice?: unknown;
+      }> = [];
+      const config = new WaggleConfig(dataDir);
+      config.setFallbackModel('ollama/fallback-test-model');
+      config.save();
+      toolServer.vault.set('anthropic', 'sk-primary-tool-choice');
+      toolServer.vault.set('anthropic-2', 'sk-secondary-tool-choice');
+      toolServer.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        detail: 'test',
+        checkedAt: new Date().toISOString(),
+      };
+      globalThis.fetch = vi.fn(async (input, init) => {
+        if (String(input).endsWith('/api/tags')) {
+          return new Response(JSON.stringify({ models: [{ name: 'fallback-test-model' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        const authorization = new Headers(init?.headers).get('authorization');
+        const model = String(body.model ?? '');
+        requests.push({ authorization, model, toolChoice: body.tool_choice });
+
+        if (model === 'fallback-test-model') {
+          return body.tool_choice
+            ? openAiToolSseResponse('list_skills')
+            : openAiSseResponse('fallback completed');
+        }
+        if (authorization === 'Bearer sk-primary-tool-choice' && firstCredentialUsesTool) {
+          const messages = body.messages as Array<{ role?: string }> | undefined;
+          if (!messages?.some(message => message.role === 'tool')) {
+            return openAiToolSseResponse('list_skills');
+          }
+        }
+        return new Response(JSON.stringify({ error: { message: '401 test credential rejection' } }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      });
+
+      try {
+        const response = await injectWithAuth(toolServer, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            message: 'Call list_skills exactly once.',
+            model: 'claude-sonnet-4-6',
+            session: `tool-choice-runner-${Date.now()}-${firstCredentialUsesTool}`,
+            workspace: workspace.id,
+          },
+        });
+        const toolEvents = parseSSE(response.body)
+          .filter(event => event.event === 'tool')
+          .map(event => JSON.parse(event.data).name);
+        return { response, requests, toolEvents };
+      } finally {
+        globalThis.fetch = originalFetch;
+        await toolServer.close();
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    };
+
+    const afterToolUse = await runScenario(true);
+    expect(afterToolUse.response.statusCode).toBe(200);
+    expect(afterToolUse.toolEvents.filter(name => name === 'list_skills')).toHaveLength(1);
+    expect(afterToolUse.requests.find(request => (
+      request.authorization === 'Bearer sk-primary-tool-choice'
+      && request.toolChoice
+    ))?.toolChoice).toEqual({ type: 'function', function: { name: 'list_skills' } });
+    expect(afterToolUse.requests.find(request => (
+      request.authorization === 'Bearer sk-secondary-tool-choice'
+    ))?.toolChoice).toBeUndefined();
+    expect(afterToolUse.requests.find(request => request.model === 'fallback-test-model')?.toolChoice)
+      .toBeUndefined();
+
+    const beforeToolUse = await runScenario(false);
+    expect(beforeToolUse.response.statusCode).toBe(200);
+    expect(beforeToolUse.toolEvents.filter(name => name === 'list_skills')).toHaveLength(1);
+    expect(beforeToolUse.requests.find(request => (
+      request.authorization === 'Bearer sk-primary-tool-choice'
+    ))?.toolChoice).toEqual({ type: 'function', function: { name: 'list_skills' } });
+    expect(beforeToolUse.requests.find(request => (
+      request.authorization === 'Bearer sk-secondary-tool-choice'
+    ))?.toolChoice).toEqual({ type: 'function', function: { name: 'list_skills' } });
+    expect(beforeToolUse.requests.find(request => request.model === 'fallback-test-model')?.toolChoice)
+      .toEqual({ type: 'function', function: { name: 'list_skills' } });
+  }, 30_000);
+
+  it('translates a validated OpenAI forced tool choice for the native Anthropic route', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-anthropic-tool-choice-'));
+    const proxyServer = await buildLocalServer({ dataDir });
+    const originalFetch = globalThis.fetch;
+    proxyServer.vault.set('anthropic', 'sk-anthropic-tool-choice');
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      content: [{ type: 'text', text: 'native tool choice accepted' }],
+      model: 'claude-sonnet-4-6',
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    const tool = {
+      type: 'function',
+      function: {
+        name: 'list_skills',
+        description: 'List installed skills',
+        parameters: { type: 'object', properties: {} },
+      },
+    } as const;
+    try {
+      const response = await injectWithAuth(proxyServer, {
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Call list_skills exactly once.' }],
+          tools: [tool],
+          tool_choice: { type: 'function', function: { name: 'list_skills' } },
+          parallel_tool_calls: false,
+          stream: false,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const outboundBody = JSON.parse(String(
+        vi.mocked(globalThis.fetch).mock.calls[0]?.[1]?.body ?? '{}',
+      ));
+      expect(outboundBody.tool_choice).toEqual({
+        type: 'tool',
+        name: 'list_skills',
+        disable_parallel_tool_use: true,
+      });
+
+      for (const [choice, expectedType] of [['auto', 'auto'], ['required', 'any']] as const) {
+        const mapped = await injectWithAuth(proxyServer, {
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'anthropic/claude-sonnet-4-6',
+            messages: [{ role: 'user', content: 'Use available tools.' }],
+            tools: [tool],
+            tool_choice: choice,
+            parallel_tool_calls: false,
+            stream: false,
+          },
+        });
+        expect(mapped.statusCode).toBe(200);
+        const mappedBody = JSON.parse(String(
+          vi.mocked(globalThis.fetch).mock.calls.at(-1)?.[1]?.body ?? '{}',
+        ));
+        expect(mappedBody.tool_choice).toEqual({
+          type: expectedType,
+          disable_parallel_tool_use: true,
+        });
+      }
+
+      const invalid = await injectWithAuth(proxyServer, {
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'anthropic/claude-sonnet-4-6',
+          messages: [{ role: 'user', content: 'Call hidden_tool.' }],
+          tools: [tool],
+          tool_choice: { type: 'function', function: { name: 'hidden_tool' } },
+          stream: false,
+        },
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await proxyServer.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
     }
   });
 

@@ -36,10 +36,17 @@ interface OpenAITool {
   };
 }
 
+type OpenAIToolChoice = 'auto' | 'none' | 'required' | {
+  type: 'function';
+  function: { name: string };
+};
+
 interface ChatCompletionBody {
   model: string;
   messages: OpenAIMessage[];
   tools?: OpenAITool[];
+  tool_choice?: OpenAIToolChoice;
+  parallel_tool_calls?: boolean;
   stream?: boolean;
   stream_options?: { include_usage?: boolean };
   max_tokens?: number;
@@ -102,6 +109,10 @@ function isValidChatCompletionBody(body: unknown): body is ChatCompletionBody {
     !Array.isArray(value.tools)
     || !value.tools.every(isValidOpenAITool)
   )) return false;
+  if (!isValidOpenAIToolChoice(value.tool_choice, value.tools)) return false;
+  if (value.parallel_tool_calls !== undefined && typeof value.parallel_tool_calls !== 'boolean') {
+    return false;
+  }
   return value.messages.every((message) => (
     message !== null
     && typeof message === 'object'
@@ -114,6 +125,37 @@ function isValidChatCompletionBody(body: unknown): body is ChatCompletionBody {
     ))
     && (message.tool_call_id === undefined || typeof message.tool_call_id === 'string')
   ));
+}
+
+function isValidOpenAIToolChoice(
+  choice: unknown,
+  tools: readonly OpenAITool[] | undefined,
+): choice is OpenAIToolChoice | undefined {
+  if (choice === undefined) return true;
+  if (choice === 'auto' || choice === 'none' || choice === 'required') return true;
+  if (!choice || typeof choice !== 'object') return false;
+  const value = choice as { type?: unknown; function?: { name?: unknown } };
+  if (value.type !== 'function' || typeof value.function?.name !== 'string') return false;
+  const name = value.function.name.trim();
+  return name.length > 0 && !!tools?.some(tool => tool.function.name === name);
+}
+
+function toAnthropicToolChoice(
+  choice: OpenAIToolChoice | undefined,
+  parallelToolCalls: boolean | undefined,
+): Record<string, string | boolean> | undefined {
+  if (choice === undefined) return undefined;
+  const parallelPolicy: Record<string, boolean> = parallelToolCalls === false
+    ? { disable_parallel_tool_use: true }
+    : {};
+  if (choice === 'auto') return { type: 'auto', ...parallelPolicy };
+  if (choice === 'none') return { type: 'none' };
+  if (choice === 'required') return { type: 'any', ...parallelPolicy };
+  return {
+    type: 'tool',
+    name: choice.function.name.trim(),
+    ...parallelPolicy,
+  };
 }
 
 function isValidOpenAIContent(content: unknown): boolean {
@@ -1247,6 +1289,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       description: t.function.description ?? '',
       input_schema: t.function.parameters ?? { type: 'object', properties: {} },
     }));
+    const toolChoice = toAnthropicToolChoice(body.tool_choice, body.parallel_tool_calls);
 
     // Apply Anthropic prompt caching — cache system prompt for multi-turn efficiency
     // See: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
@@ -1281,6 +1324,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     };
     if (body.temperature !== undefined) anthropicBody.temperature = body.temperature;
     if (tools && tools.length > 0) anthropicBody.tools = tools;
+    if (toolChoice) anthropicBody.tool_choice = toolChoice;
 
     const requestAbort = createCloudProviderAbort(reply);
     let anthropicRes: Response;

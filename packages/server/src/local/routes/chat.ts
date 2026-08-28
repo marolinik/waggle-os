@@ -397,6 +397,30 @@ export function shouldNarrowToolsForConversationalTurn(
   return autonomyLevel === 'normal' && !isExplicitGatedToolRequest(message);
 }
 
+export function resolveExplicitReadOnlyToolChoice(
+  message: string,
+  tools: readonly { name: string }[],
+): string | undefined {
+  const readOnly = new Set(READONLY_TOOLS);
+  const candidates = Array.from(new Set(tools.map(tool => tool.name)))
+    .filter(name => readOnly.has(name));
+  const mentioned = candidates.filter((name) => {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^a-z0-9_])${escaped}(?=$|[^a-z0-9_])`, 'i').test(message);
+  });
+  if (mentioned.length !== 1) return undefined;
+
+  const escaped = mentioned[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const directive = new RegExp(
+    `^\\s*(?:(?:you\\s+)?must\\s+|please\\s+)?(?:call|use|invoke|run)\\s+(?:the\\s+)?(?:tool\\s+)?${escaped}`
+      + `(?:\\s+exactly\\s+once|\\s+once)?`
+      + `(?:\\s*,?\\s*then\\s+(?:answer|respond)(?:\\s+(?:the\\s+)?(?:question|request))?)?`
+      + `[.!]?\\s*$`,
+    'i',
+  );
+  return directive.test(message) ? mentioned[0] : undefined;
+}
+
 export function filterGatedToolsForConversationalTurn<T extends { name: string }>(
   tools: T[],
   message: string,
@@ -2356,6 +2380,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let selectorLatencyMs = 0;
         let packageMode: ChatPromptPackageMode | 'custom' = 'custom';
         let spawnAvailableTools = effectiveTools;
+        let explicitReadOnlyToolChoice: string | undefined;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
@@ -2621,13 +2646,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
 
           const beforeNarrowing = effectiveTools.length;
-          effectiveTools = filterGatedToolsForConversationalTurn(
-            effectiveTools,
-            agentMessage,
-            autonomyLevel,
-            turnMutationPolicy,
-            externalToolNames,
-          );
+          explicitReadOnlyToolChoice = resolveExplicitReadOnlyToolChoice(agentMessage, effectiveTools);
+          effectiveTools = explicitReadOnlyToolChoice
+            ? effectiveTools.filter(tool => tool.name === explicitReadOnlyToolChoice)
+            : filterGatedToolsForConversationalTurn(
+              effectiveTools,
+              agentMessage,
+              autonomyLevel,
+              turnMutationPolicy,
+              externalToolNames,
+            );
           if (effectiveTools.length !== beforeNarrowing) {
             log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
           }
@@ -2704,6 +2732,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             recentToolNames: previousToolSequence,
             preferredToolNames: activePersona?.tools ?? [],
             mandatoryToolNames: [
+              ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
               ...(isExplicitMemoryRecallRequest(agentMessage) ? ['search_memory'] : []),
               ...(shouldRequireCapabilityAcquisitionTools(agentMessage)
                 && !turnMutationPolicy.denyAllMutations
@@ -2893,6 +2922,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           output: string;
           duration?: number;
         }> = [];
+        let pendingExplicitReadOnlyToolChoice = explicitReadOnlyToolChoice;
 
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
@@ -2931,6 +2961,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             sendEvent('step', { content: giveUpMessage });
           },
           onToolUse: (name: string, input: Record<string, unknown>) => {
+            pendingExplicitReadOnlyToolChoice = undefined;
             // Send human-readable step description + raw tool event
             const stepText = describeToolUse(name, input);
             sendEvent('step', { content: stepText });
@@ -3146,7 +3177,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           pendingCapabilityToolResults = [];
           activeAttemptModel = resolvedModel;
           abortedAttemptUsage = null;
-          const attemptedResult = await agentRunner(config);
+          const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
+          const attemptedResult = await agentRunner({
+            ...attemptBaseConfig,
+            ...(pendingExplicitReadOnlyToolChoice
+              ? { toolChoice: pendingExplicitReadOnlyToolChoice }
+              : {}),
+          });
           if (turnSignal.aborted) {
             abortedAttemptUsage = getBillableUsage(attemptedResult.usage);
             throw turnSignal.reason ?? new Error('Chat or workspace cancelled');

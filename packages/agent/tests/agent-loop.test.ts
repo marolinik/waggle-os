@@ -90,6 +90,101 @@ describe('runAgentLoop', () => {
     expect(body.reasoning).toEqual({ enabled: true, effort: 'low' });
   });
 
+  it('forces one requested tool only on the first model turn', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{ id: 'call-1', function: { name: 'list_skills', arguments: '{}' } }],
+      },
+      { content: '18' },
+    ]);
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '18 skills'),
+    };
+
+    await runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+    }));
+
+    const firstBody = JSON.parse(fetch.mock.calls[0][1].body);
+    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(firstBody.tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'list_skills' },
+    });
+    expect(firstBody.parallel_tool_calls).toBe(false);
+    expect(secondBody.tool_choice).toBeUndefined();
+    expect(secondBody.parallel_tool_calls).toBeUndefined();
+    expect(listSkills.execute).toHaveBeenCalledOnce();
+  });
+
+  it('rejects multiple forced tool calls before executing any of them', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [
+          { id: 'call-1', function: { name: 'list_skills', arguments: '{}' } },
+          { id: 'call-2', function: { name: 'list_skills', arguments: '{}' } },
+        ],
+      },
+      { content: 'should not be reached' },
+    ]);
+    const onToolUse = vi.fn();
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '18 skills'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+      onToolUse,
+    }))).rejects.toThrow('multiple tool calls');
+
+    expect(listSkills.execute).not.toHaveBeenCalled();
+    expect(onToolUse).not.toHaveBeenCalled();
+  });
+
+  it('does not execute the forced tool again on a later model turn', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{ id: 'call-1', function: { name: 'list_skills', arguments: '{}' } }],
+      },
+      {
+        content: null,
+        tool_calls: [{ id: 'call-2', function: { name: 'list_skills', arguments: '{}' } }],
+      },
+      { content: 'should not need another turn' },
+    ]);
+    const onToolUse = vi.fn();
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '18 skills'),
+    };
+
+    await runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+      onToolUse,
+    }));
+
+    expect(listSkills.execute).toHaveBeenCalledOnce();
+    expect(onToolUse).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('retries once when the model emits raw tool-call markup as text', async () => {
     const fetch = mockFetch([
       {
