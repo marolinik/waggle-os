@@ -67,6 +67,8 @@ export interface AgentLoopConfig {
   tools: ToolDefinition[];
   messages: Array<{ role: string; content: string }>;
   onToken?: (token: string) => void;
+  /** Signals provider reasoning activity without exposing private reasoning text. */
+  onReasoningActivity?: () => void;
   onToolUse?: (name: string, input: Record<string, unknown>) => void;
   onToolResult?: (name: string, input: Record<string, unknown>, result: string) => void;
   /**
@@ -284,6 +286,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     tools: configTools,
     messages: inputMessages,
     onToken,
+    onReasoningActivity,
     onToolUse: userOnToolUse,
     onToolResult: userOnToolResult,
     maxTurns = 10,
@@ -711,6 +714,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
             allStreamedContent += token;
             if (onToken) onToken(token);
           },
+          onReasoningActivity,
         });
       } catch (error) {
         if (!isIncompleteCompletionError(error)) {

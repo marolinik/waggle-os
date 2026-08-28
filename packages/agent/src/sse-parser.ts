@@ -35,6 +35,8 @@ export interface ParsedChatCompletionStream {
 export interface SseParseOptions {
   /** Per-token callback fired for each `delta.content` chunk. Caller's content accumulator hooks here. */
   onToken?: (token: string) => void;
+  /** Signals private provider reasoning activity without exposing its contents. */
+  onReasoningActivity?: () => void;
 }
 
 function incompleteStreamError(
@@ -70,7 +72,7 @@ export async function parseChatCompletionStream(
   body: ReadableStream<Uint8Array>,
   options: SseParseOptions = {},
 ): Promise<ParsedChatCompletionStream> {
-  const { onToken } = options;
+  const { onToken, onReasoningActivity } = options;
   let content = '';
   let inputTokens = 0;
   let outputTokens = 0;
@@ -134,6 +136,8 @@ export async function parseChatCompletionStream(
             finish_reason?: string | null;
             delta?: {
               content?: string;
+              reasoning_content?: string;
+              reasoning?: string;
               tool_calls?: Array<{
                 index?: number;
                 id?: string;
@@ -153,6 +157,9 @@ export async function parseChatCompletionStream(
 
         const delta = choice?.delta;
         if (!delta) continue;
+
+        const reasoning = delta.reasoning_content ?? delta.reasoning;
+        if (reasoning) onReasoningActivity?.();
 
         if (delta.content) {
           content += delta.content;

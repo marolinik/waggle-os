@@ -2886,6 +2886,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Build agent loop config — with windowed conversation history + hooks
         let bufferedAgentTokens: string[] = [];
+        let reasoningActivitySent = false;
         let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
         let pendingCapabilityToolResults: Array<{
           input: Record<string, unknown>;
@@ -2914,6 +2915,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           signal: turnSignal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
+          onReasoningActivity: () => {
+            if (reasoningActivitySent || turnSignal.aborted) return;
+            reasoningActivitySent = true;
+            sendEvent('step', { content: 'Thinking through your request…' });
+          },
           onToken: (token: string) => {
             if (firstTokenAt === null) firstTokenAt = performance.now();
             bufferedAgentTokens.push(token);

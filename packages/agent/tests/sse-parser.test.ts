@@ -17,6 +17,24 @@ function sse(obj: unknown): string {
 }
 
 describe('parseChatCompletionStream', () => {
+  it('signals reasoning activity without exposing private reasoning text', async () => {
+    const onReasoningActivity = vi.fn();
+    const onToken = vi.fn();
+    const body = streamFrom([
+      sse({ choices: [{ delta: { reasoning_content: 'PRIVATE_REASONING' } }] }),
+      sse({ choices: [{ delta: { content: 'Ready' } }] }),
+      sse({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+      'data: [DONE]\n\n',
+    ]);
+
+    const result = await parseChatCompletionStream(body, { onReasoningActivity, onToken });
+
+    expect(onReasoningActivity).toHaveBeenCalledOnce();
+    expect(onToken).toHaveBeenCalledWith('Ready');
+    expect(result.content).toBe('Ready');
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_REASONING');
+  });
+
   it('keeps index-less parallel tool calls in separate slots by id (R3-006)', async () => {
     // Two distinct parallel tool calls whose deltas omit `index`, interleaved.
     const body = streamFrom([

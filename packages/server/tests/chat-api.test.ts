@@ -25,7 +25,7 @@ import {
   resolveChatHistoryTarget,
 } from '../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
-import { injectWithAuth, resetRateLimiter } from './test-utils.js';
+import { getAuthToken, injectWithAuth, resetRateLimiter } from './test-utils.js';
 
 /**
  * Parse raw SSE response body into an array of { event, data } objects.
@@ -173,6 +173,228 @@ describe('Chat Streaming API', () => {
     expect(tokenEvents.length).toBe(2);
     expect(JSON.parse(tokenEvents[0].data).content).toBe('Hello ');
     expect(JSON.parse(tokenEvents[1].data).content).toBe('world');
+  });
+
+  it('surfaces safe reasoning activity without exposing provisional model content', async () => {
+    const originalRunner = server.agentRunner;
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      config.onReasoningActivity?.();
+      config.onReasoningActivity?.();
+      config.onToken?.('<think>PRIVATE_REASONING</think>[TOOL_CALL]{"secret":"EXFIL"}');
+      return {
+        content: 'Authoritative answer',
+        toolsUsed: [],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      };
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Think carefully' },
+      });
+      const events = parseSSE(res.body);
+      const reasoningEvents = events.filter(event => event.event === 'step'
+        && JSON.parse(event.data).content === 'Thinking through your request…');
+      const reasoningIndex = events.indexOf(reasoningEvents[0]);
+      const tokenIndex = events.findIndex(event => event.event === 'token');
+      const doneIndex = events.findIndex(event => event.event === 'done');
+
+      expect(reasoningEvents).toHaveLength(1);
+      expect(reasoningIndex).toBeGreaterThanOrEqual(0);
+      expect(events.some(event => event.event === 'draft_update')).toBe(false);
+      expect(tokenIndex).toBeGreaterThan(reasoningIndex);
+      expect(doneIndex).toBeGreaterThan(tokenIndex);
+      expect(JSON.parse(events[tokenIndex].data).content).toBe('Authoritative answer');
+      expect(JSON.parse(events[doneIndex].data).content).toBe('Authoritative answer');
+      expect(res.body).not.toContain('PRIVATE_REASONING');
+      expect(res.body).not.toContain('EXFIL');
+    } finally {
+      server.agentRunner = originalRunner;
+    }
+  });
+
+  it('suppresses late reasoning and model output after a live client disconnect', async () => {
+    const abortDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-abort-'));
+    const abortServer = await buildLocalServer({ dataDir: abortDir });
+    let capturedSignal: AbortSignal | undefined;
+    let releaseRunner!: () => void;
+    let markReasoningStarted!: () => void;
+    let markRunnerFinished!: () => void;
+    const runnerGate = new Promise<void>(resolve => { releaseRunner = resolve; });
+    const reasoningStarted = new Promise<void>(resolve => { markReasoningStarted = resolve; });
+    const runnerFinished = new Promise<void>(resolve => { markRunnerFinished = resolve; });
+    const sessionId = `live-disconnect-${Date.now()}`;
+
+    abortServer.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedSignal = config.signal;
+      config.onReasoningActivity?.();
+      markReasoningStarted();
+      await runnerGate; // Deliberately ignore cancellation to exercise late callbacks.
+      config.onReasoningActivity?.();
+      config.onToken?.('<think>LATE_PRIVATE_REASONING</think>[TOOL_CALL]{"secret":"LATE_EXFIL"}');
+      markRunnerFinished();
+      return {
+        content: 'LATE_AUTHORITATIVE_RESPONSE',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    const controller = new AbortController();
+    let observedBody = '';
+    try {
+      const baseUrl = await abortServer.listen({ host: '127.0.0.1', port: 0 });
+      const responsePromise = fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${getAuthToken(abortServer)}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ message: 'Start then disconnect', session: sessionId }),
+        signal: controller.signal,
+      });
+
+      await reasoningStarted;
+      const response = await responsePromise;
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      const deadline = Date.now() + 3_000;
+      while (!observedBody.includes('Thinking through your request…')) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) throw new Error('Timed out waiting for the complete reasoning SSE event');
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_resolve, reject) => {
+            setTimeout(() => reject(new Error('Timed out waiting for reasoning SSE bytes')), remainingMs);
+          }),
+        ]);
+        if (chunk.done) break;
+        observedBody += decoder.decode(chunk.value, { stream: true });
+      }
+      expect(observedBody).toContain('Thinking through your request…');
+
+      controller.abort();
+      await vi.waitFor(() => expect(capturedSignal?.aborted).toBe(true), { timeout: 3_000 });
+      releaseRunner();
+      await runnerFinished;
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      let postAbortMessages: Array<{ role: string; content: string }> = [];
+      abortServer.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+        postAbortMessages = config.messages.map(({ role, content }) => ({ role, content }));
+        config.onToken?.('post-abort probe ok');
+        return {
+          content: 'post-abort probe ok',
+          toolsUsed: [],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      };
+      const postAbortProbe = await injectWithAuth(abortServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: 'Probe canonical history after disconnect', session: sessionId },
+      });
+      const postAbortEvents = parseSSE(postAbortProbe.body);
+
+      expect(postAbortProbe.statusCode).toBe(200);
+      expect(postAbortMessages.at(-1)).toEqual({
+        role: 'user',
+        content: 'Probe canonical history after disconnect',
+      });
+      expect(postAbortEvents.filter(event => event.event === 'done')).toHaveLength(1);
+      expect(JSON.stringify(postAbortMessages)).not.toContain('LATE_PRIVATE_REASONING');
+      expect(JSON.stringify(postAbortMessages)).not.toContain('LATE_EXFIL');
+      expect(JSON.stringify(postAbortMessages)).not.toContain('LATE_AUTHORITATIVE_RESPONSE');
+    } finally {
+      controller.abort();
+      releaseRunner();
+      await abortServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        fs.rmSync(abortDir, { recursive: true, force: true });
+      } catch {
+        // Windows can retain SQLite handles briefly after Fastify closes.
+      }
+    }
+  }, 20_000);
+
+  it('keeps failed-attempt output out of the fallback response stream', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const config = new WaggleConfig(tmpDir);
+    const previousFallback = config.getFallbackModel();
+    const attempts: string[] = [];
+    config.setFallbackModel('ollama/fallback-test-model');
+    config.save();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'primary-test-model' },
+            { name: 'fallback-test-model' },
+          ],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(agentConfig.model);
+      agentConfig.onReasoningActivity?.();
+      if (attempts.length === 1) {
+        agentConfig.onToken?.('<think>FAILED_PRIVATE_REASONING</think>[TOOL_CALL]{"secret":"FAILED_EXFIL"}');
+        throw new Error('Could not reach model endpoint after 3 attempts (fetch failed).');
+      }
+      agentConfig.onToken?.('fallback ok');
+      return {
+        content: 'fallback ok',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Exercise isolated fallback streaming',
+          model: 'ollama/primary-test-model',
+          session: `reasoning-fallback-${Date.now()}`,
+        },
+      });
+      const events = parseSSE(response.body);
+      const reasoningEvents = events.filter(event => event.event === 'step'
+        && JSON.parse(event.data).content === 'Thinking through your request…');
+      const tokenContents = events
+        .filter(event => event.event === 'token')
+        .map(event => JSON.parse(event.data).content);
+      const doneEvents = events.filter(event => event.event === 'done');
+
+      expect(response.statusCode).toBe(200);
+      const errorEvents = events.filter(event => event.event === 'error');
+      expect(errorEvents).toHaveLength(0);
+      expect(attempts).toEqual(['primary-test-model', 'fallback-test-model']);
+      expect(reasoningEvents).toHaveLength(1);
+      expect(events.filter(event => event.event === 'model_switch')).toHaveLength(1);
+      expect(events.some(event => event.event === 'draft_update')).toBe(false);
+      expect(tokenContents).toEqual(['fallback ok']);
+      expect(doneEvents).toHaveLength(1);
+      expect(JSON.parse(doneEvents[0].data)).toMatchObject({
+        content: 'fallback ok',
+        model: 'ollama/fallback-test-model',
+      });
+      expect(response.body).not.toContain('FAILED_PRIVATE_REASONING');
+      expect(response.body).not.toContain('FAILED_EXFIL');
+    } finally {
+      fetchSpy.mockRestore();
+      server.agentRunner = originalRunner;
+      if (previousFallback) config.setFallbackModel(previousFallback);
+      else config.clearFallbackModel();
+      config.save();
+    }
   });
 
   it('sends done event with full response', async () => {
