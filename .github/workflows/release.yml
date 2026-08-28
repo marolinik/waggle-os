@@ -371,14 +371,14 @@ jobs:
         run: npm ci --prefix app --ignore-scripts
 
       - name: Download immutable prebuilt handoff for unsigned verification
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}
           path: ${{ runner.temp }}\waggle-prebuilt-unsigned
           merge-multiple: true
 
       - name: Download immutable prebuilt handoff for signed packaging
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.build-windows-prebuilt.outputs.artifact_id }}
           path: ${{ runner.temp }}\waggle-prebuilt-signing
@@ -1001,7 +1001,7 @@ jobs:
           }
 
       - name: Download immutable prepared Windows signing handoff
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.prepare-windows-signing.outputs.artifact_id }}
           path: ${{ runner.temp }}\waggle-windows-signing-prepared
@@ -1593,7 +1593,7 @@ jobs:
         run: npm ci
 
       - name: Download immutable signed Windows handoff
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.sign-windows.outputs.artifact_id }}
           path: ${{ runner.temp }}\waggle-windows-signed
@@ -2064,7 +2064,7 @@ jobs:
       id-token: write
     steps:
       - name: Download certified Windows release by immutable artifact ID
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.certify-windows.outputs.artifact_id }}
           path: ${{ runner.temp }}/waggle-windows-sealed
@@ -2234,7 +2234,7 @@ jobs:
           }
 
       - name: Download sealed Windows release outputs
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.certify-windows.outputs.artifact_id }}
           path: ${{ runner.temp }}\waggle-windows-sealed
