@@ -31,6 +31,9 @@ const mocks = vi.hoisted(() => ({
     getHistory: vi.fn().mockResolvedValue([]),
     sendMessage: vi.fn(),
     getSessions: vi.fn().mockResolvedValue([]),
+    createSession: vi.fn(),
+    deleteSession: vi.fn(),
+    renameSession: vi.fn(),
     getIdentity: vi.fn(),
     searchMemory: vi.fn(),
     getMemoryStats: vi.fn(),
@@ -128,6 +131,239 @@ describe('useWorkspaces (P1b)', () => {
     } finally {
       consoleSpy.mockRestore();
     }
+  });
+});
+
+// ── useSessions ────────────────────────────────────────────────────────────
+
+describe('useSessions (P1b)', () => {
+  it('keeps a successfully created session when the initial list resolves late', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    let resolveInitialList!: (sessions: never[]) => void;
+    mocks.adapter.getSessions.mockReturnValueOnce(new Promise(resolve => {
+      resolveInitialList = resolve;
+    }));
+    mocks.adapter.createSession.mockResolvedValueOnce({
+      id: 'session-real',
+      workspaceId: 'w1',
+      title: 'New session',
+      messageCount: 0,
+      lastActive: '2026-08-28T11:02:00.000Z',
+    });
+    const { result } = renderHook(() => useSessions('w1'));
+
+    await act(async () => {
+      await result.current.createSession();
+    });
+    expect(result.current.activeSessionId).toBe('session-real');
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-real']);
+    expect(result.current.loading).toBe(false);
+
+    await act(async () => {
+      resolveInitialList([]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.activeSessionId).toBe('session-real');
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-real']);
+  });
+
+  it('ignores a late create failure after switching workspaces', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    let rejectCreate!: (error: Error) => void;
+    mocks.adapter.getSessions.mockResolvedValue([]);
+    mocks.adapter.createSession.mockReturnValueOnce(new Promise((_, reject) => {
+      rejectCreate = reject;
+    }));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useSessions(workspaceId),
+      { initialProps: { workspaceId: 'w1' } },
+    );
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+
+    let pendingCreate!: Promise<unknown>;
+    act(() => {
+      pendingCreate = result.current.createSession();
+    });
+    rerender({ workspaceId: 'w2' });
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w2'));
+
+    await act(async () => {
+      rejectCreate(new Error('create failed late'));
+      await pendingCreate;
+    });
+
+    expect(result.current.activeSessionId).toBe('local-session-w2');
+    expect(result.current.sessions.every(session => session.workspaceId === 'w2')).toBe(true);
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('ignores a late create success after switching workspaces', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    let resolveCreate!: (session: {
+      id: string; workspaceId: string; title: string; messageCount: number; lastActive: string;
+    }) => void;
+    mocks.adapter.getSessions.mockResolvedValue([]);
+    mocks.adapter.createSession.mockReturnValueOnce(new Promise(resolve => {
+      resolveCreate = resolve;
+    }));
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useSessions(workspaceId),
+      { initialProps: { workspaceId: 'w1' } },
+    );
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+
+    let pendingCreate!: Promise<unknown>;
+    act(() => {
+      pendingCreate = result.current.createSession();
+    });
+    rerender({ workspaceId: 'w2' });
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w2'));
+    await act(async () => {
+      resolveCreate({
+        id: 'session-w1-late', workspaceId: 'w1', title: 'Late', messageCount: 0,
+        lastActive: '2026-08-28T11:02:00.000Z',
+      });
+      await pendingCreate;
+    });
+
+    expect(result.current.activeSessionId).toBe('local-session-w2');
+    expect(result.current.sessions.every(session => session.workspaceId === 'w2')).toBe(true);
+  });
+
+  it('never mixes prior-workspace sessions into a fast create on the next workspace', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    let resolveW2List!: (sessions: never[]) => void;
+    mocks.adapter.getSessions
+      .mockResolvedValueOnce([{
+        id: 'session-w1', workspaceId: 'w1', title: 'W1', messageCount: 1,
+        lastActive: '2026-08-28T11:00:00.000Z',
+      }])
+      .mockReturnValueOnce(new Promise(resolve => { resolveW2List = resolve; }));
+    mocks.adapter.createSession.mockResolvedValueOnce({
+      id: 'session-w2-created', workspaceId: 'w2', title: 'New session', messageCount: 0,
+      lastActive: '2026-08-28T11:03:00.000Z',
+    });
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useSessions(workspaceId),
+      { initialProps: { workspaceId: 'w1' } },
+    );
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-w1'));
+
+    rerender({ workspaceId: 'w2' });
+    await act(async () => {
+      await result.current.createSession();
+    });
+
+    expect(result.current.activeSessionId).toBe('session-w2-created');
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-w2-created']);
+    await act(async () => {
+      resolveW2List([]);
+      await Promise.resolve();
+    });
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-w2-created']);
+  });
+
+  it('does not fabricate a successful session when create fails', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValueOnce([]);
+    mocks.adapter.createSession.mockRejectedValueOnce(new Error('create failed'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+    const initialIds = result.current.sessions.map(session => session.id);
+
+    let created: unknown;
+    await act(async () => {
+      created = await result.current.createSession();
+    });
+
+    expect(created).toBeUndefined();
+    expect(result.current.sessions.map(session => session.id)).toEqual(initialIds);
+    expect(result.current.activeSessionId).toBe('local-session-w1');
+    expect(result.current.error).toBe('create failed');
+    consoleSpy.mockRestore();
+  });
+
+  it('does not fabricate a session when the server list fails', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockRejectedValueOnce(new Error('list failed'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.activeSessionId).toBeNull();
+    expect(result.current.error).toBe('list failed');
+    consoleSpy.mockRestore();
+  });
+
+  it('keeps session state unchanged when rename or delete fails', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValueOnce([{
+      id: 'session-existing', workspaceId: 'w1', title: 'Original', messageCount: 2,
+      lastActive: '2026-08-28T11:00:00.000Z',
+    }]);
+    mocks.adapter.renameSession.mockRejectedValueOnce(new Error('rename failed'));
+    mocks.adapter.deleteSession.mockRejectedValueOnce(new Error('delete failed'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-existing'));
+
+    await act(async () => { await result.current.renameSession('session-existing', 'Changed'); });
+    expect(result.current.sessions[0].title).toBe('Original');
+    expect(result.current.error).toBe('rename failed');
+    await act(async () => { await result.current.deleteSession('session-existing'); });
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-existing']);
+    expect(result.current.activeSessionId).toBe('session-existing');
+    expect(result.current.error).toBe('delete failed');
+    consoleSpy.mockRestore();
+  });
+
+  it('does not let a slow delete replace a newer active session', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    let resolveDelete!: () => void;
+    mocks.adapter.getSessions.mockResolvedValueOnce([
+      { id: 'session-s1', workspaceId: 'w1', title: 'S1', messageCount: 1, lastActive: '2026-08-28T11:00:00.000Z' },
+      { id: 'session-s2', workspaceId: 'w1', title: 'S2', messageCount: 1, lastActive: '2026-08-28T10:00:00.000Z' },
+    ]);
+    mocks.adapter.deleteSession.mockReturnValueOnce(new Promise(resolve => { resolveDelete = resolve; }));
+    mocks.adapter.createSession.mockResolvedValueOnce({
+      id: 'session-s3', workspaceId: 'w1', title: 'S3', messageCount: 0,
+      lastActive: '2026-08-28T11:04:00.000Z',
+    });
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-s1'));
+
+    let pendingDelete!: Promise<void>;
+    act(() => { pendingDelete = result.current.deleteSession('session-s1'); });
+    await act(async () => { await result.current.createSession(); });
+    expect(result.current.activeSessionId).toBe('session-s3');
+    await act(async () => {
+      resolveDelete();
+      await pendingDelete;
+    });
+
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-s3', 'session-s2']);
+    expect(result.current.activeSessionId).toBe('session-s3');
+  });
+
+  it('clears loading when the workspace is cleared during a pending list', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockReturnValueOnce(new Promise(() => {}));
+    const { result, rerender } = renderHook(
+      ({ workspaceId }: { workspaceId: string | null }) => useSessions(workspaceId),
+      { initialProps: { workspaceId: 'w1' as string | null } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(true));
+
+    rerender({ workspaceId: null });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.activeSessionId).toBeNull();
   });
 });
 

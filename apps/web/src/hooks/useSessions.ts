@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Session } from '@/lib/types';
 
@@ -15,14 +15,35 @@ export const useSessions = (workspaceId: string | null) => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const listRevisionRef = useRef(0);
+  const mountedRef = useRef(false);
+  const workspaceRef = useRef(workspaceId);
+  workspaceRef.current = workspaceId;
 
   useEffect(() => {
-    if (!workspaceId) { setSessions([]); setActiveSessionId(null); return; }
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    const listRevision = ++listRevisionRef.current;
+    let cancelled = false;
+    if (!workspaceId) {
+      setSessions([]);
+      setActiveSessionId(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     // Reset active session on workspace change to avoid stale cross-workspace refs
+    setSessions([]);
     setActiveSessionId(null);
     setLoading(true);
+    setError(null);
     adapter.getSessions(workspaceId)
       .then(data => {
+        if (cancelled || listRevision !== listRevisionRef.current) return;
+        setError(null);
         if (data.length > 0) {
           setSessions(data);
           setActiveSessionId(data[0].id);
@@ -33,49 +54,70 @@ export const useSessions = (workspaceId: string | null) => {
         }
       })
       .catch((err) => {
+        if (cancelled || listRevision !== listRevisionRef.current) return;
         console.error('[useSessions] fetch failed:', err);
         setError(err instanceof Error ? err.message : 'Failed to load');
-        const def = makeDefaultSession(workspaceId);
-        setSessions([def]);
-        setActiveSessionId(def.id);
+        setSessions([]);
+        setActiveSessionId(null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled && listRevision === listRevisionRef.current) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [workspaceId]);
 
   const createSession = useCallback(async () => {
     if (!workspaceId) return;
     try {
       const session = await adapter.createSession(workspaceId);
-      setSessions(prev => [session, ...prev]);
+      if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+      ++listRevisionRef.current;
+      setLoading(false);
+      setError(null);
+      setSessions(prev => [
+        session,
+        ...prev.filter(existing => existing.workspaceId === workspaceId && existing.id !== session.id),
+      ]);
       setActiveSessionId(session.id);
       return session;
     } catch (err) {
-      console.error('[useSessions] create failed, using local fallback:', err);
-      const local: Session = {
-        id: `local-session-${Date.now()}`,
-        workspaceId,
-        title: 'New Session',
-        messageCount: 0,
-        lastActive: new Date().toISOString(),
-      };
-      setSessions(prev => [local, ...prev]);
-      setActiveSessionId(local.id);
-      return local;
+      if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+      console.error('[useSessions] create failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create session');
+      return undefined;
     }
   }, [workspaceId]);
 
   const deleteSession = useCallback(async (sessionId: string) => {
     if (!workspaceId) return;
-    try { await adapter.deleteSession(sessionId, workspaceId); } catch (err) { console.error('[useSessions] delete failed:', err); }
-    setSessions(prev => prev.filter(s => s.id !== sessionId));
-    if (activeSessionId === sessionId) {
-      setActiveSessionId(sessions.find(s => s.id !== sessionId)?.id || null);
+    try {
+      await adapter.deleteSession(sessionId, workspaceId);
+    } catch (err) {
+      if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+      console.error('[useSessions] delete failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete session');
+      return;
     }
-  }, [workspaceId, activeSessionId, sessions]);
+    if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+    setError(null);
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+    setActiveSessionId(current => current === sessionId
+      ? sessions.find(s => s.id !== sessionId)?.id || null
+      : current);
+  }, [workspaceId, sessions]);
 
   const renameSession = useCallback(async (sessionId: string, title: string) => {
     if (!workspaceId) return;
-    try { await adapter.renameSession(workspaceId, sessionId, title); } catch (err) { console.error('[useSessions] rename failed:', err); }
+    try {
+      await adapter.renameSession(workspaceId, sessionId, title);
+    } catch (err) {
+      if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+      console.error('[useSessions] rename failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to rename session');
+      return;
+    }
+    if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+    setError(null);
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title } : s));
   }, [workspaceId]);
 
