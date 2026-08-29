@@ -16,6 +16,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { MemoryRouter } from 'react-router-dom';
 import type { ChatMessage } from '@/lib/types';
 import {
   chatThreadCacheKey,
@@ -92,6 +93,20 @@ describe('useChat — send queue (never locks, never drops)', () => {
     await act(async () => { await Promise.resolve(); });
     return hook;
   }
+
+  it('fails closed without a resolved session and never creates an optimistic turn', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({ workspaceId: 'ws-1', sessionId: null }));
+
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage('Do not send into a null session');
+    });
+
+    expect(accepted).toBe(false);
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+    expect(result.current.messages).toEqual([]);
+  });
 
   it('signals admission exactly once for an immediate and an in-flight queued send', async () => {
     const gate = deferred<void>();
@@ -311,6 +326,8 @@ describe('useChat — thread session cache (2.6-chat)', () => {
 
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0].content).toBe('cached');
+    expect(result.current.historyLoaded).toBe(true);
+    expect(result.current.historyReady).toBe(true);
   });
 
   it('never lets delayed history from the previous session overwrite the active session', async () => {
@@ -333,6 +350,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
       hook.rerender({ activeSession: 'sess-b' });
       await Promise.resolve();
     });
+    expect(hook.result.current.historyReady).toBe(false);
 
     await act(async () => {
       historyB.resolve([{ id: 'b', role: 'assistant', content: 'session B', timestamp: 'now' }]);
@@ -340,6 +358,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     });
     expect(hook.result.current.messages.map(message => message.content)).toEqual(['session B']);
     expect(hook.result.current.historyLoaded).toBe(true);
+    expect(hook.result.current.historyReady).toBe(true);
 
     await act(async () => {
       historyA.resolve([{ id: 'a', role: 'assistant', content: 'stale session A', timestamp: 'now' }]);
@@ -347,6 +366,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     });
     expect(hook.result.current.messages.map(message => message.content)).toEqual(['session B']);
     expect(hook.result.current.historyLoaded).toBe(true);
+    expect(hook.result.current.historyReady).toBe(true);
   });
 
   it('clears an uncached session immediately without displaying or caching the previous session', async () => {
@@ -1031,9 +1051,14 @@ describe('ChatApp — composer input primacy', () => {
     workspaceId: null as string | null,
     availableModels: [] as string[],
     activeSessionId: null as string | null,
+    sessionCreating: false,
+    sessionLoading: false,
+    sessionReady: true,
+    sessionError: null as string | null,
     historyLoaded: false,
     initialMessage: undefined as string | undefined,
     autoSendInitial: false,
+    onRetry: undefined as (() => void) | undefined,
   };
   const renderChat = (props: Partial<typeof baseProps> & { messages: ChatMessage[] }) =>
     render(<TooltipProvider><ChatAppEl {...baseProps} {...props} /></TooltipProvider>);
@@ -1067,6 +1092,61 @@ describe('ChatApp — composer input primacy', () => {
     renderChat({ messages: [assistantMsg], isLoading: true });
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'next message' } });
     expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
+  });
+
+  it.each([
+    {
+      label: 'a new session is being created',
+      props: { activeSessionId: 'session-old', sessionCreating: true },
+      status: /creating a new session/i,
+    },
+    {
+      label: 'the session list is still loading',
+      props: { activeSessionId: null, sessionLoading: true, sessionReady: false },
+      status: /loading sessions/i,
+    },
+    {
+      label: 'no usable session was loaded',
+      props: { activeSessionId: null, sessionReady: false, sessionError: 'Could not load sessions' },
+      status: /could not load sessions/i,
+    },
+  ])('keeps the draft and blocks Send plus Enter while $label', ({ props, status }) => {
+    const onSendMessage = vi.fn();
+    renderChat({ messages: [], onSendMessage, ...props });
+    const composer = screen.getByRole('textbox', { name: /message composer/i });
+    fireEvent.change(composer, { target: { value: 'Keep this in the right session' } });
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.click(send);
+    fireEvent.keyDown(composer, { key: 'Enter' });
+
+    expect(send).toBeDisabled();
+    expect(composer).toHaveValue('Keep this in the right session');
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(screen.getByText(status)).toBeInTheDocument();
+  });
+
+  it('hides every retry path while a session transition is pending', () => {
+    const onRetry = vi.fn();
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ChatAppEl
+            {...baseProps}
+            messages={[{
+              ...assistantMsg,
+              blocks: [{ type: 'error', blockId: 'e1', message: 'Provider failed' }],
+            }]}
+            activeSessionId="session-old"
+            sessionCreating
+            onRetry={onRetry}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+    expect(onRetry).not.toHaveBeenCalled();
   });
 
   it('renders the truthful "waiting to send" state on a queued optimistic turn', () => {
@@ -1250,6 +1330,51 @@ describe('ChatApp — composer input primacy', () => {
       });
 
       expect(onSendMessage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a delayed WorkspaceBriefing starter as a draft when session creation begins', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.adapter.getWorkspaceContext.mockResolvedValue({
+        greeting: 'Welcome',
+        suggestedPrompts: ['Inspect this workspace'],
+      });
+      const onSendMessage = vi.fn().mockResolvedValue(true);
+      const view = renderChat({
+        messages: [],
+        workspaceId: 'ws-starter-transition',
+        activeSessionId: 'session-old',
+        onSendMessage,
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Inspect this workspace' }));
+
+      view.rerender(
+        <TooltipProvider>
+          <ChatAppEl
+            {...baseProps}
+            messages={[]}
+            workspaceId="ws-starter-transition"
+            activeSessionId="session-old"
+            sessionCreating
+            onSendMessage={onSendMessage}
+          />
+        </TooltipProvider>,
+      );
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+
+      expect(onSendMessage).not.toHaveBeenCalled();
+      expect(screen.getByRole('textbox', { name: /message composer/i }))
+        .toHaveValue('Inspect this workspace');
     } finally {
       vi.useRealTimers();
     }

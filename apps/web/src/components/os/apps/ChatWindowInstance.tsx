@@ -71,6 +71,7 @@ const ChatWindowInstance = ({
     activeSessionId,
     setActiveSessionId,
     createSession,
+    loading: sessionLoading,
     creating: sessionCreating,
     error: sessionError,
   } = useSessions(workspaceId);
@@ -106,7 +107,7 @@ const ChatWindowInstance = ({
       ? { ...s, title: 'New session' }
       : s,
   );
-  const { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction } = useChat({
+  const { messages, isLoading, historyLoaded, historyReady = historyLoaded, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,
     sessionId: activeSessionId,
     persona: currentPersona,
@@ -118,7 +119,13 @@ const ChatWindowInstance = ({
   const lastHandledDispatchIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!pendingDispatch || !activeSessionId || !historyLoaded) return;
+    if (
+      !pendingDispatch
+      || !activeSessionId
+      || sessionLoading
+      || sessionCreating
+      || !historyReady
+    ) return;
     if (
       dispatchInFlightRef.current === pendingDispatch.id
       || lastHandledDispatchIdRef.current === pendingDispatch.id
@@ -149,7 +156,7 @@ const ChatWindowInstance = ({
       .finally(() => {
         if (dispatchInFlightRef.current === id) dispatchInFlightRef.current = null;
       });
-  }, [activeSessionId, historyLoaded, pendingDispatch, sendMessage, workspaceId]);
+  }, [activeSessionId, historyReady, pendingDispatch, sendMessage, sessionCreating, sessionLoading, workspaceId]);
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
@@ -327,6 +334,8 @@ const ChatWindowInstance = ({
       onSelectSession={setActiveSessionId}
       onNewSession={createSession}
       sessionCreating={sessionCreating}
+      sessionLoading={sessionLoading}
+      sessionReady={!sessionLoading && !sessionCreating && Boolean(activeSessionId)}
       sessionError={sessionError}
       workspaceId={workspaceId}
       templateId={templateId}
@@ -337,7 +346,7 @@ const ChatWindowInstance = ({
       onContextRail={onContextRail}
       initialMessage={initialMessage}
       autoSendInitial={autoSendInitial}
-      historyLoaded={historyLoaded}
+      historyLoaded={historyReady}
       onRetry={retryLastFailed}
       onStopStreaming={stopStreaming}
     />

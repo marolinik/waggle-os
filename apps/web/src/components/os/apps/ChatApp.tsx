@@ -55,6 +55,8 @@ interface ChatAppProps {
   onSelectSession?: (id: string) => void;
   onNewSession?: () => void;
   sessionCreating?: boolean;
+  sessionLoading?: boolean;
+  sessionReady?: boolean;
   sessionError?: string | null;
   workspaceId?: string | null;
   templateId?: string;
@@ -561,7 +563,7 @@ const ChatApp = ({
   onPersonaChange, currentModel, onModelChange, availableModels,
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
-  sessionCreating = false, sessionError = null,
+  sessionCreating = false, sessionLoading = false, sessionReady = true, sessionError = null,
   workspaceId, templateId, storageType,
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
   onContextRail,
@@ -581,11 +583,16 @@ const ChatApp = ({
   // chevron toggle. Empty-state stays collapsed (nothing to show).
   const [showSessions, setShowSessions] = useState(() => Boolean(sessions && sessions.length > 0));
   const sessionStatusId = useId();
-  const sessionControlsLocked = isLoading || sessionCreating;
+  const sessionInputLocked = sessionCreating || sessionLoading || !sessionReady;
+  const sessionControlsLocked = isLoading || sessionInputLocked;
   const sessionStatus = sessionError
     ? `Session error: ${sessionError}`
     : sessionCreating
       ? 'Creating a new session…'
+      : sessionLoading
+        ? 'Loading sessions…'
+        : !sessionReady
+          ? 'No chat session is ready.'
       : isLoading
         ? 'Stop or finish the current response before switching sessions.'
         : null;
@@ -614,6 +621,8 @@ const ChatApp = ({
   const composerThreadKey = `${workspaceId ?? ''}\u0000${activeSessionId ?? ''}`;
   const composerThreadKeyRef = useRef(composerThreadKey);
   composerThreadKeyRef.current = composerThreadKey;
+  const sessionInputLockedRef = useRef(sessionInputLocked);
+  sessionInputLockedRef.current = sessionInputLocked;
   const starterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (starterTimeoutRef.current) clearTimeout(starterTimeoutRef.current);
@@ -824,7 +833,7 @@ const ChatApp = ({
   // there is text, INCLUDING while a previous reply streams. useChat queues a
   // send fired mid-stream behind the in-flight one (optimistic `queued` turn),
   // so there is no disabled window — the next message is accepted immediately.
-  const canSend = Boolean(input.trim());
+  const canSend = Boolean(input.trim()) && !sessionInputLocked;
   const prevCanSendRef = useRef(canSend);
   useEffect(() => {
     if (canSend && !prevCanSendRef.current) {
@@ -837,6 +846,10 @@ const ChatApp = ({
   }, [canSend]);
 
   const submitComposerMessage = useCallback((content: string, restoreText = content) => {
+    if (sessionInputLockedRef.current) {
+      setInput(current => current || restoreText);
+      return;
+    }
     const submission = ++sendSubmissionRef.current;
     const editRevision = composerEditRevisionRef.current;
     const threadKey = composerThreadKeyRef.current;
@@ -873,6 +886,7 @@ const ChatApp = ({
   // seed clears immediately so the first generated turn never looks duplicate.
   const autoSentRef = useRef(false);
   useEffect(() => {
+    if (sessionInputLocked) return;
     const inputUnchanged = !inputRef.current || inputRef.current.value === initialMessage;
     if (!shouldAutoSendFirstTask({
       autoSendInitial, alreadySent: autoSentRef.current, initialMessage,
@@ -886,6 +900,7 @@ const ChatApp = ({
     initialMessage,
     activeSessionId,
     historyLoaded,
+    sessionInputLocked,
     submitComposerMessage,
   ]);
 
@@ -952,7 +967,7 @@ const ChatApp = ({
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || sessionInputLocked) return;
 
     // Client-only commands — handled locally, not sent to server
     if (text === '/clear') {
@@ -1299,7 +1314,7 @@ const ChatApp = ({
                       isStreaming={isLoading && msg === messages[messages.length - 1]}
                       workspaceId={workspaceId}
                       sessionId={activeSessionId}
-                      onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
+                      onRetry={msgIdx === messages.length - 1 && !isLoading && !sessionInputLocked ? onRetry : undefined}
                     />
                   ) : msg.role === 'assistant' ? (
                     <BlockRenderer blocks={[{
@@ -1369,7 +1384,7 @@ const ChatApp = ({
                     sessionId={activeSessionId ?? undefined}
                     feedback={msg.feedback}
                     content={msg.content}
-                    onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
+                    onRetry={msgIdx === messages.length - 1 && !isLoading && !sessionInputLocked ? onRetry : undefined}
                   />
                 )}
                 {/* M-28 / ENG-7: clickable next-action chips on the last
@@ -1799,6 +1814,7 @@ const ChatApp = ({
               name="message"
               autoComplete="off"
               value={input}
+              aria-describedby={sessionInputLocked && sessionStatus ? sessionStatusId : undefined}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Reply, or ask Waggle to take the next step…"
@@ -1853,6 +1869,7 @@ const ChatApp = ({
                 onClick={handleSend}
                 disabled={!canSend}
                 aria-label="Send"
+                aria-describedby={sessionInputLocked && sessionStatus ? sessionStatusId : undefined}
                 className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[color,background-color,transform] duration-mo-base ${
                   canSend
                     ? 'bg-primary text-[#1a1407] hover:opacity-90'

@@ -198,6 +198,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   // auto-send waits on this so its optimistic turn isn't clobbered by the
   // history-replace that fires when the session id resolves.
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const historyReadyThreadRef = useRef<string | null>(null);
   const activeDispatchRef = useRef<{
     controller: AbortController;
     workspaceId: string;
@@ -362,6 +363,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
             return mergeAuthoritativeHistory(visibleHistory, Array.from(localTurns.values()));
           });
           writeChatThreadCache(cacheKey, visibleHistory);
+          historyReadyThreadRef.current = cacheKey;
           historyFetchSucceeded = true;
         })
         .catch((err) => {
@@ -387,9 +389,13 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
                 historyRecoveryRetryCounts.set(cacheKey, retryCount + 1);
                 setHistoryReloadRevision(revision => revision + 1);
               }
-            } else {
-              setHistoryLoaded(true);
-            }
+          } else {
+            // Ordinary history loads are considered settled for this exact
+            // thread even when a transient refresh fails. Cached/local chat
+            // remains usable; failed-clear recovery stays fail-closed above.
+            historyReadyThreadRef.current = cacheKey;
+            setHistoryLoaded(true);
+          }
           }
           if (
             completedCurrent
@@ -445,8 +451,8 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     turnPersona?: string,
     turnAutonomy?: AutonomyState,
   ): Promise<boolean> => {
-    if (!workspaceId || !content.trim()) return false;
-    if (sessionId) setHistoryLoaded(true);
+    if (!workspaceId || !sessionId || !content.trim()) return false;
+    setHistoryLoaded(true);
     setPendingApproval(null);
     inFlightRef.current = true;
     // F2: report send success so the wizard auto-send knows whether to clear
@@ -854,7 +860,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     content: string,
     opts?: { retry?: boolean; onAccepted?: () => void },
   ): Promise<boolean> => {
-    if (!workspaceId || !content.trim()) return false;
+    if (!workspaceId || !sessionId || !content.trim()) return false;
     const cacheKey = sessionId ? chatThreadCacheKey(workspaceId, sessionId) : null;
     if (cacheKey && (
       (clearingThreadCountsRef.current.get(cacheKey) ?? 0) > 0
@@ -1140,5 +1146,12 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     );
   }, [pendingApproval]);
 
-  return { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction };
+  const historyReady = Boolean(
+    historyLoaded
+    && workspaceId
+    && sessionId
+    && historyReadyThreadRef.current === chatThreadCacheKey(workspaceId, sessionId),
+  );
+
+  return { messages, isLoading, historyLoaded, historyReady, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction };
 };

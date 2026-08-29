@@ -14,8 +14,13 @@ type SendOptions = { onAccepted?: () => void };
 
 const mocks = vi.hoisted(() => ({
   activeSessionId: 'session-1' as string | null,
+  sessionLoading: false,
+  sessionCreating: false,
+  sessionError: null as string | null,
   historyLoaded: true,
+  historyReady: true,
   sendMessage: vi.fn(),
+  chatAppProps: [] as Array<Record<string, unknown>>,
   toast: vi.fn(),
   getModels: vi.fn().mockResolvedValue([]),
   getModel: vi.fn().mockResolvedValue(''),
@@ -31,8 +36,9 @@ vi.mock('@/hooks/useSessions', () => ({
     activeSessionId: mocks.activeSessionId,
     setActiveSessionId: vi.fn(),
     createSession: vi.fn(),
-    creating: false,
-    error: null,
+    loading: mocks.sessionLoading,
+    creating: mocks.sessionCreating,
+    error: mocks.sessionError,
   }),
 }));
 vi.mock('@/hooks/useChat', () => ({
@@ -40,6 +46,7 @@ vi.mock('@/hooks/useChat', () => ({
     messages: [],
     isLoading: false,
     historyLoaded: mocks.historyLoaded,
+    historyReady: mocks.historyReady,
     sendMessage: mocks.sendMessage,
     retryLastFailed: vi.fn(),
     stopStreaming: vi.fn(),
@@ -52,7 +59,12 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: mocks.toast,
   useToast: () => ({ toast: mocks.toast }),
 }));
-vi.mock('./ChatApp', () => ({ default: () => <div data-testid="chat-app" /> }));
+vi.mock('./ChatApp', () => ({
+  default: (props: Record<string, unknown>) => {
+    mocks.chatAppProps.push(props);
+    return <div data-testid="chat-app" />;
+  },
+}));
 
 import ChatWindowInstance from './ChatWindowInstance';
 
@@ -66,14 +78,19 @@ function drain(workspaceId: string): void {
 
 beforeEach(() => {
   mocks.activeSessionId = 'session-1';
+  mocks.sessionLoading = false;
+  mocks.sessionCreating = false;
+  mocks.sessionError = null;
   mocks.historyLoaded = true;
+  mocks.historyReady = true;
+  mocks.chatAppProps.length = 0;
   mocks.sendMessage.mockReset();
   mocks.toast.mockReset();
 });
 
 afterEach(() => {
   cleanup();
-  for (const id of ['ws-ready', 'ws-late', 'ws-failure', 'ws-fifo-a', 'ws-fifo-b', 'ws-bound']) {
+  for (const id of ['ws-ready', 'ws-transition', 'ws-late', 'ws-failure', 'ws-fifo-a', 'ws-fifo-b', 'ws-bound']) {
     drain(id);
   }
   for (let index = 0; index <= MAX_CHAT_DISPATCHES_TOTAL; index += 1) {
@@ -83,6 +100,80 @@ afterEach(() => {
 });
 
 describe('repeatable per-workspace chat dispatch', () => {
+  it('forwards loading, creating, and settled readiness to the chat surface', async () => {
+    mocks.sessionLoading = true;
+    const { rerender } = render(<ChatWindowInstance workspaceId="ws-ready" />);
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.chatAppProps.at(-1)).toMatchObject({
+      sessionLoading: true,
+      sessionCreating: false,
+      sessionReady: false,
+    });
+
+    mocks.sessionLoading = false;
+    mocks.sessionCreating = true;
+    mocks.activeSessionId = 'session-old';
+    await act(async () => {
+      rerender(<ChatWindowInstance workspaceId="ws-ready" />);
+      await Promise.resolve();
+    });
+    expect(mocks.chatAppProps.at(-1)).toMatchObject({
+      sessionLoading: false,
+      sessionCreating: true,
+      sessionReady: false,
+    });
+
+    mocks.sessionCreating = false;
+    mocks.activeSessionId = 'session-new';
+    await act(async () => {
+      rerender(<ChatWindowInstance workspaceId="ws-ready" />);
+      await Promise.resolve();
+    });
+    expect(mocks.chatAppProps.at(-1)).toMatchObject({
+      sessionLoading: false,
+      sessionCreating: false,
+      sessionReady: true,
+    });
+  });
+
+  it('holds a pending Home dispatch while a new session replaces the stale active session', async () => {
+    mocks.sessionCreating = true;
+    mocks.activeSessionId = 'session-old';
+    mocks.sendMessage.mockImplementation((_content: string, opts?: SendOptions) => {
+      opts?.onAccepted?.();
+      return Promise.resolve(true);
+    });
+    enqueueChatDispatch('ws-transition', 'Keep this for the new session');
+
+    const { rerender } = render(<ChatWindowInstance workspaceId="ws-transition" />);
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    expect(peekChatDispatch('ws-transition')?.content).toBe('Keep this for the new session');
+
+    mocks.sessionCreating = false;
+    mocks.activeSessionId = 'session-new';
+    mocks.historyReady = false;
+    await act(async () => {
+      rerender(<ChatWindowInstance workspaceId="ws-transition" />);
+      await Promise.resolve();
+    });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    expect(peekChatDispatch('ws-transition')?.content).toBe('Keep this for the new session');
+
+    mocks.historyReady = true;
+    await act(async () => {
+      rerender(<ChatWindowInstance workspaceId="ws-transition" />);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage).toHaveBeenCalledWith(
+      'Keep this for the new session',
+      expect.any(Object),
+    );
+    expect(peekChatDispatch('ws-transition')).toBeNull();
+  });
+
   it('keeps same-text requests distinct and enforces exact FIFO/workspace acknowledgement', () => {
     const first = enqueueChatDispatch('ws-fifo-a', 'Repeat prompt');
     const second = enqueueChatDispatch('ws-fifo-a', 'Repeat prompt');
