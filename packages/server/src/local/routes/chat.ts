@@ -118,6 +118,33 @@ function isIncompleteCompletionError(error: unknown): boolean {
     && (error as { code?: unknown }).code === 'INCOMPLETE_COMPLETION';
 }
 
+type EmptyModelResponseError = Error & {
+  code: 'EMPTY_MODEL_RESPONSE';
+  status: 502;
+  usage: AgentResponse['usage'];
+  toolsUsed: string[];
+};
+
+function isEmptyModelResponseError(error: unknown): error is EmptyModelResponseError {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === 'EMPTY_MODEL_RESPONSE';
+}
+
+function emptyModelResponseError(response: AgentResponse): EmptyModelResponseError {
+  const error = new Error('Model returned an empty response.') as EmptyModelResponseError;
+  error.name = 'EmptyModelResponseError';
+  error.code = 'EMPTY_MODEL_RESPONSE';
+  error.status = 502;
+  error.usage = response.usage;
+  error.toolsUsed = [...response.toolsUsed];
+  return error;
+}
+
+function isTerminalEmptyModelResponse(error: unknown): boolean {
+  return isEmptyModelResponseError(error) && error.toolsUsed.length > 0;
+}
+
 function getBillableUsage(
   usage: unknown,
 ): { inputTokens: number; outputTokens: number } | null {
@@ -141,10 +168,10 @@ function getBillableUsage(
   };
 }
 
-function getIncompleteCompletionUsage(
+function getFailedCompletionUsage(
   error: unknown,
 ): { inputTokens: number; outputTokens: number } | null {
-  if (!isIncompleteCompletionError(error)) return null;
+  if (!isIncompleteCompletionError(error) && !isEmptyModelResponseError(error)) return null;
   return getBillableUsage((error as { usage?: unknown }).usage);
 }
 
@@ -3291,6 +3318,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           )) {
             throw new Error(`Required read-only tool ${explicitReadOnlyToolChoice} did not complete exactly once.`);
           }
+          if (!attemptedResult.content.trim()) {
+            throw emptyModelResponseError(attemptedResult);
+          }
           return strictToolRetryContext
             ? {
                 ...attemptedResult,
@@ -3309,7 +3339,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // The agent may already have executed tools before detecting a
           // truncated final completion. Replaying the whole run on another
           // model would repeat those side effects, so this signal is terminal.
-          if (isIncompleteCompletionError(initialError) || isTerminalModelBudgetError(initialError)) {
+          if (isIncompleteCompletionError(initialError)
+            || isTerminalEmptyModelResponse(initialError)
+            || isTerminalModelBudgetError(initialError)) {
             throw initialError;
           }
           let failure = initialError;
@@ -3334,6 +3366,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               return await runAgentAttempt(await configForModelAttempt(resolvedModel));
             } catch (primaryRunError) {
               if (isIncompleteCompletionError(primaryRunError)
+                || isTerminalEmptyModelResponse(primaryRunError)
                 || isTerminalModelBudgetError(primaryRunError)) {
                 throw primaryRunError;
               }
@@ -3367,11 +3400,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (explicitReadOnlyToolWasUsed && explicitReadOnlyToolResult === null) {
             throw primaryErr;
           }
-          if (isIncompleteCompletionError(primaryErr) || isTerminalModelBudgetError(primaryErr)) {
+          if (isIncompleteCompletionError(primaryErr)
+            || isTerminalEmptyModelResponse(primaryErr)
+            || isTerminalModelBudgetError(primaryErr)) {
             throw primaryErr;
           }
           // Report error to credential pool and try next key
-          if (credPool && poolKey) {
+          if (credPool && poolKey && !isEmptyModelResponseError(primaryErr)) {
             let failedKey = poolKey;
             let credentialError = primaryErr;
             let credentialResult: AgentResponse | null = null;
@@ -3406,6 +3441,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 break;
               } catch (nextCredentialError) {
                 if (turnSignal.aborted) throw nextCredentialError;
+                if (isEmptyModelResponseError(nextCredentialError)) {
+                  credentialError = nextCredentialError;
+                  break;
+                }
                 if (isIncompleteCompletionError(nextCredentialError)
                   || isTerminalModelBudgetError(nextCredentialError)) {
                   throw nextCredentialError;
@@ -3823,8 +3862,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
       }
     } catch (err) {
-      const incompleteUsage = getIncompleteCompletionUsage(err);
-      const billableFailureUsage = incompleteUsage
+      const failedCompletionUsage = getFailedCompletionUsage(err);
+      const billableFailureUsage = failedCompletionUsage
         ?? (turnSignal.aborted ? abortedAttemptUsage : null);
       let failureCostUsd: number | undefined;
       if (billableFailureUsage && activeAttemptModel) {

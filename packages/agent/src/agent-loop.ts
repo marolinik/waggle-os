@@ -260,6 +260,13 @@ type IncompleteCompletionError = Error & {
   partialToolCalls?: unknown;
 };
 
+type EmptyModelResponseError = Error & {
+  code: 'EMPTY_MODEL_RESPONSE';
+  status: 502;
+  usage: AgentResponse['usage'];
+  toolsUsed: string[];
+};
+
 function isIncompleteCompletionError(error: unknown): error is IncompleteCompletionError {
   return typeof error === 'object'
     && error !== null
@@ -276,6 +283,19 @@ function incompleteCompletionError(
   error.name = 'IncompleteCompletionError';
   error.code = 'INCOMPLETE_COMPLETION';
   error.usage = usage;
+  return error;
+}
+
+function emptyModelResponseError(
+  usage: AgentResponse['usage'],
+  toolsUsed: readonly string[],
+): EmptyModelResponseError {
+  const error = new Error('LLM returned an empty assistant response with no tool calls') as EmptyModelResponseError;
+  error.name = 'EmptyModelResponseError';
+  error.code = 'EMPTY_MODEL_RESPONSE';
+  error.status = 502;
+  error.usage = usage;
+  error.toolsUsed = [...toolsUsed];
   return error;
 }
 
@@ -902,9 +922,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const content = (assistantMessage.content ?? '') || allStreamedContent;
       allStreamedContent = ''; // Release accumulated tokens once consumed
       if (content.trim().length === 0) {
-        const err = new Error('LLM returned an empty assistant response with no tool calls');
-        (err as Error & { status?: number }).status = 502;
-        throw err;
+        throw emptyModelResponseError(
+          { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+          toolsUsed,
+        );
       }
       if (containsRawToolCallMarkup(content) && !rawToolMarkupCorrectionUsed) {
         rawToolMarkupCorrectionUsed = true;

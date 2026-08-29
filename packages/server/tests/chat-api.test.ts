@@ -532,6 +532,213 @@ describe('Chat Streaming API', () => {
     }
   });
 
+  it('falls back from a blank no-tool response without leaking provisional text', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const config = new WaggleConfig(tmpDir);
+    const previousFallback = config.getFallbackModel();
+    config.setFallbackModel('ollama/blank-fallback-model');
+    config.save();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'blank-primary-model' },
+            { name: 'blank-fallback-model' },
+          ],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+    const modelRequests: string[] = [];
+    const modelFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+      modelRequests.push(body.model ?? '');
+      return modelRequests.length === 1
+        ? openAiSseResponse(' \n')
+        : openAiSseResponse('fallback ok');
+    });
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => runAgentLoop({
+      ...agentConfig,
+      fetch: modelFetch,
+      verificationGate: false,
+      skillDistillationGate: false,
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Exercise blank response fallback.',
+          model: 'ollama/blank-primary-model',
+          session: `blank-fallback-${Date.now()}`,
+        },
+      });
+      const events = parseSSE(response.body);
+
+      expect(modelRequests).toEqual(['blank-primary-model', 'blank-fallback-model']);
+      expect(events.filter(event => event.event === 'error')).toHaveLength(0);
+      expect(events.filter(event => event.event === 'token').map(event => JSON.parse(event.data).content))
+        .toEqual(['fallback ok']);
+      expect(events.filter(event => event.event === 'model_switch')).toHaveLength(1);
+      expect(JSON.parse(events.find(event => event.event === 'done')!.data)).toMatchObject({
+        content: 'fallback ok',
+        model: 'ollama/blank-fallback-model',
+      });
+      expect(events.filter(event => event.event === 'token').some(event => !JSON.parse(event.data).content.trim()))
+        .toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+      server.agentRunner = originalRunner;
+      if (previousFallback) config.setFallbackModel(previousFallback);
+      else config.clearFallbackModel();
+      config.save();
+    }
+  });
+
+  it('terminates truthfully when both the primary and configured fallback are blank', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const config = new WaggleConfig(tmpDir);
+    const previousFallback = config.getFallbackModel();
+    const workspaceId = `double-blank-workspace-${Date.now()}`;
+    const sessionId = `double-blank-session-${Date.now()}`;
+    const attempts: string[] = [];
+    config.setFallbackModel('ollama/double-blank-fallback');
+    config.save();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'double-blank-primary' },
+            { name: 'double-blank-fallback' },
+          ],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(agentConfig.model);
+      agentConfig.onToken?.(`unsafe provisional ${attempts.length}`);
+      return { content: ' \n', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    };
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Both attempts must fail truthfully.',
+          model: 'ollama/double-blank-primary',
+          workspace: workspaceId,
+          session: sessionId,
+        },
+      });
+      const events = parseSSE(response.body);
+
+      expect(attempts).toEqual(['double-blank-primary', 'double-blank-fallback']);
+      expect(events.filter(event => event.event === 'token')).toHaveLength(0);
+      expect(events.filter(event => event.event === 'done')).toHaveLength(0);
+      expect(events.filter(event => event.event === 'error')).toHaveLength(1);
+      expect(response.body).not.toContain('unsafe provisional');
+
+      const inMemory = server.agentState.sessionHistories.get(
+        chatSessionStateKey(workspaceId, sessionId),
+      ) ?? [];
+      expect(inMemory).toHaveLength(2);
+      expect(inMemory[1].content).toContain(`${GENERATION_FAILED_PREFIX}Model returned an empty response`);
+      expect(inMemory[1].content.trim()).not.toBe('');
+      expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual(inMemory);
+    } finally {
+      fetchSpy.mockRestore();
+      server.agentRunner = originalRunner;
+      if (previousFallback) config.setFallbackModel(previousFallback);
+      else config.clearFallbackModel();
+      config.save();
+    }
+  });
+
+  it('does not replay completed tools when a terminal response is blank', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const config = new WaggleConfig(tmpDir);
+    const previousFallback = config.getFallbackModel();
+    const workspaceId = `tool-blank-workspace-${Date.now()}`;
+    const sessionId = `tool-blank-session-${Date.now()}`;
+    config.setFallbackModel('ollama/tool-blank-fallback');
+    config.save();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'tool-blank-primary' },
+            { name: 'tool-blank-fallback' },
+          ],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+    const modelRequests: string[] = [];
+    const mutate = vi.fn(async () => 'mutation completed');
+    const modelFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+      modelRequests.push(body.model ?? '');
+      if (modelRequests.length === 1) return openAiToolSseResponse('mutate_state');
+      if (modelRequests.length === 2) return openAiSseResponse('');
+      return openAiSseResponse('fallback should not run');
+    });
+    const mutationTool: NonNullable<AgentLoopConfig['tools']>[number] = {
+      name: 'mutate_state',
+      description: 'Mutates state exactly once.',
+      parameters: { type: 'object', properties: {} },
+      execute: mutate,
+    };
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => runAgentLoop({
+      ...agentConfig,
+      tools: [mutationTool],
+      fetch: modelFetch,
+      verificationGate: false,
+      skillDistillationGate: false,
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Do not repeat completed work.',
+          model: 'ollama/tool-blank-primary',
+          workspace: workspaceId,
+          session: sessionId,
+        },
+      });
+      const events = parseSSE(response.body);
+
+      expect(modelRequests).toEqual(['tool-blank-primary', 'tool-blank-primary']);
+      expect(mutate).toHaveBeenCalledTimes(1);
+      expect(events.filter(event => event.event === 'done')).toHaveLength(0);
+      expect(events.filter(event => event.event === 'error')).toHaveLength(1);
+      expect(events.filter(event => event.event === 'tool')).toHaveLength(1);
+      expect(events.filter(event => event.event === 'tool_result')).toHaveLength(1);
+      expect(events.filter(event => event.event === 'model_switch')).toHaveLength(0);
+
+      const inMemory = server.agentState.sessionHistories.get(
+        chatSessionStateKey(workspaceId, sessionId),
+      ) ?? [];
+      expect(inMemory).toHaveLength(2);
+      expect(inMemory[1].content).toContain(`${GENERATION_FAILED_PREFIX}LLM returned an empty assistant response`);
+      expect(inMemory[1].content.trim()).not.toBe('');
+      expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual(inMemory);
+    } finally {
+      fetchSpy.mockRestore();
+      server.agentRunner = originalRunner;
+      if (previousFallback) config.setFallbackModel(previousFallback);
+      else config.clearFallbackModel();
+      config.save();
+    }
+  });
+
   it('consumes explicit read-only tool choice only after tool use across credential and model retries', async () => {
     const runScenario = async (firstCredentialUsesTool: boolean) => {
       const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-tool-choice-runner-'));
@@ -1212,6 +1419,60 @@ describe('Chat Streaming API', () => {
 
     // Restore original runner
     server.agentRunner = originalRunner;
+  });
+
+  it.each(['', ' \n\t'])('rejects a blank successful agent response %j', async (blankContent) => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const blankTag = blankContent.length === 0 ? 'empty' : 'whitespace';
+    const workspaceId = `blank-workspace-${blankTag}-${Date.now()}`;
+    const sessionId = `blank-session-${blankTag}-${Date.now()}`;
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      config.onToken?.('unsafe provisional');
+      return {
+        content: blankContent,
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Return a substantive response.',
+          workspace: workspaceId,
+          session: sessionId,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const events = parseSSE(res.body);
+      expect(events.filter(event => event.event === 'done')).toHaveLength(0);
+      expect(events.filter(event => event.event === 'token')).toHaveLength(0);
+      const errorEvents = events.filter(event => event.event === 'error');
+      expect(errorEvents).toHaveLength(1);
+      expect(JSON.parse(errorEvents[0].data).message).toContain('empty response');
+
+      const inMemory = server.agentState.sessionHistories.get(
+        chatSessionStateKey(workspaceId, sessionId),
+      ) ?? [];
+      expect(inMemory).toHaveLength(2);
+      expect(inMemory[0]).toMatchObject({
+        role: 'user',
+        content: 'Return a substantive response.',
+      });
+      expect(inMemory[1]).toMatchObject({ role: 'assistant' });
+      expect(inMemory[1].content).toContain(`${GENERATION_FAILED_PREFIX}Model returned an empty response`);
+      expect(inMemory[1].content).not.toContain('unsafe provisional');
+      expect(inMemory.some(message => message.role === 'assistant' && !message.content.trim())).toBe(false);
+
+      const onDisk = loadSessionMessages(tmpDir, workspaceId, sessionId);
+      expect(onDisk).toEqual(inMemory);
+    } finally {
+      server.agentRunner = originalRunner;
+    }
   });
 
   it('persists an assistant error turn when generation fails', async () => {

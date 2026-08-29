@@ -604,6 +604,16 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
         if (terminalEventSeen) continue;
+        if (evt.type === 'done') {
+          const canonicalContent = typeof data?.content === 'string'
+            ? data.content
+            : legacyCanonicalContent;
+          if (!canonicalContent.trim()) {
+            const emptyResponse = new Error('The model returned an empty response. Please retry.');
+            emptyResponse.name = 'ChatStreamIncompleteError';
+            throw emptyResponse;
+          }
+        }
         const isTerminalEvent = evt.type === 'done' || evt.type === 'error';
         const legacyTokenContent = evt.type === 'token'
           ? typeof data === 'string' ? data : (data?.content as string ?? '')

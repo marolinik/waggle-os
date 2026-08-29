@@ -272,8 +272,10 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
 
     const { result } = await mountChat('sess-legacy');
-    await act(async () => { await result.current.sendMessage('question'); });
+    let succeeded = false;
+    await act(async () => { succeeded = await result.current.sendMessage('question'); });
 
+    expect(succeeded).toBe(true);
     const assistant = result.current.messages.find(message => message.role === 'assistant');
     expect(assistant?.content).toBe('legacy answer');
     expect(assistant?.draft).toBeUndefined();
@@ -290,11 +292,47 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
 
     const { result } = await mountChat('sess-legacy-tool');
-    await act(async () => { await result.current.sendMessage('question'); });
+    let succeeded = false;
+    await act(async () => { succeeded = await result.current.sendMessage('question'); });
 
+    expect(succeeded).toBe(true);
     const assistant = result.current.messages.find(message => message.role === 'assistant');
     expect(assistant?.content).toBe('Before tool. After tool.');
     expect(assistant?.draft).toBeUndefined();
+  });
+
+  it.each([
+    ['empty', '', ''],
+    ['whitespace-only', ' \n\t', ''],
+    ['explicitly blank after provisional tokens', '', 'unsafe partial'],
+  ])('rejects %s canonical done content', async (_label, doneContent, provisionalContent) => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      if (provisionalContent) {
+        yield { type: 'token', data: { content: provisionalContent } };
+      }
+      yield { type: 'done', data: { content: doneContent } };
+    });
+
+    const sessionId = `sess-blank-${_label.replaceAll(' ', '-')}`;
+    const { result } = await mountChat(sessionId);
+    let succeeded = true;
+    await act(async () => {
+      succeeded = await result.current.sendMessage('question');
+      await flush();
+    });
+
+    expect(succeeded).toBe(false);
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    expect(assistant?.content).toBe('The model returned an empty response. Please retry.');
+    expect(assistant?.content).not.toContain('unsafe partial');
+    expect(assistant?.draft).toBeUndefined();
+    expect(assistant?.blocks?.some(block => block.type === 'error')).toBe(true);
+
+    const cachedAssistant = readChatThreadCache(chatThreadCacheKey('ws-1', sessionId))
+      ?.find(message => message.role === 'assistant');
+    expect(cachedAssistant?.content).toBe('The model returned an empty response. Please retry.');
+    expect(cachedAssistant?.content).not.toContain('unsafe partial');
+    expect(cachedAssistant?.draft).toBeUndefined();
   });
 
   it.each([
