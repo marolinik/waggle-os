@@ -109,13 +109,23 @@ export function ModelGate({
   >('idle');
   const [compatibleError, setCompatibleError] = useState<string | null>(null);
   const compatibleRequestGeneration = useRef(0);
-  const compatibleSavingRef = useRef(false);
-  useEffect(() => () => {
-    compatibleRequestGeneration.current += 1;
+  const readinessProbeGeneration = useRef(0);
+  const [readinessProbeRevision, setReadinessProbeRevision] = useState(0);
+  const explicitCompatibleOperationRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      compatibleRequestGeneration.current += 1;
+      readinessProbeGeneration.current += 1;
+      explicitCompatibleOperationRef.current = null;
+    };
   }, []);
 
   const selectProvider = (id: string, focusField = true) => {
-    if (compatibleSavingRef.current) return;
+    if (compatibleStatus === 'saving') return;
+    if (explicitCompatibleOperationRef.current !== null) cancelCompatibleVerification();
     compatibleRequestGeneration.current += 1;
     const provider = providers.find((candidate) => candidate.id === id);
     const isCompatible = id === 'openai-compatible';
@@ -143,6 +153,14 @@ export function ModelGate({
         }
       }, 60);
     }
+  };
+
+  const cancelCompatibleVerification = () => {
+    if (compatibleStatus === 'saving') return;
+    const hadExplicitOwner = explicitCompatibleOperationRef.current !== null;
+    explicitCompatibleOperationRef.current = null;
+    compatibleRequestGeneration.current += 1;
+    if (hadExplicitOwner) setReadinessProbeRevision((current) => current + 1);
   };
 
   // F3: live probe of the STORED cloud key(s) so the banner stops claiming
@@ -214,8 +232,14 @@ export function ModelGate({
   // exist and no default model, skip — totalLocalModels is already a live query.
   const activeProviderIds = activeProviders.map((p) => p.id).join(',');
   useEffect(() => {
-    if (providersLoading) return;
+    if (providersLoading || explicitCompatibleOperationRef.current !== null) return;
     let cancelled = false;
+    const generation = ++readinessProbeGeneration.current;
+    const isStale = () => (
+      cancelled
+      || generation !== readinessProbeGeneration.current
+      || explicitCompatibleOperationRef.current !== null
+    );
     const ids = activeProviders.map((p) => p.id);
     if (ids.length === 0) {
       setProbe({ status: 'idle' });
@@ -226,7 +250,7 @@ export function ModelGate({
     const run = (async (): Promise<void> => {
       // 1) Probe the actual default model.
       const modelRes = await adapter.probeModel().catch(() => null);
-      if (cancelled) return;
+      if (isStale()) return;
       if (modelRes?.configured) {
         if (modelRes.verified) { setProbe({ status: 'verified', verifiedModel: modelRes.model ?? undefined }); return; }
         if (modelRes.rejected) {
@@ -239,7 +263,7 @@ export function ModelGate({
             : undefined;
           setProbe({ status: 'failed', failedProvider: owner });
           // Open the provider grid/key input so the user can fix the key now.
-          if (!compatibleSavingRef.current) {
+          if (explicitCompatibleOperationRef.current === null) {
             setTab('cloud');
             const open = owner ?? ids[0];
             if (open) selectProvider(open, false);
@@ -252,7 +276,7 @@ export function ModelGate({
 
       // 2) No default model → F3 per-provider stored-key fallback.
       const outcome = await Promise.allSettled(ids.map((id) => adapter.probeProvider(id)));
-      if (cancelled) return;
+      if (isStale()) return;
       // outcome[i] ↔ ids[i] ↔ activeProviders[i], so the display name lines up.
       let verifiedProvider: string | undefined;
       let failedProvider: string | undefined;
@@ -266,7 +290,7 @@ export function ModelGate({
       else if (failedProvider) {
         setProbe({ status: 'failed', failedProvider });
         // Open the provider grid + key input on the offending provider.
-        if (!compatibleSavingRef.current) {
+        if (explicitCompatibleOperationRef.current === null) {
           setTab('cloud');
           selectProvider(failedProvider, false);
         }
@@ -279,7 +303,7 @@ export function ModelGate({
     // can't strand the banner on 'probing'.
     const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 6000));
     void Promise.race([run, timeout]).then((outcome) => {
-      if (cancelled) return;
+      if (isStale()) return;
       if (outcome === 'timeout') setProbe({ status: 'unverified' });
     });
     return () => { cancelled = true; };
@@ -287,7 +311,7 @@ export function ModelGate({
     // effect and its cleanup would cancel every outcome (banner stuck probing).
     // Re-probing on provider-list changes is correct; the server caches 60s.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providersLoading, activeProviderIds]);
+  }, [providersLoading, activeProviderIds, readinessProbeRevision]);
 
   // Wave V (Lane B) — single-truth resolution phase. The banner must paint EXACTLY
   // ONE verdict. While ANY probe is in flight we're "resolving" (providersLoading
@@ -323,10 +347,11 @@ export function ModelGate({
   // "Fix it now" (failed banner): jump straight to the offending provider's key
   // input and focus it, so the recovery action lives IN the banner, not in prose.
   const focusFailingKey = () => {
-    if (compatibleSavingRef.current) return;
+    if (explicitCompatibleOperationRef.current !== null) return;
     setTab('cloud');
     const failedProvider = probe.status === 'failed' ? probe.failedProvider : undefined;
-    if (failedProvider) selectProvider(failedProvider);
+    const recoveryProvider = failedProvider ?? activeProviders[0]?.id;
+    if (recoveryProvider) selectProvider(recoveryProvider);
   };
 
   const handleRetryProviders = async () => {
@@ -433,9 +458,12 @@ export function ModelGate({
       setCompatibleError('The stored key is tied to the current endpoint. Enter the key to use before saving a different endpoint.');
       return;
     }
+    const generation = ++compatibleRequestGeneration.current;
+    explicitCompatibleOperationRef.current = generation;
+    readinessProbeGeneration.current += 1;
     setCompatibleStatus('verifying');
     setCompatibleError(null);
-    const generation = ++compatibleRequestGeneration.current;
+    let saved = false;
     try {
       const result = await adapter.testCompatibleProvider(
         endpoint,
@@ -452,7 +480,6 @@ export function ModelGate({
         setCompatibleError(result.error || 'The selected model did not return a usable response.');
         return;
       }
-      compatibleSavingRef.current = true;
       setCompatibleStatus('saving');
       const models = result.models.map((model) => model.id);
       await adapter.setProviderConfig('openai-compatible', {
@@ -470,12 +497,18 @@ export function ModelGate({
       setProbe({ status: 'verified', verifiedModel: model });
       setKeyValue('');
       onModelReady?.(model);
+      saved = true;
     } catch (error) {
       if (generation !== compatibleRequestGeneration.current) return;
       setCompatibleStatus('error');
       setCompatibleError(error instanceof Error ? error.message : 'Could not save that endpoint.');
     } finally {
-      compatibleSavingRef.current = false;
+      if (explicitCompatibleOperationRef.current === generation) {
+        explicitCompatibleOperationRef.current = null;
+        if (!saved && mountedRef.current) {
+          setReadinessProbeRevision((current) => current + 1);
+        }
+      }
     }
   };
 
@@ -727,7 +760,7 @@ export function ModelGate({
           aria-selected={tab === 'cloud'}
           disabled={compatibleLocked}
           onClick={() => {
-            compatibleRequestGeneration.current += 1;
+            cancelCompatibleVerification();
             setTab('cloud');
           }}
           className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -742,7 +775,7 @@ export function ModelGate({
           aria-selected={tab === 'local'}
           disabled={compatibleLocked}
           onClick={() => {
-            compatibleRequestGeneration.current += 1;
+            cancelCompatibleVerification();
             setTab('local');
           }}
           className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -824,7 +857,7 @@ export function ModelGate({
                   disabled={compatibleLocked}
                   value={endpointValue}
                   onChange={(event) => {
-                    compatibleRequestGeneration.current += 1;
+                    cancelCompatibleVerification();
                     setEndpointValue(event.target.value);
                     setCompatibleModels([]);
                     setCompatibleModel('');
@@ -846,7 +879,7 @@ export function ModelGate({
                   disabled={compatibleLocked}
                   value={keyValue}
                   onChange={(event) => {
-                    compatibleRequestGeneration.current += 1;
+                    cancelCompatibleVerification();
                     setKeyValue(event.target.value);
                     setCompatibleModels([]);
                     setCompatibleModel('');
@@ -888,7 +921,7 @@ export function ModelGate({
                     disabled={compatibleLocked}
                     value={compatibleModel}
                     onChange={(event) => {
-                      compatibleRequestGeneration.current += 1;
+                      cancelCompatibleVerification();
                       setCompatibleModel(event.target.value);
                       setCompatibleStatus('discovered');
                       setCompatibleError(null);

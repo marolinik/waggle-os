@@ -138,11 +138,29 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
     const compatibleEntry = providers?.['openai-compatible'];
     if (compatibleEntry && typeof compatibleEntry === 'object') {
-      const { baseUrl } = compatibleEntry as { baseUrl?: unknown };
+      const { baseUrl, apiKey } = compatibleEntry as { baseUrl?: unknown; apiKey?: unknown };
       if (baseUrl !== undefined && (typeof baseUrl !== 'string' || normalizeOpenAiCompatibleBaseUrl(baseUrl) === null)) {
         return reply.code(400).send({
           error: 'OpenAI-compatible base URL must be an http(s) URL without credentials, query, or fragment.',
         });
+      }
+      if (typeof baseUrl === 'string') {
+        const submittedBaseUrl = normalizeOpenAiCompatibleBaseUrl(baseUrl)!;
+        const existingVault = server.vault?.get('openai-compatible');
+        const existingConfig = config.getProviders()['openai-compatible'];
+        const existingBaseUrlRaw = (existingVault?.metadata?.baseUrl as string | undefined)
+          ?? existingConfig?.baseUrl;
+        const existingBaseUrl = existingBaseUrlRaw
+          ? normalizeOpenAiCompatibleBaseUrl(existingBaseUrlRaw)
+          : null;
+        const submittedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+        const reenteredKey = Boolean(submittedKey)
+          && submittedKey !== (existingVault ? maskApiKey(existingVault.value) : '');
+        if (existingVault && submittedBaseUrl !== existingBaseUrl && !reenteredKey) {
+          return reply.code(400).send({
+            error: 'Re-enter the OpenAI-compatible API key before changing to a different endpoint.',
+          });
+        }
       }
     }
 

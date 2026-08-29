@@ -373,6 +373,125 @@ describe('Provider API', () => {
       }
     });
 
+    it('rejects retargeting a vaulted compatible key without re-entering it and leaves all state unchanged', async () => {
+      const configPath = path.join(tmpDir, 'config.json');
+      const originalConfig = fs.readFileSync(configPath, 'utf8');
+      const originalRuntimeModel = server.agentState.currentModel;
+      const oldBaseUrl = 'https://old-endpoint.example.test/v1';
+      const newBaseUrl = 'https://new-endpoint.example.test/v1';
+
+      try {
+        const seed = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': {
+                apiKey: 'private-existing-key',
+                baseUrl: oldBaseUrl,
+                models: ['openai-compatible/old-model'],
+              },
+            },
+          },
+        });
+        expect(seed.statusCode).toBe(200);
+        const sameUrlUpdate = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            defaultModel: 'openai-compatible/old-model',
+            providers: {
+              'openai-compatible': {
+                baseUrl: `${oldBaseUrl}/models/`,
+                models: ['openai-compatible/old-model', 'openai-compatible/second-model'],
+              },
+            },
+          },
+        });
+        expect(sameUrlUpdate.statusCode).toBe(200);
+        expect(sameUrlUpdate.json()).toMatchObject({
+          defaultModel: 'openai-compatible/old-model',
+          providers: {
+            'openai-compatible': {
+              baseUrl: oldBaseUrl,
+              models: ['openai-compatible/old-model', 'openai-compatible/second-model'],
+            },
+          },
+        });
+        expect(server.vault?.get('openai-compatible')?.value).toBe('private-existing-key');
+        const diskBefore = fs.readFileSync(configPath, 'utf8');
+        const vaultBefore = server.vault?.get('openai-compatible');
+        const runtimeBefore = server.agentState.currentModel;
+
+        const response = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            defaultModel: 'openai-compatible/qwen3.8-flash-next',
+            dailyBudget: 91,
+            providers: {
+              'openai-compatible': {
+                baseUrl: newBaseUrl,
+                models: ['openai-compatible/qwen3.8-flash-next'],
+              },
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toMatch(/re-enter.*key|key.*different endpoint/i);
+        expect(fs.readFileSync(configPath, 'utf8')).toBe(diskBefore);
+        expect(server.vault?.get('openai-compatible')).toEqual(vaultBefore);
+        expect(server.agentState.currentModel).toBe(runtimeBefore);
+      } finally {
+        server.vault?.delete('openai-compatible');
+        fs.writeFileSync(configPath, originalConfig, 'utf8');
+        server.agentState.currentModel = originalRuntimeModel;
+      }
+    });
+
+    it('does not attach an orphaned vaulted compatible key to a new endpoint without key re-entry', async () => {
+      const configPath = path.join(tmpDir, 'config.json');
+      const originalConfig = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+      const originalRuntimeModel = server.agentState.currentModel;
+
+      try {
+        const withoutCompatible = originalConfig
+          ? JSON.parse(originalConfig) as { providers?: Record<string, unknown> }
+          : { defaultModel: 'claude-sonnet-4-6', providers: {} as Record<string, unknown> };
+        delete withoutCompatible.providers?.['openai-compatible'];
+        fs.writeFileSync(configPath, JSON.stringify(withoutCompatible, null, 2), 'utf8');
+        server.vault?.set('openai-compatible', 'orphaned-private-key');
+        const diskBefore = fs.readFileSync(configPath, 'utf8');
+        const vaultBefore = server.vault?.get('openai-compatible');
+
+        const response = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            dailyBudget: 92,
+            providers: {
+              'openai-compatible': {
+                baseUrl: 'https://new-endpoint.example.test/v1',
+                models: ['openai-compatible/qwen3.8-flash-next'],
+              },
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toMatch(/re-enter.*key|key.*different endpoint/i);
+        expect(fs.readFileSync(configPath, 'utf8')).toBe(diskBefore);
+        expect(server.vault?.get('openai-compatible')).toEqual(vaultBefore);
+        expect(server.agentState.currentModel).toBe(originalRuntimeModel);
+      } finally {
+        server.vault?.delete('openai-compatible');
+        if (originalConfig === null) fs.rmSync(configPath, { force: true });
+        else fs.writeFileSync(configPath, originalConfig, 'utf8');
+        server.agentState.currentModel = originalRuntimeModel;
+      }
+    });
+
     it.each([
       'file:///C:/secrets',
       'ftp://127.0.0.1/v1',
