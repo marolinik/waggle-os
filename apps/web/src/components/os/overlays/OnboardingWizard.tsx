@@ -79,6 +79,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   /* ── Workspace + first task (PR5 Template → First-task steps) ── */
   const [workspaceName, setWorkspaceName] = useState('');
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [verifyingWorkspace, setVerifyingWorkspace] = useState(false);
+  const verifyingWorkspaceRef = useRef(false);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [firstMessage, setFirstMessage] = useState(DEFAULT_FIRST_MESSAGE);
@@ -115,6 +117,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (creatingWorkspace || verifyingWorkspaceRef.current) return;
         clearTimeout(autoTimer.current);
         trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'escape' });
         onDismiss();
@@ -122,7 +125,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step, onDismiss, serverBaseUrl]);
+  }, [creatingWorkspace, step, onDismiss, serverBaseUrl]);
 
   const goToStep = useCallback((n: number) => {
     setStep(n);
@@ -221,6 +224,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     const tmpl = CURATED_ONBOARDING_TEMPLATES.find(t => t.id === templateId);
     const persona = TEMPLATE_PERSONA[templateId] ?? 'general-purpose';
     const wsName = tmpl?.name || 'My Workspace';
+    setCreateError(null);
     setCreatingWorkspace(true);
     setCreatingTemplateId(templateId);
     try {
@@ -229,9 +233,27 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       // possible): if this exact template already created a workspace, reuse it
       // instead of minting a duplicate. Picking a DIFFERENT template still
       // creates a new one (the prior workspace is orphaned but cheap/deletable).
-      if (state.workspaceId && state.templateId === templateId) {
-        wsId = state.workspaceId;
-        setCreateError(null);
+      if (state.workspaceId && state.templateId === templateId && !state.workspaceId.startsWith('local-')) {
+        try {
+          const workspaces = await adapter.getWorkspaces();
+          if (workspaces.some((workspace) => workspace.id === state.workspaceId)) {
+            wsId = state.workspaceId;
+            setCreateError(null);
+          } else {
+            const ws = await adapter.createWorkspace({
+              name: wsName,
+              group: 'Personal',
+              type: 'project',
+              persona,
+              templateId,
+            });
+            wsId = ws.id;
+            setCreateError(null);
+          }
+        } catch {
+          setCreateError('Could not create workspace. Check that Waggle is running, then try again.');
+          return;
+        }
       } else {
         try {
           const ws = await adapter.createWorkspace({
@@ -244,8 +266,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           wsId = ws.id;
           setCreateError(null);
         } catch {
-          setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
-          wsId = `local-${Date.now()}`;
+          setCreateError('Could not create workspace. Check that Waggle is running, then try again.');
+          return;
         }
       }
       setWorkspaceName(wsName);
@@ -263,14 +285,41 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     }
   }, [importDone, onUpdate, serverBaseUrl, goToName, state.workspaceId, state.templateId]);
 
-  const handleLetsGo = useCallback(() => {
+  const handleLetsGo = useCallback(async () => {
     clearTimeout(autoTimer.current);
+    if (verifyingWorkspaceRef.current) return;
+    const workspaceId = state.workspaceId;
+    if (!workspaceId || workspaceId.startsWith('local-')) {
+      setCreateError('Could not create workspace. Check that Waggle is running, then try again.');
+      onUpdate({ workspaceId: undefined });
+      goToName('template');
+      return;
+    }
+    verifyingWorkspaceRef.current = true;
+    setVerifyingWorkspace(true);
+    let workspaceExists = false;
+    try {
+      const workspaces = await adapter.getWorkspaces();
+      workspaceExists = workspaces.some((workspace) => workspace.id === workspaceId);
+    } catch {
+      setCreateError('Could not verify the workspace. Check that Waggle is running, then try again.');
+      goToName('template');
+      return;
+    } finally {
+      verifyingWorkspaceRef.current = false;
+      setVerifyingWorkspace(false);
+    }
+    if (!workspaceExists) {
+      setCreateError('That workspace is no longer available. Pick a starting point to create it again.');
+      onUpdate({ workspaceId: undefined });
+      goToName('template');
+      return;
+    }
     onComplete(serverBaseUrl);
-    const wsId = state.workspaceId || `local-${Date.now()}`;
     const wsName = workspaceName.trim() || 'My Workspace';
     const personaId = state.personaId || 'general-purpose';
-    onFinish(wsId, wsName, firstMessage.trim() || DEFAULT_FIRST_MESSAGE, personaId);
-  }, [serverBaseUrl, onComplete, onFinish, state.workspaceId, state.personaId, workspaceName, firstMessage]);
+    onFinish(workspaceId, wsName, firstMessage.trim() || DEFAULT_FIRST_MESSAGE, personaId);
+  }, [serverBaseUrl, onComplete, onFinish, onUpdate, state.workspaceId, state.personaId, workspaceName, firstMessage, goToName]);
 
   if (state.completed) return null;
 
@@ -282,6 +331,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const navTotal = LAST_NAV_INDEX - FIRST_NAV_INDEX + 1;
   const navCurrent = step - FIRST_NAV_INDEX + 1;
   const recommendedId = recommendTemplateId(profile.workType, profile.role);
+  const workspaceTransitionPending = creatingWorkspace || verifyingWorkspace;
 
   return (
     // Wave V Lane F item 3 (motion-safe): reducedMotion="user" makes the shared
@@ -355,12 +405,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
             />
           )}
           {showNavChrome && (
-            <button
-              onClick={() => {
-                clearTimeout(autoTimer.current);
-                goToStep(step - 1);
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          <button
+            onClick={() => {
+              clearTimeout(autoTimer.current);
+              goToStep(step - 1);
+            }}
+            disabled={workspaceTransitionPending}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label="Go to previous step"
             >
               ← Back
@@ -392,6 +443,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
             trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step });
             onDismiss();
           }}
+          disabled={workspaceTransitionPending}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Skip setup
@@ -449,7 +501,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 recommendedId={recommendedId}
               />
             )}
-            {step === stepIndex('first-task') && (
+          {step === stepIndex('first-task') && (
+            <fieldset
+              disabled={verifyingWorkspace}
+              aria-busy={verifyingWorkspace}
+              className="m-0 min-w-0 border-0 p-0"
+            >
               <FirstTaskStep
                 message={firstMessage}
                 onMessageChange={setFirstMessage}
@@ -458,7 +515,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 onLetsGo={handleLetsGo}
                 createError={createError}
               />
-            )}
+            </fieldset>
+          )}
           </AnimatePresence>
         </div>
       </div>
