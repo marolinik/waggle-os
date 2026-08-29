@@ -15,6 +15,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { useLayoutEffect, useRef } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { MemoryRouter } from 'react-router-dom';
 import type { ChatMessage } from '@/lib/types';
@@ -486,6 +487,213 @@ describe('useChat — thread session cache (2.6-chat)', () => {
 
     historyB.resolve([]);
     await act(async () => { await Promise.resolve(); });
+  });
+
+  it.each([
+    {
+      label: 'session switch',
+      initial: { workspaceId: 'ws-paint', sessionId: 'sess-a' },
+      destination: { workspaceId: 'ws-paint', sessionId: 'sess-b' },
+    },
+    {
+      label: 'workspace switch',
+      initial: { workspaceId: 'ws-paint-a', sessionId: 'sess-shared' },
+      destination: { workspaceId: 'ws-paint-b', sessionId: 'sess-shared' },
+    },
+  ])('never paints the previous thread during an uncached $label', async ({ initial, destination }) => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([{ id: 'a', role: 'assistant', content: 'previous thread', timestamp: 'now' }])
+      .mockReturnValueOnce(destinationHistory.promise);
+
+    const { useChat } = await import('@/hooks/useChat');
+    const snapshots: Array<{ workspaceId: string; sessionId: string; contents: string[] }> = [];
+    const hook = renderHook(
+      ({ workspaceId, sessionId }: { workspaceId: string; sessionId: string }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        snapshots.push({
+          workspaceId,
+          sessionId,
+          contents: chat.messages.map(message => message.content),
+        });
+        return chat;
+      },
+      { initialProps: initial },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    expect(hook.result.current.messages.map(message => message.content)).toEqual(['previous thread']);
+
+    const firstDestinationSnapshot = snapshots.length;
+    act(() => { hook.rerender(destination); });
+
+    const destinationSnapshots = snapshots.slice(firstDestinationSnapshot)
+      .filter(snapshot => (
+        snapshot.workspaceId === destination.workspaceId
+        && snapshot.sessionId === destination.sessionId
+      ));
+    expect(destinationSnapshots[0]?.contents).toEqual([]);
+    expect(destinationSnapshots.every(snapshot => !snapshot.contents.includes('previous thread'))).toBe(true);
+
+    destinationHistory.resolve([]);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('paints a cached destination thread immediately without exposing the previous thread', async () => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    const destination = { workspaceId: 'ws-cache-paint', sessionId: 'sess-b' };
+    writeChatThreadCache(chatThreadCacheKey(destination.workspaceId, destination.sessionId), [
+      { id: 'b', role: 'assistant', content: 'cached destination', timestamp: 'now' },
+    ]);
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([{ id: 'a', role: 'assistant', content: 'previous thread', timestamp: 'now' }])
+      .mockReturnValueOnce(destinationHistory.promise);
+
+    const { useChat } = await import('@/hooks/useChat');
+    const snapshots: Array<{ workspaceId: string; sessionId: string; contents: string[] }> = [];
+    const hook = renderHook(
+      ({ workspaceId, sessionId }: { workspaceId: string; sessionId: string }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        snapshots.push({
+          workspaceId,
+          sessionId,
+          contents: chat.messages.map(message => message.content),
+        });
+        return chat;
+      },
+      { initialProps: { workspaceId: 'ws-cache-paint', sessionId: 'sess-a' } },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    expect(hook.result.current.messages.map(message => message.content)).toEqual(['previous thread']);
+
+    const firstDestinationSnapshot = snapshots.length;
+    act(() => { hook.rerender(destination); });
+
+    const destinationSnapshots = snapshots.slice(firstDestinationSnapshot)
+      .filter(snapshot => snapshot.sessionId === destination.sessionId);
+    expect(destinationSnapshots[0]?.contents).toEqual(['cached destination']);
+    expect(destinationSnapshots.every(snapshot => !snapshot.contents.includes('previous thread'))).toBe(true);
+
+    destinationHistory.resolve([]);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('rejects a send fired before the destination thread owns message state', async () => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([{ id: 'a', role: 'assistant', content: 'previous thread', timestamp: 'now' }])
+      .mockReturnValueOnce(destinationHistory.promise);
+    mocks.adapter.sendMessage.mockImplementation(async function* () {
+      yield { type: 'done', data: { content: 'should not run' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ workspaceId, sessionId, attemptSend }: {
+        workspaceId: string;
+        sessionId: string;
+        attemptSend: boolean;
+      }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        const attemptedRef = useRef(false);
+        useLayoutEffect(() => {
+          if (attemptSend && !attemptedRef.current) {
+            attemptedRef.current = true;
+            void chat.sendMessage('destination message');
+          }
+        }, [attemptSend, chat]);
+        return chat;
+      },
+      {
+        initialProps: {
+          workspaceId: 'ws-action-a',
+          sessionId: 'sess-a',
+          attemptSend: false,
+        },
+      },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      hook.rerender({
+        workspaceId: 'ws-action-b',
+        sessionId: 'sess-b',
+        attemptSend: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+
+    destinationHistory.resolve([]);
+    await act(async () => { await Promise.resolve(); });
+  });
+
+  it('never retries the previous thread into a newly visible cached destination', async () => {
+    const destinationHistory = deferred<ChatMessage[]>();
+    const destinationFailedPair: ChatMessage[] = [
+      { id: 'b-user', role: 'user', content: 'destination retry', timestamp: 'now' },
+      { id: 'b-assistant', role: 'assistant', content: 'Generation failed: destination', timestamp: 'now' },
+    ];
+    writeChatThreadCache(chatThreadCacheKey('ws-retry-b', 'sess-b'), destinationFailedPair);
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce([
+        { id: 'a-user', role: 'user', content: 'previous private prompt', timestamp: 'now' },
+        { id: 'a-assistant', role: 'assistant', content: 'Generation failed: previous', timestamp: 'now' },
+      ])
+      .mockReturnValueOnce(destinationHistory.promise);
+    mocks.adapter.sendMessage.mockImplementation(async function* () {
+      yield { type: 'done', data: { content: 'recovered' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ workspaceId, sessionId, attemptRetry }: {
+        workspaceId: string;
+        sessionId: string;
+        attemptRetry: boolean;
+      }) => {
+        const chat = useChat({ workspaceId, sessionId });
+        const attemptedRef = useRef(false);
+        useLayoutEffect(() => {
+          if (attemptRetry && !attemptedRef.current) {
+            attemptedRef.current = true;
+            chat.retryLastFailed();
+          }
+        }, [attemptRetry, chat]);
+        return chat;
+      },
+      {
+        initialProps: {
+          workspaceId: 'ws-retry-a',
+          sessionId: 'sess-a',
+          attemptRetry: false,
+        },
+      },
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      hook.rerender({
+        workspaceId: 'ws-retry-b',
+        sessionId: 'sess-b',
+        attemptRetry: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+
+    destinationHistory.resolve(destinationFailedPair);
+    await act(async () => { await Promise.resolve(); });
+    act(() => { hook.result.current.retryLastFailed(); });
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.sendMessage.mock.calls[0]?.slice(0, 3)).toEqual([
+      'ws-retry-b',
+      'destination retry',
+      'sess-b',
+    ]);
   });
 
   it('never lets a delayed same-session history refresh erase a turn that already started', async () => {

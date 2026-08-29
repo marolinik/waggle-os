@@ -188,7 +188,13 @@ interface UseChatOptions {
 }
 
 export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: UseChatOptions) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const currentThreadKey = workspaceId && sessionId
+    ? chatThreadCacheKey(workspaceId, sessionId)
+    : null;
+  const [messages, setMessages] = useState<ChatMessage[]>(() => (
+    currentThreadKey ? (readChatThreadCache(currentThreadKey) ?? []) : []
+  ));
+  const messagesThreadKeyRef = useRef<string | null>(currentThreadKey);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [historyReloadRevision, setHistoryReloadRevision] = useState(0);
@@ -353,6 +359,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       // Lane C (2.6-chat) cache-first paint: seed from the last-known thread so a
       // return to a visited session renders instantly, then refresh silently.
       const cached = readChatThreadCache(cacheKey);
+      messagesThreadKeyRef.current = cacheKey;
       setMessages(isHistoryRecovery
         ? Array.from(pendingHistory.localMessages.values())
         : (cached ?? []));
@@ -368,6 +375,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
           const visibleHistory = pendingHistory.suppressedMessageIds.size === 0
             ? shaped
             : shaped.filter(message => !pendingHistory.suppressedMessageIds.has(message.id));
+          messagesThreadKeyRef.current = cacheKey;
           setMessages(prev => {
             if (pendingHistory.localMessageIds.size === 0) return visibleHistory;
             const localTurns = new Map(pendingHistory.localMessages);
@@ -387,7 +395,10 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
           console.error('[useChat] history fetch failed:', err);
           // Keep a good cached paint on a transient refresh failure; only clear
           // when there was nothing to show.
-          if (!cached && pendingHistory.localMessageIds.size === 0) setMessages([]);
+          if (!cached && pendingHistory.localMessageIds.size === 0) {
+            messagesThreadKeyRef.current = cacheKey;
+            setMessages([]);
+          }
         })
         .finally(() => {
           pendingHistory.release();
@@ -441,6 +452,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       pendingHistoryRef.current = null;
       // No session yet — leave historyLoaded false so an auto-send waits for a
       // real session's history to land (never race the replace below).
+      messagesThreadKeyRef.current = null;
       setMessages([]);
       setHistoryState({ threadKey: null, status: 'idle', error: null });
     }
@@ -901,6 +913,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   ): Promise<boolean> => {
     if (!workspaceId || !sessionId || !content.trim()) return false;
     const cacheKey = sessionId ? chatThreadCacheKey(workspaceId, sessionId) : null;
+    if (messagesThreadKeyRef.current !== cacheKey) return false;
     if (cacheKey && (
       (clearingThreadCountsRef.current.get(cacheKey) ?? 0) > 0
       || recoveringHistoryThreadsRef.current.has(cacheKey)
@@ -958,6 +971,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     const cacheKey = workspaceId && sessionId
       ? chatThreadCacheKey(workspaceId, sessionId)
       : null;
+    if (!cacheKey || messagesThreadKeyRef.current !== cacheKey) return;
     if (cacheKey && (
       (clearingThreadCountsRef.current.get(cacheKey) ?? 0) > 0
       || recoveringHistoryThreadsRef.current.has(cacheKey)
@@ -1016,6 +1030,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   const clearHistory = useCallback(async () => {
     if (sessionId && workspaceId) {
       const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
+      if (messagesThreadKeyRef.current !== cacheKey) return;
       const clearCounts = clearingThreadCountsRef.current;
       const previousClearCount = clearCounts.get(cacheKey) ?? 0;
       if (previousClearCount === 0) {
@@ -1183,6 +1198,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     approved: boolean,
     opts: { always?: boolean } = {},
   ) => {
+    if (messagesThreadKeyRef.current !== currentThreadKey) return;
     const approval = pendingApproval;
     if (!approval || approval.requestId !== requestId) return;
     try {
@@ -1199,7 +1215,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     setPendingApproval(current =>
       current?.requestId === requestId ? null : current
     );
-  }, [pendingApproval]);
+  }, [currentThreadKey, pendingApproval]);
 
   const historyReady = Boolean(
     historyLoaded
@@ -1208,9 +1224,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     && historyReadyThreadRef.current === chatThreadCacheKey(workspaceId, sessionId),
   );
 
-  const currentHistoryThreadKey = workspaceId && sessionId
-    ? chatThreadCacheKey(workspaceId, sessionId)
-    : null;
+  const currentHistoryThreadKey = currentThreadKey;
   const historyStatus: ChatHistoryStatus = currentHistoryThreadKey === null
     ? 'idle'
     : historyState.threadKey === currentHistoryThreadKey
@@ -1220,10 +1234,18 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     currentHistoryThreadKey !== null
     && historyState.threadKey === currentHistoryThreadKey
   ) ? historyState.error : null;
+  const threadStateOwned = messagesThreadKeyRef.current === currentThreadKey;
+  const visibleMessages = threadStateOwned
+    ? messages
+    : currentThreadKey && recoveringHistoryThreadsRef.current.has(currentThreadKey)
+      ? Array.from(historyRecoveryLocalMessagesRef.current.get(currentThreadKey)?.values() ?? [])
+      : currentThreadKey
+        ? (readChatThreadCache(currentThreadKey) ?? [])
+        : [];
 
   return {
-    messages,
-    isLoading,
+    messages: visibleMessages,
+    isLoading: threadStateOwned ? isLoading : false,
     historyLoaded,
     historyReady,
     historyStatus,
@@ -1233,7 +1255,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     retryLastFailed,
     stopStreaming,
     clearHistory,
-    pendingApproval,
+    pendingApproval: threadStateOwned ? pendingApproval : null,
     approveAction,
   };
 };
