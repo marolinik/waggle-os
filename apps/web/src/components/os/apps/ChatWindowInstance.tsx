@@ -57,12 +57,19 @@ const ChatWindowInstance = ({
   // Sync the local persona state when the parent sends a new initialPersona
   // (e.g. when PersonaSwitcher updates the window from outside ChatWindowInstance).
   useEffect(() => {
-    if (initialPersona && initialPersona !== currentPersona) {
-      setCurrentPersona(initialPersona);
+    if (initialPersona) {
+      setCurrentPersona(current => current === initialPersona ? current : initialPersona);
     }
   }, [initialPersona]);
 
-  const { sessions, activeSessionId, setActiveSessionId, createSession } = useSessions(workspaceId);
+  const {
+    sessions,
+    activeSessionId,
+    setActiveSessionId,
+    createSession,
+    creating: sessionCreating,
+    error: sessionError,
+  } = useSessions(workspaceId);
 
   const [currentModel, setCurrentModel] = useState<string>(initialModel ?? '');
   const currentModelRef = useRef(initialModel ?? '');
@@ -278,6 +285,8 @@ const ChatWindowInstance = ({
       activeSessionId={activeSessionId}
       onSelectSession={setActiveSessionId}
       onNewSession={createSession}
+      sessionCreating={sessionCreating}
+      sessionError={sessionError}
       workspaceId={workspaceId}
       templateId={templateId}
       storageType={storageType}

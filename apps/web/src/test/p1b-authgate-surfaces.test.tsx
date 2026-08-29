@@ -210,6 +210,48 @@ describe('useSessions (P1b)', () => {
     });
   });
 
+  it('exposes a synchronous creating state for the shared in-flight create and clears it after settlement', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const createdSession = {
+      id: 'session-created-with-status',
+      title: 'Created with status',
+      messageCount: 0,
+      lastActive: '2026-08-28T11:04:00.000Z',
+    };
+    let resolveCreate!: (session: typeof createdSession) => void;
+    mocks.adapter.getSessions.mockResolvedValueOnce([]);
+    mocks.adapter.createSession.mockReturnValueOnce(new Promise(resolve => {
+      resolveCreate = resolve;
+    }));
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+
+    let firstCreate!: Promise<unknown>;
+    let secondCreate!: Promise<unknown>;
+    act(() => {
+      firstCreate = result.current.createSession();
+      secondCreate = result.current.createSession();
+    });
+    const creatingWhilePending = (result.current as typeof result.current & { creating?: boolean }).creating;
+
+    await act(async () => {
+      resolveCreate(createdSession);
+      await Promise.all([firstCreate, secondCreate]);
+    });
+
+    expect({
+      adapterCalls: mocks.adapter.createSession.mock.calls.length,
+      sharedRequest: firstCreate === secondCreate,
+      creatingWhilePending,
+      creatingAfterSettle: (result.current as typeof result.current & { creating?: boolean }).creating,
+    }).toEqual({
+      adapterCalls: 1,
+      sharedRequest: true,
+      creatingWhilePending: true,
+      creatingAfterSettle: false,
+    });
+  });
+
   it('releases a coalesced create lock after rejection so a retry can succeed', async () => {
     const { useSessions } = await import('@/hooks/useSessions');
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -239,6 +281,7 @@ describe('useSessions (P1b)', () => {
     });
     expect(mocks.adapter.createSession).toHaveBeenCalledTimes(1);
     expect(result.current.error).toBe('temporary create failure');
+    expect(result.current.creating).toBe(false);
 
     let retryResult: unknown;
     await act(async () => {

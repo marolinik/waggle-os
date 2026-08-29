@@ -14,6 +14,7 @@ export const useSessions = (workspaceId: string | null) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRevisionRef = useRef(0);
   const mountedRef = useRef(false);
@@ -33,6 +34,7 @@ export const useSessions = (workspaceId: string | null) => {
       setSessions([]);
       setActiveSessionId(null);
       setLoading(false);
+      setCreating(false);
       setError(null);
       return;
     }
@@ -40,6 +42,7 @@ export const useSessions = (workspaceId: string | null) => {
     setSessions([]);
     setActiveSessionId(null);
     setLoading(true);
+    setCreating(false);
     setError(null);
     adapter.getSessions(workspaceId)
       .then(data => {
@@ -72,6 +75,7 @@ export const useSessions = (workspaceId: string | null) => {
     if (!workspaceId) return Promise.resolve(undefined);
     const pending = createInFlightRef.current.get(workspaceId);
     if (pending) return pending;
+    setCreating(true);
 
     const request = (async () => {
       try {
@@ -94,6 +98,7 @@ export const useSessions = (workspaceId: string | null) => {
         return undefined;
       } finally {
         createInFlightRef.current.delete(workspaceId);
+        if (mountedRef.current && workspaceRef.current === workspaceId) setCreating(false);
       }
     })();
     createInFlightRef.current.set(workspaceId, request);
@@ -135,6 +140,6 @@ export const useSessions = (workspaceId: string | null) => {
 
   return {
     sessions, activeSessionId, setActiveSessionId,
-    loading, error, createSession, deleteSession, renameSession,
+    loading, creating, error, createSession, deleteSession, renameSession,
   };
 };

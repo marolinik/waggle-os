@@ -76,6 +76,88 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(onNewSession).toHaveBeenCalledOnce();
   });
 
+  it('blocks new-session and session-switch actions while a response is in progress', () => {
+    const onNewSession = vi.fn();
+    const onSelectSession = vi.fn();
+
+    render({
+      messages: [assistantMsg],
+      isLoading: true,
+      sessions: [
+        { id: 's1', title: 'Active session', messageCount: 1 },
+        { id: 's2', title: 'Second session', messageCount: 2 },
+      ],
+      activeSessionId: 's1',
+      onNewSession,
+      onSelectSession,
+    });
+
+    const newSessionButtons = screen.getAllByRole('button', { name: /new session/i });
+    const activeSessionButton = screen.getByRole('button', { name: /active session/i });
+    const secondSessionButton = screen.getByRole('button', { name: /second session/i });
+    newSessionButtons.forEach(button => fireEvent.click(button));
+    fireEvent.click(activeSessionButton);
+    fireEvent.click(secondSessionButton);
+
+    expect({
+      newSessionControlsDisabled: newSessionButtons.every(button => (button as HTMLButtonElement).disabled),
+      activeSessionDisabled: (activeSessionButton as HTMLButtonElement).disabled,
+      sessionSwitchDisabled: (secondSessionButton as HTMLButtonElement).disabled,
+      newSessionCalls: onNewSession.mock.calls.length,
+      selectSessionCalls: onSelectSession.mock.calls.length,
+      explanationVisible: Boolean(screen.queryByText(/stop or finish the current response before switching sessions/i)),
+    }).toEqual({
+      newSessionControlsDisabled: true,
+      activeSessionDisabled: true,
+      sessionSwitchDisabled: true,
+      newSessionCalls: 0,
+      selectSessionCalls: 0,
+      explanationVisible: true,
+    });
+  });
+
+  it('disables New session and shows clear status while session creation is pending', () => {
+    const onNewSession = vi.fn();
+
+    render({
+      messages: [],
+      sessions: [],
+      sessionCreating: true,
+      onNewSession,
+    });
+
+    const newSessionButton = screen.getByRole('button', { name: /new session/i });
+    fireEvent.click(newSessionButton);
+    const creatingStatus = screen.queryByRole('status');
+
+    expect({
+      disabled: (newSessionButton as HTMLButtonElement).disabled,
+      newSessionCalls: onNewSession.mock.calls.length,
+      statusVisible: /creating.*session/i.test(creatingStatus?.textContent ?? ''),
+    }).toEqual({
+      disabled: true,
+      newSessionCalls: 0,
+      statusVisible: true,
+    });
+  });
+
+  it('renders session failures as a visible alert even when there are no sessions', () => {
+    render({
+      messages: [],
+      sessions: [],
+      sessionError: 'Could not load sessions',
+    });
+
+    const alert = screen.queryByRole('alert');
+    expect({
+      alertVisible: Boolean(alert),
+      messageVisible: alert?.textContent?.includes('Could not load sessions') ?? false,
+    }).toEqual({
+      alertVisible: true,
+      messageVisible: true,
+    });
+  });
+
   it('keeps historical assistant attribution when the active persona changes', () => {
     render({
       messages: [{ ...assistantMsg, persona: 'researcher' }],

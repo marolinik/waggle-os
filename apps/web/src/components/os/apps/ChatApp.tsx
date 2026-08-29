@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react';
 import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, Copy, Check, RotateCcw, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal, Square, Route } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -54,6 +54,8 @@ interface ChatAppProps {
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
   onNewSession?: () => void;
+  sessionCreating?: boolean;
+  sessionError?: string | null;
   workspaceId?: string | null;
   templateId?: string;
   storageType?: 'virtual' | 'local' | 'team';
@@ -559,6 +561,7 @@ const ChatApp = ({
   onPersonaChange, currentModel, onModelChange, availableModels,
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
+  sessionCreating = false, sessionError = null,
   workspaceId, templateId, storageType,
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
   onContextRail,
@@ -577,6 +580,15 @@ const ChatApp = ({
   // P2/P3/P5 unable to start a fresh chat without finding the unlabelled
   // chevron toggle. Empty-state stays collapsed (nothing to show).
   const [showSessions, setShowSessions] = useState(() => Boolean(sessions && sessions.length > 0));
+  const sessionStatusId = useId();
+  const sessionControlsLocked = isLoading || sessionCreating;
+  const sessionStatus = sessionError
+    ? `Session error: ${sessionError}`
+    : sessionCreating
+      ? 'Creating a new session…'
+      : isLoading
+        ? 'Stop or finish the current response before switching sessions.'
+        : null;
   const [dragging, setDragging] = useState(false);
   const [showAgentProfile, setShowAgentProfile] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
@@ -1055,14 +1067,21 @@ const ChatApp = ({
       {sessions && sessions.length > 0 && (
         <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-[width] overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
           <div className="p-2 space-y-1">
-            <button onClick={onNewSession} className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full">
+            <button
+              onClick={onNewSession}
+              disabled={sessionControlsLocked}
+              aria-describedby={sessionStatus ? sessionStatusId : undefined}
+              className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <Plus className="w-3 h-3" /> New Session
             </button>
             {sessions.map(s => (
               <button
                 key={s.id}
                 onClick={() => onSelectSession?.(s.id)}
-                className={`w-full text-left px-2 py-1.5 rounded-lg transition-colors ${
+                disabled={sessionControlsLocked}
+                aria-describedby={sessionStatus ? sessionStatusId : undefined}
+                className={`w-full text-left px-2 py-1.5 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   activeSessionId === s.id ? 'bg-primary/20' : 'hover:bg-muted/50'
                 }`}
               >
@@ -1512,16 +1531,29 @@ const ChatApp = ({
             )}
 
             {onNewSession && (
-              <HintTooltip content="New session">
+              <HintTooltip content={sessionControlsLocked && sessionStatus ? sessionStatus : 'New session'}>
                 <button
                   type="button"
                   onClick={onNewSession}
+                  disabled={sessionControlsLocked}
                   aria-label="New session"
-                  className={STRIP_ICON_PILL}
+                  aria-describedby={sessionStatus ? sessionStatusId : undefined}
+                  className={`${STRIP_ICON_PILL} disabled:cursor-not-allowed disabled:opacity-50`}
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </HintTooltip>
+            )}
+
+            {sessionStatus && (
+              <span
+                id={sessionStatusId}
+                role={sessionError ? 'alert' : 'status'}
+                title={sessionStatus}
+                className={`max-w-64 truncate text-[11px] ${sessionError ? 'text-destructive' : 'text-muted-foreground'}`}
+              >
+                {sessionStatus}
+              </span>
             )}
 
             {/* Persona picker */}
