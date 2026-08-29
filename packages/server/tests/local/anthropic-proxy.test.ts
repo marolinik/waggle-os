@@ -2740,6 +2740,7 @@ describe('Anthropic Proxy Routes', () => {
       const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
       expect(String(url)).toBe('https://api.openai.com/v1/chat/completions');
       expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer openai-vault-key');
+      expect(init?.redirect).toBe('error');
       const outbound = JSON.parse(String(init?.body));
       expect(outbound.model).toBe('gpt-5.4');
       expect(outbound.tools[0].function.name).toBe('read_file');
@@ -2775,6 +2776,8 @@ describe('Anthropic Proxy Routes', () => {
     });
 
     it('routes a persisted keyless OpenAI-compatible model in non-stream and streaming modes', async () => {
+      const compatibleFetch = vi.fn<typeof fetch>((input, init) => originalFetch(input, init));
+      globalThis.fetch = compatibleFetch;
       const captures: Array<{
         authorization: string | undefined;
       body: {
@@ -2891,6 +2894,8 @@ describe('Anthropic Proxy Routes', () => {
       ]);
       expect(captures[2].body).not.toHaveProperty('chat_template_kwargs');
       expect(captures[2].body).not.toHaveProperty('extra_body');
+      expect(compatibleFetch).toHaveBeenCalledTimes(3);
+      expect(compatibleFetch.mock.calls.every(([, init]) => init?.redirect === 'error')).toBe(true);
       } finally {
         await new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));
         fs.rmSync(dataDir, { recursive: true, force: true });

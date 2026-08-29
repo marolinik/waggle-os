@@ -1003,6 +1003,7 @@ async function forwardCompatibleProvider(
       upstream = await fetch(url, {
         method: 'POST',
         signal: requestAbort.signal,
+        redirect: 'error',
         headers: {
           'Content-Type': 'application/json',
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),

@@ -249,6 +249,7 @@ async function fetchCatalog(
     const response = await fetchImpl(request.url, {
       ...request.init,
       signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
+      ...(baseUrl?.trim() ? { redirect: 'error' as const } : {}),
     });
     if (!response.ok) throw new Error(`Provider model catalog returned HTTP ${response.status}`);
     const body = await response.json();

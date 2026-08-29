@@ -33,6 +33,28 @@ describe('provider model catalog discovery', () => {
     );
   });
 
+  it('refuses redirects for a user-configured provider catalog', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      data: [{ id: 'local-model' }],
+    }), { status: 200 }));
+
+    const result = await discoverProviderModels(
+      'openai-compatible',
+      'private-key',
+      'http://10.33.0.153:4000/v1',
+      { fetchImpl },
+    );
+
+    expect(result.status).toBe('provider-api');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://10.33.0.153:4000/v1/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer private-key' },
+        redirect: 'error',
+      }),
+    );
+  });
+
   it('normalizes Google model resource names without dropping new entries', async () => {
     let requestedUrl = '';
     let requestedInit: RequestInit | undefined;
