@@ -6,8 +6,8 @@
  * Behavioural atoms (AskBar submit, ActivityStream toggle, InlineApprovalCard
  * Always-allow gating) get a real assertion; the rest assert mount + content.
  */
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { act, render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import { Sparkles } from 'lucide-react';
 import {
   HexAvatar,
@@ -107,6 +107,107 @@ describe('warm primitives — render smoke', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(sent).toBe('draft the board update');
     expect(input.value).toBe('');
+  });
+
+  it('AskBar waits for async success, blocks duplicate submits while pending, then clears', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    const onSubmit = vi.fn(() => pending);
+    render(<AskBar onSubmit={onSubmit} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Draft the launch memo' } });
+    fireEvent.click(send);
+    fireEvent.click(send);
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe('Draft the launch memo');
+    expect(send).toBeDisabled();
+
+    resolveSubmit(true);
+    await waitFor(() => expect(input.value).toBe(''));
+  });
+
+  it('AskBar preserves the draft and re-enables submit when async submit returns false', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(false);
+    render(<AskBar onSubmit={onSubmit} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Keep this draft' } });
+    fireEvent.click(send);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(input.value).toBe('Keep this draft');
+    expect(send).toBeEnabled();
+  });
+
+  it('AskBar preserves the draft and re-enables submit when async submit rejects', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error('workspace unavailable'));
+    render(<AskBar onSubmit={onSubmit} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Do not lose this' } });
+    fireEvent.click(send);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(input.value).toBe('Do not lose this');
+    expect(send).toBeEnabled();
+  });
+
+  it('AskBar preserves text edited while an earlier submit is pending', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    render(<AskBar onSubmit={() => pending} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Draft A' } });
+    fireEvent.click(send);
+    fireEvent.change(input, { target: { value: 'Draft B' } });
+    resolveSubmit(true);
+
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(input.value).toBe('Draft B');
+  });
+
+  it('AskBar preserves a newly retyped identical draft while the old submit is pending', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    render(<AskBar onSubmit={() => pending} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const send = screen.getByRole('button', { name: 'Send' });
+
+    fireEvent.change(input, { target: { value: 'Draft A' } });
+    fireEvent.click(send);
+    fireEvent.change(input, { target: { value: 'Draft B' } });
+    fireEvent.change(input, { target: { value: 'Draft A' } });
+    resolveSubmit(true);
+
+    await waitFor(() => expect(send).toBeEnabled());
+    expect(input.value).toBe('Draft A');
+  });
+
+  it('AskBar does not clear through onChange after it unmounts with a submit pending', async () => {
+    let resolveSubmit!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSubmit = resolve; });
+    const onChange = vi.fn();
+    const { unmount } = render(<AskBar onSubmit={() => pending} onChange={onChange} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: 'Keep after navigation' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    unmount();
+    await act(async () => {
+      resolveSubmit(true);
+      await pending;
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).not.toHaveBeenCalledWith('');
   });
 
   it('ActivityStream is collapsed by default and reveals steps on click', () => {

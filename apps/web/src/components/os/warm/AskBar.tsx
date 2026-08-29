@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, ArrowUp, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { cmdKLabel } from '@/lib/platform';
 
 interface AskBarProps {
   placeholder?: string;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string) => void | boolean | Promise<void | boolean>;
   /** Optional "+" affordance — receives the current trimmed input (quick note);
    *  callers open the command palette when the input is empty (no dead button). */
   onPlus?: (text: string) => void;
@@ -35,15 +35,45 @@ export function AskBar({
   className,
 }: AskBarProps) {
   const [value, setValue] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const valueRef = useRef('');
+  const inputRevisionRef = useRef(0);
+  const submittingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const setAndTap = (next: string) => {
+    valueRef.current = next;
+    inputRevisionRef.current += 1;
     setValue(next);
     onChange?.(next);
   };
-  const submit = () => {
-    const text = value.trim();
-    if (!text) return;
-    onSubmit(text);
-    setAndTap('');
+  const submit = async () => {
+    const text = valueRef.current.trim();
+    if (!text || submittingRef.current) return;
+    const submittedRevision = inputRevisionRef.current;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      const result = onSubmit(text);
+      const accepted = result && typeof (result as PromiseLike<void | boolean>).then === 'function'
+        ? await result
+        : result;
+      if (
+        accepted !== false
+        && mountedRef.current
+        && inputRevisionRef.current === submittedRevision
+      ) {
+        setAndTap('');
+      }
+    } catch {
+      // The caller owns user-facing error detail; preserve the draft for retry.
+    } finally {
+      submittingRef.current = false;
+      if (mountedRef.current) setSubmitting(false);
+    }
   };
   return (
     <div
@@ -56,6 +86,7 @@ export function AskBar({
         <button
           type="button"
           aria-label="Quick capture"
+          disabled={submitting}
           onClick={() => {
             const text = value.trim();
             onPlus(text);
@@ -70,11 +101,12 @@ export function AskBar({
         name="ask-waggle"
         autoComplete="off"
         value={value}
+        aria-busy={submitting}
         onChange={(e) => setAndTap(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            submit();
+            void submit();
           }
         }}
         placeholder={placeholder}
@@ -86,8 +118,8 @@ export function AskBar({
         <button
           type="button"
           aria-label="Search"
-          onClick={submit}
-          disabled={!value.trim()}
+          onClick={() => { void submit(); }}
+          disabled={submitting || !value.trim()}
           className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--honey)] px-3.5 text-[13px] font-medium text-[#1a1407] transition-opacity disabled:opacity-40"
         >
           <Search className="h-4 w-4" />
@@ -97,8 +129,8 @@ export function AskBar({
         <button
           type="button"
           aria-label="Send"
-          onClick={submit}
-          disabled={!value.trim()}
+          onClick={() => { void submit(); }}
+          disabled={submitting || !value.trim()}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--honey)] text-[#1a1407] transition-opacity disabled:opacity-40"
         >
           <ArrowUp className="h-5 w-5" />
