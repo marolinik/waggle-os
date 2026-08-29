@@ -579,6 +579,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       messages: requestMessages,
       max_tokens: outputTokenLimit,
     };
+    if (/^openai-compatible\/qwen(?:$|[/_.:-]|\d)/i.test(config.billingModel ?? model)) {
+      // Keep keyless/local Qwen chat interactive even when the loop talks to
+      // the compatible endpoint directly instead of through Waggle's proxy.
+      body.chat_template_kwargs = { enable_thinking: false };
+    }
     if (config.reasoning) {
       body.reasoning = { ...config.reasoning };
     }

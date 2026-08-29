@@ -5,6 +5,7 @@ import {
   composeClosedWorldChatPrompt,
   composeEvidenceBoundedChatPrompt,
   composeChatPromptTail,
+  composeStrictReadOnlyToolChatPrompt,
   composeToolFreeAdvisoryChatPrompt,
   selectChatPromptPackageMode,
 } from '../../src/local/routes/chat-prompt-packaging.js';
@@ -114,6 +115,65 @@ describe('chat prompt packaging', () => {
     ['a sensitive turn', { message: 'Repeat this private API token.' }],
   ])('keeps full mode for %s', (_label, override) => {
     expect(selectChatPromptPackageMode({ ...baseModeInput, ...override })).toBe('full');
+  });
+
+  it('uses compact mode only for one validated explicit read-only tool', () => {
+    const strictInput = {
+      ...baseModeInput,
+      message: 'Call list_skills exactly once.',
+      selectedToolCount: 1,
+      explicitCapabilityRequest: true,
+      explicitReadOnlyToolChoice: 'list_skills',
+    };
+
+    expect(selectChatPromptPackageMode(strictInput)).toBe('compact');
+    expect(selectChatPromptPackageMode({ ...strictInput, selectedToolCount: 0 })).toBe('full');
+    expect(selectChatPromptPackageMode({ ...strictInput, selectedToolCount: 2 })).toBe('full');
+    expect(selectChatPromptPackageMode({ ...strictInput, autonomyLevel: 'trusted' })).toBe('full');
+    expect(selectChatPromptPackageMode({ ...strictInput, isAutomatedTurn: true })).toBe('full');
+    expect(selectChatPromptPackageMode({ ...strictInput, taskComplexity: 'complex' })).toBe('full');
+    expect(selectChatPromptPackageMode({
+      ...strictInput,
+      explicitReadOnlyToolChoice: undefined,
+    })).toBe('full');
+  });
+
+  it('builds a bounded strict read-only tool prompt without ambient context', () => {
+    const output = composeStrictReadOnlyToolChatPrompt({
+      behavioralSpec: BEHAVIORAL_SPEC,
+      toolName: 'list_skills',
+    });
+
+    expect(output.length).toBeLessThan(12_000);
+    expect(output).not.toContain('Verifier');
+    expect(output).toContain(BEHAVIORAL_SPEC.qualityRules);
+    expect(output).toContain('list_skills');
+    expect(output).toMatch(/exactly once/i);
+    expect(output).toMatch(/tool output.*untrusted data/i);
+    expect(output).toMatch(/never (?:invent|fabricate)/i);
+    expect(output).toMatch(/secret|private data/i);
+    expect(output).toMatch(/do not (?:write|edit|execute|delegate|persist)/i);
+    expect(output).not.toMatch(/No tools are available/i);
+    expect(output).not.toContain('AMBIENT_MEMORY_SENTINEL');
+    expect(output).not.toContain('PRIOR_HISTORY_SENTINEL');
+    expect(output).not.toContain('# Context From Your Memory');
+    expect(output).not.toContain('# Recalled Memories');
+    expect(output).not.toContain("# Why You're Here");
+  });
+
+  it('builds a persona-free fail-closed prompt when the requested tool is unavailable', () => {
+    const output = composeStrictReadOnlyToolChatPrompt({
+      behavioralSpec: BEHAVIORAL_SPEC,
+      toolName: 'list_skills',
+      toolAvailable: false,
+    });
+
+    expect(output.length).toBeLessThan(12_000);
+    expect(output).toContain('# UNAVAILABLE READ-ONLY TOOL TURN');
+    expect(output).toContain('list_skills');
+    expect(output).toMatch(/could not be run/i);
+    expect(output).toMatch(/do not simulate|invent a result/i);
+    expect(output).not.toContain('DENIED_PERSONA_PRIVATE_SENTINEL');
   });
 
   it('keeps full behavioral rules byte-identical for agentic turns', () => {
