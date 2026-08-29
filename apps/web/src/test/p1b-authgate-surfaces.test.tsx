@@ -137,6 +137,121 @@ describe('useWorkspaces (P1b)', () => {
 // ── useSessions ────────────────────────────────────────────────────────────
 
 describe('useSessions (P1b)', () => {
+  it('normalizes exact server-wire sessions to the current workspace and preserves the old session after create', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValueOnce([{
+      id: 'session-old',
+      title: 'Existing server session',
+      summary: null,
+      created: '2026-08-28T10:55:00.000Z',
+      messageCount: 2,
+      lastActive: '2026-08-28T11:00:00.000Z',
+    }]);
+    mocks.adapter.createSession.mockResolvedValueOnce({
+      id: 'session-new',
+      title: 'New server session',
+      summary: null,
+      created: '2026-08-28T11:02:00.000Z',
+      messageCount: 0,
+      lastActive: '2026-08-28T11:02:00.000Z',
+    });
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-old'));
+
+    await act(async () => {
+      await result.current.createSession();
+    });
+
+    expect(result.current.sessions.map(({ id, workspaceId }) => ({ id, workspaceId }))).toEqual([
+      { id: 'session-new', workspaceId: 'w1' },
+      { id: 'session-old', workspaceId: 'w1' },
+    ]);
+  });
+
+  it('coalesces two same-tick create requests into one adapter call and one resolved session', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const createdSession = {
+      id: 'session-created-once',
+      title: 'Created once',
+      messageCount: 0,
+      lastActive: '2026-08-28T11:03:00.000Z',
+    };
+    let resolveCreate!: (session: typeof createdSession) => void;
+    const pendingAdapterCreate = new Promise<typeof createdSession>(resolve => {
+      resolveCreate = resolve;
+    });
+    mocks.adapter.getSessions.mockResolvedValueOnce([]);
+    mocks.adapter.createSession.mockReturnValue(pendingAdapterCreate);
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+
+    let firstCreate!: Promise<unknown>;
+    let secondCreate!: Promise<unknown>;
+    act(() => {
+      firstCreate = result.current.createSession();
+      secondCreate = result.current.createSession();
+    });
+    expect(firstCreate).toBe(secondCreate);
+
+    let resolvedSessions!: unknown[];
+    await act(async () => {
+      resolveCreate(createdSession);
+      resolvedSessions = await Promise.all([firstCreate, secondCreate]);
+    });
+
+    expect({
+      adapterCalls: mocks.adapter.createSession.mock.calls.length,
+      sameResolvedSession: resolvedSessions[0] === resolvedSessions[1],
+      resolvedIds: resolvedSessions.map(session => (session as { id?: string } | undefined)?.id),
+    }).toEqual({
+      adapterCalls: 1,
+      sameResolvedSession: true,
+      resolvedIds: ['session-created-once', 'session-created-once'],
+    });
+  });
+
+  it('releases a coalesced create lock after rejection so a retry can succeed', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.adapter.getSessions.mockResolvedValueOnce([]);
+    mocks.adapter.createSession
+      .mockRejectedValueOnce(new Error('temporary create failure'))
+      .mockResolvedValueOnce({
+        id: 'session-retry',
+        title: 'Retry succeeded',
+        summary: null,
+        created: '2026-08-28T11:05:00.000Z',
+        messageCount: 0,
+        lastActive: '2026-08-28T11:05:00.000Z',
+      });
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+
+    let firstCreate!: Promise<unknown>;
+    let secondCreate!: Promise<unknown>;
+    act(() => {
+      firstCreate = result.current.createSession();
+      secondCreate = result.current.createSession();
+    });
+    expect(firstCreate).toBe(secondCreate);
+    await act(async () => {
+      await Promise.all([firstCreate, secondCreate]);
+    });
+    expect(mocks.adapter.createSession).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBe('temporary create failure');
+
+    let retryResult: unknown;
+    await act(async () => {
+      retryResult = await result.current.createSession();
+    });
+
+    expect(mocks.adapter.createSession).toHaveBeenCalledTimes(2);
+    expect((retryResult as { id?: string } | undefined)?.id).toBe('session-retry');
+    expect(result.current.activeSessionId).toBe('session-retry');
+    expect(result.current.error).toBeNull();
+    consoleSpy.mockRestore();
+  });
+
   it('keeps a successfully created session when the initial list resolves late', async () => {
     const { useSessions } = await import('@/hooks/useSessions');
     let resolveInitialList!: (sessions: never[]) => void;

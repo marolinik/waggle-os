@@ -18,6 +18,7 @@ export const useSessions = (workspaceId: string | null) => {
   const listRevisionRef = useRef(0);
   const mountedRef = useRef(false);
   const workspaceRef = useRef(workspaceId);
+  const createInFlightRef = useRef(new Map<string, Promise<Session | undefined>>());
   workspaceRef.current = workspaceId;
 
   useEffect(() => {
@@ -45,8 +46,9 @@ export const useSessions = (workspaceId: string | null) => {
         if (cancelled || listRevision !== listRevisionRef.current) return;
         setError(null);
         if (data.length > 0) {
-          setSessions(data);
-          setActiveSessionId(data[0].id);
+          const scopedSessions = data.map(session => ({ ...session, workspaceId }));
+          setSessions(scopedSessions);
+          setActiveSessionId(scopedSessions[0].id);
         } else {
           const def = makeDefaultSession(workspaceId);
           setSessions([def]);
@@ -66,26 +68,36 @@ export const useSessions = (workspaceId: string | null) => {
     return () => { cancelled = true; };
   }, [workspaceId]);
 
-  const createSession = useCallback(async () => {
-    if (!workspaceId) return;
-    try {
-      const session = await adapter.createSession(workspaceId);
-      if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
-      ++listRevisionRef.current;
-      setLoading(false);
-      setError(null);
-      setSessions(prev => [
-        session,
-        ...prev.filter(existing => existing.workspaceId === workspaceId && existing.id !== session.id),
-      ]);
-      setActiveSessionId(session.id);
-      return session;
-    } catch (err) {
-      if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
-      console.error('[useSessions] create failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create session');
-      return undefined;
-    }
+  const createSession = useCallback((): Promise<Session | undefined> => {
+    if (!workspaceId) return Promise.resolve(undefined);
+    const pending = createInFlightRef.current.get(workspaceId);
+    if (pending) return pending;
+
+    const request = (async () => {
+      try {
+        const wireSession = await adapter.createSession(workspaceId);
+        const session = { ...wireSession, workspaceId };
+        if (!mountedRef.current || workspaceRef.current !== workspaceId) return undefined;
+        ++listRevisionRef.current;
+        setLoading(false);
+        setError(null);
+        setSessions(prev => [
+          session,
+          ...prev.filter(existing => existing.workspaceId === workspaceId && existing.id !== session.id),
+        ]);
+        setActiveSessionId(session.id);
+        return session;
+      } catch (err) {
+        if (!mountedRef.current || workspaceRef.current !== workspaceId) return undefined;
+        console.error('[useSessions] create failed:', err);
+        setError(err instanceof Error ? err.message : 'Failed to create session');
+        return undefined;
+      } finally {
+        createInFlightRef.current.delete(workspaceId);
+      }
+    })();
+    createInFlightRef.current.set(workspaceId, request);
+    return request;
   }, [workspaceId]);
 
   const deleteSession = useCallback(async (sessionId: string) => {
