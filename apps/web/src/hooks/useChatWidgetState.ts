@@ -217,6 +217,86 @@ export function takeChatSeed(workspaceId: string): ChatSeed | undefined {
   return seed;
 }
 
+// ── Repeatable imperative chat dispatch API ───────────────────────────────
+
+export interface ChatDispatchRequest {
+  id: string;
+  content: string;
+}
+
+const pendingDispatches = new Map<string, readonly ChatDispatchRequest[]>();
+const dispatchListeners = new Map<string, Set<() => void>>();
+let dispatchSequence = 0;
+let pendingDispatchCount = 0;
+
+export const MAX_CHAT_DISPATCH_CONTENT_CHARS = 50_000;
+export const MAX_CHAT_DISPATCHES_PER_WORKSPACE = 20;
+export const MAX_CHAT_DISPATCHES_TOTAL = 100;
+
+function notifyDispatchListeners(workspaceId: string): void {
+  dispatchListeners.get(workspaceId)?.forEach(listener => listener());
+}
+
+/** Queue a transient prompt for the named workspace without persisting user content. */
+export function enqueueChatDispatch(workspaceId: string, content: string): ChatDispatchRequest {
+  const trimmed = content.trim();
+  if (!workspaceId || !trimmed) throw new Error('workspaceId and content are required');
+  if (trimmed.length > MAX_CHAT_DISPATCH_CONTENT_CHARS) {
+    throw new Error(`Chat dispatch content exceeds ${MAX_CHAT_DISPATCH_CONTENT_CHARS} characters`);
+  }
+  const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
+  if (workspaceQueue.length >= MAX_CHAT_DISPATCHES_PER_WORKSPACE) {
+    throw new Error('Workspace chat dispatch queue is full');
+  }
+  if (pendingDispatchCount >= MAX_CHAT_DISPATCHES_TOTAL) {
+    throw new Error('Chat dispatch queue is full');
+  }
+  const request = {
+    id: globalThis.crypto?.randomUUID?.()
+      ?? `chat-dispatch-${Date.now()}-${++dispatchSequence}`,
+    content: trimmed,
+  };
+  pendingDispatches.set(workspaceId, [...workspaceQueue, request]);
+  pendingDispatchCount += 1;
+  notifyDispatchListeners(workspaceId);
+  return request;
+}
+
+/** Non-destructive FIFO head read used by ChatHost and deterministic tests. */
+export function peekChatDispatch(workspaceId: string): ChatDispatchRequest | null {
+  return pendingDispatches.get(workspaceId)?.[0] ?? null;
+}
+
+/** Remove only the current FIFO head for the exact workspace and request id. */
+export function acknowledgeChatDispatch(workspaceId: string, dispatchId: string): boolean {
+  const queue = pendingDispatches.get(workspaceId);
+  if (!queue?.length || queue[0].id !== dispatchId) return false;
+  const rest = queue.slice(1);
+  if (rest.length) pendingDispatches.set(workspaceId, rest);
+  else pendingDispatches.delete(workspaceId);
+  pendingDispatchCount -= 1;
+  notifyDispatchListeners(workspaceId);
+  return true;
+}
+
+/** Reactive FIFO head for a kept-alive workspace chat. */
+export function usePendingChatDispatch(workspaceId: string): ChatDispatchRequest | null {
+  const subscribe = useCallback((listener: () => void) => {
+    let listeners = dispatchListeners.get(workspaceId);
+    if (!listeners) {
+      listeners = new Set();
+      dispatchListeners.set(workspaceId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners?.delete(listener);
+      if (listeners?.size === 0) dispatchListeners.delete(workspaceId);
+    };
+  }, [workspaceId]);
+  const getSnapshot = useCallback(() => peekChatDispatch(workspaceId), [workspaceId]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
 // ── The hook ──────────────────────────────────────────────────────────────
 
 export interface UseChatWidgetStateOptions {

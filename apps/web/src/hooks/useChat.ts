@@ -850,7 +850,10 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   }, [workspaceId, sessionId, flushNextQueuedFor]);
   runDispatchRef.current = runDispatch;
 
-  const sendMessage = useCallback(async (content: string, opts?: { retry?: boolean }): Promise<boolean> => {
+  const sendMessage = useCallback(async (
+    content: string,
+    opts?: { retry?: boolean; onAccepted?: () => void },
+  ): Promise<boolean> => {
     if (!workspaceId || !content.trim()) return false;
     const cacheKey = sessionId ? chatThreadCacheKey(workspaceId, sessionId) : null;
     if (cacheKey && (
@@ -887,9 +890,10 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         timestamp: new Date().toISOString(),
         queued: true,
       }]);
+      opts?.onAccepted?.();
       return true;
     }
-    return runDispatch(
+    const dispatch = runDispatch(
       content,
       opts,
       undefined,
@@ -897,6 +901,8 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       persona,
       autonomy ? { ...autonomy } : undefined,
     );
+    opts?.onAccepted?.();
+    return dispatch;
   }, [workspaceId, sessionId, model, persona, autonomy, runDispatch]);
 
   // F4: re-issue the last user turn after a failure. Drops the failed

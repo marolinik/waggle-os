@@ -93,6 +93,40 @@ describe('useChat — send queue (never locks, never drops)', () => {
     return hook;
   }
 
+  it('signals admission exactly once for an immediate and an in-flight queued send', async () => {
+    const gate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        await gate.promise;
+        yield { type: 'done', data: { content: 'first reply' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'second reply' } };
+      });
+    const { result } = await mountChat('sess-admission');
+    const firstAccepted = vi.fn();
+    const secondAccepted = vi.fn();
+    let firstPromise!: Promise<boolean>;
+
+    await act(async () => {
+      firstPromise = result.current.sendMessage('first', { onAccepted: firstAccepted });
+      await Promise.resolve();
+      await result.current.sendMessage('second', { onAccepted: secondAccepted });
+    });
+
+    expect(firstAccepted).toHaveBeenCalledOnce();
+    expect(secondAccepted).toHaveBeenCalledOnce();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      gate.resolve();
+      await firstPromise;
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(firstAccepted).toHaveBeenCalledOnce();
+    expect(secondAccepted).toHaveBeenCalledOnce();
+  });
+
   it('a send fired while the reply streams is QUEUED, then dispatched on ready', async () => {
     const gate = deferred<void>();
     mocks.adapter.sendMessage
@@ -716,13 +750,15 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     await act(async () => { await Promise.resolve(); });
 
     let sendPromise: Promise<boolean> | undefined;
+    const onAccepted = vi.fn();
     await act(async () => {
       await result.current.clearHistory();
-      sendPromise = result.current.sendMessage('wait for recovery');
+      sendPromise = result.current.sendMessage('wait for recovery', { onAccepted });
       await Promise.resolve();
     });
 
     expect(await sendPromise).toBe(false);
+    expect(onAccepted).not.toHaveBeenCalled();
     expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
     expect(result.current.messages.some(message => message.content === 'wait for recovery')).toBe(false);
 

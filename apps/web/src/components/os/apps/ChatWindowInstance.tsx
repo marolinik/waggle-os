@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
-import { useToast } from '@/hooks/use-toast';
+import { toast as showToast, useToast } from '@/hooks/use-toast';
 import { adapter } from '@/lib/adapter';
 import { formatModelLabel } from '@/lib/model-label';
+import {
+  acknowledgeChatDispatch,
+  usePendingChatDispatch,
+} from '@/hooks/useChatWidgetState';
 import ChatApp from './ChatApp';
 import type { TeamMember } from './ChatApp';
 
@@ -109,6 +113,43 @@ const ChatWindowInstance = ({
     model: currentModel,
     autonomy: { level: autonomyLevel, expiresAt: autonomyExpiresAt },
   });
+  const pendingDispatch = usePendingChatDispatch(workspaceId);
+  const dispatchInFlightRef = useRef<string | null>(null);
+  const lastHandledDispatchIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingDispatch || !activeSessionId || !historyLoaded) return;
+    if (
+      dispatchInFlightRef.current === pendingDispatch.id
+      || lastHandledDispatchIdRef.current === pendingDispatch.id
+    ) return;
+
+    const { id, content } = pendingDispatch;
+    dispatchInFlightRef.current = id;
+    let accepted = false;
+    const discardUnaccepted = () => {
+      if (accepted) return;
+      lastHandledDispatchIdRef.current = id;
+      acknowledgeChatDispatch(workspaceId, id);
+      showToast({
+        title: 'Message not sent',
+        description: 'The chat was not ready. Try sending the message again.',
+        variant: 'destructive',
+      });
+    };
+    void sendMessage(content, {
+      onAccepted: () => {
+        accepted = true;
+        lastHandledDispatchIdRef.current = id;
+        acknowledgeChatDispatch(workspaceId, id);
+      },
+    })
+      .then(discardUnaccepted)
+      .catch(discardUnaccepted)
+      .finally(() => {
+        if (dispatchInFlightRef.current === id) dispatchInFlightRef.current = null;
+      });
+  }, [activeSessionId, historyLoaded, pendingDispatch, sendMessage, workspaceId]);
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
