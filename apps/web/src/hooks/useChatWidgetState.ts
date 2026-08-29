@@ -226,6 +226,8 @@ export interface ChatDispatchRequest {
 
 const pendingDispatches = new Map<string, readonly ChatDispatchRequest[]>();
 const dispatchListeners = new Map<string, Set<() => void>>();
+const workspaceSelectionDispatchListeners = new Set<() => void>();
+let pendingWorkspaceSelectionDispatch: ChatDispatchRequest | null = null;
 let dispatchSequence = 0;
 let pendingDispatchCount = 0;
 
@@ -237,13 +239,27 @@ function notifyDispatchListeners(workspaceId: string): void {
   dispatchListeners.get(workspaceId)?.forEach(listener => listener());
 }
 
-/** Queue a transient prompt for the named workspace without persisting user content. */
-export function enqueueChatDispatch(workspaceId: string, content: string): ChatDispatchRequest {
+function normalizeChatDispatchContent(content: string): string {
   const trimmed = content.trim();
-  if (!workspaceId || !trimmed) throw new Error('workspaceId and content are required');
+  if (!trimmed) throw new Error('Chat dispatch content is required');
   if (trimmed.length > MAX_CHAT_DISPATCH_CONTENT_CHARS) {
     throw new Error(`Chat dispatch content exceeds ${MAX_CHAT_DISPATCH_CONTENT_CHARS} characters`);
   }
+  return trimmed;
+}
+
+function createChatDispatchRequest(content: string): ChatDispatchRequest {
+  return {
+    id: globalThis.crypto?.randomUUID?.()
+      ?? `chat-dispatch-${Date.now()}-${++dispatchSequence}`,
+    content,
+  };
+}
+
+/** Queue a transient prompt for the named workspace without persisting user content. */
+export function enqueueChatDispatch(workspaceId: string, content: string): ChatDispatchRequest {
+  if (!workspaceId) throw new Error('workspaceId is required');
+  const trimmed = normalizeChatDispatchContent(content);
   const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
   if (workspaceQueue.length >= MAX_CHAT_DISPATCHES_PER_WORKSPACE) {
     throw new Error('Workspace chat dispatch queue is full');
@@ -251,11 +267,7 @@ export function enqueueChatDispatch(workspaceId: string, content: string): ChatD
   if (pendingDispatchCount >= MAX_CHAT_DISPATCHES_TOTAL) {
     throw new Error('Chat dispatch queue is full');
   }
-  const request = {
-    id: globalThis.crypto?.randomUUID?.()
-      ?? `chat-dispatch-${Date.now()}-${++dispatchSequence}`,
-    content: trimmed,
-  };
+  const request = createChatDispatchRequest(trimmed);
   pendingDispatches.set(workspaceId, [...workspaceQueue, request]);
   pendingDispatchCount += 1;
   notifyDispatchListeners(workspaceId);
@@ -294,6 +306,86 @@ export function usePendingChatDispatch(workspaceId: string): ChatDispatchRequest
     };
   }, [workspaceId]);
   const getSnapshot = useCallback(() => peekChatDispatch(workspaceId), [workspaceId]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+/** Stage one transient prompt until the user chooses its destination workspace. */
+export function stageWorkspaceSelectionChatDispatch(content: string): ChatDispatchRequest {
+  const trimmed = normalizeChatDispatchContent(content);
+  if (pendingWorkspaceSelectionDispatch?.content === trimmed) {
+    return pendingWorkspaceSelectionDispatch;
+  }
+  if (!pendingWorkspaceSelectionDispatch && pendingDispatchCount >= MAX_CHAT_DISPATCHES_TOTAL) {
+    throw new Error('Chat dispatch queue is full');
+  }
+  const request = createChatDispatchRequest(trimmed);
+  if (!pendingWorkspaceSelectionDispatch) pendingDispatchCount += 1;
+  pendingWorkspaceSelectionDispatch = request;
+  workspaceSelectionDispatchListeners.forEach(listener => listener());
+  return request;
+}
+
+export function peekWorkspaceSelectionChatDispatch(): ChatDispatchRequest | null {
+  return pendingWorkspaceSelectionDispatch;
+}
+
+/** Cancel only the expected pending chooser intent; omission cancels any pending intent. */
+export function cancelWorkspaceSelectionChatDispatch(dispatchId?: string): boolean {
+  if (!pendingWorkspaceSelectionDispatch) return false;
+  if (dispatchId && pendingWorkspaceSelectionDispatch.id !== dispatchId) return false;
+  pendingWorkspaceSelectionDispatch = null;
+  pendingDispatchCount -= 1;
+  workspaceSelectionDispatchListeners.forEach(listener => listener());
+  return true;
+}
+
+/** Atomically move the expected chooser intent into the selected workspace FIFO. */
+export function transferWorkspaceSelectionChatDispatch(
+  workspaceId: string,
+  dispatchId: string,
+): ChatDispatchRequest | null {
+  if (!workspaceId) throw new Error('workspaceId is required');
+  const request = pendingWorkspaceSelectionDispatch;
+  if (!request || request.id !== dispatchId) return null;
+  const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
+  if (workspaceQueue.length >= MAX_CHAT_DISPATCHES_PER_WORKSPACE) {
+    throw new Error('Workspace chat dispatch queue is full');
+  }
+  pendingDispatches.set(workspaceId, [...workspaceQueue, request]);
+  pendingWorkspaceSelectionDispatch = null;
+  workspaceSelectionDispatchListeners.forEach(listener => listener());
+  notifyDispatchListeners(workspaceId);
+  return request;
+}
+
+/**
+ * Run a synchronous route transition only after transfer is known to fit,
+ * then atomically move the chooser intent. A thrown transition leaves the
+ * staged request untouched for an explicit retry.
+ */
+export function completeWorkspaceSelectionChatDispatch(
+  workspaceId: string,
+  dispatchId: string,
+  beforeTransfer: () => void,
+): ChatDispatchRequest | null {
+  const request = pendingWorkspaceSelectionDispatch;
+  if (!request || request.id !== dispatchId) return null;
+  if (!workspaceId) throw new Error('workspaceId is required');
+  const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
+  if (workspaceQueue.length >= MAX_CHAT_DISPATCHES_PER_WORKSPACE) {
+    throw new Error('Workspace chat dispatch queue is full');
+  }
+  beforeTransfer();
+  return transferWorkspaceSelectionChatDispatch(workspaceId, dispatchId);
+}
+
+/** Reactive pending chooser intent for the shell's workspace-selection flow. */
+export function useWorkspaceSelectionChatDispatch(): ChatDispatchRequest | null {
+  const subscribe = useCallback((listener: () => void) => {
+    workspaceSelectionDispatchListeners.add(listener);
+    return () => { workspaceSelectionDispatchListeners.delete(listener); };
+  }, []);
+  const getSnapshot = useCallback(() => peekWorkspaceSelectionChatDispatch(), []);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 

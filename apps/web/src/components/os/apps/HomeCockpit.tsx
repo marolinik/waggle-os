@@ -615,7 +615,7 @@ function buildRunChips(o: OvernightSummary): RunChipProps[] {
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────
-const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, userName, totalWorkspaceCount }: HomeCockpitProps) => {
+const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, onAskChat, userName, totalWorkspaceCount }: HomeCockpitProps) => {
   // Cache-first paint (Pillar 2.1): seed from the disk-persisted last-good Home
   // payload so a returning / cold-start launch paints real content BEFORE the
   // sidecar answers, then refreshes silently. Day-0 (no cache) keeps the skeleton.
@@ -721,18 +721,32 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
   }, []);
 
-  // Ask bar → quick-capture the typed intent (the real backend the old
-  // QuickCapture panel used). Send = a task to pick up; "+" = a quick note.
-  // NOTE: a future "start a chat from this prompt" flow could replace the task
-  // capture once Home can seed a workspace-less chat.
+  // "+" remains quick note capture. Send starts a real chat when the route
+  // supplies a workspace-bound dispatch handler; isolated renders retain the
+  // legacy task-capture fallback.
   const captureAsk = useCallback(async (text: string, kind: QuickCaptureInput['kind']) => {
     try {
       await adapter.quickCapture({ kind, content: text });
       toast({ description: kind === 'task' ? 'Added to your hive — a task to pick up.' : 'Noted — saved to your hive.' });
+      return true;
     } catch {
       toast({ variant: 'destructive', description: "Couldn't save that — try again." });
+      return false;
     }
   }, [toast]);
+
+  const submitAsk = useCallback(async (text: string): Promise<boolean> => {
+    if (!onAskChat) return captureAsk(text, 'task');
+    try {
+      return await onAskChat(text);
+    } catch {
+      toast({
+        variant: 'destructive',
+        description: "Couldn't start chat — your draft is still here. Try again.",
+      });
+      return false;
+    }
+  }, [captureAsk, onAskChat, toast]);
 
   if (loading) return <CockpitSkeleton />;
 
@@ -977,7 +991,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
       )}
 
       <AskBar
-        onSubmit={(text) => void captureAsk(text, 'task')}
+        onSubmit={submitAsk}
         onPlus={(text) => { if (text) void captureAsk(text, 'note'); else openCommandPalette(); }}
       />
     </div>
@@ -991,6 +1005,8 @@ interface HomeCockpitProps {
   onOpenWorkspaceDesktop: (workspaceId: string) => void;
   /** Start the new-workspace flow (first-run + empty-state CTA). */
   onCreateWorkspace: () => void;
+  /** Queue a prompt for an explicit workspace chat. False keeps the draft. */
+  onAskChat?: (text: string) => boolean | Promise<boolean>;
   /**
    * Fallback display name when the briefing has no userName yet (e.g. before
    * onboarding seeds identity — founder B8). Optional; the greeting from the

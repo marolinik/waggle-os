@@ -37,7 +37,14 @@ import { getDockForTier, BILLING_TIER_ORDER, type AppId, type DockEntry } from '
 import { TIER_LABELS } from '@waggle/shared';
 import { buildCommandCatalog, type CatalogCommand } from '@/lib/command-catalog';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
-import { seedChat, useChatWidgetState } from '@/hooks/useChatWidgetState';
+import {
+  cancelWorkspaceSelectionChatDispatch,
+  completeWorkspaceSelectionChatDispatch,
+  peekWorkspaceSelectionChatDispatch,
+  seedChat,
+  useChatWidgetState,
+  useWorkspaceSelectionChatDispatch,
+} from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useWaggleDance } from '@/hooks/useWaggleDance';
 import { useBumpSessionCount } from '@/hooks/useDockLabels';
@@ -237,6 +244,68 @@ const ShellLayout = () => {
       toast({ title: copy.title, description: copy.description });
     },
   });
+
+  const pendingWorkspaceAsk = useWorkspaceSelectionChatDispatch();
+  const keepWorkspaceSwitcherOpenRef = useRef(false);
+  const deliverPendingWorkspaceAsk = useCallback((workspaceId: string): boolean => {
+    const pending = peekWorkspaceSelectionChatDispatch();
+    if (!pending) return false;
+    try {
+      const delivered = completeWorkspaceSelectionChatDispatch(
+        workspaceId,
+        pending.id,
+        () => {
+          navigate(routeFor('chat', { activeWorkspaceId: workspaceId }));
+          selectWorkspace(workspaceId);
+          ov.setShowWorkspaceSwitcher(false);
+        },
+      );
+      if (!delivered) return false;
+      return true;
+    } catch {
+      toast({
+        title: 'Message not sent',
+        description: 'The workspace chat could not open. Your draft is still on Home.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  }, [navigate, ov, selectWorkspace, toast]);
+
+  useEffect(() => {
+    if (!pendingWorkspaceAsk || workspacesLoading) return;
+    if (workspacesError) {
+      if (cancelWorkspaceSelectionChatDispatch(pendingWorkspaceAsk.id)) {
+        ov.setShowWorkspaceSwitcher(false);
+        toast({
+          title: 'Workspace list unavailable',
+          description: 'Your Home draft was not sent. Retry when workspaces are available.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+    const validActiveWorkspace = activeWorkspaceId
+      ? workspaces.some(workspace => workspace.id === activeWorkspaceId)
+      : false;
+    if (activeWorkspaceId && validActiveWorkspace) {
+      deliverPendingWorkspaceAsk(activeWorkspaceId);
+    } else if (workspaces.length > 0) {
+      ov.setShowWorkspaceSwitcher(true);
+    } else {
+      cancelWorkspaceSelectionChatDispatch(pendingWorkspaceAsk.id);
+      ov.setShowCreateWorkspace(true);
+    }
+  }, [
+    activeWorkspaceId,
+    deliverPendingWorkspaceAsk,
+    ov,
+    pendingWorkspaceAsk,
+    toast,
+    workspaces,
+    workspacesError,
+    workspacesLoading,
+  ]);
 
   // §2.3: the ONE `waggle:open-app` listener (replaces Desktop.tsx:178-190).
   // Stashes the intent for mount-time consumers (AutomationCenterApp), then
@@ -548,12 +617,41 @@ const ShellLayout = () => {
           onSelectGroup={(groupId) => { if (effectiveActiveWorkspaceId) patchWorkspace(effectiveActiveWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
       )}
       {ov.showWorkspaceSwitcher && deferredShellElement(
-        <WorkspaceSwitcher open onClose={() => ov.setShowWorkspaceSwitcher(false)}
+          <WorkspaceSwitcher open onClose={() => {
+            if (keepWorkspaceSwitcherOpenRef.current) {
+              keepWorkspaceSwitcherOpenRef.current = false;
+              return;
+            }
+            cancelWorkspaceSelectionChatDispatch();
+            ov.setShowWorkspaceSwitcher(false);
+        }}
           workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId}
           error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
-          onCreateNew={() => ov.setShowCreateWorkspace(true)}
-          onViewAll={() => { ov.setShowWorkspaceSwitcher(false); navigate('/workspaces'); }}
-          onSelect={(id) => { selectWorkspace(id); ov.setShowWorkspaceSwitcher(false); navigate(`/workspaces/${id}`); }} />
+          onCreateNew={() => {
+            cancelWorkspaceSelectionChatDispatch();
+            ov.setShowWorkspaceSwitcher(false);
+            ov.setShowCreateWorkspace(true);
+          }}
+          onViewAll={() => {
+              if (peekWorkspaceSelectionChatDispatch()) {
+                keepWorkspaceSwitcherOpenRef.current = true;
+                toast({ description: 'Choose a workspace here to send your Home message.' });
+                return;
+            }
+            ov.setShowWorkspaceSwitcher(false);
+            navigate('/workspaces');
+          }}
+            onSelect={(id) => {
+              if (peekWorkspaceSelectionChatDispatch()) {
+                if (!deliverPendingWorkspaceAsk(id)) {
+                  keepWorkspaceSwitcherOpenRef.current = true;
+                }
+                return;
+            }
+            selectWorkspace(id);
+            ov.setShowWorkspaceSwitcher(false);
+            navigate(`/workspaces/${id}`);
+          }} />
       )}
       {ov.showNotifications && deferredShellElement(
         <NotificationInbox open onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
