@@ -318,7 +318,7 @@ describe('Provider API', () => {
           url: '/api/settings',
           payload: {
             providers: {
-              'openai-compatible': { baseUrl: `  ${normalizedBaseUrl}///  ` },
+              'openai-compatible': { baseUrl: `  ${normalizedBaseUrl}/models///  ` },
             },
           },
         });
@@ -373,13 +373,21 @@ describe('Provider API', () => {
       }
     });
 
-    it('rejects non-http OpenAI-compatible endpoint URLs', async () => {
+    it.each([
+      'file:///C:/secrets',
+      'ftp://127.0.0.1/v1',
+      'http://user:password@127.0.0.1/v1',
+      'http://127.0.0.1/v1?',
+      'http://127.0.0.1/v1#',
+      'http://127.0.0.1/v1?token=secret',
+      'http://127.0.0.1/v1#fragment',
+    ])('rejects unsafe OpenAI-compatible endpoint URL %s', async (baseUrl) => {
       const res = await injectWithAuth(server, {
         method: 'PUT',
         url: '/api/settings',
         payload: {
           providers: {
-            'openai-compatible': { baseUrl: 'file:///C:/secrets' },
+            'openai-compatible': { baseUrl },
           },
         },
       });
@@ -426,7 +434,7 @@ describe('Provider API', () => {
         const discovery = await injectWithAuth(server, {
           method: 'POST',
           url: '/api/settings/test-compatible',
-          payload: { baseUrl: ` ${baseUrl}/// ` },
+          payload: { baseUrl: ` ${baseUrl}/models/ ` },
         });
         expect(discovery.statusCode).toBe(200);
         expect(discovery.json()).toMatchObject({
@@ -444,7 +452,7 @@ describe('Provider API', () => {
           method: 'POST',
           url: '/api/settings/test-compatible',
           payload: {
-            baseUrl,
+            baseUrl: `${baseUrl}/models`,
             model: 'openai-compatible/qwen3.8-flash-next',
           },
         });
@@ -452,6 +460,7 @@ describe('Provider API', () => {
         expect(verification.json()).toMatchObject({
           valid: true,
           verified: true,
+          baseUrl,
           model: 'openai-compatible/qwen3.8-flash-next',
         });
 
@@ -474,12 +483,12 @@ describe('Provider API', () => {
           method: 'POST',
           url: '/api/settings/test-compatible',
           payload: {
-            baseUrl,
+            baseUrl: `${baseUrl}/chat/completions`,
             apiKey: 'private-local-key',
             model: 'openai-compatible/qwen3.8-flash-next',
           },
         });
-        expect(keyedVerification.json()).toMatchObject({ valid: true, verified: true });
+        expect(keyedVerification.json()).toMatchObject({ valid: true, verified: true, baseUrl });
         expect(keyedVerification.body).not.toContain('private-local-key');
 
         expect(requests.filter((request) => request.url === '/v1/models')).toHaveLength(4);

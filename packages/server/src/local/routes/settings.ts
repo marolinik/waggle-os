@@ -47,10 +47,14 @@ function maskApiKey(key: string): string {
 
 function normalizeOpenAiCompatibleBaseUrl(value: string): string | null {
   try {
-    const url = new URL(value.trim());
+    const trimmed = value.trim();
+    if (/[?#]/.test(trimmed)) return null;
+    const url = new URL(trimmed);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
     if (url.username || url.password || url.search || url.hash) return null;
-    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    let pathname = url.pathname.replace(/\/+$/, '');
+    pathname = pathname.replace(/\/(?:models|chat\/completions)$/, '');
+    url.pathname = pathname || '/';
     return url.toString().replace(/\/+$/, '');
   } catch {
     return null;
