@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
@@ -17,24 +17,28 @@ export const useWorkspaces = () => {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => readPersistedWorkspaceId());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const listRevisionRef = useRef(0);
 
   const fetchWorkspaces = useCallback(async () => {
+    const listRevision = ++listRevisionRef.current;
     setLoading(true);
     try {
       const data = await adapter.getWorkspaces();
+      if (listRevision !== listRevisionRef.current) return;
       setWorkspaces(data);
       // W2A: NO auto-select. Validate the existing selection against the fresh
       // list (dropping a stale/deleted id to null); never promote data[0].
       setActiveWorkspaceId(prev => resolveActiveWorkspaceId(prev, data.map(w => w.id)));
       setError(null);
     } catch (err) {
+      if (listRevision !== listRevisionRef.current) return;
       console.error('[useWorkspaces] fetch failed:', err);
       // P1b D3: surface the failure (this channel existed but was never set —
       // a lost boot race meant an empty workspace list for the whole session)
       // and keep any previously good list rather than clobbering it.
       setError(err instanceof Error ? err.message : 'Failed to load workspaces');
     } finally {
-      setLoading(false);
+      if (listRevision === listRevisionRef.current) setLoading(false);
     }
   }, []);
 
@@ -45,7 +49,10 @@ export const useWorkspaces = () => {
   const createWorkspace = useCallback(async (data: { name: string; group: string; persona?: string; agentGroupId?: string; shared?: boolean; templateId?: string; storageType?: Workspace['storageType']; storagePath?: string; storageConfig?: Record<string, unknown> }) => {
     try {
       const ws = await adapter.createWorkspace(data);
-      setWorkspaces(prev => [...prev, ws]);
+      ++listRevisionRef.current;
+      setLoading(false);
+      setError(null);
+      setWorkspaces(prev => [...prev.filter(existing => existing.id !== ws.id), ws]);
       setActiveWorkspaceId(ws.id);
       persistWorkspaceId(ws.id);
       return ws;
@@ -73,15 +80,19 @@ export const useWorkspaces = () => {
       console.error('[useWorkspaces] delete failed:', err);
       return false;
     }
+    ++listRevisionRef.current;
+    setLoading(false);
+    setError(null);
     setWorkspaces(prev => prev.filter(w => w.id !== id));
     // W2A: deleting the active workspace clears the selection (no silent
     // successor-pick) — the shell then prompts the user to choose one.
-    if (activeWorkspaceId === id) {
-      setActiveWorkspaceId(null);
+    setActiveWorkspaceId(current => {
+      if (current !== id) return current;
       clearPersistedWorkspaceId();
-    }
+      return null;
+    });
     return true;
-  }, [activeWorkspaceId]);
+  }, []);
 
   const patchWorkspace = useCallback(async (id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'name' | 'group' | 'model' | 'status' | 'description'>>): Promise<boolean> => {
     try {

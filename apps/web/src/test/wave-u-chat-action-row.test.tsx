@@ -76,6 +76,27 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(onNewSession).toHaveBeenCalledOnce();
   });
 
+  it('opens session history when New session is requested from collapsed controls', () => {
+    const onNewSession = vi.fn();
+
+    render({
+      messages: [],
+      sessions: [{ id: 's1', title: 'Existing session', messageCount: 1 }],
+      activeSessionId: 's1',
+      onNewSession,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide chat history' }));
+    const sidebar = screen.getByTestId('chat-session-sidebar');
+    expect(sidebar.className).toContain('w-0');
+
+    const newSessionButtons = screen.getAllByRole('button', { name: /new session/i });
+    fireEvent.click(newSessionButtons[newSessionButtons.length - 1]);
+
+    expect(onNewSession).toHaveBeenCalledOnce();
+    expect(sidebar.className).toContain('w-32');
+  });
+
   it('blocks new-session and session-switch actions while a response is in progress', () => {
     const onNewSession = vi.fn();
     const onSelectSession = vi.fn();

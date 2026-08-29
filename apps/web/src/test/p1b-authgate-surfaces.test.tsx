@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     getTier: vi.fn(),
     getWorkspaces: vi.fn(),
     createWorkspace: vi.fn(),
+    deleteWorkspace: vi.fn(),
     getPermissions: vi.fn().mockResolvedValue({ defaultAutonomy: 'normal', externalGates: {} }),
     getAgentStatus: vi.fn().mockResolvedValue({ active: 0, agents: [] }),
     getNotificationHistory: vi.fn().mockResolvedValue([]),
@@ -132,6 +133,92 @@ describe('useWorkspaces (P1b)', () => {
       consoleSpy.mockRestore();
     }
   });
+  it('keeps a newly created workspace when an older initial list resolves late', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    let resolveInitialList!: (workspaces: Array<{ id: string; name: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReturnValueOnce(new Promise(resolve => {
+      resolveInitialList = resolve;
+    }));
+    mocks.adapter.createWorkspace.mockResolvedValueOnce({ id: 'w-new', name: 'New workspace' });
+    const { result } = renderHook(() => useWorkspaces());
+
+    await act(async () => {
+      await result.current.createWorkspace({ name: 'New workspace', group: 'Personal' });
+    });
+    expect(result.current.activeWorkspaceId).toBe('w-new');
+
+    await act(async () => {
+      resolveInitialList([{ id: 'w-old', name: 'Older snapshot' }]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w-new']);
+    expect(result.current.activeWorkspaceId).toBe('w-new');
+    expect(readPersistedWorkspaceId()).toBe('w-new');
+  });
+
+  it('deduplicates a workspace observed by the list before its create response settles', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveList!: (workspaces: Array<{ id: string; name: string }>) => void;
+    let resolveCreate!: (workspace: { id: string; name: string }) => void;
+    mocks.adapter.getWorkspaces.mockReturnValueOnce(new Promise(resolve => {
+      resolveList = resolve;
+    }));
+    mocks.adapter.createWorkspace.mockReturnValueOnce(new Promise(resolve => {
+      resolveCreate = resolve;
+    }));
+    const { result } = renderHook(() => useWorkspaces());
+
+    let pendingCreate!: Promise<unknown>;
+    act(() => {
+      pendingCreate = result.current.createWorkspace({ name: 'New workspace', group: 'Personal' });
+    });
+    await act(async () => {
+      resolveList([{ id: 'w-new', name: 'New workspace' }]);
+      await Promise.resolve();
+    });
+    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w-new']);
+
+    await act(async () => {
+      resolveCreate({ id: 'w-new', name: 'New workspace' });
+      await pendingCreate;
+    });
+
+    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w-new']);
+    expect(result.current.activeWorkspaceId).toBe('w-new');
+  });
+
+  it('does not clear a newer workspace selection when an older delete resolves late', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    let resolveDelete!: () => void;
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+      { id: 'w-a', name: 'Workspace A' },
+      { id: 'w-b', name: 'Workspace B' },
+    ]);
+    mocks.adapter.deleteWorkspace.mockReturnValueOnce(new Promise(resolve => {
+      resolveDelete = resolve;
+    }));
+    const { result } = renderHook(() => useWorkspaces());
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(2));
+    act(() => { result.current.selectWorkspace('w-a'); });
+
+    let pendingDelete!: Promise<boolean>;
+    act(() => { pendingDelete = result.current.deleteWorkspace('w-a'); });
+    act(() => { result.current.selectWorkspace('w-b'); });
+    await act(async () => {
+      resolveDelete();
+      await pendingDelete;
+    });
+
+    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w-b']);
+    expect(result.current.activeWorkspaceId).toBe('w-b');
+    expect(readPersistedWorkspaceId()).toBe('w-b');
+  });
 });
 
 // ── useSessions ────────────────────────────────────────────────────────────
@@ -166,6 +253,28 @@ describe('useSessions (P1b)', () => {
       { id: 'session-new', workspaceId: 'w1' },
       { id: 'session-old', workspaceId: 'w1' },
     ]);
+  });
+
+  it('replaces the synthetic empty-workspace placeholder with the first real session', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValueOnce([]);
+    mocks.adapter.createSession.mockResolvedValueOnce({
+      id: 'session-real',
+      title: null,
+      summary: null,
+      created: '2026-08-29T20:00:00.000Z',
+      messageCount: 0,
+      lastActive: '2026-08-29T20:00:00.000Z',
+    });
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+
+    await act(async () => {
+      await result.current.createSession();
+    });
+
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-real']);
+    expect(result.current.activeSessionId).toBe('session-real');
   });
 
   it('coalesces two same-tick create requests into one adapter call and one resolved session', async () => {
@@ -424,6 +533,49 @@ describe('useSessions (P1b)', () => {
     expect(result.current.sessions.map(session => session.id)).toEqual(['session-w2-created']);
   });
 
+  it('keeps a pending workspace create locked across an A to B to A re-entry', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    let resolveCreate!: (session: {
+      id: string; workspaceId: string; title: string; messageCount: number; lastActive: string;
+    }) => void;
+    mocks.adapter.getSessions
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(new Promise(() => {}));
+    mocks.adapter.createSession.mockReturnValueOnce(new Promise(resolve => {
+      resolveCreate = resolve;
+    }));
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useSessions(workspaceId),
+      { initialProps: { workspaceId: 'w1' } },
+    );
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w1'));
+
+    let firstCreate!: Promise<unknown>;
+    act(() => { firstCreate = result.current.createSession(); });
+    rerender({ workspaceId: 'w2' });
+    await waitFor(() => expect(result.current.activeSessionId).toBe('local-session-w2'));
+    rerender({ workspaceId: 'w1' });
+
+    expect(result.current.creating).toBe(true);
+    let repeatedCreate!: Promise<unknown>;
+    act(() => { repeatedCreate = result.current.createSession(); });
+    expect(repeatedCreate).toBe(firstCreate);
+    expect(mocks.adapter.createSession).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveCreate({
+        id: 'session-w1-created', workspaceId: 'w1', title: 'Created in A', messageCount: 0,
+        lastActive: '2026-08-29T20:01:00.000Z',
+      });
+      await Promise.all([firstCreate, repeatedCreate]);
+    });
+
+    expect(result.current.creating).toBe(false);
+    expect(result.current.activeSessionId).toBe('session-w1-created');
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-w1-created']);
+  });
+
   it('does not fabricate a successful session when create fails', async () => {
     const { useSessions } = await import('@/hooks/useSessions');
     mocks.adapter.getSessions.mockResolvedValueOnce([]);
@@ -455,6 +607,52 @@ describe('useSessions (P1b)', () => {
     expect(result.current.sessions).toEqual([]);
     expect(result.current.activeSessionId).toBeNull();
     expect(result.current.error).toBe('list failed');
+    consoleSpy.mockRestore();
+  });
+
+  it('recovers a failed session list when the desktop connection settles', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions
+      .mockRejectedValueOnce(new Error('temporary list failure'))
+      .mockResolvedValueOnce([{
+        id: 'session-recovered', workspaceId: 'w1', title: 'Recovered', messageCount: 3,
+        lastActive: '2026-08-29T20:02:00.000Z',
+      }]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+
+    await waitFor(() => expect(result.current.error).toBe('temporary list failure'));
+    settleConnect();
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-recovered'));
+
+    expect(mocks.adapter.getSessions).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-recovered']);
+    consoleSpy.mockRestore();
+  });
+
+  it('does not reload or switch chats when reconnect follows a session mutation failure', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValue([
+      { id: 'session-first', workspaceId: 'w1', title: 'First', messageCount: 1, lastActive: '2026-08-29T20:00:00.000Z' },
+      { id: 'session-active', workspaceId: 'w1', title: 'Active', messageCount: 2, lastActive: '2026-08-29T19:00:00.000Z' },
+    ]);
+    mocks.adapter.renameSession.mockRejectedValueOnce(new Error('rename failed'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-first'));
+    act(() => { result.current.setActiveSessionId('session-active'); });
+
+    await act(async () => {
+      await result.current.renameSession('session-active', 'Renamed');
+    });
+    expect(result.current.error).toBe('rename failed');
+    settleConnect();
+    await act(async () => { await Promise.resolve(); });
+
+    expect(mocks.adapter.getSessions).toHaveBeenCalledTimes(1);
+    expect(result.current.activeSessionId).toBe('session-active');
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-first', 'session-active']);
     consoleSpy.mockRestore();
   });
 

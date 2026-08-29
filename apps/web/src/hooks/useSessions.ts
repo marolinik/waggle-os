@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Session } from '@/lib/types';
+import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 
 const makeDefaultSession = (workspaceId: string): Session => ({
   id: `local-session-${workspaceId}`,
@@ -16,6 +17,7 @@ export const useSessions = (workspaceId: string | null) => {
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listFailed, setListFailed] = useState(false);
   const listRevisionRef = useRef(0);
   const mountedRef = useRef(false);
   const workspaceRef = useRef(workspaceId);
@@ -27,54 +29,71 @@ export const useSessions = (workspaceId: string | null) => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  useEffect(() => {
+  const refreshSessions = useCallback(() => {
+    const requestedWorkspaceId = workspaceId;
     const listRevision = ++listRevisionRef.current;
-    let cancelled = false;
-    if (!workspaceId) {
+    if (!requestedWorkspaceId) {
       setSessions([]);
       setActiveSessionId(null);
       setLoading(false);
       setCreating(false);
       setError(null);
+      setListFailed(false);
       return;
     }
     // Reset active session on workspace change to avoid stale cross-workspace refs
     setSessions([]);
     setActiveSessionId(null);
     setLoading(true);
-    setCreating(false);
+    setCreating(createInFlightRef.current.has(requestedWorkspaceId));
     setError(null);
-    adapter.getSessions(workspaceId)
+    setListFailed(false);
+    adapter.getSessions(requestedWorkspaceId)
       .then(data => {
-        if (cancelled || listRevision !== listRevisionRef.current) return;
+        if (!mountedRef.current
+          || requestedWorkspaceId !== workspaceRef.current
+          || listRevision !== listRevisionRef.current) return;
         setError(null);
         if (data.length > 0) {
-          const scopedSessions = data.map(session => ({ ...session, workspaceId }));
+          const scopedSessions = data.map(session => ({ ...session, workspaceId: requestedWorkspaceId }));
           setSessions(scopedSessions);
           setActiveSessionId(scopedSessions[0].id);
         } else {
-          const def = makeDefaultSession(workspaceId);
+          const def = makeDefaultSession(requestedWorkspaceId);
           setSessions([def]);
           setActiveSessionId(def.id);
         }
       })
       .catch((err) => {
-        if (cancelled || listRevision !== listRevisionRef.current) return;
+        if (!mountedRef.current
+          || requestedWorkspaceId !== workspaceRef.current
+          || listRevision !== listRevisionRef.current) return;
         console.error('[useSessions] fetch failed:', err);
+        setListFailed(true);
         setError(err instanceof Error ? err.message : 'Failed to load');
         setSessions([]);
         setActiveSessionId(null);
       })
       .finally(() => {
-        if (!cancelled && listRevision === listRevisionRef.current) setLoading(false);
+        if (mountedRef.current
+          && requestedWorkspaceId === workspaceRef.current
+          && listRevision === listRevisionRef.current) setLoading(false);
       });
-    return () => { cancelled = true; };
   }, [workspaceId]);
+
+  useEffect(() => {
+    refreshSessions();
+  }, [refreshSessions]);
+
+  useRevalidateOnError(listFailed, refreshSessions);
 
   const createSession = useCallback((): Promise<Session | undefined> => {
     if (!workspaceId) return Promise.resolve(undefined);
     const pending = createInFlightRef.current.get(workspaceId);
-    if (pending) return pending;
+    if (pending) {
+      setCreating(true);
+      return pending;
+    }
     setCreating(true);
 
     const request = (async () => {
@@ -85,9 +104,12 @@ export const useSessions = (workspaceId: string | null) => {
         ++listRevisionRef.current;
         setLoading(false);
         setError(null);
+        setListFailed(false);
         setSessions(prev => [
           session,
-          ...prev.filter(existing => existing.workspaceId === workspaceId && existing.id !== session.id),
+          ...prev.filter(existing => existing.workspaceId === workspaceId
+            && existing.id !== session.id
+            && existing.id !== `local-session-${workspaceId}`),
         ]);
         setActiveSessionId(session.id);
         return session;

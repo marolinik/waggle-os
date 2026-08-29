@@ -606,6 +606,10 @@ const ChatApp = ({
       : isLoading
         ? 'Stop or finish the current response before switching sessions.'
         : null;
+  const handleNewSession = () => {
+    setShowSessions(true);
+    onNewSession?.();
+  };
   const [dragging, setDragging] = useState(false);
   const [showAgentProfile, setShowAgentProfile] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
@@ -1093,7 +1097,7 @@ const ChatApp = ({
         <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-[width] overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
           <div className="p-2 space-y-1">
             <button
-              onClick={onNewSession}
+              onClick={handleNewSession}
               disabled={sessionControlsLocked}
               aria-describedby={sessionStatus ? sessionStatusId : undefined}
               className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
@@ -1627,7 +1631,7 @@ const ChatApp = ({
               <HintTooltip content={sessionControlsLocked && sessionStatus ? sessionStatus : 'New session'}>
                 <button
                   type="button"
-                  onClick={onNewSession}
+                  onClick={handleNewSession}
                   disabled={sessionControlsLocked}
                   aria-label="New session"
                   aria-describedby={sessionStatus ? sessionStatusId : undefined}
