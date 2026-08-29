@@ -163,6 +163,16 @@ export interface AutonomyState {
   expiresAt: number | null;
 }
 
+export type ChatHistoryStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+const HISTORY_LOAD_ERROR = "We couldn't load this conversation. Check your connection and try again.";
+
+interface ChatHistoryState {
+  threadKey: string | null;
+  status: ChatHistoryStatus;
+  error: string | null;
+}
+
 interface UseChatOptions {
   workspaceId: string | null;
   sessionId: string | null;
@@ -198,6 +208,11 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   // auto-send waits on this so its optimistic turn isn't clobbered by the
   // history-replace that fires when the session id resolves.
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyState, setHistoryState] = useState<ChatHistoryState>({
+    threadKey: null,
+    status: 'idle',
+    error: null,
+  });
   const historyReadyThreadRef = useRef<string | null>(null);
   const activeDispatchRef = useRef<{
     controller: AbortController;
@@ -316,6 +331,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     let isHistoryRecovery = false;
     if (workspaceId && sessionId) {
       const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
+      setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
       recoveryLocalIds = historyRecoveryLocalIds.get(cacheKey);
       recoveryLocalMessages = historyRecoveryLocalMessages.get(cacheKey);
       isHistoryRecovery = (
@@ -387,15 +403,27 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
               const retryCount = historyRecoveryRetryCounts.get(cacheKey) ?? 0;
               if (retryCount < 1) {
                 historyRecoveryRetryCounts.set(cacheKey, retryCount + 1);
+                setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
                 setHistoryReloadRevision(revision => revision + 1);
+              } else {
+                setHistoryState({
+                  threadKey: cacheKey,
+                  status: 'error',
+                  error: HISTORY_LOAD_ERROR,
+                });
               }
-          } else {
-            // Ordinary history loads are considered settled for this exact
-            // thread even when a transient refresh fails. Cached/local chat
-            // remains usable; failed-clear recovery stays fail-closed above.
-            historyReadyThreadRef.current = cacheKey;
-            setHistoryLoaded(true);
-          }
+            } else {
+              // Ordinary history loads are considered settled for this exact
+              // thread even when a transient refresh fails. Cached/local chat
+              // remains usable; failed-clear recovery stays fail-closed above.
+              historyReadyThreadRef.current = cacheKey;
+              setHistoryLoaded(true);
+              setHistoryState({
+                threadKey: cacheKey,
+                status: historyFetchSucceeded ? 'ready' : 'error',
+                error: historyFetchSucceeded ? null : HISTORY_LOAD_ERROR,
+              });
+            }
           }
           if (
             completedCurrent
@@ -414,6 +442,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       // No session yet — leave historyLoaded false so an auto-send waits for a
       // real session's history to land (never race the replace below).
       setMessages([]);
+      setHistoryState({ threadKey: null, status: 'idle', error: null });
     }
     return () => {
       cancelled = true;
@@ -1052,6 +1081,8 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
         ) {
           setMessages([]);
           setHistoryLoaded(true);
+          historyReadyThreadRef.current = cacheKey;
+          setHistoryState({ threadKey: cacheKey, status: 'ready', error: null });
         }
         writeChatThreadCache(cacheKey, []);
       } catch (err) {
@@ -1108,6 +1139,7 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
               && currentThread.sessionId === sessionId
             ) {
               setHistoryLoaded(false);
+              setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
               setHistoryReloadRevision(revision => revision + 1);
             }
           } else {
@@ -1122,6 +1154,19 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
       }
     }
   }, [sessionId, workspaceId, messages, cancelActiveDispatch]);
+
+  const retryHistory = useCallback(() => {
+    if (!workspaceId || !sessionId) return;
+    const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
+    if (pendingHistoryRef.current?.cacheKey === cacheKey) return;
+
+    setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
+    // A manual retry is a fresh authoritative read. Failed-clear recovery must
+    // remain fail-closed; ordinary refresh failures become usable again when
+    // the retry settles, matching the existing exact-thread readiness rule.
+    setHistoryLoaded(false);
+    setHistoryReloadRevision(revision => revision + 1);
+  }, [sessionId, workspaceId]);
 
   const approveAction = useCallback(async (
     requestId: string,
@@ -1153,5 +1198,32 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
     && historyReadyThreadRef.current === chatThreadCacheKey(workspaceId, sessionId),
   );
 
-  return { messages, isLoading, historyLoaded, historyReady, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction };
+  const currentHistoryThreadKey = workspaceId && sessionId
+    ? chatThreadCacheKey(workspaceId, sessionId)
+    : null;
+  const historyStatus: ChatHistoryStatus = currentHistoryThreadKey === null
+    ? 'idle'
+    : historyState.threadKey === currentHistoryThreadKey
+      ? historyState.status
+      : 'loading';
+  const historyError = (
+    currentHistoryThreadKey !== null
+    && historyState.threadKey === currentHistoryThreadKey
+  ) ? historyState.error : null;
+
+  return {
+    messages,
+    isLoading,
+    historyLoaded,
+    historyReady,
+    historyStatus,
+    historyError,
+    retryHistory,
+    sendMessage,
+    retryLastFailed,
+    stopStreaming,
+    clearHistory,
+    pendingApproval,
+    approveAction,
+  };
 };

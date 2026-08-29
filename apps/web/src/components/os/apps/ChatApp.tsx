@@ -9,6 +9,7 @@ import { DATE_LOCALE } from '@/lib/date-locale';
 import { formatModelLabel } from '@/lib/model-label';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import type { RouteProposalPayload } from '@/lib/route-proposals';
+import type { ChatHistoryStatus } from '@/hooks/useChat';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
 import ChatWorkCanvas, { selectCanvasArtifact } from './chat-blocks/ChatWorkCanvas';
@@ -75,6 +76,12 @@ interface ChatAppProps {
   autoSendInitial?: boolean;
   /** F2: true once a real session's history has landed — gates the auto-send. */
   historyLoaded?: boolean;
+  /** Truthful state of the active session's authoritative history read. */
+  historyStatus?: ChatHistoryStatus;
+  /** Safe user-facing history failure copy (never raw provider/server detail). */
+  historyError?: string | null;
+  /** Retry the active session's authoritative history read. */
+  onRetryHistory?: () => void;
   /** F4: re-issue the last failed turn (Retry button on error blocks). */
   onRetry?: () => void;
   /** Lane S2 (Pillar 3.1): halt the in-flight reply mid-stream. Wired to the
@@ -570,6 +577,9 @@ const ChatApp = ({
   initialMessage,
   autoSendInitial = false,
   historyLoaded = false,
+  historyStatus = 'ready',
+  historyError = null,
+  onRetryHistory,
   onRetry,
   onStopStreaming,
 }: ChatAppProps) => {
@@ -1169,7 +1179,75 @@ const ChatApp = ({
               without it the icons sat flush against (and visually cut by) the
               boundary just above the composer. */}
           <div className={`mx-auto w-full max-w-[680px] space-y-3 ${messages.length === 0 ? 'h-full flex flex-col' : 'pb-6'}`}>
-          {messages.length === 0 && workspaceId && (
+          {messages.length > 0 && historyStatus === 'error' && (
+            <div
+              role="alert"
+              className="flex items-center gap-2 rounded-lg border border-[var(--attention)]/30 bg-[var(--attention)]/10 px-3 py-2 text-xs text-muted-foreground"
+              data-testid="chat-history-refresh-error"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--attention)]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="font-medium text-foreground">Couldn't refresh this conversation.</span>{' '}
+                {historyError}
+              </span>
+              {onRetryHistory && (
+                <button
+                  type="button"
+                  onClick={onRetryHistory}
+                  className="shrink-0 rounded-md border border-border/50 px-2 py-1 font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                  aria-label="Retry loading conversation"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+          {messages.length > 0 && historyStatus === 'loading' && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 rounded-lg border border-border/40 bg-[var(--surface-2)] px-3 py-2 text-xs text-muted-foreground"
+              data-testid="chat-history-refreshing"
+            >
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-honey motion-reduce:animate-none" aria-hidden="true" />
+              <span>Refreshing conversation…</span>
+            </div>
+          )}
+          {messages.length === 0 && workspaceId && historyStatus === 'loading' && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground"
+              data-testid="chat-history-loading"
+            >
+              <Loader2 className="h-6 w-6 animate-spin text-honey motion-reduce:animate-none" aria-hidden="true" />
+              <p className="text-sm">Loading conversation…</p>
+            </div>
+          )}
+          {messages.length === 0 && workspaceId && historyStatus === 'error' && (
+            <div
+              role="alert"
+              className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center"
+              data-testid="chat-history-load-error"
+            >
+              <AlertTriangle className="h-7 w-7 text-[var(--attention)]" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">Couldn't load this conversation.</p>
+                {historyError && <p className="mt-1 text-xs text-muted-foreground">{historyError}</p>}
+              </div>
+              {onRetryHistory && (
+                <button
+                  type="button"
+                  onClick={onRetryHistory}
+                  className="rounded-md border border-border/60 bg-[var(--surface-2)] px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                  aria-label="Retry loading conversation"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+          {messages.length === 0 && workspaceId && historyStatus === 'ready' && (
             <WorkspaceBriefing
               workspaceId={workspaceId}
               personaId={currentPersona}

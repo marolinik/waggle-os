@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   sessionError: null as string | null,
   historyLoaded: true,
   historyReady: true,
+  historyStatus: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
+  historyError: null as string | null,
+  retryHistory: vi.fn(),
   sendMessage: vi.fn(),
   chatAppProps: [] as Array<Record<string, unknown>>,
   toast: vi.fn(),
@@ -47,6 +50,9 @@ vi.mock('@/hooks/useChat', () => ({
     isLoading: false,
     historyLoaded: mocks.historyLoaded,
     historyReady: mocks.historyReady,
+    historyStatus: mocks.historyStatus,
+    historyError: mocks.historyError,
+    retryHistory: mocks.retryHistory,
     sendMessage: mocks.sendMessage,
     retryLastFailed: vi.fn(),
     stopStreaming: vi.fn(),
@@ -83,7 +89,10 @@ beforeEach(() => {
   mocks.sessionError = null;
   mocks.historyLoaded = true;
   mocks.historyReady = true;
+  mocks.historyStatus = 'ready';
+  mocks.historyError = null;
   mocks.chatAppProps.length = 0;
+  mocks.retryHistory.mockReset();
   mocks.sendMessage.mockReset();
   mocks.toast.mockReset();
 });
@@ -134,6 +143,23 @@ describe('repeatable per-workspace chat dispatch', () => {
       sessionCreating: false,
       sessionReady: true,
     });
+  });
+
+  it('forwards the exact history status, safe error, and retry callback to ChatApp', async () => {
+    mocks.historyStatus = 'error';
+    mocks.historyError = "We couldn't load this conversation. Check your connection and try again.";
+
+    render(<ChatWindowInstance workspaceId="ws-ready" />);
+    await act(async () => { await Promise.resolve(); });
+
+    const props = mocks.chatAppProps.at(-1);
+    expect(props).toMatchObject({
+      historyStatus: 'error',
+      historyError: mocks.historyError,
+      onRetryHistory: mocks.retryHistory,
+    });
+    (props?.onRetryHistory as (() => void))();
+    expect(mocks.retryHistory).toHaveBeenCalledTimes(1);
   });
 
   it('holds a pending Home dispatch while a new session replaces the stale active session', async () => {
