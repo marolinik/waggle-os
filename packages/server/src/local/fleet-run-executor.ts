@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { FrameStore, SessionStore } from '@waggle/core';
+import { FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import {
   TraceRecorder,
   detectTaskShape,
@@ -47,6 +47,13 @@ async function resolveExplicitFleetModel(
   const provider = model.slice(0, separator).toLowerCase();
   if (provider === 'ollama') {
     return (await listOllamaChatModelIds()).includes(model) ? model : null;
+  }
+  if (provider === 'openai-compatible') {
+    const configured = new WaggleConfig(server.localConfig.dataDir).getProviders()[provider];
+    if (!configured?.baseUrl) return null;
+    return configured.models?.some((candidate) => (
+      (candidate.startsWith(`${provider}/`) ? candidate : `${provider}/${candidate}`) === model
+    )) ? model : null;
   }
   if (!server.vault?.get(provider)) return null;
 

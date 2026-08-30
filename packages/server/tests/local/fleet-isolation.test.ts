@@ -116,6 +116,102 @@ describe('isolated Fleet execution', () => {
     await server.close();
   });
 
+  it('runs an explicit keyless OpenAI-compatible model configured by base URL', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-compatible-model-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      providers: {
+        'openai-compatible': {
+          apiKey: '',
+          baseUrl: 'http://qwen.test/v1',
+          models: ['openai-compatible/qwen3.8-flash-next'],
+        },
+      },
+    }));
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const runnerModels: string[] = [];
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test', manageLiteLLM: false,
+    });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('vault', { get: () => undefined } as never);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? { id, name: 'Project', group: 'test', created: new Date().toISOString(), directory: workspaceDir }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', { getMaxSessions: () => 10, size: 0, getActive: () => [] } as never);
+    server.decorate('mindCache', { acquire: () => ({}), release: () => {} } as never);
+    server.decorate('agentState', {
+      currentModel: 'openai-compatible/qwen3.8-flash-next',
+      litellmApiKey: 'test-key',
+      llmProvider: { provider: 'anthropic-proxy', health: 'degraded' },
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+      }),
+      buildToolsForSession: () => [],
+    } as never);
+    server.decorate('agentRunner', async (config: { model: string }) => {
+      runnerModels.push(config.model);
+      return { content: 'Done', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    });
+    server.decorate('fleetResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [1], workspaceFrameIds: { [run.workspaceId]: [2] },
+    }));
+    await server.register(fleetRoutes);
+
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    const unavailable = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: {
+        task: 'Reject a model that the compatible endpoint did not advertise',
+        model: 'openai-compatible/unlisted-model',
+        parentWorkspaceId: 'workspace-1',
+      },
+    });
+    expect(unavailable.statusCode).toBe(409);
+    expect(unavailable.json()).toMatchObject({
+      error: 'model_unavailable',
+      message: expect.stringContaining('openai-compatible/unlisted-model'),
+    });
+    expect(registry.list()).toEqual([]);
+    expect(runnerModels).toEqual([]);
+
+    const nestedPrefix = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: {
+        task: 'Reject a duplicated provider prefix',
+        model: 'openai-compatible/openai-compatible/qwen3.8-flash-next',
+        parentWorkspaceId: 'workspace-1',
+      },
+    });
+    expect(nestedPrefix.statusCode).toBe(409);
+    expect(nestedPrefix.json()).toMatchObject({
+      error: 'model_unavailable',
+      message: expect.stringContaining('openai-compatible/openai-compatible/qwen3.8-flash-next'),
+    });
+    expect(registry.list()).toEqual([]);
+    expect(runnerModels).toEqual([]);
+
+    const response = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: 'Use the configured Qwen model', model, parentWorkspaceId: 'workspace-1' },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({ model });
+    await waitFor(() => runnerModels.length === 1, 'keyless compatible Fleet run did not start');
+    expect(runnerModels).toEqual([model]);
+    await server.close();
+  });
+
   it('falls back from a stale implicit workspace Ollama model to the installed current model', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-stale-workspace-model-'));
     tempDirs.push(dataDir);
