@@ -14,6 +14,7 @@ import {
   isExplicitGatedToolRequest,
   isExplicitMemoryRecallRequest,
   isExplicitMemorySaveRequest,
+  shouldRequireCapabilityAcquisitionTools,
   MAX_CONTEXT_MESSAGES,
   parseDirectReadFileDirective,
   formatDirectReadFileResponse,
@@ -4200,6 +4201,14 @@ describe('conversational gated tool filtering', () => {
 
     expect(filtered).toContain('write_file');
     expect(filtered).not.toContain('create_plan');
+  });
+
+  it('does not require capability acquisition for the exact native file round-trip', () => {
+    const message = 'Create file named pm-write-read-1788105943.txt in this workspace containing exactly single line QWEN_WRITE_READ_OK. Then verify saved file by reading it and respond with exactly QWEN_WRITE_READ_OK.';
+
+    expect(isExplicitGatedToolRequest(message)).toBe(true);
+    expect(shouldRequireCapabilityAcquisitionTools(message)).toBe(false);
+    expect(shouldRequireCapabilityAcquisitionTools('Create a reusable skill for release triage.')).toBe(true);
   });
 
   it('withholds plan authoring for an inline advisory plan but keeps explicit plan creation', () => {

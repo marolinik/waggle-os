@@ -177,6 +177,114 @@ describe('selectToolsForTurn', () => {
     expect(measureOpenAiToolSchemaChars(selected.tools)).toBe(selected.schemaChars);
   });
 
+  it('narrows one explicit file create-and-read-back task to the two required tools', () => {
+    const candidates = [
+      makeTool('bash'),
+      makeTool('search_files'),
+      makeTool('search_content'),
+      makeTool('read_file'),
+      makeTool('run_code'),
+      makeTool('lsp_diagnostics'),
+      makeTool('git_diff'),
+      makeTool('git_status'),
+      makeTool('edit_file'),
+      makeTool('multi_edit'),
+      makeTool('write_file'),
+      makeTool('generate_docx'),
+      makeTool('generate_pdf'),
+      makeTool('search_memory'),
+      makeTool('search_skills'),
+      makeTool('create_skill'),
+      makeTool('spawn_agent'),
+    ];
+    const selected = selectToolsForTurn(candidates, {
+      message: 'Create file named pm-write-read-1788105943.txt in this workspace containing exactly single line QWEN_WRITE_READ_OK. Then verify saved file by reading it and respond with exactly QWEN_WRITE_READ_OK.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toEqual(['write_file', 'read_file']);
+    expect(selected.schemaChars).toBe(measureOpenAiToolSchemaChars(selected.tools));
+    expect(selected.omittedCount).toBe(candidates.length - 2);
+  });
+
+  it.each([
+    'Create two files named first.txt and second.txt containing exactly single line OK. Then verify them by reading them and respond with exactly OK.',
+    'Create file named first.txt in this workspace containing exactly single line OK. Then verify second.txt by reading it and respond with exactly OK.',
+    'Do not create file named task.txt containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    '"Create file named task.txt containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK."',
+    'Create file named "../escape.txt" containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    'Create file named "CON.txt" containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    'Create file named "task.txt " containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    'Create file named "COM¹.txt" containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    'Create file named "LPT²" containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    'Create file named "CONIN$" containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    'Create file named "CONOUT$" containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+    `Create file named "${'a'.repeat(241)}" containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.`,
+    'Create file named task.txt containing exactly single line OK. Then verify saved file by reading it and respond with exactly DIFFERENT.',
+  ])('does not apply the bounded round-trip subset to an ambiguous or unsafe request: %s', (message) => {
+    const selected = selectToolsForTurn([
+      makeTool('write_file'),
+      makeTool('read_file'),
+      makeTool('bash'),
+      makeTool('run_code'),
+      makeTool('generate_docx'),
+      makeTool('edit_file'),
+    ], { message });
+
+    expect(selected.tools.map(tool => tool.name)).not.toEqual(['write_file', 'read_file']);
+  });
+
+  it.each([
+    [
+      'Create file named task.txt in this workspace containing exactly single line OK. Then run tests.',
+      'run_code',
+    ],
+    [
+      'Create file named report.docx in this workspace containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+      'generate_docx',
+    ],
+    [
+      'Edit existing file named task.txt to contain exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',
+      'edit_file',
+    ],
+  ])('retains the required broader workflow for: %s', (message, requiredTool) => {
+    const selected = selectToolsForTurn([
+      makeTool('write_file'),
+      makeTool('read_file'),
+      makeTool('run_code'),
+      makeTool('generate_docx'),
+      makeTool('edit_file'),
+    ], { message });
+
+    expect(selected.tools.map(tool => tool.name)).toContain(requiredTool);
+  });
+
+  it('fails closed when the bounded round-trip tools or budget are unavailable', () => {
+    const message = 'Create file named task.txt containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.';
+    const expectClosed = (result: ReturnType<typeof selectToolsForTurn>, eligibleCount: number) => {
+      expect(result).toEqual({ tools: [], schemaChars: 2, omittedCount: eligibleCount });
+    };
+
+    expectClosed(selectToolsForTurn([makeTool('write_file')], { message }), 1);
+    expectClosed(selectToolsForTurn([makeTool('read_file')], { message }), 1);
+    expectClosed(selectToolsForTurn([makeTool('write_file'), makeTool('read_file')], {
+      message,
+      maxTools: 1,
+    }), 2);
+    expectClosed(selectToolsForTurn([makeTool('write_file'), makeTool('read_file')], {
+      message,
+      maxSchemaChars: 2,
+    }), 2);
+    const withUnrelatedMandatory = selectToolsForTurn([
+      makeTool('write_file'),
+      makeTool('read_file'),
+      makeTool('create_skill'),
+    ], {
+      message,
+      mandatoryToolNames: ['create_skill'],
+    });
+    expect(withUnrelatedMandatory.tools.map(tool => tool.name)).toContain('create_skill');
+  });
+
   it('offers a bounded non-external fallback only when delegated execution requests it', () => {
     const candidates = [
       makeTool('read_file'),

@@ -335,6 +335,7 @@ export {
   filterAvailableTools,
   filterOfflineTools,
   getOfflineCapableToolNames,
+  isBoundedSingleFileRoundTrip,
   measureOpenAiToolSchemaChars,
   selectToolsForTurn,
   type ToolContext,

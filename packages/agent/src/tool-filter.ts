@@ -164,6 +164,40 @@ const REPOSITORY_DISCOVERY_BUNDLE: IntentBundle = {
 };
 const REPOSITORY_DISCOVERY_TOOL_NAMES = new Set(REPOSITORY_DISCOVERY_BUNDLE.tools);
 
+const BOUNDED_FILE_ROUND_TRIP_PATTERN = /^\s*(?:please(?:,\s*|\s+))?(?:create|write)\s+(?:a\s+)?file\s+(?:named|called)\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([a-z0-9][a-z0-9._-]{0,127}))\s+(?:in\s+(?:this|the)\s+workspace\s+)?(?:containing|with(?:\s+the)?\s+content)\s+exactly\s+(?:a\s+)?single\s+line\s+([^\r\n]{1,512}?)\.\s*(?:then\s+)?(?:verify|check)\s+(?:the\s+)?(?:saved\s+)?file\s+by\s+reading\s+(?:it|the\s+same\s+file)(?:\s+back)?\s+and\s+(?:respond|reply)\s+(?:with\s+)?exactly\s+([^\r\n]{1,512}?)\.?\s*$/i;
+const GENERATED_DOCUMENT_EXTENSIONS = new Set(['doc', 'docx', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx']);
+const WINDOWS_RESERVED_FILE_NAMES = /^(?:(?:con|prn|aux|nul|(?:com|lpt)(?:[1-9]|[¹²³]))(?:\..*)?|conin\$|conout\$)$/i;
+
+export function isBoundedSingleFileRoundTrip(message: string): boolean {
+  if (message.length > 1_200
+    || Array.from(message).some(char => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || code === 127;
+    })) {
+    return false;
+  }
+  const match = BOUNDED_FILE_ROUND_TRIP_PATTERN.exec(message);
+  if (!match) return false;
+
+  const fileName = match[1] ?? match[2] ?? match[3] ?? '';
+  if (!fileName
+    || fileName.length > 240
+    || fileName !== fileName.trim()
+    || fileName.startsWith('.')
+    || fileName.endsWith('.')
+    || fileName.endsWith(' ')
+    || /[<>:"/\\|?*%$~{}]/.test(fileName)
+    || fileName.includes('[')
+    || fileName.includes(']')
+    || WINDOWS_RESERVED_FILE_NAMES.test(fileName)) {
+    return false;
+  }
+  const extension = fileName.includes('.') ? fileName.split('.').pop()?.toLowerCase() : undefined;
+  if (extension && GENERATED_DOCUMENT_EXTENSIONS.has(extension)) return false;
+
+  return match[4].trim() === match[5].trim();
+}
+
 const INTENT_BUNDLES: readonly IntentBundle[] = [
   REPOSITORY_DISCOVERY_BUNDLE,
   {
@@ -405,6 +439,29 @@ export function selectToolsForTurn(
     if (seenNames.has(candidate.name)) continue;
     seenNames.add(candidate.name);
     deduplicated.push({ tool: candidate, index });
+  }
+
+  if (isBoundedSingleFileRoundTrip(options.message)) {
+    const allowedNames = new Set(['write_file', 'read_file']);
+    const hasUnrelatedMandatoryTool = (options.mandatoryToolNames ?? [])
+      .some(name => !allowedNames.has(name));
+    if (!hasUnrelatedMandatoryTool) {
+      const toolsByName = new Map(deduplicated.map(({ tool }) => [tool.name, tool]));
+      const selected = ['write_file', 'read_file']
+        .map(name => toolsByName.get(name))
+        .filter((tool): tool is ToolDefinition => tool !== undefined);
+      const schemaChars = measureOpenAiToolSchemaChars(selected);
+      if (selected.length !== 2
+        || maxTools < 2
+        || schemaChars > maxSchemaChars) {
+        return { tools: [], schemaChars: 2, omittedCount: eligibleTools.length };
+      }
+      return {
+        tools: selected,
+        schemaChars,
+        omittedCount: eligibleTools.length - selected.length,
+      };
+    }
   }
 
   const rawMessage = options.message.toLowerCase();

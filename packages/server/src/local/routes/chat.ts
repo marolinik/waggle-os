@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -356,7 +356,8 @@ export function isExplicitGatedToolRequest(message: string): boolean {
   return hasExplicitGatedToolIntent(actionableMessage);
 }
 
-function shouldRequireCapabilityAcquisitionTools(message: string): boolean {
+export function shouldRequireCapabilityAcquisitionTools(message: string): boolean {
+  if (isBoundedSingleFileRoundTrip(message)) return false;
   const actionableMessage = stripNegatedCapabilityClauses(message);
   if (RETRY_GATED_ACTION_PATTERN.test(actionableMessage)) return false;
   if (!DIRECT_CAPABILITY_ACTION_PATTERN.test(actionableMessage)) return false;
