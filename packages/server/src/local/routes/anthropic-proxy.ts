@@ -51,6 +51,8 @@ interface ChatCompletionBody {
   stream_options?: { include_usage?: boolean };
   max_tokens?: number;
   temperature?: number;
+  chat_template_kwargs?: { enable_thinking?: boolean };
+  extra_body?: Record<string, unknown> & { enable_thinking?: boolean };
 }
 
 const MODEL_SPEND_RESERVATION_HEADER = 'x-waggle-model-spend-reservation';
@@ -982,9 +984,34 @@ async function forwardCompatibleProvider(
     && /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(route.model)
   ) {
     // Qwen-compatible servers commonly default to long hidden reasoning. Keep
-    // interactive Waggle chat responsive while leaving every other provider
-    // byte-for-byte unchanged. A user-facing override is a separate setting.
-    outboundBody.chat_template_kwargs = { enable_thinking: false };
+    // interactive Waggle chat responsive while honoring an explicit one-shot
+    // agent shape selection and leaving every other provider unchanged.
+    const templateKwargs = body.chat_template_kwargs
+      && typeof body.chat_template_kwargs === 'object'
+      && !Array.isArray(body.chat_template_kwargs)
+      ? body.chat_template_kwargs
+      : {};
+    const extraBody = body.extra_body
+      && typeof body.extra_body === 'object'
+      && !Array.isArray(body.extra_body)
+      ? body.extra_body
+      : {};
+    const requestedThinking = typeof templateKwargs.enable_thinking === 'boolean'
+      ? templateKwargs.enable_thinking
+      : typeof extraBody.enable_thinking === 'boolean'
+        ? extraBody.enable_thinking
+        : false;
+    outboundBody.chat_template_kwargs = {
+      enable_thinking: requestedThinking,
+    };
+    if ('enable_thinking' in extraBody) {
+      const { enable_thinking: _ignored, ...remainingExtraBody } = extraBody;
+      if (Object.keys(remainingExtraBody).length > 0) {
+        outboundBody.extra_body = remainingExtraBody;
+      } else {
+        delete outboundBody.extra_body;
+      }
+    }
   }
   if (
     route.providerId === 'openai'

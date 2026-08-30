@@ -2775,16 +2775,17 @@ describe('Anthropic Proxy Routes', () => {
       expect(JSON.parse(String(init?.body)).model).toBe('anthropic/claude-opus-4.8');
     });
 
-    it('routes a persisted keyless OpenAI-compatible model in non-stream and streaming modes', async () => {
+    it('routes a persisted keyless OpenAI-compatible model and preserves explicit Qwen thinking', async () => {
       const compatibleFetch = vi.fn<typeof fetch>((input, init) => originalFetch(input, init));
       globalThis.fetch = compatibleFetch;
       const captures: Array<{
         authorization: string | undefined;
-      body: {
-        model: string;
-        stream?: boolean;
-        chat_template_kwargs?: { enable_thinking?: boolean };
-      };
+        body: {
+          model: string;
+          stream?: boolean;
+          chat_template_kwargs?: { enable_thinking?: boolean };
+          extra_body?: Record<string, unknown>;
+        };
         path: string | undefined;
       }> = [];
       const upstreamSse = 'data: {"choices":[{"delta":{"content":"Local stream"}}]}\n\ndata: [DONE]\n\n';
@@ -2795,6 +2796,7 @@ describe('Anthropic Proxy Routes', () => {
           model: string;
           stream?: boolean;
           chat_template_kwargs?: { enable_thinking?: boolean };
+          extra_body?: Record<string, unknown>;
         };
         captures.push({
           authorization: request.headers.authorization,
@@ -2856,6 +2858,31 @@ describe('Anthropic Proxy Routes', () => {
       expect(streaming.headers['content-type']).toContain('text/event-stream');
       expect(streaming.body).toBe(upstreamSse);
 
+      const thinking = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+          chat_template_kwargs: { enable_thinking: true },
+        },
+      });
+      expect(thinking.statusCode).toBe(200);
+
+      const explicitFalse = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+          chat_template_kwargs: { enable_thinking: false },
+          extra_body: { enable_thinking: true, preserve_me: 'yes' },
+        },
+      });
+      expect(explicitFalse.statusCode).toBe(200);
+
       const nonQwen = await server.inject({
         method: 'POST',
         url: '/v1/chat/completions',
@@ -2888,13 +2915,32 @@ describe('Anthropic Proxy Routes', () => {
         },
         {
           authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: false,
+            chat_template_kwargs: { enable_thinking: true },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
+          body: expect.objectContaining({
+            model: 'acme/local-qwen:Q4_K_M',
+            stream: false,
+            chat_template_kwargs: { enable_thinking: false },
+            extra_body: { preserve_me: 'yes' },
+          }),
+          path: '/v1/chat/completions',
+        },
+        {
+          authorization: undefined,
           body: expect.objectContaining({ model: 'acme/local-llama:Q4_K_M', stream: false }),
           path: '/v1/chat/completions',
         },
       ]);
-      expect(captures[2].body).not.toHaveProperty('chat_template_kwargs');
-      expect(captures[2].body).not.toHaveProperty('extra_body');
-      expect(compatibleFetch).toHaveBeenCalledTimes(3);
+      expect(captures[4].body).not.toHaveProperty('chat_template_kwargs');
+      expect(captures[4].body).not.toHaveProperty('extra_body');
+      expect(compatibleFetch).toHaveBeenCalledTimes(5);
       expect(compatibleFetch.mock.calls.every(([, init]) => init?.redirect === 'error')).toBe(true);
       } finally {
         await new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));

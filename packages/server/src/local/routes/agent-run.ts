@@ -13,7 +13,7 @@
 // loop's onProgress callback (Phase 3.4 — AgentRunProgressEvent).
 
 import type { FastifyPluginAsync } from 'fastify';
-import { HybridSearch } from '@waggle/core';
+import { HybridSearch, WaggleConfig } from '@waggle/core';
 import {
   runRetrievalAgentLoop,
   listShapes,
@@ -128,7 +128,8 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
         lightweightModel: LIGHTWEIGHT_MODEL,
         localModel,
       });
-      const isQwen = model.includes('qwen');
+      const normalizedModel = model.toLowerCase();
+      const isQwen = normalizedModel.includes('qwen');
       const payload: Record<string, unknown> = {
         model,
         messages: input.messages,
@@ -142,7 +143,11 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
         payload.temperature = input.temperature ?? 0.3;
       }
       if (isQwen && input.thinking !== undefined) {
-        payload.extra_body = { enable_thinking: input.thinking };
+        if (normalizedModel.startsWith('openai-compatible/')) {
+          payload.chat_template_kwargs = { enable_thinking: input.thinking };
+        } else {
+          payload.extra_body = { enable_thinking: input.thinking };
+        }
       }
 
       try {
@@ -233,6 +238,11 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
     const body = request.body ?? ({} as AgentRunBody);
     const { question, shape, model, persona, maxSteps, maxRetrievalsPerStep } = body;
     const workspaceId = body.workspace ?? body.workspaceId;
+    const requestedModel = typeof model === 'string' ? model.trim() : '';
+    const selectedModel = requestedModel
+      || new WaggleConfig(server.localConfig.dataDir).getDefaultModel()
+      || server.agentState?.currentModel
+      || DEFAULT_MODEL;
 
     // Validation BEFORE hijack — once hijacked, reply.status() is a no-op.
     if (!question || typeof question !== 'string') {
@@ -287,13 +297,13 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
       shape: shapeOverride ?? '(model-default)',
       shapeRequested: shape ?? null,
       shapeRecognized: shapeOverride !== undefined || shape === undefined,
-      model: model ?? DEFAULT_MODEL,
+      model: selectedModel,
     });
 
     let completed = false;
     try {
       const result = await runRetrievalAgentLoop({
-        modelAlias: model ?? DEFAULT_MODEL,
+        modelAlias: selectedModel,
         persona: persona ?? DEFAULT_PERSONA,
         question,
         llmCall: makeLlmCall(),
