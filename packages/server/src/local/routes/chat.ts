@@ -432,7 +432,9 @@ export function resolveExplicitReadOnlyToolChoice(
 ): string | undefined {
   const readOnly = new Set(READONLY_TOOLS);
   const candidates = Array.from(new Set(tools.map(tool => tool.name)))
-    .filter(name => readOnly.has(name));
+    // read_file requires a path. It is handled by the bounded parser below so
+    // a forced call can never leave the model to invent which file to read.
+    .filter(name => readOnly.has(name) && name !== 'read_file');
   const mentioned = candidates.filter((name) => {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`(?:^|[^a-z0-9_])${escaped}(?=$|[^a-z0-9_])`, 'i').test(message);
@@ -448,6 +450,156 @@ export function resolveExplicitReadOnlyToolChoice(
     'i',
   );
   return directive.test(message) ? mentioned[0] : undefined;
+}
+
+export type DirectReadFileDirective =
+  | { kind: 'unrelated' }
+  | { kind: 'invalid' }
+  | { kind: 'valid'; expectedPath: string };
+
+const DIRECT_READ_FILE_PATH_TOKEN = '(?<path>"[^"\\r\\n]+"|\'[^\'\\r\\n]+\'|[^,\\s]+?)';
+const DIRECT_READ_FILE_RESPONSE_CLAUSE =
+  '(?:,\\s*then\\s+(?:report|return|show)(?:\\s+me)?\\s+(?:the\\s+)?(?:exact\\s+)?(?:file\\s+)?contents?(?:\\s+between\\s+[A-Za-z0-9_-]+\\s+and\\s+[A-Za-z0-9_-]+)?)?';
+const EXPLICIT_DIRECT_READ_FILE_RE = new RegExp(
+  `^\\s*(?:please\\s+)?(?:use|call|invoke)\\s+(?:the\\s+)?(?:read_file(?:\\s+tool)?|tool\\s+read_file)\\s+to\\s+(?:read|open|inspect)\\s+${DIRECT_READ_FILE_PATH_TOKEN}${DIRECT_READ_FILE_RESPONSE_CLAUSE}[.!]?\\s*$`,
+  'i',
+);
+const NATURAL_DIRECT_READ_FILE_RE = new RegExp(
+  `^\\s*(?:please\\s+)?(?:read|open|inspect)\\s+${DIRECT_READ_FILE_PATH_TOKEN}\\s+in\\s+(?:this|the)\\s+workspace${DIRECT_READ_FILE_RESPONSE_CLAUSE}[.!]?\\s*$`,
+  'i',
+);
+const EXTENSIONLESS_DIRECT_READ_FILE_NAME = '(?:Makefile|Dockerfile|LICENSE|NOTICE|README|CHANGELOG|AUTHORS|CONTRIBUTORS|Gemfile|Rakefile|Procfile)';
+const WINDOWS_RESERVED_DIRECT_READ_FILE_TOKEN = '(?:(?:con|prn|aux|nul|(?:com|lpt)(?:[1-9]|[¹²³]))(?:[. ]+)?|conin\\$|conout\\$)';
+const NATURAL_DIRECT_READ_FILE_INTENT_PATH_TOKEN = `(?:"[^"\\r\\n]+"|'[^'\\r\\n]+'|[^,\\s]*(?:[\\\\/]|\\.[A-Za-z0-9_-]+)[^,\\s]*|${EXTENSIONLESS_DIRECT_READ_FILE_NAME}(?=\\s)|${WINDOWS_RESERVED_DIRECT_READ_FILE_TOKEN}(?=\\s))`;
+const NATURAL_DIRECT_READ_FILE_INTENT_RE = new RegExp(
+  `^\\s*(?:please\\s+)?(?:read|open|inspect)\\s+${NATURAL_DIRECT_READ_FILE_INTENT_PATH_TOKEN}[\\s\\S]*\\bin\\s+(?:this|the)\\s+workspace\\b`,
+  'i',
+);
+const WARNING_TIER_DIRECT_READ_FILE_INTENT_RE = /\b(?:read|open|inspect)\b[\s\S]*\bin\s+(?:this|the)\s+workspace\b/i;
+const DIRECT_READ_FILE_MAX_EXACT_BYTES = 2_048;
+const WINDOWS_RESERVED_DEVICE_SEGMENT = /^(?:(?:con|prn|aux|nul|(?:com|lpt)(?:[1-9]|[¹²³]))(?:\..*)?|conin\$|conout\$)$/i;
+
+function normalizeDirectReadFilePath(candidate: string): string | undefined {
+  const unquoted = ((candidate.startsWith('"') && candidate.endsWith('"'))
+    || (candidate.startsWith("'") && candidate.endsWith("'")))
+    ? candidate.slice(1, -1)
+    : candidate;
+  if (!unquoted
+    || unquoted.length > 240
+    || Array.from(unquoted).some(character => character.charCodeAt(0) < 32)) {
+    return undefined;
+  }
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(unquoted)
+    || /^[\\/]/.test(unquoted)
+    || /[:*?<>|%$~{}]/.test(unquoted)
+    || unquoted.includes('[')
+    || unquoted.includes(']')) {
+    return undefined;
+  }
+
+  const segments = unquoted.replace(/\\/g, '/').split('/');
+  if (segments.some(segment => !segment
+    || segment === '..'
+    || /[. ]$/.test(segment)
+    || WINDOWS_RESERVED_DEVICE_SEGMENT.test(segment))) {
+    return undefined;
+  }
+  const normalized = segments.filter(segment => segment !== '.').join('/');
+  return normalized || undefined;
+}
+
+/**
+ * Recognize only a complete, single-file workspace read. `invalid` is
+ * intentionally distinct from `unrelated`: a malformed direct-read request
+ * must fail closed instead of falling through to broad tool selection.
+ */
+export function parseDirectReadFileDirective(message: string): DirectReadFileDirective {
+  const directReadIntent = /\bread_file\b/i.test(message)
+    || NATURAL_DIRECT_READ_FILE_INTENT_RE.test(message);
+  if (!directReadIntent) return { kind: 'unrelated' };
+  if (!message.trim() || message.length > 240 || /[\r\n]/.test(message)) return { kind: 'invalid' };
+
+  const match = EXPLICIT_DIRECT_READ_FILE_RE.exec(message)
+    ?? NATURAL_DIRECT_READ_FILE_RE.exec(message);
+  const rawPath = match?.groups?.path;
+  if (!rawPath) return { kind: 'invalid' };
+  const expectedPath = normalizeDirectReadFilePath(rawPath);
+  return expectedPath
+    ? { kind: 'valid', expectedPath }
+    : { kind: 'invalid' };
+}
+
+function canonicalBoundReadPath(workspaceRoot: string, candidate: string): string | undefined {
+  const normalized = normalizeDirectReadFilePath(candidate);
+  if (!normalized) return undefined;
+  const root = path.resolve(workspaceRoot);
+  const resolved = path.resolve(root, ...normalized.split('/'));
+  const relative = path.relative(root, resolved);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return undefined;
+  }
+  return resolved;
+}
+
+export async function boundDirectReadFilePathsMatch(
+  workspaceRoot: string,
+  expectedPath: string,
+  suppliedPath: string,
+  resolveRealPath: (candidate: string) => Promise<string> = candidate => fs.promises.realpath(candidate),
+): Promise<boolean> {
+  const expected = canonicalBoundReadPath(workspaceRoot, expectedPath);
+  const supplied = canonicalBoundReadPath(workspaceRoot, suppliedPath);
+  if (!expected || !supplied) return false;
+  if (expected === supplied) return true;
+  if (expected.toLowerCase() !== supplied.toLowerCase()) return false;
+  try {
+    const [expectedRealPath, suppliedRealPath] = await Promise.all([
+      resolveRealPath(expected),
+      resolveRealPath(supplied),
+    ]);
+    return expectedRealPath === suppliedRealPath;
+  } catch {
+    return false;
+  }
+}
+
+function bindDirectReadFileTool(
+  tools: ToolDefinition[],
+  workspaceRoot: string,
+  expectedPath: string,
+): ToolDefinition[] {
+  if (!canonicalBoundReadPath(workspaceRoot, expectedPath)) {
+    return tools.filter(tool => tool.name !== 'read_file');
+  }
+  return tools.map((tool) => {
+    if (tool.name !== 'read_file') return tool;
+    return {
+      ...tool,
+      execute: async (args) => {
+        const suppliedPath = typeof args.path === 'string' ? args.path : '';
+        const unsupportedArgument = Object.keys(args).some(key => (
+          key !== 'path' && key !== 'offset' && key !== 'line_numbers'
+        ));
+        const partialRead = (args.offset !== undefined
+          && (typeof args.offset !== 'number' || args.offset !== 1))
+          || (args.line_numbers !== undefined && args.line_numbers !== false);
+        const pathMatches = await boundDirectReadFilePathsMatch(
+          workspaceRoot,
+          expectedPath,
+          suppliedPath,
+        );
+        if (!pathMatches || partialRead || unsupportedArgument) {
+          return `Error: read_file must read the complete explicitly requested workspace file: ${expectedPath}`;
+        }
+        const result = await tool.execute(args);
+        if (/^Error(?::|\s)/.test(result)) return result;
+        if (Buffer.byteLength(result, 'utf8') > DIRECT_READ_FILE_MAX_EXACT_BYTES) {
+          return `Error: exact read_file response exceeds the ${DIRECT_READ_FILE_MAX_EXACT_BYTES}-byte direct-read limit; use a scoped or partial read request instead.`;
+        }
+        return result;
+      },
+    };
+  });
 }
 
 export function filterGatedToolsForConversationalTurn<T extends { name: string }>(
@@ -1429,14 +1581,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       message,
       Array.from(READONLY_TOOLS, name => ({ name })),
     );
-    const explicitReadOnlyToolCandidate = resolvedReadOnlyToolDirective === 'list_skills'
+    const directReadFileDirective = parseDirectReadFileDirective(message);
+    const directReadFileCandidate = directReadFileDirective.kind !== 'unrelated'
       && autonomyLevel === 'normal'
       && !isAutomatedTurn
       && turnMutationPolicy.contextScope === 'default'
-      && detectTaskShape(message).complexity === 'simple'
-      && /^\s*(?:(?:you\s+)?must\s+|please\s+)?(?:call|use|invoke|run)\s+(?:the\s+)?(?:tool\s+)?list_skills(?:\s+exactly\s+once|\s+once)?[.!]?\s*$/i.test(message)
-      ? resolvedReadOnlyToolDirective
+      && Boolean(executionWorkspacePath)
+      ? 'read_file'
       : undefined;
+    const preScanExplicitReadOnlyToolCandidate = directReadFileCandidate
+      ?? (resolvedReadOnlyToolDirective === 'list_skills'
+        && autonomyLevel === 'normal'
+        && !isAutomatedTurn
+        && turnMutationPolicy.contextScope === 'default'
+        && detectTaskShape(message).complexity === 'simple'
+        && /^\s*(?:(?:you\s+)?must\s+|please\s+)?(?:call|use|invoke|run)\s+(?:the\s+)?(?:tool\s+)?list_skills(?:\s+exactly\s+once|\s+once)?[.!]?\s*$/i.test(message)
+        ? resolvedReadOnlyToolDirective
+        : undefined);
     const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
     const toolFreeAdvisoryCandidate = autonomyLevel === 'normal'
       && !isAutomatedTurn
@@ -1491,6 +1652,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     } else if (injectionResult.score >= 0.3) {
       log.warn(`[security] Potential prompt injection detected (score ${injectionResult.score})`, injectionResult.flags);
     }
+    const warningTierDirectReadFileCandidate = !injectionResult.safe
+      && WARNING_TIER_DIRECT_READ_FILE_INTENT_RE.test(message)
+      && autonomyLevel === 'normal'
+      && !isAutomatedTurn
+      && turnMutationPolicy.contextScope === 'default'
+      && Boolean(executionWorkspacePath)
+      ? 'read_file'
+      : undefined;
+    const explicitReadOnlyToolCandidate = preScanExplicitReadOnlyToolCandidate
+      ?? warningTierDirectReadFileCandidate;
 
     // Review Critical #3: viewer RBAC moved above reply.hijack() — after hijack,
     // reply.status(403) silently no-ops and the client gets HTTP 200 + empty SSE stream.
@@ -2739,7 +2910,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
 
           const beforeNarrowing = effectiveTools.length;
-          explicitReadOnlyToolChoice = resolveExplicitReadOnlyToolChoice(agentMessage, effectiveTools);
+          if (explicitReadOnlyToolCandidate === 'read_file') {
+            explicitReadOnlyToolChoice = injectionResult.safe
+              && directReadFileDirective.kind === 'valid'
+              && turnTaskShape.complexity === 'simple'
+              && effectiveTools.some(tool => tool.name === 'read_file')
+              ? 'read_file'
+              : undefined;
+          } else {
+            explicitReadOnlyToolChoice = injectionResult.safe
+              ? resolveExplicitReadOnlyToolChoice(agentMessage, effectiveTools)
+              : undefined;
+          }
           if (explicitReadOnlyToolCandidate) {
             effectiveTools = explicitReadOnlyToolChoice
               ? effectiveTools.filter(tool => tool.name === explicitReadOnlyToolChoice)
@@ -2757,6 +2939,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
           if (effectiveTools.length !== beforeNarrowing) {
             log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          }
+
+          if (explicitReadOnlyToolChoice === 'read_file'
+            && directReadFileDirective.kind === 'valid'
+            && executionWorkspacePath) {
+            effectiveTools = bindDirectReadFileTool(
+              effectiveTools,
+              executionWorkspacePath,
+              directReadFileDirective.expectedPath,
+            );
           }
         }
 
@@ -3004,7 +3196,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             maxTurns: 2,
             maxToolRounds: 1,
             maxTokenBudget: 12_000,
-            synthesisReserveTokens: 1_500,
+            synthesisReserveTokens: explicitReadOnlyToolChoice === 'read_file' ? 3_500 : 1_500,
+          };
+          maxOutputTokens = explicitReadOnlyToolChoice === 'read_file' ? 3_072 : 512;
+        } else if (explicitReadOnlyToolCandidate && !explicitReadOnlyToolChoice) {
+          agentRunBudget = {
+            ...agentRunBudget,
+            maxTurns: 1,
+            maxToolRounds: 1,
+            maxTokenBudget: 6_000,
+            synthesisReserveTokens: 1_000,
           };
           maxOutputTokens = 512;
         } else if (toolFreeAdvisory) {
@@ -3047,6 +3248,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let pendingExplicitReadOnlyToolChoice = explicitReadOnlyToolChoice;
         let explicitReadOnlyToolWasUsed = false;
         let explicitReadOnlyToolResult: string | null = null;
+        let explicitReadOnlyToolFailure: string | null = null;
 
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
@@ -3112,10 +3314,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
           onToolResult: (name: string, input: Record<string, unknown>, result: string) => {
             if (explicitReadOnlyToolChoice && name === explicitReadOnlyToolChoice) {
-              explicitReadOnlyToolResult = capToolResultForModel(
-                result,
-                Math.min(4_000, agentRunBudget.toolContextBudget.maxSingleResultChars),
-              );
+              if (/^Error(?::|\s)/.test(result)) {
+                explicitReadOnlyToolFailure = result;
+                explicitReadOnlyToolResult = null;
+              } else {
+                explicitReadOnlyToolResult = capToolResultForModel(
+                  result,
+                  Math.min(4_000, agentRunBudget.toolContextBudget.maxSingleResultChars),
+                );
+              }
             }
             // Calculate duration from the most recent start of this tool
             let duration: number | undefined;
@@ -3352,6 +3559,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (turnSignal.aborted) {
             abortedAttemptUsage = getBillableUsage(attemptedResult.usage);
             throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
+          }
+          if (explicitReadOnlyToolFailure) {
+            throw new Error(`Required read-only tool ${explicitReadOnlyToolChoice} failed: ${explicitReadOnlyToolFailure}`);
           }
           if (explicitReadOnlyToolChoice && (
             pendingExplicitReadOnlyToolChoice
