@@ -221,6 +221,8 @@ describe('durable memory return journey', () => {
       );
       expect(recallReceiptB).toBeDefined();
       expect(recallReceiptB?.data.result).toBe('No relevant memories found');
+      expect(eventsB.find(event => event.event === 'done')?.data.memoryContext)
+        .toEqual({ included: false, count: 0 });
       expect(capturedConfigs).toHaveLength(2);
       const configB = capturedConfigs[1];
       if (!configB) throw new Error('Expected the workspace-B turn to reach the model');

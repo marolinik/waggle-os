@@ -1618,7 +1618,11 @@ describe('Chat Streaming API', () => {
       checkedAt: new Date().toISOString(),
     };
     globalThis.fetch = vi.fn(async (_input, init) => {
-      outboundBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      // The local server may perform unrelated background health requests while
+      // this global test double is installed. Count only actual model payloads;
+      // otherwise a timing-dependent `{}` request shifts the assertions.
+      if (Array.isArray(body.messages)) outboundBodies.push(body);
       return openAiSseResponse('The requested tool is not available in this workspace.');
     });
 

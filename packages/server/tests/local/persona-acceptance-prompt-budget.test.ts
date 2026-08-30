@@ -22,6 +22,7 @@ const testState = vi.hoisted(() => {
   return {
     previousPromptAssembler,
     optimizerExpand: vi.fn(),
+    recallScanMode: 'actual' as 'actual' | 'drop' | 'throw',
     runAgentLoop: vi.fn(),
   };
 });
@@ -31,6 +32,15 @@ vi.mock('@waggle/agent', async (importOriginal) => {
   return {
     ...actual,
     runAgentLoop: testState.runAgentLoop,
+    scanForInjection: (text: string, context: 'user_input' | 'tool_output' = 'user_input') => {
+      if (context === 'tool_output' && testState.recallScanMode === 'drop') {
+        return { safe: false, score: 0.5, flags: ['test_recall_injection'] };
+      }
+      if (context === 'tool_output' && testState.recallScanMode === 'throw') {
+        throw new Error('synthetic recall scan failure');
+      }
+      return actual.scanForInjection(text, context);
+    },
   };
 });
 
@@ -153,6 +163,7 @@ describe('persona acceptance prompt budget', () => {
 
   beforeEach(() => {
     resetRateLimiter(server);
+    testState.recallScanMode = 'actual';
     testState.optimizerExpand.mockReset().mockResolvedValue({
       expanded: null,
       clarifyingQuestions: null,
@@ -613,7 +624,9 @@ describe('persona acceptance prompt budget', () => {
     expect(capturedConfig!.systemPrompt.length).toBeLessThan(13_000);
     const events = parseSse(second.body);
     expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
-    expect(events.find(event => event.event === 'done')?.data.contextMetrics).toMatchObject({
+    const done = events.find(event => event.event === 'done')?.data;
+    expect(done?.memoryContext).toEqual({ included: false, count: 0 });
+    expect(done?.contextMetrics).toMatchObject({
       packageMode: 'compact',
       toolSelectedCount: 0,
       transmittedToolSchemaChars: 0,
@@ -710,9 +723,52 @@ describe('persona acceptance prompt budget', () => {
     expect(capturedConfig!.systemPrompt).toContain(PERSISTED_MEMORY_SENTINEL);
     const events = parseSse(second.body);
     expect(events.some(event => event.data.name === 'auto_recall')).toBe(true);
-    expect(events.find(event => event.event === 'done')?.data.contextMetrics).toMatchObject({
+    const recallResult = String(events.find(
+      event => event.event === 'tool_result' && event.data.name === 'auto_recall',
+    )?.data.result ?? '');
+    const recalledCount = Number(recallResult.match(/^(\d+) memories recalled:/)?.[1]);
+    expect(recalledCount).toBeGreaterThan(0);
+    const done = events.find(event => event.event === 'done')?.data;
+    expect(done?.memoryContext).toEqual({
+      included: true,
+      count: recalledCount,
+    });
+    expect(done?.contextMetrics).toMatchObject({
       packageMode: 'full',
     });
+  });
+
+  it.each([
+    ['drop', 'Recalled memories were not used because they failed safety checks', false],
+    ['throw', 'Memory recall was unavailable for this response', true],
+  ] as const)('never claims memory was included when recall handling must %s', async (mode, resultText, isError) => {
+    testState.recallScanMode = mode;
+    capturedConfig = null;
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Search my saved memory for our previous launch decision. Do not write files or execute code.',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session: `memory-context-receipt-${mode}`,
+        workspace: 'default',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.systemPrompt).not.toContain('# Recalled Memories');
+    expect(response.body).not.toContain(PERSISTED_MEMORY_SENTINEL);
+    const events = parseSse(response.body);
+    expect(events.some(
+      event => event.event === 'step' && /^Recalled \d+ relevant memor/.test(String(event.data.content)),
+    )).toBe(false);
+    expect(events.find(
+      event => event.event === 'tool_result' && event.data.name === 'auto_recall',
+    )?.data).toMatchObject({ result: resultText, isError });
+    expect(events.find(event => event.event === 'done')?.data.memoryContext)
+      .toEqual({ included: false, count: 0 });
   });
 
   it('distinguishes current-session references from persisted or ambiguous history', () => {

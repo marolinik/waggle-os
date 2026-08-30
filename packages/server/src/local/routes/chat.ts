@@ -1807,6 +1807,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // W4.5: unprefixed recall text handed to the PromptAssembler (fixes
     // double-compute — assembler reuses it instead of re-searching).
     let recallTextForAssembler = '';
+    // Terminal, content-free proof that saved memory actually entered this
+    // turn's model context. The UI must never infer this from message count or
+    // an attempted recall because empty, failed, and safety-dropped lookups did
+    // not influence the answer.
+    let memoryContext = { included: false, count: 0 };
 
     // B1-B7: Rerouted message from slash command processing — scoped to handler
     let reroutedMessage: string | undefined;
@@ -2281,51 +2286,66 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && !explicitReadOnlyToolCandidate
           && !isCurrentConversationOnlyReferenceRequest(agentMessage)
           && allowsAutomaticRecall(turnMutationPolicy)) {
+          const recallStart = Date.now();
           try {
             sendEvent('step', { content: 'Recalling relevant memories...' });
             sendEvent('tool', { name: 'auto_recall', input: { query: agentMessage } });
-            const recallStart = Date.now();
             const recall = await sessionOrch.recallMemory(agentMessage);
             throwIfTurnAborted();
             const recallDuration = Date.now() - recallStart;
             if (recall.count > 0) {
               // Minor #3: scan recalled memory for injection payloads before injecting into prompt
               const recallInjection = scanForInjection(recall.text, 'tool_output');
-              if (recallInjection.score >= 0.7) {
+              if (!recallInjection.safe) {
                 log.warn('[security] Injection detected in recalled memory — dropping context', recallInjection.flags);
                 sendEvent('step', { content: 'Recalled memories dropped — suspicious content detected.' });
+                sendEvent('tool_result', {
+                  name: 'auto_recall',
+                  result: 'Recalled memories were not used because they failed safety checks',
+                  duration: recallDuration,
+                  isError: false,
+                });
               } else {
                 recalledContext = '\n\n' + recall.text;
                 recallTextForAssembler = recall.text;
+                memoryContext = { included: true, count: recall.count };
+
+                // B5: Include content snippets so ToolCard can show what was recalled
+                const snippets = (recall.recalled ?? []).slice(0, 3);
+                const snippetText = snippets.map(s => `  - ${s}`).join('\n');
+                const resultText = `${recall.count} memories recalled:\n${snippetText}`;
+                // PR3.5: distinct provenance sources of the recalled memories
+                // (raw frame.source values; the FE owns the friendly label map).
+                // Review M-4: emit the breakdown ONLY when it covers EVERY recalled
+                // frame — a partial breakdown next to "Recalled N memories" would
+                // imply all N share these sources. Any 'unknown' (e.g. the rare
+                // catch-up lane, which doesn't carry source) suppresses the pill
+                // rather than undercount. Never a fabricated source.
+                const recalledFrames = recall.recalledFrames ?? [];
+                const hasUnknownSource = recalledFrames.some(f => !f.source || f.source === 'unknown');
+                const provenanceSources = [...new Set(
+                  recalledFrames.map(f => f.source).filter((s): s is string => !!s && s !== 'unknown'),
+                )];
+                const emitProvenance = !hasUnknownSource && provenanceSources.length > 0;
+                sendEvent('step', {
+                  content: `Recalled ${recall.count} relevant memor${recall.count === 1 ? 'y' : 'ies'}.`,
+                  ...(emitProvenance ? { provenance: { sources: provenanceSources } } : {}),
+                });
+                sendEvent('tool_result', { name: 'auto_recall', result: resultText, duration: recallDuration, isError: false });
               }
-              // B5: Include content snippets so ToolCard can show what was recalled
-              const snippets = (recall.recalled ?? []).slice(0, 3);
-              const snippetText = snippets.map(s => `  - ${s}`).join('\n');
-              const resultText = `${recall.count} memories recalled:\n${snippetText}`;
-              // PR3.5: distinct provenance sources of the recalled memories
-              // (raw frame.source values; the FE owns the friendly label map).
-              // Review M-4: emit the breakdown ONLY when it covers EVERY recalled
-              // frame — a partial breakdown next to "Recalled N memories" would
-              // imply all N share these sources. Any 'unknown' (e.g. the rare
-              // catch-up lane, which doesn't carry source) suppresses the pill
-              // rather than undercount. Never a fabricated source.
-              const recalledFrames = recall.recalledFrames ?? [];
-              const hasUnknownSource = recalledFrames.some(f => !f.source || f.source === 'unknown');
-              const provenanceSources = [...new Set(
-                recalledFrames.map(f => f.source).filter((s): s is string => !!s && s !== 'unknown'),
-              )];
-              const emitProvenance = !hasUnknownSource && provenanceSources.length > 0;
-              sendEvent('step', {
-                content: `Recalled ${recall.count} relevant memor${recall.count === 1 ? 'y' : 'ies'}.`,
-                ...(emitProvenance ? { provenance: { sources: provenanceSources } } : {}),
-              });
-              sendEvent('tool_result', { name: 'auto_recall', result: resultText, duration: recallDuration, isError: false });
             } else {
               sendEvent('tool_result', { name: 'auto_recall', result: 'No relevant memories found', duration: recallDuration, isError: false });
             }
           } catch {
             throwIfTurnAborted();
-            // Non-blocking — if recall fails, continue without it
+            // Non-blocking and sanitized — complete the visible tool lifecycle
+            // without leaking the lookup query, stored content, or exception.
+            sendEvent('tool_result', {
+              name: 'auto_recall',
+              result: 'Memory recall was unavailable for this response',
+              duration: Date.now() - recallStart,
+              isError: true,
+            });
           }
         }
 
@@ -4158,6 +4178,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           usage: result.usage,
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
+          memoryContext,
           contextMetrics: {
             toolCatalogCount,
             toolEligibleCount,
