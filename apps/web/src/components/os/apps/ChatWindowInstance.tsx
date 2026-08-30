@@ -74,6 +74,7 @@ const ChatWindowInstance = ({
     activeSessionId,
     setActiveSessionId,
     createSession,
+    revalidateSessions,
     loading: sessionLoading,
     creating: sessionCreating,
     error: sessionError,
@@ -130,6 +131,9 @@ const ChatWindowInstance = ({
     persona: currentPersona,
     model: currentModel,
     autonomy: { level: autonomyLevel, expiresAt: autonomyExpiresAt },
+    onTurnSettled: ({ workspaceId: settledWorkspaceId, sessionId: settledSessionId }) => {
+      void revalidateSessions(settledWorkspaceId, settledSessionId);
+    },
   });
   const pendingNewChatSession = usePendingNewChatSessionIntent(workspaceId);
   const pendingDispatch = usePendingChatDispatch(workspaceId);

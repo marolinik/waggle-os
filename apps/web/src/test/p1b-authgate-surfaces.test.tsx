@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
     getSystemHealth: vi.fn().mockResolvedValue({ status: 'ok' }),
     getHistory: vi.fn().mockResolvedValue([]),
     sendMessage: vi.fn(),
+    abortAgent: vi.fn().mockResolvedValue(undefined),
     getSessions: vi.fn().mockResolvedValue([]),
     createSession: vi.fn(),
     deleteSession: vi.fn(),
@@ -756,6 +757,203 @@ describe('useSessions (P1b)', () => {
     expect(result.current.sessions).toEqual([]);
     expect(result.current.activeSessionId).toBeNull();
   });
+
+  it('silently refreshes session metadata without blanking or switching the active session', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions.mockResolvedValueOnce([
+      { id: 'session-first', workspaceId: 'w1', title: 'First', messageCount: 1, lastActive: '2026-08-30T01:00:00.000Z' },
+      { id: 'session-active', workspaceId: 'w1', title: 'Before', messageCount: 0, lastActive: '2026-08-30T00:59:00.000Z' },
+    ]);
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-first'));
+    act(() => { result.current.setActiveSessionId('session-active'); });
+
+    let resolveMetadata!: (sessions: Array<{
+      id: string;
+      workspaceId: string;
+      title: string;
+      messageCount: number;
+      lastActive: string;
+    }>) => void;
+    mocks.adapter.getSessions.mockReturnValueOnce(new Promise(resolve => {
+      resolveMetadata = resolve;
+    }));
+
+    let pending!: Promise<boolean>;
+    act(() => { pending = result.current.revalidateSessions('w1'); });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.activeSessionId).toBe('session-active');
+    expect(result.current.sessions.find(session => session.id === 'session-active')?.title).toBe('Before');
+
+    await act(async () => {
+      resolveMetadata([
+        { id: 'session-active', workspaceId: 'w1', title: 'After', messageCount: 2, lastActive: '2026-08-30T01:01:00.000Z' },
+        { id: 'session-first', workspaceId: 'w1', title: 'First', messageCount: 1, lastActive: '2026-08-30T01:00:00.000Z' },
+      ]);
+      expect(await pending).toBe(true);
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.activeSessionId).toBe('session-active');
+    expect(result.current.sessions[0]).toMatchObject({
+      id: 'session-active',
+      title: 'After',
+      messageCount: 2,
+    });
+  });
+
+  it('preserves session metadata and selection when a silent refresh fails', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions.mockResolvedValueOnce([
+      { id: 'session-active', workspaceId: 'w1', title: 'Stable', messageCount: 4, lastActive: '2026-08-30T01:00:00.000Z' },
+    ]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-active'));
+    mocks.adapter.getSessions.mockRejectedValueOnce(new Error('metadata offline'));
+
+    await act(async () => {
+      expect(await result.current.revalidateSessions('w1')).toBe(false);
+    });
+
+    expect(result.current.sessions).toEqual([
+      expect.objectContaining({ id: 'session-active', title: 'Stable', messageCount: 4 }),
+    ]);
+    expect(result.current.activeSessionId).toBe('session-active');
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    consoleSpy.mockRestore();
+  });
+
+  it('ignores a late silent refresh after switching workspaces', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions
+      .mockResolvedValueOnce([
+        { id: 'session-a', workspaceId: 'w1', title: 'A', messageCount: 1, lastActive: '2026-08-30T01:00:00.000Z' },
+      ]);
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useSessions(workspaceId),
+      { initialProps: { workspaceId: 'w1' } },
+    );
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-a'));
+
+    let resolveStale!: (sessions: Array<{
+      id: string;
+      workspaceId: string;
+      title: string;
+      messageCount: number;
+      lastActive: string;
+    }>) => void;
+    mocks.adapter.getSessions.mockReturnValueOnce(new Promise(resolve => {
+      resolveStale = resolve;
+    }));
+    let stale!: Promise<boolean>;
+    act(() => { stale = result.current.revalidateSessions('w1'); });
+
+    mocks.adapter.getSessions.mockResolvedValueOnce([
+      { id: 'session-b', workspaceId: 'w2', title: 'B', messageCount: 3, lastActive: '2026-08-30T01:02:00.000Z' },
+    ]);
+    rerender({ workspaceId: 'w2' });
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-b'));
+
+    await act(async () => {
+      resolveStale([
+        { id: 'session-a', workspaceId: 'w1', title: 'Stale A', messageCount: 9, lastActive: '2026-08-30T01:03:00.000Z' },
+      ]);
+      expect(await stale).toBe(false);
+    });
+
+    expect(result.current.sessions).toEqual([
+      expect.objectContaining({ id: 'session-b', title: 'B', messageCount: 3 }),
+    ]);
+    expect(result.current.activeSessionId).toBe('session-b');
+  });
+
+  it('keeps the newest same-workspace metadata when an older refresh resolves late', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const initialSession = {
+      id: 'session-active',
+      workspaceId: 'w1',
+      title: 'Initial',
+      messageCount: 1,
+      lastActive: '2026-08-30T01:00:00.000Z',
+    };
+    mocks.adapter.getSessions.mockReset().mockResolvedValueOnce([initialSession]);
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-active'));
+
+    let resolveOlder!: (sessions: typeof initialSession[]) => void;
+    let resolveNewer!: (sessions: typeof initialSession[]) => void;
+    mocks.adapter.getSessions
+      .mockReturnValueOnce(new Promise(resolve => { resolveOlder = resolve; }))
+      .mockReturnValueOnce(new Promise(resolve => { resolveNewer = resolve; }));
+
+    let older!: Promise<boolean>;
+    let newer!: Promise<boolean>;
+    act(() => {
+      older = result.current.revalidateSessions('w1', 'session-active');
+      newer = result.current.revalidateSessions('w1', 'session-active');
+    });
+
+    await act(async () => {
+      resolveNewer([{ ...initialSession, title: 'Newest', messageCount: 3 }]);
+      expect(await newer).toBe(true);
+    });
+    expect(result.current.sessions[0]).toMatchObject({ title: 'Newest', messageCount: 3 });
+
+    await act(async () => {
+      resolveOlder([{ ...initialSession, title: 'Older', messageCount: 2 }]);
+      expect(await older).toBe(false);
+    });
+    expect(result.current.sessions[0]).toMatchObject({ title: 'Newest', messageCount: 3 });
+  });
+
+  it('does not let stale metadata undo a successful rename or delete', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const staleSession = {
+      id: 'session-active',
+      workspaceId: 'w1',
+      title: 'Original',
+      messageCount: 2,
+      lastActive: '2026-08-30T01:00:00.000Z',
+    };
+    mocks.adapter.getSessions.mockReset().mockResolvedValueOnce([staleSession]);
+    mocks.adapter.renameSession.mockResolvedValueOnce(undefined);
+    mocks.adapter.deleteSession.mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-active'));
+
+    let resolveRenameStale!: (sessions: typeof staleSession[]) => void;
+    mocks.adapter.getSessions.mockReturnValueOnce(new Promise(resolve => {
+      resolveRenameStale = resolve;
+    }));
+    let staleRename!: Promise<boolean>;
+    act(() => { staleRename = result.current.revalidateSessions('w1', 'session-active'); });
+    await act(async () => { await result.current.renameSession('session-active', 'Renamed'); });
+    await act(async () => {
+      resolveRenameStale([staleSession]);
+      expect(await staleRename).toBe(false);
+    });
+    expect(result.current.sessions[0]?.title).toBe('Renamed');
+
+    let resolveDeleteStale!: (sessions: typeof staleSession[]) => void;
+    mocks.adapter.getSessions.mockReturnValueOnce(new Promise(resolve => {
+      resolveDeleteStale = resolve;
+    }));
+    let staleDelete!: Promise<boolean>;
+    act(() => { staleDelete = result.current.revalidateSessions('w1', 'session-active'); });
+    await act(async () => { await result.current.deleteSession('session-active'); });
+    await act(async () => {
+      resolveDeleteStale([staleSession]);
+      expect(await staleDelete).toBe(false);
+    });
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.activeSessionId).toBeNull();
+  });
 });
 
 // ── useBilling ─────────────────────────────────────────────────────────────
@@ -1045,6 +1243,7 @@ describe('SettingsApp tier badges (P1b D3-4)', () => {
 describe('useChat error surfacing (P1b)', () => {
   beforeEach(() => {
     mocks.adapter.getHistory.mockResolvedValue([]);
+    mocks.adapter.abortAgent.mockReset().mockResolvedValue(undefined);
   });
 
   async function sendFailing(err: unknown) {
@@ -1102,6 +1301,84 @@ describe('useChat error surfacing (P1b)', () => {
     let failed: boolean | void = undefined;
     await act(async () => { failed = await result.current.sendMessage('again'); });
     expect(failed).toBe(false);
+  });
+
+  it('reports only canonical terminal turns to the owning workspace and session', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const onTurnSettled = vi.fn();
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-1',
+      onTurnSettled,
+    }));
+    await act(async () => { await Promise.resolve(); });
+
+    let releaseFirst!: () => void;
+    const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve; });
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        await firstHeld;
+        yield { type: 'done', data: { content: 'first answer' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'error', data: { message: 'model failed' } };
+      });
+
+    let first!: Promise<boolean>;
+    act(() => { first = result.current.sendMessage('first'); });
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+    await act(async () => {
+      expect(await result.current.sendMessage('second')).toBe(true);
+    });
+    expect(onTurnSettled).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseFirst();
+      expect(await first).toBe(true);
+    });
+    await waitFor(() => expect(onTurnSettled).toHaveBeenCalledTimes(2));
+    expect(onTurnSettled).toHaveBeenNthCalledWith(1, { workspaceId: 'ws-1', sessionId: 'sess-1' });
+    expect(onTurnSettled).toHaveBeenNthCalledWith(2, { workspaceId: 'ws-1', sessionId: 'sess-1' });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* (): AsyncGenerator<never> {
+      throw new TypeError('network down');
+      // eslint-disable-next-line no-unreachable
+      yield undefined as never;
+    });
+    await act(async () => { await result.current.sendMessage('third'); });
+    expect(onTurnSettled).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not report a locally aborted stream as a settled turn', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const onTurnSettled = vi.fn();
+    let releaseStream!: () => void;
+    const heldStream = new Promise<void>(resolve => { releaseStream = resolve; });
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'token', data: { content: 'partial' } };
+      await heldStream;
+      yield { type: 'done', data: { content: 'late final' } };
+    });
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-1',
+      onTurnSettled,
+    }));
+    await act(async () => { await Promise.resolve(); });
+
+    let send!: Promise<boolean>;
+    act(() => { send = result.current.sendMessage('stop this'); });
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+    await act(async () => { result.current.stopStreaming(); });
+    expect(onTurnSettled).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseStream();
+      await send;
+    });
+    expect(onTurnSettled).not.toHaveBeenCalled();
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-1');
   });
 
   it('retryLastFailed drops the failed pair and re-issues the same content (no duplicate user bubble)', async () => {

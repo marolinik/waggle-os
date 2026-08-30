@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   retryHistory: vi.fn(),
   sendMessage: vi.fn(),
   createSession: vi.fn(),
+  revalidateSessions: vi.fn(),
+  chatOptions: [] as Array<Record<string, unknown>>,
   chatAppProps: [] as Array<Record<string, unknown>>,
   toast: vi.fn(),
   getModels: vi.fn().mockResolvedValue([]),
@@ -44,13 +46,16 @@ vi.mock('@/hooks/useSessions', () => ({
     activeSessionId: mocks.activeSessionId,
     setActiveSessionId: vi.fn(),
     createSession: mocks.createSession,
+    revalidateSessions: mocks.revalidateSessions,
     loading: mocks.sessionLoading,
     creating: mocks.sessionCreating,
     error: mocks.sessionError,
   }),
 }));
 vi.mock('@/hooks/useChat', () => ({
-  useChat: () => ({
+  useChat: (options: Record<string, unknown>) => {
+    mocks.chatOptions.push(options);
+    return {
     messages: [],
     isLoading: mocks.chatIsLoading,
     historyLoaded: mocks.historyLoaded,
@@ -64,7 +69,8 @@ vi.mock('@/hooks/useChat', () => ({
     clearHistory: vi.fn(),
     pendingApproval: null,
     approveAction: vi.fn(),
-  }),
+    };
+  },
 }));
 vi.mock('@/hooks/use-toast', () => ({
   toast: mocks.toast,
@@ -103,10 +109,12 @@ beforeEach(() => {
   mocks.historyReady = true;
   mocks.historyStatus = 'ready';
   mocks.historyError = null;
+  mocks.chatOptions.length = 0;
   mocks.chatAppProps.length = 0;
   mocks.retryHistory.mockReset();
   mocks.sendMessage.mockReset();
   mocks.createSession.mockReset().mockResolvedValue({ id: 'session-created' });
+  mocks.revalidateSessions.mockReset().mockResolvedValue(true);
   mocks.toast.mockReset();
 });
 
@@ -233,6 +241,23 @@ describe('repeatable per-workspace chat dispatch', () => {
       sessionCreating: false,
       sessionReady: true,
     });
+  });
+
+  it('revalidates session metadata for the exact terminal-turn workspace', async () => {
+    render(<StrictMode><ChatWindowInstance workspaceId="ws-ready" /></StrictMode>);
+    await act(async () => { await Promise.resolve(); });
+
+    const onTurnSettled = mocks.chatOptions.at(-1)?.onTurnSettled as
+      | ((owner: { workspaceId: string; sessionId: string }) => void)
+      | undefined;
+    expect(onTurnSettled).toBeTypeOf('function');
+
+    act(() => {
+      onTurnSettled?.({ workspaceId: 'ws-ready', sessionId: 'session-1' });
+    });
+
+    expect(mocks.revalidateSessions).toHaveBeenCalledTimes(1);
+    expect(mocks.revalidateSessions).toHaveBeenCalledWith('ws-ready', 'session-1');
   });
 
   it('forwards the exact history status, safe error, and retry callback to ChatApp', async () => {

@@ -21,8 +21,12 @@ export const useSessions = (workspaceId: string | null) => {
   const listRevisionRef = useRef(0);
   const mountedRef = useRef(false);
   const workspaceRef = useRef(workspaceId);
+  const activeSessionIdRef = useRef(activeSessionId);
+  const loadingRef = useRef(loading);
   const createInFlightRef = useRef(new Map<string, Promise<Session | undefined>>());
   workspaceRef.current = workspaceId;
+  activeSessionIdRef.current = activeSessionId;
+  loadingRef.current = loading;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -87,6 +91,48 @@ export const useSessions = (workspaceId: string | null) => {
 
   useRevalidateOnError(listFailed, refreshSessions);
 
+  const revalidateSessions = useCallback(async (
+    expectedWorkspaceId: string | null = workspaceRef.current,
+    expectedSessionId?: string,
+  ): Promise<boolean> => {
+    if (
+      !expectedWorkspaceId
+      || expectedWorkspaceId !== workspaceRef.current
+      || loadingRef.current
+    ) return false;
+
+    const listRevision = ++listRevisionRef.current;
+    try {
+      const data = await adapter.getSessions(expectedWorkspaceId);
+      if (
+        !mountedRef.current
+        || expectedWorkspaceId !== workspaceRef.current
+        || listRevision !== listRevisionRef.current
+      ) return false;
+
+      const scopedSessions = data.map(session => ({
+        ...session,
+        workspaceId: expectedWorkspaceId,
+      }));
+      const activeId = activeSessionIdRef.current;
+      if (
+        !activeId
+        || !scopedSessions.some(session => session.id === activeId)
+        || (expectedSessionId && !scopedSessions.some(session => session.id === expectedSessionId))
+      ) return false;
+
+      setSessions(scopedSessions);
+      return true;
+    } catch (err) {
+      if (
+        mountedRef.current
+        && expectedWorkspaceId === workspaceRef.current
+        && listRevision === listRevisionRef.current
+      ) console.error('[useSessions] metadata refresh failed:', err);
+      return false;
+    }
+  }, []);
+
   const createSession = useCallback((): Promise<Session | undefined> => {
     if (!workspaceId) return Promise.resolve(undefined);
     const pending = createInFlightRef.current.get(workspaceId);
@@ -138,6 +184,8 @@ export const useSessions = (workspaceId: string | null) => {
       return;
     }
     if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+    ++listRevisionRef.current;
+    setLoading(false);
     setError(null);
     setSessions(prev => prev.filter(s => s.id !== sessionId));
     setActiveSessionId(current => current === sessionId
@@ -156,6 +204,8 @@ export const useSessions = (workspaceId: string | null) => {
       return;
     }
     if (!mountedRef.current || workspaceRef.current !== workspaceId) return;
+    ++listRevisionRef.current;
+    setLoading(false);
     setError(null);
     setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title } : s));
   }, [workspaceId]);
@@ -163,5 +213,6 @@ export const useSessions = (workspaceId: string | null) => {
   return {
     sessions, activeSessionId, setActiveSessionId,
     loading, creating, error, createSession, deleteSession, renameSession,
+    revalidateSessions,
   };
 };

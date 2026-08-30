@@ -185,9 +185,17 @@ interface UseChatOptions {
    * tool set. The server owns the final check — client state is advisory.
    */
   autonomy?: AutonomyState;
+  onTurnSettled?: (owner: { workspaceId: string; sessionId: string }) => void;
 }
 
-export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: UseChatOptions) => {
+export const useChat = ({
+  workspaceId,
+  sessionId,
+  persona,
+  model,
+  autonomy,
+  onTurnSettled,
+}: UseChatOptions) => {
   const currentThreadKey = workspaceId && sessionId
     ? chatThreadCacheKey(workspaceId, sessionId)
     : null;
@@ -209,7 +217,9 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
   const historyRecoveryLocalMessagesRef = useRef<Map<string, Map<string, ChatMessage>>>(new Map());
   const historyRecoveryRetryCountsRef = useRef<Map<string, number>>(new Map());
   const currentThreadRef = useRef({ workspaceId, sessionId });
+  const onTurnSettledRef = useRef(onTurnSettled);
   currentThreadRef.current = { workspaceId, sessionId };
+  onTurnSettledRef.current = onTurnSettled;
   // F2: true only after a real session's history fetch has landed. The wizard
   // auto-send waits on this so its optimistic turn isn't clobbered by the
   // history-replace that fires when the session id resolves.
@@ -831,7 +841,24 @@ export const useChat = ({ workspaceId, sessionId, persona, model, autonomy }: Us
               : m
           );
         });
-        if (isTerminalEvent) break;
+        if (isTerminalEvent) {
+          const currentThread = currentThreadRef.current;
+          if (
+            activeDispatchRef.current === activeDispatch
+            && currentThread.workspaceId === activeDispatch.workspaceId
+            && (currentThread.sessionId ?? '') === activeDispatch.sessionId
+          ) {
+            try {
+              onTurnSettledRef.current?.({
+                workspaceId: activeDispatch.workspaceId,
+                sessionId: activeDispatch.sessionId,
+              });
+            } catch {
+              // Session metadata refresh is best-effort and must not fail the turn.
+            }
+          }
+          break;
+        }
       }
       if (!terminalEventSeen && !controller.signal.aborted) {
         const incomplete = new Error('The response ended before completion. Please retry.');
