@@ -6,7 +6,10 @@ import { adapter } from '@/lib/adapter';
 import { formatModelLabel } from '@/lib/model-label';
 import {
   acknowledgeChatDispatch,
+  claimNewChatSessionIntent,
+  completeNewChatSessionIntent,
   usePendingChatDispatch,
+  usePendingNewChatSessionIntent,
 } from '@/hooks/useChatWidgetState';
 import ChatApp from './ChatApp';
 import type { TeamMember } from './ChatApp';
@@ -128,9 +131,30 @@ const ChatWindowInstance = ({
     model: currentModel,
     autonomy: { level: autonomyLevel, expiresAt: autonomyExpiresAt },
   });
+  const pendingNewChatSession = usePendingNewChatSessionIntent(workspaceId);
   const pendingDispatch = usePendingChatDispatch(workspaceId);
   const dispatchInFlightRef = useRef<string | null>(null);
   const lastHandledDispatchIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !pendingNewChatSession
+      || isLoading
+      || sessionLoading
+      || sessionCreating
+    ) return;
+    if (!claimNewChatSessionIntent(workspaceId, pendingNewChatSession.id)) return;
+
+    void (async () => {
+      try {
+        await createSession();
+      } catch {
+        // useSessions owns the visible error state; still release the intent.
+      } finally {
+        completeNewChatSessionIntent(workspaceId, pendingNewChatSession.id);
+      }
+    })();
+  }, [createSession, isLoading, pendingNewChatSession, sessionCreating, sessionLoading, workspaceId]);
 
   useEffect(() => {
     if (

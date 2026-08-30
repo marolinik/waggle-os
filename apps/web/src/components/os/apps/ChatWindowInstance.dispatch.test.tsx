@@ -3,11 +3,14 @@ import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   acknowledgeChatDispatch,
+  claimNewChatSessionIntent,
+  completeNewChatSessionIntent,
   enqueueChatDispatch,
   MAX_CHAT_DISPATCH_CONTENT_CHARS,
   MAX_CHAT_DISPATCHES_PER_WORKSPACE,
   MAX_CHAT_DISPATCHES_TOTAL,
   peekChatDispatch,
+  requestNewChatSession,
 } from '@/hooks/useChatWidgetState';
 
 type SendOptions = { onAccepted?: () => void };
@@ -17,12 +20,14 @@ const mocks = vi.hoisted(() => ({
   sessionLoading: false,
   sessionCreating: false,
   sessionError: null as string | null,
+  chatIsLoading: false,
   historyLoaded: true,
   historyReady: true,
   historyStatus: 'ready' as 'idle' | 'loading' | 'ready' | 'error',
   historyError: null as string | null,
   retryHistory: vi.fn(),
   sendMessage: vi.fn(),
+  createSession: vi.fn(),
   chatAppProps: [] as Array<Record<string, unknown>>,
   toast: vi.fn(),
   getModels: vi.fn().mockResolvedValue([]),
@@ -38,7 +43,7 @@ vi.mock('@/hooks/useSessions', () => ({
     sessions: [],
     activeSessionId: mocks.activeSessionId,
     setActiveSessionId: vi.fn(),
-    createSession: vi.fn(),
+    createSession: mocks.createSession,
     loading: mocks.sessionLoading,
     creating: mocks.sessionCreating,
     error: mocks.sessionError,
@@ -47,7 +52,7 @@ vi.mock('@/hooks/useSessions', () => ({
 vi.mock('@/hooks/useChat', () => ({
   useChat: () => ({
     messages: [],
-    isLoading: false,
+    isLoading: mocks.chatIsLoading,
     historyLoaded: mocks.historyLoaded,
     historyReady: mocks.historyReady,
     historyStatus: mocks.historyStatus,
@@ -82,11 +87,18 @@ function drain(workspaceId: string): void {
   }
 }
 
+function clearNewChatSessionIntent(workspaceId: string): void {
+  const intent = requestNewChatSession(workspaceId);
+  claimNewChatSessionIntent(workspaceId, intent.id);
+  completeNewChatSessionIntent(workspaceId, intent.id);
+}
+
 beforeEach(() => {
   mocks.activeSessionId = 'session-1';
   mocks.sessionLoading = false;
   mocks.sessionCreating = false;
   mocks.sessionError = null;
+  mocks.chatIsLoading = false;
   mocks.historyLoaded = true;
   mocks.historyReady = true;
   mocks.historyStatus = 'ready';
@@ -94,6 +106,7 @@ beforeEach(() => {
   mocks.chatAppProps.length = 0;
   mocks.retryHistory.mockReset();
   mocks.sendMessage.mockReset();
+  mocks.createSession.mockReset().mockResolvedValue({ id: 'session-created' });
   mocks.toast.mockReset();
 });
 
@@ -102,6 +115,9 @@ afterEach(() => {
   for (const id of ['ws-ready', 'ws-transition', 'ws-late', 'ws-failure', 'ws-fifo-a', 'ws-fifo-b', 'ws-bound']) {
     drain(id);
   }
+  for (const id of ['ws-new-session', 'ws-new-session-other', 'ws-new-session-locked', 'ws-new-session-failure']) {
+    clearNewChatSessionIntent(id);
+  }
   for (let index = 0; index <= MAX_CHAT_DISPATCHES_TOTAL; index += 1) {
     drain(`ws-global-${index}`);
   }
@@ -109,6 +125,80 @@ afterEach(() => {
 });
 
 describe('repeatable per-workspace chat dispatch', () => {
+  it('claims one new-session intent under StrictMode and coalesces repeats while in flight', async () => {
+    let resolveCreate!: (value: { id: string }) => void;
+    const createPending = new Promise<{ id: string }>(resolve => { resolveCreate = resolve; });
+    mocks.createSession.mockReturnValue(createPending);
+    const first = requestNewChatSession('ws-new-session');
+    expect(requestNewChatSession('ws-new-session')).toEqual(first);
+
+    const { rerender, unmount } = render(
+      <StrictMode><ChatWindowInstance workspaceId="ws-new-session" /></StrictMode>,
+    );
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    expect(requestNewChatSession('ws-new-session')).toEqual(first);
+
+    rerender(<StrictMode><ChatWindowInstance workspaceId="ws-new-session" /></StrictMode>);
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.createSession).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveCreate({ id: 'session-created' });
+      await createPending;
+    });
+    unmount();
+    const next = requestNewChatSession('ws-new-session');
+    expect(next.id).not.toBe(first.id);
+  });
+
+  it('keeps a new-session intent isolated from another workspace', async () => {
+    requestNewChatSession('ws-new-session-other');
+    render(<StrictMode><ChatWindowInstance workspaceId="ws-new-session" /></StrictMode>);
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
+
+  it('holds a new-session intent through every session lock then creates exactly once', async () => {
+    mocks.chatIsLoading = true;
+    mocks.sessionLoading = true;
+    mocks.sessionCreating = true;
+    requestNewChatSession('ws-new-session-locked');
+    const { rerender } = render(
+      <StrictMode><ChatWindowInstance workspaceId="ws-new-session-locked" /></StrictMode>,
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.createSession).not.toHaveBeenCalled();
+
+    mocks.sessionLoading = false;
+    rerender(<StrictMode><ChatWindowInstance workspaceId="ws-new-session-locked" /></StrictMode>);
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.createSession).not.toHaveBeenCalled();
+
+    mocks.sessionCreating = false;
+    rerender(<StrictMode><ChatWindowInstance workspaceId="ws-new-session-locked" /></StrictMode>);
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.createSession).not.toHaveBeenCalled();
+
+    mocks.chatIsLoading = false;
+    rerender(<StrictMode><ChatWindowInstance workspaceId="ws-new-session-locked" /></StrictMode>);
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+  });
+
+  it('releases a failed new-session intent for one explicit retry without looping', async () => {
+    mocks.createSession.mockRejectedValue(new Error('offline'));
+    const first = requestNewChatSession('ws-new-session-failure');
+    render(<StrictMode><ChatWindowInstance workspaceId="ws-new-session-failure" /></StrictMode>);
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.createSession).toHaveBeenCalledTimes(1);
+
+    let retry!: ReturnType<typeof requestNewChatSession>;
+    act(() => { retry = requestNewChatSession('ws-new-session-failure'); });
+    expect(retry.id).not.toBe(first.id);
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(2));
+    await act(async () => { await Promise.resolve(); });
+  });
+
   it('forwards loading, creating, and settled readiness to the chat surface', async () => {
     mocks.sessionLoading = true;
     const { rerender } = render(<ChatWindowInstance workspaceId="ws-ready" />);

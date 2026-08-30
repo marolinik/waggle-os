@@ -41,6 +41,7 @@ import {
   cancelWorkspaceSelectionChatDispatch,
   completeWorkspaceSelectionChatDispatch,
   peekWorkspaceSelectionChatDispatch,
+  requestNewChatSession,
   seedChat,
   useChatWidgetState,
   useWorkspaceSelectionChatDispatch,
@@ -158,34 +159,44 @@ const ShellLayout = () => {
     () => workspaces.find(ws => ws.status !== 'archived')?.id ?? null,
     [workspaces],
   );
-  const chatShortcutWorkspaceId = effectiveActiveWorkspaceId ?? firstAvailableWorkspaceId;
-  const [pendingChatShortcut, setPendingChatShortcut] = useState(false);
-  const navigateToActiveChat = useCallback(() => {
+  const chatShortcutWorkspaceId = useMemo(() => {
+    const activeWorkspaceStillExists = effectiveActiveWorkspaceId
+      && workspaces.some(ws => ws.id === effectiveActiveWorkspaceId && ws.status !== 'archived');
+    return activeWorkspaceStillExists ? effectiveActiveWorkspaceId : firstAvailableWorkspaceId;
+  }, [effectiveActiveWorkspaceId, firstAvailableWorkspaceId, workspaces]);
+  const [pendingChatShortcut, setPendingChatShortcut] = useState<'navigate' | 'new-session' | null>(null);
+  const openActiveChat = useCallback((action: 'navigate' | 'new-session') => {
+    if (workspacesLoading && !workspacesError) {
+      setPendingChatShortcut(current => current === 'new-session' ? current : action);
+      return;
+    }
     if (chatShortcutWorkspaceId) {
+      if (action === 'new-session') requestNewChatSession(chatShortcutWorkspaceId);
       selectWorkspace(chatShortcutWorkspaceId);
       ov.setShowWorkspaceSwitcher(false);
       navigate(routeFor('chat', { activeWorkspaceId: chatShortcutWorkspaceId }));
       return;
     }
-    if (workspacesLoading && !workspacesError) {
-      setPendingChatShortcut(true);
-      return;
-    }
     // No workspace exists yet; ask the user to create or pick one.
     ov.toggleWorkspaceSwitcher();
   }, [chatShortcutWorkspaceId, navigate, ov, selectWorkspace, workspacesError, workspacesLoading]);
+  const navigateToActiveChat = useCallback(() => openActiveChat('navigate'), [openActiveChat]);
+  const startNewChat = useCallback(() => openActiveChat('new-session'), [openActiveChat]);
 
   useEffect(() => {
     if (!pendingChatShortcut) return;
+    if (workspacesLoading) return;
     if (chatShortcutWorkspaceId) {
-      setPendingChatShortcut(false);
+      const action = pendingChatShortcut;
+      setPendingChatShortcut(null);
+      if (action === 'new-session') requestNewChatSession(chatShortcutWorkspaceId);
       selectWorkspace(chatShortcutWorkspaceId);
       ov.setShowWorkspaceSwitcher(false);
       navigate(routeFor('chat', { activeWorkspaceId: chatShortcutWorkspaceId }));
       return;
     }
     if (!workspacesLoading) {
-      setPendingChatShortcut(false);
+      setPendingChatShortcut(null);
       ov.toggleWorkspaceSwitcher();
     }
   }, [chatShortcutWorkspaceId, navigate, ov, pendingChatShortcut, selectWorkspace, workspacesLoading]);
@@ -336,7 +347,7 @@ const ShellLayout = () => {
 
   // Keyboard shortcuts — every app shortcut is a navigate() now (§2.2).
   // Ctrl+W / Ctrl+Shift+M window handlers retire with the window manager
-  // (§3.1); Ctrl+Shift+N navigates to the active workspace's chat tab (§4.2).
+  // (§3.1); Ctrl+Shift+N starts a real session in the active workspace.
   useKeyboardShortcuts({
     onOpenApp: (id) => {
       ov.setShowWorkspaceSwitcher(false);
@@ -346,7 +357,7 @@ const ShellLayout = () => {
     onTogglePersonaSwitcher: ov.togglePersonaSwitcher,
     onToggleWorkspaceSwitcher: ov.toggleWorkspaceSwitcher,
     onToggleKeyboardHelp: ov.toggleKeyboardHelp,
-    onNewChatWindow: navigateToActiveChat,
+    onNewChatWindow: startNewChat,
   });
 
   // §2.2 row 1: palette result clicks become pure URL navigation. The

@@ -217,6 +217,84 @@ export function takeChatSeed(workspaceId: string): ChatSeed | undefined {
   return seed;
 }
 
+// ── Reliable per-workspace new-session intent ─────────────────────────────
+
+export interface NewChatSessionIntent {
+  id: string;
+}
+
+const pendingNewChatSessions = new Map<string, NewChatSessionIntent>();
+const inFlightNewChatSessions = new Map<string, NewChatSessionIntent>();
+const newChatSessionListeners = new Map<string, Set<() => void>>();
+let newChatSessionSequence = 0;
+
+function notifyNewChatSessionListeners(workspaceId: string): void {
+  newChatSessionListeners.get(workspaceId)?.forEach(listener => listener());
+}
+
+function assertNewChatWorkspace(workspaceId: string): void {
+  if (!workspaceId || workspaceId === 'local-default') {
+    throw new Error('A real workspaceId is required for a new chat session');
+  }
+}
+
+/** Stage one coalesced new-session request until the workspace chat can consume it. */
+export function requestNewChatSession(workspaceId: string): NewChatSessionIntent {
+  assertNewChatWorkspace(workspaceId);
+  const existing = pendingNewChatSessions.get(workspaceId)
+    ?? inFlightNewChatSessions.get(workspaceId);
+  if (existing) return existing;
+
+  const intent = {
+    id: globalThis.crypto?.randomUUID?.()
+      ?? `new-chat-session-${Date.now()}-${++newChatSessionSequence}`,
+  };
+  pendingNewChatSessions.set(workspaceId, intent);
+  notifyNewChatSessionListeners(workspaceId);
+  return intent;
+}
+
+function peekPendingNewChatSession(workspaceId: string): NewChatSessionIntent | null {
+  return pendingNewChatSessions.get(workspaceId) ?? null;
+}
+
+/** Atomically claim the exact pending request; StrictMode duplicate effects fail closed. */
+export function claimNewChatSessionIntent(workspaceId: string, intentId: string): boolean {
+  const intent = pendingNewChatSessions.get(workspaceId);
+  if (!intent || intent.id !== intentId) return false;
+  pendingNewChatSessions.delete(workspaceId);
+  inFlightNewChatSessions.set(workspaceId, intent);
+  notifyNewChatSessionListeners(workspaceId);
+  return true;
+}
+
+/** Complete only the exact in-flight request, allowing a later explicit shortcut. */
+export function completeNewChatSessionIntent(workspaceId: string, intentId: string): boolean {
+  const intent = inFlightNewChatSessions.get(workspaceId);
+  if (!intent || intent.id !== intentId) return false;
+  inFlightNewChatSessions.delete(workspaceId);
+  notifyNewChatSessionListeners(workspaceId);
+  return true;
+}
+
+/** Reactive pending request for one kept-alive workspace chat. */
+export function usePendingNewChatSessionIntent(workspaceId: string): NewChatSessionIntent | null {
+  const subscribe = useCallback((listener: () => void) => {
+    let listeners = newChatSessionListeners.get(workspaceId);
+    if (!listeners) {
+      listeners = new Set();
+      newChatSessionListeners.set(workspaceId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners?.delete(listener);
+      if (listeners?.size === 0) newChatSessionListeners.delete(workspaceId);
+    };
+  }, [workspaceId]);
+  const getSnapshot = useCallback(() => peekPendingNewChatSession(workspaceId), [workspaceId]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
 // ── Repeatable imperative chat dispatch API ───────────────────────────────
 
 export interface ChatDispatchRequest {

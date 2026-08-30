@@ -5,7 +5,7 @@
  *
  *   Bug #1:  Default model shows sonnet, not opus
  *   Bug #2:  Onboarding auto-skip for returning users
- *   Bug #7:  Ctrl+Shift+N navigates to the active workspace's chat route
+ *   Bug #7:  Ctrl+Shift+N creates one persisted session in the active workspace
  *            (window spawning retired, §4.2)
  *   A.2:     DROPPED — concurrent same-workspace multi-persona chat windows
  *            were consciously removed (§9.10 / §4.3); per-workspace persona
@@ -125,32 +125,151 @@ test.describe('Bug #1 — Default model', () => {
 });
 
 // ── Bug #7: Ctrl+Shift+N ──────────────────────────────────────────────────
-// Retargeted (plan §4.2): the shortcut retired as a window spawner — it now
-// navigates to the active workspace's chat route; no workspace → /home.
+// The single-canvas replacement for the retired window spawner must create a
+// real session in the active workspace, not merely navigate to its chat route.
 
 test.describe('Bug #7 — Ctrl+Shift+N', () => {
-  test('Ctrl+Shift+N navigates to the active workspace chat route', async ({ page, request }) => {
-    await gotoDesktop(page);
+  test('Ctrl+Shift+N creates exactly one persisted session in the active workspace', async ({ page, request }) => {
+    const createWorkspace = await request.post(`${BASE}/api/workspaces`, {
+      data: {
+        name: `Shortcut session ${Date.now()}`,
+        group: 'E2E',
+        personaId: 'general-purpose',
+      },
+    });
+    expect(createWorkspace.status(), await createWorkspace.text()).toBe(201);
+    const workspace = await createWorkspace.json() as { id: string };
+    let createdSessionId: string | null = null;
 
-    const res = await request.get(`${BASE}/api/workspaces`);
-    const workspaces = await res.json();
-    const hasWorkspace = Array.isArray(workspaces) && workspaces.length > 0;
+    try {
+      await page.addInitScript((workspaceId: string) => {
+        localStorage.setItem('waggle:active-workspace-v1', workspaceId);
+      }, workspace.id);
+      await gotoDesktop(page);
 
-    // Dispatch Ctrl+Shift+N via evaluate — browser intercepts the real shortcut
-    await page.evaluate(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'N', code: 'KeyN', ctrlKey: true, shiftKey: true, bubbles: true,
-      }));
+      const beforeListResponse = await request.get(`${BASE}/api/workspaces/${workspace.id}/sessions`);
+      expect(beforeListResponse.status(), await beforeListResponse.text()).toBe(200);
+      const beforeSessions = await beforeListResponse.json() as Array<{ id: string }>;
+      const beforeSessionIds = new Set(beforeSessions.map(session => session.id));
+
+      const sessionResponsePromise = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return response.request().method() === 'POST'
+          && url.pathname === `/api/workspaces/${workspace.id}/sessions`;
+      }, { timeout: 10_000 });
+
+      await page.evaluate(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'N', code: 'KeyN', ctrlKey: true, shiftKey: true, bubbles: true,
+        }));
+      });
+
+      const sessionResponse = await sessionResponsePromise;
+      expect(sessionResponse.status(), await sessionResponse.text()).toBe(201);
+      const createdSession = await sessionResponse.json() as { id: string };
+      createdSessionId = createdSession.id;
+
+      await page.waitForURL(new RegExp(`/workspaces/${workspace.id}/chat(?:[/?#]|$)`), { timeout: 5000 });
+      const listResponse = await request.get(`${BASE}/api/workspaces/${workspace.id}/sessions`);
+      expect(listResponse.status(), await listResponse.text()).toBe(200);
+      const sessions = await listResponse.json() as Array<{ id: string }>;
+      expect(sessions.filter(session => session.id === createdSession.id)).toHaveLength(1);
+      expect(
+        sessions.filter(session => !beforeSessionIds.has(session.id)).map(session => session.id),
+      ).toEqual([createdSession.id]);
+
+      // The single-canvas shell never spawns window chrome (§3.1).
+      expect(await page.locator('[class*="AppWindow"], [class*="app-window"]').count()).toBe(0);
+    } finally {
+      if (createdSessionId) {
+        await request.delete(
+          `${BASE}/api/sessions/${createdSessionId}?workspace=${encodeURIComponent(workspace.id)}`,
+        ).catch(() => null);
+      }
+      await request.delete(`${BASE}/api/workspaces/${encodeURIComponent(workspace.id)}`).catch(() => null);
+    }
+  });
+
+  test('Ctrl+Shift+N waits for workspace validation and never targets a stale persisted id', async ({ page, request }) => {
+    const createWorkspace = await request.post(`${BASE}/api/workspaces`, {
+      data: {
+        name: `Shortcut validation ${Date.now()}`,
+        group: 'E2E',
+        personaId: 'general-purpose',
+      },
+    });
+    expect(createWorkspace.status(), await createWorkspace.text()).toBe(201);
+    const workspace = await createWorkspace.json() as { id: string } & Record<string, unknown>;
+    const staleWorkspaceId = `deleted-workspace-${Date.now()}`;
+    let createdSessionId: string | null = null;
+    let releaseWorkspaceList!: () => void;
+    const workspaceListGate = new Promise<void>(resolve => {
+      releaseWorkspaceList = resolve;
+    });
+    const sessionPostPaths: string[] = [];
+
+    page.on('request', requestEvent => {
+      const url = new URL(requestEvent.url());
+      if (requestEvent.method() === 'POST' && /\/api\/workspaces\/[^/]+\/sessions$/.test(url.pathname)) {
+        sessionPostPaths.push(url.pathname);
+      }
+    });
+    await page.route('**/api/workspaces*', async route => {
+      const routeRequest = route.request();
+      const url = new URL(routeRequest.url());
+      if (routeRequest.method() === 'GET' && url.pathname === '/api/workspaces') {
+        await workspaceListGate;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([workspace]),
+        });
+        return;
+      }
+      await route.continue();
     });
 
-    if (hasWorkspace) {
-      await page.waitForURL(/\/workspaces\/[^/]+\/chat/, { timeout: 5000 });
-    } else {
-      // routeFor('chat') with no active workspace falls back to /home (§1.3).
-      await page.waitForURL(/\/home/, { timeout: 5000 });
+    try {
+      await page.addInitScript((workspaceId: string) => {
+        localStorage.setItem('waggle:active-workspace-v1', workspaceId);
+      }, staleWorkspaceId);
+      await gotoDesktop(page);
+
+      const validSessionResponsePromise = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return response.request().method() === 'POST'
+          && url.pathname === `/api/workspaces/${workspace.id}/sessions`;
+      }, { timeout: 10_000 });
+
+      await page.evaluate(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'N', code: 'KeyN', ctrlKey: true, shiftKey: true, bubbles: true,
+        }));
+        return new Promise<void>(resolve => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
+      });
+      expect(sessionPostPaths).toEqual([]);
+      await expect(page).toHaveURL(/\/home(?:[/?#]|$)/);
+
+      releaseWorkspaceList();
+      const sessionResponse = await validSessionResponsePromise;
+      expect(sessionResponse.status(), await sessionResponse.text()).toBe(201);
+      const createdSession = await sessionResponse.json() as { id: string };
+      createdSessionId = createdSession.id;
+
+      await page.waitForURL(new RegExp(`/workspaces/${workspace.id}/chat(?:[/?#]|$)`), { timeout: 5000 });
+      expect(sessionPostPaths).toEqual([`/api/workspaces/${workspace.id}/sessions`]);
+    } finally {
+      releaseWorkspaceList();
+      await page.unroute('**/api/workspaces*');
+      if (createdSessionId) {
+        await request.delete(
+          `${BASE}/api/sessions/${createdSessionId}?workspace=${encodeURIComponent(workspace.id)}`,
+        ).catch(() => null);
+      }
+      await request.delete(`${BASE}/api/workspaces/${encodeURIComponent(workspace.id)}`).catch(() => null);
     }
-    // The single-canvas shell never spawns window chrome (§3.1).
-    expect(await page.locator('[class*="AppWindow"], [class*="app-window"]').count()).toBe(0);
   });
 });
 
