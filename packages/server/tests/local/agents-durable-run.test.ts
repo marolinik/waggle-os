@@ -77,7 +77,7 @@ describe('Agent Center durable Fleet run integration', () => {
     const started = await server.inject({
       method: 'POST', url: `/api/agents/${agent.id}/run`, payload: { input: 'Investigate now' },
     });
-    expect(started.statusCode).toBe(200);
+    expect(started.statusCode).toBe(202);
     const startedBody = started.json() as { runId: string; roomId: string; resumable: boolean; statusUrl: string };
     expect(receivedAgentId).toBe(agent.id);
     expect(startedBody.runId).toMatch(/^run_/);

@@ -443,7 +443,7 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
         } catch { /* legacy trace recording is best-effort */ }
       }
 
-      return {
+      return reply.code(res.statusCode).send({
         runId: body.runId,
         roomId: body.roomId,
         sessionId: body.sessionId,
@@ -452,7 +452,7 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
         statusUrl: body.statusUrl,
         resumable: body.resumable ?? false,
         task,
-      };
+      });
     },
   );
 
