@@ -11,7 +11,10 @@ const makeDefaultSession = (workspaceId: string): Session => ({
   lastActive: new Date().toISOString(),
 });
 
-export const useSessions = (workspaceId: string | null) => {
+export const useSessions = (
+  workspaceId: string | null,
+  preferredSessionId?: string | null,
+) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,12 +24,35 @@ export const useSessions = (workspaceId: string | null) => {
   const listRevisionRef = useRef(0);
   const mountedRef = useRef(false);
   const workspaceRef = useRef(workspaceId);
+  const preferredSessionIdRef = useRef(preferredSessionId);
+  const appliedRoutePreferenceRef = useRef<{
+    workspaceId: string | null;
+    preferredSessionId?: string | null;
+  }>({ workspaceId: null, preferredSessionId: undefined });
+  const sessionsRef = useRef(sessions);
   const activeSessionIdRef = useRef(activeSessionId);
   const loadingRef = useRef(loading);
   const createInFlightRef = useRef(new Map<string, Promise<Session | undefined>>());
   workspaceRef.current = workspaceId;
-  activeSessionIdRef.current = activeSessionId;
+  preferredSessionIdRef.current = preferredSessionId;
+  sessionsRef.current = sessions;
   loadingRef.current = loading;
+
+  const scopedSessions = workspaceId
+    ? sessions.filter(session => session.workspaceId === workspaceId)
+    : [];
+  const routePreferenceChanged = preferredSessionId !== undefined && (
+    appliedRoutePreferenceRef.current.workspaceId !== workspaceId
+    || appliedRoutePreferenceRef.current.preferredSessionId !== preferredSessionId
+  );
+  const preferredSession = typeof preferredSessionId === 'string'
+    ? scopedSessions.find(session => session.id === preferredSessionId)
+    : undefined;
+  const routedSessionId = (preferredSession ?? scopedSessions[0])?.id ?? null;
+  const exposedActiveSessionId = routePreferenceChanged && routedSessionId
+    ? routedSessionId
+    : activeSessionId;
+  activeSessionIdRef.current = exposedActiveSessionId;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -60,8 +86,12 @@ export const useSessions = (workspaceId: string | null) => {
         setError(null);
         if (data.length > 0) {
           const scopedSessions = data.map(session => ({ ...session, workspaceId: requestedWorkspaceId }));
+          const preferred = preferredSessionIdRef.current;
+          const initialSession = typeof preferred === 'string'
+            ? scopedSessions.find(session => session.id === preferred) ?? scopedSessions[0]
+            : scopedSessions[0];
           setSessions(scopedSessions);
-          setActiveSessionId(scopedSessions[0].id);
+          setActiveSessionId(initialSession.id);
         } else {
           const def = makeDefaultSession(requestedWorkspaceId);
           setSessions([def]);
@@ -88,6 +118,21 @@ export const useSessions = (workspaceId: string | null) => {
   useEffect(() => {
     refreshSessions();
   }, [refreshSessions]);
+
+  // `undefined` means this kept-alive workspace is not the active routed chat
+  // and must preserve its local selection. `null` means the active route has no
+  // session query, so it follows the existing newest-session default.
+  useEffect(() => {
+    appliedRoutePreferenceRef.current = { workspaceId, preferredSessionId };
+    if (preferredSessionId === undefined || !workspaceId) return;
+    const scopedSessions = sessionsRef.current.filter(session => session.workspaceId === workspaceId);
+    const preferred = typeof preferredSessionId === 'string'
+      ? scopedSessions.find(session => session.id === preferredSessionId)
+      : undefined;
+    const nextSessionId = (preferred ?? scopedSessions[0])?.id;
+    if (!nextSessionId) return;
+    setActiveSessionId(current => current === nextSessionId ? current : nextSessionId);
+  }, [preferredSessionId, workspaceId]);
 
   useRevalidateOnError(listFailed, refreshSessions);
 
@@ -211,7 +256,7 @@ export const useSessions = (workspaceId: string | null) => {
   }, [workspaceId]);
 
   return {
-    sessions, activeSessionId, setActiveSessionId,
+    sessions, activeSessionId: exposedActiveSessionId, setActiveSessionId,
     loading, creating, error, createSession, deleteSession, renameSession,
     revalidateSessions,
   };

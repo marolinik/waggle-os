@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import {
   acknowledgeChatDispatch,
   claimNewChatSessionIntent,
@@ -28,7 +29,16 @@ const mocks = vi.hoisted(() => ({
   retryHistory: vi.fn(),
   sendMessage: vi.fn(),
   createSession: vi.fn(),
+  setActiveSessionId: vi.fn(),
   revalidateSessions: vi.fn(),
+  sessions: [] as Array<{
+    id: string;
+    workspaceId: string;
+    title: string;
+    messageCount: number;
+    lastActive: string;
+  }>,
+  sessionHookCalls: [] as Array<{ workspaceId: string; preferredSessionId?: string | null }>,
   chatOptions: [] as Array<Record<string, unknown>>,
   chatAppProps: [] as Array<Record<string, unknown>>,
   toast: vi.fn(),
@@ -37,20 +47,31 @@ const mocks = vi.hoisted(() => ({
   getSettings: vi.fn().mockResolvedValue({}),
   getTeamMembers: vi.fn().mockResolvedValue([]),
   patchWorkspace: vi.fn().mockResolvedValue(undefined),
+  shell: {
+    workspaces: [
+      { id: 'ws-a', name: 'Workspace A', group: 'Personal' },
+      { id: 'ws-b', name: 'Workspace B', group: 'Personal' },
+    ],
+    defaultAutonomy: 'normal',
+    setContextRailTarget: vi.fn(),
+  },
 }));
 
 vi.mock('@/lib/adapter', () => ({ adapter: mocks }));
 vi.mock('@/hooks/useSessions', () => ({
-  useSessions: () => ({
-    sessions: [],
+  useSessions: (workspaceId: string, preferredSessionId?: string | null) => {
+    mocks.sessionHookCalls.push({ workspaceId, preferredSessionId });
+    return ({
+    sessions: mocks.sessions,
     activeSessionId: mocks.activeSessionId,
-    setActiveSessionId: vi.fn(),
+    setActiveSessionId: mocks.setActiveSessionId,
     createSession: mocks.createSession,
     revalidateSessions: mocks.revalidateSessions,
     loading: mocks.sessionLoading,
     creating: mocks.sessionCreating,
     error: mocks.sessionError,
-  }),
+    });
+  },
 }));
 vi.mock('@/hooks/useChat', () => ({
   useChat: (options: Record<string, unknown>) => {
@@ -76,6 +97,7 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: mocks.toast,
   useToast: () => ({ toast: mocks.toast }),
 }));
+vi.mock('@/providers/ShellContext', () => ({ useShell: () => mocks.shell }));
 vi.mock('./ChatApp', () => ({
   default: (props: Record<string, unknown>) => {
     mocks.chatAppProps.push(props);
@@ -84,6 +106,7 @@ vi.mock('./ChatApp', () => ({
 }));
 
 import ChatWindowInstance from './ChatWindowInstance';
+import ChatHost from '../ChatHost';
 
 function drain(workspaceId: string): void {
   let head = peekChatDispatch(workspaceId);
@@ -111,6 +134,9 @@ beforeEach(() => {
   mocks.historyError = null;
   mocks.chatOptions.length = 0;
   mocks.chatAppProps.length = 0;
+  mocks.sessionHookCalls.length = 0;
+  mocks.sessions.length = 0;
+  mocks.setActiveSessionId.mockReset();
   mocks.retryHistory.mockReset();
   mocks.sendMessage.mockReset();
   mocks.createSession.mockReset().mockResolvedValue({ id: 'session-created' });
@@ -133,6 +159,126 @@ afterEach(() => {
 });
 
 describe('repeatable per-workspace chat dispatch', () => {
+  it('restores URL-selected sessions, records sidebar navigation, and isolates hidden workspaces', async () => {
+    mocks.activeSessionId = 'session-return-a';
+    mocks.sessions.push(
+      { id: 'session-return-a', workspaceId: 'ws-a', title: 'Return A', messageCount: 4, lastActive: '2026-08-29T12:00:00.000Z' },
+      { id: 'session-newer-b', workspaceId: 'ws-a', title: 'Newer B', messageCount: 2, lastActive: '2026-08-30T12:00:00.000Z' },
+      { id: 'session-created-c', workspaceId: 'ws-a', title: 'Created C', messageCount: 0, lastActive: '2026-08-30T12:01:00.000Z' },
+      { id: 'session-b-only', workspaceId: 'ws-b', title: 'B only', messageCount: 1, lastActive: '2026-08-30T12:02:00.000Z' },
+    );
+    const router = createMemoryRouter(
+      [{ path: '*', element: <ChatHost /> }],
+      { initialEntries: ['/workspaces/ws-a/chat?session=session-return-a'] },
+    );
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(mocks.sessionHookCalls).toContainEqual({
+      workspaceId: 'ws-a',
+      preferredSessionId: 'session-return-a',
+    }));
+    expect(mocks.chatOptions.find(options => options.workspaceId === 'ws-a'))
+      .toMatchObject({ workspaceId: 'ws-a', sessionId: 'session-return-a' });
+
+    const workspaceAProps = [...mocks.chatAppProps]
+      .reverse()
+      .find(props => props.workspaceId === 'ws-a');
+    act(() => {
+      (workspaceAProps?.onSelectSession as ((id: string) => void))('session-newer-b');
+    });
+    await waitFor(() => expect(router.state.location.search).toBe('?session=session-newer-b'));
+    expect(mocks.setActiveSessionId).toHaveBeenCalledWith('session-newer-b');
+
+    await act(async () => { await router.navigate(-1); });
+    await waitFor(() => expect(router.state.location.search).toBe('?session=session-return-a'));
+    await waitFor(() => expect(mocks.sessionHookCalls.at(-1)).toEqual({
+      workspaceId: 'ws-a',
+      preferredSessionId: 'session-return-a',
+    }));
+
+    mocks.createSession.mockResolvedValueOnce({ id: 'session-created-c' });
+    const latestWorkspaceAProps = [...mocks.chatAppProps]
+      .reverse()
+      .find(props => props.workspaceId === 'ws-a');
+    await act(async () => {
+      await (latestWorkspaceAProps?.onNewSession as (() => Promise<unknown>))();
+    });
+    await waitFor(() => expect(router.state.location.search).toBe('?session=session-created-c'));
+
+    await act(async () => { await router.navigate(-1); });
+    await waitFor(() => expect(router.state.location.search).toBe('?session=session-return-a'));
+
+    await act(async () => {
+      await router.navigate('/workspaces/ws-b/chat?session=session-b-only');
+    });
+    await waitFor(() => expect(mocks.sessionHookCalls).toContainEqual({
+      workspaceId: 'ws-b',
+      preferredSessionId: 'session-b-only',
+    }));
+    expect(mocks.sessionHookCalls.filter(call => call.workspaceId === 'ws-a').at(-1))
+      .toEqual({ workspaceId: 'ws-a', preferredSessionId: undefined });
+  });
+
+  it('does not let a pending create in a hidden workspace navigate away from the current one', async () => {
+    mocks.activeSessionId = 'session-return-a';
+    mocks.sessions.push(
+      { id: 'session-return-a', workspaceId: 'ws-a', title: 'Return A', messageCount: 4, lastActive: '2026-08-29T12:00:00.000Z' },
+      { id: 'session-b-only', workspaceId: 'ws-b', title: 'B only', messageCount: 1, lastActive: '2026-08-30T12:02:00.000Z' },
+    );
+    let resolveCreate!: (value: { id: string }) => void;
+    const pendingCreate = new Promise<{ id: string }>(resolve => { resolveCreate = resolve; });
+    mocks.createSession.mockReturnValueOnce(pendingCreate);
+    const router = createMemoryRouter(
+      [{ path: '*', element: <ChatHost /> }],
+      { initialEntries: ['/workspaces/ws-a/chat?session=session-return-a'] },
+    );
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(mocks.chatAppProps.some(props => props.workspaceId === 'ws-a')).toBe(true));
+
+    const workspaceAProps = [...mocks.chatAppProps]
+      .reverse()
+      .find(props => props.workspaceId === 'ws-a');
+    let createResult!: Promise<unknown>;
+    act(() => {
+      createResult = (workspaceAProps?.onNewSession as (() => Promise<unknown>))();
+    });
+    await act(async () => {
+      await router.navigate('/workspaces/ws-b/chat?session=session-b-only');
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/workspaces/ws-b/chat'));
+
+    await act(async () => {
+      resolveCreate({ id: 'session-created-a' });
+      await createResult;
+    });
+
+    expect(`${router.state.location.pathname}${router.state.location.search}`)
+      .toBe('/workspaces/ws-b/chat?session=session-b-only');
+  });
+
+  it('replaces an invalid session query with the safe workspace fallback', async () => {
+    mocks.activeSessionId = 'session-newer-b';
+    mocks.sessions.push({
+      id: 'session-newer-b',
+      workspaceId: 'ws-a',
+      title: 'Newer B',
+      messageCount: 2,
+      lastActive: '2026-08-30T12:00:00.000Z',
+    });
+    const router = createMemoryRouter(
+      [{ path: '*', element: <ChatHost /> }],
+      {
+        initialEntries: ['/home', '/workspaces/ws-a/chat?session=foreign-session'],
+        initialIndex: 1,
+      },
+    );
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(router.state.location.search).toBe('?session=session-newer-b'));
+    await act(async () => { await router.navigate(-1); });
+    expect(router.state.location.pathname).toBe('/home');
+  });
+
   it('claims one new-session intent under StrictMode and coalesces repeats while in flight', async () => {
     let resolveCreate!: (value: { id: string }) => void;
     const createPending = new Promise<{ id: string }>(resolve => { resolveCreate = resolve; });

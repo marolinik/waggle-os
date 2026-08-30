@@ -260,6 +260,79 @@ describe('useWorkspaces (P1b)', () => {
 // ── useSessions ────────────────────────────────────────────────────────────
 
 describe('useSessions (P1b)', () => {
+  it('selects an exact older preferred session without flashing the newer first item', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValueOnce([
+      {
+        id: 'session-newer-b', title: 'Newer B', messageCount: 2,
+        lastActive: '2026-08-30T12:00:00.000Z',
+      },
+      {
+        id: 'session-return-a', title: 'Return A', messageCount: 4,
+        lastActive: '2026-08-29T12:00:00.000Z',
+      },
+    ]);
+    const observedActiveIds: Array<string | null> = [];
+    const { result, rerender } = renderHook(
+      ({ preferredSessionId }: { preferredSessionId: string | null }) => {
+        const sessions = useSessions('w1', preferredSessionId);
+        observedActiveIds.push(sessions.activeSessionId);
+        return sessions;
+      },
+      { initialProps: { preferredSessionId: 'session-return-a' } },
+    );
+
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-return-a'));
+    expect(observedActiveIds).not.toContain('session-newer-b');
+
+    observedActiveIds.length = 0;
+    rerender({ preferredSessionId: 'session-newer-b' });
+    expect(result.current.activeSessionId).toBe('session-newer-b');
+    expect(observedActiveIds).not.toContain('session-return-a');
+
+    rerender({ preferredSessionId: 'session-return-a' });
+    expect(result.current.activeSessionId).toBe('session-return-a');
+    observedActiveIds.length = 0;
+    rerender({ preferredSessionId: 'session-from-another-workspace' });
+    expect(result.current.activeSessionId).toBe('session-newer-b');
+    expect(observedActiveIds).not.toContain('session-return-a');
+    expect(result.current.sessions.every(session => session.workspaceId === 'w1')).toBe(true);
+  });
+
+  it('preserves the local session selection while its kept-alive workspace is hidden', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValueOnce([
+      { id: 'session-newer-b', title: 'Newer B', messageCount: 2, lastActive: '2026-08-30T12:00:00.000Z' },
+      { id: 'session-return-a', title: 'Return A', messageCount: 4, lastActive: '2026-08-29T12:00:00.000Z' },
+    ]);
+    const { result, rerender } = renderHook(
+      ({ preferredSessionId }: { preferredSessionId?: string | null }) => useSessions('w1', preferredSessionId),
+      { initialProps: { preferredSessionId: 'session-return-a' as string | null | undefined } },
+    );
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-return-a'));
+
+    act(() => result.current.setActiveSessionId('session-newer-b'));
+    rerender({ preferredSessionId: undefined });
+
+    expect(result.current.activeSessionId).toBe('session-newer-b');
+  });
+
+  it('does not let an unchanged route preference undo a newly created session', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockResolvedValueOnce([
+      { id: 'session-return-a', title: 'Return A', messageCount: 2, lastActive: '2026-08-29T12:00:00.000Z' },
+    ]);
+    mocks.adapter.createSession.mockResolvedValueOnce({
+      id: 'session-created-c', title: null, messageCount: 0, lastActive: '2026-08-30T12:00:00.000Z',
+    });
+    const { result } = renderHook(() => useSessions('w1', 'session-return-a'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-return-a'));
+
+    await act(async () => { await result.current.createSession(); });
+
+    expect(result.current.activeSessionId).toBe('session-created-c');
+  });
+
   it('normalizes exact server-wire sessions to the current workspace and preserves the old session after create', async () => {
     const { useSessions } = await import('@/hooks/useSessions');
     mocks.adapter.getSessions.mockResolvedValueOnce([{

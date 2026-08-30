@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
 import { toast as showToast, useToast } from '@/hooks/use-toast';
@@ -42,6 +42,11 @@ interface ChatWindowInstanceProps {
   onAutonomyChange?: (level: AutonomyLevel, ttlMinutes: number | null) => void;
   /** ContextRail: triggered when user double-clicks a message. */
   onContextRail?: (target: { type: 'message'; id: string; label: string }) => void;
+  /** Exact session requested by the active workspace route. Undefined means
+   * this kept-alive workspace is hidden and should preserve its selection. */
+  preferredSessionId?: string | null;
+  /** Records an explicit user session choice in the active route. */
+  onSessionNavigate?: (sessionId: string, options?: { replace?: boolean }) => void;
 }
 
 const ChatWindowInstance = ({
@@ -58,6 +63,8 @@ const ChatWindowInstance = ({
   autonomyExpiresAt = null,
   onAutonomyChange,
   onContextRail,
+  preferredSessionId,
+  onSessionNavigate,
 }: ChatWindowInstanceProps) => {
   const [currentPersona, setCurrentPersona] = useState(initialPersona || 'general-purpose');
 
@@ -78,7 +85,30 @@ const ChatWindowInstance = ({
     loading: sessionLoading,
     creating: sessionCreating,
     error: sessionError,
-  } = useSessions(workspaceId);
+  } = useSessions(workspaceId, preferredSessionId);
+  const onSessionNavigateRef = useRef(onSessionNavigate);
+  onSessionNavigateRef.current = onSessionNavigate;
+
+  const handleSelectSession = useCallback((sessionId: string) => {
+    setActiveSessionId(sessionId);
+    onSessionNavigateRef.current?.(sessionId);
+  }, [setActiveSessionId]);
+
+  const handleCreateSession = useCallback(async () => {
+    const session = await createSession();
+    if (session) onSessionNavigateRef.current?.(session.id);
+    return session;
+  }, [createSession]);
+
+  useEffect(() => {
+    if (
+      typeof preferredSessionId !== 'string'
+      || sessionLoading
+      || !activeSessionId
+      || sessions.some(session => session.id === preferredSessionId)
+    ) return;
+    onSessionNavigateRef.current?.(activeSessionId, { replace: true });
+  }, [activeSessionId, preferredSessionId, sessionLoading, sessions]);
 
   const [currentModel, setCurrentModel] = useState<string>(initialModel ?? '');
   const currentModelRef = useRef(initialModel ?? '');
@@ -151,14 +181,14 @@ const ChatWindowInstance = ({
 
     void (async () => {
       try {
-        await createSession();
+        await handleCreateSession();
       } catch {
         // useSessions owns the visible error state; still release the intent.
       } finally {
         completeNewChatSessionIntent(workspaceId, pendingNewChatSession.id);
       }
     })();
-  }, [createSession, isLoading, pendingNewChatSession, sessionCreating, sessionLoading, workspaceId]);
+  }, [handleCreateSession, isLoading, pendingNewChatSession, sessionCreating, sessionLoading, workspaceId]);
 
   useEffect(() => {
     if (
@@ -373,8 +403,8 @@ const ChatWindowInstance = ({
       teamPresence={teamPresence}
       sessions={displaySessions}
       activeSessionId={activeSessionId}
-      onSelectSession={setActiveSessionId}
-      onNewSession={createSession}
+      onSelectSession={handleSelectSession}
+      onNewSession={handleCreateSession}
       sessionCreating={sessionCreating}
       sessionLoading={sessionLoading}
       sessionReady={!sessionLoading && !sessionCreating && Boolean(activeSessionId)}
