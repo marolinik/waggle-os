@@ -199,7 +199,6 @@ describe('chat smart-router integration', () => {
     config.setBudgetThreshold(0.8);
     config.save();
     const getDailyTotal = vi.spyOn(server.agentState.costTracker, 'getDailyTotal').mockReturnValue(0.8);
-    vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(4);
 
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -216,7 +215,7 @@ describe('chat smart-router integration', () => {
       sessionId: 'over-budget-trivial-route',
       limit: 1,
     });
-    expect(persistedTrace.cost_usd).toBe(4);
+    expect(persistedTrace.cost_usd).toBe(0);
     expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 1, output: 1 });
   });
 
@@ -506,7 +505,7 @@ describe('chat smart-router integration', () => {
     const attempts: string[] = [];
     let simulatedMutations = 0;
     const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
-    const calculateCost = vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(2);
+    const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
     const addTokens = vi.spyOn(server.sessionManager, 'addTokens');
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(agentConfig.model);
@@ -538,20 +537,26 @@ describe('chat smart-router integration', () => {
       13_500,
       500,
       activeWorkspaceId,
+      { billingClass: 'free' },
     );
     expect(addTokens).toHaveBeenCalledOnce();
     expect(addTokens).toHaveBeenCalledWith(activeWorkspaceId, 14_000);
-    expect(calculateCost).toHaveBeenCalledWith(13_500, 500, 'ollama/budget-test-model');
+    expect(calculateUsageCost).toHaveBeenCalledWith({
+      model: 'ollama/budget-test-model',
+      input: 13_500,
+      output: 500,
+      billingClass: 'free',
+    });
     const [persistedTrace] = server.traceStore.query({
       sessionId: 'incomplete-budget-no-replay',
       limit: 1,
     });
-    expect(persistedTrace.cost_usd).toBe(2);
+    expect(persistedTrace.cost_usd).toBe(0);
     expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 13_500, output: 500 });
   });
 
   it('persists returned usage before completing a client-cancelled run', async () => {
-    const calculateCost = vi.spyOn(server.agentState.costTracker, 'calculateCost').mockReturnValue(3);
+    const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
     const addUsage = vi.spyOn(server.agentState.costTracker, 'addUsage');
     server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
       Object.defineProperty(agentConfig.signal!, 'aborted', {
@@ -574,18 +579,24 @@ describe('chat smart-router integration', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).not.toContain('event: error');
     expect(response.body).not.toContain('event: done');
-    expect(calculateCost).toHaveBeenCalledWith(20_000, 1_000, 'ollama/primary-test-model');
+    expect(calculateUsageCost).toHaveBeenCalledWith({
+      model: 'ollama/primary-test-model',
+      input: 20_000,
+      output: 1_000,
+      billingClass: 'free',
+    });
     expect(addUsage).toHaveBeenCalledWith(
       'ollama/primary-test-model',
       20_000,
       1_000,
       activeWorkspaceId,
+      { billingClass: 'free' },
     );
     const [persistedTrace] = server.traceStore.query({
       sessionId: 'cancelled-run-usage',
       limit: 1,
     });
-    expect(persistedTrace.cost_usd).toBe(3);
+    expect(persistedTrace.cost_usd).toBe(0);
     expect(JSON.parse(persistedTrace.trace_json).tokens).toEqual({ input: 20_000, output: 1_000 });
     expect(persistedTrace.outcome).toBe('abandoned');
   });

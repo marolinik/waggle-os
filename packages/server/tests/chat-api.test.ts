@@ -174,6 +174,16 @@ describe('Chat Streaming API', () => {
     });
     config.save();
     const localServer = await buildLocalServer({ dataDir });
+    const workspace = localServer.workspaceManager.create({
+      name: 'Keyless billing workspace',
+      group: 'Test',
+      model: configuredModel,
+    });
+    const paidWorkspace = localServer.workspaceManager.create({
+      name: 'Explicit paid billing workspace',
+      group: 'Test',
+      model: 'ollama/remote-paid',
+    });
     const capturedConfigs: AgentLoopConfig[] = [];
     localServer.agentRunner = async (runnerConfig): Promise<AgentResponse> => {
       capturedConfigs.push(runnerConfig);
@@ -193,8 +203,34 @@ describe('Chat Streaming API', () => {
           message: 'Use the configured local model.',
           model: configuredModel,
           session: 'configured-keyless-billing',
+          workspace: workspace.id,
         },
       });
+      expect(configured.statusCode).toBe(200);
+      const done = parseSSE(configured.body).find(event => event.event === 'done');
+      expect(done).toBeDefined();
+      expect(JSON.parse(done!.data)).toMatchObject({ cost: 0 });
+      const [trace] = localServer.traceStore.query({
+        sessionId: 'configured-keyless-billing',
+        limit: 1,
+      });
+      expect(trace).toBeDefined();
+      expect(trace.cost_usd).toBe(0);
+      expect(localServer.traceStore.getTotalCostSince('2000-01-01T00:00:00.000Z')).toBe(0);
+      expect(localServer.agentState.costTracker.getStats().estimatedCost).toBe(0);
+      expect(localServer.agentState.costTracker.getWorkspaceCost(workspace.id)).toBe(0);
+
+      const paidReservation = localServer.agentState.costTracker.reserveModelSpend({
+        model: 'ollama/remote-paid',
+        inputTokens: 1_000,
+        maxOutputTokens: 1_000,
+        workspaceId: paidWorkspace.id,
+        billingClass: 'priced',
+      });
+      expect(localServer.agentState.costTracker.commitReservedModelSpend(paidReservation)).toBe(true);
+      expect(localServer.agentState.costTracker.getStats().estimatedCost).toBeCloseTo(0.018, 6);
+      expect(localServer.agentState.costTracker.getWorkspaceCost(paidWorkspace.id)).toBeCloseTo(0.018, 6);
+
       const unlisted = await injectWithAuth(localServer, {
         method: 'POST',
         url: '/api/chat',
@@ -202,8 +238,26 @@ describe('Chat Streaming API', () => {
           message: 'Do not inherit free billing.',
           model: 'openai-compatible/wrapped/paid-model',
           session: 'unlisted-compatible-billing',
+          workspace: workspace.id,
         },
       });
+      expect(unlisted.statusCode).toBe(200);
+      expect(capturedConfigs[1]).toMatchObject({
+        billingModel: 'openai-compatible/wrapped/paid-model',
+        modelSpendBillingClass: 'priced',
+      });
+      const unlistedDone = parseSSE(unlisted.body).find(event => event.event === 'done');
+      expect(unlistedDone).toBeDefined();
+      expect(JSON.parse(unlistedDone!.data).cost).toBeCloseTo(0.000078, 9);
+      const [unlistedTrace] = localServer.traceStore.query({
+        sessionId: 'unlisted-compatible-billing',
+        limit: 1,
+      });
+      expect(unlistedTrace.cost_usd).toBeCloseTo(0.000078, 9);
+      expect(JSON.parse(unlistedDone!.data).cost).toBeCloseTo(unlistedTrace.cost_usd, 9);
+      expect(localServer.agentState.costTracker.getWorkspaceCost(workspace.id))
+        .toBeCloseTo(0.000078, 9);
+
       localServer.vault.set('openai-compatible', 'sk-compatible-test', {
         models: ['qwen3.8-flash-next'],
         baseUrl: 'http://127.0.0.1:1/v1',
@@ -215,6 +269,7 @@ describe('Chat Streaming API', () => {
           message: 'A configured credential must remain metered.',
           model: configuredModel,
           session: 'configured-keyed-billing',
+          workspace: workspace.id,
         },
       });
 
@@ -276,6 +331,14 @@ describe('Chat Streaming API', () => {
         .toEqual([primaryModel, fallbackModel]);
       expect(capturedConfigs.map(attempt => attempt.modelSpendBillingClass))
         .toEqual(['free', 'free']);
+      const done = parseSSE(response.body).find(event => event.event === 'done');
+      expect(done).toBeDefined();
+      expect(JSON.parse(done!.data)).toMatchObject({ cost: 0 });
+      const [trace] = localServer.traceStore.query({
+        sessionId: 'configured-keyless-fallback-billing',
+        limit: 1,
+      });
+      expect(trace).toMatchObject({ model: fallbackModel, cost_usd: 0 });
     } finally {
       await localServer.close();
       fs.rmSync(dataDir, { recursive: true, force: true });
@@ -2710,6 +2773,7 @@ describe('Chat Streaming API', () => {
         1,
         1,
         'personal::default',
+        { billingClass: 'free' },
       );
       expect(personalServer.agentState.activeWorkspaceId).toBeNull();
 

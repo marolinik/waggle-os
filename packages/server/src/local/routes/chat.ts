@@ -1608,6 +1608,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const sessionPersistenceDataDir = historyTarget.dataDir;
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     let activeAttemptModel: string | null = null;
+    let activeAttemptBillingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']> = 'priced';
     let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
 
     // Mutable conversation-local state cannot accept two overlapping turns.
@@ -3312,7 +3313,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           bufferedAgentTokens = [];
           capabilityReceipt = null;
           pendingCapabilityToolResults = [];
-          activeAttemptModel = resolvedModel;
+          activeAttemptModel = config.billingModel ?? resolvedModel;
+          activeAttemptBillingClass = config.modelSpendBillingClass ?? 'priced';
           abortedAttemptUsage = null;
           const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
           const strictToolRetryContext = explicitReadOnlyToolChoice
@@ -3551,17 +3553,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Track cost with the ACTUALLY used model
-        const resultCost = costTracker.calculateCost(
-          result.usage.inputTokens,
-          result.usage.outputTokens,
-          resolvedModel,
-        );
+        let resultCost = costTracker.calculateUsageCost({
+          model: activeAttemptModel ?? resolvedModel,
+          input: result.usage.inputTokens,
+          output: result.usage.outputTokens,
+          billingClass: activeAttemptBillingClass,
+        });
         if (hasCustomRunner) {
           costTracker.addUsage(
-          resolvedModel,
-          result.usage.inputTokens,
-          result.usage.outputTokens,
-          executionScopeId,
+            activeAttemptModel ?? resolvedModel,
+            result.usage.inputTokens,
+            result.usage.outputTokens,
+            executionScopeId,
+            { billingClass: activeAttemptBillingClass },
           );
         }
 
@@ -3580,7 +3584,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // 'corrected' on the next turn via traceStore.markCorrected().
         if (traceRecorder && traceHandle) {
           try {
-            traceRecorder.finalize(traceHandle, {
+            const finalizedTrace = traceRecorder.finalize(traceHandle, {
               outcome: 'success',
               output: retainedTurnText(result.content ?? ''),
               model: activeAttemptModel ?? resolvedModel,
@@ -3590,6 +3594,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               },
               costUsd: resultCost,
             });
+            resultCost = finalizedTrace?.cost_usd ?? resultCost;
             traceFinalized = true;
           } catch { /* tracing is best-effort — don't fail the response */ }
         }
@@ -3840,9 +3845,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Send the done event with full response + model info + per-message cost
-        const messageCost = result.usage
-          ? costTracker.calculateCost(result.usage.inputTokens, result.usage.outputTokens, resolvedModel)
-          : undefined;
+        const messageCost = result.usage ? resultCost : undefined;
         const doneAt = performance.now();
         sendEvent('done', {
           content: finalContent,
@@ -3907,17 +3910,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       let failureCostUsd: number | undefined;
       if (billableFailureUsage && activeAttemptModel) {
         try {
-          failureCostUsd = costTracker.calculateCost(
-            billableFailureUsage.inputTokens,
-            billableFailureUsage.outputTokens,
-            activeAttemptModel,
-          );
+          failureCostUsd = costTracker.calculateUsageCost({
+            model: activeAttemptModel,
+            input: billableFailureUsage.inputTokens,
+            output: billableFailureUsage.outputTokens,
+            billingClass: activeAttemptBillingClass,
+          });
           if (hasCustomRunner) {
             costTracker.addUsage(
               activeAttemptModel,
               billableFailureUsage.inputTokens,
               billableFailureUsage.outputTokens,
               activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
+              { billingClass: activeAttemptBillingClass },
             );
           }
           if (activeExecutionWorkspaceId) {
