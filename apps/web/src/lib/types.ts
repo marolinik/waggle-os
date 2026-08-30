@@ -438,6 +438,11 @@ export interface ChatMessage {
   /** The model that actually produced this turn, as reported by the server. */
   model?: string;
   /**
+   * Live proof that saved memory passed safety checks and entered this reply's
+   * model context. Empty, failed, skipped, and blocked lookups are omitted.
+   */
+  memoryContext?: MemoryContextReceipt;
+  /**
    * Lane C (Pillar 2.2/2.5): an optimistic user turn that was typed+sent while a
    * previous reply was still streaming. It renders immediately with a truthful
    * "waiting" marker and dispatches the moment the in-flight reply finishes —
@@ -456,6 +461,15 @@ export interface ChatMessage {
     content: string;
     status: 'streaming' | 'stopped';
   };
+}
+
+export interface MemoryContextReceipt {
+  included: true;
+  count: number;
+  /** Only the live SSE path sets this; restored history must stay silent. */
+  live: true;
+  /** Stable per-assistant-turn key used to prevent duplicate live notices. */
+  receiptId: string;
 }
 
 export interface ToolExecution {

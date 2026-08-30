@@ -19,11 +19,7 @@ import { useContainerWidth } from '@/hooks/useContainerWidth';
 import { shouldCollapseChatHeader } from '@/lib/chat-header-layout';
 import { extractSuggestedActions } from '@/lib/suggested-actions';
 import { shouldAutoSendFirstTask } from '@/lib/auto-send-first-task';
-import {
-  buildRecallQuery,
-  previewRecall,
-  shouldFireMemoryRecall,
-} from '@/lib/memory-recall-toast';
+import { findNewestMemoryRecallNotice } from '@/lib/memory-recall-toast';
 import { useToast } from '@/hooks/use-toast';
 import { DUR } from '@/lib/motion/tokens';
 
@@ -688,35 +684,14 @@ const ChatApp = ({
     lastCanvasPath.current = path;
   }, [canvasArtifact]);
 
-  // M-22 / ENG-1: surface a relevant memory on the 5th user message of
-  // a session. Reset when the workspace or session changes so each
-  // session gets one chance to wow.
   const { toast } = useToast();
-  const [recallFired, setRecallFired] = useState(false);
+  const announcedMemoryReceiptIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    setRecallFired(false);
-  }, [workspaceId, activeSessionId]);
-  useEffect(() => {
-    const userCount = messages.filter(m => m.role === 'user').length;
-    if (!shouldFireMemoryRecall({ userMessageCount: userCount, alreadyFired: recallFired })) return;
-    const query = buildRecallQuery(messages);
-    if (!query) return;
-    let cancelled = false;
-    const scope = workspaceId ?? 'global';
-    adapter.searchMemory(query, scope).then(frames => {
-      if (cancelled) return;
-      const top = frames[0];
-      if (!top?.content) return;
-      const preview = previewRecall(top.content);
-      if (!preview) return;
-      toast({
-        title: 'I just remembered something relevant',
-        description: preview,
-      });
-      setRecallFired(true);
-    }).catch(() => { /* quiet — memory search is best-effort */ });
-    return () => { cancelled = true; };
-  }, [messages, recallFired, workspaceId, toast]);
+    const pending = findNewestMemoryRecallNotice(messages, announcedMemoryReceiptIds.current);
+    if (!pending) return;
+    announcedMemoryReceiptIds.current.add(pending.receipt.receiptId);
+    toast(pending.notice);
+  }, [messages, toast]);
 
   const persona = currentPersona ? getPersonaById(currentPersona) : PERSONAS[0];
 
@@ -1705,7 +1680,7 @@ const ChatApp = ({
             {/* Memory-active trust signal — always visible (not gated by
                 isStripCompact). Signals that the workspace memory layer is
                 feeding context into this chat (5-persona UX audit, dim 9). */}
-            <HintTooltip content="This chat uses your workspace memory — past sessions, entities, and decisions inform every reply. Click the Memory app in the dock to browse.">
+            <HintTooltip content="Saved context is available when relevant. When Waggle brings it into a reply, Activity shows what was recalled and where it came from. Open Memory to review or edit what is saved.">
               <span
                 data-testid="chat-header-memory-active"
                 className={`${STRIP_PILL} cursor-help font-display text-honey`}

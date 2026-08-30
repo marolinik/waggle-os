@@ -6,6 +6,10 @@ import {
   readChatThreadCache,
   writeChatThreadCache,
 } from '@/hooks/chat-thread-cache';
+import {
+  normalizeMemoryContextReceipt,
+  stripLiveMemoryReceipts,
+} from '@/lib/memory-recall-toast';
 import type {
   ChatMessage, StreamEvent, ApprovalRequest,
   ContentBlock, TextContentBlock, ToolExecution,
@@ -491,7 +495,7 @@ export const useChat = ({
     if (messages.some((m) => m.queued)) return;
     const settledMessages = messages.filter(message => !message.draft);
     if (settledMessages.length === 0) return;
-    writeChatThreadCache(cacheKey, settledMessages);
+    writeChatThreadCache(cacheKey, stripLiveMemoryReceipts(settledMessages));
   }, [messages, workspaceId, sessionId, isLoading]);
 
   const runDispatch = useCallback(async (
@@ -667,6 +671,7 @@ export const useChat = ({
           const blocks = [...(last.blocks || [])];
           let toolsUpdate: ToolExecution[] | null = null;
           let modelUpdate: string | null = null;
+          let memoryContextUpdate: ChatMessage['memoryContext'];
           let draftUpdate: ChatMessage['draft'] | null | undefined;
 
           switch (evt.type) {
@@ -816,6 +821,10 @@ export const useChat = ({
               blocks.splice(0, blocks.length, ...replaceTextBlocks(blocks, doneContent));
               const resolvedModel = data?.model;
               if (typeof resolvedModel === 'string' && resolvedModel) modelUpdate = resolvedModel;
+              memoryContextUpdate = normalizeMemoryContextReceipt(
+                data?.memoryContext,
+                `${activeDispatch.workspaceId}\u0000${activeDispatch.sessionId}\u0000${assistantId}`,
+              );
               break;
             }
 
@@ -836,6 +845,7 @@ export const useChat = ({
                 content,
                 ...(toolsUpdate && { tools: toolsUpdate }),
                 ...(modelUpdate && { model: modelUpdate }),
+                ...(memoryContextUpdate && { memoryContext: memoryContextUpdate }),
                 ...(draftUpdate !== undefined && { draft: draftUpdate ?? undefined }),
               }
               : m
