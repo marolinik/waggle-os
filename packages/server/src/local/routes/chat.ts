@@ -73,6 +73,7 @@ import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import {
   canonicalizeModelReference,
+  isExactConfiguredKeylessCompatibleModel,
   listOllamaChatModelIds,
   resolveExplicitRoutableModel,
   resolveUsableModel,
@@ -3050,7 +3051,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           model: resolvedModel,
           billingModel: resolvedModel,
           modelSpendBudget: costTracker,
-          modelSpendBillingClass: isOfflineOllamaModelReference(resolvedModel) ? 'free' : 'priced',
+          modelSpendBillingClass: isOfflineOllamaModelReference(resolvedModel)
+            || isExactConfiguredKeylessCompatibleModel(server, resolvedModel)
+            ? 'free'
+            : 'priced',
           spendWorkspaceId: executionScopeId,
           systemPrompt,
           tools: effectiveTools,
@@ -3293,7 +3297,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             systemPrompt: systemPromptForAttempt,
             model: useOllama ? logicalModel.slice('ollama/'.length) : logicalModel,
             billingModel: logicalModel,
-            modelSpendBillingClass: isOfflineOllamaModelReference(logicalModel) ? 'free' : 'priced',
+            modelSpendBillingClass: isOfflineOllamaModelReference(logicalModel)
+              || isExactConfiguredKeylessCompatibleModel(server, logicalModel)
+              ? 'free'
+              : 'priced',
             litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
             litellmApiKey: apiKey,
             reasoning: reasoningForModelAttempt(logicalModel),

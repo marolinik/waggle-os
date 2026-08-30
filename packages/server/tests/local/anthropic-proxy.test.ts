@@ -43,12 +43,14 @@ function createTestServer(options: {
 
   // Mock vault
   if (options.vaultApiKey || options.vaultProviders || options.vaultGet) {
+    const getVaultValue = (name: string) => {
+      if (options.vaultGet) return options.vaultGet(name);
+      if (name === 'anthropic' && options.vaultApiKey) return { value: options.vaultApiKey };
+      return options.vaultProviders?.[name] ?? null;
+    };
     server.decorate('vault', {
-      get: (name: string) => {
-        if (options.vaultGet) return options.vaultGet(name);
-        if (name === 'anthropic' && options.vaultApiKey) return { value: options.vaultApiKey };
-        return options.vaultProviders?.[name] ?? null;
-      },
+      get: getVaultValue,
+      has: (name: string) => getVaultValue(name) !== null,
     });
   } else {
     server.decorate('vault', null);
@@ -2822,28 +2824,87 @@ describe('Anthropic Proxy Routes', () => {
         providers: {
           'openai-compatible': {
             apiKey: '',
-            models: ['acme/local-qwen:Q4_K_M'],
+            models: ['acme/local-qwen:Q4_K_M', 'acme/local-llama:Q4_K_M'],
             baseUrl: `http://127.0.0.1:${port}/v1`,
           },
         },
       }), 'utf8');
-      server = createTestServer({ dataDir });
+      const costTracker = new CostTracker();
+      costTracker.setBudget(0.000001, 'hard');
+      const vaultProviders: Record<string, { value: string; metadata?: Record<string, unknown> }> = {};
+      server = createTestServer({ dataDir, costTracker, vaultProviders });
 
       try {
         const readiness = await server.inject({ method: 'GET', url: '/v1/health/readiness' });
         expect(readiness.statusCode).toBe(200);
 
+        const nonStreamBody = {
+          model: 'openai-compatible/acme/local-qwen:Q4_K_M',
+          messages: [{ role: 'user' as const, content: 'test' }],
+          stream: false,
+        };
+        const callerReservation = costTracker.reserveModelSpend({
+          model: nonStreamBody.model,
+          inputTokens: 1,
+          maxOutputTokens: 16,
+          billingClass: 'free',
+        });
+        const targetUrl = 'http://127.0.0.1:3333/v1';
+        costTracker.registerModelSpendReservationTarget(targetUrl);
+        const callerHandoff = costTracker.issueModelSpendReservationHandoff(
+          callerReservation,
+          JSON.stringify(nonStreamBody),
+          targetUrl,
+        );
+        expect(callerHandoff).toBeDefined();
+
         const nonStream = await server.inject({
           method: 'POST',
           url: '/v1/chat/completions',
-          payload: {
-            model: 'openai-compatible/acme/local-qwen:Q4_K_M',
-            messages: [{ role: 'user', content: 'test' }],
-            stream: false,
-          },
+          headers: { [MODEL_SPEND_RESERVATION_HEADER]: callerHandoff!.token },
+          payload: nonStreamBody,
         });
         expect(nonStream.statusCode).toBe(200);
         expect(nonStream.json().choices[0].message.content).toBe('Local response');
+        expect(costTracker.takeModelSpendReservationHandoffDisposition(callerHandoff!.token))
+          .toBeUndefined();
+        expect(costTracker.claimModelSpendReservationHandoff(
+          callerHandoff!.token,
+          JSON.stringify(nonStreamBody),
+        )?.reservation).toEqual(callerReservation);
+        costTracker.discardModelSpendReservationHandoff(callerHandoff!.token);
+        expect(costTracker.reconcileModelSpend(callerReservation, {
+          inputTokens: 1,
+          outputTokens: 1,
+        })).toBe(true);
+
+        const racedReservation = costTracker.reserveModelSpend({
+          model: nonStreamBody.model,
+          inputTokens: 1,
+          maxOutputTokens: 16,
+          billingClass: 'free',
+        });
+        const racedHandoff = costTracker.issueModelSpendReservationHandoff(
+          racedReservation,
+          JSON.stringify(nonStreamBody),
+          targetUrl,
+        );
+        expect(racedHandoff).toBeDefined();
+        vaultProviders['openai-compatible'] = { value: 'sk-compatible-now-priced' };
+        const racedResponse = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          headers: { [MODEL_SPEND_RESERVATION_HEADER]: racedHandoff!.token },
+          payload: nonStreamBody,
+        });
+        expect(racedResponse.statusCode).toBe(429);
+        expect(racedResponse.json().error.code).toBe('DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE');
+        expect(captures).toHaveLength(1);
+        expect(costTracker.takeModelSpendReservationHandoffDisposition(racedHandoff!.token))
+          .toBe('release');
+        costTracker.discardModelSpendReservationHandoff(racedHandoff!.token);
+        expect(costTracker.releaseReservedModelSpend(racedReservation)).toBe(true);
+        delete vaultProviders['openai-compatible'];
 
         const streaming = await server.inject({
           method: 'POST',
@@ -2894,6 +2955,18 @@ describe('Anthropic Proxy Routes', () => {
       });
       expect(nonQwen.statusCode).toBe(200);
 
+      const unlisted = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai-compatible/acme/unlisted-model',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
+      expect(unlisted.statusCode).toBe(429);
+      expect(unlisted.json().error.code).toBe('DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE');
+
       expect(captures).toEqual([
         {
           authorization: undefined,
@@ -2942,8 +3015,47 @@ describe('Anthropic Proxy Routes', () => {
       expect(captures[4].body).not.toHaveProperty('extra_body');
       expect(compatibleFetch).toHaveBeenCalledTimes(5);
       expect(compatibleFetch.mock.calls.every(([, init]) => init?.redirect === 'error')).toBe(true);
+      expect(costTracker.getReservedDailyTotal()).toBe(0);
+      expect(costTracker.getDailyTotal()).toBe(0);
       } finally {
         await new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));
+        fs.rmSync(dataDir, { recursive: true, force: true });
+      }
+    });
+
+    it('keeps a configured compatible model priced when the vault is unavailable', async () => {
+      const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-vault-unavailable-'));
+      try {
+        fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+          defaultModel: 'openai-compatible/acme/local-qwen',
+          providers: {
+            'openai-compatible': {
+              apiKey: '',
+              models: ['acme/local-qwen'],
+              baseUrl: 'http://127.0.0.1:43218/v1',
+            },
+          },
+        }), 'utf8');
+        const costTracker = new CostTracker();
+        costTracker.setBudget(0.000001, 'hard');
+        server = createTestServer({ dataDir, costTracker });
+        const upstreamFetch = vi.fn();
+        globalThis.fetch = upstreamFetch as unknown as typeof globalThis.fetch;
+
+        const response = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'openai-compatible/acme/local-qwen',
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+
+        expect(response.statusCode).toBe(429);
+        expect(response.json().error.code).toBe('DAILY_MODEL_BUDGET_PRICING_UNAVAILABLE');
+        expect(upstreamFetch).not.toHaveBeenCalled();
+      } finally {
         fs.rmSync(dataDir, { recursive: true, force: true });
       }
     });

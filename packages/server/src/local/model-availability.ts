@@ -214,6 +214,43 @@ export async function listOllamaChatModelIds(signal?: AbortSignal): Promise<stri
 }
 
 /**
+ * A compatible endpoint is unmetered only when the exact model was persisted
+ * for a keyless user-owned endpoint. Do not infer this from the provider prefix
+ * alone: OpenAI-compatible endpoints can also be paid gateways.
+ */
+export function isExactConfiguredKeylessCompatibleModel(
+  server: FastifyInstance,
+  model: string,
+): boolean {
+  const selectedModel = model.trim();
+  if (!selectedModel.startsWith('openai-compatible/')) return false;
+
+  if (!server.vault) return false;
+  try {
+    if (server.vault.has('openai-compatible')) return false;
+  } catch {
+    // A locked or unavailable vault cannot prove that the endpoint is keyless.
+    return false;
+  }
+
+  try {
+    const configured = new WaggleConfig(server.localConfig.dataDir)
+      .getProviders()['openai-compatible'];
+    if (!configured?.baseUrl?.trim() || configured.apiKey?.trim()) return false;
+    return configured.models.some((configuredModel) => {
+      const trimmed = configuredModel.trim();
+      if (!trimmed) return false;
+      const canonical = trimmed.startsWith('openai-compatible/')
+        ? trimmed
+        : `openai-compatible/${trimmed}`;
+      return canonical === selectedModel;
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Strict preflight for an explicitly selected model. Unlike
  * resolveUsableModel(), this never falls back to the current model or another
  * local model. A non-null result is provider-backed and executable now.

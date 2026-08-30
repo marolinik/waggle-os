@@ -162,6 +162,126 @@ describe('Chat Streaming API', () => {
     expect(outboundBody!.chat_template_kwargs).toEqual({ enable_thinking: false });
   });
 
+  it('marks only an exact configured keyless OpenAI-compatible model as free', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-keyless-billing-'));
+    const configuredModel = 'openai-compatible/qwen3.8-flash-next';
+    const config = new WaggleConfig(dataDir);
+    config.setDefaultModel(configuredModel);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      models: ['qwen3.8-flash-next'],
+      baseUrl: 'http://127.0.0.1:1/v1',
+    });
+    config.save();
+    const localServer = await buildLocalServer({ dataDir });
+    const capturedConfigs: AgentLoopConfig[] = [];
+    localServer.agentRunner = async (runnerConfig): Promise<AgentResponse> => {
+      capturedConfigs.push(runnerConfig);
+      runnerConfig.onToken?.('billing-class-ok');
+      return {
+        content: 'billing-class-ok',
+        toolsUsed: [],
+        usage: { inputTokens: 11, outputTokens: 3 },
+      };
+    };
+
+    try {
+      const configured = await injectWithAuth(localServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Use the configured local model.',
+          model: configuredModel,
+          session: 'configured-keyless-billing',
+        },
+      });
+      const unlisted = await injectWithAuth(localServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Do not inherit free billing.',
+          model: 'openai-compatible/wrapped/paid-model',
+          session: 'unlisted-compatible-billing',
+        },
+      });
+      localServer.vault.set('openai-compatible', 'sk-compatible-test', {
+        models: ['qwen3.8-flash-next'],
+        baseUrl: 'http://127.0.0.1:1/v1',
+      });
+      const keyed = await injectWithAuth(localServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'A configured credential must remain metered.',
+          model: configuredModel,
+          session: 'configured-keyed-billing',
+        },
+      });
+
+      expect(configured.statusCode).toBe(200);
+      expect(unlisted.statusCode).toBe(200);
+      expect(keyed.statusCode).toBe(200);
+      expect(capturedConfigs).toHaveLength(3);
+      expect(capturedConfigs[0].modelSpendBillingClass).toBe('free');
+      expect(capturedConfigs[1].modelSpendBillingClass).toBe('priced');
+      expect(capturedConfigs[2].modelSpendBillingClass).toBe('priced');
+    } finally {
+      await localServer.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps an exact configured keyless fallback model free', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-keyless-fallback-billing-'));
+    const primaryModel = 'openai-compatible/acme/primary-local';
+    const fallbackModel = 'openai-compatible/acme/fallback-local';
+    const config = new WaggleConfig(dataDir);
+    config.setDefaultModel(primaryModel);
+    config.setFallbackModel(fallbackModel);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      models: ['acme/primary-local', 'acme/fallback-local'],
+      baseUrl: 'http://127.0.0.1:1/v1',
+    });
+    config.save();
+    const localServer = await buildLocalServer({ dataDir });
+    const capturedConfigs: AgentLoopConfig[] = [];
+    localServer.agentRunner = async (runnerConfig): Promise<AgentResponse> => {
+      capturedConfigs.push(runnerConfig);
+      if (capturedConfigs.length === 1) {
+        throw new Error('Could not reach model endpoint after 3 attempts (fetch failed).');
+      }
+      runnerConfig.onToken?.('fallback-billing-ok');
+      return {
+        content: 'fallback-billing-ok',
+        toolsUsed: [],
+        usage: { inputTokens: 11, outputTokens: 3 },
+      };
+    };
+
+    try {
+      const response = await injectWithAuth(localServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Use the configured fallback after the primary fails.',
+          model: primaryModel,
+          session: 'configured-keyless-fallback-billing',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfigs).toHaveLength(2);
+      expect(capturedConfigs.map(attempt => attempt.billingModel))
+        .toEqual([primaryModel, fallbackModel]);
+      expect(capturedConfigs.map(attempt => attempt.modelSpendBillingClass))
+        .toEqual(['free', 'free']);
+    } finally {
+      await localServer.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     ['openai-compatible/llama3.1', 'llama3.1'],
     ['ollama/qwen3.8-flash-next', 'qwen3.8-flash-next'],

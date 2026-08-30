@@ -12,7 +12,10 @@ import { WaggleConfig } from '@waggle/core';
 import { validateOrigin } from '../cors-config.js';
 import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
 import { isRemoteOllamaAlias, PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
-import { fetchOllamaRoutingModels } from '../model-availability.js';
+import {
+  fetchOllamaRoutingModels,
+  isExactConfiguredKeylessCompatibleModel,
+} from '../model-availability.js';
 import { getAuthenticatedRunToken } from '../security-middleware.js';
 
 interface OpenAIMessage {
@@ -206,34 +209,40 @@ function reserveProxySpend(
   const spendRequest = proxySpendRequest(body);
   const claimed = claimProxySpendHandoff(server, request, body, spendRequest);
   if (claimed) {
-    const { dailyBudgetUsd, mode } = budget.getBudget();
-    const hardBudgetEnabled = mode === 'hard' && dailyBudgetUsd !== null;
-    const estimatedCostUsd = claimed.estimatedCostUsd;
-    if (estimatedCostUsd === undefined || claimed.durableTraceId === undefined || !server.traceStore) {
-      if (!hardBudgetEnabled) return claimed;
-      const error = new ProxySpendLedgerUnavailableError();
+    // The provider may have become keyed after the caller reserved this exact
+    // request as free. Never let a stale zero-cost handoff bypass the proxy's
+    // current priced classification: release caller ownership and reserve again.
+    if (claimed.estimatedCostUsd !== undefined && claimed.estimatedCostUsd <= 0) {
       budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
-      throw error;
-    }
-    if (estimatedCostUsd <= 0) return claimed;
-    try {
-      const traceCostReservationId = server.traceStore.reserveCost(
-        claimed.durableTraceId,
-        estimatedCostUsd,
-      );
-      budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'commit');
-      return {
-        ...claimed,
-        traceId: claimed.durableTraceId,
-        traceCostReservationId,
-      };
-    } catch (error) {
-      budget.markModelSpendPersistenceUnavailable(error);
-      if (hardBudgetEnabled) {
+    } else {
+      const { dailyBudgetUsd, mode } = budget.getBudget();
+      const hardBudgetEnabled = mode === 'hard' && dailyBudgetUsd !== null;
+      const estimatedCostUsd = claimed.estimatedCostUsd;
+      if (estimatedCostUsd === undefined || claimed.durableTraceId === undefined || !server.traceStore) {
+        if (!hardBudgetEnabled) return claimed;
+        const error = new ProxySpendLedgerUnavailableError();
         budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
-        throw new ProxySpendLedgerUnavailableError(error);
+        throw error;
       }
-      return claimed;
+      try {
+        const traceCostReservationId = server.traceStore.reserveCost(
+          claimed.durableTraceId,
+          estimatedCostUsd,
+        );
+        budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'commit');
+        return {
+          ...claimed,
+          traceId: claimed.durableTraceId,
+          traceCostReservationId,
+        };
+      } catch (error) {
+        budget.markModelSpendPersistenceUnavailable(error);
+        if (hardBudgetEnabled) {
+          budget.setModelSpendReservationHandoffDisposition?.(claimed.handoffToken!, 'release');
+          throw new ProxySpendLedgerUnavailableError(error);
+        }
+        return claimed;
+      }
     }
   }
 
@@ -1237,12 +1246,14 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     }
     let spend: ProxySpendReservation | undefined;
-    try {
-      spend = reserveProxySpend(server, request, body);
-    } catch (error) {
-      const code = modelSpendFailureCode(error);
-      if (code) return sendProxyBudgetFailure(reply, error, code);
-      throw error;
+    if (!isExactConfiguredKeylessCompatibleModel(server, body.model)) {
+      try {
+        spend = reserveProxySpend(server, request, body);
+      } catch (error) {
+        const code = modelSpendFailureCode(error);
+        if (code) return sendProxyBudgetFailure(reply, error, code);
+        throw error;
+      }
     }
     if (route.providerId !== 'anthropic') {
       const compatibleResult = await forwardCompatibleProvider(
