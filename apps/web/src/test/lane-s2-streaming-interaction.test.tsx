@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { useLayoutEffect } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { ChatMessage } from '@/lib/types';
+import type { ChatMessage, ToolContextContentBlock } from '@/lib/types';
 import {
   chatThreadCacheKey,
   clearChatThreadCache,
@@ -335,9 +335,9 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     await act(async () => { await result.current.sendMessage('question'); });
 
     const assistant = result.current.messages.find(message => message.role === 'assistant');
-    const receipt = assistant?.blocks?.find(block => block.type === 'tool_context') as
-      | { type: string; metrics?: Record<string, unknown> }
-      | undefined;
+    const receipt = assistant?.blocks?.find(
+      (block): block is ToolContextContentBlock => block.type === 'tool_context',
+    );
     expect(receipt?.metrics).toMatchObject({
       toolCatalogCount: 29,
       toolEligibleCount: 29,
