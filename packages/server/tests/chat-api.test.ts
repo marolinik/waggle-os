@@ -602,7 +602,10 @@ describe('Chat Streaming API', () => {
     const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
-    const workspaceId = `double-blank-workspace-${Date.now()}`;
+    const workspaceId = server.workspaceManager.create({
+      name: `Double blank ${Date.now()}`,
+      group: 'test',
+    }).id;
     const sessionId = `double-blank-session-${Date.now()}`;
     const attempts: string[] = [];
     config.setFallbackModel('ollama/double-blank-fallback');
@@ -664,7 +667,10 @@ describe('Chat Streaming API', () => {
     const originalRunner = server.agentRunner;
     const config = new WaggleConfig(tmpDir);
     const previousFallback = config.getFallbackModel();
-    const workspaceId = `tool-blank-workspace-${Date.now()}`;
+    const workspaceId = server.workspaceManager.create({
+      name: `Tool blank ${Date.now()}`,
+      group: 'test',
+    }).id;
     const sessionId = `tool-blank-session-${Date.now()}`;
     config.setFallbackModel('ollama/tool-blank-fallback');
     config.save();
@@ -1425,7 +1431,10 @@ describe('Chat Streaming API', () => {
     resetRateLimiter(server);
     const originalRunner = server.agentRunner;
     const blankTag = blankContent.length === 0 ? 'empty' : 'whitespace';
-    const workspaceId = `blank-workspace-${blankTag}-${Date.now()}`;
+    const workspaceId = server.workspaceManager.create({
+      name: `Blank ${blankTag} ${Date.now()}`,
+      group: 'test',
+    }).id;
     const sessionId = `blank-session-${blankTag}-${Date.now()}`;
     server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
       config.onToken?.('unsafe provisional');
@@ -1478,7 +1487,10 @@ describe('Chat Streaming API', () => {
   it('persists an assistant error turn when generation fails', async () => {
     resetRateLimiter(server);
     const originalRunner = server.agentRunner;
-    const workspaceId = `error-workspace-${Date.now()}`;
+    const workspaceId = server.workspaceManager.create({
+      name: `Error response ${Date.now()}`,
+      group: 'test',
+    }).id;
     const sessionId = `error-session-${Date.now()}`;
     server.agentRunner = async () => {
       throw new Error('LLM error (400): invalid tool call arguments');
@@ -1698,14 +1710,58 @@ describe('Chat Streaming API', () => {
     server.agentRunner = originalRunner;
   });
 
-  it('accepts optional workspace parameter', async () => {
+  it.each(['workspace', 'workspaceId'] as const)(
+    'rejects unknown %s before running or persisting chat',
+    async (workspaceField) => {
+      resetRateLimiter(server);
+      const workspaceId = `unknown-${workspaceField.toLowerCase()}-${Date.now()}`;
+      const sessionId = `unknown-session-${Date.now()}`;
+      const originalRunner = server.agentRunner;
+      const runner = vi.fn(originalRunner);
+      server.agentRunner = runner;
+
+      try {
+        const res = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/chat',
+          payload: {
+            message: 'This must not create orphan history.',
+            [workspaceField]: workspaceId,
+            session: sessionId,
+          },
+        });
+
+        expect(res.statusCode).toBe(404);
+        expect(res.json()).toEqual({
+          error: 'Workspace not found',
+          code: 'WORKSPACE_NOT_FOUND',
+        });
+        expect(runner).not.toHaveBeenCalled();
+        expect(server.workspaceManager.get(workspaceId)).toBeNull();
+        expect(server.agentState.sessionHistories.has(
+          chatSessionStateKey(workspaceId, sessionId),
+        )).toBe(false);
+        expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual([]);
+        expect(fs.existsSync(path.join(tmpDir, 'workspaces', workspaceId))).toBe(false);
+      } finally {
+        server.agentRunner = originalRunner;
+      }
+    },
+  );
+
+  it('accepts optional workspace parameter for an existing workspace', async () => {
+    const workspace = server.workspaceManager.create({
+      name: `Optional chat ${Date.now()}`,
+      group: 'test',
+    });
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/chat',
-      payload: { message: 'Hello', workspace: 'my-project' },
+      payload: { message: 'Hello', workspace: workspace.id },
     });
     const events = parseSSE(res.body);
     const doneEvents = events.filter(e => e.event === 'done');
+    expect(res.statusCode).toBe(200);
     expect(doneEvents.length).toBe(1);
   });
 
@@ -1870,8 +1926,14 @@ describe('Chat Streaming API', () => {
     resetRateLimiter(server);
     const nonce = Date.now();
     const sessionId = `shared-session-${nonce}`;
-    const workspaceA = `workspace-a-${nonce}`;
-    const workspaceB = `workspace-b-${nonce}`;
+    const workspaceA = server.workspaceManager.create({
+      name: `Parallel workspace A ${nonce}`,
+      group: 'test',
+    }).id;
+    const workspaceB = server.workspaceManager.create({
+      name: `Parallel workspace B ${nonce}`,
+      group: 'test',
+    }).id;
     const messageA = `parallel marker only for workspace A ${nonce}`;
     const messageB = `parallel marker only for workspace B ${nonce}`;
 
@@ -1931,7 +1993,10 @@ describe('Chat Streaming API', () => {
   it('keeps simultaneous sessions in the same workspace independent', async () => {
     resetRateLimiter(server);
     const nonce = Date.now();
-    const workspace = `shared-workspace-${nonce}`;
+    const workspace = server.workspaceManager.create({
+      name: `Shared workspace ${nonce}`,
+      group: 'test',
+    }).id;
     const sessionA = `parallel-session-a-${nonce}`;
     const sessionB = `parallel-session-b-${nonce}`;
     const messageA = `parallel marker only for session A ${nonce}`;

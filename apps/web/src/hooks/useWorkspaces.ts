@@ -101,6 +101,9 @@ export const useWorkspaces = () => {
       console.error('[useWorkspaces] patch failed:', err);
       return false;
     }
+    ++listRevisionRef.current;
+    setLoading(false);
+    setError(null);
     setWorkspaces(prev => prev.map(w => w.id === id ? { ...w, ...data } : w));
     return true;
   }, []);

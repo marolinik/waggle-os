@@ -1251,6 +1251,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const historyWorkspaceConfig = historyWorkspace
       ? server.workspaceManager?.get(historyWorkspace)
       : undefined;
+    if (
+      historyWorkspace
+      && historyWorkspace !== 'default'
+      && !historyWorkspaceConfig
+    ) {
+      return reply.status(404).send({
+        error: 'Workspace not found',
+        code: 'WORKSPACE_NOT_FOUND',
+      });
+    }
     const historyTarget = resolveChatHistoryTarget(
       server.localConfig.dataDir,
       historyWorkspace,

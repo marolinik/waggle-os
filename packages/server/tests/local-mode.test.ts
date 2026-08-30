@@ -187,6 +187,11 @@ describe('Local Server Mode', () => {
   // --- Chat SSE ---
   describe('chat SSE', () => {
     it('returns SSE stream when agent runner is set', async () => {
+      const workspaceId = server.workspaceManager.create({
+        name: 'Chat SSE workspace',
+        group: 'test',
+      }).id;
+
       // Inject a mock agent runner for this test
       server.agentRunner = async (config) => {
         if (config.onToken) config.onToken('Hi');
@@ -200,7 +205,7 @@ describe('Local Server Mode', () => {
       const res = await injectWithAuth(server, {
         method: 'POST',
         url: '/api/chat',
-        payload: { message: 'Hello world', workspace: 'test-ws' },
+        payload: { message: 'Hello world', workspace: workspaceId },
       });
       expect(res.headers['content-type']).toBe('text/event-stream; charset=utf-8');
       expect(res.body).toContain('event: token');

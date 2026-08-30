@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     getWorkspaces: vi.fn(),
     createWorkspace: vi.fn(),
     deleteWorkspace: vi.fn(),
+    patchWorkspace: vi.fn(),
     getPermissions: vi.fn().mockResolvedValue({ defaultAutonomy: 'normal', externalGates: {} }),
     getAgentStatus: vi.fn().mockResolvedValue({ active: 0, agents: [] }),
     getNotificationHistory: vi.fn().mockResolvedValue([]),
@@ -157,6 +158,40 @@ describe('useWorkspaces (P1b)', () => {
     expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w-new']);
     expect(result.current.activeWorkspaceId).toBe('w-new');
     expect(readPersistedWorkspaceId()).toBe('w-new');
+  });
+
+  it('keeps a successful workspace patch when an older list resolves late', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+      { id: 'w1', name: 'Before', group: 'Personal' },
+    ]);
+    mocks.adapter.patchWorkspace.mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() => useWorkspaces());
+    await waitFor(() => expect(result.current.workspaces[0]?.name).toBe('Before'));
+
+    let resolveRefresh!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReturnValueOnce(new Promise(resolve => {
+      resolveRefresh = resolve;
+    }));
+
+    let refreshPromise!: Promise<void>;
+    act(() => {
+      refreshPromise = result.current.refresh();
+    });
+    await waitFor(() => expect(result.current.loading).toBe(true));
+
+    await act(async () => {
+      expect(await result.current.patchWorkspace('w1', { name: 'After' })).toBe(true);
+    });
+    expect(result.current.workspaces[0]?.name).toBe('After');
+
+    await act(async () => {
+      resolveRefresh([{ id: 'w1', name: 'Before', group: 'Personal' }]);
+      await refreshPromise;
+    });
+
+    expect(result.current.workspaces[0]?.name).toBe('After');
+    expect(result.current.loading).toBe(false);
   });
 
   it('deduplicates a workspace observed by the list before its create response settles', async () => {
