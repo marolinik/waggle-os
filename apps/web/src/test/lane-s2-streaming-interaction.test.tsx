@@ -56,6 +56,24 @@ function deferred<T = unknown>() {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+const validToolContextMetrics = {
+  toolCatalogCount: 29,
+  toolEligibleCount: 29,
+  toolSelectedCount: 4,
+  toolOmittedCount: 25,
+  transmittedToolSchemaChars: 3200,
+  estimatedToolSchemaTokens: 800,
+  finalSystemPromptChars: 4800,
+  estimatedSystemPromptTokens: 1200,
+  packageMode: 'compact',
+  selectorLatencyMs: 3,
+  timeToFirstTokenMs: 140,
+  agentLatencyMs: 420,
+  totalServerLatencyMs: 450,
+  providerInputTokens: 1500,
+  providerOutputTokens: 120,
+} as const;
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.adapter.sendMessage.mockReset();
@@ -299,6 +317,119 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     const assistant = result.current.messages.find(message => message.role === 'assistant');
     expect(assistant?.content).toBe('Before tool. After tool.');
     expect(assistant?.draft).toBeUndefined();
+  });
+
+  it('retains a valid compact tool-context receipt without inventing tool executions', async () => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'done',
+        data: {
+          content: 'Direct answer.',
+          toolsUsed: ['web_search'],
+          contextMetrics: validToolContextMetrics,
+        },
+      };
+    });
+
+    const { result } = await mountChat('sess-tool-context');
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    const receipt = assistant?.blocks?.find(block => block.type === 'tool_context') as
+      | { type: string; metrics?: Record<string, unknown> }
+      | undefined;
+    expect(receipt?.metrics).toMatchObject({
+      toolCatalogCount: 29,
+      toolEligibleCount: 29,
+      toolSelectedCount: 4,
+      toolOmittedCount: 25,
+      packageMode: 'compact',
+    });
+    expect(assistant?.blocks?.some(block => block.type === 'tool_use')).toBe(false);
+    expect(assistant?.tools).toEqual([]);
+    const cached = readChatThreadCache(chatThreadCacheKey('ws-1', 'sess-tool-context'));
+    expect(cached?.flatMap(message => message.blocks ?? []).some(block => block.type === 'tool_context')).toBe(false);
+  });
+
+  it.each([
+    ['catalog below eligible', { toolCatalogCount: 28 }],
+    ['selected above eligible', { toolEligibleCount: 3 }],
+    ['omitted mismatch', { toolOmittedCount: 24 }],
+    ['schema estimate mismatch', { estimatedToolSchemaTokens: 799 }],
+    ['prompt estimate mismatch', { estimatedSystemPromptTokens: 1199 }],
+    ['selector above total latency', { selectorLatencyMs: 451 }],
+    ['non-finite value', { totalServerLatencyMs: Number.NaN }],
+    ['zero selected with nonzero schema', {
+      toolSelectedCount: 0,
+      toolOmittedCount: 29,
+      transmittedToolSchemaChars: 4,
+      estimatedToolSchemaTokens: 1,
+    }],
+  ])('fails closed on malformed tool-context metrics: %s', async (_case, overrides) => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'done',
+        data: {
+          content: 'Direct answer.',
+          contextMetrics: {
+            ...validToolContextMetrics,
+            ...overrides,
+          },
+        },
+      };
+    });
+
+    const { result } = await mountChat(`sess-bad-tool-context-${_case}`);
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    expect(assistant?.blocks?.some(block => block.type === 'tool_context')).toBe(false);
+  });
+
+  it('renders a failed tool result as an error and matches the latest repeated call', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(12345);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'tool_start', data: { name: 'read_file', input: { path: 'first.md' } } };
+      yield { type: 'tool_start', data: { name: 'read_file', input: { path: 'second.md' } } };
+      yield { type: 'tool_end', data: { name: 'read_file', result: 'Error: denied', isError: true, duration: 8 } };
+      yield { type: 'tool_end', data: { name: 'read_file', result: 'first contents', isError: false, duration: 11 } };
+      yield { type: 'done', data: { content: 'Could not read the second file.' } };
+    });
+
+    const { result } = await mountChat('sess-tool-error');
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    const tools = assistant?.blocks?.filter(block => block.type === 'tool_use');
+    expect(tools).toHaveLength(2);
+    expect(new Set(tools?.map(tool => tool.id)).size).toBe(2);
+    expect(tools?.[0]).toMatchObject({ input: { path: 'first.md' }, status: 'done', result: 'first contents' });
+    expect(tools?.[1]).toMatchObject({ input: { path: 'second.md' }, status: 'error', result: 'Error: denied' });
+    expect(assistant?.tools?.[0]).toMatchObject({ input: { path: 'first.md' }, status: 'done' });
+    expect(assistant?.tools?.[1]).toMatchObject({ input: { path: 'second.md' }, status: 'error' });
+    expect(new Set(assistant?.tools?.map(tool => tool.id)).size).toBe(2);
+    now.mockRestore();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', 'false'],
+  ])('fails closed when a tool result has a %s error flag', async (_case, isError) => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'tool_start', data: { name: 'web_search', input: { query: 'Waggle' } } };
+      yield { type: 'tool_end', data: { name: 'web_search', result: 'ambiguous output', isError } };
+      yield { type: 'done', data: { content: 'Answer.' } };
+    });
+
+    const { result } = await mountChat(`sess-tool-status-${_case}`);
+    await act(async () => { await result.current.sendMessage('question'); });
+
+    const assistant = result.current.messages.find(message => message.role === 'assistant');
+    const tool = assistant?.blocks?.find(block => block.type === 'tool_use');
+    expect(tool).toMatchObject({
+      status: 'error',
+      result: expect.stringContaining('Tool completion status was not reported'),
+    });
   });
 
   it.each([

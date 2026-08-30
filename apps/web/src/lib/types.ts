@@ -559,6 +559,7 @@ export type ContentBlock =
   | TextContentBlock
   | StepContentBlock
   | ToolUseContentBlock
+  | ToolContextContentBlock
   | ModelSwitchContentBlock
   | ErrorContentBlock
   | RouteProposalContentBlock;
@@ -590,6 +591,34 @@ export interface ToolUseContentBlock {
   status: 'running' | 'done' | 'error' | 'denied';
   result?: string;
   duration?: number;
+}
+
+/**
+ * Sanitized, aggregate proof of how much of the tool catalog entered one turn.
+ * This is preparation telemetry, not evidence that any tool or skill ran.
+ */
+export interface ToolContextContentBlock {
+  type: 'tool_context';
+  blockId: string;
+  metrics: ToolContextMetrics;
+}
+
+export interface ToolContextMetrics {
+  toolCatalogCount: number;
+  toolEligibleCount: number;
+  toolSelectedCount: number;
+  toolOmittedCount: number;
+  transmittedToolSchemaChars: number;
+  estimatedToolSchemaTokens: number;
+  finalSystemPromptChars: number;
+  estimatedSystemPromptTokens: number;
+  packageMode: 'compact' | 'full' | 'custom';
+  selectorLatencyMs: number;
+  timeToFirstTokenMs: number | null;
+  agentLatencyMs: number;
+  totalServerLatencyMs: number;
+  providerInputTokens: number;
+  providerOutputTokens: number;
 }
 
 export interface ModelSwitchContentBlock {

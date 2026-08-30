@@ -12,7 +12,7 @@ import {
 } from '@/lib/memory-recall-toast';
 import type {
   ChatMessage, StreamEvent, ApprovalRequest,
-  ContentBlock, TextContentBlock, ToolExecution,
+  ContentBlock, TextContentBlock, ToolContextMetrics, ToolExecution,
 } from '@/lib/types';
 
 let blockCounter = 0;
@@ -165,6 +165,95 @@ export interface AutonomyState {
   level: AutonomyLevel;
   /** Epoch ms after which the elevated level auto-reverts. null = until session end. */
   expiresAt: number | null;
+}
+
+/**
+ * Tool-context metrics are live transport diagnostics, not conversation data.
+ * Keep them on the active response, but never let the module cache replay them
+ * after a session return as though they were durable history.
+ */
+function stripLiveToolContextReceipts(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map(message => {
+    if (!message.blocks?.some(block => block.type === 'tool_context')) return message;
+    return {
+      ...message,
+      blocks: message.blocks.filter(block => block.type !== 'tool_context'),
+    };
+  });
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+/** Fail closed: malformed or internally inconsistent server telemetry is hidden. */
+function normalizeToolContextMetrics(value: unknown): ToolContextMetrics | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const toolCatalogCount = nonNegativeInteger(raw.toolCatalogCount);
+  const toolEligibleCount = nonNegativeInteger(raw.toolEligibleCount);
+  const toolSelectedCount = nonNegativeInteger(raw.toolSelectedCount);
+  const toolOmittedCount = nonNegativeInteger(raw.toolOmittedCount);
+  const transmittedToolSchemaChars = nonNegativeInteger(raw.transmittedToolSchemaChars);
+  const estimatedToolSchemaTokens = nonNegativeInteger(raw.estimatedToolSchemaTokens);
+  const finalSystemPromptChars = nonNegativeInteger(raw.finalSystemPromptChars);
+  const estimatedSystemPromptTokens = nonNegativeInteger(raw.estimatedSystemPromptTokens);
+  const selectorLatencyMs = nonNegativeInteger(raw.selectorLatencyMs);
+  const agentLatencyMs = nonNegativeInteger(raw.agentLatencyMs);
+  const totalServerLatencyMs = nonNegativeInteger(raw.totalServerLatencyMs);
+  const providerInputTokens = nonNegativeInteger(raw.providerInputTokens);
+  const providerOutputTokens = nonNegativeInteger(raw.providerOutputTokens);
+  const packageMode = raw.packageMode;
+  const timeToFirstTokenMs = raw.timeToFirstTokenMs === null
+    ? null
+    : nonNegativeInteger(raw.timeToFirstTokenMs);
+
+  if (
+    toolCatalogCount === null
+    || toolEligibleCount === null
+    || toolSelectedCount === null
+    || toolOmittedCount === null
+    || transmittedToolSchemaChars === null
+    || estimatedToolSchemaTokens === null
+    || finalSystemPromptChars === null
+    || estimatedSystemPromptTokens === null
+    || selectorLatencyMs === null
+    || (timeToFirstTokenMs === null && raw.timeToFirstTokenMs !== null)
+    || agentLatencyMs === null
+    || totalServerLatencyMs === null
+    || providerInputTokens === null
+    || providerOutputTokens === null
+    || (packageMode !== 'compact' && packageMode !== 'full' && packageMode !== 'custom')
+    || toolEligibleCount > toolCatalogCount
+    || toolSelectedCount > toolEligibleCount
+    || toolOmittedCount !== toolEligibleCount - toolSelectedCount
+    || estimatedToolSchemaTokens !== Math.ceil(transmittedToolSchemaChars / 4)
+    || ((toolSelectedCount === 0) !== (transmittedToolSchemaChars === 0))
+    || estimatedSystemPromptTokens !== Math.ceil(finalSystemPromptChars / 4)
+    || selectorLatencyMs > totalServerLatencyMs
+    || agentLatencyMs > totalServerLatencyMs
+    || (timeToFirstTokenMs !== null && timeToFirstTokenMs > totalServerLatencyMs)
+  ) return null;
+
+  return {
+    toolCatalogCount,
+    toolEligibleCount,
+    toolSelectedCount,
+    toolOmittedCount,
+    transmittedToolSchemaChars,
+    estimatedToolSchemaTokens,
+    finalSystemPromptChars,
+    estimatedSystemPromptTokens,
+    packageMode,
+    selectorLatencyMs,
+    timeToFirstTokenMs,
+    agentLatencyMs,
+    totalServerLatencyMs,
+    providerInputTokens,
+    providerOutputTokens,
+  };
 }
 
 export type ChatHistoryStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -495,7 +584,10 @@ export const useChat = ({
     if (messages.some((m) => m.queued)) return;
     const settledMessages = messages.filter(message => !message.draft);
     if (settledMessages.length === 0) return;
-    writeChatThreadCache(cacheKey, stripLiveMemoryReceipts(settledMessages));
+    writeChatThreadCache(
+      cacheKey,
+      stripLiveToolContextReceipts(stripLiveMemoryReceipts(settledMessages)),
+    );
   }, [messages, workspaceId, sessionId, isLoading]);
 
   const runDispatch = useCallback(async (
@@ -731,7 +823,7 @@ export const useChat = ({
             case 'tool_start': {
               draftUpdate = clearDraftPreview(last.draft, legacyTurnId);
               const toolName = (data?.name as string) ?? 'unknown';
-              const toolId = toolName + '-' + Date.now();
+              const toolId = `${toolName}-${nextBlockId('tool')}`;
               blocks.push({
                 type: 'tool_use',
                 id: toolId,
@@ -747,12 +839,17 @@ export const useChat = ({
 
             case 'tool_end': {
               const toolName = data?.name as string;
-              const result = data?.result as string;
+              const reportedResult = typeof data?.result === 'string' ? data.result : '';
               const duration = data?.duration as number | undefined;
+              const statusReported = typeof data?.isError === 'boolean';
+              const status = data?.isError === false ? 'done' as const : 'error' as const;
+              const result = statusReported
+                ? reportedResult
+                : `Tool completion status was not reported${reportedResult ? `\n${reportedResult}` : ''}`;
               for (let i = blocks.length - 1; i >= 0; i--) {
                 const b = blocks[i];
                 if (b.type === 'tool_use' && b.name === toolName && b.status === 'running') {
-                  blocks[i] = { ...b, status: 'done', result, duration };
+                  blocks[i] = { ...b, status, result, duration };
                   break;
                 }
               }
@@ -766,10 +863,16 @@ export const useChat = ({
               }
               // Legacy tools[] — immutable update
               if (last.tools && toolName) {
-                const idx = last.tools.findIndex(t => t.name === toolName && t.status === 'running');
+                let idx = -1;
+                for (let i = last.tools.length - 1; i >= 0; i--) {
+                  if (last.tools[i]?.name === toolName && last.tools[i]?.status === 'running') {
+                    idx = i;
+                    break;
+                  }
+                }
                 if (idx >= 0) {
                   toolsUpdate = last.tools.map((t, ti) =>
-                    ti === idx ? { ...t, status: 'done' as const, output: result, duration } : t
+                    ti === idx ? { ...t, status, output: result, duration } : t
                   );
                 }
               }
@@ -803,16 +906,18 @@ export const useChat = ({
             case 'done': {
               draftUpdate = null;
               setPendingApproval(null);
-              // Mark all running blocks as done — type-narrowed, no unsafe cast
+              const missingToolResult = 'Tool completion was not reported';
+              // Thinking may settle at terminal done. A tool cannot truthfully
+              // settle as successful unless its own tool_result arrived.
               for (let i = 0; i < blocks.length; i++) {
                 const b = blocks[i];
                 if (b.type === 'step' && b.status === 'running') {
                   blocks[i] = { ...b, status: 'done' };
                 } else if (b.type === 'tool_use' && b.status === 'running') {
-                  blocks[i] = { ...b, status: 'done' };
+                  blocks[i] = { ...b, status: 'error', result: missingToolResult };
                 }
               }
-              if (last.tools) toolsUpdate = settleRunningTools(last.tools);
+              if (last.tools) toolsUpdate = settleRunningTools(last.tools, missingToolResult);
               const doneContent = typeof data?.content === 'string'
                 ? data.content
                 : last.draft?.turnId === legacyTurnId
@@ -825,6 +930,14 @@ export const useChat = ({
                 data?.memoryContext,
                 `${activeDispatch.workspaceId}\u0000${activeDispatch.sessionId}\u0000${assistantId}`,
               );
+              const contextMetrics = normalizeToolContextMetrics(data?.contextMetrics);
+              if (contextMetrics) {
+                blocks.push({
+                  type: 'tool_context',
+                  blockId: nextBlockId('tool-context'),
+                  metrics: contextMetrics,
+                });
+              }
               break;
             }
 
