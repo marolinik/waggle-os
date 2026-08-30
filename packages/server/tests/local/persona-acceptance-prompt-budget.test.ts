@@ -11,6 +11,7 @@ import {
   renderVerifierReportEnvelope,
 } from '../../../../tests/vision/verifier-contract.js';
 import { buildLocalServer } from '../../src/local/index.js';
+import { isCurrentConversationOnlyReferenceRequest } from '../../src/local/routes/chat.js';
 import { closeAuditDb, getAuditDb } from '../../src/local/routes/events.js';
 import { chatSessionStateKey, persistMessage } from '../../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
@@ -569,6 +570,195 @@ describe('persona acceptance prompt budget', () => {
     ]));
     expect(capturedConfig!.systemPrompt).not.toContain('# SELF-CONTAINED ADVISORY TURN');
     expect(capturedConfig!.reasoning).toBeUndefined();
+  });
+
+  it('uses the current session for an exact previous-message scalar without ambient memory recall', async () => {
+    const session = 'current-session-project-code-budget';
+    const projectCode = 'QWEN_CONTINUITY_TEST';
+    const priorMessage = `Context for the next question: project_code=${projectCode}. Reply with exactly ACK.`;
+    const currentMessage = 'What is the exact project_code from my previous message? Reply with only that code.';
+    const first = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: priorMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace: 'default',
+      },
+    });
+    expect(first.statusCode).toBe(200);
+
+    capturedConfig = null;
+    const second = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: currentMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace: 'default',
+      },
+    });
+
+    expect(second.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.messages).toEqual(expect.arrayContaining([
+      { role: 'user', content: priorMessage },
+      { role: 'user', content: currentMessage },
+    ]));
+    expect(capturedConfig!.tools).toEqual([]);
+    expect(capturedConfig!.systemPrompt.length).toBeLessThan(13_000);
+    const events = parseSse(second.body);
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+    expect(events.find(event => event.event === 'done')?.data.contextMetrics).toMatchObject({
+      packageMode: 'compact',
+      toolSelectedCount: 0,
+      transmittedToolSchemaChars: 0,
+    });
+  });
+
+  it('summarizes the current chat without enabling persisted-memory tools', async () => {
+    const session = 'current-session-summary-budget';
+    const priorMessage = 'For this chat only, the launch marker is CURRENT_CHAT_ONLY.';
+    const currentMessage = 'Summarize what we discussed earlier in this chat.';
+    const first = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: priorMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace: 'default',
+      },
+    });
+    expect(first.statusCode).toBe(200);
+
+    capturedConfig = null;
+    const second = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: currentMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace: 'default',
+      },
+    });
+
+    expect(second.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.messages).toEqual(expect.arrayContaining([
+      { role: 'user', content: priorMessage },
+      { role: 'user', content: currentMessage },
+    ]));
+    expect(capturedConfig!.tools).toEqual([]);
+    expect(capturedConfig!.systemPrompt.length).toBeLessThan(13_000);
+    const events = parseSse(second.body);
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+    expect(events.find(event => event.event === 'done')?.data.contextMetrics).toMatchObject({
+      packageMode: 'compact',
+      toolSelectedCount: 0,
+      transmittedToolSchemaChars: 0,
+    });
+  });
+
+  it.each([
+    ['agreed-plan', 'Summarize what we discussed earlier in this chat and compare it to our agreed plan.'],
+    ['previous-decision', 'Summarize this conversation so far and our previous decision.'],
+    ['earlier-decision', 'Summarize this conversation so far and compare it to our earlier decision.'],
+  ])('keeps mixed current-chat and persisted context memory-capable: %s', async (label, currentMessage) => {
+    const session = `mixed-current-persisted-${label}`;
+    const priorMessage = 'In this chat, we reviewed the Windows Solo launch checklist.';
+    const first = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: priorMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace: 'default',
+      },
+    });
+    expect(first.statusCode).toBe(200);
+
+    capturedConfig = null;
+    const second = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: currentMessage,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace: 'default',
+      },
+    });
+
+    expect(second.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.messages).toEqual(expect.arrayContaining([
+      { role: 'user', content: priorMessage },
+      { role: 'user', content: currentMessage },
+    ]));
+    expect(capturedConfig!.tools.map(tool => tool.name)).toContain('search_memory');
+    expect(capturedConfig!.systemPrompt).toContain(PERSISTED_MEMORY_SENTINEL);
+    const events = parseSse(second.body);
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(true);
+    expect(events.find(event => event.event === 'done')?.data.contextMetrics).toMatchObject({
+      packageMode: 'full',
+    });
+  });
+
+  it('distinguishes current-session references from persisted or ambiguous history', () => {
+    for (const message of [
+      'What is the exact project_code from my previous message? Reply with only that code.',
+      'Repeat the marker from my last turn.',
+      'Use the message above to answer.',
+      'What did I just say?',
+      'Summarize this conversation so far.',
+      'What did we mention earlier in this chat?',
+      'Summarize what we discussed earlier in this chat.',
+      'Summarize our earlier discussion in this conversation.',
+    ]) {
+      expect(isCurrentConversationOnlyReferenceRequest(message), message).toBe(true);
+    }
+
+    for (const message of [
+      'What did we discuss?',
+      'Recall our previous session.',
+      'Search my saved memory for the launch decision.',
+      'Use my previous message and my saved memory.',
+      'What did I just say in our previous session?',
+      'Use the message above and anything from another session.',
+      'Summarize this chat so far and my saved preferences.',
+      'Summarize this conversation so far together with our previous sessions.',
+      'Use the message above and context from another workspace.',
+      'Use my previous message and search memory for related context.',
+      'Use my previous message and what you remember about me.',
+      'Use my previous message and recall our launch decision.',
+      'Use my previous message and remember our agreement.',
+      'Use my previous message and tell me what have you saved about me?',
+      'Use my previous message and tell me what do you know about me?',
+      'Summarize what we discussed earlier in this chat and compare it to our agreed plan.',
+      'Summarize this conversation so far and our previous decision.',
+      'Summarize this conversation so far and compare it to our earlier decision.',
+      'Summarize this conversation so far and compare it to my earlier plan.',
+      'Summarize this chat so far using our earlier context.',
+      'Summarize this conversation so far and my saved_preferences.',
+      'Use my previous message and the previous_session.',
+      'What was in any earlier message in this conversation?',
+      'Translate the phrase "previous message" into French.',
+      'The phrase "previous message" is ambiguous.',
+      'Do not use the previous message.',
+    ]) {
+      expect(isCurrentConversationOnlyReferenceRequest(message), message).toBe(false);
+    }
   });
 
   it.each([

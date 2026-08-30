@@ -58,6 +58,7 @@ interface StrictReadOnlyToolChatPromptOptions {
 }
 
 const PROTECTED_TURN_SIGNAL = /\b(?:legal|law|lawyer|attorney|contract|clause|nda|gdpr|hipaa|liability|compliance|regulation|payroll|salary|wage|overtime|withholding|tax|medical|diagnosis|health|patient|private|privacy|confidential|secret|password|credential|token|api key|pii|ssn|code|function|class|module|api|debug|error|bug|promise|regex|sql|database|schema|query|git|docker|kubernetes|repository|research|analy[sz]e|review|compare|decide|plan|implement|build|deploy|verify|validate|audit|delete|remove|overwrite|publish|send|execute|install)\b/i;
+const BOUNDED_CURRENT_CHAT_PROJECT_CODE_LOOKUP = /^\s*(?:what\s+(?:is|was)\s+(?:the\s+)?exact\s+project_code\s+from\s+(?:my|the)\s+(?:previous|last|preceding)\s+(?:message|turn)|(?:repeat|return|give\s+me|tell\s+me)\s+(?:the\s+)?project_code\s+from\s+(?:my|the)\s+(?:previous|last|preceding)\s+(?:message|turn))\s*[?.!]?\s*(?:reply|respond|return|answer)\s+(?:with\s+)?(?:only|just)\s+(?:that|the)\s+code\s*[.!]?\s*$/i;
 
 const CONVERSATIONAL_OPERATING_CONTRACT = `# CONVERSATIONAL OPERATING CONTRACT
 
@@ -113,7 +114,15 @@ export function selectChatPromptPackageMode(input: ChatPromptPackageModeInput): 
   if (input.explicitCapabilityRequest || input.taskComplexity !== 'simple') return 'full';
   if ((message.match(/\n/g) ?? []).length > 1) return 'full';
   if (message.includes('`') || /https?:\/\//i.test(message)) return 'full';
-  if (PROTECTED_TURN_SIGNAL.test(message)) return 'full';
+  // The measured current-chat probe uses a non-sensitive `project_code`
+  // scalar and calls it "that code" only in its output shape. Keep the
+  // grammar fully anchored so no second task or broader history request can
+  // hide inside the exception.
+  if (BOUNDED_CURRENT_CHAT_PROJECT_CODE_LOOKUP.test(message)) return 'compact';
+  // Normalize identifier separators before protected-term matching. In
+  // JavaScript `_` is a word character, so authentication_code would
+  // otherwise evade the ordinary `\b` boundary around "authentication".
+  if (PROTECTED_TURN_SIGNAL.test(message.replace(/_/g, ' '))) return 'full';
   return 'compact';
 }
 

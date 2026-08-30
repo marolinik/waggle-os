@@ -105,6 +105,41 @@ describe('chat prompt packaging', () => {
     })).toBe('compact');
   });
 
+  it('keeps a bounded current-chat scalar lookup compact without treating "code" as source code', () => {
+    const message = 'What is the exact project_code from my previous message? Reply with only that code.';
+
+    expect(detectTaskShape(message).complexity).toBe('simple');
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message,
+    })).toBe('compact');
+  });
+
+  it.each([
+    'Explain that code. Reply with only that code.',
+    'What is the authentication code from my previous message? Reply with only that code.',
+    'Review project_code from my previous message. Reply with only that code.',
+    'What is the authentication_code from my previous message? Reply with only that code.',
+    'What is the verification_code from my previous message? Reply with only that code.',
+    'What is the recovery_code from my previous message? Reply with only that code.',
+    'What is the secret_code from my previous message? Reply with only that code.',
+    'What is the password_code from my previous message? Reply with only that code.',
+    'What is the api_key from my previous message? Reply with only that code.',
+    'What is the medical_code from my previous message? Reply with only that code.',
+    'What is the tax_code from my previous message? Reply with only that code.',
+    'What is the source_code from my previous message? Reply with only that code.',
+    'What is the project_code from my previous messages? Reply with only that code.',
+    'What is the project_code from my previous session? Reply with only that code.',
+    'What is the project_code from my previous message and summarize our conversation. Reply with only that code.',
+    'What is the authentication_code from my previous message? Reply with only the authentication_code.',
+  ])('keeps substantive coding or sensitive code requests on the full package: %s', (message) => {
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message,
+    })).toBe('full');
+  });
+
   it('uses an inclusive 512-character ordinary-turn boundary', () => {
     expect(selectChatPromptPackageMode({ ...baseModeInput, message: 'x'.repeat(512) })).toBe('compact');
     expect(selectChatPromptPackageMode({ ...baseModeInput, message: 'x'.repeat(513) })).toBe('full');

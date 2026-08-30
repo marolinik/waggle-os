@@ -393,21 +393,55 @@ function isExplicitPlanAuthoringRequest(message: string): boolean {
     || /\bplan(?:ning)?\s+(?:this|that|the|a|an|my|our|your)\b/i.test(message);
 }
 
-export function isExplicitMemoryRecallRequest(message: string): boolean {
-  if (!allowsPersistedMemoryRead(classifyExplicitTurnMutationPolicy(message))) return false;
+function hasExplicitPersistedMemoryRecallSignal(message: string): boolean {
   if (resolveExplicitPersistedMemoryReadDirective(message) === 'allow') return true;
   const directRecall = /\b(?:what do you know about me|what have you saved|what memor(?:y|ies) have you saved(?: about me)?|what do you remember about (?:me|us|my|our))\b/i.test(message)
     || /\bwhat do you remember\s*[?.!,;:]?\s*$/i.test(message)
     || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(message);
   const explicitMemoryLookup = /\b(?:search|find|look up|show|list|open|inspect|retrieve)\s+(?:me\s+)?(?:(?:in|inside|within)\s+)?(?:(?:my|our|your|the|saved|previous|prior)\s+)?memor(?:y|ies)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|containing|regarding)\b))/i;
   const ownedContextLookup = /\b(?:search|find|look up|recall|retrieve)\s+(?:(?:my|our)\s+saved\s+|(?:saved|previous|prior)\s+)(?:[\w'-]+\s+){0,3}(?:notes?|preferences?|decisions?|history|context)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|on|containing|regarding)\b))/i;
+  return directRecall
+    || explicitMemoryLookup.test(message)
+    || ownedContextLookup.test(message);
+}
+
+export function isExplicitMemoryRecallRequest(message: string): boolean {
+  if (!allowsPersistedMemoryRead(classifyExplicitTurnMutationPolicy(message))) return false;
   const ownedPriorContext = /\b(?:our|my)\s+(?:(?:(?:previous|prior|earlier|agreed)\s+)?(?:decisions?|agreements?|plans?|choices?|conclusions?|discussion)|(?:previous|prior|earlier|agreed)\s+context)\b/i.test(message)
     || /\b(?:the\s+)?agreed\s+(?:plan|decision|approach|scope|next steps?)\b/i.test(message)
     || /\bwhat\s+(?:we|I)\s+(?:decided|agreed|discussed|chose|selected)\b/i.test(message);
-  return directRecall
-    || explicitMemoryLookup.test(message)
-    || ownedContextLookup.test(message)
-    || ownedPriorContext;
+  return hasExplicitPersistedMemoryRecallSignal(message) || ownedPriorContext;
+}
+
+const CURRENT_CONVERSATION_ONLY_REFERENCE_PATTERN = /\b(?:(?:(?:my|the|your|our)\s+)?(?:previous|last|preceding|above)\s+(?:message|turn|reply)|(?:message|turn|reply)\s+above|what\s+(?:did\s+)?(?:I|we|you)\s+(?:just\s+)?(?:say|said|write|wrote|mention|mentioned|share|shared)|(?:this|our|the)\s+(?:chat|conversation|discussion|thread)\s+so\s+far|earlier\s+in\s+(?:this|our|the)\s+(?:chat|conversation|discussion|thread)|(?:(?:our|the|this)\s+)?earlier\s+discussion\s+in\s+(?:this|our|the)\s+(?:chat|conversation|thread))\b/i;
+const DESCRIPTIVE_CONVERSATION_REFERENCE_PATTERN = /^\s*(?:explain|define|translate|quote|discuss|compare)\b[^.?!\r\n]{0,100}\b(?:phrase|wording|sentence|expression|term|policy|rule)\b/i;
+const PERSISTED_CONVERSATION_REFERENCE_PATTERN = /\b(?:(?:previous|prior|earlier|last|past|another|other)\s+(?:chats?|sessions?|conversations?|threads?|workspaces?)|(?:saved|stored|persistent|personal|workspace)\s+(?:memor(?:y|ies)|notes?|preferences?|decisions?|context|history))\b/i;
+const OWNED_PERSISTED_CONTEXT_REFERENCE_PATTERN = /\b(?:(?:our|my)\s+(?:(?:(?:previous|prior|earlier|agreed)\s+)?(?:decisions?|agreements?|plans?|choices?|conclusions?|context)|(?:previous|prior|agreed)\s+discussions?)|(?:the\s+)?agreed\s+(?:plan|decision|approach|scope|next steps?))\b/i;
+const BROAD_CURRENT_CONVERSATION_REFERENCE_PATTERN = /\b(?:any|all|every|multiple|several)\s+(?:previous|prior|earlier|preceding|above)\s+(?:messages?|turns?|replies?)\b/i;
+const QUOTED_CONVERSATION_REFERENCE_PATTERN = /"[^"\r\n]*"|“[^”\r\n]*”|«[^»\r\n]*»/g;
+
+/**
+ * Identify an unambiguous request for evidence already present in this
+ * session. Persisted memory cannot improve these turns and can contaminate a
+ * bounded scalar answer with similarly named facts from another session.
+ */
+export function isCurrentConversationOnlyReferenceRequest(message: string): boolean {
+  const policy = classifyExplicitTurnMutationPolicy(message);
+  if (!allowsConversationHistory(policy)) return false;
+  const normalizedReferenceText = message.replace(/_/g, ' ');
+  if (DESCRIPTIVE_CONVERSATION_REFERENCE_PATTERN.test(message)) return false;
+  if (PERSISTED_CONVERSATION_REFERENCE_PATTERN.test(normalizedReferenceText)) return false;
+  if (OWNED_PERSISTED_CONTEXT_REFERENCE_PATTERN.test(normalizedReferenceText)) return false;
+  if (BROAD_CURRENT_CONVERSATION_REFERENCE_PATTERN.test(normalizedReferenceText)) return false;
+  if (hasExplicitPersistedMemoryRecallSignal(message)) return false;
+  return CURRENT_CONVERSATION_ONLY_REFERENCE_PATTERN.test(
+    message.replace(QUOTED_CONVERSATION_REFERENCE_PATTERN, ' '),
+  );
+}
+
+function shouldUsePersistedMemoryForTurn(message: string): boolean {
+  return isExplicitMemoryRecallRequest(message)
+    && !isCurrentConversationOnlyReferenceRequest(message);
 }
 
 export function isExplicitMemorySaveRequest(message: string): boolean {
@@ -658,7 +692,7 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
     return eligibleTools.filter(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name));
   }
   if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return eligibleTools;
-  const allowMemorySearch = isExplicitMemoryRecallRequest(message);
+  const allowMemorySearch = shouldUsePersistedMemoryForTurn(message);
   const allowMemorySave = isExplicitMemorySaveRequest(message);
   const allowExternalResearch = isExplicitExternalResearchRequest(message);
   eligibleTools = eligibleTools.filter((tool) => {
@@ -1638,7 +1672,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const persistedMemoryReadAllowed = allowsPersistedMemoryRead(turnMutationPolicy);
     const toolFreeAdvisoryCandidate = autonomyLevel === 'normal'
       && !isAutomatedTurn
-      && !isExplicitMemoryRecallRequest(message)
+      && !shouldUsePersistedMemoryForTurn(message)
       && !isExplicitMemorySaveRequest(message)
       && !isExplicitExternalResearchRequest(message)
       && isExplicitToolFreeAdvisoryRequest(message, turnMutationPolicy);
@@ -2245,6 +2279,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           && !closedWorldRewrite
           && !toolFreeAdvisory
           && !explicitReadOnlyToolCandidate
+          && !isCurrentConversationOnlyReferenceRequest(agentMessage)
           && allowsAutomaticRecall(turnMutationPolicy)) {
           try {
             sendEvent('step', { content: 'Recalling relevant memories...' });
@@ -3070,7 +3105,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             preferredToolNames: activePersona?.tools ?? [],
             mandatoryToolNames: [
               ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
-              ...(isExplicitMemoryRecallRequest(agentMessage) ? ['search_memory'] : []),
+              ...(shouldUsePersistedMemoryForTurn(agentMessage) ? ['search_memory'] : []),
               ...(shouldRequireCapabilityAcquisitionTools(agentMessage)
                 && !turnMutationPolicy.denyAllMutations
                 && !activePersona?.isReadOnly
@@ -3123,7 +3158,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           closedWorldRewrite,
         )) {
           const explicitCapabilityRequest = isExplicitGatedToolRequest(agentMessage)
-            || isExplicitMemoryRecallRequest(agentMessage)
+            || shouldUsePersistedMemoryForTurn(agentMessage)
             || isExplicitMemorySaveRequest(agentMessage)
             || isExplicitExternalResearchRequest(agentMessage);
           const selectedPackageMode = selectChatPromptPackageMode({
