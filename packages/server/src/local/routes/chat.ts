@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type ToolDefinition, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -455,11 +455,16 @@ export function resolveExplicitReadOnlyToolChoice(
 export type DirectReadFileDirective =
   | { kind: 'unrelated' }
   | { kind: 'invalid' }
-  | { kind: 'valid'; expectedPath: string };
+  | {
+      kind: 'valid';
+      expectedPath: string;
+      startMarker?: string;
+      endMarker?: string;
+    };
 
 const DIRECT_READ_FILE_PATH_TOKEN = '(?<path>"[^"\\r\\n]+"|\'[^\'\\r\\n]+\'|[^,\\s]+?)';
 const DIRECT_READ_FILE_RESPONSE_CLAUSE =
-  '(?:,\\s*then\\s+(?:report|return|show)(?:\\s+me)?\\s+(?:the\\s+)?(?:exact\\s+)?(?:file\\s+)?contents?(?:\\s+between\\s+[A-Za-z0-9_-]+\\s+and\\s+[A-Za-z0-9_-]+)?)?';
+  '(?:,\\s*then\\s+(?:report|return|show)(?:\\s+me)?\\s+(?:the\\s+)?(?:exact\\s+)?(?:file\\s+)?contents?(?:\\s+between\\s+(?<startMarker>[A-Za-z0-9_-]+)\\s+and\\s+(?<endMarker>[A-Za-z0-9_-]+))?)?';
 const EXPLICIT_DIRECT_READ_FILE_RE = new RegExp(
   `^\\s*(?:please\\s+)?(?:use|call|invoke)\\s+(?:the\\s+)?(?:read_file(?:\\s+tool)?|tool\\s+read_file)\\s+to\\s+(?:read|open|inspect)\\s+${DIRECT_READ_FILE_PATH_TOKEN}${DIRECT_READ_FILE_RESPONSE_CLAUSE}[.!]?\\s*$`,
   'i',
@@ -525,8 +530,28 @@ export function parseDirectReadFileDirective(message: string): DirectReadFileDir
   if (!rawPath) return { kind: 'invalid' };
   const expectedPath = normalizeDirectReadFilePath(rawPath);
   return expectedPath
-    ? { kind: 'valid', expectedPath }
+    ? {
+        kind: 'valid',
+        expectedPath,
+        ...(match?.groups?.startMarker && match.groups.endMarker
+          ? {
+              startMarker: match.groups.startMarker,
+              endMarker: match.groups.endMarker,
+            }
+          : {}),
+      }
     : { kind: 'invalid' };
+}
+
+export function formatDirectReadFileResponse(
+  directive: Extract<DirectReadFileDirective, { kind: 'valid' }>,
+  result: string,
+): string {
+  if (!directive.startMarker || !directive.endMarker) {
+    if (!result) return '(The file is empty.)';
+    return result.trim() ? result : '(The file contains only whitespace.)';
+  }
+  return `${directive.startMarker}\n${result}${result.endsWith('\n') ? '' : '\n'}${directive.endMarker}`;
 }
 
 function canonicalBoundReadPath(workspaceRoot: string, candidate: string): string | undefined {
@@ -567,6 +592,7 @@ function bindDirectReadFileTool(
   tools: ToolDefinition[],
   workspaceRoot: string,
   expectedPath: string,
+  reportOutcome: (outcome: ToolExecutionOutcome) => void,
 ): ToolDefinition[] {
   if (!canonicalBoundReadPath(workspaceRoot, expectedPath)) {
     return tools.filter(tool => tool.name !== 'read_file');
@@ -589,14 +615,24 @@ function bindDirectReadFileTool(
           suppliedPath,
         );
         if (!pathMatches || partialRead || unsupportedArgument) {
-          return `Error: read_file must read the complete explicitly requested workspace file: ${expectedPath}`;
+          const outcome = {
+            content: `Error: read_file must read the complete explicitly requested workspace file: ${expectedPath}`,
+            isError: true,
+          };
+          reportOutcome(outcome);
+          return outcome.content;
         }
-        const result = await tool.execute(args);
-        if (/^Error(?::|\s)/.test(result)) return result;
-        if (Buffer.byteLength(result, 'utf8') > DIRECT_READ_FILE_MAX_EXACT_BYTES) {
-          return `Error: exact read_file response exceeds the ${DIRECT_READ_FILE_MAX_EXACT_BYTES}-byte direct-read limit; use a scoped or partial read request instead.`;
+        const outcome = await executeToolWithStatus(tool, args);
+        if (Buffer.byteLength(outcome.content, 'utf8') > DIRECT_READ_FILE_MAX_EXACT_BYTES) {
+          const oversizedOutcome = {
+            content: `Error: exact read_file response exceeds the ${DIRECT_READ_FILE_MAX_EXACT_BYTES}-byte direct-read limit; use a scoped or partial read request instead.`,
+            isError: true,
+          };
+          reportOutcome(oversizedOutcome);
+          return oversizedOutcome.content;
         }
-        return result;
+        reportOutcome(outcome);
+        return outcome.content;
       },
     };
   });
@@ -1986,6 +2022,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       allowMemoryPersistence = !toolFreeAdvisory && turnPersistence.allowMemoryPersistence;
       allowDerivedPersistence = !toolFreeAdvisory && turnPersistence.allowDerivedPersistence;
       allowResponseDecoration = !toolFreeAdvisory && turnAllowsResponseDecoration;
+      if (explicitReadOnlyToolCandidate === 'read_file'
+        && directReadFileDirective.kind === 'valid') {
+        allowMemoryPersistence = false;
+        allowDerivedPersistence = false;
+        allowResponseDecoration = false;
+      }
 
       // A saved-history opt-out is both a read and retention boundary for this turn.
       if (!turnMutationPolicy.denyConversationHistory) {
@@ -2645,6 +2687,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let packageMode: ChatPromptPackageMode | 'custom' = 'custom';
         let spawnAvailableTools = effectiveTools;
         let explicitReadOnlyToolChoice: string | undefined;
+        let directReadFileExecutionOutcome: ToolExecutionOutcome | null = null;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
@@ -2948,6 +2991,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               effectiveTools,
               executionWorkspacePath,
               directReadFileDirective.expectedPath,
+              outcome => { directReadFileExecutionOutcome = outcome; },
             );
           }
         }
@@ -3313,8 +3357,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             });
           },
           onToolResult: (name: string, input: Record<string, unknown>, result: string) => {
+            const isError = name === 'read_file' && explicitReadOnlyToolChoice === 'read_file'
+              ? directReadFileExecutionOutcome === null
+                || directReadFileExecutionOutcome.isError
+                || directReadFileExecutionOutcome.content !== result
+              : result.startsWith('Error:') || result.startsWith('Error ');
             if (explicitReadOnlyToolChoice && name === explicitReadOnlyToolChoice) {
-              if (/^Error(?::|\s)/.test(result)) {
+              if (isError) {
                 explicitReadOnlyToolFailure = result;
                 explicitReadOnlyToolResult = null;
               } else {
@@ -3336,7 +3385,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
 
             // Send tool_result SSE event so client can update status + show result
-            const isError = result.startsWith('Error:') || result.startsWith('Error ');
             if (name === 'acquire_capability') {
               if (createPersistedCapabilityReceipt(input, result)) {
                 pendingCapabilityToolResults.push({ input, output: result, duration });
@@ -3570,18 +3618,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           )) {
             throw new Error(`Required read-only tool ${explicitReadOnlyToolChoice} did not complete exactly once.`);
           }
-          if (!attemptedResult.content.trim()) {
-            throw emptyModelResponseError(attemptedResult);
+          const completedResult = explicitReadOnlyToolChoice === 'read_file'
+            && directReadFileDirective.kind === 'valid'
+            && explicitReadOnlyToolResult !== null
+            ? {
+                ...attemptedResult,
+                content: formatDirectReadFileResponse(
+                  directReadFileDirective,
+                  explicitReadOnlyToolResult,
+                ),
+              }
+            : attemptedResult;
+          if (!completedResult.content.trim()) {
+            throw emptyModelResponseError(completedResult);
           }
           return strictToolRetryContext
             ? {
-                ...attemptedResult,
+                ...completedResult,
                 toolsUsed: Array.from(new Set([
                   ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
-                  ...attemptedResult.toolsUsed,
+                  ...completedResult.toolsUsed,
                 ])),
               }
-            : attemptedResult;
+            : completedResult;
         };
 
         const runModelFallbackChain = async (

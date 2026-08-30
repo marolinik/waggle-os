@@ -1,5 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createSanitizedEnv, createSystemTools, extractWebPageText } from '../src/system-tools.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  createSanitizedEnv,
+  createSystemTools,
+  executeToolWithStatus,
+  extractWebPageText,
+} from '../src/system-tools.js';
 import { execFileWithTreeTimeout } from '../src/system-tools-helpers.js';
 import { capToolResultForModel } from '../src/agent-run-budget.js';
 import { untrustedContextWrapper } from '../src/untrusted-context.js';
@@ -207,6 +212,39 @@ describe('createSystemTools', () => {
       const readFile = getTool('read_file');
       const result = await readFile.execute({ path: 'test.txt' });
       expect(result).toBe('file contents here');
+    });
+
+    it('reports execution status independently of Error-prefixed file content', async () => {
+      fs.writeFileSync(path.join(workspace, 'literal-error.txt'), 'Error: ENOENT is file content');
+      fs.writeFileSync(path.join(workspace, 'credentials.json'), 'SENSITIVE_FILE_SENTINEL');
+      const readFile = getTool('read_file');
+      const linkedRead = getToolFrom(
+        createSystemTools({ workspace, denySensitiveFiles: true }),
+        'read_file',
+      );
+
+      await expect(executeToolWithStatus(readFile, { path: 'literal-error.txt' }))
+        .resolves.toEqual({ content: 'Error: ENOENT is file content', isError: false });
+      await expect(executeToolWithStatus(readFile, { path: 'missing.txt' }))
+        .resolves.toMatchObject({ isError: true, content: expect.stringContaining('ENOENT') });
+      await expect(executeToolWithStatus(linkedRead, { path: 'credentials.json' }))
+        .resolves.toEqual({ content: 'Error: Access to sensitive file denied', isError: true });
+    });
+
+    it('fails closed without executing a tool that has no structured status contract', async () => {
+      const execute = vi.fn(async () => 'unstructured result');
+      const unregisteredTool: ToolDefinition = {
+        name: 'unregistered_read_file',
+        description: 'Test-only unregistered tool',
+        parameters: { type: 'object', properties: {} },
+        execute,
+      };
+
+      await expect(executeToolWithStatus(unregisteredTool, {})).resolves.toEqual({
+        content: 'Error: structured execution status unavailable for tool "unregistered_read_file".',
+        isError: true,
+      });
+      expect(execute).not.toHaveBeenCalled();
     });
 
     it('rejects paths outside workspace', async () => {

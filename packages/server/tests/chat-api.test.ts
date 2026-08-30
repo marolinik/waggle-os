@@ -16,6 +16,7 @@ import {
   isExplicitMemorySaveRequest,
   MAX_CONTEXT_MESSAGES,
   parseDirectReadFileDirective,
+  formatDirectReadFileResponse,
   boundDirectReadFilePathsMatch,
   resolveExplicitReadOnlyToolChoice,
 } from '../src/local/routes/chat.js';
@@ -180,7 +181,12 @@ describe('Chat Streaming API', () => {
   it('parses one bounded workspace read and rejects unsafe or compound directives', () => {
     expect(parseDirectReadFileDirective(
       'Use the read_file tool to read sentinel.txt, then report the exact file contents between FILE_START and FILE_END.',
-    )).toEqual({ kind: 'valid', expectedPath: 'sentinel.txt' });
+    )).toEqual({
+      kind: 'valid',
+      expectedPath: 'sentinel.txt',
+      startMarker: 'FILE_START',
+      endMarker: 'FILE_END',
+    });
     expect(parseDirectReadFileDirective(
       'Read "notes/weekly report.txt" in this workspace, then return the exact contents.',
     )).toEqual({ kind: 'valid', expectedPath: 'notes/weekly report.txt' });
@@ -188,6 +194,23 @@ describe('Chat Streaming API', () => {
       .toEqual({ kind: 'valid', expectedPath: 'Makefile' });
     expect(parseDirectReadFileDirective('Open Dockerfile in this workspace.'))
       .toEqual({ kind: 'valid', expectedPath: 'Dockerfile' });
+    expect(formatDirectReadFileResponse(
+      { kind: 'valid', expectedPath: 'empty.txt' },
+      '',
+    )).toBe('(The file is empty.)');
+    expect(formatDirectReadFileResponse(
+      { kind: 'valid', expectedPath: 'whitespace.txt' },
+      ' \n\t',
+    )).toBe('(The file contains only whitespace.)');
+    expect(formatDirectReadFileResponse(
+      {
+        kind: 'valid',
+        expectedPath: 'empty.txt',
+        startMarker: 'START',
+        endMarker: 'END',
+      },
+      '',
+    )).toBe('START\n\nEND');
 
     const invalid = [
       'Do not use read_file to read sentinel.txt.',
@@ -1261,7 +1284,11 @@ describe('Chat Streaming API', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-natural-read-file-'));
     const workspaceDir = path.join(dataDir, 'linked-workspace');
     fs.mkdirSync(workspaceDir, { recursive: true });
-    fs.writeFileSync(path.join(workspaceDir, 'sentinel.txt'), 'NATURAL_READ_FILE_SENTINEL', 'utf8');
+    fs.writeFileSync(
+      path.join(workspaceDir, 'sentinel.txt'),
+      'Error: NATURAL_READ_FILE_SENTINEL\nweekly',
+      'utf8',
+    );
     const configuredModel = 'openai-compatible/qwen3.8-flash-next';
     const config = new WaggleConfig(dataDir);
     config.setDefaultModel(configuredModel);
@@ -1293,7 +1320,7 @@ describe('Chat Streaming API', () => {
         ? body.messages as Array<{ role?: unknown }>
         : [];
       return messages.some(message => message.role === 'tool')
-        ? openAiJsonResponse('FILE_START\nNATURAL_READ_FILE_SENTINEL\nFILE_END')
+        ? openAiJsonResponse('MODEL_MISINTERPRETED_MARKERS')
         : openAiToolSseResponseWithArgs('read_file', { path: 'sentinel.txt' });
     });
 
@@ -1324,10 +1351,13 @@ describe('Chat Streaming API', () => {
 
       expect(response.statusCode).toBe(200);
       expect(toolEvents).toEqual([{ name: 'read_file', input: { path: 'sentinel.txt' } }]);
-      expect(toolResults).toMatchObject([{ name: 'read_file', result: 'NATURAL_READ_FILE_SENTINEL' }]);
+      expect(toolResults).toMatchObject([{
+        name: 'read_file',
+        result: 'Error: NATURAL_READ_FILE_SENTINEL\nweekly',
+      }]);
       expect(events.filter(event => event.event === 'error')).toHaveLength(0);
       expect(done).toMatchObject({
-        content: 'FILE_START\nNATURAL_READ_FILE_SENTINEL\nFILE_END',
+        content: 'FILE_START\nError: NATURAL_READ_FILE_SENTINEL\nweekly\nFILE_END',
         toolsUsed: ['read_file'],
         contextMetrics: {
           packageMode: 'compact',
@@ -1344,6 +1374,14 @@ describe('Chat Streaming API', () => {
       expect(firstMessages.filter(item => item.role !== 'system')).toEqual([{ role: 'user', content: message }]);
       expect(String(firstMessages.find(item => item.role === 'system')?.content ?? ''))
         .toContain('# STRICT READ-ONLY TOOL TURN');
+      expect(events
+        .filter(event => event.event === 'token')
+        .map(event => (JSON.parse(event.data) as { content?: string }).content ?? '')
+        .join(''))
+        .toBe('FILE_START\nError: NATURAL_READ_FILE_SENTINEL\nweekly\nFILE_END');
+      expect(response.body).not.toContain('MODEL_MISINTERPRETED_MARKERS');
+      expect(loadSessionMessages(dataDir, workspace.id, 'natural-read-file').at(-1)?.content)
+        .toBe('FILE_START\nError: NATURAL_READ_FILE_SENTINEL\nweekly\nFILE_END');
     } finally {
       globalThis.fetch = originalFetch;
       await toolServer.close();
@@ -1351,12 +1389,35 @@ describe('Chat Streaming API', () => {
     }
   }, 30_000);
 
-  it('refuses a model-selected read_file path that differs from the user request', async () => {
+  it.each([
+    {
+      label: 'a model-selected path that differs from the user request',
+      requestedPath: 'requested.txt',
+      selectedPath: 'other.txt',
+      expectedFailure: 'must read the complete explicitly requested workspace file',
+      session: 'bound-natural-read-file-wrong-path',
+    },
+    {
+      label: 'a requested file that does not exist',
+      requestedPath: 'missing.txt',
+      selectedPath: 'missing.txt',
+      expectedFailure: 'ENOENT',
+      session: 'bound-natural-read-file-missing',
+    },
+    {
+      label: 'a linked-workspace sensitive-file denial',
+      requestedPath: 'credentials.json',
+      selectedPath: 'credentials.json',
+      expectedFailure: 'Access to sensitive file denied',
+      session: 'bound-natural-read-file-sensitive',
+    },
+  ])('refuses $label', async ({ requestedPath, selectedPath, expectedFailure, session }) => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-natural-read-file-bound-'));
     const workspaceDir = path.join(dataDir, 'linked-workspace');
     fs.mkdirSync(workspaceDir, { recursive: true });
     fs.writeFileSync(path.join(workspaceDir, 'requested.txt'), 'REQUESTED_FILE_SENTINEL');
     fs.writeFileSync(path.join(workspaceDir, 'other.txt'), 'WRONG_PATH_SECRET_SENTINEL');
+    fs.writeFileSync(path.join(workspaceDir, 'credentials.json'), 'SENSITIVE_FILE_SENTINEL');
     const configuredModel = 'openai-compatible/qwen3.8-flash-next';
     const config = new WaggleConfig(dataDir);
     config.setDefaultModel(configuredModel);
@@ -1389,7 +1450,7 @@ describe('Chat Streaming API', () => {
         : [];
       return messages.some(message => message.role === 'tool')
         ? openAiJsonResponse('PATH_GUARD_HANDLED')
-        : openAiToolSseResponseWithArgs('read_file', { path: 'other.txt' });
+        : openAiToolSseResponseWithArgs('read_file', { path: selectedPath });
     });
 
     try {
@@ -1397,9 +1458,9 @@ describe('Chat Streaming API', () => {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: 'Read requested.txt in this workspace, then return the exact file contents.',
+          message: `Read ${requestedPath} in this workspace, then return the exact file contents.`,
           model: configuredModel,
-          session: 'bound-natural-read-file',
+          session,
           workspace: workspace.id,
         },
       });
@@ -1414,16 +1475,23 @@ describe('Chat Streaming API', () => {
       expect(response.statusCode).toBe(200);
       expect(events.filter(event => event.event === 'tool')).toHaveLength(1);
       expect(events.filter(event => event.event === 'tool_result')).toHaveLength(1);
-      expect(toolEvent).toMatchObject({ name: 'read_file', input: { path: 'other.txt' } });
+      expect(toolEvent).toMatchObject({ name: 'read_file', input: { path: selectedPath } });
       expect(toolResult).toMatchObject({
         name: 'read_file',
-        result: expect.stringContaining('must read the complete explicitly requested workspace file'),
+        result: expect.stringContaining(expectedFailure),
+        isError: true,
       });
       expect(serializedResults).not.toContain('WRONG_PATH_SECRET_SENTINEL');
       expect(serializedResults).not.toContain('REQUESTED_FILE_SENTINEL');
+      expect(serializedResults).not.toContain('SENSITIVE_FILE_SENTINEL');
       expect(done).toBeUndefined();
       expect(error).toBeDefined();
       expect(JSON.parse(error!.data).message).toContain('read_file');
+      expect(events.filter(event => event.event === 'token')).toHaveLength(0);
+      expect(response.body).not.toContain('PATH_GUARD_HANDLED');
+      expect(loadSessionMessages(dataDir, workspace.id, session)
+        .some(item => item.role === 'assistant' && item.content.includes('PATH_GUARD_HANDLED')))
+        .toBe(false);
       expect(modelRequests).toHaveLength(2);
       expect(modelRequests[0]?.tool_choice).toEqual({ type: 'function', function: { name: 'read_file' } });
       expect(modelRequests[1]?.tools).toBeUndefined();
@@ -1437,12 +1505,18 @@ describe('Chat Streaming API', () => {
   it.each([
     ['rejects non-boolean line_numbers', 'typed.txt', { path: 'typed.txt', line_numbers: 'false' }],
     ['rejects an oversized exact read', 'large.txt', { path: 'large.txt' }],
+    ['rejects an oversized Error-prefixed exact read', 'large-error.txt', { path: 'large-error.txt' }],
   ] as const)('%s', async (_label, requestedPath, toolArgs) => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-natural-read-file-guard-'));
     const workspaceDir = path.join(dataDir, 'linked-workspace');
     fs.mkdirSync(workspaceDir, { recursive: true });
     fs.writeFileSync(path.join(workspaceDir, 'typed.txt'), 'TYPED_ARGUMENT_SENTINEL', 'utf8');
     fs.writeFileSync(path.join(workspaceDir, 'large.txt'), 'LARGE_FILE_PRIVATE_SENTINEL'.repeat(240), 'utf8');
+    fs.writeFileSync(
+      path.join(workspaceDir, 'large-error.txt'),
+      'Error: LARGE_ERROR_FILE_PRIVATE_SENTINEL'.repeat(240),
+      'utf8',
+    );
     const configuredModel = 'openai-compatible/qwen3.8-flash-next';
     const config = new WaggleConfig(dataDir);
     config.setDefaultModel(configuredModel);
@@ -1501,6 +1575,7 @@ describe('Chat Streaming API', () => {
       expect(toolResult.result).toMatch(/^Error:/);
       expect(serialized).not.toContain('TYPED_ARGUMENT_SENTINEL');
       expect(serialized).not.toContain('LARGE_FILE_PRIVATE_SENTINEL');
+      expect(serialized).not.toContain('LARGE_ERROR_FILE_PRIVATE_SENTINEL');
       expect(response.body).not.toContain('FABRICATED_GUARD_SUCCESS');
     } finally {
       globalThis.fetch = originalFetch;

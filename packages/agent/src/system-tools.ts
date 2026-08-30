@@ -41,6 +41,29 @@ export interface SystemToolDeps {
   denySensitiveFiles?: boolean;
 }
 
+export interface ToolExecutionOutcome {
+  content: string;
+  isError: boolean;
+}
+
+type StructuredToolExecutor = (
+  args: Record<string, unknown>,
+) => Promise<ToolExecutionOutcome>;
+
+const structuredToolExecutors = new WeakMap<ToolDefinition, StructuredToolExecutor>();
+
+export async function executeToolWithStatus(
+  tool: ToolDefinition,
+  args: Record<string, unknown>,
+): Promise<ToolExecutionOutcome> {
+  const structuredExecutor = structuredToolExecutors.get(tool);
+  if (structuredExecutor) return structuredExecutor(args);
+  return {
+    content: `Error: structured execution status unavailable for tool "${tool.name}".`,
+    isError: true,
+  };
+}
+
 /** Prefer a repository README over GitHub navigation chrome for exact repo-root fetches. */
 export function extractWebPageText(body: string, sourceUrl: string): string {
   let content = body;
@@ -187,6 +210,115 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
     return pattern;
   };
 
+  const executeReadFileWithStatus: StructuredToolExecutor = async (args) => {
+    try {
+      const filePath = args.path as string;
+      const ext = path.extname(filePath).toLowerCase();
+
+      // Image / PDF branches are fs-only in v1. Team-storage users will see
+      // backend routing for text files; images/PDFs stay on local disk until
+      // Bucket 2 adds binary-stream support in the backend contract.
+      if (!fileBackend) {
+        const resolved = resolveReadablePath(filePath);
+
+        if (IMAGE_EXTENSIONS.has(ext)) {
+          const stat = fs.statSync(resolved);
+          return { content: `[Image file: ${filePath}, ${stat.size} bytes]`, isError: false };
+        }
+        if (ext === '.pdf') {
+          const stat = fs.statSync(resolved);
+          try {
+            // pdf-parse is an optional CJS module; describe only the call we make.
+            type PdfParseFn = (buf: Buffer) => Promise<{ text: string }>;
+            const pdfModule = (await import('pdf-parse')) as unknown as
+              PdfParseFn & { default?: PdfParseFn };
+            const buffer = fs.readFileSync(resolved);
+            const parseFn: PdfParseFn = pdfModule.default ?? pdfModule;
+            const data = await parseFn(buffer);
+            const text = data.text;
+            return {
+              content: text || `[PDF file: ${filePath}, ${stat.size} bytes, no text content extracted]`,
+              isError: false,
+            };
+          } catch {
+            return {
+              content: `[PDF file: ${filePath}, ${stat.size} bytes. Install pdf-parse for text extraction: npm install pdf-parse]`,
+              isError: false,
+            };
+          }
+        }
+      }
+
+      // Text read — branch on backend presence.
+      let content: string;
+      if (fileBackend) {
+        if (IMAGE_EXTENSIONS.has(ext)) {
+          return {
+            content: `[Image file: ${filePath}, binary content not read over storage backend]`,
+            isError: false,
+          };
+        }
+        if (ext === '.pdf') {
+          return {
+            content: `[PDF file: ${filePath}, backend-routed read does not yet extract PDF text. Download the file to inspect it.]`,
+            isError: false,
+          };
+        }
+        const key = resolveReadableBackendKey(filePath);
+        const buf = await fileBackend.read(key);
+        content = buf.toString('utf-8');
+      } else {
+        const resolved = resolveReadablePath(filePath);
+        content = fs.readFileSync(resolved, 'utf-8');
+      }
+
+      let lines = content.split('\n');
+      const offset = (args.offset as number) ?? 1;
+      const limit = args.limit as number | undefined;
+      const lineNumbers = (args.line_numbers as boolean) ?? false;
+      const startIdx = Math.max(0, offset - 1);
+      lines = lines.slice(startIdx);
+
+      if (limit !== undefined && limit > 0) {
+        lines = lines.slice(0, limit);
+      }
+
+      if (lineNumbers) {
+        const maxLineNum = startIdx + lines.length;
+        const padWidth = String(maxLineNum).length;
+        lines = lines.map((line, i) => {
+          const lineNum = String(startIdx + i + 1).padStart(padWidth, ' ');
+          return `${lineNum}\t${line}`;
+        });
+      }
+
+      return { content: lines.join('\n'), isError: false };
+    } catch (err: unknown) {
+      return {
+        content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  };
+
+  const readFileTool: ToolDefinition = {
+    name: 'read_file',
+    description: 'Read contents of a file (path relative to workspace). Supports offset/limit for partial reads and line numbers.',
+    offlineCapable: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path relative to workspace' },
+        offset: { type: 'number', description: 'Starting line number (1-based, default: 1)' },
+        limit: { type: 'number', description: 'Maximum number of lines to return (default: all)' },
+        line_numbers: { type: 'boolean', description: 'If true, prefix each line with its right-aligned line number (default: false)' },
+      },
+      required: ['path'],
+    },
+    execute: async (args) => (await executeReadFileWithStatus(args)).content,
+  };
+  structuredToolExecutors.set(readFileTool, executeReadFileWithStatus);
+
   return [
     // 1. bash — Execute shell commands
     {
@@ -290,101 +422,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
     },
 
     // 2. read_file — Read file contents
-    {
-      name: 'read_file',
-      description: 'Read the contents of a file (path relative to workspace). Supports offset/limit for partial reads and line numbers.',
-      offlineCapable: true,
-      parameters: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'File path relative to workspace' },
-          offset: { type: 'number', description: 'Line number to start reading from (1-based, default: 1)' },
-          limit: { type: 'number', description: 'Maximum number of lines to return (default: all)' },
-          line_numbers: { type: 'boolean', description: 'When true, prefix each line with right-aligned line number (default: false)' },
-        },
-        required: ['path'],
-      },
-      execute: async (args) => {
-        try {
-          const filePath = args.path as string;
-          const ext = path.extname(filePath).toLowerCase();
-
-          // Image / PDF branches are fs-only for v1. Team-storage users will see
-          // backend routing for text files; images/PDFs stay on local disk until
-          // Bucket 2 adds binary-stream support in the backend contract.
-          if (!fileBackend) {
-            const resolved = resolveReadablePath(filePath);
-
-            if (IMAGE_EXTENSIONS.has(ext)) {
-              const stat = fs.statSync(resolved);
-              return `[Image file: ${filePath}, ${stat.size} bytes]`;
-            }
-            if (ext === '.pdf') {
-              const stat = fs.statSync(resolved);
-              try {
-                // pdf-parse is an optional CJS module; describe only the call we make.
-                type PdfParseFn = (buf: Buffer) => Promise<{ text: string }>;
-                const pdfModule = (await import('pdf-parse')) as unknown as
-                  PdfParseFn & { default?: PdfParseFn };
-                const buffer = fs.readFileSync(resolved);
-                const parseFn: PdfParseFn = pdfModule.default ?? pdfModule;
-                const data = await parseFn(buffer);
-                const text = data.text;
-                return text || `[PDF file: ${filePath}, ${stat.size} bytes, no text content extracted]`;
-              } catch {
-                return `[PDF file: ${filePath}, ${stat.size} bytes. Install pdf-parse for text extraction: npm install pdf-parse]`;
-              }
-            }
-          }
-
-          // Text read — branch on backend presence.
-          let content: string;
-          if (fileBackend) {
-            if (IMAGE_EXTENSIONS.has(ext)) {
-              return `[Image file: ${filePath}, binary content not read over storage backend]`;
-            }
-            if (ext === '.pdf') {
-              return `[PDF file: ${filePath}, backend-routed read does not yet extract PDF text. Download the file to inspect it.]`;
-            }
-            const key = resolveReadableBackendKey(filePath);
-            const buf = await fileBackend.read(key);
-            content = buf.toString('utf-8');
-          } else {
-            const resolved = resolveReadablePath(filePath);
-            content = fs.readFileSync(resolved, 'utf-8');
-          }
-
-          let lines = content.split('\n');
-
-          const offset = (args.offset as number) ?? 1;
-          const limit = args.limit as number | undefined;
-          const lineNumbers = (args.line_numbers as boolean) ?? false;
-
-          // Apply offset (1-based)
-          const startIdx = Math.max(0, offset - 1);
-          lines = lines.slice(startIdx);
-
-          // Apply limit
-          if (limit !== undefined && limit > 0) {
-            lines = lines.slice(0, limit);
-          }
-
-          // Apply line numbers
-          if (lineNumbers) {
-            const maxLineNum = startIdx + lines.length;
-            const padWidth = String(maxLineNum).length;
-            lines = lines.map((line, i) => {
-              const lineNum = String(startIdx + i + 1).padStart(padWidth, ' ');
-              return `${lineNum}\t${line}`;
-            });
-          }
-
-          return lines.join('\n');
-        } catch (err: unknown) {
-          return `Error: ${err instanceof Error ? err.message : String(err)}`;
-        }
-      },
-    },
+    readFileTool,
 
     // 3. write_file — Create/overwrite files
     {
