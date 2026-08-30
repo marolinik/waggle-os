@@ -589,7 +589,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
         <CreateWorkspaceDialog
           open={showCreate}
           onClose={() => setShowCreate(false)}
-          onCreate={(data) => { void createWorkspace(data); }}
+          onCreate={createWorkspace}
         />
       </div>
     );
@@ -691,7 +691,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
       <CreateWorkspaceDialog
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        onCreate={(data) => { void createWorkspace(data); }}
+        onCreate={createWorkspace}
       />
     </div>
   );

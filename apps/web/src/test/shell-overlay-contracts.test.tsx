@@ -212,6 +212,70 @@ describe('Shell overlay contracts', () => {
     expect(within(reopened).queryByText('Agent (optional)', { exact: true })).not.toBeInTheDocument();
   });
 
+  it('Create Workspace keeps the draft open and supports retry after asynchronous creation fails', async () => {
+    const onCreate = vi.fn<() => Promise<Workspace | null>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'premium-launch-workspace', name: 'Premium launch workspace', group: 'Personal' });
+    const onClose = vi.fn();
+
+    renderWithProviders(<CreateWorkspaceDialog open onClose={onClose} onCreate={onCreate} />);
+    await waitFor(() => expect(mocks.adapter.getWorkspaceTemplates).toHaveBeenCalled());
+
+    const dialog = screen.getByRole('dialog', { name: /create workspace/i });
+    const nameInput = within(dialog).getByRole('textbox', { name: /what project or area/i });
+    fireEvent.change(nameInput, { target: { value: 'Premium launch workspace' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^create workspace$/i }));
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/wasn.t created/i);
+    expect(nameInput).toHaveValue('Premium launch workspace');
+    expect(onClose).not.toHaveBeenCalled();
+    const retryButton = within(dialog).getByRole('button', { name: /^create workspace$/i });
+    expect(retryButton).toBeEnabled();
+
+    fireEvent.click(retryButton);
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('Create Workspace permits one pending transaction and closes only after success', async () => {
+    let resolveCreate!: (value: Workspace | null) => void;
+    const pendingCreate = new Promise<Workspace | null>((resolve) => { resolveCreate = resolve; });
+    const onCreate = vi.fn(() => pendingCreate);
+    const onClose = vi.fn();
+
+    renderWithProviders(<CreateWorkspaceDialog open onClose={onClose} onCreate={onCreate} />);
+    await waitFor(() => expect(mocks.adapter.getWorkspaceTemplates).toHaveBeenCalled());
+
+    const dialog = screen.getByRole('dialog', { name: /create workspace/i });
+    const nameInput = within(dialog).getByRole('textbox', { name: /what project or area/i });
+    fireEvent.change(nameInput, {
+      target: { value: 'Successful workspace' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^create workspace$/i }));
+
+    expect(dialog).toHaveAttribute('aria-busy', 'true');
+    const pendingButton = within(dialog).getByRole('button', { name: /creating workspace/i });
+    const cancelButton = within(dialog).getByRole('button', { name: /cancel/i });
+    const closeButton = within(dialog).getByRole('button', { name: /close create workspace/i });
+    expect(pendingButton).toBeDisabled();
+    expect(cancelButton).toBeDisabled();
+    expect(closeButton).toBeDisabled();
+    fireEvent.click(pendingButton);
+    fireEvent.click(cancelButton);
+    fireEvent.click(closeButton);
+    fireEvent.keyDown(nameInput, { key: 'Enter' });
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent.click(dialog.parentElement as HTMLElement);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveCreate({ id: 'successful-workspace', name: 'Successful workspace', group: 'Personal' });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
   it('Create Workspace visible setup fields expose stable form metadata and focus rings', async () => {
     renderWithProviders(<CreateWorkspaceDialog open onClose={vi.fn()} onCreate={vi.fn()} />);
     await waitFor(() => expect(mocks.adapter.getWorkspaceTemplates).toHaveBeenCalled());
