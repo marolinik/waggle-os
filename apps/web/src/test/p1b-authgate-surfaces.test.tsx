@@ -200,7 +200,7 @@ describe('useWorkspaces (P1b)', () => {
       { id: 'w-a', name: 'Workspace A' },
       { id: 'w-b', name: 'Workspace B' },
     ]);
-    mocks.adapter.deleteWorkspace.mockReturnValueOnce(new Promise(resolve => {
+    mocks.adapter.deleteWorkspace.mockReturnValueOnce(new Promise<void>(resolve => {
       resolveDelete = resolve;
     }));
     const { result } = renderHook(() => useWorkspaces());
@@ -685,7 +685,7 @@ describe('useSessions (P1b)', () => {
       { id: 'session-s1', workspaceId: 'w1', title: 'S1', messageCount: 1, lastActive: '2026-08-28T11:00:00.000Z' },
       { id: 'session-s2', workspaceId: 'w1', title: 'S2', messageCount: 1, lastActive: '2026-08-28T10:00:00.000Z' },
     ]);
-    mocks.adapter.deleteSession.mockReturnValueOnce(new Promise(resolve => { resolveDelete = resolve; }));
+    mocks.adapter.deleteSession.mockReturnValueOnce(new Promise<void>(resolve => { resolveDelete = resolve; }));
     mocks.adapter.createSession.mockResolvedValueOnce({
       id: 'session-s3', workspaceId: 'w1', title: 'S3', messageCount: 0,
       lastActive: '2026-08-28T11:04:00.000Z',

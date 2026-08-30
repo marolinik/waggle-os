@@ -313,7 +313,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
       yield { type: 'done', data: { content: doneContent } };
     });
 
-    const sessionId = `sess-blank-${_label.replaceAll(' ', '-')}`;
+    const sessionId = `sess-blank-${_label.replace(/ /g, '-')}`;
     const { result } = await mountChat(sessionId);
     let succeeded = true;
     await act(async () => {

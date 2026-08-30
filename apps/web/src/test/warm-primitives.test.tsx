@@ -97,7 +97,7 @@ describe('warm primitives — render smoke', () => {
 
   it('AskBar submits trimmed text and clears the input', () => {
     let sent = '';
-    render(<AskBar onSubmit={(t) => (sent = t)} />);
+    render(<AskBar onSubmit={(t) => { sent = t; }} />);
     const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
     expect(input).toHaveAttribute('name', 'ask-waggle');
     expect(input).toHaveAttribute('autocomplete', 'off');
