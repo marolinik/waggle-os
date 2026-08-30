@@ -142,6 +142,83 @@ describe('Cost Dashboard API', () => {
     }
   });
 
+  it('projects policy-aware free and fixed spend consistently across every cost surface', async () => {
+    const policyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cost-policy-'));
+    let policyServer: FastifyInstance | undefined;
+    try {
+      fs.writeFileSync(
+        path.join(policyDir, 'config.json'),
+        JSON.stringify({ tier: 'TEAMS', dailyBudget: 1 }),
+      );
+      const mind = new MindDB(path.join(policyDir, 'personal.mind'));
+      mind.close();
+
+      policyServer = await buildLocalServer({ dataDir: policyDir });
+      const freeWorkspace = policyServer.workspaceManager.create({
+        name: 'Free compatible workspace',
+        group: 'Test',
+        model: 'openai-compatible/qwen3.8-flash-next',
+      });
+      const paidWorkspace = policyServer.workspaceManager.create({
+        name: 'Fixed paid workspace',
+        group: 'Test',
+        model: 'ollama/remote-paid',
+      });
+      const { costTracker } = policyServer.agentState;
+      costTracker.addUsage(
+        'openai-compatible/qwen3.8-flash-next',
+        1_000,
+        1_000,
+        freeWorkspace.id,
+        { billingClass: 'free' },
+      );
+      costTracker.addUsage(
+        'ollama/remote-paid',
+        1_000,
+        1_000,
+        paidWorkspace.id,
+        { billingClass: 'priced', fixedCostUsd: 0.25 },
+      );
+
+      const summary = (await injectWithAuth(policyServer, {
+        method: 'GET',
+        url: '/api/cost/summary',
+      })).json();
+      expect(summary.today.estimatedCost).toBeCloseTo(0.25, 6);
+      expect(summary.week.estimatedCost).toBeCloseTo(0.25, 6);
+      expect(summary.allTime.estimatedCost).toBeCloseTo(0.25, 6);
+      expect(summary.daily.at(-1)?.cost).toBeCloseTo(0.25, 6);
+      expect(summary.budget.todayCost).toBeCloseTo(0.25, 6);
+
+      const byWorkspace = (await injectWithAuth(policyServer, {
+        method: 'GET',
+        url: '/api/cost/by-workspace',
+      })).json();
+      expect(byWorkspace.totalCost).toBeCloseTo(0.25, 6);
+      expect(byWorkspace.workspaces).toEqual(expect.arrayContaining([
+        expect.objectContaining({ workspaceId: freeWorkspace.id, estimatedCost: 0 }),
+        expect.objectContaining({ workspaceId: paidWorkspace.id, estimatedCost: 0.25 }),
+      ]));
+
+      const freeCost = (await injectWithAuth(policyServer, {
+        method: 'GET',
+        url: `/api/workspaces/${freeWorkspace.id}/cost`,
+      })).json();
+      expect(freeCost.used).toBe(0);
+      expect(freeCost.history).toEqual([expect.objectContaining({ cost: 0 })]);
+
+      const paidCost = (await injectWithAuth(policyServer, {
+        method: 'GET',
+        url: `/api/workspaces/${paidWorkspace.id}/cost`,
+      })).json();
+      expect(paidCost.used).toBeCloseTo(0.25, 6);
+      expect(paidCost.history).toEqual([expect.objectContaining({ cost: 0.25 })]);
+    } finally {
+      if (policyServer) await policyServer.close();
+      fs.rmSync(policyDir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps the budget progress total across a sidecar restart', async () => {
     const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cost-restart-'));
     let initialServer: FastifyInstance | undefined;

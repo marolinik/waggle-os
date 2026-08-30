@@ -1279,7 +1279,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     for (const e of wsEntries) {
       const day = e.timestamp?.slice(0, 10) ?? '';
       if (!day) continue;
-      const cost = costTracker.calculateCost(e.input, e.output, e.model);
+      const cost = costTracker.calculateUsageCost(e);
       dailyMap.set(day, (dailyMap.get(day) ?? 0) + cost);
     }
     const history = Array.from(dailyMap.entries())
