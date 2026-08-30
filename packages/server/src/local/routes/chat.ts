@@ -1238,10 +1238,52 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
       origin, channel: channelMeta,
     } = request.body ?? {};
+
+    // Reject malformed request fields before resolving referenced resources.
+    // A syntactically valid unknown workspace still returns 404 below, while
+    // invalid message/session input remains a stable 400 regardless of whether
+    // the named workspace exists.
+    if (message === undefined || message === '') {
+      return reply.status(400).send({ error: 'message is required' });
+    }
+    if (typeof message !== 'string') {
+      return reply.status(400).send({ error: 'message must be a string', code: 'INVALID_FIELD_TYPE' });
+    }
+    const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
+    }
+    const MAX_CHAT_SEGMENT_LENGTH = 200;
+    for (const [field, value] of [
+      ['workspace', _ws],
+      ['workspaceId', _wsId],
+      ['session', session],
+      ['sessionId', sessionIdAlias],
+    ] as const) {
+      if (value === undefined) continue;
+      if (typeof value !== 'string') {
+        return reply.status(400).send({ error: `${field} must be a string`, code: 'INVALID_FIELD_TYPE' });
+      }
+      if (value.length > MAX_CHAT_SEGMENT_LENGTH) {
+        return reply.status(400).send({
+          error: `${field} is too long (max ${MAX_CHAT_SEGMENT_LENGTH} chars)`,
+          code: 'INVALID_FIELD_LENGTH',
+        });
+      }
+      assertSafeSegment(value, field);
+    }
+
     const suppliedWorkspace = _ws ?? _wsId;
     const authorizedWorkspace = getResolvedChatWorkspaceId(request);
     const workspace = suppliedWorkspace;
-    if (workspace) assertSafeSegment(workspace, 'workspace');
+    const requestedSessionId = session ?? sessionIdAlias;
+    if (session !== undefined && sessionIdAlias !== undefined && session !== sessionIdAlias) {
+      return reply.status(400).send({
+        error: 'session and sessionId must match when both are provided',
+        code: 'SESSION_ID_CONFLICT',
+      });
+    }
+
     const workspaceConfig = workspace
       ? server.workspaceManager?.get(workspace)
       : undefined;
@@ -1284,8 +1326,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
       }
     }
-    const requestedSessionId = session ?? sessionIdAlias;
-
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
     // already sets it, so its review turns are gated even without `origin`.
@@ -1381,17 +1421,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     }
 
-    // Validation — return standard JSON error before starting SSE.
-    // Review Critical #3: ALL validation + auth checks must run BEFORE reply.hijack() —
-    // once hijacked, reply.status() / reply.send() become no-ops on the raw socket.
-    if (!message) {
-      return reply.status(400).send({ error: 'message is required' });
-    }
-    // F17: Message size limit — reject payloads over 50KB to prevent abuse
-    const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
-    if (message.length > MAX_MESSAGE_LENGTH) {
-      return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
-    }
+    // Validation and auth checks remain before reply.hijack(); once hijacked,
+    // reply.status() / reply.send() become no-ops on the raw socket.
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
     const resolvedReadOnlyToolDirective = resolveExplicitReadOnlyToolChoice(
       message,
@@ -1445,16 +1476,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // joined into dataDir/workspaces/<workspace>/sessions/<session>.jsonl by
     // chat-persistence (persistMessage / loadSessionMessages). A crafted
     // "../evil" segment would escape the sessions dir on both write and read.
-    // Reuse the shared guard; runs BEFORE reply.hijack() so the thrown
-    // {statusCode:400} is converted to a 400 by Fastify's default error handler.
-    if (session && sessionIdAlias && session !== sessionIdAlias) {
-      return reply.status(400).send({
-        error: 'session and sessionId must match when both are provided',
-        code: 'SESSION_ID_CONFLICT',
-      });
-    }
-    if (requestedSessionId) assertSafeSegment(requestedSessionId, 'session');
-
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
     if (injectionResult.score >= 0.7) {
