@@ -124,11 +124,8 @@ async function modelIsRoutable(
   // request is the authority; managed LiteLLM catalog state may be stale or
   // absent after the service has fallen back from a failed LiteLLM launch.
   const activeProvider = server.agentState?.llmProvider;
-  if (
-    activeProvider?.provider === 'anthropic-proxy'
-    && activeProvider.health !== 'unavailable'
-  ) {
-    return true;
+  if (activeProvider?.provider === 'anthropic-proxy') {
+    return activeProvider.health !== 'unavailable';
   }
   return ensureManagedLiteLLMModel(server, model);
 }

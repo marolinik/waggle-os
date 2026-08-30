@@ -23,6 +23,7 @@ import { persistMessage } from './routes/chat-persistence.js';
 import { emitWaggleSignal } from './routes/waggle-signals.js';
 import type { AgentRunner } from './routes/chat.js';
 import {
+  isExactConfiguredKeylessCompatibleModel,
   listOllamaChatModelIds,
   OllamaModelNotLocalError,
   resolveUsableModel,
@@ -264,6 +265,7 @@ async function executeFleetRun(
           run.workspaceId,
           listOllamaChatModelIds,
           () => traceId,
+          (model) => isExactConfiguredKeylessCompatibleModel(server, model),
         )
       : underlyingRunner;
     let workerTools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);

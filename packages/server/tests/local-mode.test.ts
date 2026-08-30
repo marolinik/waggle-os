@@ -753,8 +753,14 @@ describe('Local Server Mode', () => {
   it('blocks first-after-restart Fleet dispatch after persisted spend exhausts hard cap', async () => {
     const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-budget-restart-'));
     const config = new waggleCore.WaggleConfig(restartDir);
+    const compatibleModel = 'openai-compatible/qwen3.8-flash-next';
     config.setDailyBudget(1);
     config.setBudgetHardCap(false);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      models: ['qwen3.8-flash-next'],
+    });
     config.save();
 
     const firstServer = await buildLocalServer({ dataDir: restartDir });
@@ -779,8 +785,13 @@ describe('Local Server Mode', () => {
       return new Response('', { status: 503 });
     });
     const fleetTraceIds: Array<number | undefined> = [];
+    const fleetBilling: Array<{ model: string; billingClass: string | undefined }> = [];
     firstServer.agentRunner = async (agentConfig) => {
       fleetTraceIds.push(agentConfig.modelSpendTraceId);
+      fleetBilling.push({
+        model: agentConfig.billingModel ?? agentConfig.model,
+        billingClass: agentConfig.modelSpendBillingClass,
+      });
       if (agentConfig.model === 'anthropic/claude-sonnet-4-6') {
         const spawn = agentConfig.tools.find((tool) => tool.name === 'spawn_agent');
         expect(spawn).toBeDefined();
@@ -791,6 +802,10 @@ describe('Local Server Mode', () => {
         await spawn!.execute({
           name: 'Free Ollama child', role: 'researcher', task: 'Use offline Ollama',
           model: 'ollama/qwen2.5:1.5b',
+        });
+        await spawn!.execute({
+          name: 'Free compatible child', role: 'researcher', task: 'Use exact configured Qwen',
+          model: compatibleModel,
         });
         return { content: 'parent Fleet run', toolsUsed: ['spawn_agent'], usage: { inputTokens: 0, outputTokens: 0 } };
       }
@@ -825,7 +840,8 @@ describe('Local Server Mode', () => {
     expect(firstRun?.status, JSON.stringify(firstRun)).toBe('completed');
     const [firstTrace] = firstServer.traceStore.query({ sessionId: `spawn-${firstRunId}`, limit: 1 });
     expect(firstTrace.cost_usd).toBeCloseTo(0.018, 6);
-    expect(fleetTraceIds).toEqual([firstTrace.id, firstTrace.id, firstTrace.id]);
+    expect(fleetTraceIds).toEqual([firstTrace.id, firstTrace.id, firstTrace.id, firstTrace.id]);
+    expect(fleetBilling.find(item => item.model === compatibleModel)?.billingClass).toBe('free');
 
     expect(firstServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.018, 6);
     await firstServer.close();
@@ -882,8 +898,14 @@ describe('Local Server Mode', () => {
   it('persists shared Agent Group spend and blocks all members after restart', async () => {
     const restartDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-group-budget-restart-'));
     const config = new waggleCore.WaggleConfig(restartDir);
+    const compatibleModel = 'openai-compatible/qwen3.8-flash-next';
     config.setDailyBudget(0.04);
     config.setBudgetHardCap(false);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      models: ['qwen3.8-flash-next'],
+    });
     config.save();
     const waitForJob = async (target: FastifyInstance, jobId: string) => {
       for (let attempt = 0; attempt < 200; attempt += 1) {
@@ -896,6 +918,7 @@ describe('Local Server Mode', () => {
     };
 
     const firstServer = await buildLocalServer({ dataDir: restartDir });
+    let firstServerClosed = false;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       if (String(input).endsWith('/api/tags')) {
         return new Response(JSON.stringify({ models: [{ name: 'qwen2.5:1.5b' }] }), { status: 200 });
@@ -908,8 +931,13 @@ describe('Local Server Mode', () => {
       firstServer.workspaceManager.update(workspaceId, { model: 'anthropic/claude-sonnet-4-6' });
       let providerDispatches = 0;
       const paidGroupTraceIds: Array<number | undefined> = [];
+      const groupBilling: Array<{ model: string; billingClass: string | undefined }> = [];
       firstServer.agentRunner = async (agentConfig) => {
         paidGroupTraceIds.push(agentConfig.modelSpendTraceId);
+        groupBilling.push({
+          model: agentConfig.billingModel ?? agentConfig.model,
+          billingClass: agentConfig.modelSpendBillingClass,
+        });
         const reservation = agentConfig.modelSpendBudget!.reserveModelSpend({
           model: agentConfig.billingModel ?? agentConfig.model,
           inputTokens: 1_000,
@@ -961,6 +989,74 @@ describe('Local Server Mode', () => {
       const [localTrace] = firstServer.traceStore.query({ sessionId: `group-${localJobId}`, limit: 1 });
       expect(localTrace.cost_usd).toBe(0);
       expect(firstServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.036, 6);
+
+      const coordinatorGroup = await injectWithAuth(firstServer, {
+        method: 'POST',
+        url: '/api/agent-groups',
+        payload: {
+          name: 'Compatible coordinator', strategy: 'coordinator',
+          members: [
+            { agentId: 'researcher', roleInGroup: 'worker', executionOrder: 0 },
+            { agentId: 'writer', roleInGroup: 'worker', executionOrder: 1 },
+          ],
+        },
+      });
+      expect(coordinatorGroup.statusCode).toBe(201);
+      const coordinatorGroupId = (coordinatorGroup.json() as { id: string }).id;
+      firstServer.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
+      firstServer.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        detail: 'compatible endpoint ready',
+        checkedAt: new Date().toISOString(),
+      };
+      firstServer.workspaceManager.update(workspaceId, { model: compatibleModel });
+      const callsBeforeCompatible = groupBilling.length;
+      const ollamaProbesBeforeCompatible = fetchSpy.mock.calls.filter(([input]) => (
+        String(input).endsWith('/api/tags')
+      )).length;
+      const compatibleStart = await injectWithAuth(firstServer, {
+        method: 'POST', url: `/api/agent-groups/${coordinatorGroupId}/run`,
+        payload: { task: 'Run exact configured Qwen members and synthesizer', workspaceId },
+      });
+      const compatibleJobId = (compatibleStart.json() as { jobId: string }).jobId;
+      expect((await waitForJob(firstServer, compatibleJobId)).status).toBe('completed');
+      expect(providerDispatches).toBe(7);
+      expect(groupBilling.slice(callsBeforeCompatible)).toEqual([
+        { model: compatibleModel, billingClass: 'free' },
+        { model: compatibleModel, billingClass: 'free' },
+        { model: compatibleModel, billingClass: 'free' },
+      ]);
+      expect(fetchSpy.mock.calls.filter(([input]) => (
+        String(input).endsWith('/api/tags')
+      ))).toHaveLength(ollamaProbesBeforeCompatible);
+      const [compatibleTrace] = firstServer.traceStore.query({
+        sessionId: `group-${compatibleJobId}`,
+        limit: 1,
+      });
+      expect(compatibleTrace.cost_usd).toBe(0);
+      expect(firstServer.agentState.costTracker.getDailyTotal()).toBeCloseTo(0.036, 6);
+
+      const dispatchesBeforeUnavailable = providerDispatches;
+      firstServer.vault.set('anthropic', 'test-key');
+      expect(Boolean(firstServer.localConfig.manageLiteLLM)).toBe(false);
+      firstServer.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'unavailable',
+        detail: 'compatible endpoint unavailable',
+        checkedAt: new Date().toISOString(),
+      };
+      try {
+        const unavailableCompatible = await injectWithAuth(firstServer, {
+          method: 'POST', url: `/api/agent-groups/${coordinatorGroupId}/run`,
+          payload: { task: 'Do not fall back from unavailable Qwen', workspaceId },
+        });
+        expect(unavailableCompatible.statusCode).toBe(409);
+        expect(unavailableCompatible.json()).toMatchObject({ error: 'model_unavailable' });
+        expect(providerDispatches).toBe(dispatchesBeforeUnavailable);
+      } finally {
+        firstServer.vault.delete('anthropic');
+      }
 
       firstServer.agentState.currentModel = 'anthropic/claude-sonnet-4-6';
       firstServer.workspaceManager.update(workspaceId, { model: 'anthropic/claude-sonnet-4-6' });
@@ -1088,10 +1184,11 @@ describe('Local Server Mode', () => {
         releaseSecondMember();
         await waitForJob(firstServer, crashJobId);
         await firstServer.close();
+        firstServerClosed = true;
       }
     } finally {
       fetchSpy.mockRestore();
-      if (firstServer.server.listening) await firstServer.close();
+      if (!firstServerClosed) await firstServer.close();
       fs.rmSync(restartDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   }, 30_000);
