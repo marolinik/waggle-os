@@ -1294,6 +1294,80 @@ describe('persona acceptance prompt budget', () => {
     },
   );
 
+  it('keeps exact keyless compatible chat subagents free and fails closed when a credential appears', async () => {
+    const compatibleModel = 'openai-compatible/qwen3.8-flash-next';
+    const config = new WaggleConfig(tmpDir);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      models: ['qwen3.8-flash-next'],
+    });
+    config.save();
+    const loopConfigs: AgentLoopConfig[] = [];
+
+    testState.runAgentLoop.mockImplementation(async (loopConfig: AgentLoopConfig) => {
+      loopConfigs.push(loopConfig);
+      const spawn = loopConfig.tools.find(tool => tool.name === 'spawn_agent');
+      if (spawn) {
+        await spawn.execute({
+          name: 'billing-child',
+          role: 'custom',
+          task: 'Read one current workspace file.',
+          tools: ['read_file'],
+        });
+        return {
+          content: 'Parent completed after delegation',
+          toolsUsed: ['spawn_agent'],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      }
+      return {
+        content: 'Child completed',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    });
+
+    const runDelegation = async (session: string) => {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Delegate one bounded read of a current workspace file.',
+          model: compatibleModel,
+          persona: 'general-purpose',
+          session,
+          workspace: collaborationWorkspaceId,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('Parent completed after delegation');
+      expect(loopConfigs).toHaveLength(2);
+      expect(loopConfigs[1].billingModel).toBe(compatibleModel);
+      expect(loopConfigs[1].modelSpendBudget).toBe(loopConfigs[0].modelSpendBudget);
+      expect(loopConfigs[1].modelSpendTraceId).toBe(loopConfigs[0].modelSpendTraceId);
+    };
+
+    try {
+      await runDelegation('keyless-compatible-child-billing');
+      expect(loopConfigs.map(item => item.modelSpendBillingClass)).toEqual(['free', 'free']);
+
+      server.vault.set('openai-compatible', 'sk-compatible-test', {
+        baseUrl: 'http://127.0.0.1:1/v1',
+        models: ['qwen3.8-flash-next'],
+      });
+      loopConfigs.length = 0;
+      await runDelegation('keyed-compatible-child-billing');
+      expect(loopConfigs.map(item => item.modelSpendBillingClass)).toEqual(['priced', 'priced']);
+    } finally {
+      server.vault.delete('openai-compatible');
+      const cleanup = new WaggleConfig(tmpDir);
+      cleanup.removeProvider('openai-compatible');
+      cleanup.save();
+      testState.runAgentLoop.mockImplementation(defaultRunAgentLoop);
+    }
+  });
+
   it('keeps public marketplace search available when persisted memory is disabled', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ packages: [], total: 0 }), {

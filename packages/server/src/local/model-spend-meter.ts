@@ -122,12 +122,21 @@ export function bindModelSpendBudget(
   workspaceId: string,
   listVerifiedLocalModels: () => Promise<string[]>,
   getDurableTraceId?: () => number | undefined,
+  isAdditionalUnmeteredModel?: (model: string) => boolean,
 ): AgentRunner {
   let verifiedLocalModels: Promise<Set<string>> | undefined;
   return async (config) => {
     const billingModel = config.billingModel ?? config.model;
     let billingClass: 'priced' | 'free' = 'priced';
-    if (billingModel.toLowerCase().startsWith('ollama/')) {
+    let additionalUnmetered = false;
+    try {
+      additionalUnmetered = isAdditionalUnmeteredModel?.(billingModel) === true;
+    } catch {
+      additionalUnmetered = false;
+    }
+    if (additionalUnmetered) {
+      billingClass = 'free';
+    } else if (billingModel.toLowerCase().startsWith('ollama/')) {
       verifiedLocalModels ??= listVerifiedLocalModels().then((models) => new Set(models));
       billingClass = (await verifiedLocalModels).has(billingModel) ? 'free' : 'priced';
     }

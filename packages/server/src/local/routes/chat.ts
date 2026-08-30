@@ -2774,6 +2774,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             executionScopeId,
             listOllamaChatModelIds,
             () => traceHandle?.id,
+            (model) => isExactConfiguredKeylessCompatibleModel(server, model),
           );
           effectiveTools = bindChatCollaborationTools({
             server,
