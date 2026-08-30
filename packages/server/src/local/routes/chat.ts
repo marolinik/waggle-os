@@ -2896,6 +2896,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             isAutomatedTurn,
             explicitCapabilityRequest,
             taskComplexity: turnTaskShape.complexity,
+            suspiciousInjection: !injectionResult.safe,
             explicitReadOnlyToolChoice: explicitReadOnlyToolChoice === explicitReadOnlyToolCandidate
               ? explicitReadOnlyToolChoice
               : undefined,

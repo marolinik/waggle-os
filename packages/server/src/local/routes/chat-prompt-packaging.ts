@@ -14,6 +14,7 @@ export interface ChatPromptPackageModeInput {
   isAutomatedTurn: boolean;
   explicitCapabilityRequest: boolean;
   taskComplexity: 'simple' | 'moderate' | 'complex';
+  suspiciousInjection: boolean;
   exclusiveSuppliedOnlyResponseContract?: boolean;
   explicitToolFreeAdvisory?: boolean;
   /** Already validated against the final authorized tool set by the chat route. */
@@ -89,6 +90,7 @@ const WORKSPACE_READ_OPERATING_CONTRACT = `# WORKSPACE READ OPERATING CONTRACT
  */
 export function selectChatPromptPackageMode(input: ChatPromptPackageModeInput): ChatPromptPackageMode {
   const message = input.message.trim();
+  if (input.suspiciousInjection) return 'full';
   if (input.explicitReadOnlyToolChoice) {
     if (!message || message.length > 240 || input.selectedToolCount !== 1) return 'full';
     if (input.autonomyLevel !== 'normal' || input.isAutomatedTurn) return 'full';
@@ -105,7 +107,7 @@ export function selectChatPromptPackageMode(input: ChatPromptPackageModeInput): 
     if (input.autonomyLevel !== 'normal' || input.isAutomatedTurn) return 'full';
     return 'compact';
   }
-  if (!message || message.length > 240) return 'full';
+  if (!message || message.length > 512) return 'full';
   if (input.selectedToolCount !== 0) return 'full';
   if (input.autonomyLevel !== 'normal' || input.isAutomatedTurn) return 'full';
   if (input.explicitCapabilityRequest || input.taskComplexity !== 'simple') return 'full';
