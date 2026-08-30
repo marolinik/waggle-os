@@ -24,6 +24,9 @@
  * §2 (HomeBriefing / OvernightSummary — bare objects, no envelope).
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import type { FastifyPluginAsync } from 'fastify';
 import { FrameStore, IdentityLayer } from '@waggle/core';
 import { normalizeToMemory } from './memory-center.js';
@@ -117,6 +120,12 @@ const CRON_HISTORY_SCAN = 50;
  *  Center list itself fetches (MemoryCenterTab limit=200), so the Home count
  *  always agrees with what the deep-linked "Needs review" view shows. */
 const NEEDS_REVIEW_SCAN = 200;
+/** Hard caps for the Home continuation lookup. The selector reads only enough
+ * JSONL to confirm a user/assistant exchange; it never loads whole transcripts. */
+const CONTINUE_SESSION_MAX_FILES = 256;
+const CONTINUE_SESSION_MAX_FILE_BYTES = 64 * 1024;
+const CONTINUE_SESSION_MAX_TOTAL_BYTES = 512 * 1024;
+const CONTINUE_SESSION_READ_CHUNK = 4 * 1024;
 /** Priority boost: each pending/blocked item ranks a workspace as if touched
  *  this much more recently (PRD §12.1 "ranked by recency AND priority"). */
 const PENDING_BOOST_MS = 3_600_000; // 1 hour per pending item
@@ -132,6 +141,132 @@ interface RankableWorkspace {
   group: string;
   rankTs: number;
   lastActiveIso: string;
+}
+
+function hasConversationExchange(filePath: string, byteLimit: number): {
+  found: boolean;
+  bytesRead: number;
+} {
+  let fd: number | undefined;
+  let bytesRead = 0;
+  try {
+    const linkStat = fs.lstatSync(filePath);
+    if (linkStat.isSymbolicLink() || !linkStat.isFile() || linkStat.size === 0) {
+      return { found: false, bytesRead };
+    }
+
+    fd = fs.openSync(filePath, 'r');
+    if (!fs.fstatSync(fd).isFile()) return { found: false, bytesRead };
+
+    const decoder = new StringDecoder('utf8');
+    const buffer = Buffer.allocUnsafe(CONTINUE_SESSION_READ_CHUNK);
+    let carry = '';
+    let sawUser = false;
+    let sawAssistant = false;
+
+    const inspectLine = (line: string): void => {
+      if (!line.trim()) return;
+      try {
+        const record = JSON.parse(line) as { type?: unknown; role?: unknown; content?: unknown };
+        if (record.type === 'meta' || typeof record.content !== 'string' || !record.content.trim()) return;
+        if (record.role === 'user') sawUser = true;
+        if (record.role === 'assistant') sawAssistant = true;
+      } catch {
+        // Malformed or partial records do not establish a real conversation.
+      }
+    };
+
+    while (bytesRead < byteLimit && !(sawUser && sawAssistant)) {
+      const requested = Math.min(CONTINUE_SESSION_READ_CHUNK, byteLimit - bytesRead);
+      const chunkBytes = fs.readSync(fd, buffer, 0, requested, bytesRead);
+      if (chunkBytes === 0) break;
+      bytesRead += chunkBytes;
+      const lines = `${carry}${decoder.write(buffer.subarray(0, chunkBytes))}`.split(/\r?\n/);
+      carry = lines.pop() ?? '';
+      for (const line of lines) {
+        inspectLine(line);
+        if (sawUser && sawAssistant) break;
+      }
+    }
+
+    if (!(sawUser && sawAssistant) && bytesRead === linkStat.size) {
+      inspectLine(`${carry}${decoder.end()}`);
+    }
+    return { found: sawUser && sawAssistant, bytesRead };
+  } catch {
+    return { found: false, bytesRead };
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch { /* best-effort close */ }
+    }
+  }
+}
+
+function findContinueSessionId(dataDir: string | undefined, workspaceId: string): string | undefined {
+  if (!dataDir) return undefined;
+  const workspaceDir = path.join(dataDir, 'workspaces', workspaceId);
+  const sessionsDir = path.join(workspaceDir, 'sessions');
+  let dir: fs.Dir | undefined;
+
+  try {
+    const workspaceStat = fs.lstatSync(workspaceDir);
+    const sessionsStat = fs.lstatSync(sessionsDir);
+    if (
+      workspaceStat.isSymbolicLink()
+      || !workspaceStat.isDirectory()
+      || sessionsStat.isSymbolicLink()
+      || !sessionsStat.isDirectory()
+    ) return undefined;
+
+    const workspaceReal = fs.realpathSync.native(workspaceDir);
+    const sessionsReal = fs.realpathSync.native(sessionsDir);
+    const relativeSessionsPath = path.relative(workspaceReal, sessionsReal);
+    if (
+      !relativeSessionsPath
+      || relativeSessionsPath.startsWith(`..${path.sep}`)
+      || relativeSessionsPath === '..'
+      || path.isAbsolute(relativeSessionsPath)
+    ) return undefined;
+
+    dir = fs.opendirSync(sessionsDir);
+    const candidates: Array<{ filePath: string; sessionId: string; mtimeMs: number }> = [];
+    let inspected = 0;
+    let entry: fs.Dirent | null;
+    while ((entry = dir.readSync()) !== null) {
+      inspected += 1;
+      if (inspected > CONTINUE_SESSION_MAX_FILES) return undefined;
+      if (!entry.name.endsWith('.jsonl')) continue;
+      if (entry.isSymbolicLink() || !entry.isFile()) continue;
+
+      const filePath = path.join(sessionsDir, entry.name);
+      const stat = fs.lstatSync(filePath);
+      if (stat.isSymbolicLink() || !stat.isFile()) continue;
+      candidates.push({
+        filePath,
+        sessionId: entry.name.slice(0, -'.jsonl'.length),
+        mtimeMs: stat.mtimeMs,
+      });
+    }
+
+    candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    let remainingBytes = CONTINUE_SESSION_MAX_TOTAL_BYTES;
+    for (const candidate of candidates) {
+      if (remainingBytes <= 0) break;
+      const result = hasConversationExchange(
+        candidate.filePath,
+        Math.min(CONTINUE_SESSION_MAX_FILE_BYTES, remainingBytes),
+      );
+      remainingBytes -= result.bytesRead;
+      if (result.found) return candidate.sessionId;
+    }
+  } catch {
+    return undefined;
+  } finally {
+    if (dir) {
+      try { dir.closeSync(); } catch { /* best-effort close */ }
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -298,6 +433,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       let nextActions: string[] = [];
       let summary: string | undefined;
       let anyStateForWs = false;
+      const continueSessionId = findContinueSessionId(server.localConfig?.dataDir, ws.id);
 
       try {
         const state = buildWorkspaceState({
@@ -322,7 +458,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
 
       rankedCards.push({
         rankTs: ws.rankTs,
-        hasContent: anyStateForWs || pendingCount > 0,
+        hasContent: anyStateForWs || pendingCount > 0 || Boolean(continueSessionId),
         card: {
           id: ws.id,
           name: ws.name,
@@ -330,6 +466,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
           ...(summary ? { summary } : {}),
           lastActive: ws.lastActiveIso || now.toISOString(),
           pendingCount,
+          ...(continueSessionId ? { continueSessionId } : {}),
         },
       });
 

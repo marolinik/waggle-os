@@ -124,6 +124,56 @@ async function renderHome(withAutoDelivery = false) {
 }
 
 describe('Home Ask to workspace chat dispatch', () => {
+  it('continues the exact conversation selected by the Home briefing', async () => {
+    mocks.adapter.getHomeBriefing.mockResolvedValueOnce({
+      greeting: 'Welcome back',
+      date: '2026-08-29T08:00:00.000Z',
+      recentWorkspaces: [{
+        id: 'ws-active',
+        name: 'Active workspace',
+        group: 'Personal',
+        lastActive: '2026-08-29T08:00:00.000Z',
+        pendingCount: 0,
+        continueSessionId: 'session-memory-return',
+      }],
+      suggestedActions: [],
+      upNext: [],
+      isFirstRun: false,
+      needsReviewCount: 0,
+    });
+    await renderHome();
+
+    fireEvent.click(screen.getByTestId('home-cockpit-continue-ws-active'));
+
+    expect(mocks.shell.selectWorkspace).toHaveBeenCalledWith('ws-active');
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      '/workspaces/ws-active/chat?session=session-memory-return',
+    );
+  });
+
+  it('falls back to the workspace chat root when no real conversation exists', async () => {
+    mocks.adapter.getHomeBriefing.mockResolvedValueOnce({
+      greeting: 'Welcome back',
+      date: '2026-08-29T08:00:00.000Z',
+      recentWorkspaces: [{
+        id: 'ws-active',
+        name: 'Active workspace',
+        group: 'Personal',
+        lastActive: '2026-08-29T08:00:00.000Z',
+        pendingCount: 0,
+      }],
+      suggestedActions: [],
+      upNext: [],
+      isFirstRun: false,
+      needsReviewCount: 0,
+    });
+    await renderHome();
+
+    fireEvent.click(screen.getByTestId('home-cockpit-continue-ws-active'));
+
+    expect(mocks.navigate).toHaveBeenCalledWith('/workspaces/ws-active/chat');
+  });
+
   it('queues the prompt only to the explicit active workspace, selects it, and navigates to its chat', async () => {
     const input = await renderHome();
     fireEvent.change(input, { target: { value: '  Prepare the exact board update  ' } });

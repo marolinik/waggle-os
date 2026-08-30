@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import HomeCockpit from '@/components/os/apps/HomeCockpit';
 import SurfaceBoundary from './SurfaceBoundary';
 import { useShell } from '@/providers/ShellContext';
-import { routeFor } from '@/lib/routes';
+import { queryString, routeFor } from '@/lib/routes';
 import { NoModelBanner } from '@/components/os/model-gate/NoModelBanner';
 import { workspaceCounts } from '@/lib/workspace-counts';
 import {
@@ -29,11 +29,7 @@ const HomeRoute = () => {
       <HomeCockpit
         onContinue={(workspaceId, sessionId) => {
           selectWorkspace(workspaceId);
-          // sessionId: same known gap as the windowed shell (Desktop.tsx:366-373)
-          // — `?session=` targeted restore lands when the chat runtime accepts a
-          // sessionId seed (plan §5.3 #5; URL shape reserved).
-          void sessionId;
-          navigate(routeFor('chat', { activeWorkspaceId: workspaceId }));
+          navigate(`${routeFor('chat', { activeWorkspaceId: workspaceId })}${queryString({ session: sessionId })}`);
         }}
         onOpenWorkspaceDesktop={(workspaceId) => {
           selectWorkspace(workspaceId);

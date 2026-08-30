@@ -14,7 +14,8 @@
  * Honesty (PR3-BUILD-PLAN §5): the overnight story sentence + run chips are
  * COMPOSED client-side from the real OvernightSummary counts (no narrative
  * producer); the 🔥 streak has no backend field yet (SHOW_STREAK gate, below);
- * "Continue" lands at chat root because the server omits continueSessionId.
+ * Continue carries the latest real conversation when one exists and falls
+ * back to the workspace chat root for a workspace without conversation history.
  */
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
