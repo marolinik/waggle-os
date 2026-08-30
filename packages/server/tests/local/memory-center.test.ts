@@ -81,6 +81,64 @@ describe('Memory Center routes (Phase 2B.2)', () => {
     expect(typeof mem.id).toBe('string');
   });
 
+  it('POST /api/memory rejects an unknown workspace without falling back to personal memory', async () => {
+    const raw = db.getDatabase();
+    const counts = () => raw.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM sessions) AS sessions,
+        (SELECT COUNT(*) FROM memory_frames) AS frames,
+        (SELECT COUNT(*) FROM memory_frames_fts) AS indexed,
+        (SELECT COUNT(*) FROM memory_frames WHERE metadata IS NOT NULL) AS metadata
+    `).get();
+    const before = counts();
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/memory',
+      payload: {
+        workspaceId: 'missing-workspace',
+        content: 'This workspace memory must not become personal memory.',
+        kind: 'decision',
+      },
+    });
+
+    expect.soft(res.statusCode).toBe(404);
+    expect.soft(res.json()).toEqual({ error: 'Workspace not found' });
+    expect(counts()).toEqual(before);
+  });
+
+  it('POST /api/memory rejects malformed workspace aliases without personal mutation', async () => {
+    const raw = db.getDatabase();
+    const counts = () => raw.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM sessions) AS sessions,
+        (SELECT COUNT(*) FROM memory_frames) AS frames,
+        (SELECT COUNT(*) FROM memory_frames_fts) AS indexed,
+        (SELECT COUNT(*) FROM memory_frames WHERE metadata IS NOT NULL) AS metadata
+    `).get();
+    const before = counts();
+
+    for (const malformedWorkspace of [
+      { workspace: '' },
+      { workspaceId: '' },
+      { workspaceId: 42 },
+      { workspace: 'workspace-a', workspaceId: 'workspace-b' },
+    ]) {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/memory',
+        payload: {
+          ...malformedWorkspace,
+          content: 'An empty workspace must not become personal memory.',
+          kind: 'decision',
+        },
+      });
+      expect.soft(res.statusCode).toBe(400);
+      expect.soft(res.json()).toEqual({ error: 'workspace must be a non-empty string' });
+    }
+    expect(counts()).toEqual(before);
+  });
+
   it('blocks unsafe create content before session, frame, FTS, or metadata persistence', async () => {
     const raw = db.getDatabase();
     const counts = () => raw.prepare(`

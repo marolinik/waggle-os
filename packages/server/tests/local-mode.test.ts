@@ -239,15 +239,70 @@ describe('Local Server Mode', () => {
       expect(body.results[0].content).toContain('Waggle');
     });
 
-    it('returns empty results for non-matching query', async () => {
-      const res = await injectWithAuth(server, {
-        method: 'GET',
-        url: '/api/memory/search?q=xyznonexistent',
+  it('returns empty results for non-matching query', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/memory/search?q=xyznonexistent',
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.count).toBe(0);
-    });
+    expect(body.count).toBe(0);
+  });
+
+  it('fails closed instead of searching the previously active workspace for an unknown workspace', async () => {
+    const workspaceId = server.workspaceManager.create({
+      name: 'Memory isolation search workspace',
+      group: 'test',
+    }).id;
+    expect(server.agentState.activateWorkspaceMind(workspaceId)).toBe(true);
+
+    const workspaceDb = server.agentState.getWorkspaceMindDb(workspaceId)!;
+    const sessions = new SessionStore(workspaceDb);
+    const frames = new FrameStore(workspaceDb);
+    const marker = `workspaceisolation${Date.now()}`;
+    const session = sessions.create('memory-isolation');
+    frames.createIFrame(session.gop_id, marker, 'important');
+
+    try {
+      const valid = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/memory/search?q=${marker}&scope=workspace&workspaceId=${workspaceId}`,
+      });
+      expect(valid.statusCode).toBe(200);
+      expect(valid.json().results.some((result: { content?: string }) => result.content?.includes(marker))).toBe(true);
+
+      for (const alias of ['workspace', 'workspaceId']) {
+        const malformed = await injectWithAuth(server, {
+          method: 'GET',
+          url: `/api/memory/search?q=${marker}&scope=workspace&${alias}=`,
+        });
+        expect.soft(malformed.statusCode).toBe(400);
+        expect.soft(malformed.json()).toEqual({ error: 'workspace must be a non-empty string' });
+        expect.soft(malformed.body).not.toContain(marker);
+      }
+      const conflicting = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/memory/search?q=${marker}&scope=workspace&workspace=${workspaceId}&workspaceId=other-workspace`,
+      });
+      expect.soft(conflicting.statusCode).toBe(400);
+      expect.soft(conflicting.json()).toEqual({ error: 'workspace must be a non-empty string' });
+      expect.soft(conflicting.body).not.toContain(marker);
+
+      const missing = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/memory/search?q=${marker}&scope=workspace&workspaceId=missing-workspace`,
+      });
+      expect.soft(missing.statusCode).toBe(404);
+      expect.soft(missing.json()).toEqual({ error: 'Workspace not found' });
+      expect.soft(missing.body).not.toContain(marker);
+    } finally {
+      const removed = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/workspaces/${workspaceId}`,
+      });
+      expect(removed.statusCode).toBe(204);
+    }
+  });
 
     it('returns 400 without query parameter', async () => {
       const res = await injectWithAuth(server, {
@@ -359,7 +414,7 @@ describe('Local Server Mode', () => {
       expect(counts()).toEqual(before);
     });
 
-    it('rejects malformed direct-memory content without leaking internals or mutating state', async () => {
+  it('rejects malformed direct-memory content without leaking internals or mutating state', async () => {
       const db = server.multiMind.personal.getDatabase();
       const counts = () => ({
         ...db.prepare(`
@@ -388,8 +443,149 @@ describe('Local Server Mode', () => {
         expect(response.json()).toEqual({ error: 'content is required' });
         expect(response.body).not.toMatch(/replace|trim|internal server error/i);
       }
-      expect(counts()).toEqual(before);
+    expect(counts()).toEqual(before);
+  });
+
+  it('rejects direct writes to an unknown workspace without mutating personal memory or audit state', async () => {
+    const db = server.multiMind.personal.getDatabase();
+    const counts = () => ({
+      ...db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM sessions) AS sessions,
+          (SELECT COUNT(*) FROM memory_frames) AS frames,
+          (SELECT COUNT(*) FROM memory_frames_fts) AS indexed,
+          (SELECT COUNT(*) FROM awareness) AS awareness
+      `).get() as Record<string, number>,
+      auditEvents: (getAuditDb(tmpDir).prepare(
+        'SELECT COUNT(*) AS count FROM audit_events',
+      ).get() as { count: number }).count,
     });
+    const before = counts();
+
+    const frame = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/memory/frames?extract=false',
+      payload: {
+        workspaceId: 'missing-workspace',
+        content: `Must not reach personal memory ${Date.now()}`,
+      },
+    });
+    const capture = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/quick-capture',
+      payload: {
+        workspaceId: 'missing-workspace',
+        kind: 'task',
+        content: `Must not become a personal task ${Date.now()}`,
+      },
+    });
+    const curated = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/memory',
+      payload: {
+        workspaceId: 'missing-workspace',
+        content: `Curated memory must not reach personal memory ${Date.now()}`,
+        kind: 'decision',
+      },
+    });
+
+    expect.soft([frame.statusCode, capture.statusCode, curated.statusCode]).toEqual([404, 404, 404]);
+    expect.soft(frame.json()).toEqual({ error: 'Workspace not found' });
+    expect.soft(capture.json()).toEqual({ error: 'Workspace not found' });
+    expect.soft(curated.json()).toEqual({ error: 'Workspace not found' });
+    expect(counts()).toEqual(before);
+  });
+
+  it('keeps valid workspace frame and quick-capture writes out of personal memory', async () => {
+    const workspaceId = server.workspaceManager.create({
+      name: 'Memory isolation write workspace',
+      group: 'test',
+    }).id;
+    expect(server.agentState.activateWorkspaceMind(workspaceId)).toBe(true);
+    const workspaceDb = server.agentState.getWorkspaceMindDb(workspaceId)!;
+    const personalDb = server.multiMind.personal.getDatabase();
+    const wsRaw = workspaceDb.getDatabase();
+    const counts = (db: typeof personalDb) => db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM sessions) AS sessions,
+        (SELECT COUNT(*) FROM memory_frames) AS frames,
+        (SELECT COUNT(*) FROM memory_frames_fts) AS indexed,
+        (SELECT COUNT(*) FROM awareness) AS awareness
+    `).get() as Record<string, number>;
+    const personalBefore = counts(personalDb);
+    const workspaceBefore = counts(wsRaw);
+    const frameContent = `Workspace-only frame ${Date.now()}`;
+    const taskContent = `Workspace-only task ${Date.now()}`;
+
+    try {
+      const frame = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/memory/frames?extract=false',
+        payload: { workspace: workspaceId, content: frameContent },
+      });
+      const capture = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/quick-capture',
+        payload: { workspaceId, kind: 'task', content: taskContent },
+      });
+
+      expect(frame.statusCode).toBe(200);
+      expect(frame.json()).toMatchObject({ saved: true, mind: 'workspace' });
+      expect(capture.statusCode).toBe(200);
+      expect(capture.json()).toMatchObject({ mind: 'workspace', kind: 'task' });
+      expect(counts(personalDb)).toEqual(personalBefore);
+      expect(counts(wsRaw)).toEqual({
+        sessions: workspaceBefore.sessions + 1,
+        frames: workspaceBefore.frames + 2,
+        indexed: workspaceBefore.indexed + 2,
+        awareness: workspaceBefore.awareness + 1,
+      });
+      expect(new FrameStore(workspaceDb).findDuplicate(frameContent)?.content).toBe(frameContent);
+      expect(new FrameStore(workspaceDb).findDuplicate(taskContent)?.content).toBe(taskContent);
+    } finally {
+      const removed = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/workspaces/${workspaceId}`,
+      });
+      expect(removed.statusCode).toBe(204);
+    }
+  });
+
+  it('rejects malformed workspace identifiers instead of treating them as personal memory', async () => {
+    const db = server.multiMind.personal.getDatabase();
+    const counts = () => ({
+      ...db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM sessions) AS sessions,
+          (SELECT COUNT(*) FROM memory_frames) AS frames,
+          (SELECT COUNT(*) FROM memory_frames_fts) AS indexed,
+          (SELECT COUNT(*) FROM awareness) AS awareness
+      `).get() as Record<string, number>,
+      auditEvents: (getAuditDb(tmpDir).prepare(
+        'SELECT COUNT(*) AS count FROM audit_events',
+      ).get() as { count: number }).count,
+    });
+    const before = counts();
+    const content = `Empty workspace must fail closed ${Date.now()}`;
+
+    const requests = [
+      { method: 'POST' as const, url: '/api/memory/frames?extract=false', payload: { workspace: '', content } },
+      { method: 'POST' as const, url: '/api/memory/frames?extract=false', payload: { workspaceId: '', content } },
+      { method: 'POST' as const, url: '/api/memory/frames?extract=false', payload: { workspaceId: 42, content } },
+      { method: 'POST' as const, url: '/api/quick-capture', payload: { workspaceId: '', content } },
+      { method: 'POST' as const, url: '/api/quick-capture', payload: { workspaceId: 42, content } },
+    ];
+    const responses = [];
+    for (const request of requests) {
+      responses.push(await injectWithAuth(server, request));
+    }
+
+    expect.soft(responses.map((response) => response.statusCode)).toEqual([400, 400, 400, 400, 400]);
+    for (const response of responses) {
+      expect.soft(response.json()).toEqual({ error: 'workspace must be a non-empty string' });
+    }
+    expect(counts()).toEqual(before);
+  });
 
     it('fails closed without side effects for every non-allow direct-memory decision', async () => {
       const original = `Fail-closed edit seed ${Date.now()}`;
