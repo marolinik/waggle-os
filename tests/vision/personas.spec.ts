@@ -33,6 +33,8 @@ import {
   BASE,
   dismissOverlay,
   gotoDesktop,
+  redactDiagnosticText,
+  redactDiagnosticUrl,
   type ConsoleCapture,
 } from './_helpers';
 
@@ -209,7 +211,9 @@ function parseSse(body: string): { events: CapturedSseEvent[]; errors: string[] 
     try {
       events.push({ event, data: JSON.parse(rawData), rawData });
     } catch (error) {
-      errors.push(`${event}: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(redactDiagnosticText(
+        `${event}: ${error instanceof Error ? error.message : String(error)}`,
+      ));
       events.push({ event, data: null, rawData });
     }
   }
@@ -316,9 +320,10 @@ async function settleBeforeDeadline<T>(
 }
 
 function appendTransportError(denial: ApprovalAutoDenial, message: string): void {
+  const sanitized = redactDiagnosticText(message);
   denial.transportError = denial.transportError
-    ? `${denial.transportError} ${message}`
-    : message;
+    ? `${denial.transportError} ${sanitized}`
+    : sanitized;
 }
 
 async function armChatWireCapture(page: Page): Promise<number> {
@@ -548,7 +553,7 @@ async function captureBodyWithApprovalDenials(
       });
     } catch (error) {
       capturedPath = null;
-      screenshotError = error instanceof Error ? error.message : String(error);
+      screenshotError = redactDiagnosticText(error instanceof Error ? error.message : String(error));
     }
 
     const denial: ApprovalAutoDenial = {
@@ -586,7 +591,7 @@ async function captureBodyWithApprovalDenials(
       ? decodeURIComponent(new URL(requestUrl).pathname.split('/').filter(Boolean).at(-1) ?? '') || null
       : null;
     denial.requestId = requestId;
-    denial.requestUrl = requestUrl;
+    denial.requestUrl = requestUrl ? redactDiagnosticUrl(requestUrl) : null;
     denial.requestBody = denialResponse?.request().postData() ?? null;
     denial.responseStatus = denialResponse?.status() ?? null;
     if (denialResponse) {
@@ -627,7 +632,7 @@ async function sendAndCapture(
   const startedAt = Date.now();
   const deadlineAt = startedAt + options.bodyTimeoutMs;
   const approvalAutoDenials: ApprovalAutoDenial[] = [];
-  let requestUrl = `${BASE}/api/chat`;
+  let requestUrl = redactDiagnosticUrl(`${BASE}/api/chat`);
   let requestPayload: ChatRequestPayload = { message: prompt };
   let httpStatus = 0;
   let captureCursor: number | null = null;
@@ -673,7 +678,7 @@ async function sendAndCapture(
 
     const [requestOutcome, firstResponseOutcome] = await Promise.all([requestResult, firstResponseResult]);
     if (requestOutcome.request) {
-      requestUrl = requestOutcome.request.url();
+      requestUrl = redactDiagnosticUrl(requestOutcome.request.url());
       requestPayload = parseRequestPayload(requestOutcome.request.postData());
     }
     if (firstResponseOutcome.error) throw firstResponseOutcome.error;
@@ -699,7 +704,7 @@ async function sendAndCapture(
       response = retryOutcome.response;
     }
     if (!requestOutcome.request) {
-      requestUrl = response.url();
+      requestUrl = redactDiagnosticUrl(response.url());
       requestPayload = parseRequestPayload(response.request().postData());
     }
     httpStatus = response.status();
@@ -745,7 +750,7 @@ async function sendAndCapture(
       parseErrors: [],
       done: null,
       timedOut: isTimeoutFailure(error),
-      transportError: error instanceof Error ? error.message : String(error),
+      transportError: redactDiagnosticText(error instanceof Error ? error.message : String(error)),
       approvalAutoDenials,
     };
   } finally {
@@ -858,7 +863,7 @@ async function captureScreenshot(page: Page, path: string, errors: string[]): Pr
     await page.screenshot({ path, fullPage: true });
     return path;
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    errors.push(redactDiagnosticText(error instanceof Error ? error.message : String(error)));
     return null;
   }
 }

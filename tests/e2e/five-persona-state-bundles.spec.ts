@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { redactDiagnosticText, redactDiagnosticUrl } from '../vision/_helpers';
 
 type DisclosureTier = 'simple' | 'professional' | 'power' | 'admin';
 
@@ -558,14 +559,16 @@ function attachBrowserCapture(page: Page): BrowserCapture {
 
   page.on('console', (message) => {
     if (message.type() === 'error') {
-      capture.consoleErrors.push(message.text());
+      capture.consoleErrors.push(redactDiagnosticText(message.text()));
     }
   });
   page.on('pageerror', (error) => {
-    capture.pageErrors.push(error.message);
+    capture.pageErrors.push(redactDiagnosticText(error.message));
   });
   page.on('requestfailed', (request) => {
-    capture.networkFailures.push(`${request.method()} ${request.url()} - ${request.failure()?.errorText ?? 'failed'}`);
+    capture.networkFailures.push(redactDiagnosticText(
+      `${request.method()} ${redactDiagnosticUrl(request.url())} - ${request.failure()?.errorText ?? 'failed'}`,
+    ));
   });
 
   return capture;
@@ -1179,7 +1182,7 @@ test.describe('five-persona state-bundle evidence', () => {
         routeEvidence.push({
           id: route.id,
           path: route.path,
-          url: page.url(),
+          url: redactDiagnosticUrl(page.url()),
           viewport,
           screenshot: relative(process.cwd(), screenshotPath),
           overflow: await visibleHorizontalOverflow(page),
@@ -1202,7 +1205,7 @@ test.describe('five-persona state-bundle evidence', () => {
           failureEvidence.push({
             id: probe.id,
             path: probe.path,
-            url: page.url(),
+            url: redactDiagnosticUrl(page.url()),
             viewport,
             screenshot: relative(process.cwd(), screenshotPath),
             overflow: await visibleHorizontalOverflow(page),
