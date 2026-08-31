@@ -55,6 +55,8 @@ interface ChatAppProps {
   sessionLoading?: boolean;
   sessionReady?: boolean;
   sessionError?: string | null;
+  sessionListFailed?: boolean;
+  onRetrySessions?: () => void | Promise<boolean>;
   workspaceId?: string | null;
   templateId?: string;
   storageType?: 'virtual' | 'local' | 'team';
@@ -567,6 +569,7 @@ const ChatApp = ({
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
   sessionCreating = false, sessionLoading = false, sessionReady = true, sessionError = null,
+  sessionListFailed = false, onRetrySessions,
   workspaceId, templateId, storageType,
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
   onContextRail,
@@ -1647,14 +1650,29 @@ const ChatApp = ({
             )}
 
             {sessionStatus && (
-              <span
-                id={sessionStatusId}
-                role={sessionError ? 'alert' : 'status'}
-                title={sessionStatus}
-                className={`max-w-64 truncate text-[11px] ${sessionError ? 'text-destructive' : 'text-muted-foreground'}`}
-              >
-                {sessionStatus}
-              </span>
+              <>
+                <span
+                  id={sessionStatusId}
+                  role={sessionError ? 'alert' : 'status'}
+                  title={sessionStatus}
+                  className={`max-w-64 truncate text-[11px] ${sessionError ? 'text-destructive' : 'text-muted-foreground'}`}
+                >
+                  {sessionStatus}
+                </span>
+                {sessionError && sessionListFailed && onRetrySessions && (
+                  <button
+                    type="button"
+                    onClick={() => { void onRetrySessions(); }}
+                    disabled={sessionLoading}
+                    aria-label="Retry loading sessions"
+                    aria-describedby={sessionStatusId}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/10 px-3 text-[11px] font-medium text-destructive transition-colors hover:bg-destructive/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                    <span>Retry</span>
+                  </button>
+                )}
+              </>
             )}
 
             {/* Persona picker */}

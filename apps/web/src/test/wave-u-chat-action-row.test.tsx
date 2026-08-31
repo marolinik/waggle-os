@@ -291,6 +291,79 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     });
   });
 
+  it('offers an explicit session-list retry from the visible error state', () => {
+    const onRetrySessions = vi.fn().mockResolvedValue(true);
+    render({
+      messages: [],
+      sessions: [],
+      sessionError: 'Could not load sessions',
+      sessionListFailed: true,
+      onRetrySessions,
+    });
+
+    const retry = screen.getByRole('button', { name: 'Retry loading sessions' });
+    fireEvent.click(retry);
+
+    expect(onRetrySessions).toHaveBeenCalledOnce();
+    expect(retry).toHaveClass('h-8');
+  });
+
+  it('does not offer a list retry for a session mutation failure', () => {
+    render({
+      messages: [],
+      sessions: [{ id: 's1', title: 'Existing session', messageCount: 1 }],
+      activeSessionId: 's1',
+      sessionError: 'Could not rename session',
+      sessionListFailed: false,
+      onRetrySessions: vi.fn(),
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not rename session');
+    expect(screen.queryByRole('button', { name: 'Retry loading sessions' })).not.toBeInTheDocument();
+  });
+
+  it('keeps list Retry inert while loading and removes it after recovery', () => {
+    const onRetrySessions = vi.fn().mockResolvedValue(true);
+    const view = render({
+      messages: [],
+      sessions: [],
+      sessionError: 'Could not load sessions',
+      sessionListFailed: true,
+      sessionLoading: true,
+      onRetrySessions,
+    });
+
+    const pendingRetry = screen.getByRole('button', { name: 'Retry loading sessions' });
+    expect(pendingRetry).toBeDisabled();
+    fireEvent.click(pendingRetry);
+    expect(onRetrySessions).not.toHaveBeenCalled();
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp
+          {...baseProps}
+          messages={[]}
+          sessions={[]}
+          sessionError="Could not load sessions"
+          sessionListFailed
+          sessionLoading={false}
+          onRetrySessions={onRetrySessions}
+        />
+      </TooltipProvider>,
+    );
+    const readyRetry = screen.getByRole('button', { name: 'Retry loading sessions' });
+    expect(readyRetry).toBeEnabled();
+    fireEvent.click(readyRetry);
+    expect(onRetrySessions).toHaveBeenCalledOnce();
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp {...baseProps} messages={[]} sessions={[]} onRetrySessions={onRetrySessions} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Retry loading sessions' })).not.toBeInTheDocument();
+  });
+
   it('keeps historical assistant attribution when the active persona changes', () => {
     render({
       messages: [{ ...assistantMsg, persona: 'researcher' }],

@@ -202,6 +202,7 @@ export const useSessions = (
 
   const createSession = useCallback((): Promise<Session | undefined> => {
     if (!workspaceId) return Promise.resolve(undefined);
+    setListFailed(false);
     const pending = createInFlightRef.current.get(workspaceId);
     if (pending) {
       setCreating(true);
@@ -242,6 +243,7 @@ export const useSessions = (
 
   const deleteSession = useCallback(async (sessionId: string) => {
     if (!workspaceId) return;
+    setListFailed(false);
     try {
       await adapter.deleteSession(sessionId, workspaceId);
     } catch (err) {
@@ -262,6 +264,7 @@ export const useSessions = (
 
   const renameSession = useCallback(async (sessionId: string, title: string) => {
     if (!workspaceId) return;
+    setListFailed(false);
     try {
       await adapter.renameSession(workspaceId, sessionId, title);
     } catch (err) {
@@ -280,6 +283,6 @@ export const useSessions = (
   return {
     sessions, activeSessionId: exposedActiveSessionId, setActiveSessionId,
     loading, creating, error, createSession, deleteSession, renameSession,
-    revalidateSessions, retrySessions,
+    listFailed, revalidateSessions, retrySessions,
   };
 };

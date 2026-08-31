@@ -82,9 +82,11 @@ const ChatWindowInstance = ({
     setActiveSessionId,
     createSession,
     revalidateSessions,
+    retrySessions,
     loading: sessionLoading,
     creating: sessionCreating,
     error: sessionError,
+    listFailed: sessionListFailed,
   } = useSessions(workspaceId, preferredSessionId);
   const onSessionNavigateRef = useRef(onSessionNavigate);
   onSessionNavigateRef.current = onSessionNavigate;
@@ -409,6 +411,8 @@ const ChatWindowInstance = ({
       sessionLoading={sessionLoading}
       sessionReady={!sessionLoading && !sessionCreating && Boolean(activeSessionId)}
       sessionError={sessionError}
+      sessionListFailed={sessionListFailed}
+      onRetrySessions={retrySessions}
       workspaceId={workspaceId}
       templateId={templateId}
       storageType={storageType}

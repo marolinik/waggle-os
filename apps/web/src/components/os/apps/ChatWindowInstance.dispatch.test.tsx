@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import {
@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   sessionLoading: false,
   sessionCreating: false,
   sessionError: null as string | null,
+  sessionListFailed: false,
   chatIsLoading: false,
   historyLoaded: true,
   historyReady: true,
@@ -31,6 +32,10 @@ const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
   setActiveSessionId: vi.fn(),
   revalidateSessions: vi.fn(),
+  retrySessions: vi.fn(),
+  getSessions: vi.fn(),
+  renameSession: vi.fn(),
+  deleteSession: vi.fn(),
   sessions: [] as Array<{
     id: string;
     workspaceId: string;
@@ -67,9 +72,11 @@ vi.mock('@/hooks/useSessions', () => ({
     setActiveSessionId: mocks.setActiveSessionId,
     createSession: mocks.createSession,
     revalidateSessions: mocks.revalidateSessions,
+    retrySessions: mocks.retrySessions,
     loading: mocks.sessionLoading,
     creating: mocks.sessionCreating,
     error: mocks.sessionError,
+    listFailed: mocks.sessionListFailed,
     });
   },
 }));
@@ -127,6 +134,7 @@ beforeEach(() => {
   mocks.sessionLoading = false;
   mocks.sessionCreating = false;
   mocks.sessionError = null;
+  mocks.sessionListFailed = false;
   mocks.chatIsLoading = false;
   mocks.historyLoaded = true;
   mocks.historyReady = true;
@@ -141,6 +149,10 @@ beforeEach(() => {
   mocks.sendMessage.mockReset();
   mocks.createSession.mockReset().mockResolvedValue({ id: 'session-created' });
   mocks.revalidateSessions.mockReset().mockResolvedValue(true);
+  mocks.retrySessions.mockReset().mockResolvedValue(true);
+  mocks.getSessions.mockReset();
+  mocks.renameSession.mockReset();
+  mocks.deleteSession.mockReset();
   mocks.toast.mockReset();
 });
 
@@ -421,6 +433,77 @@ describe('repeatable per-workspace chat dispatch', () => {
     });
     (props?.onRetryHistory as (() => void))();
     expect(mocks.retryHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards session-list recovery to the chat surface', async () => {
+    mocks.sessionError = 'Could not load sessions';
+    mocks.sessionListFailed = true;
+
+    render(<ChatWindowInstance workspaceId="ws-ready" />);
+    await act(async () => { await Promise.resolve(); });
+
+    const props = mocks.chatAppProps.at(-1);
+    expect(props).toMatchObject({
+      sessionError: mocks.sessionError,
+      sessionListFailed: true,
+      onRetrySessions: mocks.retrySessions,
+    });
+    await (props?.onRetrySessions as (() => Promise<boolean>))();
+    expect(mocks.retrySessions).toHaveBeenCalledOnce();
+  });
+
+  it('clears stale list retry ownership when a later session mutation fails', async () => {
+    const { useSessions } = await vi.importActual<typeof import('@/hooks/useSessions')>('@/hooks/useSessions');
+    const current = {
+      id: 'session-current',
+      workspaceId: 'ws-ready',
+      title: 'Current',
+      messageCount: 2,
+      lastActive: '2026-08-30T12:00:00.000Z',
+    };
+    mocks.getSessions.mockReset()
+      .mockResolvedValueOnce([current])
+      .mockRejectedValueOnce(new Error('temporary list failure'))
+      .mockRejectedValueOnce(new Error('temporary list failure'))
+      .mockRejectedValueOnce(new Error('temporary list failure'));
+    mocks.createSession.mockReset().mockRejectedValueOnce(new Error('create failed'));
+    mocks.renameSession.mockRejectedValueOnce(new Error('rename failed'));
+    mocks.deleteSession.mockRejectedValueOnce(new Error('delete failed'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('ws-ready'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-current'));
+
+    await act(async () => {
+      expect(await result.current.retrySessions()).toBe(false);
+    });
+    expect(result.current.listFailed).toBe(true);
+
+    await act(async () => {
+      expect(await result.current.createSession()).toBeUndefined();
+    });
+    expect(result.current.error).toBe('create failed');
+    expect(result.current.listFailed).toBe(false);
+
+    await act(async () => {
+      expect(await result.current.retrySessions()).toBe(false);
+    });
+    expect(result.current.listFailed).toBe(true);
+    await act(async () => {
+      await result.current.renameSession('session-current', 'Renamed');
+    });
+    expect(result.current.error).toBe('rename failed');
+    expect(result.current.listFailed).toBe(false);
+
+    await act(async () => {
+      expect(await result.current.retrySessions()).toBe(false);
+    });
+    expect(result.current.listFailed).toBe(true);
+    await act(async () => {
+      await result.current.deleteSession('session-current');
+    });
+    expect(result.current.error).toBe('delete failed');
+    expect(result.current.listFailed).toBe(false);
+    consoleSpy.mockRestore();
   });
 
   it('holds a pending Home dispatch while a new session replaces the stale active session', async () => {
