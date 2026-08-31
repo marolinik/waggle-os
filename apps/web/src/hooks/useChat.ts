@@ -138,8 +138,39 @@ interface PendingHistoryLoad {
   localMessageIds: Set<string>;
   localMessages: Map<string, ChatMessage>;
   suppressedMessageIds: Set<string>;
+  suppressedFailedTail: {
+    userContent: string;
+    assistantFailure: string;
+  } | null;
   ready: Promise<void>;
   release: () => void;
+}
+
+function assistantFailureDetail(message: ChatMessage): string | null {
+  if (message.role !== 'assistant') return null;
+  if (message.content.startsWith(GENERATION_FAILED_PREFIX)) {
+    return message.content.slice(GENERATION_FAILED_PREFIX.length);
+  }
+  for (let i = (message.blocks?.length ?? 0) - 1; i >= 0; i--) {
+    const block = message.blocks?.[i];
+    if (block?.type === 'error') return block.message;
+  }
+  return null;
+}
+
+function suppressRetriedFailedHistoryTail(
+  history: ChatMessage[],
+  failedTail: PendingHistoryLoad['suppressedFailedTail'],
+): ChatMessage[] {
+  if (!failedTail || history.length < 2) return history;
+  const user = history[history.length - 2];
+  const assistant = history[history.length - 1];
+  if (
+    user.role !== 'user'
+    || user.content !== failedTail.userContent
+    || assistantFailureDetail(assistant) !== failedTail.assistantFailure
+  ) return history;
+  return history.slice(0, -2);
 }
 
 function isActiveTurnClearConflict(error: unknown): boolean {
@@ -465,6 +496,7 @@ export const useChat = ({
         localMessageIds: new Set(recoveryLocalIds ?? []),
         localMessages: new Map(recoveryLocalMessages ?? []),
         suppressedMessageIds: new Set(),
+        suppressedFailedTail: null,
         ready,
         release: releaseHistory,
       };
@@ -485,7 +517,10 @@ export const useChat = ({
             || historyGenerationRef.current !== generation
             || pendingHistoryRef.current !== pendingHistory
           ) return;
-          const shaped = history.map(ensureBlocks);
+          const shaped = suppressRetriedFailedHistoryTail(
+            history.map(ensureBlocks),
+            pendingHistory.suppressedFailedTail,
+          );
           const visibleHistory = pendingHistory.suppressedMessageIds.size === 0
             ? shaped
             : shaped.filter(message => !pendingHistory.suppressedMessageIds.has(message.id));
@@ -1146,8 +1181,15 @@ export const useChat = ({
     if (cacheKey) {
       const pendingHistory = pendingHistoryRef.current;
       if (pendingHistory?.cacheKey === cacheKey) {
-        for (const message of messages.slice(idx)) {
+        const retryTail = messages.slice(idx);
+        for (const message of retryTail) {
           pendingHistory.suppressedMessageIds.add(message.id);
+        }
+        const assistantFailure = retryTail.length === 2
+          ? assistantFailureDetail(retryTail[1])
+          : null;
+        if (assistantFailure !== null) {
+          pendingHistory.suppressedFailedTail = { userContent: content, assistantFailure };
         }
       }
     }

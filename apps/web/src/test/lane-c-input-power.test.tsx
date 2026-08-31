@@ -778,9 +778,9 @@ describe('useChat — thread session cache (2.6-chat)', () => {
   it('does not restore a persisted failed pair while its retry waits for history', async () => {
     const cacheKey = chatThreadCacheKey('ws-1', 'sess-pending-retry');
     const failedPair: ChatMessage[] = [
-      { id: 'hist-user', role: 'user', content: 'retry me', timestamp: 'old' },
+      { id: 'client-user', role: 'user', content: 'retry me', timestamp: 'old' },
       {
-        id: 'hist-assistant',
+        id: 'client-assistant',
         role: 'assistant',
         content: 'Generation failed: original failure',
         timestamp: 'old',
@@ -800,19 +800,134 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     }));
     await act(async () => { await Promise.resolve(); });
     expect(result.current.messages.map(message => message.id))
-      .toEqual(['hist-user', 'hist-assistant']);
+      .toEqual(['client-user', 'client-assistant']);
 
     act(() => { result.current.retryLastFailed(); });
     expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
 
-    history.resolve(failedPair);
+    history.resolve([
+      { id: 'hist-0', role: 'user', content: 'retry me', timestamp: 'server-user' },
+      {
+        id: 'hist-1',
+        role: 'assistant',
+        content: 'Generation failed: original failure',
+        timestamp: 'server-assistant',
+      },
+    ]);
     await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.messages.map(message => [message.role, message.content])).toEqual([
+    const expectedRecoveredPair = [
       ['user', 'retry me'],
       ['assistant', 'recovered answer'],
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+    expect(readChatThreadCache(cacheKey)?.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+    expect(result.current.messages.some(message => message.content.startsWith('Generation failed:')))
+      .toBe(false);
+  });
+
+  it('does not restore an error-block failed pair while its retry waits for history', async () => {
+    const cacheKey = chatThreadCacheKey('ws-1', 'sess-pending-error-block-retry');
+    const failedPair: ChatMessage[] = [
+      { id: 'client-user', role: 'user', content: 'retry typed error', timestamp: 'old' },
+      {
+        id: 'client-assistant',
+        role: 'assistant',
+        content: 'Provider failed',
+        blocks: [{ type: 'error', blockId: 'client-error', message: 'Provider failed' }],
+        timestamp: 'old',
+      },
+    ];
+    writeChatThreadCache(cacheKey, failedPair);
+    const history = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory.mockReturnValueOnce(history.promise);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'done', data: { content: 'typed error recovered' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-pending-error-block-retry',
+    }));
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.retryLastFailed(); });
+    expect(mocks.adapter.sendMessage).not.toHaveBeenCalled();
+
+    history.resolve([
+      { id: 'hist-0', role: 'user', content: 'retry typed error', timestamp: 'server-user' },
+      {
+        id: 'hist-1',
+        role: 'assistant',
+        content: 'Provider failed',
+        blocks: [{ type: 'error', blockId: 'server-error', message: 'Provider failed' }],
+        timestamp: 'server-assistant',
+      },
     ]);
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const expectedRecoveredPair = [
+      ['user', 'retry typed error'],
+      ['assistant', 'typed error recovered'],
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+    expect(readChatThreadCache(cacheKey)?.map(message => [message.role, message.content]))
+      .toEqual(expectedRecoveredPair);
+  });
+
+  it('preserves a distinct failed history tail for the same retry prompt', async () => {
+    const cacheKey = chatThreadCacheKey('ws-1', 'sess-pending-distinct-failure');
+    writeChatThreadCache(cacheKey, [
+      { id: 'client-user', role: 'user', content: 'same prompt', timestamp: 'old' },
+      {
+        id: 'client-assistant',
+        role: 'assistant',
+        content: 'Generation failed: cached timeout',
+        timestamp: 'old',
+      },
+    ]);
+    const history = deferred<ChatMessage[]>();
+    mocks.adapter.getHistory.mockReturnValueOnce(history.promise);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'done', data: { content: 'recovered after timeout' } };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-pending-distinct-failure',
+    }));
+    await act(async () => { await Promise.resolve(); });
+
+    act(() => { result.current.retryLastFailed(); });
+    history.resolve([
+      { id: 'hist-0', role: 'user', content: 'same prompt', timestamp: 'server-user' },
+      {
+        id: 'hist-1',
+        role: 'assistant',
+        content: 'Generation failed: newer quota failure',
+        timestamp: 'server-assistant',
+      },
+    ]);
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const expectedHistoryAndRecoveredPair = [
+      ['user', 'same prompt'],
+      ['assistant', 'Generation failed: newer quota failure'],
+      ['user', 'same prompt'],
+      ['assistant', 'recovered after timeout'],
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(expectedHistoryAndRecoveredPair);
+    expect(readChatThreadCache(cacheKey)?.map(message => [message.role, message.content]))
+      .toEqual(expectedHistoryAndRecoveredPair);
   });
 
   it('waits for initial history before dispatch and preserves a legitimate repeated exchange', async () => {
