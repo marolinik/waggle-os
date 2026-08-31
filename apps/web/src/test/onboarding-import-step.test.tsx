@@ -72,7 +72,14 @@ describe('Onboarding ImportStep', () => {
       <ImportStep
         {...baseProps({
           importSource: 'chatgpt',
-          importItems: [{ id: 'memory-1', title: 'Decision', kind: 'fact', confidence: 0.9 }],
+          importItems: [{
+            id: 'memory-1',
+            title: 'Decision',
+            type: 'conversation',
+            source: 'ChatGPT',
+            kind: 'fact',
+            confidence: 90,
+          }],
           importError: "Couldn't confirm the import. It is safe to try again, or skip and review Memory later.",
         })}
       />,
@@ -88,7 +95,14 @@ describe('Onboarding ImportStep', () => {
       <ImportStep
         {...baseProps({
           importSource: 'chatgpt',
-          importItems: [{ id: 'memory-1', title: 'Decision', kind: 'fact', confidence: 0.9 }],
+          importItems: [{
+            id: 'memory-1',
+            title: 'Decision',
+            type: 'conversation',
+            source: 'ChatGPT',
+            kind: 'fact',
+            confidence: 90,
+          }],
           importing: true,
         })}
       />,

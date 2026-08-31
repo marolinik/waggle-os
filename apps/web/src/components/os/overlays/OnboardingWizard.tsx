@@ -301,7 +301,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       } else {
         setImportDone(false);
         setImportError(outcome.message);
-        if (outcome.empty) {
+        if ('empty' in outcome && outcome.empty) {
           setImportData(null);
           setImportSource(null);
           setImportItems([]);
