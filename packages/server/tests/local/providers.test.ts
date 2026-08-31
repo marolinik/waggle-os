@@ -34,6 +34,8 @@ interface ProviderResponse {
   badge: string | null;
   models: ProviderModelResponse[];
   modelsSource?: string;
+  modelsError?: string;
+  reachable?: boolean;
   baseUrl?: string;
 }
 
@@ -363,6 +365,80 @@ describe('Provider API', () => {
         expect(server.vault?.get('openai-compatible')?.metadata?.baseUrl).toBe(normalizedBaseUrl);
       } finally {
         await new Promise<void>((resolve, reject) => catalogServer.close((error) => error ? reject(error) : resolve()));
+        server.vault?.delete('openai-compatible');
+        const configPath = path.join(tmpDir, 'config.json');
+        const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+          providers?: Record<string, unknown>;
+        };
+        delete persisted.providers?.['openai-compatible'];
+        fs.writeFileSync(configPath, JSON.stringify(persisted, null, 2), 'utf8');
+      }
+    });
+
+    it('rechecks a degraded compatible endpoint quickly and caches its recovered catalog', async () => {
+      let healthy = false;
+      let catalogRequests = 0;
+      const catalogServer = http.createServer((request, response) => {
+        if (!request.url?.endsWith('/models')) {
+          response.writeHead(404).end();
+          return;
+        }
+        catalogRequests += 1;
+        if (!healthy) {
+          response.writeHead(503, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ error: 'warming up' }));
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ data: [{ id: 'recovered-qwen', name: 'Recovered Qwen' }] }));
+      });
+      await new Promise<void>((resolve) => catalogServer.listen(0, '127.0.0.1', resolve));
+      const { port } = catalogServer.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}/v1`;
+
+      try {
+        const configured = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: { providers: { 'openai-compatible': { baseUrl } } },
+        });
+        expect(configured.statusCode).toBe(200);
+
+        const unavailableResponse = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const unavailable = unavailableResponse.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        ) as ProviderResponse;
+        expect(unavailable.modelsSource).toBe('unavailable');
+        expect(unavailable.modelsError).toMatch(/503/);
+        expect(catalogRequests).toBe(1);
+
+        healthy = true;
+        const stillCachedResponse = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const stillCached = stillCachedResponse.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        ) as ProviderResponse;
+        expect(stillCached.modelsSource).toBe('unavailable');
+        expect(catalogRequests).toBe(1);
+
+        await new Promise(resolve => setTimeout(resolve, 2_050));
+        const recoveredResponse = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const recovered = recoveredResponse.json().providers.find(
+          (provider: ProviderResponse) => provider.id === 'openai-compatible',
+        ) as ProviderResponse;
+        expect(recovered.modelsSource).toBe('provider-api');
+        expect(recovered.models).toContainEqual(expect.objectContaining({
+          id: 'openai-compatible/recovered-qwen',
+        }));
+        expect(catalogRequests).toBe(2);
+
+        await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        expect(catalogRequests).toBe(2);
+
+        await new Promise(resolve => setTimeout(resolve, 2_050));
+        await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        expect(catalogRequests).toBe(2);
+      } finally {
+        await new Promise<void>((resolve, reject) => catalogServer.close(error => error ? reject(error) : resolve()));
         server.vault?.delete('openai-compatible');
         const configPath = path.join(tmpDir, 'config.json');
         const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
