@@ -11,7 +11,7 @@
  *      composer returns to send (Stop only shows while streaming).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { renderHook, act, render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { useLayoutEffect } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { ChatMessage, ToolContextContentBlock } from '@/lib/types';
@@ -984,6 +984,52 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     expect(assistant?.blocks?.some(block => block.type === 'error')).toBe(false);
   });
 
+  it('retries a stopped partial from the same prompt as one canonical replacement turn', async () => {
+    const firstGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await firstGate.promise;
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'recovered answer' } };
+      });
+
+    const { result } = await mountChat('sess-stopped-retry');
+    let firstPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      firstPromise = result.current.sendMessage('question');
+      await flush();
+    });
+    await act(async () => { result.current.stopStreaming(); await flush(); });
+    expect(result.current.messages.find(message => message.role === 'assistant')?.draft)
+      .toMatchObject({ content: 'partial answer', status: 'stopped' });
+
+    await act(async () => {
+      result.current.retryLastFailed();
+      await flush();
+    });
+
+    expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith(
+      'ws-1',
+      'question',
+      'sess-stopped-retry',
+      undefined,
+      undefined,
+      true,
+    );
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(result.current.messages.map(message => [message.role, message.content])).toEqual([
+      ['user', 'question'],
+      ['assistant', 'recovered answer'],
+    ]);
+
+    firstGate.resolve();
+    await act(async () => { await firstPromise; });
+    expect(result.current.messages.map(message => message.content))
+      .toEqual(['question', 'recovered answer']);
+  });
+
   it('preserves queued FIFO when a stopped stream is replaced and settles late', async () => {
     const firstGate = deferred<void>();
     const secondGate = deferred<void>();
@@ -1225,6 +1271,8 @@ describe('ChatApp — streaming interaction contract', () => {
     workspaceId: 'ws-1',
     activeSessionId: null as string | null,
     onStopStreaming: noop as () => void,
+    onRetry: undefined as (() => void) | undefined,
+    sessionCreating: false,
   };
 
   let ChatAppEl: typeof import('@/components/os/apps/ChatApp').default;
@@ -1250,7 +1298,64 @@ describe('ChatApp — streaming interaction contract', () => {
     return { getTop: () => top };
   }
 
-  it('renders a draft visibly while keeping canonical message actions disabled', async () => {
+  it('announces the active pre-token wait and removes it on first visible response activity', async () => {
+    const userMessage: ChatMessage = {
+      id: 'waiting-user', role: 'user', content: 'Explain this', timestamp: 'now',
+    };
+    const emptyAssistant: ChatMessage = {
+      id: 'waiting-assistant', role: 'assistant', content: '', timestamp: 'now',
+    };
+    const onStopStreaming = vi.fn();
+    const { container, rerender } = await renderChat({
+      messages: [userMessage, emptyAssistant],
+      isLoading: true,
+      onStopStreaming,
+    });
+
+    const waitingIndicator = screen.getByTestId('chat-first-response-indicator');
+    const waitingStatus = within(waitingIndicator)
+      .getByRole('status', { name: 'Model response status' });
+    expect(waitingStatus).toHaveTextContent('Waiting for the model to respond.');
+    const waitingDots = waitingIndicator.querySelectorAll('.animate-bounce');
+    expect(waitingDots).toHaveLength(3);
+    for (const dot of waitingDots) {
+      expect(dot).toHaveClass('motion-reduce:animate-none');
+    }
+    expect(screen.getByTestId('chat-stop-stream')).toBeInTheDocument();
+
+    const firstToken: ChatMessage = {
+      ...emptyAssistant,
+      draft: {
+        turnId: 'waiting-turn',
+        revision: 1,
+        content: 'First visible token',
+        status: 'streaming',
+      },
+    };
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl {...baseProps} messages={[userMessage, firstToken]} isLoading />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByTestId('chat-first-response-indicator')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Model response status' })).toBeNull();
+    expect(container.querySelectorAll('.animate-bounce')).toHaveLength(0);
+    expect(screen.getByText('First visible token')).toBeInTheDocument();
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl {...baseProps} messages={[emptyAssistant, a1]} isLoading />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByTestId('chat-first-response-indicator')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Model response status' })).toBeNull();
+    expect(container.querySelectorAll('.animate-bounce')).toHaveLength(0);
+  });
+
+  it('renders a stopped draft with one latest-turn recovery action and no canonical actions', async () => {
+    const userMessage: ChatMessage = {
+      id: 'draft-user', role: 'user', content: 'Draft this', timestamp: 'now',
+    };
     const draftMessage: ChatMessage = {
       id: 'draft-1',
       role: 'assistant',
@@ -1263,11 +1368,45 @@ describe('ChatApp — streaming interaction contract', () => {
         status: 'stopped',
       },
     };
-    await renderChat({ messages: [draftMessage], isLoading: false });
+    const onRetry = vi.fn();
+    const { rerender } = await renderChat({
+      messages: [userMessage, draftMessage],
+      isLoading: false,
+      onRetry,
+    });
 
     expect(screen.getByText('Visible provisional answer')).toBeInTheDocument();
     expect(screen.getByTestId('chat-draft-status')).toHaveTextContent('Stopped draft · not saved');
     expect(screen.queryByLabelText('Pin message')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy response' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Good response' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Poor response' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry response' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry stopped response' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl
+          {...baseProps}
+          messages={[userMessage, draftMessage, a1]}
+          onRetry={onRetry}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Retry stopped response' })).toBeNull();
+
+    rerender(
+      <TooltipProvider>
+        <ChatAppEl
+          {...baseProps}
+          messages={[userMessage, draftMessage]}
+          onRetry={onRetry}
+          sessionCreating
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Retry stopped response' })).toBeNull();
   });
 
   it('renders capability markers in drafts inertly without exposing install actions', async () => {

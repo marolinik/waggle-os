@@ -80,7 +80,7 @@ interface ChatAppProps {
   historyError?: string | null;
   /** Retry the active session's authoritative history read. */
   onRetryHistory?: () => void;
-  /** F4: re-issue the last failed turn (Retry button on error blocks). */
+  /** F4: re-issue the last failed or stopped turn from its recovery action. */
   onRetry?: () => void;
   /** Lane S2 (Pillar 3.1): halt the in-flight reply mid-stream. Wired to the
    *  useChat abort/cancel path; the partial answer stays and send returns. When
@@ -1321,6 +1321,13 @@ const ChatApp = ({
           {messages.map((msg, msgIdx) => {
             const messagePersona = msg.persona ? getPersonaById(msg.persona) : undefined;
             const persistedMessageIndex = persistedMessageIndices[msgIdx];
+            const isWaitingForModel = isLoading
+              && msgIdx === messages.length - 1
+              && msg.role === 'assistant'
+              && !msg.content.trim()
+              && !msg.draft?.content.trim()
+              && (!msg.blocks || msg.blocks.length === 0)
+              && (!msg.tools || msg.tools.length === 0);
             return (
             <div key={msg.id} className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
               onDoubleClick={() => {
@@ -1405,11 +1412,23 @@ const ChatApp = ({
                       onRetry={msgIdx === messages.length - 1 && !isLoading && !sessionInputLocked ? onRetry : undefined}
                     />
                   ) : msg.role === 'assistant' ? (
-                    <BlockRenderer blocks={[{
-                      type: 'text',
-                      blockId: `legacy-${msg.id}`,
-                      content: msg.content,
-                    }]} />
+                    <div data-testid={isWaitingForModel ? 'chat-first-response-indicator' : undefined}>
+                      {isWaitingForModel && (
+                        <span
+                          role="status"
+                          aria-live="polite"
+                          aria-label="Model response status"
+                          className="sr-only"
+                        >
+                          Waiting for the model to respond.
+                        </span>
+                      )}
+                      <BlockRenderer blocks={[{
+                        type: 'text',
+                        blockId: `legacy-${msg.id}`,
+                        content: msg.content,
+                      }]} isStreaming={isWaitingForModel} />
+                    </div>
                   ) : (
                     <span className="whitespace-pre-wrap">
                       {msg.content}
@@ -1446,6 +1465,26 @@ const ChatApp = ({
                     </HintTooltip>
                   )}
                 </div>
+                {msg.role === 'assistant'
+                  && msg.draft?.status === 'stopped'
+                  && msgIdx === messages.length - 1
+                  && !isLoading
+                  && !sessionInputLocked
+                  && onRetry && (
+                  <div className="mt-1 flex items-center">
+                    <HintTooltip content="Retry from the beginning — this stopped draft is not saved">
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        aria-label="Retry stopped response"
+                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--honey-wash)] hover:text-[var(--honey-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                      >
+                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                        <span>Retry response</span>
+                      </button>
+                    </HintTooltip>
+                  </div>
+                )}
                 {/* Lane C (Pillar 2.5): an optimistic turn typed+sent while the
                     previous reply was still streaming. Truthful "waiting" state —
                     it dispatches the moment the current reply finishes, never
