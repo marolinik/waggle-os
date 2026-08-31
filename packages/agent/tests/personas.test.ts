@@ -140,6 +140,21 @@ describe('Prompt composition', () => {
     expect(result).toContain('every compared item');
   });
 
+  it('keeps an empty-workspace Coder answer brief and grounded in tool evidence', () => {
+    const result = composePersonaPrompt(corePrompt, getPersona('coder')!);
+
+    expect(result).toContain('under 200 words');
+    expect(result).toContain('successful tool evidence');
+    expect(result).toContain('Do not infer project details from path or workspace names');
+  });
+
+  it('preserves literal wrapper tags in an exclusive Verifier response contract', () => {
+    const result = composePersonaPrompt(corePrompt, getPersona('verifier')!);
+
+    expect(result).toContain('emit requested tags literally');
+    expect(result).toContain('raw means no Markdown fence, not no wrapper');
+  });
+
   it('combined prompt stays under 32000 chars', () => {
     for (const persona of PERSONAS) {
       const result = composePersonaPrompt(corePrompt, persona);

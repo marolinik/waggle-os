@@ -199,6 +199,19 @@ function isSuppliedClaim(
   return ATTRIBUTED_CONTEXT.test(assertionContext(content, index).line);
 }
 
+function isNegatedEvidenceObjectRelativeClause(matchText: string, content: string, index: number): boolean {
+  if (!/^i(?:'ve| have)?\s+verified$/i.test(matchText.trim())) return false;
+  const { line } = assertionContext(content, index);
+  const lineStart = content.lastIndexOf('\n', Math.max(0, index - 1)) + 1;
+  const relativeIndex = Math.max(0, index - lineStart);
+  const prefix = line.slice(0, relativeIndex);
+  const suffix = line.slice(relativeIndex + matchText.length);
+  const isTerminalClause = /^\s*(?:[.!?]\s*)?$/.test(suffix);
+  const isExplicitNegativeContinuation = /^\s*,\s+(?:and\s+)?(?:they|those|these|it|that|this)\s+(?:(?:do|does|did)\s+not\s+constitute|(?:are|is|was|were)\s+not)\s+(?:valid\s+)?evidence(?:\s+(?:about|for|of)\s+(?:(?:your|the|this|that)\s+)?(?:project|workspace|codebase|files?|results?|claims?|implementation))?[.!?]?\s*$/i.test(suffix);
+  return (isTerminalClause || isExplicitNegativeContinuation)
+    && /\bnot\s+(?:the\s+)?(?:(?:actual|raw|project|source|workspace)\s+){0,2}(?:artifacts?|claims?|code|evidence|facts?|file\s+contents?|files?|results?)\s+$/i.test(prefix);
+}
+
 /**
  * True when `content` asserts verified/passing/working completion but
  * none of `toolsUsed` is a verification-class tool — an unverified
@@ -216,6 +229,7 @@ export function assertsUnverifiedCompletion(
     const flags = assertion.flags.includes('g') ? assertion.flags : `${assertion.flags}g`;
     for (const match of content.matchAll(new RegExp(assertion.source, flags))) {
       const index = match.index ?? 0;
+      if (isNegatedEvidenceObjectRelativeClause(match[0], content, index)) continue;
       if (isPlanningCondition(content, index)) continue;
       if (isSuppliedClaim(assertion, match[0], content, index, userRequest)) continue;
       return true;
