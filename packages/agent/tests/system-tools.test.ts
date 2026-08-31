@@ -142,7 +142,167 @@ describe('createSystemTools', () => {
     expect(names).toContain('get_task_output');
     expect(names).toContain('kill_task');
     expect(names).toContain('run_code');
-    expect(tools).toHaveLength(12);
+    expect(names).toContain('calculate_decision_matrix');
+    expect(tools).toHaveLength(13);
+  });
+
+  describe('calculate_decision_matrix', () => {
+    it('returns reconciled weighted totals and two-option sensitivity', async () => {
+      const calculator = getTool('calculate_decision_matrix');
+
+      expect(calculator.riskLevel).toBe('low');
+      expect(calculator.offlineCapable).toBe(true);
+
+      const result = JSON.parse(await calculator.execute({
+        criteria: [
+          { name: 'cost', weight: 5 },
+          { name: 'speed', weight: 3 },
+          { name: 'privacy', weight: 5 },
+        ],
+        options: [
+          { name: 'Option A', scores: [4, 3, 5] },
+          { name: 'Option B', scores: [2, 5, 4] },
+        ],
+        sensitivityCriterion: 'speed',
+      }));
+
+      expect(result.options[0]).toMatchObject({
+        name: 'Option A',
+        checksum: '20 + 9 + 25 = 54',
+        total: 54,
+      });
+      expect(result.options[1]).toMatchObject({
+        name: 'Option B',
+        checksum: '10 + 15 + 20 = 45',
+        total: 45,
+      });
+      expect(result.decision).toEqual({
+        winner: 'Option A',
+        tied: false,
+        tiedOptions: [],
+      });
+      expect(result.sensitivity).toMatchObject({
+        criterion: 'speed',
+        tieWeight: 7.5,
+        firstWholeNumberWeightWhereWinnerChanges: 8,
+        winnerAtFirstWholeNumber: 'Option B',
+        totalsAtFirstWholeNumber: {
+          'Option A': 69,
+          'Option B': 70,
+        },
+      });
+    });
+
+    it('handles decreasing and equal-slope sensitivity deterministically', async () => {
+      const calculator = getTool('calculate_decision_matrix');
+      const decreasing = JSON.parse(await calculator.execute({
+        criteria: [
+          { name: 'cost', weight: 5 },
+          { name: 'speed', weight: 8 },
+          { name: 'privacy', weight: 5 },
+        ],
+        options: [
+          { name: 'Option A', scores: [4, 3, 5] },
+          { name: 'Option B', scores: [2, 5, 4] },
+        ],
+        sensitivityCriterion: 'speed',
+      }));
+      expect(decreasing.sensitivity).toMatchObject({
+        tieWeight: 7.5,
+        firstWholeNumberWeightWhereWinnerChanges: 7,
+        winnerAtFirstWholeNumber: 'Option A',
+        totalsAtFirstWholeNumber: { 'Option A': 66, 'Option B': 65 },
+      });
+
+      const equalSlope = JSON.parse(await calculator.execute({
+        criteria: [{ name: 'cost', weight: 1 }],
+        options: [
+          { name: 'Ångström', scores: [3] },
+          { name: 'Zulu', scores: [3] },
+        ],
+        sensitivityCriterion: 'cost',
+      }));
+      expect(equalSlope.ranking.map((item: { name: string }) => item.name)).toEqual([
+        'Zulu',
+        'Ångström',
+      ]);
+      expect(equalSlope.sensitivity).toMatchObject({
+        tieWeight: null,
+        firstWholeNumberWeightWhereWinnerChanges: null,
+        winnerAtFirstWholeNumber: null,
+      });
+    });
+
+    it('keeps the largest valid result inside the smallest tool-context cap', async () => {
+      const name = (prefix: string, index: number) => `${prefix}${index}`.padEnd(64, 'x');
+      const criteria = Array.from({ length: 5 }, (_unused, index) => ({
+        name: name('criterion-', index),
+        weight: 100,
+      }));
+      const options = Array.from({ length: 5 }, (_unused, index) => ({
+        name: name('option-', index),
+        scores: Array.from({ length: 5 }, () => 100),
+      }));
+
+      const result = await getTool('calculate_decision_matrix').execute({
+        criteria,
+        options,
+      });
+
+      expect(result).not.toMatch(/^Error:/);
+      expect(untrustedContextWrapper('calculate_decision_matrix', result).length)
+        .toBeLessThanOrEqual(3_000);
+      const parsed = JSON.parse(result);
+      expect(parsed.options).toHaveLength(5);
+      expect(parsed.options.every((option: { checksum: string }) => option.checksum.endsWith('= 50000')))
+        .toBe(true);
+    });
+
+    it.each([
+      ['non-finite weight', {
+        criteria: [{ name: 'cost', weight: Number.POSITIVE_INFINITY }],
+        options: [{ name: 'A', scores: [1] }, { name: 'B', scores: [2] }],
+      }],
+      ['duplicate criterion names', {
+        criteria: [{ name: 'Cost', weight: 1 }, { name: ' cost ', weight: 2 }],
+        options: [{ name: 'A', scores: [1, 2] }, { name: 'B', scores: [2, 3] }],
+      }],
+      ['duplicate option names', {
+        criteria: [{ name: 'cost', weight: 1 }],
+        options: [{ name: 'Alpha', scores: [1] }, { name: ' alpha ', scores: [2] }],
+      }],
+      ['out-of-range score', {
+        criteria: [{ name: 'cost', weight: 1 }],
+        options: [{ name: 'A', scores: [101] }, { name: 'B', scores: [2] }],
+      }],
+      ['Unicode format control in a name', {
+        criteria: [{ name: 'co\u202est', weight: 1 }],
+        options: [{ name: 'A', scores: [1] }, { name: 'B', scores: [2] }],
+      }],
+      ['mismatched score count', {
+        criteria: [{ name: 'cost', weight: 1 }, { name: 'speed', weight: 2 }],
+        options: [{ name: 'A', scores: [1] }, { name: 'B', scores: [2, 3] }],
+      }],
+      ['unknown sensitivity criterion', {
+        criteria: [{ name: 'cost', weight: 1 }],
+        options: [{ name: 'A', scores: [1] }, { name: 'B', scores: [2] }],
+        sensitivityCriterion: 'speed',
+      }],
+      ['sensitivity with three options', {
+        criteria: [{ name: 'cost', weight: 1 }],
+        options: [
+          { name: 'A', scores: [1] },
+          { name: 'B', scores: [2] },
+          { name: 'C', scores: [3] },
+        ],
+        sensitivityCriterion: 'cost',
+      }],
+    ])('fails closed for %s', async (_label, args) => {
+      const result = await getTool('calculate_decision_matrix').execute(args);
+
+      expect(result).toMatch(/^Error:/);
+      expect(result).not.toMatch(/(?:NaN|Infinity)/);
+    });
   });
 
   it('labels host execution tools high risk and describes their host-wide access', () => {

@@ -87,6 +87,8 @@ export interface ToolExecResult {
    * inside the tool) return true. Matches the prior inline semantics.
    */
   countedAsUsed: boolean;
+  /** True only when an attempted execution produced a usable success result. */
+  succeeded: boolean;
   /** Tool name resolved from the call (for caller's toolsUsed bookkeeping) */
   toolName: string;
   /**
@@ -115,6 +117,7 @@ export async function executeToolCall(
       content: `Error: Invalid arguments for ${fnName}. The arguments were not valid JSON.`,
       toolCallId: toolCall.id,
       countedAsUsed: false,
+      succeeded: false,
       toolName: fnName,
     };
   }
@@ -126,7 +129,7 @@ export async function executeToolCall(
   if (blockedTools?.includes(fnName)) {
     const policyMsg = `Tool "${fnName}" is blocked by your team's governance policy. Contact your team admin to request access, or use the request_team_capability tool to submit a request.`;
     if (onToolResult) onToolResult(fnName, fnArgs, policyMsg);
-    return { content: policyMsg, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
+    return { content: policyMsg, toolCallId: toolCall.id, countedAsUsed: false, succeeded: false, toolName: fnName };
   }
 
   const existingTool = toolMap.get(fnName);
@@ -149,7 +152,7 @@ export async function executeToolCall(
 
     result = guardExternalToolOutput(result);
     if (onToolResult) onToolResult(fnName, fnArgs, result);
-    return { content: result, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
+    return { content: result, toolCallId: toolCall.id, countedAsUsed: false, succeeded: false, toolName: fnName };
   }
 
   // ── Step 4: pre:tool hook ──
@@ -165,6 +168,7 @@ export async function executeToolCall(
         content: `[BLOCKED] ${hookResult.reason ?? 'No reason given'}`,
         toolCallId: toolCall.id,
         countedAsUsed: false,
+        succeeded: false,
         toolName: fnName,
       };
     }
@@ -196,7 +200,7 @@ export async function executeToolCall(
           `It was denied because this execution context (such as a sub-agent or ` +
           `automated workflow) did not provide an authorization decision.`;
       if (onToolResult) onToolResult(fnName, fnArgs, denyMsg);
-      return { content: denyMsg, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
+      return { content: denyMsg, toolCallId: toolCall.id, countedAsUsed: false, succeeded: false, toolName: fnName };
     }
   }
 
@@ -213,6 +217,7 @@ export async function executeToolCall(
         content: `[BLOCKED] Memory write blocked: ${memoryHookResult.reason ?? 'No reason given'}`,
         toolCallId: toolCall.id,
         countedAsUsed: false,
+        succeeded: false,
         toolName: fnName,
       };
     }
@@ -224,6 +229,7 @@ export async function executeToolCall(
   // surrounding `let` is preserved from the original Review H3 rationale).
   let result = '';
   let countedAsUsed = false;
+  let executionSucceeded = false;
   let abort = false;
   let abortReason: string | undefined;
   const tool = toolMap.get(fnName);
@@ -252,11 +258,26 @@ export async function executeToolCall(
       // Tools in this codebase report many failures by RETURNING an
       // "Error: ..." string rather than throwing — count those as failures
       // too, or the failure tiers never see them.
-      guard.record(fnName, fnArgs, !/^Error\b/.test(rawResult));
+      const trimmedResult = rawResult.trim();
+      let structuredFailure = false;
+      if (trimmedResult.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmedResult) as Record<string, unknown>;
+          structuredFailure = 'error' in parsed || parsed.ok === false || parsed.success === false;
+        } catch {
+          // A non-JSON result beginning with "{" remains ordinary tool text.
+        }
+      }
+      executionSucceeded = trimmedResult.length > 0
+        && !/^(?:error|failed|failure|denied|blocked)\b/i.test(trimmedResult)
+        && !structuredFailure;
+      guard.record(fnName, fnArgs, executionSucceeded);
       result = guardExternalToolOutput(rawResult);
+      if (result === QUARANTINED_TOOL_OUTPUT) executionSucceeded = false;
       logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, resultChars: result.length, error: false });
     } catch (err) {
       result = guardExternalToolOutput(`Error executing ${fnName}: ${(err as Error).message}`);
+      executionSucceeded = false;
       guard.record(fnName, fnArgs, false);
       logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: result });
     }
@@ -314,5 +335,13 @@ export async function executeToolCall(
   // on, and fencing them as "do not obey" would defeat recovery. §C / untrusted-context.ts.
   const compressed = compressToolOutput(result);
   const modelFacing = countedAsUsed ? untrustedContextWrapper(fnName, compressed) : compressed;
-  return { content: modelFacing, toolCallId: toolCall.id, countedAsUsed, toolName: fnName, abort, abortReason };
+  return {
+    content: modelFacing,
+    toolCallId: toolCall.id,
+    countedAsUsed,
+    succeeded: countedAsUsed && executionSucceeded && !abort,
+    toolName: fnName,
+    abort,
+    abortReason,
+  };
 }

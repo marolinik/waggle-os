@@ -122,6 +122,231 @@ const MAX_BACKGROUND_TASKS = 100;
 /** Maximum age (ms) for stale completed tasks — 30 minutes */
 const STALE_TASK_THRESHOLD_MS = 30 * 60 * 1000;
 
+const DECISION_MATRIX_MAX_ITEMS = 5;
+const DECISION_MATRIX_MAX_NAME_LENGTH = 64;
+const DECISION_MATRIX_MAX_VALUE = 100;
+
+function roundDecisionNumber(value: number): number {
+  const rounded = Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function decisionMatrixError(detail: string): string {
+  return `Error: Invalid decision matrix: ${detail}`;
+}
+
+function parseDecisionName(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} name must be text`);
+  const name = value.trim();
+  if (
+    name.length === 0
+    || name.length > DECISION_MATRIX_MAX_NAME_LENGTH
+    || Array.from(name).some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint < 32
+        || codePoint === 127
+        || /(?:\p{Cf}|\p{Zl}|\p{Zp})/u.test(character);
+    })
+  ) {
+    throw new Error(`${label} name must be 1-${DECISION_MATRIX_MAX_NAME_LENGTH} printable characters`);
+  }
+  return name;
+}
+
+function parseDecisionNumber(value: unknown, label: string): number {
+  if (
+    typeof value !== 'number'
+    || !Number.isFinite(value)
+    || value < 0
+    || value > DECISION_MATRIX_MAX_VALUE
+  ) {
+    throw new Error(`${label} must be a finite number from 0 to ${DECISION_MATRIX_MAX_VALUE}`);
+  }
+  return value;
+}
+
+function ensureUniqueDecisionNames(names: readonly string[], label: string): void {
+  const normalized = names.map((name) => name.toLocaleLowerCase('en-US'));
+  if (new Set(normalized).size !== normalized.length) {
+    throw new Error(`${label} names must be unique`);
+  }
+}
+
+function compareDecisionNames(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function calculateDecisionMatrix(args: Record<string, unknown>): string {
+  try {
+    if (
+      !Array.isArray(args.criteria)
+      || args.criteria.length < 1
+      || args.criteria.length > DECISION_MATRIX_MAX_ITEMS
+    ) {
+      throw new Error(`criteria must contain 1-${DECISION_MATRIX_MAX_ITEMS} items`);
+    }
+    if (
+      !Array.isArray(args.options)
+      || args.options.length < 2
+      || args.options.length > DECISION_MATRIX_MAX_ITEMS
+    ) {
+      throw new Error(`options must contain 2-${DECISION_MATRIX_MAX_ITEMS} items`);
+    }
+
+    const criteria = args.criteria.map((candidate, index) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        throw new Error(`criterion ${index + 1} must be an object`);
+      }
+      const criterion = candidate as Record<string, unknown>;
+      return {
+        name: parseDecisionName(criterion.name, `criterion ${index + 1}`),
+        weight: parseDecisionNumber(criterion.weight, `criterion ${index + 1} weight`),
+      };
+    });
+    ensureUniqueDecisionNames(criteria.map((criterion) => criterion.name), 'criterion');
+
+    const options = args.options.map((candidate, index) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        throw new Error(`option ${index + 1} must be an object`);
+      }
+      const option = candidate as Record<string, unknown>;
+      const name = parseDecisionName(option.name, `option ${index + 1}`);
+      if (!Array.isArray(option.scores) || option.scores.length !== criteria.length) {
+        throw new Error(`option ${index + 1} must provide exactly ${criteria.length} scores`);
+      }
+      const scores = option.scores.map((score, scoreIndex) => (
+        parseDecisionNumber(score, `option ${index + 1} score ${scoreIndex + 1}`)
+      ));
+      const weightedScores = criteria.map((criterion, criterionIndex) => ({
+        criterion: criterion.name,
+        weight: criterion.weight,
+        score: scores[criterionIndex],
+        weightedScore: roundDecisionNumber(criterion.weight * scores[criterionIndex]),
+      }));
+      const total = roundDecisionNumber(
+        weightedScores.reduce((sum, item) => sum + item.weightedScore, 0),
+      );
+      return {
+        name,
+        scores,
+        weightedScores,
+        checksum: `${weightedScores.map((item) => item.weightedScore).join(' + ')} = ${total}`,
+        total,
+      };
+    });
+    ensureUniqueDecisionNames(options.map((option) => option.name), 'option');
+
+    const ranking = options
+      .map((option) => ({ name: option.name, total: option.total }))
+      .sort((left, right) => right.total - left.total || compareDecisionNames(left.name, right.name));
+    const topTotal = ranking[0].total;
+    const tiedOptions = ranking
+      .filter((item) => Math.abs(item.total - topTotal) < 0.000001)
+      .map((item) => item.name);
+    const result: Record<string, unknown> = {
+      formula: 'weighted score = weight * raw score',
+      criteria,
+      options: options.map((option) => ({
+        name: option.name,
+        scores: option.scores,
+        weightedScores: option.weightedScores.map((item) => item.weightedScore),
+        checksum: option.checksum,
+        total: option.total,
+      })),
+      ranking,
+      decision: {
+        winner: tiedOptions.length === 1 ? tiedOptions[0] : null,
+        tied: tiedOptions.length > 1,
+        tiedOptions: tiedOptions.length > 1 ? tiedOptions : [],
+      },
+    };
+
+    if (args.sensitivityCriterion !== undefined) {
+      if (options.length !== 2) {
+        throw new Error('sensitivity analysis requires exactly two options');
+      }
+      const requestedCriterion = parseDecisionName(
+        args.sensitivityCriterion,
+        'sensitivity criterion',
+      );
+      const criterionIndex = criteria.findIndex((criterion) => (
+        criterion.name.toLocaleLowerCase('en-US')
+        === requestedCriterion.toLocaleLowerCase('en-US')
+      ));
+      if (criterionIndex < 0) throw new Error('sensitivity criterion must match a criterion name');
+
+      const criterion = criteria[criterionIndex];
+      const equations = options.map((option) => {
+        const criterionContribution = option.weightedScores[criterionIndex].weightedScore;
+        const fixedTotal = roundDecisionNumber(option.total - criterionContribution);
+        const criterionScore = option.scores[criterionIndex];
+        return {
+          name: option.name,
+          fixedTotal,
+          criterionScore,
+          equation: `${fixedTotal} + (${criterionScore} * weight)`,
+        };
+      });
+      const baselineWinner = tiedOptions.length === 1 ? tiedOptions[0] : null;
+      const denominator = equations[0].criterionScore - equations[1].criterionScore;
+      const rawTieWeight = denominator === 0
+        ? null
+        : (equations[1].fixedTotal - equations[0].fixedTotal) / denominator;
+      const tieWeight = rawTieWeight !== null && Number.isFinite(rawTieWeight)
+        ? roundDecisionNumber(rawTieWeight)
+        : null;
+      let firstWholeNumberWeightWhereWinnerChanges: number | null = null;
+      let winnerAtFirstWholeNumber: string | null = null;
+      let totalsAtFirstWholeNumber: Record<string, number> | null = null;
+
+      if (
+        baselineWinner
+        && tieWeight !== null
+        && tieWeight >= 0
+        && tieWeight <= DECISION_MATRIX_MAX_VALUE
+        && Math.abs(tieWeight - criterion.weight) > 0.000001
+      ) {
+        const direction = tieWeight > criterion.weight ? 1 : -1;
+        let candidate = direction > 0 ? Math.floor(tieWeight) + 1 : Math.ceil(tieWeight) - 1;
+        while (candidate >= 0 && candidate <= DECISION_MATRIX_MAX_VALUE) {
+          const totals = Object.fromEntries(equations.map((equation) => [
+            equation.name,
+            roundDecisionNumber(equation.fixedTotal + equation.criterionScore * candidate),
+          ]));
+          const candidateRanking = Object.entries(totals)
+            .sort((left, right) => right[1] - left[1]);
+          if (
+            candidateRanking.length === 2
+            && candidateRanking[0][1] > candidateRanking[1][1]
+            && candidateRanking[0][0] !== baselineWinner
+          ) {
+            firstWholeNumberWeightWhereWinnerChanges = candidate;
+            winnerAtFirstWholeNumber = candidateRanking[0][0];
+            totalsAtFirstWholeNumber = totals;
+            break;
+          }
+          candidate += direction;
+        }
+      }
+
+      result.sensitivity = {
+        criterion: criterion.name,
+        baselineWeight: criterion.weight,
+        baselineWinner,
+        equations,
+        tieWeight,
+        firstWholeNumberWeightWhereWinnerChanges,
+        totalsAtFirstWholeNumber,
+        winnerAtFirstWholeNumber,
+      };
+    }
+
+    return JSON.stringify(result);
+  } catch (error) {
+    return decisionMatrixError(error instanceof Error ? error.message : 'invalid input');
+  }
+}
+
 /**
  * Evict the oldest completed/failed/killed task when the map exceeds MAX_BACKGROUND_TASKS.
  */
@@ -1103,6 +1328,60 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
         task.status = 'killed';
         return `Task ${taskId} has been killed`;
       },
+    },
+
+    // 13. calculate_decision_matrix — Deterministic, side-effect-free arithmetic
+    {
+      name: 'calculate_decision_matrix',
+      description: 'Calculate and verify a weighted decision matrix. Use this as the sole numeric authority for weighted cells, checksums, totals, ranking, and optional two-option sensitivity analysis.',
+      riskLevel: 'low',
+      offlineCapable: true,
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          criteria: {
+            type: 'array',
+            minItems: 1,
+            maxItems: DECISION_MATRIX_MAX_ITEMS,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                name: { type: 'string', minLength: 1, maxLength: DECISION_MATRIX_MAX_NAME_LENGTH },
+                weight: { type: 'number', minimum: 0, maximum: DECISION_MATRIX_MAX_VALUE },
+              },
+              required: ['name', 'weight'],
+            },
+          },
+          options: {
+            type: 'array',
+            minItems: 2,
+            maxItems: DECISION_MATRIX_MAX_ITEMS,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                name: { type: 'string', minLength: 1, maxLength: DECISION_MATRIX_MAX_NAME_LENGTH },
+                scores: {
+                  type: 'array',
+                  minItems: 1,
+                  maxItems: DECISION_MATRIX_MAX_ITEMS,
+                  items: { type: 'number', minimum: 0, maximum: DECISION_MATRIX_MAX_VALUE },
+                },
+              },
+              required: ['name', 'scores'],
+            },
+          },
+          sensitivityCriterion: {
+            type: 'string',
+            minLength: 1,
+            maxLength: DECISION_MATRIX_MAX_NAME_LENGTH,
+          },
+        },
+        required: ['criteria', 'options'],
+      },
+      execute: async (args) => calculateDecisionMatrix(args),
     },
   ];
 }

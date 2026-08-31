@@ -374,6 +374,260 @@ describe('runAgentLoop', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('forces an authorized tool sequence exactly once before synthesis', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{
+          id: 'call-skill',
+          function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+        }],
+      },
+      {
+        content: null,
+        tool_calls: [{
+          id: 'call-calculator',
+          function: {
+            name: 'calculate_decision_matrix',
+            arguments: JSON.stringify({
+              criteria: [{ name: 'cost', weight: 5 }],
+              options: [
+                { name: 'Option A', scores: [4] },
+                { name: 'Option B', scores: [2] },
+              ],
+            }),
+          },
+        }],
+      },
+      { content: 'Option A wins 54 to 45.' },
+    ]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'Decision matrix instructions'),
+    };
+    const calculator: ToolDefinition = {
+      name: 'calculate_decision_matrix',
+      description: 'Calculate a weighted decision matrix',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '{"winner":"Option A","total":54,"otherTotal":45}'),
+    };
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill, calculator],
+      requiredToolSequence: ['read_skill', 'calculate_decision_matrix'],
+    }));
+
+    expect(result.content).toBe('Option A wins 54 to 45.');
+    expect(result.toolsUsed).toEqual(['read_skill', 'calculate_decision_matrix']);
+    expect(readSkill.execute).toHaveBeenCalledOnce();
+    expect(calculator.execute).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const bodies = fetch.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(bodies[0].tool_choice.function.name).toBe('read_skill');
+    expect(bodies[1].tool_choice.function.name).toBe('calculate_decision_matrix');
+    expect(bodies[0].parallel_tool_calls).toBe(false);
+    expect(bodies[1].parallel_tool_calls).toBe(false);
+    expect(bodies[2].tool_choice).toBeUndefined();
+    expect(bodies[2].tools).toBeUndefined();
+    const synthesisToolMessages = bodies[2].messages.filter((message: { role: string }) => (
+      message.role === 'tool'
+    ));
+    expect(synthesisToolMessages).toHaveLength(2);
+    expect(synthesisToolMessages[0]).toMatchObject({ tool_call_id: 'call-skill' });
+    expect(synthesisToolMessages[0].content).toContain('Decision matrix instructions');
+    expect(synthesisToolMessages[1]).toMatchObject({ tool_call_id: 'call-calculator' });
+    expect(synthesisToolMessages[1].content).toContain('"total":54');
+  });
+
+  it('fails closed before dispatch when a required sequence tool is unavailable', async () => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      requiredToolSequence: ['read_skill'],
+    }))).rejects.toThrow(/required tool.*read_skill.*unavailable/i);
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'Error: skill not found',
+    'Failed: access denied',
+    '{"error":"access denied"}',
+  ])('fails closed when a required sequence tool returns %s', async (toolResult) => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-skill',
+        function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+      }],
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => toolResult),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+    }))).rejects.toThrow(/required tool.*read_skill.*failed/i);
+
+    expect(readSkill.execute).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a provider call that violates the required tool order', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-wrong',
+        function: { name: 'calculate_decision_matrix', arguments: '{}' },
+      }],
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'Decision matrix instructions'),
+    };
+    const calculator: ToolDefinition = {
+      name: 'calculate_decision_matrix',
+      description: 'Calculate a weighted decision matrix',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '{}'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill, calculator],
+      requiredToolSequence: ['read_skill', 'calculate_decision_matrix'],
+    }))).rejects.toThrow(/required tool.*read_skill.*not called in sequence/i);
+
+    expect(readSkill.execute).not.toHaveBeenCalled();
+    expect(calculator.execute).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when governance rejects a required tool before execution', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-skill',
+        function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+      }],
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'must not run'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+      governancePolicies: { blockedTools: ['read_skill'] },
+    }))).rejects.toThrow(/required tool.*read_skill.*failed/i);
+
+    expect(readSkill.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ambiguous required tool before provider dispatch', async () => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'built-in'),
+    };
+    const pluginTools: PluginToolProvider = {
+      getAllTools: () => [{ ...readSkill, execute: vi.fn(async () => 'plugin') }],
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      pluginTools,
+      requiredToolSequence: ['read_skill'],
+    }))).rejects.toThrow(/required tool.*read_skill.*ambiguous/i);
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a required tool cannot start within the token budget', async () => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'instructions'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+      maxTokenBudget: 1,
+    }))).rejects.toThrow(/required tool.*read_skill.*could not start.*token budget/i);
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not execute a required tool after the provider exhausts the token budget', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{
+        id: 'call-skill',
+        function: { name: 'read_skill', arguments: '{"name":"decision-matrix"}' },
+      }],
+      usage: { prompt_tokens: 700, completion_tokens: 300 },
+    }]);
+    const readSkill: ToolDefinition = {
+      name: 'read_skill',
+      description: 'Read one installed skill',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'instructions'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [readSkill],
+      requiredToolSequence: ['read_skill'],
+      maxTokenBudget: 1_000,
+    }))).rejects.toThrow(/required tool.*read_skill.*could not complete.*token budget/i);
+
+    expect(readSkill.execute).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['maxTurns', { maxTurns: 2 }],
+    ['maxToolRounds', { maxToolRounds: 1 }],
+  ])('rejects a required sequence that exceeds %s', async (_label, limits) => {
+    const fetch = mockFetch([{ content: 'must not run' }]);
+    const tools: ToolDefinition[] = ['read_skill', 'calculate_decision_matrix'].map((name) => ({
+      name,
+      description: name,
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'ok'),
+    }));
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools,
+      requiredToolSequence: ['read_skill', 'calculate_decision_matrix'],
+      ...limits,
+    }))).rejects.toThrow(/required tool sequence does not fit/i);
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('retries once when the model emits raw tool-call markup as text', async () => {
     const fetch = mockFetch([
       {
