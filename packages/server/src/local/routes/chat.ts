@@ -350,6 +350,50 @@ const AMBIGUOUS_GATED_ACTION_PATTERN = new RegExp(
   'i',
 );
 
+const QUOTED_TOOL_DIRECTIVE_PATTERN = /"[^"\r\n]*"|“[^”\r\n]*”|«[^»\r\n]*»|'[^'\r\n]*'/g;
+const EXPLICIT_NAMED_TOOL_ACTION_SOURCE = String.raw`(?:^|[.!?]\s+)(?:(?:before|after)\b[^,.;!?\r\n]{0,40},\s*)?(?:(?:(?:can|could|would)\s+you(?:\s+please)?|please|then)\s+)?(?:use|call|invoke|run)\s+(?:(?:the|a|an|installed)\s+)*(?:tool\s+)?(?<name>[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b`;
+
+function isExplicitReadSkillDirective(message: string): boolean {
+  const actionable = message.replace(QUOTED_TOOL_DIRECTIVE_PATTERN, ' ');
+  const matches = Array.from(actionable.matchAll(new RegExp(EXPLICIT_NAMED_TOOL_ACTION_SOURCE, 'gi')));
+  if (matches.length !== 1 || matches[0].groups?.name?.toLowerCase() !== 'read_skill') return false;
+
+  const directiveEnd = (matches[0].index ?? 0) + matches[0][0].length;
+  const sentenceTail = actionable.slice(directiveEnd).split(/[.!?\r\n]/, 1)[0].trim();
+  return sentenceTail === ''
+    || /^(?:(?:with|using)\s+(?:the\s+)?(?:exact\s+)?name\s+[a-z0-9][\w.-]*|(?:exactly\s+once|once))$/i.test(sentenceTail);
+}
+
+function stripNamedToolActionSentences(message: string): string {
+  const matches = Array.from(message.matchAll(new RegExp(EXPLICIT_NAMED_TOOL_ACTION_SOURCE, 'gi')));
+  if (matches.length === 0) return message;
+  const ranges = matches.map((match) => {
+    const matchStart = match.index ?? 0;
+    const verbOffset = match[0].search(/\b(?:use|call|invoke|run)\b/i);
+    const actionStart = matchStart + Math.max(0, verbOffset);
+    const priorBoundary = Math.max(
+      message.lastIndexOf('.', actionStart - 1),
+      message.lastIndexOf('!', actionStart - 1),
+      message.lastIndexOf('?', actionStart - 1),
+      message.lastIndexOf('\n', actionStart - 1),
+      message.lastIndexOf('\r', actionStart - 1),
+    );
+    const nextBoundaries = ['.', '!', '?', '\n', '\r']
+      .map(boundary => message.indexOf(boundary, actionStart))
+      .filter(index => index >= 0);
+    const nextBoundary = nextBoundaries.length > 0 ? Math.min(...nextBoundaries) + 1 : message.length;
+    return { start: priorBoundary + 1, end: nextBoundary };
+  });
+  let cursor = 0;
+  let stripped = '';
+  for (const range of ranges) {
+    if (range.start > cursor) stripped += message.slice(cursor, range.start);
+    stripped += ' ';
+    cursor = Math.max(cursor, range.end);
+  }
+  return stripped + message.slice(cursor);
+}
+
 function stripNegatedCapabilityClauses(message: string): string {
   return message
     .replace(DIRECT_NEGATED_CAPABILITY_PATTERN, ' ')
@@ -361,15 +405,25 @@ function stripNegatedCapabilityClauses(message: string): string {
 }
 
 function hasExplicitGatedToolIntent(message: string): boolean {
-  return EXPLICIT_GATED_ACTION_PATTERN.test(message)
-    || RETRY_GATED_ACTION_PATTERN.test(message)
-    || AMBIGUOUS_GATED_ACTION_PATTERN.test(message)
-    || /\b(file|docx|document|artifact|workbook|spreadsheet|xlsx|terminal|shell|bash|command|calculator|cross-workspace|other workspace)\b/i.test(message)
-    || /\b(?:use|using|call|invoke|run)\s+(?:(?:the|a|an)\s+)?(?:calculator|python|code|spreadsheet|workbook|xlsx)\b/i.test(message)
-    || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
-    || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
-    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message)
-    || isExplicitPlanAuthoringRequest(message);
+  const withoutQuotedNamedToolExamples = message.replace(
+    QUOTED_TOOL_DIRECTIVE_PATTERN,
+    quoted => new RegExp(EXPLICIT_NAMED_TOOL_ACTION_SOURCE, 'i').test(quoted.slice(1, -1)) ? ' ' : quoted,
+  );
+  const genericIntentMessage = stripNamedToolActionSentences(withoutQuotedNamedToolExamples);
+  const actionVerbIntentMessage = genericIntentMessage.replace(
+    /\b(?:this|that|the|an?|my|our|your)\s+emails?\b/gi,
+    ' ',
+  );
+  return EXPLICIT_GATED_ACTION_PATTERN.test(actionVerbIntentMessage)
+    || RETRY_GATED_ACTION_PATTERN.test(genericIntentMessage)
+    || AMBIGUOUS_GATED_ACTION_PATTERN.test(genericIntentMessage)
+    || isExplicitReadSkillDirective(message)
+    || /\b(file|docx|document|artifact|workbook|spreadsheet|xlsx|terminal|shell|bash|command|calculator|cross-workspace|other workspace)\b/i.test(genericIntentMessage)
+    || /\b(?:use|using|call|invoke|run)\s+(?:(?:the|a|an)\s+)?(?:calculator|python|code|spreadsheet|workbook|xlsx)\b/i.test(genericIntentMessage)
+    || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(genericIntentMessage)
+    || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(genericIntentMessage)
+    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(genericIntentMessage)
+    || isExplicitPlanAuthoringRequest(genericIntentMessage);
 }
 
 function isTerminalModelBudgetError(error: unknown): boolean {
@@ -497,6 +551,9 @@ export function resolveExplicitReadOnlyToolChoice(
   message: string,
   tools: readonly { name: string }[],
 ): string | undefined {
+  if (tools.some(tool => tool.name === 'read_skill') && isExplicitReadSkillDirective(message)) {
+    return 'read_skill';
+  }
   const readOnly = new Set(READONLY_TOOLS);
   const candidates = Array.from(new Set(tools.map(tool => tool.name)))
     // read_file requires a path. It is handled by the bounded parser below so

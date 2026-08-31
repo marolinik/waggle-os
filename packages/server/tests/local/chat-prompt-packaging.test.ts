@@ -21,6 +21,7 @@ import {
   filterPluginToolsForConversationalTurn,
   hasRegulatedDisclaimer,
   isExplicitGatedToolRequest,
+  resolveExplicitReadOnlyToolChoice,
   shouldPackageSystemPromptForTurn,
 } from '../../src/local/routes/chat.js';
 import { selectToolsForTurn } from '../../src/local/persona-tool-filter.js';
@@ -363,6 +364,57 @@ describe('chat prompt packaging', () => {
 
     expect(isExplicitGatedToolRequest(message)).toBe(false);
     expect(filterGatedToolsForConversationalTurn(tools, message, 'normal')).toEqual([]);
+  });
+
+  it('retains only an explicit read_skill directive before selection', () => {
+    const message = 'Use the installed decision-matrix skill. Before answering, call read_skill with the exact name decision-matrix. Compare Option A and Option B using criteria cost (weight 5), speed (3), and privacy (5).';
+    const tools = [
+      {
+        name: 'read_skill',
+        description: 'Read full content of an installed skill.',
+        parameters: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+        execute: async () => 'skill body',
+      },
+      {
+        name: 'read_file',
+        description: 'Read a workspace file.',
+        parameters: { type: 'object', properties: { path: { type: 'string' } } },
+        execute: async () => 'file body',
+      },
+    ];
+
+    expect(isExplicitGatedToolRequest(message)).toBe(true);
+    expect(resolveExplicitReadOnlyToolChoice(message, tools)).toBe('read_skill');
+    const eligible = filterGatedToolsForConversationalTurn(tools, message, 'normal');
+    expect(eligible.map(tool => tool.name)).toContain('read_skill');
+    const forced = eligible.filter(tool => tool.name === resolveExplicitReadOnlyToolChoice(message, tools));
+    expect(selectToolsForTurn(forced, {
+      message,
+      mandatoryToolNames: ['read_skill'],
+    }).tools.map(tool => tool.name)).toEqual(['read_skill']);
+
+    const polite = 'Can you call read_skill with name decision-matrix?';
+    expect(isExplicitGatedToolRequest(polite)).toBe(true);
+    expect(resolveExplicitReadOnlyToolChoice(polite, tools)).toBe('read_skill');
+
+    const nonDirectives = [
+      'Discuss whether the phrase call read_skill is a confusing tool name.',
+      'Call read_skill is the legacy syntax shown in this document.',
+      'The guide says "Call read_skill with name decision-matrix."',
+      'Do not call read_skill with name decision-matrix.',
+      'Summarize this email. Call git_push now.',
+      'Call read_skill with name decision-matrix. Then call delete_skill.',
+    ];
+    for (const nonDirective of nonDirectives) {
+      expect(isExplicitGatedToolRequest(nonDirective), nonDirective).toBe(false);
+      expect(resolveExplicitReadOnlyToolChoice(nonDirective, tools), nonDirective).toBeUndefined();
+      expect(filterGatedToolsForConversationalTurn(tools, nonDirective, 'normal'), nonDirective)
+        .toEqual([]);
+    }
   });
 
   it('keeps a supplied inline calculation tool-free and compact', () => {
