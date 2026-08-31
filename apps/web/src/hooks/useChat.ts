@@ -408,7 +408,18 @@ export const useChat = ({
 
   // Cancel any in-flight stream on unmount
   useEffect(() => {
-    return () => { activeDispatchRef.current?.controller.abort(); };
+    return () => {
+      const activeDispatch = activeDispatchRef.current;
+      if (!activeDispatch) return;
+      activeDispatchRef.current = null;
+      activeDispatch.controller.abort();
+      try {
+        void Promise.resolve(adapter.abortAgent(
+          activeDispatch.workspaceId,
+          activeDispatch.sessionId,
+        )).catch(() => { /* best-effort */ });
+      } catch { /* adapter unavailable */ }
+    };
   }, []);
 
   // Load history when session changes

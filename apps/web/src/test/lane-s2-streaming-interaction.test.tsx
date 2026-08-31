@@ -171,6 +171,30 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     expect(assistant?.blocks?.some(block => block.type === 'error')).toBe(true);
   });
 
+  it('cancels the exact server-side stream when chat unmounts before the first token', async () => {
+    const gate = deferred<void>();
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      await gate.promise;
+      yield { type: 'done', data: { content: 'late answer' } };
+    });
+
+    const hook = await mountChat('sess-unmount');
+    let sendPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      sendPromise = hook.result.current.sendMessage('question');
+      await flush();
+    });
+
+    hook.unmount();
+
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-unmount');
+    expect(mocks.adapter.abortAgent).not.toHaveBeenCalledWith('ws-1', 'sess-other');
+
+    gate.resolve();
+    await sendPromise;
+  });
+
   it('stops consuming immediately after done even when the producer would stay open', async () => {
     const never = deferred<void>();
     mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
