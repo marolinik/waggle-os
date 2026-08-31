@@ -6678,6 +6678,11 @@ describe('deterministic 100-point persona scorer', () => {
       'Browser testing shows two unresolved failures on Windows, but I retract that claim.',
       'Browser testing shows two unresolved failures on Windows, but that claim has been withdrawn.',
       'Browser testing shows two unresolved failures on Windows, although all failures were fixed afterward.',
+      'Previously resolved: Browser tests: Two failures on Windows.',
+      'Previously resolved browser tests: Two failures on Windows.',
+      'Historical status (now cleared): Browser tests: Two failures on Windows.',
+      'Browser tests: Two failures on Windows; later cleared.',
+      'Browser tests: Two failures on Windows. Update: those failures have now been resolved.',
       'Browser testing shows two unresolved failures on Windows; correction: zero failures remain.',
       'There is no evidence that browser testing shows two unresolved failures on Windows.',
       'If browser testing shows two unresolved failures on Windows, delay release.',
@@ -6708,6 +6713,472 @@ describe('deterministic 100-point persona scorer', () => {
         deniedResult.checks.find(check => check.id === 'release-facts')?.passed,
         deniedClaim,
       ).toBe(false);
+    }
+  });
+
+  it('accepts the exact Qwen writer memo when every supplied fact is preserved', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      '**MEMO: Release Delay Recommendation**',
+      '',
+      '**Current Status:**',
+      '- API tests: Passing.',
+      '- Browser tests: Two failures on Windows.',
+      '- Smart router: Unexercised without cloud credentials.',
+      '',
+      '**Recommendation:**',
+      'Delay the planned Friday release until the Windows browser failures are resolved and the smart router is validated without cloud credentials.',
+    ].join('\n');
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    }));
+
+    for (const id of ['release-facts', 'router-fact', 'recommendation']) {
+      expect(result.checks.find(check => check.id === id)?.passed, id).toBe(true);
+    }
+  });
+
+  it('accepts the exact Qwen 30-minute agenda with an explicit reserved final block', () => {
+    const assistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const response = [
+      '**Launch-Readiness Meeting Agenda (30 min)**',
+      '*Participants: Product, Engineering, QA, Support*',
+      '',
+      '**Pre-read Checklist**',
+      '- [ ] Final feature scope and release notes',
+      '- [ ] Outstanding defects with severity and QA pass/fail status',
+      '- [ ] Production deployment checklist and rollback plan',
+      '- [ ] Support readiness: runbooks, FAQ, escalation paths',
+      '- [ ] Customer communication draft and marketing schedule',
+      '',
+      '**Agenda**',
+      '| Time | Topic | Lead | Decision Required |',
+      '|---|---|---|---|',
+      '| 5 min | Launch scope review | Product | Confirm scope is locked and no new items are admitted |',
+      '| 5 min | Engineering readiness | Engineering | Approve deployment plan and rollback procedure |',
+      '| 5 min | QA sign-off | QA | Confirm release candidate passes criteria; identify remaining critical defects |',
+      '| 5 min | Support readiness | Support | Approve launch support plan and escalation ownership |',
+      '| 5 min | Go/No-Go assessment | Product (facilitator) | Go/No-Go decision based on readiness evidence |',
+      '',
+      '*Note: The blocks above total 25 minutes; the final 5 minutes are reserved for action-item assignment and confirmation of launch communication timeline.*',
+    ].join('\n');
+    const result = scorePersonaTrial(assistant, evidence({
+      prompt: assistant.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: assistant.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'decisions')?.passed).toBe(true);
+  });
+
+  it('accepts the exact Qwen current-runway calculation and two affirmative actions', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway is calculated using the formula: Runway = Cash Balance ÷ Monthly Burn.',
+      '',
+      'Given a cash balance of $40,000 and a monthly burn of $10,000 with zero revenue, the runway is exactly 4 months.',
+      '',
+      'The biggest assumption in this calculation is that the $10,000 monthly burn is fixed and remains constant. In reality, expenses are often variable and may shift month-to-month, meaning actual runway could differ if costs are not strictly locked in.',
+      '',
+      'Two actions to improve runway:',
+      '',
+      '1.  **Audit and cut non-essential expenses**: Review the $10,000 burn to identify discretionary costs, software subscriptions, or vendor contracts that can be renegotiated, paused, or eliminated without immediately halting core operations.',
+      '2.  **Accelerate time-to-revenue**: Prioritize initiatives that generate cash faster, such as launching a paid service offering, upselling existing contacts, or securing early pilot payments, since every dollar of new revenue directly extends the runway.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'runway')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+  });
+
+  it('accepts the exact Qwen priority table when each row gives a decision basis', () => {
+    const general = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Order: 1) Production memory bug → 2) Close customer → 3) Repair onboarding friction.**',
+      '',
+      '## Plan',
+      '',
+      '| Priority | Rank | Why this position |',
+      '|---|---|---|',
+      '| Memory bug | 1 | Blocks everything. A live production bug risks churn across *all* customers, including the one you\'re trying to close. Fix first to protect the base and give the sales push a stable foundation. |',
+      '| Close customer | 2 | Revenue and momentum. Once stability is confirmed, focus energy here — deals don\'t close themselves, and a confident product demo beats a known-unstable one. |',
+      '| Onboarding friction | 3 | High-value but rarely time-boxed to *this* week. It compounds over time rather than burning a deadline. Schedule it as the structured work once the fires are out. |',
+      '',
+      '**Rationale for the sequence:** The bug is a risk-reducer, the close is an opportunity-capturer, and onboarding is a long-term ROI item. Risk reduction before revenue capture, revenue capture before optimization. Each step removes uncertainty for the next.',
+      '',
+      '## First Action Today',
+      '',
+      '**Triage the memory bug as a bounded investigation, not a fix:**',
+      '1. Pull the last 24h of production logs and isolate the memory growth pattern — is it leaking per-request, per-session, or background job?',
+      '2. Reproduce locally with a minimal harness to confirm the failure mode.',
+      '3. Decide scope: if it\'s a quick patch, fix it; if it needs deeper surgery, ship a mitigation (restart policy, limit, or feature flag) to stop the bleeding *now* and schedule the real fix for next week.',
+      '',
+      'Time-box this to half a day. You don\'t need to solve it completely today — you need to know whether it\'s a fire or a slow burn, because that answer changes how much headroom you have for the customer push.',
+    ].join('\n');
+    const result = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: general.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+  });
+
+  it('keeps the Qwen writer grammar fail-closed for negated facts and recommendations', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const base = [
+      'Friday ship status: API tests passing.',
+      'Browser tests: Two failures on Windows.',
+      'Smart router: Unexercised without cloud credentials.',
+      'Recommendation: Delay the planned Friday release until those gaps are closed.',
+    ].join('\n');
+    const check = (response: string, id: string): boolean => scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: writer.id,
+    })).checks.find(item => item.id === id)?.passed ?? false;
+
+    expect(check(base.replace('Two failures', 'Not two failures'), 'release-facts')).toBe(false);
+    expect(check(base.replace('Two failures on Windows.', 'Two failures on Windows were resolved yesterday.'), 'release-facts')).toBe(false);
+    expect(check(base.replace('Browser tests: Two failures on Windows.', 'Resolved: Browser tests: Two failures on Windows.'), 'release-facts')).toBe(false);
+    expect(check(base.replace('Unexercised', 'Not unexercised'), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised', "The smart router wasn't untested"), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised', 'The smart router is hardly untested'), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised', 'If the smart router is unexercised'), 'router-fact')).toBe(false);
+    expect(check(base.replace('Smart router: Unexercised without', 'Smart router: Unexercised with'), 'router-fact')).toBe(false);
+    expect(check(base.replace(
+      'Smart router: Unexercised without cloud credentials.',
+      'The smart router is healthy; the browser is untested without cloud credentials.',
+    ), 'router-fact')).toBe(false);
+    expect(check(`${base}\nCorrection: the smart router was exercised without cloud credentials.`, 'router-fact')).toBe(false);
+    for (const deniedRouterStatus of [
+      'Assuming the smart router is untested without cloud credentials.',
+      'Provided that the smart router is untested without cloud credentials.',
+      'The smart router would be untested without cloud credentials.',
+      'The smart router is supposedly untested without cloud credentials.',
+      'Presumably, the smart router is untested without cloud credentials.',
+      'Pending confirmation, the smart router is untested without cloud credentials.',
+      'Smart router is untested without cloud credentials, but it is now tested.',
+      'The smart router is untested with cloud credentials, not without cloud credentials.',
+      'The smart router is untested without cloud credentials but is fully tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. It is now tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. We exercised the smart router without cloud credentials.',
+      'Smart router is untested without cloud credentials. Correction: we tested it without cloud credentials.',
+      'Smart router is untested without cloud credentials. The team has now tested it without cloud credentials.',
+      'Smart router is untested without cloud credentials. However, it is now tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. The router is now tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. It has since been tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. The same was later tested without cloud credentials.',
+      'Smart router is untested without cloud credentials. Testing later covered the smart router without credentials.',
+    ]) {
+      expect(check(base.replace(
+        'Smart router: Unexercised without cloud credentials.',
+        deniedRouterStatus,
+      ), 'router-fact'), deniedRouterStatus).toBe(false);
+    }
+    expect(check(base.replace('Recommendation: Delay', 'Recommendation: Do not delay'), 'recommendation')).toBe(false);
+    for (const nonRecommendation of [
+      'Recommendation: Should we delay the planned Friday release until those gaps are closed?',
+      'Recommendation: Could delay the planned Friday release until those gaps are closed.',
+      'Recommendation: Delay the planned Friday release until those gaps are closed? No.',
+      'Recommendation: Delaying the planned Friday release until the Windows failures are resolved is not recommended.',
+    ]) {
+      expect(check(base.replace(
+        'Recommendation: Delay the planned Friday release until those gaps are closed.',
+        nonRecommendation,
+      ), 'recommendation'), nonRecommendation).toBe(false);
+    }
+    for (const status of [
+      'The smart router has not been exercised without cloud credentials.',
+      'The smart router has not been validated without cloud credentials.',
+      'The smart router is untested without cloud credentials.',
+      'The smart router still needs to be exercised without cloud credentials.',
+      'We have yet to exercise the smart router without cloud credentials.',
+      'Testing the smart router without cloud credentials remains outstanding.',
+      'The smart router still awaits testing without cloud credentials.',
+      'Testing without cloud credentials is still pending for the smart router.',
+    ]) {
+      expect(check(base.replace('Smart router: Unexercised without cloud credentials.', status), 'router-fact'), status).toBe(true);
+    }
+  });
+
+  it('does not invent a 30-minute agenda from a negated or wrong remainder', () => {
+    const assistant = PERSONA_CASES.find(persona => persona.id === 'executive-assistant')!;
+    const base = [
+      '**Launch-Readiness Meeting Agenda (30 min)**',
+      '**Agenda**',
+      '| Time | Topic | Decision Required |',
+      '|---|---|---|',
+      '| 10 min | Product | Decide scope |',
+      '| 15 min | QA and Support | Decide readiness |',
+      '*The final 5 minutes are reserved for action-item assignment.*',
+    ].join('\n');
+    const scored = (response: string): boolean => scorePersonaTrial(assistant, evidence({
+      prompt: assistant.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: assistant.id,
+    })).checks.find(item => item.id === 'duration-blocks')?.passed ?? false;
+
+    expect(scored(base)).toBe(true);
+    expect(scored(base.replace('are reserved', 'are not reserved'))).toBe(false);
+    expect(scored(base.replace('final 5 minutes', 'final 4 minutes'))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      '## Pre-read Checklist\n- The final 5 minutes are reserved for document review.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'If leadership approves, the final 5 minutes are reserved for action items.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items, but actually not.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items — this is false.',
+    ))).toBe(false);
+    for (const deniedRemainder of [
+      'The final 5 minutes are reserved for action items, subject to leadership approval.',
+      'The final 5 minutes are reserved for action items, except that this reservation is cancelled.',
+      'The final 5 minutes are reserved for action items — cancelled.',
+      'For reference only: the final 5 minutes are reserved for action items.',
+      'Alternative only, excluded from this plan: the final 5 minutes are reserved for action items.',
+      'Once leadership approves, the final 5 minutes are reserved for action items.',
+      'When leadership approves, the final 5 minutes are reserved for action items.',
+      'Only after leadership approval are the final 5 minutes reserved for action items.',
+    ]) {
+      expect(scored(base.replace(
+        '*The final 5 minutes are reserved for action-item assignment.*',
+        deniedRemainder,
+      )), deniedRemainder).toBe(false);
+    }
+    expect(scored(`${base}\nThis reservation was subsequently cancelled.`)).toBe(false);
+    expect(scored(`${base}\nCorrection: no time is reserved for action items.`)).toBe(false);
+    expect(scored(`${base}\nUpdate: cancel that reservation.`)).toBe(false);
+    expect(scored(`${base}\nUpdate: this reservation no longer applies.`)).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items. Update: that reservation no longer applies.',
+    ))).toBe(false);
+    expect(scored(`${base}\nThat reservation has since been withdrawn.`)).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items. This reservation is no longer in effect.',
+    ))).toBe(false);
+    expect(scored(base.replace(
+      '*The final 5 minutes are reserved for action-item assignment.*',
+      'The final 5 minutes are reserved for action items. Update: cancel that reservation.',
+    ))).toBe(false);
+
+    const decimalAgenda = base
+      .replace('| 10 min | Product | Decide scope |', '| Product | 1.1 min | Decide scope |')
+      .replace('| 15 min | QA and Support | Decide readiness |', '| QA and Support | 23.9 min | Decide readiness |');
+    expect(scored(decimalAgenda)).toBe(true);
+
+    const decisionHeaderOnly = base
+      .replace('| 10 min | Product | Decide scope |', '| 10 min | Product | TBD |')
+      .replace('| 15 min | QA and Support | Decide readiness |', '| 15 min | QA and Support | None |');
+    const decisionResult = scorePersonaTrial(assistant, evidence({
+      prompt: assistant.prompt,
+      response: decisionHeaderOnly,
+      persistedResponse: decisionHeaderOnly,
+      requestPersonaId: assistant.id,
+    }));
+    expect(decisionResult.checks.find(item => item.id === 'decisions')?.passed).toBe(false);
+    for (const invalidDecision of [
+      'We did not approve launch',
+      'Never approve launch',
+      'Could approve launch',
+      'Would decide later',
+      'Confirm scope remains TBD',
+      'Approve later — TBD',
+      'Confirm scope remains undecided',
+      'Make no final choice',
+    ]) {
+      const invalidDecisionAgenda = base
+        .replace('| 10 min | Product | Decide scope |', `| 10 min | Product | ${invalidDecision} |`)
+        .replace('| 15 min | QA and Support | Decide readiness |', '| 15 min | QA and Support | None |');
+      const invalidDecisionResult = scorePersonaTrial(assistant, evidence({
+        prompt: assistant.prompt,
+        response: invalidDecisionAgenda,
+        persistedResponse: invalidDecisionAgenda,
+        requestPersonaId: assistant.id,
+      }));
+      expect(invalidDecisionResult.checks.find(item => item.id === 'decisions')?.passed, invalidDecision).toBe(false);
+    }
+  });
+
+  it('keeps exact runway and action variants fail-closed under contradiction', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const base = [
+      'Runway = Cash Balance ÷ Monthly Burn.',
+      'The runway is exactly 4 months.',
+      'The biggest assumption is constant burn and zero revenue.',
+      'Two actions to improve runway:',
+      '1. Audit and cut non-essential expenses.',
+      '2. Accelerate time-to-revenue by generating cash faster.',
+    ].join('\n');
+    const scored = (response: string) => scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(scored(base.replace('exactly 4', 'exactly 5')).checks.find(item => item.id === 'runway')?.passed).toBe(false);
+    const denied = base
+      .replace('Audit and cut', 'Do not audit or cut')
+      .replace('Accelerate time-to-revenue', 'Do not accelerate time-to-revenue');
+    expect(scored(denied).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Increase cash burn.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Accelerate the decline in revenue.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Generate cash outflows.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    expect(scored(base.replace(
+      'Accelerate time-to-revenue by generating cash faster.',
+      'Generate a cash forecast and revenue report.',
+    )).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+    for (const reportingOnly of [
+      'Generate a report on revenue.',
+      'Grow revenue reporting.',
+      'Raise an analysis of funding.',
+      'Generate a cash-flow report.',
+      'Generate a cash-flow summary.',
+      'Increase cash consumption.',
+      'Increase customer complaints.',
+      'Grow customer churn.',
+      'Raise funding costs.',
+      'Generate cash losses.',
+      'Generate a memo on revenue.',
+      'Raise customer acquisition costs.',
+      'Increase customer acquisition expenses.',
+      'Generate revenue losses.',
+    ]) {
+      expect(scored(base.replace(
+        'Accelerate time-to-revenue by generating cash faster.',
+        reportingOnly,
+      )).checks.find(item => item.id === 'two-actions')?.passed, reportingOnly).toBe(false);
+    }
+    const reportingOnlyPair = base
+      .replace('Audit and cut non-essential expenses.', 'Audit and cut the cost forecast.')
+      .replace('Accelerate time-to-revenue by generating cash faster.', 'Raise the funding report.');
+    expect(scored(reportingOnlyPair).checks.find(item => item.id === 'two-actions')?.passed).toBe(false);
+  });
+
+  it('does not borrow swapped decision bases across Qwen-style priority table rows', () => {
+    const general = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Order: 1) Production memory bug → 2) Close customer → 3) Repair onboarding friction.**',
+      '| Priority | Rank | Why this position |',
+      '|---|---|---|',
+      '| Memory bug | 1 | Reliability risk and churn make this urgent. |',
+      '| Close customer | 2 | Long-term ROI compounds over time. |',
+      '| Onboarding friction | 3 | Revenue and commercial momentum. |',
+      '**First Action Today** Triage the memory bug.',
+    ].join('\n');
+    const result = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: general.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const missingOnboardingBasis = response.replace(
+      '| Onboarding friction | 3 | Revenue and commercial momentum. |',
+      '| Onboarding friction | 3 | TBD |',
+    );
+    const missingBasisResult = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response: missingOnboardingBasis,
+      persistedResponse: missingOnboardingBasis,
+      requestPersonaId: general.id,
+    }));
+    expect(missingBasisResult.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const disclaimedRationale = response
+      .replace('| Memory bug | 1 | Reliability risk and churn make this urgent. |', '| Memory bug | 1 | Churn; this is not a rationale. |')
+      .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue; this is not a rationale. |')
+      .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI; this is not a rationale. |');
+    const disclaimedResult = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response: disclaimedRationale,
+      persistedResponse: disclaimedRationale,
+      requestPersonaId: general.id,
+    }));
+    expect(disclaimedResult.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    const pseudoTable = response
+      .replace('|---|---|---|\n', '')
+      .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue and commercial momentum. |')
+      .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI compounds over time. |');
+    const pseudoTableResult = scorePersonaTrial(general, evidence({
+      prompt: general.prompt,
+      response: pseudoTable,
+      persistedResponse: pseudoTable,
+      requestPersonaId: general.id,
+    }));
+    expect(pseudoTableResult.checks.find(check => check.id === 'justification')?.passed).toBe(false);
+
+    for (const malformedSeparator of ['|---|', '| unrelated | row | before separator |\n|---|---|---|']) {
+      const malformedTable = response
+        .replace('|---|---|---|', malformedSeparator)
+        .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue and commercial momentum. |')
+        .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI compounds over time. |');
+      const malformedResult = scorePersonaTrial(general, evidence({
+        prompt: general.prompt,
+        response: malformedTable,
+        persistedResponse: malformedTable,
+        requestPersonaId: general.id,
+      }));
+      expect(malformedResult.checks.find(check => check.id === 'justification')?.passed, malformedSeparator).toBe(false);
+    }
+
+    for (const disclaimer of [
+      'Churn; not actually a rationale.',
+      'Churn; no rationale here.',
+      'Churn; this does not justify the ranking.',
+      'Not a rationale: churn matters.',
+      'TBD, probably churn.',
+      'TBC, probably churn.',
+      'Probably churn because it poses risk.',
+      'Tentatively, churn because it poses risk.',
+      'Churn, but it should not justify this position.',
+    ]) {
+      const disclaimedTable = response
+        .replace('Reliability risk and churn make this urgent.', disclaimer)
+        .replace('| Close customer | 2 | Long-term ROI compounds over time. |', '| Close customer | 2 | Revenue and commercial momentum. |')
+        .replace('| Onboarding friction | 3 | Revenue and commercial momentum. |', '| Onboarding friction | 3 | Long-term ROI compounds over time. |');
+      const disclaimedTableResult = scorePersonaTrial(general, evidence({
+        prompt: general.prompt,
+        response: disclaimedTable,
+        persistedResponse: disclaimedTable,
+        requestPersonaId: general.id,
+      }));
+      expect(disclaimedTableResult.checks.find(check => check.id === 'justification')?.passed, disclaimer).toBe(false);
     }
   });
 });

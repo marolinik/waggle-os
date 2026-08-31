@@ -361,7 +361,7 @@ const FINANCE_CURRENT_BURN = new RegExp(
 const FINANCE_RUNWAY_AFTER = new RegExp(
   /\b(?:(?:actual|current)\s+){0,2}runway(?:\s*\(months\))?\s*/.source
     + /(is\s+not|isn't|isn’t|cannot\s+be|can't\s+be|is|of|=|:|\||equals?|comes\s+to|totals?|works\s+out\s+to|should\s+be)/.source
-    + /\s*(?:approximately|about|around|roughly)?\s*/.source
+    + /\s*(?:exactly|approximately|about|around|roughly)?\s*/.source
     + '(' + FINANCE_NUMBER + ')'
     + /\s*months?\b/.source,
   'gi',
@@ -1268,6 +1268,7 @@ function hasTimedAgenda(
   const agendaBlocks: Array<{
     kind: 'clock' | 'offset' | 'duration';
     duration: number;
+    lineIndex: number;
     start?: number;
     end?: number;
   }> = [];
@@ -1398,7 +1399,7 @@ function hasTimedAgenda(
           const annotationMatches = durationAnnotations.length === 0
             || (durationAnnotations.length === 1 && durationAnnotations[0] === intervalDuration);
           if (intervalDuration > 0 && annotationMatches) {
-            agendaBlocks.push({ kind: 'clock', start, end, duration: intervalDuration });
+            agendaBlocks.push({ kind: 'clock', start, end, duration: intervalDuration, lineIndex });
           }
           else invalidAgendaBlock = true;
         } else {
@@ -1408,7 +1409,7 @@ function hasTimedAgenda(
           const annotationMatches = durationAnnotations.length === 0
             || (durationAnnotations.length === 1 && durationAnnotations[0] === intervalDuration);
           if (intervalDuration > 0 && annotationMatches) {
-            agendaBlocks.push({ kind: 'offset', start, end, duration: intervalDuration });
+            agendaBlocks.push({ kind: 'offset', start, end, duration: intervalDuration, lineIndex });
           }
           else invalidAgendaBlock = true;
         }
@@ -1429,7 +1430,7 @@ function hasTimedAgenda(
         ? rangeAnnotationValues(line)
         : [];
       if (labelFirstValues.length === 1 && /[\p{L}]/u.test(line)) {
-        agendaBlocks.push({ kind: 'duration', duration: labelFirstValues[0] });
+        agendaBlocks.push({ kind: 'duration', duration: labelFirstValues[0], lineIndex });
       } else if (labelFirstValues.length > 1) {
         invalidAgendaBlock = true;
       }
@@ -1449,7 +1450,7 @@ function hasTimedAgenda(
       invalidAgendaBlock = true;
       continue;
     }
-    if (value > 0) agendaBlocks.push({ kind: 'duration', duration: value });
+    if (value > 0) agendaBlocks.push({ kind: 'duration', duration: value, lineIndex });
     else invalidAgendaBlock = true;
   }
 
@@ -1464,7 +1465,103 @@ function hasTimedAgenda(
     }
     elapsedMinutes += block.duration;
   }
-  return elapsedMinutes === durationMinutes;
+  if (elapsedMinutes === durationMinutes) return true;
+  const remainingMinutes = Math.round((durationMinutes - elapsedMinutes) * 1_000) / 1_000;
+  if (remainingMinutes <= 0) return false;
+  const lastAgendaBlockLine = Math.max(...agendaBlocks.map(block => block.lineIndex));
+  const escapedRemainingMinutes = String(remainingMinutes)
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const reservedRemainder = new RegExp(
+    String.raw`\b(?:final|remaining|last)\s+${escapedRemainingMinutes}\s+(?:mins?|minutes?)\s+(?:is\s+|are\s+)?reserved\s+for\s+[\p{L}]`,
+    'iu',
+  );
+  let candidateOffset = lines.slice(0, lastAgendaBlockLine + 1)
+    .reduce((total, line) => total + line.length + 1, 0);
+  for (let lineIndex = lastAgendaBlockLine + 1; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    if (!line.trim()) {
+      candidateOffset += line.length + 1;
+      continue;
+    }
+    const match = reservedRemainder.exec(line);
+    if (!match || match.index === undefined) return false;
+    const prefix = line.slice(0, match.index);
+    const suffix = line.slice(match.index + match[0].length);
+    const qualification = `${prefix} ${suffix}`;
+    if (/\b(?:if|unless|whether|once|when|only after|provided(?: that)?|assuming(?: that)?|subject to|pending|contingent(?: on)?|awaiting|maybe|perhaps|possibly|could|may|might|would|should|for reference only|reference only|alternative only|illustrative only|excluded from (?:this|the) plan|not part of (?:this|the) plan)\b/i.test(qualification)) {
+      return false;
+    }
+    if (/\b(?:but|however|yet|except(?: that)?)\b[^.!?\r\n]{0,100}\b(?:not|false|wrong|untrue|cancelled|canceled|revoked|withdrawn)\b/i.test(suffix)
+      || /(?:—|-|,)\s*(?:(?:this|that|it)\s+is\s+)?(?:false|wrong|untrue|cancelled|canceled|revoked|withdrawn)\b/i.test(suffix)
+      || /\b(?:not actually|actually not)\b/i.test(suffix)
+      || /\b(?:cancel(?:s|led|ed|ing)?|revok(?:e|es|ed|ing)|withdraw(?:s|n|ing)?)\s+(?:that|this|the)\s+reservation\b/i.test(suffix)) {
+      return false;
+    }
+    const laterText = lines.slice(lineIndex + 1).join('\n');
+    const retractionText = `${suffix}\n${laterText}`;
+    if (/\b(?:(?:this|that|the)\s+reservation\s+(?:(?:was|is|(?:has|had)\s+(?:since\s+)?been)\s+)?(?:subsequently\s+)?(?:cancelled|canceled|revoked|withdrawn)|(?:this|that|the)\s+reservation\s+(?:no\s+longer\s+(?:applies|is\s+in\s+effect)|is\s+no\s+longer\s+in\s+effect)|(?:cancel(?:s|led|ed|ing)?|revok(?:e|es|ed|ing)|withdraw(?:s|n|ing)?)\s+(?:that|this|the)\s+reservation|correction\s*:\s*(?:no|not)[^.\r\n]{0,48}\breserved\b|no\s+(?:time|minutes?)\s+(?:is|are|was|were)\s+reserved)\b/i.test(retractionText)) {
+      return false;
+    }
+    const start = candidateOffset + match.index;
+    return durationMentionIsAffirmed(text, start, start + match[0].length);
+  }
+  return false;
+}
+
+function isAffirmedAgendaDecision(value: string): boolean {
+  const normalized = value.replace(/[*_`]/g, '').trim();
+  if (!normalized || /\b(?:tbd|tbc|undecided|not decided|pending|decide later|approve later|no\s+(?:final\s+)?choice)\b|^(?:none|n\/?a|not applicable|no decision(?: required)?|decision required)$/i.test(normalized)) {
+    return false;
+  }
+  if (/\?|\b(?:if|unless|maybe|perhaps|possibly|hypothetical|do not|don't|did not|never|cannot|can't|could|would|may|might|should|not approved|not decided|no decision)\b/i.test(normalized)) {
+    return false;
+  }
+  return /\b(?:approve|confirm|decide|select|choose|agree|sign[- ]?off|assign|make)\b/i.test(normalized)
+    || /\b(?:final\s+)?(?:launch|go\/?no-go)\s+decision\b/i.test(normalized);
+}
+
+function hasAffirmedAgendaDecision(response: string): boolean {
+  const lines = response.replace(/\r\n?/g, '\n').split('\n');
+  let decisionColumn = -1;
+  let inDecisionSection = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/^\|.*\|$/.test(line)) {
+      const cells = line.slice(1, -1).split('|').map(cell => cell.trim());
+      const separator = cells.every(cell => /^:?-{3,}:?$/.test(cell));
+      const headerColumn = cells.findIndex(cell => /\b(?:desired\s+)?decision(?:s| required)?\b|\boutcome\b/i.test(cell));
+      if (headerColumn >= 0) {
+        decisionColumn = headerColumn;
+        continue;
+      }
+      if (!separator && decisionColumn >= 0 && isAffirmedAgendaDecision(cells[decisionColumn] ?? '')) {
+        return true;
+      }
+      continue;
+    }
+
+    const heading = line
+      .replace(/^#{1,6}\s+/, '')
+      .replace(/^\*\*|\*\*$/g, '')
+      .replace(/:$/, '')
+      .trim();
+    if (/^desired decisions?$/i.test(heading)) {
+      inDecisionSection = true;
+      decisionColumn = -1;
+      continue;
+    }
+    if (/^(?:#{1,6}\s+|\*\*[^*]+\*\*\s*$)/.test(line)) {
+      inDecisionSection = false;
+      decisionColumn = -1;
+      continue;
+    }
+    if (inDecisionSection && isAffirmedAgendaDecision(line.replace(/^[-*+]\s+|^\d+[.)]\s+/, ''))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 interface DependencyReference {
@@ -1657,6 +1754,7 @@ const NON_AFFIRMATIVE_WRITER_FRIDAY = /\b(?:there\s+(?:is|was)\s+)?no\s+Friday\s
 const NON_AFFIRMATIVE_WRITER_API = /\bAPI tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:(?:has|have)(?:\s+(?:still|yet))?\s+not|hasn['’]t|haven['’]t)(?:\s+(?:yet|all|quite|fully|completely)){0,2}\s+passed|(?:has|have|is|are)\s+yet\s+to\s+(?:(?:fully|completely)\s+)?pass|(?:has|have)\s+failed|(?:is|are)\s+failing|fail(?:ed|ing)?)\b|\b(?:not\s+all|no)\s+API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:have\s+)?pass(?:ed|ing)?\b/i;
 const NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM = /\b(?:two|2)\s+failures?\s+(?:on|in)\s+(?!Windows\b)[^.;,\r\n]{1,30},?\s*(?:not|rather\s+than|instead\s+of|unlike)\s+(?:(?:on|in|under)\s+)?Windows\b|\bWindows\b\s*(?:[,;:–—-]\s*)?(?:(?:currently|now|still|otherwise)\s+)*(?:(?:is|was|remains?)\s+(?:(?:currently|now|still|otherwise)\s+)*(?:clean|green|passing|unaffected|failure[- ]free)|(?:shows?|reports?|has)\s+(?:no|zero)\s+failures?)\b/i;
 const AFFIRMATIVE_WRITER_BROWSER_PASS = /\bbrowser test(?:s|ing)?\b(?:(?!\bAPI tests?\b|\b(?:not|never|no\s+longer|hasn['’]t|haven['’]t|isn['’]t|aren['’]t|didn['’]t|doesn['’]t|don['’]t|cannot|can['’]t)\b)[^.;\r\n]){0,60}\bpass(?:ed|ing)?\b/i;
+const NON_AFFIRMATIVE_WRITER_BROWSER_STATUS = /^(?:(?:previously|already|now)\s+)?(?:resolved|fixed|closed|cleared|corrected)\s*:?\s*(?:the\s+)?browser test(?:s|ing)?\b|^(?:historical|past|previous)[^.\r\n]{0,100}\b(?:now\s+)?(?:cleared|resolved|fixed|closed)\b[^.\r\n]{0,60}\bbrowser test(?:s|ing)?\b|\bbrowser test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:later|subsequently)\s+(?:cleared|resolved|fixed|closed)\b/i;
 const WRITER_FACT_CONSEQUENCE = /(?:,\s+which|;\s+(?:this|that))\s+(?:may|might|could|would)\s+(?:delay|block|affect|impact|prevent|change|move|push)\b[^.;]*/gi;
 const WRITER_ROUTER_PRE_QUALIFIER = /\b(?:unverified|unconfirmed|uncertain)\s+smart router(?:\s+(?:behaviou?r|functionality|operation))?\b(?=\s*(?:$|[,.;:!?*(){}[\]–—-]|(?:and|or|nor|&|as|along|together|without|while|but|is|are|was|were|remain(?:s|ed)?|has|have|had)\b))/gi;
 const WRITER_ROUTER_POST_QUALIFIER = /(\bsmart router(?:\s+(?:behaviou?r|functionality|operation))?)(\s+(?:(?:is|remains?|was)\s+)?)(?:unverified|unconfirmed|uncertain)\b/gi;
@@ -1760,6 +1858,7 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
     || (/browser/i.test(topic.source) && (
       NON_AFFIRMATIVE_WRITER_BROWSER_PLATFORM.test(clause)
       || AFFIRMATIVE_WRITER_BROWSER_PASS.test(clause)
+      || NON_AFFIRMATIVE_WRITER_BROWSER_STATUS.test(clause)
     ))
   );
 
@@ -1789,12 +1888,87 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
       && testPattern(patterns[2], scopedClause);
   });
 
-  return !hasDeniedFact(/\bFriday\b/i)
+  const browserFailureWasLaterResolved = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\s+on\s+Windows\b[\s\S]{0,180}\b(?:update|correction)\s*:\s*(?:those|these|the)\s+failures?\s+(?:(?:have|has)\s+(?:now\s+)?been|were|are)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
+  return !browserFailureWasLaterResolved
+    && !hasDeniedFact(/\bFriday\b/i)
     && !hasDeniedFact(/\bAPI tests?\b/i)
     && !hasDeniedFact(/\bbrowser test(?:s|ing)?\b/i)
     && hasAffirmedFact(/\bFriday\b/i, patterns[0])
     && hasAffirmedFact(/\bAPI tests?\b/i, patterns[1])
     && browserAffirmed;
+}
+
+function hasAffirmedWriterRouterFact(response: string): boolean {
+  const clauses = response
+    .replace(/\r\n?/g, '\n')
+    .split(/\n+|;\s*|(?<=[.!?])\s+/)
+    .map(clause => clause.replace(/[*_`]/g, '').trim())
+    .filter(Boolean);
+  const routerStatus = /(?:\b(?:unexercised|untested|unvalidated)\b|\bnot (?:(?:yet|been|fully|thoroughly)\s+)*(?:exercised|tested|validated)\b|\b(?:still\s+)?needs?\s+to\s+be\s+(?:exercised|tested|validated)\b|\b(?:still\s+)?awaits?\s+(?:testing|validation|exercise)\b)/i;
+  const activePendingStatus = /(?:\b(?:we|i|the team)\b\s+(?:have|has|had)\s+(?:still\s+)?yet\s+to\s+(?:exercise|test|validate)\s+(?:the\s+)?smart router\b|\btesting\s+(?:the\s+)?smart router\s+without cloud credentials\s+(?:remains?|is)\s+outstanding\b|\btesting\s+without cloud credentials\s+(?:is|remains?)\s+(?:still\s+)?pending\s+for\s+(?:the\s+)?smart router\b)/i;
+  const doubleNegation = /\b(?:not|never|hardly|barely|scarcely|isn't|isn['’]t|wasn't|wasn['’]t|aren't|aren['’]t|weren't|weren['’]t)\s+(?:(?:really|actually|fully)\s+)*(?:unexercised|untested|unvalidated)\b/i;
+  const confirmedStatus = /(?:\b(?:smart router|router|same|it|this|that)\b\s+(?:is|was|(?:has|have|had)\s+(?:now\s+|since\s+)?been)\s+(?:now\s+|since\s+|later\s+|fully\s+|successfully\s+)*(?:exercised|tested|validated)\b|\b(?:we|i|the team)\b\s+(?:(?:have|has|had)\s+)?(?:now\s+|fully\s+|successfully\s+)*(?:exercised|tested|validated)\s+(?:the\s+)?(?:smart router|router|it|this|that)\b|\b(?:but|however|yet)\s+(?:(?:it|this|that)\s+)?(?:is|was|(?:has|have|had)\s+(?:now\s+|since\s+)?been)\s+(?:now\s+|since\s+|later\s+|fully\s+|successfully\s+)*(?:exercised|tested|validated)\b)/i;
+  const coverageConfirmation = /\btesting\s+(?:later\s+)?covered\s+(?:the\s+)?smart router\s+without\s+(?:cloud\s+)?credentials\b/i;
+  const nonAffirmativeRouterStatus = /\b(?:assuming(?: that)?|provided(?: that)?|presumably|supposedly|allegedly|reportedly|pending confirmation|would|could|may|might|if|unless|whether|perhaps|maybe|possibly)\b/i;
+  let affirmed = false;
+
+  for (const clause of clauses) {
+    const routerIndex = clause.search(/\bsmart router\b/i);
+    const status = routerStatus.exec(clause);
+    const activePending = activePendingStatus.exec(clause);
+    const credentialsIndex = clause.search(/\bwithout cloud credentials\b/i);
+    const confirmation = confirmedStatus.exec(clause) ?? coverageConfirmation.exec(clause);
+    const confirmationIsConditional = confirmation?.index !== undefined
+      && /\b(?:until|once|if|when|after|before|should|must|will|would|could|may|might|needs? to|to be)\b/i.test(
+        clause.slice(0, confirmation.index),
+      );
+    if (affirmed
+      && confirmation
+      && !confirmationIsConditional) {
+      affirmed = false;
+      continue;
+    }
+    if (routerIndex < 0 || credentialsIndex < 0 || (!status && !activePending)) continue;
+    const statusIndex = status?.index ?? activePending!.index;
+    const statusEnd = statusIndex + (status?.[0].length ?? activePending![0].length);
+    const statusRelationIsDirect = status !== null
+      && routerIndex < statusIndex
+      && statusIndex < credentialsIndex;
+    const statusRelationIsActive = activePending !== null
+      && ((activePending.index < routerIndex && routerIndex < credentialsIndex)
+        || (activePending.index <= Math.min(routerIndex, credentialsIndex)
+          && activePending.index + activePending[0].length >= Math.max(routerIndex, credentialsIndex)));
+    if (!statusRelationIsDirect && !statusRelationIsActive) continue;
+    const credentialsPrefix = clause.slice(Math.max(0, credentialsIndex - 32), credentialsIndex);
+    if (/\b(?:not|never|rather than|instead of)\s+$/i.test(credentialsPrefix)) continue;
+    const nonAffirmativeScope = `${clause.slice(0, statusIndex)} router-unchecked ${clause.slice(statusEnd)}`;
+    const laterConfirmation = confirmation?.index !== undefined && confirmation.index > statusIndex;
+    if ((!status || !doubleNegation.test(clause))
+      && !laterConfirmation
+      && !nonAffirmativeRouterStatus.test(clause.slice(0, credentialsIndex + 'without cloud credentials'.length))
+      && !NON_AFFIRMATIVE_WRITER_CLAIM.test(nonAffirmativeScope)) affirmed = true;
+  }
+  return affirmed;
+}
+
+function hasAffirmedWriterDelayRecommendation(response: string): boolean {
+  const delayRecommendation = /\bdelay(?:ing)?\s+(?:the\s+)?(?:(?:planned|Friday)\s+){0,2}release\b[^?\r\n]{0,240}\b(?:until|once)\b[^?\r\n]{0,180}\b(?:gaps?|failures?|smart router|cloud credentials)\b/i;
+  for (const rawLine of response.replace(/\r\n?/g, '\n').split('\n')) {
+    const line = rawLine.replace(/[*_`]/g, '').trim();
+    const recommendation = delayRecommendation.exec(line);
+    if (!recommendation || recommendation.index === undefined || line.includes('?')) continue;
+    const prefix = line.slice(0, recommendation.index);
+    const suffix = line.slice(recommendation.index + recommendation[0].length);
+    if (/\b(?:should\s+we|could|would|may|might|perhaps|maybe|possibly)\b/i.test(prefix)) continue;
+    if (/\b(?:do\s+not|don't|never|cannot|can't|no\s+longer|avoid|against)\b/i.test(prefix)) continue;
+    if (/\b(?:but|however|yet)\b[^.\r\n]{0,80}\b(?:do\s+not|don't|no|not|cancel(?:led|ed)?|withdrawn|retracted)\b|\b(?:is|was|remains?)\s+not\s+recommended\b/i.test(suffix)) continue;
+    const hasPositiveLead = recommendation.index === 0
+      || /\brecommend(?:ation|ed|ing)?\b[^.\r\n]{0,80}$/i.test(prefix)
+      || /\b(?:we|you|the team)\s+should\s+$/i.test(prefix)
+      || /^\s*(?:[-*#>]\s*)+$/.test(prefix);
+    if (hasPositiveLead) return true;
+  }
+  return false;
 }
 
 const NON_AFFIRMATIVE_ACTION_STATUS = String.raw`\b(?:merely reported|withdrawn|retracted|reject(?:s|ed|ing)?|oppos(?:e[sd]?|ing)|declined|deferred|ruled[- ]out|hypothetical|tentative|illustrative only|not (?:selected|approved|endorsed|accepted|chosen)|old memo|consider only|no longer recommend(?:ed|ing)?|not to be implemented|(?:this|that|it) is not an action|decid(?:e[sd]?|ing) against|do not implement)\b`;
@@ -1830,6 +2004,7 @@ const EXPLICIT_AFFIRMATIVE_ACTION_SECTION = /\b(?:now\s+)?recommend(?:ed|ing)?\s
 const GENERIC_ACTION_SECTION = /^\s*(?:two|2)\s+actions?\s*:?\s*$/i;
 const RESETTABLE_SCENARIO_ACTION_SECTION = /^\s*(?:(?:hypothetical|alternative)\s+)?(?:scenario|sensitivity)(?:\s+analysis)?\s*:?\s*$|^\s*hypothetical\s*:?\s*$/i;
 const RETRACTS_ALL_ACTIONS = /\b(?:(?:both|all|the|these)\s+(?:recommendations?|actions?)\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|vetoed|denied|cancelled|canceled|abandoned|scrapped|illustrative|quoted|ruled[- ]out|not approved|not endorsed|no longer recommended)|(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the|these)\s+(?:recommendations?|actions?)|no longer recommend(?:ed|ing)?\s+(?:both|all|the|these)\s+(?:recommendations?|actions?))\b/i;
+const NON_ACTIONABLE_RUNWAY_LINE = /\b(?:(?:generate|create|produce|prepare|write|raise)\s+(?:an?\s+)?(?:the\s+)?(?:costs?|cash(?:[- ]flow)?|revenue|funding)?\s*(?:memo|report|summary|analysis|forecast|projection|model|dashboard|statement)\b|(?:memo|report|summary|analysis|forecast|projection|model|dashboard|statement)\s+(?:on|of|for|about)\s+(?:costs?|cash(?:[- ]flow)?|revenue|funding)\b|(?:costs?|revenue|cash(?:[- ]flow)?|funding)\s+(?:memo|reporting|report|summary|analysis|forecast|projection|model|dashboard|statement)\b|(?:increase|grow|raise|generate)\s+(?:customer\s+(?:(?:acquisition\s+)?(?:costs?|expenses?)|complaints?|churn)|funding\s+costs?|revenue\s+loss(?:es)?|cash\s+(?:consumption|burn|outflows?|loss(?:es)?))\b)/i;
 
 type ActionSectionState = 'active' | 'scenario' | 'hard';
 
@@ -1930,7 +2105,7 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
     const scorableLine = isUnnumberedTableRow && explicitActionSection
       ? line.replace(/^\s*\|[ \t]*/, '')
       : line;
-    if (NON_AFFIRMATIVE_ACTION_LINE.test(line)) {
+    if (NON_AFFIRMATIVE_ACTION_LINE.test(line) || NON_ACTIONABLE_RUNWAY_LINE.test(line)) {
       patterns.forEach((pattern, index) => {
         if (testPattern(pattern, scorableLine)) matched[index] = false;
       });
@@ -2217,9 +2392,13 @@ function inlinePrioritizationActionBoundary(line: string): number {
 }
 
 function collectPrioritizationSegments(response: string): string[] {
+  const tableRationaleMarker = '\u001fpersona-rationale\u001f';
   const segments: string[] = [];
   let numberedBlock: string[] | null = null;
   let insideFence = false;
+  let rationaleColumn = -1;
+  let pendingRationaleColumn = -1;
+  let pendingRationaleCellCount = -1;
 
   const flushNumberedBlock = () => {
     if (numberedBlock?.length) segments.push(numberedBlock.join('\n'));
@@ -2233,7 +2412,45 @@ function collectPrioritizationSegments(response: string): string[] {
     if (insideFence || /^\s*>/.test(rawLine)) continue;
 
     let line = rawLine.trimEnd();
-    if (!line.trim()) continue;
+    if (!line.trim()) {
+      rationaleColumn = -1;
+      pendingRationaleColumn = -1;
+      pendingRationaleCellCount = -1;
+      continue;
+    }
+
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      const cells = line
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map(cell => cell.trim());
+      const separator = cells.every(cell => /^:?-{3,}:?$/.test(cell));
+      const rationaleHeader = cells.findIndex(cell => /\b(?:why|rationale|reason|decision basis)\b/i.test(cell));
+      if (pendingRationaleColumn >= 0) {
+        if (separator && cells.length === pendingRationaleCellCount) {
+          rationaleColumn = pendingRationaleColumn;
+        } else {
+          rationaleColumn = -1;
+        }
+        pendingRationaleColumn = -1;
+        pendingRationaleCellCount = -1;
+      } else if (rationaleHeader >= 0) {
+        pendingRationaleColumn = rationaleHeader;
+        pendingRationaleCellCount = cells.length;
+        rationaleColumn = -1;
+      }
+      else if (!separator && rationaleColumn >= 0) {
+        const rationale = cells[rationaleColumn] ?? '';
+        const context = cells.filter((_cell, index) => index !== rationaleColumn).join(' | ');
+        line = `| ${context} | ${tableRationaleMarker}Rationale: ${rationale}`;
+      }
+    } else {
+      rationaleColumn = -1;
+      pendingRationaleColumn = -1;
+      pendingRationaleCellCount = -1;
+    }
 
     const inlineActionBoundary = inlinePrioritizationActionBoundary(line);
     if (inlineActionBoundary >= 0) line = line.slice(0, inlineActionBoundary).trimEnd();
@@ -2261,6 +2478,11 @@ function collectPrioritizationSegments(response: string): string[] {
 }
 
 function splitPrioritizationClauses(segment: string, basis: RegExp): string[] {
+  const tableRationaleMarker = '\u001fpersona-rationale\u001f';
+  const tableRationaleIndex = segment.indexOf(tableRationaleMarker);
+  if (tableRationaleIndex >= 0) return [segment.slice(tableRationaleIndex + tableRationaleMarker.length)];
+  const trimmed = segment.trim();
+  if (/^\|.*\|$/.test(trimmed)) return [trimmed];
   const clauses: string[] = [];
   let clauseStart = 0;
   for (const boundary of segment.matchAll(/\n+|(?<=[.!?;])\s+/g)) {
@@ -2289,7 +2511,11 @@ function hasAffirmedPrioritizationBasis(
   criterionIndex: number,
 ): boolean {
   const normalized = clause.replace(/[*_`]/g, '').trim();
+  const assertedRationale = normalized.replace(/^Rationale:\s*/i, '');
   if (prioritizationWordCount(normalized) < 4) return false;
+  if (/\b(?:no|not(?:\s+actually)?)\s+(?:a\s+)?(?:rationale|reason|basis|justification)\b|\b(?:does|do|did|should|would|could|may|might|must|can|will)\s+not\s+(?:justify|support|explain)\b|\b(?:tbd|tbc|placeholder)\b|^\s*(?:maybe|perhaps|probably|possibly|tentatively|supposedly)\b/i.test(assertedRationale)) {
+    return false;
+  }
   if (PRIORITIZATION_REPORTED_CLAUSE.test(normalized)) return false;
   if (PRIORITIZATION_REPORTED_SUFFIX.test(normalized)) return false;
   if (PRIORITIZATION_REJECTED_ASSERTION.test(normalized)) return false;
@@ -2544,6 +2770,8 @@ function evaluateResponseRule(
       return hasMilestoneDependencyMap(evidence.response);
     case 'timedAgenda':
       return hasTimedAgenda(evidence.response, rule.durationMinutes, rule.minimumBlocks);
+    case 'agendaDecisions':
+      return hasAffirmedAgendaDecision(evidence.response);
     case 'runwayResult':
       return hasAffirmedCurrentRunway(evidence.response);
     case 'runwayFormula':
@@ -2554,6 +2782,10 @@ function evaluateResponseRule(
       return hasAffirmedRunwayActions(evidence.response, rule.patterns);
     case 'writerReleaseFacts':
       return hasAffirmedWriterReleaseFacts(evidence.response, rule.patterns);
+    case 'writerRouterFact':
+      return hasAffirmedWriterRouterFact(evidence.response);
+    case 'writerDelayRecommendation':
+      return hasAffirmedWriterDelayRecommendation(evidence.response);
     case 'emptyWorkspaceResult':
       return hasAffirmedEmptyWorkspaceResult(evidence);
     case 'boundedWorkspaceClaims':
