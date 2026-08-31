@@ -34,6 +34,61 @@ function trackTelemetry(_serverBaseUrl: string, event: string, properties?: Reco
   adapter.trackTelemetry(event, properties);
 }
 
+type HarvestCommitOutcome =
+  | { completed: true; message: string }
+  | { completed: false; message: string; empty: boolean };
+
+function classifyHarvestCommit(result: unknown): HarvestCommitOutcome {
+  const record = result && typeof result === 'object' ? result as Record<string, unknown> : {};
+  const saved = typeof record.saved === 'number' && Number.isInteger(record.saved) && record.saved >= 0
+    ? record.saved
+    : null;
+  const itemCount = typeof record.itemCount === 'number' && Number.isInteger(record.itemCount) && record.itemCount >= 0
+    ? record.itemCount
+    : null;
+  const couldNotVerify = typeof record.couldNotVerify === 'number'
+    && Number.isInteger(record.couldNotVerify)
+    && record.couldNotVerify >= 0
+    ? record.couldNotVerify
+    : 0;
+
+  if (saved === null || itemCount === null) {
+    return {
+      completed: false,
+      empty: false,
+      message: "Waggle couldn't confirm how many memories were imported. It is safe to try again, or skip and review Memory later.",
+    };
+  }
+  if (couldNotVerify > 0) {
+    const savedText = saved > 0
+      ? `Imported ${saved} memory ${saved === 1 ? 'item' : 'items'}, but`
+      : 'No new memories were imported, and';
+    return {
+      completed: false,
+      empty: false,
+      message: `${savedText} ${couldNotVerify} ${couldNotVerify === 1 ? 'item' : 'items'} could not be verified and ${couldNotVerify === 1 ? 'was' : 'were'} skipped. Try again later, or continue and review Memory.`,
+    };
+  }
+  if (record.skipped === true && itemCount > 0) {
+    return { completed: true, message: 'Memory is already up to date.' };
+  }
+  if (saved > 0) {
+    return { completed: true, message: `Imported ${saved} memory ${saved === 1 ? 'item' : 'items'}.` };
+  }
+  if (itemCount === 0) {
+    return {
+      completed: false,
+      empty: true,
+      message: 'No importable memories were found. Try again later, or skip and import from Memory.',
+    };
+  }
+  return {
+    completed: false,
+    empty: false,
+    message: 'No new memories were imported. It is safe to try again, or skip and review Memory later.',
+  };
+}
+
 /* ─── PR5 6-step chain (S12→S17, C33) with the hard model gate at step 3.
    `ready` is terminal. All navigation is driven off STEP_NAMES.indexOf(name) —
    never a magic number — so re-keying the chain can't strand the user mid-flow.
@@ -77,6 +132,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const [importData, setImportData] = useState<unknown>(null);
   const [importItems, setImportItems] = useState<ClassifiedHarvestItem[]>([]);
   const [importing, setImporting] = useState(false);
+  const importingRef = useRef(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const [importDone, setImportDone] = useState(false);
   const [claudeCodeDetected, setClaudeCodeDetected] = useState<{ found: boolean; itemCount: number; path: string } | null>(null);
 
@@ -121,7 +179,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (savingProfileRef.current || creatingWorkspace || verifyingWorkspaceRef.current) return;
+        if (savingProfileRef.current || importingRef.current || creatingWorkspace || verifyingWorkspaceRef.current) return;
         clearTimeout(autoTimer.current);
         trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'escape' });
         onDismiss();
@@ -195,28 +253,66 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
   /* ── S15 / C33: file import → classified preview ── */
   const handleFileImport = async (file: File, source: string) => {
+    if (importingRef.current) return;
+    importingRef.current = true;
+    setImporting(true);
+    setImportError(null);
+    setImportSuccessMessage(null);
     try {
       const text = await file.text();
       let data: unknown;
       try { data = JSON.parse(text); } catch { data = text; }
-      setImportData(data);
-      setImportSource(source);
       const result = await adapter.harvestPreview(data, source);
       const items = (result?.items ?? result?.preview ?? []) as ClassifiedHarvestItem[];
+      if (items.length === 0) {
+        setImportData(null);
+        setImportSource(null);
+        setImportItems([]);
+        setImportError('No importable memories were found. Choose another file, or skip and import it later from Memory.');
+        return;
+      }
+      setImportData(data);
+      setImportSource(source);
       setImportItems(items);
-    } catch { /* ignore parse errors */ }
+    } catch {
+      setImportData(null);
+      setImportSource(null);
+      setImportItems([]);
+      setImportError("Couldn't read this export. Choose the file again, or skip and import it later from Memory.");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
   };
 
   // C33: commit-all default — every item lands `status:'unreviewed'` server-side.
   const handleImportCommit = async () => {
-    if (!importData || !importSource) return;
+    if (importingRef.current || importData == null || !importSource) return;
+    importingRef.current = true;
     setImporting(true);
+    setImportError(null);
+    setImportSuccessMessage(null);
     try {
-      await adapter.harvestCommit(importData, importSource);
-      setImportDone(true);
-      setTimeout(() => goToName('template'), 800);
-    } catch { /* ignore */ }
-    finally { setImporting(false); }
+      const result = await adapter.harvestCommit(importData, importSource);
+      const outcome = classifyHarvestCommit(result);
+      if (outcome.completed) {
+        setImportSuccessMessage(outcome.message);
+        setImportDone(true);
+      } else {
+        setImportDone(false);
+        setImportError(outcome.message);
+        if (outcome.empty) {
+          setImportData(null);
+          setImportSource(null);
+          setImportItems([]);
+        }
+      }
+    } catch {
+      setImportError("Couldn't confirm the import. It is safe to try again, or skip and review Memory later.");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
   };
 
   /* ── Claude Code auto-detect on mount ── */
@@ -232,15 +328,34 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   }, []);
 
   const handleClaudeCodeHarvest = async () => {
+    if (importingRef.current) return;
+    importingRef.current = true;
     setImporting(true);
-    setImportSource('claude-code');
+    setImportError(null);
+    setImportSuccessMessage(null);
     try {
-      await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
-      setImportDone(true);
-      setTimeout(() => goToName('template'), 800);
-    } catch { /* ignore */ }
-    finally { setImporting(false); }
+      const result = await adapter.harvestCommit({ scanLocal: true }, 'claude-code');
+      const outcome = classifyHarvestCommit(result);
+      if (outcome.completed) {
+        setImportSource('claude-code');
+        setImportSuccessMessage(outcome.message);
+        setImportDone(true);
+      } else {
+        setImportDone(false);
+        setImportError(outcome.message);
+      }
+    } catch {
+      setImportError("Couldn't confirm the Claude Code import. It is safe to try again, or skip and review Memory later.");
+    } finally {
+      importingRef.current = false;
+      setImporting(false);
+    }
   };
+
+  const handleImportContinue = useCallback(() => {
+    if (importingRef.current) return;
+    goToName('template');
+  }, [goToName]);
 
   /* ── PR5 Template step: create the first workspace from the chosen template
        (matching specialist persona + template id), then seed the first task. The
@@ -356,7 +471,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const navTotal = LAST_NAV_INDEX - FIRST_NAV_INDEX + 1;
   const navCurrent = step - FIRST_NAV_INDEX + 1;
   const recommendedId = recommendTemplateId(profile.workType, profile.role);
-  const workspaceTransitionPending = savingProfile || creatingWorkspace || verifyingWorkspace;
+  const workspaceTransitionPending = savingProfile || importing || creatingWorkspace || verifyingWorkspace;
 
   return (
     // Wave V Lane F item 3 (motion-safe): reducedMotion="user" makes the shared
@@ -511,11 +626,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 importItems={importItems}
                 importDone={importDone}
                 importing={importing}
+                importError={importError}
+                importSuccessMessage={importSuccessMessage}
                 onFileImport={handleFileImport}
                 onImportCommit={handleImportCommit}
                 claudeCodeDetected={claudeCodeDetected}
                 onClaudeCodeHarvest={handleClaudeCodeHarvest}
-                onContinue={() => goToName('template')}
+                onContinue={handleImportContinue}
               />
             )}
             {step === stepIndex('template') && (

@@ -42,6 +42,8 @@ export interface ImportStepProps {
   readonly importItems: readonly ClassifiedHarvestItem[];
   readonly importDone: boolean;
   readonly importing: boolean;
+  readonly importError?: string | null;
+  readonly importSuccessMessage?: string | null;
   readonly onFileImport: (file: File, source: string) => void;
   readonly onImportCommit: () => void;
   /** Claude Code auto-detect status; when found, renders a one-click harvest. */

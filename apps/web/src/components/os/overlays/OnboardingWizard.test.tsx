@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   getWorkspaces: vi.fn(),
   updateProfile: vi.fn(),
   setIdentity: vi.fn(),
+  harvestPreview: vi.fn(),
+  harvestCommit: vi.fn(),
   trackTelemetry: vi.fn(),
   captureOnboardingComplete: vi.fn(),
 }));
@@ -20,6 +22,8 @@ vi.mock('@/lib/adapter', () => ({
     getWorkspaces: mocks.getWorkspaces,
     updateProfile: mocks.updateProfile,
     setIdentity: mocks.setIdentity,
+    harvestPreview: mocks.harvestPreview,
+    harvestCommit: mocks.harvestCommit,
     trackTelemetry: mocks.trackTelemetry,
   },
 }));
@@ -66,7 +70,67 @@ vi.mock('./onboarding', () => ({
     </section>
   ),
   ModelGateStep: () => <section aria-label="Model gate step" />,
-  ImportStep: () => null,
+  ImportStep: ({
+    importSource,
+    importDone,
+    importing,
+    importError,
+    importSuccessMessage,
+    onFileImport,
+    onImportCommit,
+    onClaudeCodeHarvest,
+    onContinue,
+  }: {
+    importSource: string | null;
+    importDone: boolean;
+    importing: boolean;
+    importError?: string | null;
+    importSuccessMessage?: string | null;
+    onFileImport: (file: File, source: string) => void;
+    onImportCommit: () => void;
+    onClaudeCodeHarvest: () => void;
+    onContinue: () => void;
+  }) => {
+    const file = { text: vi.fn().mockResolvedValue('{"messages":[]}') } as unknown as File;
+    return (
+      <section aria-label="Import step">
+        {!importSource && !importDone && (
+          <>
+            <button type="button" disabled={importing} onClick={() => onFileImport(file, 'chatgpt')}>
+              Choose import file
+            </button>
+            <button type="button" disabled={importing} onClick={() => {
+              onFileImport(file, 'chatgpt');
+              onFileImport(file, 'chatgpt');
+            }}>
+              Preview twice
+            </button>
+          </>
+        )}
+        {importSource && !importDone && (
+          <>
+            <button type="button" disabled={importing} onClick={onImportCommit}>Import preview</button>
+            <button type="button" disabled={importing} onClick={() => {
+              onImportCommit();
+              onImportCommit();
+            }}>
+              Import preview twice
+            </button>
+          </>
+        )}
+        <button type="button" disabled={importing} onClick={onClaudeCodeHarvest}>Import Claude history</button>
+        <button type="button" disabled={importing} onClick={() => {
+          onClaudeCodeHarvest();
+          onClaudeCodeHarvest();
+        }}>
+          Import Claude twice
+        </button>
+        <button type="button" disabled={importing} onClick={onContinue}>Skip import</button>
+        {importError && <p role="alert">{importError}</p>}
+        {importDone && <p>{importSuccessMessage ?? 'Import complete'}</p>}
+      </section>
+    );
+  },
   TemplateStep: ({
     onSelect,
     creating,
@@ -112,6 +176,8 @@ describe('OnboardingWizard workspace creation', () => {
     mocks.getWorkspaces.mockResolvedValue([]);
     mocks.updateProfile.mockResolvedValue(undefined);
     mocks.setIdentity.mockResolvedValue(undefined);
+    mocks.harvestPreview.mockResolvedValue({ items: [{ id: 'memory-1', title: 'Decision', kind: 'fact', confidence: 0.9 }] });
+    mocks.harvestCommit.mockResolvedValue({ saved: 1, itemCount: 1, couldNotVerify: 0 });
   });
 
   it('stays on profile after a failed save, then advances only after an explicit successful retry', async () => {
@@ -280,6 +346,204 @@ describe('OnboardingWizard workspace creation', () => {
     expect(onDismiss).not.toHaveBeenCalled();
     await act(async () => { resolveProfile(); });
     expect(await screen.findByRole('region', { name: 'Model gate step' })).toBeInTheDocument();
+  });
+
+  it('keeps file preview failures visible and supports an explicit retry', async () => {
+    mocks.harvestPreview.mockRejectedValueOnce(new Error('preview unavailable'));
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose import file' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't read this export.*choose.*again.*skip/i);
+    expect(screen.getByRole('region', { name: 'Import step' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose import file' }));
+    await waitFor(() => expect(mocks.harvestPreview).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('makes an empty preview recoverable instead of hiding the file picker', async () => {
+    mocks.harvestPreview.mockResolvedValueOnce({ items: [] });
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose import file' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no importable memories.*choose another file.*skip/i);
+    expect(screen.getByRole('button', { name: 'Choose import file' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Import preview' })).not.toBeInTheDocument();
+  });
+
+  it('single-owns a file commit, preserves its payload, and permits retry after failure', async () => {
+    let rejectCommit!: (reason?: unknown) => void;
+    mocks.harvestCommit.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectCommit = reject; }));
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose import file' }));
+    await waitFor(() => expect(mocks.harvestPreview).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Import preview twice' }));
+
+    expect(mocks.harvestCommit).toHaveBeenCalledOnce();
+    expect(mocks.harvestCommit).toHaveBeenNthCalledWith(1, { messages: [] }, 'chatgpt');
+    await act(async () => rejectCommit(new Error('commit response lost')));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't confirm the import.*safe to try again.*skip/i);
+    expect(screen.queryByText('Import complete')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import preview' }));
+    expect(await screen.findByText(/imported 1 memory item/i)).toBeInTheDocument();
+    expect(mocks.harvestCommit).toHaveBeenCalledTimes(2);
+    expect(mocks.harvestCommit).toHaveBeenNthCalledWith(2, { messages: [] }, 'chatgpt');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('single-owns Claude Code import and retries the exact local-scan request', async () => {
+    let rejectCommit!: (reason?: unknown) => void;
+    mocks.harvestCommit.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectCommit = reject; }));
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import Claude twice' }));
+    expect(mocks.harvestCommit).toHaveBeenCalledOnce();
+    expect(mocks.harvestCommit).toHaveBeenNthCalledWith(1, { scanLocal: true }, 'claude-code');
+    await act(async () => rejectCommit(new Error('Claude import unavailable')));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't confirm the Claude Code import.*safe to try again.*skip/i);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import Claude history' }));
+    expect(await screen.findByText(/imported 1 memory item/i)).toBeInTheDocument();
+    expect(mocks.harvestCommit).toHaveBeenCalledTimes(2);
+    expect(mocks.harvestCommit).toHaveBeenNthCalledWith(2, { scanLocal: true }, 'claude-code');
+  });
+
+  it('does not call a degraded partial commit complete', async () => {
+    mocks.harvestCommit.mockResolvedValueOnce({ saved: 1, itemCount: 2, couldNotVerify: 1 });
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose import file' }));
+    await waitFor(() => expect(mocks.harvestPreview).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Import preview' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/imported 1.*1 item.*could not be verified.*skipped/i);
+    expect(screen.queryByText(/^Imported 1 memory item\.$/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Import preview' })).toBeEnabled();
+  });
+
+  it('does not claim an empty Claude scan imported memories', async () => {
+    mocks.harvestCommit.mockResolvedValueOnce({ saved: 0, itemCount: 0 });
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import Claude history' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no importable memories.*try again later.*skip/i);
+    expect(screen.queryByText(/memories imported|imported \d+ memory/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Import Claude history' })).toBeEnabled();
+  });
+
+  it('treats a confirmed unchanged import as already up to date', async () => {
+    mocks.harvestCommit.mockResolvedValueOnce({ saved: 0, itemCount: 1, skipped: true });
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose import file' }));
+    await waitFor(() => expect(mocks.harvestPreview).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: 'Import preview' }));
+
+    expect(await screen.findByText(/memory is already up to date/i)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('single-owns preview work and locks every escape route while it is pending', async () => {
+    let resolvePreview!: (value: { items: unknown[] }) => void;
+    mocks.harvestPreview.mockReturnValueOnce(new Promise((resolve) => { resolvePreview = resolve; }));
+    const onDismiss = vi.fn();
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 3 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={onDismiss}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview twice' }));
+    await waitFor(() => expect(mocks.harvestPreview).toHaveBeenCalledOnce());
+    expect(screen.getByRole('button', { name: 'Go to previous step' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Skip setup' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Skip import' })).toBeDisabled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    await act(async () => resolvePreview({ items: [] }));
+    expect(screen.getByRole('button', { name: 'Skip import' })).toBeEnabled();
   });
 
   it('stays on the template step and creates no phantom workspace when persistence fails', async () => {

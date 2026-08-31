@@ -8,6 +8,7 @@ const baseProps = (overrides: Partial<ImportStepProps> = {}): ImportStepProps =>
   importItems: [],
   importDone: false,
   importing: false,
+  importError: null,
   onFileImport: vi.fn(),
   onImportCommit: vi.fn(),
   onContinue: vi.fn(),
@@ -64,5 +65,43 @@ describe('Onboarding ImportStep', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /import my history/i }));
     expect(onClaudeCodeHarvest).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces a recoverable import error without removing retry or skip actions', () => {
+    render(
+      <ImportStep
+        {...baseProps({
+          importSource: 'chatgpt',
+          importItems: [{ id: 'memory-1', title: 'Decision', kind: 'fact', confidence: 0.9 }],
+          importError: "Couldn't confirm the import. It is safe to try again, or skip and review Memory later.",
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't confirm the import/i);
+    expect(screen.getByRole('button', { name: /import 1 item/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /skip this step/i })).toBeEnabled();
+  });
+
+  it('locks file selection, import, and skip while work is pending', () => {
+    const first = render(
+      <ImportStep
+        {...baseProps({
+          importSource: 'chatgpt',
+          importItems: [{ id: 'memory-1', title: 'Decision', kind: 'fact', confidence: 0.9 }],
+          importing: true,
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /import 1 item/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /skip this step/i })).toBeDisabled();
+    first.unmount();
+
+    render(<ImportStep {...baseProps({ importing: true })} />);
+    for (const input of screen.getAllByLabelText(/Import .* export file/i)) {
+      expect(input).toBeDisabled();
+    }
+    expect(screen.getByRole('button', { name: /skip this step/i })).toBeDisabled();
   });
 });
