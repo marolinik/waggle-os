@@ -210,6 +210,103 @@ describe('warm primitives — render smoke', () => {
     expect(onChange).not.toHaveBeenCalledWith('');
   });
 
+  it('AskBar preserves a failed quick-capture draft, blocks duplicates, and clears only after success', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const firstCapture = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn()
+      .mockReturnValueOnce(firstCapture)
+      .mockResolvedValueOnce(true);
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} />);
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const capture = screen.getByRole('button', { name: 'Quick capture' });
+
+    fireEvent.change(input, { target: { value: 'Remember this safely' } });
+    fireEvent.click(capture);
+    fireEvent.click(capture);
+    expect(onPlus).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe('Remember this safely');
+    expect(capture).toBeDisabled();
+    expect(capture).toHaveClass('disabled:cursor-not-allowed', 'disabled:opacity-40');
+
+    resolveCapture(false);
+    await waitFor(() => expect(capture).toBeEnabled());
+    expect(input.value).toBe('Remember this safely');
+
+    fireEvent.click(capture);
+    await waitFor(() => expect(input.value).toBe(''));
+    expect(onPlus).toHaveBeenCalledTimes(2);
+  });
+
+  it('AskBar restores an in-memory quick-capture draft and pending state after remount', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn()
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce(true);
+    const draftKey = `quick-capture-remount-${crypto.randomUUID()}`;
+    const first = render(
+      <AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />,
+    );
+    const firstInput = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    fireEvent.change(firstInput, { target: { value: 'Survive navigation' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quick capture' }));
+    first.unmount();
+
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />);
+    const restoredInput = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    const restoredCapture = screen.getByRole('button', { name: 'Quick capture' });
+    expect(restoredInput.value).toBe('Survive navigation');
+    expect(restoredCapture).toBeDisabled();
+
+    resolveCapture(false);
+    await waitFor(() => expect(restoredCapture).toBeEnabled());
+    expect(restoredInput.value).toBe('Survive navigation');
+
+    fireEvent.click(restoredCapture);
+    await waitFor(() => expect(restoredInput.value).toBe(''));
+    expect(onPlus).toHaveBeenCalledTimes(2);
+  });
+
+  it('AskBar clears an accepted transient draft even when success arrives while unmounted', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn().mockReturnValue(pending);
+    const draftKey = `quick-capture-unmounted-success-${crypto.randomUUID()}`;
+    const first = render(
+      <AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />,
+    );
+    const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Saved while away' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quick capture' }));
+    first.unmount();
+
+    await act(async () => { resolveCapture(true); });
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />);
+    expect(screen.getByLabelText('Ask Waggle')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Quick capture' })).toBeEnabled();
+  });
+
+  it('AskBar never lets an older remounted save erase a newer draft edit', async () => {
+    let resolveCapture!: (accepted: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveCapture = resolve; });
+    const onPlus = vi.fn().mockReturnValue(pending);
+    const draftKey = `quick-capture-remount-edit-${crypto.randomUUID()}`;
+    const first = render(
+      <AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />,
+    );
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), { target: { value: 'Older draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quick capture' }));
+    first.unmount();
+
+    render(<AskBar onSubmit={vi.fn()} onPlus={onPlus} transientDraftKey={draftKey} />);
+    const restoredInput = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    fireEvent.change(restoredInput, { target: { value: 'Newer draft after navigation' } });
+    await act(async () => { resolveCapture(true); });
+
+    expect(restoredInput.value).toBe('Newer draft after navigation');
+    expect(screen.getByRole('button', { name: 'Quick capture' })).toBeEnabled();
+  });
+
   it('ActivityStream is collapsed by default and reveals steps on click', () => {
     render(
       <ActivityStream

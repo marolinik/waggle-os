@@ -388,5 +388,20 @@ describe('Home Ask to workspace chat dispatch', () => {
     expect(peekWorkspaceSelectionChatDispatch()).toBeNull();
     expect(mocks.shell.selectWorkspace).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(input.value).toBe(''));
+  });
+
+  it('keeps the Home quick-capture draft when memory save fails', async () => {
+    mocks.adapter.quickCapture.mockRejectedValueOnce(new Error('memory unavailable'));
+    const input = await renderHome();
+    fireEvent.change(input, { target: { value: 'Do not lose this note' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Quick capture' }));
+
+    await waitFor(() => expect(mocks.adapter.quickCapture).toHaveBeenCalledOnce());
+    expect(input.value).toBe('Do not lose this note');
+    expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+      variant: 'destructive',
+      description: expect.stringMatching(/try again/i),
+    }));
   });
 });

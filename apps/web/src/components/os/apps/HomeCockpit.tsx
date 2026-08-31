@@ -993,7 +993,8 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
 
       <AskBar
         onSubmit={submitAsk}
-        onPlus={(text) => { if (text) void captureAsk(text, 'note'); else openCommandPalette(); }}
+        onPlus={(text) => text ? captureAsk(text, 'note') : openCommandPalette()}
+        transientDraftKey="home-quick-capture"
       />
     </div>
   );
