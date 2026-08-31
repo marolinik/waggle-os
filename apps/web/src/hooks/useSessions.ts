@@ -59,64 +59,81 @@ export const useSessions = (
     return () => { mountedRef.current = false; };
   }, []);
 
-  const refreshSessions = useCallback(() => {
+  const refreshSessions = useCallback(async (): Promise<boolean> => {
     const requestedWorkspaceId = workspaceId;
     const listRevision = ++listRevisionRef.current;
     if (!requestedWorkspaceId) {
+      loadingRef.current = false;
       setSessions([]);
       setActiveSessionId(null);
       setLoading(false);
       setCreating(false);
       setError(null);
       setListFailed(false);
-      return;
+      return false;
     }
-    // Reset active session on workspace change to avoid stale cross-workspace refs
-    setSessions([]);
-    setActiveSessionId(null);
+    const existingSessions = sessionsRef.current.filter(session => session.workspaceId === requestedWorkspaceId);
+    const existingActiveId = activeSessionIdRef.current;
+    const preserveExisting = existingSessions.length > 0
+      && Boolean(existingActiveId && existingSessions.some(session => session.id === existingActiveId));
+    // A workspace switch starts fail-closed. A same-workspace retry keeps the
+    // last authoritative list visible until a newer list succeeds.
+    if (!preserveExisting) {
+      setSessions([]);
+      setActiveSessionId(null);
+    }
+    loadingRef.current = true;
     setLoading(true);
     setCreating(createInFlightRef.current.has(requestedWorkspaceId));
     setError(null);
     setListFailed(false);
-    adapter.getSessions(requestedWorkspaceId)
-      .then(data => {
-        if (!mountedRef.current
-          || requestedWorkspaceId !== workspaceRef.current
-          || listRevision !== listRevisionRef.current) return;
-        setError(null);
-        if (data.length > 0) {
-          const scopedSessions = data.map(session => ({ ...session, workspaceId: requestedWorkspaceId }));
-          const preferred = preferredSessionIdRef.current;
-          const initialSession = typeof preferred === 'string'
-            ? scopedSessions.find(session => session.id === preferred) ?? scopedSessions[0]
-            : scopedSessions[0];
-          setSessions(scopedSessions);
-          setActiveSessionId(initialSession.id);
-        } else {
-          const def = makeDefaultSession(requestedWorkspaceId);
-          setSessions([def]);
-          setActiveSessionId(def.id);
-        }
-      })
-      .catch((err) => {
-        if (!mountedRef.current
-          || requestedWorkspaceId !== workspaceRef.current
-          || listRevision !== listRevisionRef.current) return;
-        console.error('[useSessions] fetch failed:', err);
-        setListFailed(true);
-        setError(err instanceof Error ? err.message : 'Failed to load');
+    try {
+      const data = await adapter.getSessions(requestedWorkspaceId);
+      if (!mountedRef.current
+        || requestedWorkspaceId !== workspaceRef.current
+        || listRevision !== listRevisionRef.current) return false;
+      setError(null);
+      if (data.length > 0) {
+        const scopedSessions = data.map(session => ({ ...session, workspaceId: requestedWorkspaceId }));
+        const preferred = preferredSessionIdRef.current;
+        const currentActiveId = activeSessionIdRef.current;
+        const initialSession = (typeof preferred === 'string'
+          ? scopedSessions.find(session => session.id === preferred)
+          : undefined)
+          ?? scopedSessions.find(session => session.id === currentActiveId)
+          ?? scopedSessions[0];
+        setSessions(scopedSessions);
+        setActiveSessionId(initialSession.id);
+      } else {
+        const def = makeDefaultSession(requestedWorkspaceId);
+        setSessions([def]);
+        setActiveSessionId(def.id);
+      }
+      return true;
+    } catch (err) {
+      if (!mountedRef.current
+        || requestedWorkspaceId !== workspaceRef.current
+        || listRevision !== listRevisionRef.current) return false;
+      console.error('[useSessions] fetch failed:', err);
+      setListFailed(true);
+      setError(err instanceof Error ? err.message : 'Failed to load');
+      if (!preserveExisting) {
         setSessions([]);
         setActiveSessionId(null);
-      })
-      .finally(() => {
-        if (mountedRef.current
-          && requestedWorkspaceId === workspaceRef.current
-          && listRevision === listRevisionRef.current) setLoading(false);
-      });
+      }
+      return false;
+    } finally {
+      if (mountedRef.current
+        && requestedWorkspaceId === workspaceRef.current
+        && listRevision === listRevisionRef.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
+    }
   }, [workspaceId]);
 
   useEffect(() => {
-    refreshSessions();
+    void refreshSessions();
   }, [refreshSessions]);
 
   // `undefined` means this kept-alive workspace is not the active routed chat
@@ -135,6 +152,11 @@ export const useSessions = (
   }, [preferredSessionId, workspaceId]);
 
   useRevalidateOnError(listFailed, refreshSessions);
+
+  const retrySessions = useCallback((): Promise<boolean> => {
+    if (loadingRef.current) return Promise.resolve(false);
+    return refreshSessions();
+  }, [refreshSessions]);
 
   const revalidateSessions = useCallback(async (
     expectedWorkspaceId: string | null = workspaceRef.current,
@@ -258,6 +280,6 @@ export const useSessions = (
   return {
     sessions, activeSessionId: exposedActiveSessionId, setActiveSessionId,
     loading, creating, error, createSession, deleteSession, renameSession,
-    revalidateSessions,
+    revalidateSessions, retrySessions,
   };
 };

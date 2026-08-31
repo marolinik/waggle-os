@@ -719,6 +719,135 @@ describe('useSessions (P1b)', () => {
     consoleSpy.mockRestore();
   });
 
+  it('recovers a cold session-list failure only after an explicit retry succeeds', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions
+      .mockRejectedValueOnce(new Error('temporary list failure'))
+      .mockResolvedValueOnce([{
+        id: 'session-current', title: 'Current', messageCount: 2,
+        lastActive: '2026-08-30T12:00:00.000Z',
+      }]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+
+    await waitFor(() => expect(result.current.error).toBe('temporary list failure'));
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.activeSessionId).toBeNull();
+
+    let recovered = false;
+    await act(async () => {
+      recovered = await result.current.retrySessions();
+    });
+
+    expect(recovered).toBe(true);
+    expect(mocks.adapter.getSessions).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+    expect(result.current.activeSessionId).toBe('session-current');
+    consoleSpy.mockRestore();
+  });
+
+  it('preserves the loaded session list and selection when retry fails', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const current = {
+      id: 'session-current', title: 'Current', messageCount: 2,
+      lastActive: '2026-08-30T12:00:00.000Z',
+    };
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions
+      .mockResolvedValueOnce([current])
+      .mockRejectedValueOnce(new Error('temporary list failure'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-current'));
+
+    let recovered = true;
+    await act(async () => {
+      recovered = await result.current.retrySessions();
+    });
+
+    expect(recovered).toBe(false);
+    expect(result.current.sessions).toEqual([expect.objectContaining({ id: 'session-current' })]);
+    expect(result.current.activeSessionId).toBe('session-current');
+    expect(result.current.error).toBe('temporary list failure');
+    expect(result.current.loading).toBe(false);
+    consoleSpy.mockRestore();
+  });
+
+  it('keeps a user-selected session active after a successful list retry', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const first = { id: 'session-first', title: 'First', messageCount: 2, lastActive: '2026-08-30T12:00:00.000Z' };
+    const selected = { id: 'session-selected', title: 'Selected', messageCount: 1, lastActive: '2026-08-29T12:00:00.000Z' };
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions
+      .mockResolvedValueOnce([first, selected])
+      .mockResolvedValueOnce([{ ...selected, messageCount: 3 }, first]);
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-first'));
+    act(() => { result.current.setActiveSessionId('session-selected'); });
+
+    await act(async () => {
+      expect(await result.current.retrySessions()).toBe(true);
+    });
+
+    expect(result.current.activeSessionId).toBe('session-selected');
+    expect(result.current.sessions.map(session => session.id)).toEqual(['session-selected', 'session-first']);
+  });
+
+  it('keeps the latest user selection when it changes during a list retry', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const first = { id: 'session-first', title: 'First', messageCount: 2, lastActive: '2026-08-30T12:00:00.000Z' };
+    const selected = { id: 'session-selected', title: 'Selected', messageCount: 1, lastActive: '2026-08-29T12:00:00.000Z' };
+    let resolveRetry!: (sessions: Array<typeof first>) => void;
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions
+      .mockResolvedValueOnce([first, selected])
+      .mockReturnValueOnce(new Promise(resolve => { resolveRetry = resolve; }));
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-first'));
+
+    let retry!: Promise<boolean>;
+    act(() => { retry = result.current.retrySessions(); });
+    act(() => { result.current.setActiveSessionId('session-selected'); });
+    await act(async () => {
+      resolveRetry([{ ...first, messageCount: 3 }, selected]);
+      expect(await retry).toBe(true);
+    });
+
+    expect(result.current.activeSessionId).toBe('session-selected');
+  });
+
+  it('suppresses a duplicate retry while the first retry is pending', async () => {
+    const { useSessions } = await import('@/hooks/useSessions');
+    const current = { id: 'session-current', title: 'Current', messageCount: 2, lastActive: '2026-08-30T12:00:00.000Z' };
+    let resolveRetry!: (sessions: Array<typeof current>) => void;
+    mocks.adapter.getSessions.mockReset();
+    mocks.adapter.getSessions
+      .mockResolvedValueOnce([current])
+      .mockReturnValueOnce(new Promise(resolve => { resolveRetry = resolve; }));
+    const { result } = renderHook(() => useSessions('w1'));
+    await waitFor(() => expect(result.current.activeSessionId).toBe('session-current'));
+
+    let firstRetry!: Promise<boolean>;
+    let duplicateRetry!: Promise<boolean>;
+    act(() => {
+      firstRetry = result.current.retrySessions();
+      duplicateRetry = result.current.retrySessions();
+    });
+
+    await expect(duplicateRetry).resolves.toBe(false);
+    expect(mocks.adapter.getSessions).toHaveBeenCalledTimes(2);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      resolveRetry([{ ...current, messageCount: 3 }]);
+      expect(await firstRetry).toBe(true);
+    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.activeSessionId).toBe('session-current');
+    expect(result.current.sessions).toEqual([expect.objectContaining({ id: 'session-current', messageCount: 3 })]);
+  });
+
   it('recovers a failed session list when the desktop connection settles', async () => {
     const { useSessions } = await import('@/hooks/useSessions');
     mocks.adapter.getSessions
