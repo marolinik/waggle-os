@@ -587,7 +587,26 @@ const ChatApp = ({
   // collapsed state hides "New Session" + history (w-0 container), which made
   // P2/P3/P5 unable to start a fresh chat without finding the unlabelled
   // chevron toggle. Empty-state stays collapsed (nothing to show).
-  const [showSessions, setShowSessions] = useState(() => Boolean(sessions && sessions.length > 0));
+  const sessionCount = sessions?.length ?? 0;
+  const [showSessions, setShowSessions] = useState(() => sessionCount > 0);
+  const previousSessionCount = useRef(sessionCount);
+  const sessionSidebarTouched = useRef(false);
+  const sessionSidebarWorkspace = useRef(workspaceId);
+  useEffect(() => {
+    if (sessionSidebarWorkspace.current !== workspaceId) {
+      sessionSidebarWorkspace.current = workspaceId;
+      sessionSidebarTouched.current = false;
+      previousSessionCount.current = sessionCount;
+      setShowSessions(sessionCount > 0);
+      return;
+    }
+    if (sessionCount === 0) {
+      setShowSessions(false);
+    } else if (!sessionSidebarTouched.current && previousSessionCount.current === 0) {
+      setShowSessions(true);
+    }
+    previousSessionCount.current = sessionCount;
+  }, [sessionCount, workspaceId]);
   const sessionStatusId = useId();
   const sessionInputLocked = sessionCreating || sessionLoading || !sessionReady;
   const sessionControlsLocked = isLoading || sessionInputLocked;
@@ -603,8 +622,13 @@ const ChatApp = ({
         ? 'Stop or finish the current response before switching sessions.'
         : null;
   const handleNewSession = () => {
+    sessionSidebarTouched.current = true;
     setShowSessions(true);
     onNewSession?.();
+  };
+  const handleToggleSessions = () => {
+    sessionSidebarTouched.current = true;
+    setShowSessions((current) => !current);
   };
   const [dragging, setDragging] = useState(false);
   const [showAgentProfile, setShowAgentProfile] = useState(false);
@@ -1069,8 +1093,12 @@ const ChatApp = ({
 
       {/* Session sidebar */}
       {sessions && sessions.length > 0 && (
-        <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-[width] overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
-          <div className="p-2 space-y-1">
+        <div
+          className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-[width] overflow-hidden border-r border-border/50 shrink-0`}
+          data-testid="chat-session-sidebar"
+          aria-hidden={!showSessions}
+        >
+          {showSessions ? <div className="p-2 space-y-1">
             <button
               onClick={handleNewSession}
               disabled={sessionControlsLocked}
@@ -1101,7 +1129,7 @@ const ChatApp = ({
                 )}
               </button>
             ))}
-          </div>
+          </div> : null}
         </div>
       )}
 
@@ -1586,13 +1614,13 @@ const ChatApp = ({
             data-testid="chat-agent-strip"
             data-compact={isStripCompact ? 'true' : 'false'}
           >
-            {sessions && (
+            {sessionCount > 0 && (
               /* R10 Lane D fix 2: the bare '>' toggle read as unlabeled chrome —
                  a styled hover tooltip (matching the strip family) names what it
                  does; aria-label + aria-expanded keep the a11y contract. */
               <HintTooltip content={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}>
                 <button
-                  onClick={() => setShowSessions(p => !p)}
+                  onClick={handleToggleSessions}
                   aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
                   aria-expanded={showSessions}
                   className={STRIP_ICON_PILL}
@@ -1610,9 +1638,10 @@ const ChatApp = ({
                   disabled={sessionControlsLocked}
                   aria-label="New session"
                   aria-describedby={sessionStatus ? sessionStatusId : undefined}
-                  className={`${STRIP_ICON_PILL} disabled:cursor-not-allowed disabled:opacity-50`}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--surface-3)] hover:text-foreground active:bg-[var(--honey-wash)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5" aria-hidden />
+                  <span>New session</span>
                 </button>
               </HintTooltip>
             )}

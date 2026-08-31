@@ -7,7 +7,7 @@
  *          empty→ready transition (fires once, never on mount / re-render).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render as rtlRender, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { ComponentProps } from 'react';
 
@@ -76,6 +76,95 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(onNewSession).toHaveBeenCalledOnce();
   });
 
+  it('opens chat history when sessions arrive after the first render', () => {
+    const onNewSession = vi.fn();
+    const view = render({ messages: [], sessions: [], onNewSession });
+    expect(screen.queryByRole('button', { name: /chat history/i })).toBeNull();
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp
+          {...baseProps}
+          messages={[]}
+          sessions={[{ id: 's1', title: 'Loaded later', messageCount: 1 }]}
+          activeSessionId="s1"
+          onNewSession={onNewSession}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Hide chat history' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('chat-session-sidebar').className).toContain('w-32');
+    expect(screen.getByRole('button', { name: /loaded later/i })).toBeVisible();
+  });
+
+  it('keeps an explicit collapse when another session arrives later', () => {
+    const onNewSession = vi.fn();
+    const firstSession = { id: 's1', title: 'Existing session', messageCount: 1 };
+    const view = render({
+      messages: [],
+      sessions: [firstSession],
+      activeSessionId: 's1',
+      onNewSession,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Hide chat history' }));
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp
+          {...baseProps}
+          messages={[]}
+          sessions={[firstSession, { id: 's2', title: 'Arrived later', messageCount: 0 }]}
+          activeSessionId="s1"
+          onNewSession={onNewSession}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Show chat history' })).toHaveAttribute('aria-expanded', 'false');
+    const sidebar = screen.getByTestId('chat-session-sidebar');
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    expect(sidebar.className).toContain('w-0');
+    expect(sidebar.querySelector('button')).toBeNull();
+  });
+
+  it('keeps history private after collapse, an empty refresh, and later recovery', () => {
+    const onNewSession = vi.fn();
+    const firstSession = { id: 's1', title: 'Private plan', messageCount: 1 };
+    const view = render({
+      messages: [],
+      sessions: [firstSession],
+      activeSessionId: 's1',
+      onNewSession,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Hide chat history' }));
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp {...baseProps} messages={[]} sessions={[]} onNewSession={onNewSession} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole('button', { name: /chat history/i })).toBeNull();
+    expect(screen.queryByTestId('chat-session-sidebar')).toBeNull();
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp
+          {...baseProps}
+          messages={[]}
+          sessions={[{ id: 's2', title: 'Recovered private plan', messageCount: 1 }]}
+          activeSessionId="s2"
+          onNewSession={onNewSession}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Show chat history' })).toHaveAttribute('aria-expanded', 'false');
+    const sidebar = screen.getByTestId('chat-session-sidebar');
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    expect(sidebar.querySelector('button')).toBeNull();
+    expect(screen.queryByText('Recovered private plan')).toBeNull();
+  });
+
   it('opens session history when New session is requested from collapsed controls', () => {
     const onNewSession = vi.fn();
 
@@ -95,6 +184,29 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
 
     expect(onNewSession).toHaveBeenCalledOnce();
     expect(sidebar.className).toContain('w-32');
+  });
+
+  it('removes hidden session controls from the tab order when history is collapsed', () => {
+    render({
+      messages: [],
+      sessions: [{ id: 's1', title: 'Existing session', messageCount: 1 }],
+      activeSessionId: 's1',
+      onNewSession: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide chat history' }));
+    const sidebar = screen.getByTestId('chat-session-sidebar');
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    expect(sidebar.querySelector('button')).toBeNull();
+  });
+
+  it('shows New session as a labelled desktop action with a usable target', () => {
+    render({ messages: [], sessions: [], onNewSession: vi.fn() });
+    const strip = screen.getByTestId('chat-agent-strip');
+    const button = within(strip).getByRole('button', { name: 'New session' });
+
+    expect(button).toHaveTextContent('New session');
+    expect(button.className).toMatch(/\bh-8\b/);
   });
 
   it('blocks new-session and session-switch actions while a response is in progress', () => {
