@@ -111,6 +111,7 @@ export function ModelGate({
   const compatibleRequestGeneration = useRef(0);
   const readinessProbeGeneration = useRef(0);
   const [readinessProbeRevision, setReadinessProbeRevision] = useState(0);
+  const manualReadinessRetryRevision = useRef<number | null>(null);
   const explicitCompatibleOperationRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -235,14 +236,26 @@ export function ModelGate({
     if (providersLoading || explicitCompatibleOperationRef.current !== null) return;
     let cancelled = false;
     const generation = ++readinessProbeGeneration.current;
+    const manualRetryRevision = manualReadinessRetryRevision.current === readinessProbeRevision
+      ? readinessProbeRevision
+      : null;
     const isStale = () => (
       cancelled
       || generation !== readinessProbeGeneration.current
       || explicitCompatibleOperationRef.current !== null
     );
+    const finishManualRetry = (verified: boolean, modelId?: string) => {
+      if (
+        manualRetryRevision === null
+        || manualReadinessRetryRevision.current !== manualRetryRevision
+      ) return;
+      manualReadinessRetryRevision.current = null;
+      if (verified) onModelReady?.(modelId);
+    };
     const ids = activeProviders.map((p) => p.id);
     if (ids.length === 0) {
       setProbe({ status: 'idle' });
+      finishManualRetry(false);
       return;
     }
     setProbe({ status: 'probing' });
@@ -252,7 +265,11 @@ export function ModelGate({
       const modelRes = await adapter.probeModel().catch(() => null);
       if (isStale()) return;
       if (modelRes?.configured) {
-        if (modelRes.verified) { setProbe({ status: 'verified', verifiedModel: modelRes.model ?? undefined }); return; }
+        if (modelRes.verified) {
+          setProbe({ status: 'verified', verifiedModel: modelRes.model ?? undefined });
+          finishManualRetry(true, modelRes.model ?? undefined);
+          return;
+        }
         if (modelRes.rejected) {
           // Round-6 fix 3b: derive WHICH provider owns the rejected default
           // model (trivially available from the provider→models catalog) so
@@ -268,25 +285,54 @@ export function ModelGate({
             const open = owner ?? ids[0];
             if (open) selectProvider(open, false);
           }
+          finishManualRetry(false);
           return;
         }
         setProbe({ status: 'unverified' });
+        finishManualRetry(false);
         return;
       }
 
-      // 2) No default model → F3 per-provider stored-key fallback.
-      const outcome = await Promise.allSettled(ids.map((id) => adapter.probeProvider(id)));
+      // 2) No default model → probe a configured keyless compatible model by
+      // exact id; probe-provider is intentionally key-only and can never verify
+      // a keyless endpoint. Other providers retain the stored-key fallback.
+      const compatibleProvider = activeProviders.find((provider) => (
+        provider.id === 'openai-compatible' && Boolean(provider.models[0]?.id)
+      ));
+      const compatibleModel = compatibleProvider?.models[0]?.id;
+      const providerProbeCandidates = activeProviders.filter((provider) => (
+        provider.id !== 'openai-compatible' || !compatibleModel
+      ));
+      const [compatibleOutcome, outcome] = await Promise.all([
+        compatibleModel
+          ? adapter.probeModel(compatibleModel).catch(() => null)
+          : Promise.resolve(null),
+        Promise.allSettled(providerProbeCandidates.map((provider) => adapter.probeProvider(provider.id))),
+      ]);
       if (isStale()) return;
-      // outcome[i] ↔ ids[i] ↔ activeProviders[i], so the display name lines up.
+      // outcome[i] ↔ providerProbeCandidates[i], so display names stay aligned.
+      let verifiedModel: string | undefined;
       let verifiedProvider: string | undefined;
       let failedProvider: string | undefined;
+      if (compatibleOutcome?.configured && compatibleOutcome.verified) {
+        verifiedModel = compatibleOutcome.model ?? compatibleModel;
+      } else if (compatibleOutcome?.rejected) {
+        failedProvider = compatibleProvider?.id;
+      }
       outcome.forEach((r, i) => {
         if (r.status !== 'fulfilled') return;
         const v = r.value;
-        if (v.configured && v.valid && v.verified) { if (!verifiedProvider) verifiedProvider = activeProviders[i]?.name; }
-        else if (v.configured && !v.valid && !failedProvider) failedProvider = ids[i];
+        const provider = providerProbeCandidates[i];
+        if (v.configured && v.valid && v.verified) { if (!verifiedProvider) verifiedProvider = provider?.name; }
+        else if (v.configured && !v.valid && !failedProvider) failedProvider = provider?.id;
       });
-      if (verifiedProvider) setProbe({ status: 'verified', verifiedProvider });
+      if (verifiedModel) {
+        setProbe({ status: 'verified', verifiedModel });
+        finishManualRetry(true, verifiedModel);
+      } else if (verifiedProvider) {
+        setProbe({ status: 'verified', verifiedProvider });
+        finishManualRetry(true);
+      }
       else if (failedProvider) {
         setProbe({ status: 'failed', failedProvider });
         // Open the provider grid + key input on the offending provider.
@@ -294,8 +340,10 @@ export function ModelGate({
           setTab('cloud');
           selectProvider(failedProvider, false);
         }
+        finishManualRetry(false);
       } else {
         setProbe({ status: 'unverified' });
+        finishManualRetry(false);
       }
     })();
 
@@ -304,7 +352,13 @@ export function ModelGate({
     const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 6000));
     void Promise.race([run, timeout]).then((outcome) => {
       if (isStale()) return;
-      if (outcome === 'timeout') setProbe({ status: 'unverified' });
+      if (outcome === 'timeout') {
+        // Timeout is terminal for this attempt. Invalidate the still-pending
+        // run so it cannot repaint verified or refresh onboarding later.
+        readinessProbeGeneration.current += 1;
+        setProbe({ status: 'unverified' });
+        finishManualRetry(false);
+      }
     });
     return () => { cancelled = true; };
     // probe.status must NOT be a dep: setting 'probing' inside would re-run the
@@ -366,6 +420,11 @@ export function ModelGate({
   const handleValidateAndSave = async () => {
     const key = keyValue.trim();
     if (!selectedProvider || !key) return;
+    // The explicit save owns the readiness verdict. Invalidate any retry/mount
+    // probe already in flight so its late result cannot overwrite this action.
+    manualReadinessRetryRevision.current = null;
+    readinessProbeGeneration.current += 1;
+    let readinessFinalized = false;
     setValidate({ status: 'testing' });
     try {
       const res = await adapter.testApiKey(selectedProvider.id, key, { live: true });
@@ -401,15 +460,31 @@ export function ModelGate({
       // F3: a freshly verified key upgrades the banner immediately, without
       // waiting out the 60s probe cache.
       if (saved.router?.ready === false && !localReady) {
+        readinessProbeGeneration.current += 1;
         setProbe({ status: 'idle' });
+        readinessFinalized = true;
       } else if (res.verified === true) {
+        readinessProbeGeneration.current += 1;
         setProbe({ status: 'verified', verifiedProvider: selectedProvider.name });
+        readinessFinalized = true;
       }
       setKeyValue('');
       if (saved.router?.ready !== false || localReady) onModelReady?.(firstCloudModel);
     } catch {
       setValidate({ status: 'error', message: 'Could not save the key — check your connection and try again.' });
+    } finally {
+      if (!readinessFinalized && mountedRef.current) {
+        setReadinessProbeRevision((current) => current + 1);
+      }
     }
+  };
+
+  const handleRetryReadiness = () => {
+    if (explicitCompatibleOperationRef.current !== null) return;
+    const nextRevision = readinessProbeRevision + 1;
+    manualReadinessRetryRevision.current = nextRevision;
+    setProbe({ status: 'probing' });
+    setReadinessProbeRevision(nextRevision);
   };
 
   const handleDiscoverCompatible = async () => {
@@ -460,6 +535,7 @@ export function ModelGate({
     }
     const generation = ++compatibleRequestGeneration.current;
     explicitCompatibleOperationRef.current = generation;
+    manualReadinessRetryRevision.current = null;
     readinessProbeGeneration.current += 1;
     setCompatibleStatus('verifying');
     setCompatibleError(null);
@@ -725,7 +801,18 @@ export function ModelGate({
       ) : probe.status === 'unverified' ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
           <AlertTriangle className="size-4 shrink-0" aria-hidden />
-          <span>Couldn’t verify your key just now — you can continue and check it in Settings later.</span>
+          <span className="flex-1">
+            Couldn’t confirm model access just now. Retry the check
+            {variant === 'onboarding' ? ', or choose “I’ll do this later” below.' : ' before using it.'}
+          </span>
+          <button
+            type="button"
+            onClick={handleRetryReadiness}
+            disabled={compatibleLocked || compatibleStatus === 'verifying'}
+            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Retry check
+          </button>
         </div>
       ) : (
         <div

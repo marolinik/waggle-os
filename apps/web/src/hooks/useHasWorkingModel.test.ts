@@ -95,6 +95,33 @@ describe('useHasWorkingModel', () => {
     expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
   });
 
+  it('refresh unlocks a keyless compatible endpoint by probing its exact model when no default exists', async () => {
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    let exactModelProbes = 0;
+    mocks.adapter.getProviders.mockResolvedValue(providerRows(compatibleRow()));
+    mocks.adapter.probeProvider.mockResolvedValue({ configured: false, valid: false, verified: false });
+    mocks.adapter.probeModel.mockImplementation(async (requested?: string) => {
+      if (!requested) return { model: null, configured: false, verified: false };
+      if (requested !== model) throw new Error(`Unexpected model probe: ${requested}`);
+      exactModelProbes += 1;
+      return { model: requested, configured: true, verified: exactModelProbes > 1 };
+    });
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false });
+    expect(mocks.adapter.probeModel).toHaveBeenCalledWith(model);
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(exactModelProbes).toBe(2));
+    await waitFor(() => expect(result.current).toMatchObject({ loading: false, hasWorkingModel: true, cloudReady: true }));
+    expect(mocks.adapter.probeModel.mock.calls
+      .filter(([requested]) => requested !== undefined)
+      .map(([requested]) => requested)).toEqual([model, model]);
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+  });
+
   it('does not pass onboarding when a compatible default model cannot be verified', async () => {
     mocks.adapter.getProviders.mockResolvedValue(providerRows(compatibleRow()));
     mocks.adapter.probeModel.mockResolvedValue({

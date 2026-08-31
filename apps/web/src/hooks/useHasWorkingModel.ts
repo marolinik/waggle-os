@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { adapter } from '@/lib/adapter';
-import { isRoutableCloudProvider, useProviders } from './useProviders';
+import { isRoutableCloudProvider, useProviders, type Provider } from './useProviders';
 
 /**
  * Shared model-readiness signal for the onboarding hard gate and Models banner.
@@ -24,8 +24,8 @@ export function useHasWorkingModel(): WorkingModelState {
   const cloudGeneration = useRef(0);
   const explicitCloudRefresh = useRef<number | null>(null);
   const explicitProviders = useRef<unknown>(null);
-  const activeProviderIds = useRef<string[]>([]);
-  activeProviderIds.current = activeProviders.map((provider) => provider.id);
+  const activeProviderRows = useRef<Provider[]>([]);
+  activeProviderRows.current = activeProviders;
 
   const refreshLocal = useCallback(async () => {
     const generation = ++localGeneration.current;
@@ -43,14 +43,14 @@ export function useHasWorkingModel(): WorkingModelState {
     }
   }, []);
 
-  const probeCloud = useCallback(async (providerIds: string[], generation: number) => {
+  const probeCloud = useCallback(async (providerRows: Provider[], generation: number) => {
     const setCloudForGeneration = (next: { ready: boolean; loading: boolean }) => {
       if (mounted.current && generation === cloudGeneration.current) setCloud(next);
     };
     if (!mounted.current || generation !== cloudGeneration.current) return;
     setCloudForGeneration({ ready: false, loading: true });
 
-    if (providerIds.length === 0) {
+    if (providerRows.length === 0) {
       setCloudForGeneration({ ready: false, loading: false });
       return;
     }
@@ -83,11 +83,27 @@ export function useHasWorkingModel(): WorkingModelState {
       return;
     }
 
-    const outcomes = await Promise.allSettled(providerIds.map((id) => adapter.probeProvider(id)));
+    const compatibleProvider = providerRows.find((provider) => (
+      provider.id === 'openai-compatible' && Boolean(provider.models[0]?.id)
+    ));
+    const compatibleModel = compatibleProvider?.models[0]?.id;
+    const providerProbeCandidates = providerRows.filter((provider) => (
+      provider.id !== 'openai-compatible' || !compatibleModel
+    ));
+    const [compatibleOutcome, outcomes] = await Promise.all([
+      compatibleModel
+        ? adapter.probeModel(compatibleModel).catch(() => null)
+        : Promise.resolve(null),
+      Promise.allSettled(providerProbeCandidates.map((provider) => adapter.probeProvider(provider.id))),
+    ]);
     if (!mounted.current || generation !== cloudGeneration.current) return;
     const probes = outcomes.flatMap((outcome) => outcome.status === 'fulfilled' ? [outcome.value] : []);
-    const verified = probes.some((probe) => probe.configured && probe.valid !== false && probe.verified);
-    const rejected = probes.some((probe) => probe.configured && probe.valid === false);
+    const compatibleVerified = Boolean(compatibleOutcome?.configured && compatibleOutcome.verified);
+    const compatibleBlocked = Boolean(compatibleModel) && !compatibleVerified;
+    const verified = compatibleVerified
+      || probes.some((probe) => probe.configured && probe.valid !== false && probe.verified);
+    const rejected = compatibleBlocked
+      || probes.some((probe) => probe.configured && probe.valid === false);
     const transient = outcomes.some((outcome) => outcome.status === 'rejected')
       || probes.some((probe) => probe.configured && probe.valid !== false);
     setCloudForGeneration({ ready: verified || (!rejected && transient), loading: false });
@@ -114,7 +130,7 @@ export function useHasWorkingModel(): WorkingModelState {
       explicitProviders.current = null;
     }
     const generation = ++cloudGeneration.current;
-    void probeCloud(activeProviderIds.current, generation);
+    void probeCloud(activeProviderRows.current, generation);
   }, [probeCloud, providers, providersLoading]);
 
   useEffect(() => {
@@ -129,11 +145,11 @@ export function useHasWorkingModel(): WorkingModelState {
     void (async () => {
       const data = await refreshProviders();
       if (!mounted.current || generation !== cloudGeneration.current) return;
-      const ids = data
-        ? data.providers.filter(isRoutableCloudProvider).map((provider) => provider.id)
-        : activeProviderIds.current;
+      const rows = data
+        ? data.providers.filter(isRoutableCloudProvider)
+        : activeProviderRows.current;
       explicitProviders.current = data?.providers ?? null;
-      await probeCloud(ids, generation);
+      await probeCloud(rows, generation);
       if (mounted.current && generation === cloudGeneration.current && !data) explicitCloudRefresh.current = null;
     })();
   }, [probeCloud, refreshLocal, refreshProviders]);

@@ -403,7 +403,7 @@ describe('ModelGate', () => {
     expect(screen.getByLabelText(/endpoint url/i)).toHaveValue('http://127.0.0.1:4000/v1');
     expect(mocks.adapter.setProviderConfig).not.toHaveBeenCalled();
     await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
     await act(async () => {
       resolveReadiness({
         model: 'anthropic/current',
@@ -412,7 +412,7 @@ describe('ModelGate', () => {
         rejected: true,
       });
     });
-    expect(screen.getByText(/verify your key just now/i)).toBeInTheDocument();
+    expect(screen.getByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
   });
 
   it('restarts readiness after an exact compatible verification fails while the mount probe is pending', async () => {
@@ -461,7 +461,7 @@ describe('ModelGate', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no assistant response/i);
     await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
     expect(screen.queryByText(/checking your models/i)).not.toBeInTheDocument();
   });
 
@@ -490,11 +490,15 @@ describe('ModelGate', () => {
     });
     render(<StrictMode><ModelGate /></StrictMode>);
     fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
+    const readinessCallsBeforeVerification = mocks.adapter.probeModel.mock.calls
+      .filter(([requested]) => requested === undefined).length;
     fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/no assistant response/i);
-    await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
+    await waitFor(() => expect(
+      mocks.adapter.probeModel.mock.calls.filter(([requested]) => requested === undefined),
+    ).toHaveLength(readinessCallsBeforeVerification + 1));
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
   });
 
   it('cancels an in-flight compatible verification when the user selects another provider', async () => {
@@ -518,6 +522,7 @@ describe('ModelGate', () => {
     render(<ModelGate />);
     fireEvent.click(await screen.findByRole('button', { name: /openai-compatible/i }));
     fireEvent.click(screen.getByRole('button', { name: /verify & save/i }));
+    expect(screen.getByRole('button', { name: /retry check/i })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /anthropic/i }));
 
     expect(await screen.findByLabelText(/api key for anthropic/i)).toBeInTheDocument();
@@ -914,7 +919,7 @@ describe('ModelGate', () => {
     // "you have a working model" key-presence flash (only visible pre-probe) is gone.
     mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
     render(<ModelGate />);
-    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
     expect(screen.queryByText(/no working model yet/i)).not.toBeInTheDocument();
   });
 
@@ -1107,16 +1112,102 @@ describe('ModelGate', () => {
     expect(await screen.findByText(/you.re ready to go/i)).toBeInTheDocument();
   });
 
-  it('a network-degraded probe (valid, not verified) settles on the honest neutral, never an over-claim', async () => {
-    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
-    mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
-    render(<ModelGate />);
-    // Wave V single-truth: the ONE verdict is the honest "couldn’t verify … just
-    // now" — it must NOT over-claim "verified" nor "you’re ready to go" off a key
-    // it could not confirm (the old wording only appeared as a pre-probe flash).
-    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
+  it('a network-degraded probe stays unavailable and offers a real retry', async () => {
+    const onModelReady = vi.fn();
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    let exactModelProbes = 0;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      modelsSource: 'provider-api',
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    }));
+    mocks.adapter.probeProvider.mockResolvedValue({ configured: false, valid: false, verified: false });
+    mocks.adapter.probeModel.mockImplementation(async (requested?: string) => {
+      if (!requested) return { model: null, configured: false, verified: false };
+      exactModelProbes += 1;
+      return { model: requested, configured: true, verified: exactModelProbes > 1 };
+    });
+    render(<ModelGate variant="onboarding" onModelReady={onModelReady} />);
+    // Single truth: the verdict is provider/model-neutral and offers recovery.
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
     expect(screen.queryByText(/key verified/i)).toBeNull();
     expect(screen.queryByText(/ready to go/i)).toBeNull();
+    expect(screen.queryByText(/you can continue/i)).toBeNull();
+
+    await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledWith(model));
+    const exactCallsBeforeRetry = mocks.adapter.probeModel.mock.calls.filter(([requested]) => requested === model).length;
+    fireEvent.click(screen.getByRole('button', { name: /retry check/i }));
+    await waitFor(() => expect(
+      mocks.adapter.probeModel.mock.calls.filter(([requested]) => requested === model),
+    ).toHaveLength(exactCallsBeforeRetry + 1));
+    expect(await screen.findByText((text) => text.includes('Model verified') && text.includes(model))).toBeInTheDocument();
+    expect(onModelReady).toHaveBeenCalledWith(model);
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+    expect(screen.queryByText(/couldn.t confirm model access just now/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /retry check/i })).toBeNull();
+  });
+
+  it('makes a manual retry timeout terminal even if the old probe resolves later', async () => {
+    const onModelReady = vi.fn();
+    let resolveRetry!: (value: { configured: boolean; valid: boolean; verified: boolean }) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeProvider
+      .mockResolvedValueOnce({ configured: true, valid: true, verified: false })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveRetry = resolve;
+      }));
+    render(<ModelGate onModelReady={onModelReady} />);
+
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /retry check/i }));
+      await act(async () => { await Promise.resolve(); });
+      expect(mocks.adapter.probeProvider).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+      expect(screen.getByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+
+      await act(async () => {
+        resolveRetry({ configured: true, valid: true, verified: true });
+        await Promise.resolve();
+      });
+      expect(screen.getByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+      expect(screen.queryByText(/anthropic key verified/i)).toBeNull();
+      expect(onModelReady).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not let a stale retry overwrite a newly verified provider save', async () => {
+    let resolveRetry!: (value: { configured: boolean; valid: boolean; verified: boolean }) => void;
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeProvider
+      .mockResolvedValueOnce({ configured: true, valid: true, verified: false })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveRetry = resolve;
+      }));
+    render(<ModelGate />);
+
+    expect(await screen.findByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
+    const callsBeforeRetry = mocks.adapter.probeProvider.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: /retry check/i }));
+    await waitFor(() => expect(mocks.adapter.probeProvider).toHaveBeenCalledTimes(callsBeforeRetry + 1));
+
+    await selectProviderAndType(/anthropic/i, 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+    await waitFor(() => expect(screen.getByLabelText(/api key for anthropic/i)).toHaveFocus());
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+    expect(await screen.findByText(/anthropic key verified/i)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveRetry({ configured: true, valid: true, verified: false });
+    });
+    expect(screen.getByText(/anthropic key verified/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn.t confirm model access just now/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /retry check/i })).toBeNull();
   });
 
   // ── MODEL-GATE: probe the workspace's actual default model ──
