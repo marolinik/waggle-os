@@ -160,10 +160,12 @@ function getConfiguredProviderIds(dataDir: string, server?: FastifyInstance): st
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
-        providers?: Record<string, { apiKey?: string }>;
+        providers?: Record<string, { apiKey?: string; baseUrl?: string }>;
       };
       for (const [providerId, provider] of Object.entries(config.providers ?? {})) {
-        if (PROVIDER_ENV_NAMES[providerId] && provider.apiKey) configured.add(providerId);
+        const hasKnownProviderKey = Boolean(PROVIDER_ENV_NAMES[providerId] && provider.apiKey?.trim());
+        const hasCompatibleEndpoint = providerId === 'openai-compatible' && Boolean(provider.baseUrl?.trim());
+        if (hasKnownProviderKey || hasCompatibleEndpoint) configured.add(providerId);
       }
     }
   } catch { /* ignore */ }
@@ -390,7 +392,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
       providerHealth = 'degraded';
       providerDetail = configuredProviders.length === 1 && configuredProviders[0] === 'anthropic'
         ? 'Built-in Anthropic proxy (API key configured; verification pending)'
-        : `Built-in provider proxy (credentials configured: ${configuredProviders.join(', ')}; verification pending)`;
+        : `Built-in provider proxy (provider configured: ${configuredProviders.join(', ')}; verification pending)`;
     } else {
       const localModels = await listOllamaChatModelIds();
       if (localModels.length > 0) {

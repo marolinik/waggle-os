@@ -253,6 +253,58 @@ describe('Agent Service', () => {
     expect(server.localConfig.manageLiteLLM).toBe(false);
   });
 
+  it('recognizes a keyless OpenAI-compatible endpoint as configured at cold start', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const port = randomPort();
+    const litellmPort = randomPort();
+
+    clearProviderEnv();
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      providers: {
+        'openai-compatible': {
+          baseUrl: '  http://10.33.0.153:4000/v1  ',
+          apiKey: '',
+        },
+      },
+    }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 503 } as Response);
+
+    const { server } = await startService({ dataDir, port, litellmPort, skipLiteLLM: true });
+    cleanups.push(async () => { await server.close(); });
+
+    expect(server.agentState.llmProvider).toMatchObject({
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+    });
+    expect(server.agentState.llmProvider.detail).toContain('openai-compatible');
+    expect(server.agentState.llmProvider.detail).toContain('verification pending');
+    expect(server.agentState.llmProvider.detail).not.toContain('no API key');
+  });
+
+  it('does not treat a whitespace-only OpenAI-compatible endpoint as configured', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const port = randomPort();
+    const litellmPort = randomPort();
+
+    clearProviderEnv();
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      providers: {
+        'openai-compatible': {
+          baseUrl: '   ',
+          apiKey: '',
+        },
+      },
+    }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 503 } as Response);
+
+    const { server } = await startService({ dataDir, port, litellmPort, skipLiteLLM: true });
+    cleanups.push(async () => { await server.close(); });
+
+    expect(server.agentState.llmProvider.detail).toContain('no API key');
+  });
+
   it('does not probe or adopt an unrelated LiteLLM when explicitly skipped', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);
