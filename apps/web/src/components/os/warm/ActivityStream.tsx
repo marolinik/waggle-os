@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,6 +28,8 @@ interface ActivityStreamProps {
   steps: ActivityStep[];
   /** Default-open on the active turn; collapsed on prior turns. */
   defaultOpen?: boolean;
+  /** Whether any activity in this group is still running. */
+  busy?: boolean;
   className?: string;
 }
 
@@ -41,22 +43,32 @@ export function ActivityStream({
   durationMs,
   steps,
   defaultOpen = false,
+  busy = false,
   className,
 }: ActivityStreamProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const toggleId = useId();
+  const stepsId = useId();
   const reduce = useReducedMotion();
   const seconds = durationMs != null ? `${Math.max(1, Math.round(durationMs / 1000))}s` : null;
   const meta = [`${steps.length} step${steps.length === 1 ? '' : 's'}`, seconds].filter(Boolean).join(' · ');
   return (
-    <div className={cn('rounded-[14px] border border-[var(--line-soft)] bg-[var(--bg-2)]', className)}>
+    <div
+      data-testid="chat-activity"
+      aria-busy={busy}
+      className={cn('rounded-[14px] border border-[var(--line-soft)] bg-[var(--bg-2)]', className)}
+    >
       <button
+        id={toggleId}
+        data-testid="chat-activity-toggle"
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        aria-controls={stepsId}
         className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left"
       >
         <Sparkles className="h-4 w-4 shrink-0 text-[var(--intel)]" strokeWidth={1.8} />
-        <span className="flex-1 text-[13px] text-[var(--text-2)]">
+        <span role="status" aria-live="polite" aria-atomic="true" className="flex-1 text-[13px] text-[var(--text-2)]">
           {summary}
           {meta && <span className="text-[var(--text-dim)]"> · {meta}</span>}
         </span>
@@ -68,44 +80,53 @@ export function ActivityStream({
         />
       </button>
       {open && (
-        <ul className="space-y-2 border-t border-[var(--line-soft)] px-3.5 py-3">
-          {steps.map((s, i) => {
-            const rowContent = (
-              <>
-                <DotLive tone={s.tone ?? 'intel'} live={false} size={7} className="mt-1.5" />
-                <span className="min-w-0 flex-1">
-                  {s.text}
-                  {s.provenance && (
-                    <span className="mt-1 block">
-                      <ProvenanceLine {...s.provenance} />
-                    </span>
-                  )}
-                </span>
-              </>
-            );
-            // Surprise-recall bloom: honey glow (CSS keyframe) + SPRING.micro scale
-            // pop on mount. Skipped under reduced-motion → a plain row (no bloom).
-            if (s.bloom && !reduce) {
-              return (
-                <motion.li
-                  key={i}
-                  data-recall-bloom="true"
-                  className="recall-bloom flex items-start gap-2.5 rounded-lg text-[13px] text-[var(--text-2)]"
-                  initial={{ scale: 0.96 }}
-                  animate={{ scale: 1 }}
-                  transition={SPRING.micro}
-                >
-                  {rowContent}
-                </motion.li>
+        <div
+          id={stepsId}
+          data-testid="chat-activity-steps"
+          role="region"
+          aria-labelledby={toggleId}
+          className="border-t border-[var(--line-soft)] px-3.5 py-3"
+        >
+          <ul className="space-y-2">
+            {steps.map((s, i) => {
+              const rowContent = (
+                <>
+                  <DotLive tone={s.tone ?? 'intel'} live={false} size={7} className="mt-1.5" />
+                  <span className="min-w-0 flex-1">
+                    {s.text}
+                    {s.provenance && (
+                      <span className="mt-1 block">
+                        <ProvenanceLine {...s.provenance} />
+                      </span>
+                    )}
+                  </span>
+                </>
               );
-            }
-            return (
-              <li key={i} className="flex items-start gap-2.5 text-[13px] text-[var(--text-2)]">
-                {rowContent}
-              </li>
-            );
-          })}
-        </ul>
+              // Surprise-recall bloom: honey glow (CSS keyframe) + SPRING.micro scale
+              // pop on mount. Skipped under reduced-motion → a plain row (no bloom).
+              if (s.bloom && !reduce) {
+                return (
+                  <motion.li
+                    key={i}
+                    data-recall-bloom="true"
+                    data-testid="chat-activity-step"
+                    className="recall-bloom flex items-start gap-2.5 rounded-lg text-[13px] text-[var(--text-2)]"
+                    initial={{ scale: 0.96 }}
+                    animate={{ scale: 1 }}
+                    transition={SPRING.micro}
+                  >
+                    {rowContent}
+                  </motion.li>
+                );
+              }
+              return (
+                <li key={i} data-testid="chat-activity-step" className="flex items-start gap-2.5 text-[13px] text-[var(--text-2)]">
+                  {rowContent}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   );

@@ -76,6 +76,10 @@ function formatToolName(name: string): string {
   return name.replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
 }
 
+function toolDataName(name: string): string {
+  return name.replace(/[^a-z0-9_-]/gi, '-');
+}
+
 function skillName(block: ToolUseContentBlock): string | null {
   const raw = block.input?.name ?? block.input?.skillName;
   return typeof raw === 'string' && raw.trim()
@@ -117,8 +121,14 @@ function ToolActivityDetails({
         : 'Failed';
   const hasDetails = !!block.input || typeof block.result === 'string';
   return (
-    <span className="block min-w-0">
+    <span
+      data-testid="chat-tool-activity"
+      data-tool-name={toolDataName(block.name)}
+      data-tool-status={block.status}
+      className="block min-w-0"
+    >
       <button
+        data-testid="chat-tool-activity-toggle"
         type="button"
         aria-expanded={hasDetails ? open : undefined}
         aria-controls={hasDetails ? contentId : undefined}
@@ -134,7 +144,11 @@ function ToolActivityDetails({
         {block.duration != null && <span className="text-xs text-[var(--text-dim)]">{block.duration}ms</span>}
       </button>
       {open && hasDetails && (
-        <span id={contentId} className="mt-1.5 block space-y-1 text-xs text-[var(--text-dim)]">
+        <span
+          id={contentId}
+          data-testid="chat-tool-activity-details"
+          className="mt-1.5 block space-y-1 text-xs text-[var(--text-dim)]"
+        >
           {block.input && (
             <code className="block max-h-24 overflow-auto rounded bg-[var(--bg-1)] p-1.5 whitespace-pre-wrap">
               {JSON.stringify(block.input, null, 2).slice(0, 1000)}
@@ -161,8 +175,12 @@ function ContextEfficiencyDetails({ block }: { block: ToolContextContentBlock })
     `total ${metrics.totalServerLatencyMs}ms`,
   ].filter(Boolean).join(' · ');
   return (
-    <span className="block min-w-0">
+    <span
+      data-testid="chat-context-efficiency"
+      className="block min-w-0"
+    >
       <button
+        data-testid="chat-context-efficiency-toggle"
         type="button"
         aria-expanded={open}
         aria-controls={contentId}
@@ -172,7 +190,15 @@ function ContextEfficiencyDetails({ block }: { block: ToolContextContentBlock })
         Context efficiency
       </button>
       {open && (
-        <span id={contentId} className="mt-1.5 block space-y-0.5 text-xs text-[var(--text-dim)]">
+        <span
+          id={contentId}
+          data-testid="chat-context-efficiency-details"
+          data-tool-selected-count={metrics.toolSelectedCount}
+          data-tool-eligible-count={metrics.toolEligibleCount}
+          data-tool-omitted-count={metrics.toolOmittedCount}
+          data-tool-schema-chars={metrics.transmittedToolSchemaChars}
+          className="mt-1.5 block space-y-0.5 text-xs text-[var(--text-dim)]"
+        >
           <span className="block">
           Prepared {metrics.toolSelectedCount} of {metrics.toolEligibleCount} eligible tools ·{' '}
           {metrics.toolOmittedCount} kept out of model context
@@ -321,6 +347,7 @@ function renderActivityGroup(blocks: ContentBlock[], key: string, isStreaming: b
       summary={summary}
       steps={activitySteps}
       defaultOpen={isStreaming || anyRunning}
+      busy={anyRunning}
       className="my-1.5"
     />
   );

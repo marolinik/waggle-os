@@ -74,18 +74,46 @@ describe('BlockRenderer — activity grouping', () => {
 
   it('collapses consecutive steps into one Activity card (closed off the active turn)', () => {
     render(<BlockRenderer blocks={steps} />);
-    expect(screen.getByRole('button', { name: /Activity.*2 steps/ })).toBeInTheDocument();
+    const activity = screen.getByTestId('chat-activity');
+    const toggle = screen.getByTestId('chat-activity-toggle');
+    expect(toggle).toHaveAccessibleName(/Activity.*2 steps/);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(activity).toHaveAttribute('aria-busy', 'false');
     expect(screen.queryByText(/memory|web|files/i)).not.toBeInTheDocument();
     // collapsed → step text hidden until expanded
     expect(screen.queryByText('Recalled 6 memories')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { expanded: false }));
+    const region = screen.getByTestId('chat-activity-steps');
+    expect(region).toHaveAttribute('role', 'region');
+    expect(toggle).toHaveAttribute('aria-controls', region.id);
+    expect(region).toHaveAttribute('aria-labelledby', toggle.id);
     expect(screen.getByText('Recalled 6 memories')).toBeInTheDocument();
     expect(screen.getByText('Searched 9 sites')).toBeInTheDocument();
   });
 
   it('opens the Activity card by default while streaming', () => {
     render(<BlockRenderer blocks={steps} isStreaming />);
+    expect(screen.getByTestId('chat-activity')).toHaveAttribute('aria-busy', 'false');
     expect(screen.getByText('Recalled 6 memories')).toBeInTheDocument();
+  });
+
+  it('announces a running to completed activity transition without losing its open details', () => {
+    const running: ContentBlock = {
+      type: 'tool_use', id: 'tool-transition', name: 'read_file', status: 'running',
+      input: { path: 'proof.txt' },
+    };
+    const done: ContentBlock = {
+      ...running, status: 'done', result: 'proof', duration: 12,
+    };
+    const view = render(<BlockRenderer blocks={[running]} isStreaming />);
+    expect(screen.getByTestId('chat-activity')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('status')).toHaveTextContent(/Working.*1 tool/);
+    expect(screen.getByTestId('chat-activity-steps')).toBeInTheDocument();
+
+    view.rerender(<BlockRenderer blocks={[done]} />);
+    expect(screen.getByTestId('chat-activity')).toHaveAttribute('aria-busy', 'false');
+    expect(screen.getByRole('status')).toHaveTextContent(/Used 1 tool/);
+    expect(screen.getByTestId('chat-activity-steps')).toBeInTheDocument();
   });
 
   it('still routes a completed write_file to the artifact card', () => {
@@ -135,20 +163,30 @@ describe('BlockRenderer — activity grouping', () => {
     };
 
     render(<BlockRenderer blocks={[tool, contextBlock()]} />);
-    expect(screen.getByText(/Used 1 tool/)).toBeInTheDocument();
+    expect(screen.getByTestId('chat-activity-toggle')).toHaveTextContent(/Used 1 tool/);
     expect(screen.queryByText('Web Search')).not.toBeInTheDocument();
     expect(screen.queryByText(/Prepared 4 of 29/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { expanded: false }));
+    const toolRow = screen.getByTestId('chat-tool-activity');
+    expect(toolRow).toHaveAttribute('data-tool-name', 'web_search');
+    expect(toolRow).toHaveAttribute('data-tool-status', 'done');
     expect(screen.getByText('Web Search')).toBeInTheDocument();
     expect(screen.getByText('Context efficiency')).toBeInTheDocument();
     expect(screen.queryByText(/Prepared 4 of 29/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Web Search/ }));
+    expect(screen.getByTestId('chat-tool-activity-details')).toBeInTheDocument();
     expect(screen.getByText(/"query": "Waggle"/)).toBeInTheDocument();
     expect(screen.getByText('Found 3 results')).toBeInTheDocument();
 
+    expect(screen.queryByTestId('chat-context-efficiency-details')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Context efficiency'));
+    const contextDetails = screen.getByTestId('chat-context-efficiency-details');
+    expect(contextDetails).toHaveAttribute('data-tool-selected-count', '4');
+    expect(contextDetails).toHaveAttribute('data-tool-eligible-count', '29');
+    expect(contextDetails).toHaveAttribute('data-tool-omitted-count', '25');
+    expect(contextDetails).toHaveAttribute('data-tool-schema-chars', '3200');
     expect(screen.getByText(/Prepared 4 of 29 eligible tools/)).toBeInTheDocument();
     expect(screen.getByText(/25 kept out of model context/)).toBeInTheDocument();
     expect(screen.queryByText(/applied skill|used skill/i)).not.toBeInTheDocument();
@@ -174,7 +212,7 @@ describe('BlockRenderer — activity grouping', () => {
       input: { path: 'out/report.md', content: '# R' }, result: 'ok',
     };
     render(<BlockRenderer blocks={[web, write, contextBlock()]} />);
-    expect(screen.getByText(/Used 2 tools/)).toBeInTheDocument();
+    expect(screen.getByTestId('chat-activity-toggle')).toHaveTextContent(/Used 2 tools/);
     expect(screen.getByTestId('chat-artifact-block')).toBeInTheDocument();
   });
 
