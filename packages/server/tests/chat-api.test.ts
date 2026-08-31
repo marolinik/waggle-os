@@ -2195,6 +2195,210 @@ describe('Chat Streaming API', () => {
     }
   });
 
+  it('atomically replaces the exact assistant retry pair and invokes the runner once', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const workspaceId = server.workspaceManager.create({
+      name: `Structured retry success ${Date.now()}`,
+      group: 'test',
+    }).id;
+    const sessionId = `structured-retry-success-${Date.now()}`;
+    const message = 'Retry this exact turn.';
+    const failedAssistant = `${GENERATION_FAILED_PREFIX}temporary failure`;
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'user', content: message });
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'assistant', content: failedAssistant });
+    const seeded = loadSessionMessages(tmpDir, workspaceId, sessionId);
+    server.agentState.sessionHistories.set(chatSessionStateKey(workspaceId, sessionId), [...seeded]);
+    const runner = vi.fn(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      const content = `replacement:${config.messages.at(-1)?.content ?? ''}`;
+      config.onToken?.(content);
+      return { content, toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    });
+    server.agentRunner = runner;
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message,
+          workspace: workspaceId,
+          session: sessionId,
+          retry: true,
+          retryTarget: {
+            kind: 'assistant-pair',
+            expectedMessageCount: 2,
+            expectedAssistantContent: failedAssistant,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(runner).toHaveBeenCalledTimes(1);
+      const expected = [
+        expect.objectContaining({ role: 'user', content: message }),
+        expect.objectContaining({ role: 'assistant', content: `replacement:${message}` }),
+      ];
+      expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual(expected);
+      expect(server.agentState.sessionHistories.get(
+        chatSessionStateKey(workspaceId, sessionId),
+      )).toEqual(expected);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+    }
+  });
+
+  it.each([
+    ['count', 4, `${GENERATION_FAILED_PREFIX}temporary failure`],
+    ['content', 2, `${GENERATION_FAILED_PREFIX}different failure`],
+  ])('fails closed when structured retry %s is stale', async (_case, expectedMessageCount, expectedAssistantContent) => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const workspaceId = server.workspaceManager.create({
+      name: `Structured retry stale ${_case} ${Date.now()}`,
+      group: 'test',
+    }).id;
+    const sessionId = `structured-retry-stale-${_case}-${Date.now()}`;
+    const message = 'Keep this original turn.';
+    const failedAssistant = `${GENERATION_FAILED_PREFIX}temporary failure`;
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'user', content: message });
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'assistant', content: failedAssistant });
+    const sessionFile = path.join(
+      tmpDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`,
+    );
+    const diskBefore = fs.readFileSync(sessionFile);
+    const memoryBefore = loadSessionMessages(tmpDir, workspaceId, sessionId);
+    server.agentState.sessionHistories.set(
+      chatSessionStateKey(workspaceId, sessionId),
+      memoryBefore.map(entry => ({ ...entry })),
+    );
+    const runner = vi.fn(async (): Promise<AgentResponse> => ({
+      content: 'must not run', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    server.agentRunner = runner;
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message,
+          workspace: workspaceId,
+          session: sessionId,
+          retry: true,
+          retryTarget: {
+            kind: 'assistant-pair',
+            expectedMessageCount,
+            expectedAssistantContent,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const errors = parseSSE(response.body).filter(event => event.event === 'error');
+      expect(errors).toHaveLength(1);
+      expect(JSON.parse(errors[0]!.data)).toMatchObject({ code: 'RETRY_TARGET_STALE' });
+      expect(runner).not.toHaveBeenCalled();
+      expect(fs.readFileSync(sessionFile)).toEqual(diskBefore);
+      expect(server.agentState.sessionHistories.get(
+        chatSessionStateKey(workspaceId, sessionId),
+      )).toEqual(memoryBefore);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+    }
+  });
+
+  it('does not replace a prior failed pair for a legacy retry with a different message', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const workspaceId = server.workspaceManager.create({
+      name: `Legacy retry preservation ${Date.now()}`,
+      group: 'test',
+    }).id;
+    const sessionId = `legacy-retry-preservation-${Date.now()}`;
+    const originalMessage = 'Original failed request.';
+    const retryMessage = 'A different retry request.';
+    const failedAssistant = `${GENERATION_FAILED_PREFIX}original failure`;
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'user', content: originalMessage });
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'assistant', content: failedAssistant });
+    server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+    server.agentRunner = async (): Promise<AgentResponse> => ({
+      content: 'different retry answer', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST', url: '/api/chat',
+        payload: { message: retryMessage, workspace: workspaceId, session: sessionId, retry: true },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(loadSessionMessages(tmpDir, workspaceId, sessionId).map(({ role, content }) => ({ role, content })))
+        .toEqual([
+          { role: 'user', content: originalMessage },
+          { role: 'assistant', content: failedAssistant },
+          { role: 'user', content: retryMessage },
+          { role: 'assistant', content: 'different retry answer' },
+        ]);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+    }
+  });
+
+  it('runs a structured retry without reading or rewriting durable history when history is denied', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const workspaceId = server.workspaceManager.create({
+      name: `Denied structured retry ${Date.now()}`,
+      group: 'test',
+    }).id;
+    const sessionId = `denied-structured-retry-${Date.now()}`;
+    const priorMessage = 'Sensitive prior failed request.';
+    const failedAssistant = `${GENERATION_FAILED_PREFIX}sensitive failure`;
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'user', content: priorMessage });
+    persistMessage(tmpDir, workspaceId, sessionId, { role: 'assistant', content: failedAssistant });
+    const sessionFile = path.join(
+      tmpDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`,
+    );
+    const diskBefore = fs.readFileSync(sessionFile);
+    server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+    const runner = vi.fn(async (config: AgentLoopConfig): Promise<AgentResponse> => ({
+      content: `private:${config.messages.at(-1)?.content ?? ''}`,
+      toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    server.agentRunner = runner;
+    const message = '/research BERYL do not use saved history. Answer from scratch. Do not write files or execute code.';
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST', url: '/api/chat',
+        payload: {
+          message, workspace: workspaceId, session: sessionId, retry: true,
+          retryTarget: {
+            kind: 'assistant-pair',
+            expectedMessageCount: 999,
+            expectedAssistantContent: 'intentionally stale',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(parseSSE(response.body).some(event => event.event === 'done')).toBe(true);
+      expect(parseSSE(response.body).some(event => event.event === 'error')).toBe(false);
+      expect(runner).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(runner.mock.calls[0]![0].messages)).not.toContain(priorMessage);
+      expect(fs.readFileSync(sessionFile)).toEqual(diskBefore);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, sessionId),
+      )).toBe(false);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+    }
+  });
+
   // #3 launch-blocker: memory capture must NOT depend on generation success.
   // When the model call throws, the happy-path write-back never runs — so the
   // route persists the raw user turn directly, else "remembers everything" breaks.

@@ -7,13 +7,14 @@
  * Uses real temp directories to exercise file system behavior.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
   persistMessage,
   loadSessionMessages,
+  replaceRetryTailWithUser,
   stripTrailingFailedPair,
 } from '../../src/local/routes/chat-persistence.js';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
@@ -29,7 +30,20 @@ function makeTempDir(): string {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
+  const temporaryFiles: string[] = [];
   for (const dir of tempDirs) {
+    if (fs.existsSync(dir)) {
+      const pending = [dir];
+      while (pending.length > 0) {
+        const current = pending.pop()!;
+        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+          const entryPath = path.join(current, entry.name);
+          if (entry.isDirectory()) pending.push(entryPath);
+          else if (entry.name.endsWith('.tmp')) temporaryFiles.push(entryPath);
+        }
+      }
+    }
     try {
       fs.rmSync(dir, { recursive: true, force: true });
     } catch {
@@ -37,6 +51,7 @@ afterEach(() => {
     }
   }
   tempDirs = [];
+  expect(temporaryFiles).toEqual([]);
 });
 
 // ─── persistMessage ─────────────────────────────────────────────────
@@ -280,5 +295,190 @@ describe('stripTrailingFailedPair', () => {
   it('returns false when the session file does not exist', () => {
     const dataDir = makeTempDir();
     expect(stripTrailingFailedPair(dataDir, 'ws-1', 'missing')).toBe(false);
+  });
+
+  it('does not strip a failed pair belonging to a different user prompt', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'original prompt' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', {
+      role: 'assistant',
+      content: `${GENERATION_FAILED_PREFIX}boom`,
+    });
+    const filePath = path.join(dataDir, 'workspaces', 'ws-1', 'sessions', 'sess-1.jsonl');
+    const original = fs.readFileSync(filePath, 'utf-8');
+
+    expect(stripTrailingFailedPair(dataDir, 'ws-1', 'sess-1', 'different prompt')).toBe(false);
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(original);
+  });
+});
+
+// ─── replaceRetryTailWithUser ─────────────────────────────────
+
+describe('replaceRetryTailWithUser', () => {
+  it('atomically replaces an exact assistant pair with one fresh user turn', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'earlier' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'kept' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'retry me' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'replace me' });
+
+    expect(replaceRetryTailWithUser(dataDir, 'ws-1', 'sess-1', 'retry me', {
+      kind: 'assistant-pair',
+      expectedMessageCount: 4,
+      expectedAssistantContent: 'replace me',
+    })).toEqual({ ok: true, removed: 2 });
+    expect(loadSessionMessages(dataDir, 'ws-1', 'sess-1')).toEqual([
+      { role: 'user', content: 'earlier' },
+      { role: 'assistant', content: 'kept' },
+      { role: 'user', content: 'retry me' },
+    ]);
+  });
+
+  it('atomically replaces an exact lone user while preserving the transcript prefix', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'earlier' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'kept' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'stopped prompt' });
+    const filePath = path.join(dataDir, 'workspaces', 'ws-1', 'sessions', 'sess-1.jsonl');
+    const original = fs.readFileSync(filePath, 'utf-8');
+
+    expect(replaceRetryTailWithUser(dataDir, 'ws-1', 'sess-1', 'stopped prompt', {
+      kind: 'lone-user',
+      expectedMessageCount: 3,
+    })).toEqual({ ok: true, removed: 1 });
+    expect(fs.readFileSync(filePath, 'utf-8')).not.toBe(original);
+    expect(loadSessionMessages(dataDir, 'ws-1', 'sess-1')).toEqual([
+      { role: 'user', content: 'earlier' },
+      { role: 'assistant', content: 'kept' },
+      { role: 'user', content: 'stopped prompt' },
+    ]);
+  });
+
+  it.each([
+    {
+      name: 'message count',
+      userContent: 'retry me',
+      expectation: {
+        kind: 'assistant-pair' as const,
+        expectedMessageCount: 3,
+        expectedAssistantContent: 'old answer',
+      },
+    },
+    {
+      name: 'user content',
+      userContent: 'different prompt',
+      expectation: {
+        kind: 'assistant-pair' as const,
+        expectedMessageCount: 2,
+        expectedAssistantContent: 'old answer',
+      },
+    },
+    {
+      name: 'assistant content',
+      userContent: 'retry me',
+      expectation: {
+        kind: 'assistant-pair' as const,
+        expectedMessageCount: 2,
+        expectedAssistantContent: 'different answer',
+      },
+    },
+  ])('leaves the original bytes untouched on a stale $name', ({ userContent, expectation }) => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'retry me' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'old answer' });
+    const filePath = path.join(dataDir, 'workspaces', 'ws-1', 'sessions', 'sess-1.jsonl');
+    const original = fs.readFileSync(filePath, 'utf-8');
+
+    expect(replaceRetryTailWithUser(
+      dataDir,
+      'ws-1',
+      'sess-1',
+      userContent,
+      expectation,
+    )).toEqual({ ok: false, reason: 'history-stale' });
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(original);
+  });
+
+  it('detects a file mutation before replacement and preserves the newer bytes', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'retry me' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'old answer' });
+    const filePath = path.join(dataDir, 'workspaces', 'ws-1', 'sessions', 'sess-1.jsonl');
+    const realReadFileSync = fs.readFileSync;
+    const readSpy = vi.spyOn(fs, 'readFileSync');
+    readSpy.mockImplementationOnce(realReadFileSync);
+    readSpy.mockImplementationOnce(((target, options) => {
+      fs.appendFileSync(filePath, `${JSON.stringify({
+        role: 'user',
+        content: 'concurrent prompt',
+        timestamp: new Date().toISOString(),
+      })}\n`, 'utf-8');
+      return realReadFileSync(target, options as never);
+    }) as typeof fs.readFileSync);
+
+    const result = replaceRetryTailWithUser(dataDir, 'ws-1', 'sess-1', 'retry me', {
+      kind: 'assistant-pair',
+      expectedMessageCount: 2,
+      expectedAssistantContent: 'old answer',
+    });
+    readSpy.mockRestore();
+
+    expect(result).toEqual({ ok: false, reason: 'history-changed' });
+    expect(loadSessionMessages(dataDir, 'ws-1', 'sess-1')).toEqual([
+      { role: 'user', content: 'retry me' },
+      { role: 'assistant', content: 'old answer' },
+      { role: 'user', content: 'concurrent prompt' },
+    ]);
+  });
+
+  it('retries transient Windows rename locks and then succeeds', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'retry me' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'old answer' });
+    const realRenameSync = fs.renameSync;
+    const transientCodes = ['EPERM', 'EACCES', 'EBUSY'];
+    let attempt = 0;
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+      const code = transientCodes[attempt++];
+      if (code) throw Object.assign(new Error(`locked: ${code}`), { code });
+      return realRenameSync(source, destination);
+    });
+
+    const result = replaceRetryTailWithUser(dataDir, 'ws-1', 'sess-1', 'retry me', {
+      kind: 'assistant-pair',
+      expectedMessageCount: 2,
+      expectedAssistantContent: 'old answer',
+    });
+    const renameAttempts = renameSpy.mock.calls.length;
+    renameSpy.mockRestore();
+
+    expect(result).toEqual({ ok: true, removed: 2 });
+    expect(renameAttempts).toBe(4);
+    expect(loadSessionMessages(dataDir, 'ws-1', 'sess-1')).toEqual([
+      { role: 'user', content: 'retry me' },
+    ]);
+  });
+
+  it('leaves the original bytes untouched when Windows rename locks never clear', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'retry me' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'old answer' });
+    const filePath = path.join(dataDir, 'workspaces', 'ws-1', 'sessions', 'sess-1.jsonl');
+    const original = fs.readFileSync(filePath, 'utf-8');
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw Object.assign(new Error('locked'), { code: 'EBUSY' });
+    });
+
+    const result = replaceRetryTailWithUser(dataDir, 'ws-1', 'sess-1', 'retry me', {
+      kind: 'assistant-pair',
+      expectedMessageCount: 2,
+      expectedAssistantContent: 'old answer',
+    });
+    const renameAttempts = renameSpy.mock.calls.length;
+    renameSpy.mockRestore();
+
+    expect(result).toEqual({ ok: false, reason: 'history-replace-failed' });
+    expect(renameAttempts).toBe(4);
+    expect(fs.readFileSync(filePath, 'utf-8')).toBe(original);
   });
 });

@@ -986,6 +986,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
 
   it('retries a stopped partial from the same prompt as one canonical replacement turn', async () => {
     const firstGate = deferred<void>();
+    const pendingHistory = deferred<ChatMessage[]>();
     mocks.adapter.sendMessage
       .mockImplementationOnce(async function* () {
         yield { type: 'token', data: { content: 'partial answer' } };
@@ -1005,10 +1006,23 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     expect(result.current.messages.find(message => message.role === 'assistant')?.draft)
       .toMatchObject({ content: 'partial answer', status: 'stopped' });
 
+    mocks.adapter.getHistory.mockReturnValueOnce(pendingHistory.promise);
+    await act(async () => { result.current.retryHistory(); await flush(); });
+    await vi.waitFor(() => expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(2));
     await act(async () => {
       result.current.retryLastFailed();
       await flush();
     });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    pendingHistory.resolve([{
+      id: 'persisted-question',
+      role: 'user',
+      content: 'question',
+      timestamp: 'now',
+    }]);
+    await act(async () => { await pendingHistory.promise; await flush(); });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
 
     expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith(
       'ws-1',
@@ -1017,17 +1031,24 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
       undefined,
       undefined,
       true,
+      undefined,
+      { kind: 'lone-user', expectedMessageCount: 1 },
     );
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
-    expect(result.current.messages.map(message => [message.role, message.content])).toEqual([
+    const canonicalReplacement = [
       ['user', 'question'],
       ['assistant', 'recovered answer'],
-    ]);
+    ];
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(canonicalReplacement);
+    expect(
+      readChatThreadCache(chatThreadCacheKey('ws-1', 'sess-stopped-retry'))
+        ?.map(message => [message.role, message.content]),
+    ).toEqual(canonicalReplacement);
 
     firstGate.resolve();
     await act(async () => { await firstPromise; });
-    expect(result.current.messages.map(message => message.content))
-      .toEqual(['question', 'recovered answer']);
+    expect(result.current.messages.map(message => [message.role, message.content]))
+      .toEqual(canonicalReplacement);
   });
 
   it('preserves queued FIFO when a stopped stream is replaced and settles late', async () => {

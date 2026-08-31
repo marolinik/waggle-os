@@ -18,6 +18,7 @@ import { renderHook, act, render, screen, fireEvent, cleanup, waitFor } from '@t
 import { useLayoutEffect, useRef } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { MemoryRouter } from 'react-router-dom';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import type { ChatMessage } from '@/lib/types';
 import {
   chatThreadCacheKey,
@@ -836,7 +837,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
       {
         id: 'client-assistant',
         role: 'assistant',
-        content: 'Provider failed',
+        content: `${GENERATION_FAILED_PREFIX}Provider failed`,
         blocks: [{ type: 'error', blockId: 'client-error', message: 'Provider failed' }],
         timestamp: 'old',
       },
@@ -863,12 +864,26 @@ describe('useChat — thread session cache (2.6-chat)', () => {
       {
         id: 'hist-1',
         role: 'assistant',
-        content: 'Provider failed',
+        content: `${GENERATION_FAILED_PREFIX}Provider failed`,
         blocks: [{ type: 'error', blockId: 'server-error', message: 'Provider failed' }],
         timestamp: 'server-assistant',
       },
     ]);
     await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledWith(
+      'ws-1',
+      'retry typed error',
+      'sess-pending-error-block-retry',
+      undefined,
+      undefined,
+      true,
+      undefined,
+      {
+        kind: 'assistant-pair',
+        expectedMessageCount: 2,
+        expectedAssistantContent: `${GENERATION_FAILED_PREFIX}Provider failed`,
+      },
+    );
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     const expectedRecoveredPair = [
@@ -879,6 +894,92 @@ describe('useChat — thread session cache (2.6-chat)', () => {
       .toEqual(expectedRecoveredPair);
     expect(readChatThreadCache(cacheKey)?.map(message => [message.role, message.content]))
       .toEqual(expectedRecoveredPair);
+  });
+
+  it('discards a stale optimistic retry, restores cached truth, and forces authoritative reload', async () => {
+    const cacheKey = chatThreadCacheKey('ws-1', 'sess-stale-retry-target');
+    const cachedFailedPair: ChatMessage[] = [
+      { id: 'cached-user', role: 'user', content: 'retry stale turn', timestamp: 'cached-user' },
+      {
+        id: 'cached-assistant',
+        role: 'assistant',
+        content: `${GENERATION_FAILED_PREFIX}cached provider failure`,
+        timestamp: 'cached-assistant',
+      },
+    ];
+    const authoritativeReload = deferred<ChatMessage[]>();
+    writeChatThreadCache(cacheKey, cachedFailedPair);
+    mocks.adapter.getHistory
+      .mockResolvedValueOnce(cachedFailedPair)
+      .mockReturnValueOnce(authoritativeReload.promise);
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'error',
+        data: {
+          code: 'RETRY_TARGET_STALE',
+          message: 'This conversation changed before Retry could replace it.',
+        },
+      };
+    });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-1',
+      sessionId: 'sess-stale-retry-target',
+    }));
+    await waitFor(() => expect(result.current.historyStatus).toBe('ready'));
+
+    act(() => { result.current.retryLastFailed(); });
+
+    await waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledWith(
+      'ws-1',
+      'retry stale turn',
+      'sess-stale-retry-target',
+      undefined,
+      undefined,
+      true,
+      undefined,
+      {
+        kind: 'assistant-pair',
+        expectedMessageCount: 2,
+        expectedAssistantContent: `${GENERATION_FAILED_PREFIX}cached provider failure`,
+      },
+    );
+    await waitFor(() => expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(result.current.messages.map(message => message.id))
+        .toEqual(['cached-user', 'cached-assistant']);
+    });
+    expect(result.current.historyStatus).toBe('loading');
+    expect(result.current.historyLoaded).toBe(false);
+    expect(result.current.historyReady).toBe(false);
+    expect(result.current.messages.some(message =>
+      message.content.includes('This conversation changed before Retry could replace it.')
+    )).toBe(false);
+
+    const authoritativeTruth: ChatMessage[] = [
+      { id: 'server-user', role: 'user', content: 'retry stale turn', timestamp: 'server-user' },
+      {
+        id: 'server-assistant',
+        role: 'assistant',
+        content: `${GENERATION_FAILED_PREFIX}newer authoritative failure`,
+        timestamp: 'server-assistant',
+      },
+    ];
+    await act(async () => {
+      authoritativeReload.resolve(authoritativeTruth);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.historyStatus).toBe('ready'));
+    expect(result.current.messages.map(message => [message.id, message.content])).toEqual([
+      ['server-user', 'retry stale turn'],
+      ['server-assistant', `${GENERATION_FAILED_PREFIX}newer authoritative failure`],
+    ]);
+    expect(result.current.messages.some(message =>
+      !['server-user', 'server-assistant'].includes(message.id)
+    )).toBe(false);
   });
 
   it('preserves a distinct failed history tail for the same retry prompt', async () => {
