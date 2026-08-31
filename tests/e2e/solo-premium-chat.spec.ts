@@ -259,9 +259,24 @@ async function captureChatTurn(page: Page, trigger: () => Promise<void>): Promis
   return { request, response, events: parsed.events, done, tokenText };
 }
 
-async function readHistory(page: Page, workspaceId: string, sessionId: string) {
+async function readBrowserSessionToken(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const response = await fetch('/api/auth/session-token', { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`Session bootstrap failed: ${response.status}`);
+    const body = await response.json() as { token?: unknown };
+    if (typeof body.token !== 'string' || !body.token) throw new Error('Session bootstrap returned no token');
+    return body.token;
+  });
+}
+
+function authHeaders(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
+}
+
+async function readHistory(page: Page, workspaceId: string, sessionId: string, token: string) {
   const response = await page.request.get(
     `/api/history?workspace=${encodeURIComponent(workspaceId)}&session=${encodeURIComponent(sessionId)}`,
+    { headers: authHeaders(token) },
   );
   expect(response.ok(), await response.text().catch(() => '')).toBe(true);
   const body = await response.json() as {
@@ -291,13 +306,14 @@ async function readAssistantFromUi(page: Page): Promise<string> {
 
 test.describe('Windows Solo premium chat journey', () => {
   test.skip(!RUN_LIVE_SOLO_CHAT, 'Set WAGGLE_E2E_SOLO_CHAT=1 to run the real local-model journey.');
-  test.setTimeout(240_000);
+  test.setTimeout(600_000);
 
-  test('saves Qwen, creates a blank workspace/session, chats, retries, and reloads cleanly', async ({ page }) => {
+  test('saves Qwen, chats, retries, discloses a tool and skill, and recalls memory in a new session', async ({ page }) => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     const criticalRequestFailures: string[] = [];
     let workspaceId: string | null = null;
+    let sessionToken: string | null = null;
 
     page.on('console', message => {
       if (message.type() === 'error') consoleErrors.push(message.text());
@@ -317,6 +333,7 @@ test.describe('Windows Solo premium chat journey', () => {
     try {
       await page.goto(`/settings?${SKIP_PARAMS}`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+      sessionToken = await readBrowserSessionToken(page);
 
       await page.getByRole('button', { name: /openai-compatible/i }).click();
       await page.getByLabel('Endpoint URL').fill(ENDPOINT);
@@ -330,7 +347,7 @@ test.describe('Windows Solo premium chat journey', () => {
       });
       await expect(savedStatus).toBeVisible({ timeout: 90_000 });
 
-      const settingsResponse = await page.request.get('/api/settings');
+      const settingsResponse = await page.request.get('/api/settings', { headers: authHeaders(sessionToken) });
       expect(settingsResponse.ok(), await settingsResponse.text().catch(() => '')).toBe(true);
       const settings = await settingsResponse.json() as {
         defaultModel?: string;
@@ -368,7 +385,7 @@ test.describe('Windows Solo premium chat journey', () => {
       await expect(page.getByRole('textbox', { name: 'Message composer' })).toBeVisible();
 
       await expect(page.locator('button[title^="Waggle picked the model"]')).toContainText(
-        /Qwen3\.8 Flash Next/i,
+        /Qwen3\.8/i,
         { timeout: 20_000 },
       );
 
@@ -457,10 +474,10 @@ test.describe('Windows Solo premium chat journey', () => {
       expect(normalizeText(String(firstWire.done.content ?? ''))).not.toBe(normalizeText(prompt));
       expect(await readAssistantFromUi(page)).toBe(normalizeText(String(firstWire.done.content)));
 
-      await expect.poll(async () => (await readHistory(page, workspaceId!, session.id)).length, {
+      await expect.poll(async () => (await readHistory(page, workspaceId!, session.id, sessionToken!)).length, {
         timeout: 15_000,
       }).toBe(2);
-      const firstHistory = await readHistory(page, workspaceId, session.id);
+      const firstHistory = await readHistory(page, workspaceId, session.id, sessionToken);
       expect(firstHistory.map(message => ({ role: message.role, content: normalizeText(message.content) })))
         .toEqual([
           { role: 'user', content: prompt },
@@ -485,11 +502,11 @@ test.describe('Windows Solo premium chat journey', () => {
       });
       const retryContent = normalizeText(String(retryWire.done.content ?? ''));
       expect(retryContent).toContain(expectedAnswer);
-      await expect.poll(async () => (await readHistory(page, workspaceId!, session.id)).length, {
+      await expect.poll(async () => (await readHistory(page, workspaceId!, session.id, sessionToken!)).length, {
         timeout: 15_000,
       }).toBe(2);
 
-      const authoritativeHistory = await readHistory(page, workspaceId, session.id);
+      const authoritativeHistory = await readHistory(page, workspaceId, session.id, sessionToken);
       expect(authoritativeHistory.map(message => ({ role: message.role, content: normalizeText(message.content) })))
         .toEqual([
           { role: 'user', content: prompt },
@@ -501,19 +518,282 @@ test.describe('Windows Solo premium chat journey', () => {
       await expect(page).toHaveURL(sessionUrl);
       await expect(page.getByRole('textbox', { name: 'Message composer' })).toBeVisible();
       expect(await readAssistantFromUi(page)).toBe(retryContent);
-      expect(await readHistory(page, workspaceId, session.id)).toHaveLength(2);
+      expect(await readHistory(page, workspaceId, session.id, sessionToken)).toHaveLength(2);
 
-      const sessionsResponse = await page.request.get(`/api/workspaces/${workspaceId}/sessions`);
+      const sessionsResponse = await page.request.get(`/api/workspaces/${workspaceId}/sessions`, {
+        headers: authHeaders(sessionToken),
+      });
       expect(sessionsResponse.ok()).toBe(true);
       const sessions = await sessionsResponse.json() as Array<{ id: string }>;
       expect(sessions.map(item => item.id)).toContain(session.id);
+
+      const fileSentinel = `WAGGLE_TOOL_SENTINEL_${randomUUID()}`;
+      const writeResponse = await page.request.post(
+        `/api/workspaces/${workspaceId}/storage/write?path=sentinel.txt`,
+        { data: { content: fileSentinel }, headers: authHeaders(sessionToken) },
+      );
+      expect(writeResponse.status(), await writeResponse.text().catch(() => '')).toBe(201);
+
+      const toolPrompt = 'Use the read_file tool to read sentinel.txt, then report the exact file contents between FILE_START and FILE_END.';
+      await composer.fill(toolPrompt);
+      const toolWire = await captureChatTurn(page, async () => {
+        await page.getByRole('button', { name: 'Send' }).click();
+      });
+      const toolEvents = toolWire.events.filter(event => event.event === 'tool');
+      const toolResultEvents = toolWire.events.filter(event => event.event === 'tool_result');
+      expect(toolEvents).toHaveLength(1);
+      expect(toolEvents[0]?.data).toMatchObject({ name: 'read_file', input: { path: 'sentinel.txt' } });
+      expect(toolResultEvents).toHaveLength(1);
+      expect(toolResultEvents[0]?.data).toMatchObject({
+        name: 'read_file',
+        result: fileSentinel,
+        isError: false,
+      });
+      expect(toolWire.events.filter(event => event.event === 'error')).toHaveLength(0);
+      expect(toolWire.done).toMatchObject({
+        content: `FILE_START\n${fileSentinel}\nFILE_END`,
+        toolsUsed: ['read_file'],
+        contextMetrics: {
+          packageMode: 'compact',
+          toolSelectedCount: 1,
+        },
+      });
+      expect(normalizeText(toolWire.tokenText)).toBe(normalizeText(String(toolWire.done.content)));
+
+      const metrics = toolWire.done.contextMetrics as Record<string, number>;
+      expect(metrics.toolCatalogCount).toBeGreaterThanOrEqual(metrics.toolEligibleCount);
+      expect(metrics.toolEligibleCount).toBeGreaterThanOrEqual(metrics.toolSelectedCount);
+      expect(metrics.toolOmittedCount).toBe(metrics.toolEligibleCount - metrics.toolSelectedCount);
+      expect(metrics.toolSelectedCount).toBeLessThanOrEqual(14);
+      expect(metrics.transmittedToolSchemaChars).toBeLessThanOrEqual(8_000);
+
+      const activity = page.getByTestId('chat-activity').last();
+      const activityToggle = activity.getByTestId('chat-activity-toggle');
+      await expect(activity).toHaveAttribute('aria-busy', 'false');
+      await expect(activityToggle).toContainText(/Used 1 tool/);
+      if (await activityToggle.getAttribute('aria-expanded') === 'false') await activityToggle.click();
+      const toolRow = activity.getByTestId('chat-tool-activity');
+      await expect(toolRow).toHaveAttribute('data-tool-name', 'read_file');
+      await expect(toolRow).toHaveAttribute('data-tool-status', 'done');
+      const toolToggle = toolRow.getByTestId('chat-tool-activity-toggle');
+      await expect(toolRow.getByTestId('chat-tool-activity-details')).toHaveCount(0);
+      await toolToggle.click();
+      await expect(toolRow.getByTestId('chat-tool-activity-details')).toContainText('"path": "sentinel.txt"');
+      await expect(toolRow.getByTestId('chat-tool-activity-details')).toContainText(fileSentinel);
+
+      const context = activity.getByTestId('chat-context-efficiency');
+      await expect(context.getByTestId('chat-context-efficiency-details')).toHaveCount(0);
+      await context.getByTestId('chat-context-efficiency-toggle').click();
+      const contextDetails = context.getByTestId('chat-context-efficiency-details');
+      await expect(contextDetails).toHaveAttribute('data-tool-selected-count', '1');
+      await expect(contextDetails).toHaveAttribute('data-tool-eligible-count', String(metrics.toolEligibleCount));
+      await expect(contextDetails).toHaveAttribute('data-tool-omitted-count', String(metrics.toolOmittedCount));
+      await expect(contextDetails).toHaveAttribute('data-tool-schema-chars', String(metrics.transmittedToolSchemaChars));
+      await expect(contextDetails).toContainText(
+        `Prepared 1 of ${metrics.toolEligibleCount} eligible tools`,
+      );
+      await expect(contextDetails).toContainText('Compact prompt package');
+      expect(await readAssistantFromUi(page)).toBe(normalizeText(`FILE_START\n${fileSentinel}\nFILE_END`));
+
+      await expect.poll(async () => (await readHistory(page, workspaceId!, session.id, sessionToken!)).length, {
+        timeout: 15_000,
+      }).toBe(4);
+      const toolHistory = await readHistory(page, workspaceId, session.id, sessionToken);
+      expect(toolHistory.slice(-2).map(message => ({ role: message.role, content: normalizeText(message.content) })))
+        .toEqual([
+          { role: 'user', content: toolPrompt },
+          { role: 'assistant', content: normalizeText(`FILE_START\n${fileSentinel}\nFILE_END`) },
+        ]);
+
+      let replayedChats = 0;
+      const countReplay = (request: Request) => {
+        if (request.method() === 'POST' && pathOf(request.url()) === '/api/chat') replayedChats += 1;
+      };
+      page.on('request', countReplay);
+      const toolSessionUrl = page.url();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page).toHaveURL(toolSessionUrl);
+      await expect(page.getByRole('textbox', { name: 'Message composer' })).toBeVisible();
+      expect(await readAssistantFromUi(page)).toBe(normalizeText(`FILE_START\n${fileSentinel}\nFILE_END`));
+      expect(await readHistory(page, workspaceId, session.id, sessionToken)).toHaveLength(4);
+      expect(replayedChats).toBe(0);
+      await expect(page.getByTestId('chat-context-efficiency')).toHaveCount(0);
+      page.off('request', countReplay);
+
+      const catalogResponse = await page.request.get('/api/skills/starter-pack/catalog', {
+        headers: authHeaders(sessionToken),
+      });
+      expect(catalogResponse.ok(), await catalogResponse.text().catch(() => '')).toBe(true);
+      const catalog = await catalogResponse.json() as {
+        skills?: Array<{ id?: string; state?: string }>;
+      };
+      expect(catalog.skills?.find(skill => skill.id === 'decision-matrix')?.state)
+        .toBe('active');
+      const loadedSkillsResponse = await page.request.get('/api/skills', {
+        headers: authHeaders(sessionToken),
+      });
+      expect(loadedSkillsResponse.ok(), await loadedSkillsResponse.text().catch(() => '')).toBe(true);
+      const loadedSkillsBody = await loadedSkillsResponse.json() as {
+        skills?: Array<{ name?: string; status?: string }>;
+      } | Array<{ name?: string; status?: string }>;
+      const loadedSkills = Array.isArray(loadedSkillsBody) ? loadedSkillsBody : loadedSkillsBody.skills ?? [];
+      expect(loadedSkills).toContainEqual(expect.objectContaining({
+        name: 'decision-matrix',
+        status: 'active',
+      }));
+
+      const skillPrompt = 'Use the installed decision-matrix skill. Before answering, call read_skill with the exact name decision-matrix. Compare Option A and Option B using criteria cost (weight 5), speed (3), privacy (5). Score A as 4/3/5 and B as 2/5/4. Follow the complete workflow, include raw and weighted scores, totals, recommendation, weakest critical criterion, and sensitivity analysis.';
+      await composer.fill(skillPrompt);
+      const skillWire = await captureChatTurn(page, async () => {
+        await page.getByRole('button', { name: 'Send' }).click();
+      });
+      const skillStart = skillWire.events.filter(event => (
+        event.event === 'tool'
+        && typeof event.data === 'object'
+        && event.data?.name === 'read_skill'
+      ));
+      const skillResult = skillWire.events.filter(event => (
+        event.event === 'tool_result'
+        && typeof event.data === 'object'
+        && event.data?.name === 'read_skill'
+      ));
+      expect(skillStart).toHaveLength(1);
+      expect(skillStart[0]?.data).toMatchObject({ input: { name: 'decision-matrix' } });
+      expect(skillResult).toHaveLength(1);
+      expect(skillResult[0]?.data).toMatchObject({ isError: false });
+      const skillGuidance = String(
+        typeof skillResult[0]?.data === 'object' && skillResult[0]?.data
+          ? skillResult[0].data.result ?? ''
+          : '',
+      );
+      expect(skillGuidance).toContain('Decision Matrix — Weighted Option Comparison');
+      expect(skillGuidance).toContain('Criteria (weight)');
+      expect(skillGuidance).toContain('Offer sensitivity analysis');
+      const skillAnswer = normalizeText(String(skillWire.done.content ?? ''));
+      expect(skillAnswer).toMatch(/Option A/i);
+      expect(skillAnswer).toMatch(/54/);
+      expect(skillAnswer).toMatch(/45/);
+      expect(skillAnswer).toMatch(/recommend/i);
+      expect(skillAnswer).toMatch(/sensitivity/i);
+
+      const skillActivity = page.getByTestId('chat-activity').last();
+      const skillActivityToggle = skillActivity.getByTestId('chat-activity-toggle');
+      if (await skillActivityToggle.getAttribute('aria-expanded') === 'false') await skillActivityToggle.click();
+      const skillRow = skillActivity.locator('[data-testid="chat-tool-activity"][data-tool-name="read_skill"]');
+      await expect(skillRow).toHaveAttribute('data-tool-status', 'done');
+      await expect(skillRow.getByTestId('chat-tool-activity-details')).toHaveCount(0);
+      await expect(skillRow.getByTestId('chat-tool-activity-toggle')).toContainText('Opened Decision Matrix skill');
+      await skillRow.getByTestId('chat-tool-activity-toggle').click();
+      await expect(skillRow.getByTestId('chat-tool-activity-details')).toContainText('"name": "decision-matrix"');
+      await expect(skillRow.getByTestId('chat-tool-activity-details')).toContainText('Criteria (weight)');
+      await expect(skillRow.getByTestId('chat-tool-activity-details')).not.toContainText(/applied skill|used skill/i);
+
+      const memoryTopic = `pilot-${randomUUID().slice(0, 8)}`;
+      const memorySecret = `ORCHID-${randomUUID().slice(0, 12).toUpperCase()}`;
+      const decisionPrompt = `Let's go with ${memorySecret} as the ${memoryTopic} launch codename. We will use it for the internal pilot.`;
+      await composer.fill(decisionPrompt);
+      const decisionWire = await captureChatTurn(page, async () => {
+        await page.getByRole('button', { name: 'Send' }).click();
+      });
+      expect(decisionWire.events.some(event => (
+        event.event === 'step'
+        && typeof event.data === 'object'
+        && /Auto-saved \d+ memor/i.test(String(event.data?.content ?? ''))
+      ))).toBe(true);
+
+      let savedMemory: { content?: string; importance?: string; scope?: string; source?: string } | undefined;
+      await expect.poll(async () => {
+        const memoryResponse = await page.request.get(
+          `/api/memory?mind=workspace&workspace=${encodeURIComponent(workspaceId!)}&q=${encodeURIComponent(memoryTopic)}`,
+          { headers: authHeaders(sessionToken!) },
+        );
+        if (!memoryResponse.ok()) return false;
+        const body = await memoryResponse.json() as {
+          results?: Array<{ content?: string; importance?: string; scope?: string; source?: string }>;
+        };
+        savedMemory = body.results?.find(memory => memory.content?.includes(memorySecret));
+        return Boolean(savedMemory);
+      }, { timeout: 20_000 }).toBe(true);
+      expect(savedMemory?.content).toContain(memorySecret);
+      expect(savedMemory?.content).toMatch(/Decision:/i);
+      expect(savedMemory?.content).not.toMatch(/<\/?think>/i);
+      expect((savedMemory?.content ?? '').split(memorySecret)).toHaveLength(2);
+
+      const recallSessionResponsePromise = page.waitForResponse(response => (
+        response.request().method() === 'POST'
+        && pathOf(response.url()) === `/api/workspaces/${workspaceId}/sessions`
+      ));
+      await page.getByTestId('chat-agent-strip')
+        .getByRole('button', { name: 'New session', exact: true })
+        .click();
+      const recallSessionResponse = await recallSessionResponsePromise;
+      expect(recallSessionResponse.status(), await recallSessionResponse.text().catch(() => '')).toBe(201);
+      const recallSession = await recallSessionResponse.json() as { id: string };
+      await expect(page).toHaveURL(new RegExp(`session=${encodeURIComponent(recallSession.id)}(?:&|$)`));
+      expect(await readHistory(page, workspaceId, recallSession.id, sessionToken)).toHaveLength(0);
+      const recallSessionUrl = page.url();
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page).toHaveURL(recallSessionUrl);
+
+      const recallPrompt = `Search my saved memory for our ${memoryTopic} launch codename decision. What exact codename did we choose? Reply with only the codename. Do not write files or execute code.`;
+      expect(recallPrompt).not.toContain(memorySecret);
+      await page.getByRole('textbox', { name: 'Message composer' }).fill(recallPrompt);
+      const recallWire = await captureChatTurn(page, async () => {
+        await page.getByRole('button', { name: 'Send' }).click();
+      });
+      const recallPayload = JSON.parse(recallWire.request.postData() ?? '{}') as Record<string, unknown>;
+      expect(recallPayload).toMatchObject({
+        workspaceId,
+        sessionId: recallSession.id,
+        model: MODEL,
+      });
+      expect(String(recallPayload.message ?? '')).not.toContain(memorySecret);
+      const recallReceipt = recallWire.events.find(event => (
+        event.event === 'tool_result'
+        && typeof event.data === 'object'
+        && event.data?.name === 'auto_recall'
+      ));
+      expect(recallReceipt?.data).toMatchObject({ isError: false });
+      expect(String(
+        typeof recallReceipt?.data === 'object' && recallReceipt.data
+          ? recallReceipt.data.result ?? ''
+          : '',
+      )).toContain(memorySecret);
+      expect(recallWire.done).toMatchObject({
+        memoryContext: { included: true },
+      });
+      expect(Number((recallWire.done.memoryContext as { count?: unknown })?.count)).toBeGreaterThan(0);
+      expect(normalizeText(String(recallWire.done.content ?? '')).replace(/[.`]/g, '')).toBe(memorySecret);
+      await expect(page.getByText('Memory brought forward')).toBeVisible();
+      const recallActivity = page.getByTestId('chat-activity').last();
+      await expect(recallActivity.getByTestId('chat-activity-toggle')).toContainText('Used saved memory');
+      const recallToggle = recallActivity.getByTestId('chat-activity-toggle');
+      if (await recallToggle.getAttribute('aria-expanded') === 'false') await recallToggle.click();
+      await expect(recallActivity.getByTestId('chat-activity-steps')).toContainText(/Recalled \d+ relevant memor/i);
+      expect(await readAssistantFromUi(page)).toContain(memorySecret);
+      const recallHistory = await readHistory(page, workspaceId, recallSession.id, sessionToken);
+      expect(recallHistory).toHaveLength(2);
+      expect(recallHistory[0]).toMatchObject({ role: 'user', content: recallPrompt });
+      const persistedRecall = normalizeText(recallHistory[1]?.content ?? '').replace(/[.`]/g, '');
+      expect(persistedRecall).toBe(memorySecret);
+      expect(recallHistory[1]?.content).not.toMatch(/<\/?think>/i);
 
       expect(pageErrors).toEqual([]);
       expect(criticalRequestFailures).toEqual([]);
       expect(consoleErrors).toEqual([]);
     } finally {
-      if (workspaceId) {
-        await page.request.delete(`/api/workspaces/${workspaceId}`).catch(() => undefined);
+      if (workspaceId && sessionToken) {
+        try {
+          const cleanupResponse = await page.request.delete(`/api/workspaces/${workspaceId}`, {
+            headers: authHeaders(sessionToken),
+          });
+          expect.soft(
+            cleanupResponse.status(),
+            `Workspace cleanup failed: ${cleanupResponse.status()} ${await cleanupResponse.text()}`,
+          ).toBe(204);
+        } catch (error) {
+          expect.soft(String(error), 'Workspace cleanup request failed').toBe('');
+        }
       }
     }
   });

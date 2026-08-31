@@ -21,6 +21,7 @@ import type {
   ModelSpendReservation,
 } from './cost-tracker.js';
 import { MODEL_SPEND_RESERVATION_HEADER } from './cost-tracker.js';
+import { normalizeReasoningOutput } from './output-normalize.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 type PluginToolCandidate = Omit<ToolDefinition, 'riskLevel'> & { riskLevel?: unknown };
@@ -286,6 +287,10 @@ function incompleteCompletionError(
   return error;
 }
 
+function isQwenModelId(modelId: string): boolean {
+  return /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(modelId);
+}
+
 function emptyModelResponseError(
   usage: AgentResponse['usage'],
   toolsUsed: readonly string[],
@@ -329,6 +334,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     skillDistillationGate = true,
     onSkillDistillationFire,
   } = config;
+
+  const isQwenModel = isQwenModelId(config.billingModel ?? model);
+  // Literal reasoning tags cannot be removed safely token-by-token because an
+  // orphan close can retroactively mark earlier text as private. Buffer Qwen
+  // streams and emit the normalized accepted response once; other providers
+  // retain their existing token streaming behavior.
+  const bufferReasoningSensitiveStream = stream && isQwenModel;
 
   if (
     config.maxTokenBudget !== undefined
@@ -493,8 +505,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       citationIntent,
       successfullyFetchedCitationUrls,
     );
-    if (stream && onToken) {
-      if (preservedContent || usableContentWasStreamed) {
+    if (onToken) {
+      if (!stream || bufferReasoningSensitiveStream) {
+        onToken(finalized.content);
+      } else if (preservedContent || usableContentWasStreamed) {
         if (finalized.suffix) onToken(finalized.suffix);
       } else {
         onToken(finalized.content);
@@ -751,7 +765,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           onToken: (token) => {
             currentTurnStreamedContent += token;
             allStreamedContent += token;
-            if (onToken) onToken(token);
+            if (onToken && !bufferReasoningSensitiveStream) onToken(token);
           },
           onReasoningActivity,
         });
@@ -838,13 +852,29 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       }
     }
 
+    // Preserve the raw response only for fallback usage/spend accounting.
+    // It must never flow into gates, messages, persistence, traces, or output.
+    const rawAssistantMessageForUsage = JSON.stringify(assistantMessage);
+
+    // Qwen-compatible engines can emit private reasoning as literal ordinary
+    // content even when thinking is disabled. Normalize before budgets, gates,
+    // tool-message insertion, trace/autosave, or final return can consume it.
+    if (isQwenModel) {
+      if (assistantMessage.content !== null) {
+        assistantMessage.content = normalizeReasoningOutput(assistantMessage.content).normalized;
+      }
+      if (allStreamedContent) {
+        allStreamedContent = normalizeReasoningOutput(allStreamedContent).normalized;
+      }
+    }
+
     // Some OpenAI-compatible providers omit or corrupt usage counters. Do not
     // interpret missing/non-finite counters as free work.
     if (!Number.isFinite(turnInputTokens) || turnInputTokens <= 0) {
       turnInputTokens = estimatedNextRequestTokens;
     }
     if (!Number.isFinite(turnOutputTokens) || turnOutputTokens <= 0) {
-      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
+      turnOutputTokens = estimateTextTokens(rawAssistantMessageForUsage);
     }
 
     if (spendReservation) {
@@ -912,7 +942,6 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
             : `Token budget exceeded (used ${totalInputTokens + totalOutputTokens} tokens, limit ${maxTokenBudget}).`),
         Boolean(requestUsesStream && usableContent),
       );
-      if (!stream && onToken && result.content) onToken(result.content);
       return result;
     }
 
@@ -951,11 +980,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         onSkillDistillationFire,
         turnId,
       });
-      gateState = gate.state;
-      if (gate.fired) {
-        if (stream && onToken && gate.contentSuffix) onToken(gate.contentSuffix);
-        continue;
+    gateState = gate.state;
+    if (gate.fired) {
+      if (stream && !bufferReasoningSensitiveStream && onToken && gate.contentSuffix) {
+        onToken(gate.contentSuffix);
       }
+      continue;
+    }
 
       const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
       // Once D1 has fired, surface the preserved user answer instead of the
@@ -968,7 +999,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const finalContent = finalized.content;
 
       // In non-streaming mode, emit the full content as a single token
-      if (!requestUsesStream && onToken && finalContent) {
+      if ((!requestUsesStream || bufferReasoningSensitiveStream) && onToken && finalContent) {
         onToken(finalContent);
       } else if (requestUsesStream && onToken) {
         if (gate.contentSuffix) onToken(gate.contentSuffix);
@@ -1000,7 +1031,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         citationIntent,
         successfullyFetchedCitationUrls,
       );
-      if (!requestUsesStream && onToken && finalized.content) {
+      if ((!requestUsesStream || bufferReasoningSensitiveStream) && onToken && finalized.content) {
         onToken(finalized.content);
       } else if (requestUsesStream && onToken && finalized.suffix) {
         onToken(finalized.suffix);
@@ -1105,7 +1136,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     successfullyFetchedCitationUrls,
   );
   if (stream && onToken) {
-    if (fallbackBaseWasStreamed) {
+    if (bufferReasoningSensitiveStream) {
+      onToken(finalized.content);
+    } else if (fallbackBaseWasStreamed) {
       if (finalized.suffix) onToken(finalized.suffix);
     } else {
       onToken(finalized.content);

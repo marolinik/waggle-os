@@ -119,7 +119,10 @@ export const PRESETS: Record<string, NormalizationConfig> = {
   },
 };
 
-const THINK_TAG_REGEX = /<think>[\s\S]*?<\/think>/gi;
+const THINK_BLOCK_REGEX = /<think>[\s\S]*?<\/think>/gi;
+const THINK_MARKUP_REGEX = /<\/?think>/i;
+const UNCLOSED_THINK_REGEX = /<think>[\s\S]*$/i;
+const ORPHAN_THINK_CLOSE_REGEX = /<\/think>/gi;
 const ANSWER_LABEL_REGEX = /^\s*(?:final\s+answer\s+is\s*:|final\s+answer\s*:|answer\s*:)\s*/i;
 const COPIED_METADATA_LINE_REGEX = /^\s*(?:\[(?:memory|retrieved|context|recall)[^\]]*\]|<\/?(?:retrieval|memory|context)_?\w*>|#+\s+recalled\s+memories?|#+\s+retrieved\s+context)\s*$/im;
 const WHOLE_RESPONSE_FENCE_REGEX = /^\s*```(?:[a-z0-9_-]+)?\s*\n([\s\S]*?)\n\s*```\s*$/i;
@@ -135,9 +138,21 @@ function recordAction(
 }
 
 function applyStripThinkTags(text: string, actions: NormalizationAction[]): string {
-  if (!THINK_TAG_REGEX.test(text)) return text;
-  THINK_TAG_REGEX.lastIndex = 0;
-  const after = text.replace(THINK_TAG_REGEX, '');
+  if (!THINK_MARKUP_REGEX.test(text)) return text;
+
+  let after = text.replace(THINK_BLOCK_REGEX, '');
+  // An unmatched opening tag means the rest is private reasoning. Dropping
+  // that tail fails closed instead of exposing it as ordinary answer text.
+  after = after.replace(UNCLOSED_THINK_REGEX, '');
+
+  const orphanSeparated = after.split(ORPHAN_THINK_CLOSE_REGEX);
+  if (orphanSeparated.length > 1) {
+    // Anything before an unmatched closing tag may be private reasoning.
+    // Keep only the final suffix; this also reduces the observed Qwen pattern
+    // (the same answer repeated around orphan closes) to its last answer.
+    after = orphanSeparated.at(-1)?.trim() ?? '';
+  }
+
   recordAction(actions, 'strip-think-tags', text, after);
   return after;
 }
@@ -261,6 +276,25 @@ export function normalize(text: string, config: NormalizationConfig): Normalizat
   }
 
   return { raw, normalized: cur, actions };
+}
+
+const REASONING_OUTPUT_CONFIG: NormalizationConfig = {
+  stripThinkTags: true,
+  stripAnswerLabels: false,
+  stripWholeResponseMarkdownFence: false,
+  stripCopiedMetadata: false,
+  unknownAliases: [],
+  collapseBlankLines: false,
+  trimWhitespace: false,
+};
+
+/**
+ * Remove only literal reasoning markup. Unlike the broader production preset,
+ * this preserves answer labels, metadata-like lines, abstention wording,
+ * markdown, and surrounding whitespace exactly.
+ */
+export function normalizeReasoningOutput(text: string): NormalizationResult {
+  return normalize(text, REASONING_OUTPUT_CONFIG);
 }
 
 /**

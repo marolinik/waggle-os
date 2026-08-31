@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalize,
+  normalizeReasoningOutput,
   normalizeWithPreset,
   PRESETS,
   type NormalizationConfig,
@@ -67,6 +68,31 @@ describe('strip-think-tags', () => {
   it('case-insensitive (handles <THINK>)', () => {
     const r = normalize('a<THINK>x</THINK>b', cfg);
     expect(r.normalized).toBe('ab');
+  });
+
+  it('drops an unclosed reasoning block instead of exposing its private tail', () => {
+    const r = normalize('Safe answer.<think>private reasoning without a close', cfg);
+    expect(r.normalized).toBe('Safe answer.');
+  });
+
+  it('collapses the observed Qwen orphan-tag repetition to one answer', () => {
+    const answer = 'ORCHID-ANCHOR';
+    const malformed = Array.from({ length: 9 }, () => answer).join('</think>');
+    const r = normalize(malformed, cfg);
+
+    expect(r.normalized).toBe(answer);
+    expect(r.normalized).not.toMatch(/<\/?think>/i);
+  });
+
+  it('keeps only the safe suffix after a non-identical orphan closing tag', () => {
+    const r = normalize('private chain of thought</think>Final answer', cfg);
+    expect(r.normalized).toBe('Final answer');
+  });
+
+  it('preserves ordinary repeated prose when no think markup is present', () => {
+    const repeated = 'Keep this. Keep this. Keep this.';
+    const r = normalize(repeated, cfg);
+    expect(r.normalized).toBe(repeated);
   });
 
   it('no-op when no think tags present', () => {
@@ -284,6 +310,14 @@ describe('normalizeWithPreset', () => {
     expect(r.raw).toBe('hello');
     expect(r.normalized).toBe('hello');
     expect(Array.isArray(r.actions)).toBe(true);
+  });
+});
+
+describe('normalizeReasoningOutput', () => {
+  it('does not apply unrelated production rewrites', () => {
+    const text = 'N/A\n[memory:synth]\n```xml\n<answer>literal markup</answer>\n```';
+    const r = normalizeReasoningOutput(text);
+    expect(r.normalized).toBe(text);
   });
 });
 

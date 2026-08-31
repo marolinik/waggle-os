@@ -40,6 +40,42 @@ function mockFetch(
   });
 }
 
+function mockStreamFetch(
+  chunks: string[],
+  options: {
+    toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+    usage?: { prompt_tokens: number; completion_tokens: number };
+  } = {},
+) {
+  const encoder = new TextEncoder();
+  const events = [
+    ...chunks.map(content => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`),
+    ...(options.toolCalls?.length ? [`data: ${JSON.stringify({ choices: [{ delta: {
+      tool_calls: options.toolCalls.map((toolCall, index) => ({
+        index,
+        id: toolCall.id,
+        type: 'function',
+        function: { name: toolCall.name, arguments: toolCall.arguments },
+      })),
+    } }] })}\n\n`] : []),
+    `data: ${JSON.stringify({
+      choices: [{ delta: {}, finish_reason: options.toolCalls?.length ? 'tool_calls' : 'stop' }],
+      usage: options.usage ?? { prompt_tokens: 10, completion_tokens: 25 },
+    })}\n\n`,
+    'data: [DONE]\n\n',
+  ];
+  return vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const event of events) controller.enqueue(encoder.encode(event));
+        controller.close();
+      },
+    }),
+  } as unknown as Response));
+}
+
 function makeConfig(overrides: Partial<AgentLoopConfig> = {}): AgentLoopConfig {
   return {
     litellmUrl: 'http://localhost:4000',
@@ -75,6 +111,159 @@ describe('runAgentLoop', () => {
     expect(body.reasoning).toBeUndefined();
     expect(body.messages[0]).toEqual({ role: 'system', content: 'You are a helpful assistant.' });
     expect(body.messages[1]).toEqual({ role: 'user', content: 'Hello' });
+  });
+
+  it('normalizes malformed Qwen reasoning content before returning it', async () => {
+    const answer = 'ORCHID-ANCHOR';
+    const malformed = '<think>all tests passed</think>'
+      + Array.from({ length: 9 }, () => answer).join('</think>');
+    const onToken = vi.fn();
+    const fetch = mockFetch([{ content: malformed }]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }));
+
+    expect(result.content).toBe(answer);
+    expect(result.content).not.toMatch(/<\/?think>/i);
+    expect(onToken).toHaveBeenCalledWith(answer);
+    expect(onToken).not.toHaveBeenCalledWith(malformed);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('buffers a Qwen stream until malformed reasoning content is normalized', async () => {
+    const answer = 'ORCHID-STREAM';
+    const malformed = '<think>private analysis</think>'
+      + Array.from({ length: 4 }, () => answer).join('</think>');
+    const fetch = mockStreamFetch([
+      malformed.slice(0, 21),
+      malformed.slice(21, 52),
+      malformed.slice(52),
+    ]);
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }));
+
+    expect(result.content).toBe(answer);
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(answer);
+    expect(JSON.stringify(onToken.mock.calls)).not.toContain('private analysis');
+    expect(JSON.stringify(onToken.mock.calls)).not.toContain('</think>');
+  });
+
+  it('uses the raw Qwen response for missing-usage token accounting', async () => {
+    const raw = `<think>${'private '.repeat(80)}</think>Safe answer`;
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{
+          message: { role: 'assistant', content: raw },
+          finish_reason: 'stop',
+        }],
+      }),
+    } as unknown as Response));
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }));
+
+    expect(result.content).toBe('Safe answer');
+    expect(result.usage.outputTokens).toBeGreaterThan(100);
+  });
+
+  it('emits the buffered Qwen answer once when the token budget stops the turn', async () => {
+    const fetch = mockStreamFetch(['Budget answer'], {
+      usage: { prompt_tokens: 190, completion_tokens: 25 },
+    });
+    const onToken = vi.fn();
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTokenBudget: 200,
+    }));
+
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(result.content);
+    expect(onToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits a buffered Qwen max-turn fallback after a streamed tool call', async () => {
+    const echoTool: ToolDefinition = {
+      name: 'echo',
+      description: 'Echoes text',
+      parameters: { type: 'object', properties: { text: { type: 'string' } } },
+      execute: vi.fn(async args => String(args.text)),
+    };
+    const fetch = mockStreamFetch(['Checking safely.'], {
+      toolCalls: [{ id: 'call_qwen', name: 'echo', arguments: '{"text":"ok"}' }],
+    });
+    const onToken = vi.fn();
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      tools: [echoTool],
+      maxTurns: 1,
+    }));
+
+    expect(result.content).toBe('Checking safely.');
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(result.content);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(echoTool.execute).toHaveBeenCalledOnce();
+  });
+
+  it('emits a buffered Qwen D3 and D1 preserved answer exactly once', async () => {
+    const echoTool: ToolDefinition = {
+      name: 'echo',
+      description: 'Echoes text',
+      parameters: { type: 'object', properties: { text: { type: 'string' } } },
+      execute: vi.fn(async args => String(args.text)),
+    };
+    const toolCalls = Array.from({ length: 5 }, (_, index) => ({
+      id: `call_gate_${index}`,
+      name: 'echo',
+      arguments: `{"text":"${index}"}`,
+    }));
+    const responses = [
+      mockStreamFetch([], { toolCalls }),
+      mockStreamFetch(['All tests passed.']),
+      mockStreamFetch(['Skill distillation complete.']),
+    ];
+    let responseIndex = 0;
+    const fetch = vi.fn(async () => responses[responseIndex++]());
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      onToken,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      tools: [echoTool],
+    }));
+
+    expect(result.content).toContain('All tests passed.');
+    expect(result.content).toContain('UNVERIFIED');
+    expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(result.content);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(echoTool.execute).toHaveBeenCalledTimes(5);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserves literal think markup from non-Qwen providers', async () => {
+    const literal = 'Example: `<think>literal XML-like text</think>`.';
+    const fetch = mockFetch([{ content: literal }]);
+    const result = await runAgentLoop(makeConfig({ fetch, model: 'gpt-4' }));
+    expect(result.content).toBe(literal);
   });
 
   it('forwards an explicit provider reasoning policy without inventing one', async () => {
