@@ -377,6 +377,8 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       if (!catalog.models.some((candidate) => candidate.id === model)) {
         return { ...common, valid: false, model, error: 'Selected model was not returned by this endpoint.' };
       }
+      const upstreamModel = model.slice('openai-compatible/'.length);
+      const isQwenModel = /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(upstreamModel);
 
       try {
         const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -385,16 +387,14 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           },
-          signal: AbortSignal.timeout(45_000),
+          signal: AbortSignal.timeout(isQwenModel ? 90_000 : 45_000),
           redirect: 'error',
           body: JSON.stringify({
-            model: model.slice('openai-compatible/'.length),
+            model: upstreamModel,
             max_tokens: 512,
             stream: false,
             messages: [{ role: 'user', content: 'Reply with exactly WAGGLE_OK.' }],
-            ...(/(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(
-              model.slice('openai-compatible/'.length),
-            ) ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+            ...(isQwenModel ? { chat_template_kwargs: { enable_thinking: false } } : {}),
           }),
         });
         if (!response.ok) {

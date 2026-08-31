@@ -31,8 +31,8 @@ describe('model router request deadlines', () => {
     ]);
   });
 
-  it('tests a candidate compatible endpoint without saving it and with the model-router deadline', async () => {
-    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+  it('uses an extended compatible-model deadline only for Qwen verification', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockImplementation(async () => new Response(JSON.stringify({
       valid: true,
       verified: true,
       baseUrl: 'http://10.33.0.153:4000/v1',
@@ -47,13 +47,32 @@ describe('model router request deadlines', () => {
       'openai-compatible/qwen3.8-flash-next',
     );
 
-    expect(fetchSpy).toHaveBeenCalledWith(
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
       '/api/settings/test-compatible',
       {
         method: 'POST',
         body: JSON.stringify({
           baseUrl: 'http://10.33.0.153:4000/v1',
           model: 'openai-compatible/qwen3.8-flash-next',
+        }),
+      },
+      105_000,
+    );
+
+    await client.testCompatibleProvider(
+      'http://127.0.0.1:4000/v1',
+      undefined,
+      'openai-compatible/local-model',
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      '/api/settings/test-compatible',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          baseUrl: 'http://127.0.0.1:4000/v1',
+          model: 'openai-compatible/local-model',
         }),
       },
       60_000,

@@ -175,6 +175,7 @@ const MODEL_ROUTER_REQUEST_TIMEOUT_MS = 45000;
 // cold-model completion. The client deadline must cover that composed server
 // budget instead of cancelling a valid response just before it arrives.
 const COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS = 60000;
+const COMPATIBLE_QWEN_PROVIDER_TEST_TIMEOUT_MS = 105000;
 
 /**
  * P1b D3 — settle a promise within `ms` or reject with TimeoutError. Used to
@@ -2606,6 +2607,9 @@ class LocalAdapter {
     modelsSource: 'provider-api' | 'stale-provider-api' | 'unavailable';
     error?: string;
   }> {
+    const timeoutMs = model && /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(model)
+      ? COMPATIBLE_QWEN_PROVIDER_TEST_TIMEOUT_MS
+      : COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS;
     const res = await this.fetch('/api/settings/test-compatible', {
       method: 'POST',
       body: JSON.stringify({
@@ -2613,7 +2617,7 @@ class LocalAdapter {
         ...(apiKey ? { apiKey } : {}),
         ...(model ? { model } : {}),
       }),
-    }, COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS);
+    }, timeoutMs);
     return res.json();
   }
 

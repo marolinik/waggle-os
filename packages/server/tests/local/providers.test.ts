@@ -624,6 +624,7 @@ describe('Provider API', () => {
       const configBefore = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
       const nativeFetch = globalThis.fetch;
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => nativeFetch(input, init));
+      const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
 
       try {
         const discovery = await injectWithAuth(server, {
@@ -692,6 +693,9 @@ describe('Provider API', () => {
         const candidateFetches = fetchSpy.mock.calls.filter(([input]) => String(input).startsWith(baseUrl));
         expect(candidateFetches).toHaveLength(7);
         expect(candidateFetches.every(([, init]) => init?.redirect === 'error')).toBe(true);
+        expect(timeoutSpy.mock.calls
+          .map(([milliseconds]) => milliseconds)
+          .filter(milliseconds => milliseconds >= 45_000)).toEqual([90_000, 45_000, 90_000]);
       expect(requests).toContainEqual(expect.objectContaining({
         url: '/v1/chat/completions',
         body: expect.objectContaining({
@@ -708,6 +712,7 @@ describe('Provider API', () => {
         expect(fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null).toBe(configBefore);
         expect(server.vault?.get('openai-compatible')).toBeNull();
       } finally {
+        timeoutSpy.mockRestore();
         fetchSpy.mockRestore();
         await new Promise<void>((resolve, reject) => candidateServer.close((error) => error ? reject(error) : resolve()));
       }
