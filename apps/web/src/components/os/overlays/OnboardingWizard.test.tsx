@@ -5,6 +5,8 @@ import OnboardingWizard from './OnboardingWizard';
 const mocks = vi.hoisted(() => ({
   createWorkspace: vi.fn(),
   getWorkspaces: vi.fn(),
+  updateProfile: vi.fn(),
+  setIdentity: vi.fn(),
   trackTelemetry: vi.fn(),
   captureOnboardingComplete: vi.fn(),
 }));
@@ -16,6 +18,8 @@ vi.mock('@/lib/adapter', () => ({
     scanClaudeCode: vi.fn().mockResolvedValue({ found: false, itemCount: 0, path: '' }),
     createWorkspace: mocks.createWorkspace,
     getWorkspaces: mocks.getWorkspaces,
+    updateProfile: mocks.updateProfile,
+    setIdentity: mocks.setIdentity,
     trackTelemetry: mocks.trackTelemetry,
   },
 }));
@@ -30,8 +34,38 @@ vi.mock('@/hooks/useOfflineStatus', () => ({
 
 vi.mock('./onboarding', () => ({
   WelcomeStep: () => null,
-  WhoAreYouStep: () => null,
-  ModelGateStep: () => null,
+  WhoAreYouStep: ({
+    onChange,
+    onContinue,
+    onContinueWithoutPersonalization,
+    saving,
+    saveError,
+  }: {
+    onChange: (patch: { name: string }) => void;
+    onContinue: () => void;
+    onContinueWithoutPersonalization: () => void;
+    saving: boolean;
+    saveError: string | null;
+  }) => (
+    <section aria-label="Who are you step">
+      <button type="button" disabled={saving} onClick={onContinue}>
+        {saveError ? 'Retry saving profile' : 'Save profile'}
+      </button>
+      <button type="button" disabled={saving} onClick={() => { onContinue(); onContinue(); }}>
+        Submit profile twice
+      </button>
+      <button type="button" disabled={saving} onClick={() => onChange({ name: 'Profile B' })}>
+        Change profile
+      </button>
+      {saveError && <p role="alert">{saveError}</p>}
+      {saveError && (
+        <button type="button" disabled={saving} onClick={onContinueWithoutPersonalization}>
+          Continue without personalization
+        </button>
+      )}
+    </section>
+  ),
+  ModelGateStep: () => <section aria-label="Model gate step" />,
   ImportStep: () => null,
   TemplateStep: ({
     onSelect,
@@ -76,6 +110,176 @@ describe('OnboardingWizard workspace creation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getWorkspaces.mockResolvedValue([]);
+    mocks.updateProfile.mockResolvedValue(undefined);
+    mocks.setIdentity.mockResolvedValue(undefined);
+  });
+
+  it('stays on profile after a failed save, then advances only after an explicit successful retry', async () => {
+    mocks.updateProfile
+      .mockRejectedValueOnce(new Error('profile unavailable'))
+      .mockResolvedValueOnce(undefined);
+    const onUpdate = vi.fn();
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 1 }}
+        onUpdate={onUpdate}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't confirm your profile was saved/i);
+    expect(screen.getByRole('region', { name: 'Who are you step' })).toBeInTheDocument();
+    expect(mocks.setIdentity).not.toHaveBeenCalled();
+    expect(onUpdate).not.toHaveBeenCalledWith({ profileSeeded: true });
+    expect(mocks.trackTelemetry.mock.calls.filter(([event]) => event === 'onboarding_profile_seeded')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry saving profile' }));
+    expect(await screen.findByRole('region', { name: 'Model gate step' })).toBeInTheDocument();
+    expect(mocks.updateProfile).toHaveBeenCalledTimes(2);
+    expect(mocks.setIdentity).toHaveBeenCalledOnce();
+    expect(onUpdate).toHaveBeenCalledWith({ profileSeeded: true });
+    expect(mocks.trackTelemetry).toHaveBeenCalledWith(
+      'onboarding_profile_seeded',
+      { hasName: false, hasRole: false, goalCount: 0 },
+    );
+    expect(mocks.trackTelemetry.mock.calls.filter(([event]) => event === 'onboarding_profile_seeded')).toHaveLength(1);
+    expect(mocks.trackTelemetry.mock.calls.filter(([event]) => event === 'onboarding_profile_skipped')).toHaveLength(0);
+  });
+
+  it('offers an explicit escape after profile failure without claiming personalization succeeded', async () => {
+    mocks.updateProfile.mockRejectedValueOnce(new Error('profile unavailable'));
+    const onUpdate = vi.fn();
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 1 }}
+        onUpdate={onUpdate}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without personalization' }));
+
+    expect(await screen.findByRole('region', { name: 'Model gate step' })).toBeInTheDocument();
+    expect(mocks.updateProfile).toHaveBeenCalledOnce();
+    expect(mocks.setIdentity).not.toHaveBeenCalled();
+    expect(onUpdate).not.toHaveBeenCalledWith({ profileSeeded: true });
+    expect(mocks.trackTelemetry.mock.calls.filter(([event]) => event === 'onboarding_profile_seeded')).toHaveLength(0);
+    expect(mocks.trackTelemetry).toHaveBeenCalledWith(
+      'onboarding_profile_skipped',
+      { reason: 'save-failed' },
+    );
+    expect(mocks.trackTelemetry.mock.calls.filter(([event]) => event === 'onboarding_profile_skipped')).toHaveLength(1);
+  });
+
+  it('distinguishes a saved profile from failed identity personalization', async () => {
+    mocks.setIdentity.mockRejectedValueOnce(new Error('identity unavailable'));
+    const onUpdate = vi.fn();
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 1 }}
+        onUpdate={onUpdate}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/profile was saved.*couldn't finish personalization/i);
+    expect(screen.getByRole('region', { name: 'Who are you step' })).toBeInTheDocument();
+    expect(mocks.updateProfile).toHaveBeenCalledOnce();
+    expect(mocks.setIdentity).toHaveBeenCalledOnce();
+    expect(onUpdate).not.toHaveBeenCalledWith({ profileSeeded: true });
+    expect(mocks.trackTelemetry.mock.calls.filter(([event]) => event === 'onboarding_profile_seeded')).toHaveLength(0);
+  });
+
+  it('keeps acknowledging a confirmed profile save when a later retry cannot update it', async () => {
+    mocks.setIdentity.mockRejectedValueOnce(new Error('identity unavailable'));
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 1 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/profile was saved/i);
+
+    mocks.updateProfile.mockRejectedValueOnce(new Error('profile temporarily unavailable'));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry saving profile' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/profile was saved.*couldn't finish personalization/i);
+    expect(mocks.updateProfile).toHaveBeenCalledTimes(2);
+    expect(mocks.setIdentity).toHaveBeenCalledOnce();
+  });
+
+  it('does not claim edited profile values were saved when their retry fails', async () => {
+    mocks.setIdentity.mockRejectedValueOnce(new Error('identity unavailable'));
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 1 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={vi.fn()}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/profile was saved/i);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change profile' }));
+    mocks.updateProfile.mockRejectedValueOnce(new Error('profile temporarily unavailable'));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry saving profile' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/earlier profile is still saved.*couldn't confirm your latest changes/i);
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/^Your profile was saved/i);
+    expect(mocks.updateProfile).toHaveBeenCalledTimes(2);
+    expect(mocks.setIdentity).toHaveBeenCalledOnce();
+  });
+
+  it('locks wizard navigation while profile persistence is pending', async () => {
+    let resolveProfile!: () => void;
+    mocks.updateProfile.mockReturnValueOnce(new Promise<void>((resolve) => { resolveProfile = resolve; }));
+    const onDismiss = vi.fn();
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 1 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn()}
+        onDismiss={onDismiss}
+        onFinish={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Submit profile twice' }));
+    expect(mocks.updateProfile).toHaveBeenCalledOnce();
+
+    expect(screen.getByRole('button', { name: 'Go to previous step' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Skip setup' })).toBeDisabled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onDismiss).not.toHaveBeenCalled();
+    await act(async () => { resolveProfile(); });
+    expect(await screen.findByRole('region', { name: 'Model gate step' })).toBeInTheDocument();
   });
 
   it('stays on the template step and creates no phantom workspace when persistence fails', async () => {

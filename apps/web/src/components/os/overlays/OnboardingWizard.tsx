@@ -67,6 +67,10 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     name: '', role: '', industry: '', workType: '', teamSize: '', goals: [],
   });
   const [savingProfile, setSavingProfile] = useState(false);
+  const savingProfileRef = useRef(false);
+  const profilePersistedPayloadRef = useRef<string | null>(null);
+  const profileSkipHandledRef = useRef(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
 
   /* ── Import (S15 / C33) ── */
   const [importSource, setImportSource] = useState<string | null>(null);
@@ -117,7 +121,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (creatingWorkspace || verifyingWorkspaceRef.current) return;
+        if (savingProfileRef.current || creatingWorkspace || verifyingWorkspaceRef.current) return;
         clearTimeout(autoTimer.current);
         trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'escape' });
         onDismiss();
@@ -137,36 +141,57 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
   /* ── S13 / B8: write profile AND seed identity in one Continue. ── */
   const handleProfileContinue = useCallback(async () => {
+    if (savingProfileRef.current) return;
+    savingProfileRef.current = true;
+    profileSkipHandledRef.current = false;
     setSavingProfile(true);
+    setProfileSaveError(null);
+    const payload: Partial<OnboardingProfileFields> = {
+      name: profile.name?.trim() || undefined,
+      role: profile.role?.trim() || undefined,
+      industry: profile.industry || undefined,
+      workType: profile.workType || undefined,
+      teamSize: profile.teamSize || undefined,
+      goals: profile.goals && profile.goals.length > 0 ? profile.goals : undefined,
+    };
+    const payloadFingerprint = JSON.stringify(payload);
     try {
-      const payload: Partial<OnboardingProfileFields> = {
-        name: profile.name?.trim() || undefined,
-        role: profile.role?.trim() || undefined,
-        industry: profile.industry || undefined,
-        workType: profile.workType || undefined,
-        teamSize: profile.teamSize || undefined,
-        goals: profile.goals && profile.goals.length > 0 ? profile.goals : undefined,
-      };
-      try {
-        await adapter.updateProfile(payload as Record<string, unknown>);
-        // B8: seed the per-mind identity so the Home cockpit greets by name.
-        await adapter.setIdentity({
-          name: payload.name,
-          role: payload.role,
-          department: payload.industry,
-        });
-        onUpdate({ profileSeeded: true });
-      } catch { /* sidecar offline — proceed; profile can be set later in My Profile */ }
+      await adapter.updateProfile(payload as Record<string, unknown>);
+      profilePersistedPayloadRef.current = payloadFingerprint;
+      // B8: seed the per-mind identity so the Home cockpit greets by name.
+      await adapter.setIdentity({
+        name: payload.name,
+        role: payload.role,
+        department: payload.industry,
+      });
+      onUpdate({ profileSeeded: true });
       trackTelemetry(serverBaseUrl, 'onboarding_profile_seeded', {
         hasName: Boolean(payload.name),
         hasRole: Boolean(payload.role),
         goalCount: payload.goals?.length ?? 0,
       });
       goToName('model-gate');
+    } catch {
+      if (profilePersistedPayloadRef.current === payloadFingerprint) {
+        setProfileSaveError("Your profile was saved, but Waggle couldn't finish personalization. Retry to finish, or continue without personalization.");
+      } else if (profilePersistedPayloadRef.current) {
+        setProfileSaveError("Your earlier profile is still saved, but Waggle couldn't confirm your latest changes or finish personalization. Retry, or continue without personalization.");
+      } else {
+        setProfileSaveError("We couldn't confirm your profile was saved. Retry, or continue without personalization.");
+      }
     } finally {
+      savingProfileRef.current = false;
       setSavingProfile(false);
     }
   }, [profile, onUpdate, serverBaseUrl, goToName]);
+
+  const handleProfileContinueWithoutPersonalization = useCallback(() => {
+    if (savingProfileRef.current || profileSkipHandledRef.current) return;
+    profileSkipHandledRef.current = true;
+    setProfileSaveError(null);
+    trackTelemetry(serverBaseUrl, 'onboarding_profile_skipped', { reason: 'save-failed' });
+    goToName('model-gate');
+  }, [goToName, serverBaseUrl]);
 
   /* ── S15 / C33: file import → classified preview ── */
   const handleFileImport = async (file: File, source: string) => {
@@ -331,7 +356,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const navTotal = LAST_NAV_INDEX - FIRST_NAV_INDEX + 1;
   const navCurrent = step - FIRST_NAV_INDEX + 1;
   const recommendedId = recommendTemplateId(profile.workType, profile.role);
-  const workspaceTransitionPending = creatingWorkspace || verifyingWorkspace;
+  const workspaceTransitionPending = savingProfile || creatingWorkspace || verifyingWorkspace;
 
   return (
     // Wave V Lane F item 3 (motion-safe): reducedMotion="user" makes the shared
@@ -465,7 +490,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 profile={profile}
                 onChange={(patch) => setProfile(prev => ({ ...prev, ...patch }))}
                 onContinue={handleProfileContinue}
+                onContinueWithoutPersonalization={handleProfileContinueWithoutPersonalization}
                 saving={savingProfile}
+                saveError={profileSaveError}
               />
             )}
             {step === stepIndex('model-gate') && (

@@ -28,6 +28,10 @@ export interface WhoAreYouStepProps {
   readonly onChange: (patch: Partial<OnboardingProfileFields>) => void;
   /** Performs the dual write (profile + identity seed) then advances. */
   readonly onContinue: () => void;
+  /** Actionable persistence error; the step remains open until retry or escape. */
+  readonly saveError?: string | null;
+  /** Explicit escape after a failed save without claiming personalization succeeded. */
+  readonly onContinueWithoutPersonalization?: () => void;
   readonly saving: boolean;
 }
 
