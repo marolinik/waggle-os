@@ -37,6 +37,17 @@ import type {
   CollaborationRunControl, ExternalToolAccess, ToolDetectionResult,
 } from '@waggle/shared';
 
+export type ChatRetryTarget =
+  | {
+      kind: 'assistant-pair';
+      expectedMessageCount: number;
+      expectedAssistantContent: string;
+    }
+  | {
+      kind: 'lone-user';
+      expectedMessageCount: number;
+    };
+
 export interface SpawnAgentResult {
   id: string;
   runId: string;
@@ -1071,6 +1082,7 @@ class LocalAdapter {
     autonomy?: { level: 'normal' | 'trusted' | 'yolo'; expiresAt?: number },
     retry?: boolean,
     model?: string,
+    retryTarget?: ChatRetryTarget,
   ): AsyncGenerator<StreamEvent> {
     // CC Sesija A §2.2 — thread the user-selected Faza 1 GEPA shape into the
     // chat body. Sidecar /api/chat ignores `shape` until A3.1 wires it into
@@ -1090,7 +1102,17 @@ class LocalAdapter {
     try {
       const res = await this.fetch('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry, model }),
+        body: JSON.stringify({
+          workspaceId,
+          message,
+          sessionId,
+          persona,
+          autonomy,
+          shape,
+          retry,
+          model,
+          retryTarget,
+        }),
         signal: controller.signal,
       }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
 

@@ -39,6 +39,21 @@ export interface ChatHistoryMessage {
   tools?: PersistedCapabilityReceipt[];
 }
 
+export type RetryTailExpectation =
+  | {
+      kind: 'assistant-pair';
+      expectedMessageCount: number;
+      expectedAssistantContent: string;
+    }
+  | {
+      kind: 'lone-user';
+      expectedMessageCount: number;
+    };
+
+export type ReplaceRetryTailResult =
+  | { ok: true; removed: 1 | 2 }
+  | { ok: false; reason: string };
+
 function hasCanonicalCapabilityMarker(result: string): boolean {
   const match = result.match(CAPABILITY_MARKER_AT_END_RE);
   if (!match) return false;
@@ -467,6 +482,125 @@ export function persistMessage(
   fs.appendFileSync(filePath, line + '\n', 'utf-8');
 }
 
+export function retryTailMatches(
+  messages: readonly ChatHistoryMessage[],
+  userContent: string,
+  expectation: RetryTailExpectation,
+): boolean {
+  if (messages.length !== expectation.expectedMessageCount) return false;
+  if (expectation.kind === 'lone-user') {
+    const user = messages.at(-1);
+    return user?.role === 'user' && user.content === userContent;
+  }
+  const user = messages.at(-2);
+  const assistant = messages.at(-1);
+  return user?.role === 'user'
+    && user.content === userContent
+    && assistant?.role === 'assistant'
+    && assistant.content === expectation.expectedAssistantContent;
+}
+
+/**
+ * Atomically replace the exact durable Retry tail with the fresh user turn.
+ * The expected count and content form a compare-and-swap guard: stale tabs or
+ * concurrent writers leave the original bytes untouched.
+ */
+export function replaceRetryTailWithUser(
+  dataDir: string,
+  workspaceId: string,
+  sessionId: string,
+  userContent: string,
+  expectation: RetryTailExpectation,
+): ReplaceRetryTailResult {
+  const filePath = path.join(
+    dataDir,
+    'workspaces',
+    workspaceId,
+    'sessions',
+    `${sessionId}.jsonl`,
+  );
+  if (!fs.existsSync(filePath)) return { ok: false, reason: 'history-missing' };
+
+  let original: string;
+  try {
+    original = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return { ok: false, reason: 'history-unreadable' };
+  }
+  const lines = original.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  if (lines.length === 0 || lines.some(line => line.trim() === '')) {
+    return { ok: false, reason: 'history-malformed' };
+  }
+
+  const messages: ChatHistoryMessage[] = [];
+  const messageLineIndexes: number[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(lines[index]) as Record<string, unknown>;
+    } catch {
+      return { ok: false, reason: 'history-malformed' };
+    }
+    if (parsed.type === 'meta') continue;
+    if (typeof parsed.role !== 'string' || typeof parsed.content !== 'string') {
+      return { ok: false, reason: 'history-malformed' };
+    }
+    messages.push({ role: parsed.role, content: parsed.content });
+    messageLineIndexes.push(index);
+  }
+  if (!retryTailMatches(messages, userContent, expectation)) {
+    return { ok: false, reason: 'history-stale' };
+  }
+
+  const removed: 1 | 2 = expectation.kind === 'lone-user' ? 1 : 2;
+  const firstRemovedLineIndex = messageLineIndexes[messages.length - removed];
+  if (firstRemovedLineIndex !== lines.length - removed) {
+    return { ok: false, reason: 'history-malformed' };
+  }
+  const replacement = JSON.stringify({
+    role: 'user',
+    content: userContent,
+    timestamp: new Date().toISOString(),
+  });
+  const next = [...lines.slice(0, firstRemovedLineIndex), replacement].join('\n') + '\n';
+  const temporaryPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  let handle: number | undefined;
+  try {
+    handle = fs.openSync(temporaryPath, 'wx');
+    fs.writeFileSync(handle, next, 'utf-8');
+    fs.fsyncSync(handle);
+    fs.closeSync(handle);
+    handle = undefined;
+
+    if (fs.readFileSync(filePath, 'utf-8') !== original) {
+      return { ok: false, reason: 'history-changed' };
+    }
+    const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        fs.renameSync(temporaryPath, filePath);
+        return { ok: true, removed };
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+        if (!transient || attempt === 4) {
+          return { ok: false, reason: 'history-replace-failed' };
+        }
+        Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+    return { ok: false, reason: 'history-replace-failed' };
+  } catch {
+    return { ok: false, reason: 'history-write-failed' };
+  } finally {
+    if (handle !== undefined) {
+      try { fs.closeSync(handle); } catch { /* already closed */ }
+    }
+    try { fs.rmSync(temporaryPath, { force: true }); } catch { /* best-effort cleanup */ }
+  }
+}
+
 /**
  * Strip a trailing failed user+assistant pair from a session's .jsonl file.
  *
@@ -483,6 +617,7 @@ export function stripTrailingFailedPair(
   dataDir: string,
   workspaceId: string,
   sessionId: string,
+  expectedUserContent?: string,
 ): boolean {
   const filePath = path.join(dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`);
   if (!fs.existsSync(filePath)) return false;
@@ -502,6 +637,7 @@ export function stripTrailingFailedPair(
   }
   const prev = parse(lines[lastIdx - 1]);
   if (!prev || prev.type === 'meta' || prev.role !== 'user') return false;
+  if (expectedUserContent !== undefined && prev.content !== expectedUserContent) return false;
 
   const kept = lines.slice(0, lastIdx - 1);
   fs.writeFileSync(filePath, kept.length ? kept.join('\n') + '\n' : '', 'utf-8');

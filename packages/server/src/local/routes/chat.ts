@@ -26,6 +26,35 @@ import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, isClosedWorl
 
 const NON_RETAINED_TURN_CONTENT = '[Not retained: memory disabled for this turn]';
 
+function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const expectedMessageCount = candidate.expectedMessageCount;
+  if (!Number.isSafeInteger(expectedMessageCount) || (expectedMessageCount as number) < 1) {
+    return null;
+  }
+  if (candidate.kind === 'lone-user') {
+    if (Object.keys(candidate).sort().join(',') !== 'expectedMessageCount,kind') return null;
+    return {
+      kind: 'lone-user',
+      expectedMessageCount: expectedMessageCount as number,
+    };
+  }
+  if (candidate.kind === 'assistant-pair') {
+    if (
+      Object.keys(candidate).sort().join(',')
+      !== 'expectedAssistantContent,expectedMessageCount,kind'
+      || typeof candidate.expectedAssistantContent !== 'string'
+    ) return null;
+    return {
+      kind: 'assistant-pair',
+      expectedMessageCount: expectedMessageCount as number,
+      expectedAssistantContent: candidate.expectedAssistantContent,
+    };
+  }
+  return null;
+}
+
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
  * (Faza 1 evolved variants like `claude::gen1-v1`, `qwen-thinking::gen1-v1`,
@@ -54,7 +83,10 @@ import {
   resolveChatHistoryTarget,
   persistMessage,
   loadSessionMessages,
+  replaceRetryTailWithUser,
+  retryTailMatches,
   stripTrailingFailedPair,
+  type RetryTailExpectation,
 } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
@@ -1420,6 +1452,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        * a reload doesn't show a duplicate.
        */
       retry?: boolean;
+      retryTarget?: RetryTailExpectation;
       /**
        * Self-evolution: set by the IdleSessionWatcher's loopback review turn.
        * A review turn runs headless — no interactive client watches the SSE
@@ -1459,7 +1492,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       message, workspace: _ws, workspaceId: _wsId, model, session,
       sessionId: sessionIdAlias,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
-      autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
+      autonomy: autonomyRaw, retry: retryTurn, retryTarget: retryTargetRaw,
+      proposeHeld: proposeHeldTurn,
       origin, channel: channelMeta,
     } = request.body ?? {};
 
@@ -1476,6 +1510,27 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
     if (message.length > MAX_MESSAGE_LENGTH) {
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
+    }
+    if (retryTurn !== undefined && typeof retryTurn !== 'boolean') {
+      return reply.status(400).send({
+        error: 'retry must be a boolean',
+        code: 'INVALID_FIELD_TYPE',
+      });
+    }
+    const retryTarget = retryTargetRaw === undefined
+      ? null
+      : parseRetryTailExpectation(retryTargetRaw);
+    if (retryTargetRaw !== undefined && retryTarget === null) {
+      return reply.status(400).send({
+        error: 'retryTarget is invalid',
+        code: 'INVALID_RETRY_TARGET',
+      });
+    }
+    if (retryTarget && retryTurn !== true) {
+      return reply.status(400).send({
+        error: 'retryTarget requires retry: true',
+        code: 'INVALID_RETRY_TARGET',
+      });
     }
     const MAX_CHAT_SEGMENT_LENGTH = 200;
     for (const [field, value] of [
@@ -2040,19 +2095,58 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         : sessionHistories.get(sessionStateKey)!;
       activeHistory = turnMutationPolicy.denyConversationHistory ? undefined : history;
 
-      // F4 retry-dedup: a retried turn re-issues the failed user message. Drop
+      let retryUserAlreadyPersisted = false;
+      if (retryTarget && !turnMutationPolicy.denyConversationHistory) {
+        if (!retryTailMatches(history, message, retryTarget)) {
+          sendEvent('error', {
+            message: 'This conversation changed before Retry could replace it. Reload and try again.',
+            code: 'RETRY_TARGET_STALE',
+          });
+          if (!raw.destroyed && !raw.writableEnded) raw.end();
+          return;
+        }
+        const replacement = replaceRetryTailWithUser(
+          sessionPersistenceDataDir,
+          activeWorkspaceId,
+          sessionId,
+          message,
+          retryTarget,
+        );
+        if (!replacement.ok) {
+          sendEvent('error', {
+            message: 'Retry could not safely replace this conversation. Reload and try again.',
+            code: 'RETRY_TARGET_STALE',
+          });
+          if (!raw.destroyed && !raw.writableEnded) raw.end();
+          return;
+        }
+        history.splice(
+          history.length - replacement.removed,
+          replacement.removed,
+          { role: 'user', content: message },
+        );
+        retryUserAlreadyPersisted = true;
+      }
+
+      // F4 legacy retry-dedup: older clients only identified failed turns. Drop
       // the previously persisted failed user+assistant pair (RAM + disk) so a
       // reload doesn't render it duplicated alongside the fresh turn.
-      if (retryTurn && !turnMutationPolicy.denyConversationHistory) {
+      if (retryTurn && !retryTarget && !turnMutationPolicy.denyConversationHistory) {
         const n = history.length;
-        if (n >= 2
+        const legacyTailMatches = n >= 2
           && history[n - 1].role === 'assistant'
           && typeof history[n - 1].content === 'string'
           && history[n - 1].content.startsWith(GENERATION_FAILED_PREFIX)
-          && history[n - 2].role === 'user') {
+          && history[n - 2].role === 'user'
+          && history[n - 2].content === message;
+        if (legacyTailMatches && stripTrailingFailedPair(
+          sessionPersistenceDataDir,
+          activeWorkspaceId,
+          sessionId,
+          message,
+        )) {
           history.splice(n - 2, 2);
         }
-        stripTrailingFailedPair(sessionPersistenceDataDir, activeWorkspaceId, sessionId);
       }
 
       // Current-message-only packaging is safe only when there is no prior
@@ -2070,7 +2164,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // A saved-history opt-out is both a read and retention boundary for this turn.
-      if (!turnMutationPolicy.denyConversationHistory) {
+      if (!turnMutationPolicy.denyConversationHistory && !retryUserAlreadyPersisted) {
         history.push({ role: 'user', content: message });
         persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, { role: 'user', content: message });
       }

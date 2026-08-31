@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { adapter } from '@/lib/adapter';
+import { adapter, type ChatRetryTarget } from '@/lib/adapter';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import {
   chatThreadCacheKey,
@@ -138,9 +138,9 @@ interface PendingHistoryLoad {
   localMessageIds: Set<string>;
   localMessages: Map<string, ChatMessage>;
   suppressedMessageIds: Set<string>;
-  suppressedFailedTail: {
+  suppressedRetryTail: {
     userContent: string;
-    assistantFailure: string;
+    target: ChatRetryTarget;
   } | null;
   ready: Promise<void>;
   release: () => void;
@@ -158,19 +158,42 @@ function assistantFailureDetail(message: ChatMessage): string | null {
   return null;
 }
 
-function suppressRetriedFailedHistoryTail(
+function persistedAssistantRetryContent(message: ChatMessage): string {
+  const failure = assistantFailureDetail(message);
+  return failure === null
+    ? message.content
+    : `${GENERATION_FAILED_PREFIX}${failure}`;
+}
+
+function persistedRetryMessageCount(messages: readonly ChatMessage[]): number {
+  return messages.reduce((count, message) => (
+    message.role === 'assistant' && message.draft?.status === 'stopped'
+      ? count
+      : count + 1
+  ), 0);
+}
+
+function suppressRetriedHistoryTail(
   history: ChatMessage[],
-  failedTail: PendingHistoryLoad['suppressedFailedTail'],
+  retriedTail: PendingHistoryLoad['suppressedRetryTail'],
 ): ChatMessage[] {
-  if (!failedTail || history.length < 2) return history;
-  const user = history[history.length - 2];
-  const assistant = history[history.length - 1];
-  if (
-    user.role !== 'user'
-    || user.content !== failedTail.userContent
-    || assistantFailureDetail(assistant) !== failedTail.assistantFailure
-  ) return history;
-  return history.slice(0, -2);
+  if (!retriedTail || history.length !== retriedTail.target.expectedMessageCount) {
+    return history;
+  }
+  if (retriedTail.target.kind === 'lone-user') {
+    const user = history.at(-1);
+    return user?.role === 'user' && user.content === retriedTail.userContent
+      ? history.slice(0, -1)
+      : history;
+  }
+  const user = history.at(-2);
+  const assistant = history.at(-1);
+  return user?.role === 'user'
+    && user.content === retriedTail.userContent
+    && assistant?.role === 'assistant'
+    && assistant.content === retriedTail.target.expectedAssistantContent
+    ? history.slice(0, -2)
+    : history;
 }
 
 function isActiveTurnClearConflict(error: unknown): boolean {
@@ -370,6 +393,7 @@ export const useChat = ({
     id: string;
     content: string;
     retry?: boolean;
+    retryTarget?: ChatRetryTarget;
     model?: string;
     persona?: string;
     autonomy?: AutonomyState;
@@ -380,7 +404,7 @@ export const useChat = ({
   const runDispatchRef = useRef<
     (
       content: string,
-      opts: { retry?: boolean } | undefined,
+      opts: { retry?: boolean; retryTarget?: ChatRetryTarget } | undefined,
       optimisticId?: string,
       turnModel?: string,
       turnPersona?: string,
@@ -405,7 +429,7 @@ export const useChat = ({
     if (next) {
       void runDispatchRef.current(
         next.content,
-        { retry: next.retry },
+        { retry: next.retry, retryTarget: next.retryTarget },
         next.id,
         next.model,
         next.persona,
@@ -496,7 +520,7 @@ export const useChat = ({
         localMessageIds: new Set(recoveryLocalIds ?? []),
         localMessages: new Map(recoveryLocalMessages ?? []),
         suppressedMessageIds: new Set(),
-        suppressedFailedTail: null,
+        suppressedRetryTail: null,
         ready,
         release: releaseHistory,
       };
@@ -517,9 +541,9 @@ export const useChat = ({
             || historyGenerationRef.current !== generation
             || pendingHistoryRef.current !== pendingHistory
           ) return;
-          const shaped = suppressRetriedFailedHistoryTail(
+          const shaped = suppressRetriedHistoryTail(
             history.map(ensureBlocks),
-            pendingHistory.suppressedFailedTail,
+            pendingHistory.suppressedRetryTail,
           );
           const visibleHistory = pendingHistory.suppressedMessageIds.size === 0
             ? shaped
@@ -638,7 +662,7 @@ export const useChat = ({
 
   const runDispatch = useCallback(async (
     content: string,
-    opts?: { retry?: boolean },
+    opts?: { retry?: boolean; retryTarget?: ChatRetryTarget },
     optimisticId?: string,
     turnModel?: string,
     turnPersona?: string,
@@ -745,24 +769,35 @@ export const useChat = ({
       const autonomyPayload = turnAutonomy && turnAutonomy.level !== 'normal'
         ? { level: turnAutonomy.level, expiresAt: turnAutonomy.expiresAt ?? undefined }
         : undefined;
-      const eventStream = turnModel
+      const eventStream = opts?.retryTarget
         ? adapter.sendMessage(
           workspaceId,
           content,
           sessionId || undefined,
           turnPersona,
           autonomyPayload,
-          opts?.retry,
+          opts.retry,
           turnModel,
+          opts.retryTarget,
         )
-        : adapter.sendMessage(
-          workspaceId,
-          content,
-          sessionId || undefined,
-          turnPersona,
-          autonomyPayload,
-          opts?.retry,
-        );
+        : turnModel
+          ? adapter.sendMessage(
+            workspaceId,
+            content,
+            sessionId || undefined,
+            turnPersona,
+            autonomyPayload,
+            opts?.retry,
+            turnModel,
+          )
+          : adapter.sendMessage(
+            workspaceId,
+            content,
+            sessionId || undefined,
+            turnPersona,
+            autonomyPayload,
+            opts?.retry,
+          );
       for await (const event of eventStream) {
         if (controller.signal.aborted) break;
         const evt = event as StreamEvent;
@@ -785,6 +820,8 @@ export const useChat = ({
         if (evt.type === 'token') legacyCanonicalContent += legacyTokenContent;
         if (evt.type === 'error') failed = true;
         if (isTerminalEvent) terminalEventSeen = true;
+        const retryTargetStale = evt.type === 'error'
+          && data?.code === 'RETRY_TARGET_STALE';
         if (evt.type === 'approval_request' || evt.type === 'approval_required') {
           const currentThread = currentThreadRef.current;
           if (
@@ -798,7 +835,30 @@ export const useChat = ({
           setPendingApproval(null);
         }
 
+        if (retryTargetStale) {
+          const cacheKey = chatThreadCacheKey(
+            activeDispatch.workspaceId,
+            activeDispatch.sessionId,
+          );
+          const pendingHistory = pendingHistoryRef.current;
+          if (pendingHistory?.cacheKey === cacheKey) {
+            historyGenerationRef.current += 1;
+            pendingHistory.release();
+            pendingHistoryRef.current = null;
+          }
+          historyReadyThreadRef.current = null;
+          setHistoryLoaded(false);
+          setHistoryState({ threadKey: cacheKey, status: 'loading', error: null });
+          setHistoryReloadRevision(revision => revision + 1);
+        }
+
         setMessages(prev => {
+          if (retryTargetStale) {
+            return readChatThreadCache(chatThreadCacheKey(
+              activeDispatch.workspaceId,
+              activeDispatch.sessionId,
+            )) ?? [];
+          }
           const msgs = [...prev];
           const targetIdx = msgs.findIndex(m => m.id === assistantId);
           const last = targetIdx >= 0 ? msgs[targetIdx] : undefined;
@@ -1105,7 +1165,7 @@ export const useChat = ({
 
   const sendMessage = useCallback(async (
     content: string,
-    opts?: { retry?: boolean; onAccepted?: () => void },
+    opts?: { retry?: boolean; retryTarget?: ChatRetryTarget; onAccepted?: () => void },
   ): Promise<boolean> => {
     if (!workspaceId || !sessionId || !content.trim()) return false;
     const cacheKey = sessionId ? chatThreadCacheKey(workspaceId, sessionId) : null;
@@ -1124,6 +1184,7 @@ export const useChat = ({
         id,
         content: trimmed,
         retry: opts?.retry,
+        retryTarget: opts?.retryTarget,
         model: model || undefined,
         persona,
         autonomy: autonomy ? { ...autonomy } : undefined,
@@ -1178,23 +1239,43 @@ export const useChat = ({
     }
     if (idx === -1) return;
     const content = messages[idx].content;
+    const retryTail = messages.slice(idx);
+    const expectedMessageCount = persistedRetryMessageCount(messages);
+    let retryTarget: ChatRetryTarget;
+    if (retryTail.length === 1 && retryTail[0].role === 'user') {
+      retryTarget = {
+        kind: 'lone-user',
+        expectedMessageCount,
+      };
+    } else if (
+      retryTail.length === 2
+      && retryTail[0].role === 'user'
+      && retryTail[1].role === 'assistant'
+    ) {
+      retryTarget = retryTail[1].draft?.status === 'stopped'
+          ? {
+              kind: 'lone-user',
+              expectedMessageCount,
+            }
+          : {
+              kind: 'assistant-pair',
+              expectedMessageCount,
+              expectedAssistantContent: persistedAssistantRetryContent(retryTail[1]),
+            };
+    } else {
+      return;
+    }
     if (cacheKey) {
       const pendingHistory = pendingHistoryRef.current;
       if (pendingHistory?.cacheKey === cacheKey) {
-        const retryTail = messages.slice(idx);
         for (const message of retryTail) {
           pendingHistory.suppressedMessageIds.add(message.id);
         }
-        const assistantFailure = retryTail.length === 2
-          ? assistantFailureDetail(retryTail[1])
-          : null;
-        if (assistantFailure !== null) {
-          pendingHistory.suppressedFailedTail = { userContent: content, assistantFailure };
-        }
+        pendingHistory.suppressedRetryTail = { userContent: content, target: retryTarget };
       }
     }
     setMessages(prev => prev.slice(0, idx));
-    void sendMessage(content, { retry: true });
+    void sendMessage(content, { retry: true, retryTarget });
   }, [messages, isLoading, workspaceId, sessionId, sendMessage]);
 
   // Lane S2 (Pillar 3.1): user-initiated halt of the in-flight reply. Aborts THIS
