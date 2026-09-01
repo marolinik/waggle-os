@@ -817,6 +817,145 @@ describe('Provider API', () => {
   });
 });
 
+describe('OpenAI-compatible cold restart', () => {
+  it('restores the endpoint, model lanes, Vault binding, catalog, and completion route', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-restart-'));
+    const upstreamRequests: Array<{ url: string; authorization?: string; body?: unknown }> = [];
+    const upstream = http.createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        const rawBody = Buffer.concat(chunks).toString('utf8');
+        upstreamRequests.push({
+          url: request.url ?? '',
+          authorization: request.headers.authorization,
+          ...(rawBody ? { body: JSON.parse(rawBody) } : {}),
+        });
+        response.writeHead(200, { 'content-type': 'application/json' });
+        if (request.url?.endsWith('/models')) {
+          response.end(JSON.stringify({
+            data: [
+              { id: 'qwen-primary', name: 'Qwen Primary' },
+              { id: 'qwen-fallback', name: 'Qwen Fallback' },
+              { id: 'qwen-budget', name: 'Qwen Budget' },
+            ],
+          }));
+          return;
+        }
+        response.end(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'Restarted Qwen answered.' } }],
+          usage: { prompt_tokens: 4, completion_tokens: 3 },
+        }));
+      });
+    });
+    let firstServer: FastifyInstance | undefined;
+    let restartedServer: FastifyInstance | undefined;
+
+    try {
+      await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+      const { port } = upstream.address() as AddressInfo;
+      const baseUrl = `http://127.0.0.1:${port}/v1`;
+      const primary = 'openai-compatible/qwen-primary';
+      const fallback = 'openai-compatible/qwen-fallback';
+      const budget = 'openai-compatible/qwen-budget';
+      const apiKey = 'restart-private-key';
+
+      firstServer = await buildLocalServer({ dataDir, port: 0 });
+      const firstSessionToken = firstServer.agentState.wsSessionToken;
+      const save = await injectWithAuth(firstServer, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          defaultModel: primary,
+          fallbackModel: fallback,
+          budgetModel: budget,
+          providers: {
+            'openai-compatible': {
+              apiKey,
+              baseUrl,
+              models: [primary, fallback, budget],
+            },
+          },
+        },
+      });
+      expect(save.statusCode, save.body).toBe(200);
+
+      await firstServer.close();
+      firstServer = undefined;
+      restartedServer = await buildLocalServer({ dataDir, port: 0 });
+      upstreamRequests.length = 0;
+
+      expect(restartedServer.agentState.wsSessionToken).not.toBe(firstSessionToken);
+      expect(restartedServer.agentState.currentModel).toBe(primary);
+
+      const restoredSettings = await injectWithAuth(restartedServer, {
+        method: 'GET',
+        url: '/api/settings',
+      });
+      expect(restoredSettings.statusCode).toBe(200);
+      expect(restoredSettings.json()).toMatchObject({
+        defaultModel: primary,
+        fallbackModel: fallback,
+        budgetModel: budget,
+        providers: {
+          'openai-compatible': {
+            apiKey: expect.stringMatching(/^restart\.\.\.-key$/),
+            baseUrl,
+            models: [primary, fallback, budget],
+          },
+        },
+      });
+      expect(restartedServer.vault?.get('openai-compatible')).toMatchObject({
+        value: apiKey,
+        metadata: { baseUrl },
+      });
+
+      const restoredCatalog = await injectWithAuth(restartedServer, {
+        method: 'GET',
+        url: '/api/providers',
+      });
+      expect(restoredCatalog.statusCode).toBe(200);
+      const compatible = restoredCatalog.json().providers.find(
+        (provider: ProviderResponse) => provider.id === 'openai-compatible',
+      ) as ProviderResponse;
+      expect(compatible).toMatchObject({
+        hasKey: true,
+        baseUrl,
+        modelsSource: 'provider-api',
+      });
+      expect(compatible.models.map(model => model.id)).toEqual(expect.arrayContaining([
+        primary,
+        fallback,
+        budget,
+      ]));
+
+      const completion = await injectWithAuth(restartedServer, {
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: primary,
+          messages: [{ role: 'user', content: 'Confirm restart routing.' }],
+        },
+      });
+      expect(completion.statusCode, completion.body).toBe(200);
+      expect(completion.json().choices[0].message.content).toBe('Restarted Qwen answered.');
+      expect(upstreamRequests.filter(request => request.url === '/v1/models')).toEqual([
+        expect.objectContaining({ authorization: `Bearer ${apiKey}` }),
+      ]);
+      expect(upstreamRequests.filter(request => request.url === '/v1/chat/completions')).toEqual([expect.objectContaining({
+        url: '/v1/chat/completions',
+        authorization: `Bearer ${apiKey}`,
+        body: expect.objectContaining({ model: 'qwen-primary' }),
+      })]);
+    } finally {
+      if (firstServer) await firstServer.close();
+      if (restartedServer) await restartedServer.close();
+      await new Promise<void>((resolve, reject) => upstream.close(error => error ? reject(error) : resolve()));
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Perplexity Search Tool', () => {
   it('perplexity_search tool exists in createSearchTools output', async () => {
     const { createSearchTools } = await import('../../src/../../../packages/agent/src/search-tools.js');
