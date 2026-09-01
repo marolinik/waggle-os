@@ -32,7 +32,7 @@ describe('StatusBar', () => {
   });
 
   it('does not promise automatic delivery while the local service is unavailable', () => {
-    render(
+    const { container } = render(
       <MemoryRouter>
         <TooltipProvider>
           <StatusBar offline />
@@ -40,9 +40,24 @@ describe('StatusBar', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('button', { name: 'Backend unavailable — chat requires retry' })).toBeInTheDocument();
-    expect(screen.getByText(/messages aren.t sent while the local service is unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText(/use retry in chat/i)).toBeInTheDocument();
-    expect(screen.queryByText(/queued and sent/i)).not.toBeInTheDocument();
+    const trigger = screen.getByRole('status', { name: /backend unavailable/i });
+    expect(trigger).toHaveAttribute('aria-describedby', 'backend-offline-recovery');
+    expect(trigger).toHaveAttribute('tabindex', '0');
+    expect(trigger.className).toContain('focus-visible:ring-2');
+    expect(trigger.className).toContain('focus-visible:ring-[var(--focus-ring)]');
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    const recovery = screen.getByRole('tooltip');
+    expect(recovery).toHaveAttribute('id', 'backend-offline-recovery');
+    expect(recovery).toHaveTextContent(
+      "Messages aren't sent while the local service is unavailable. When it returns, review the failed turn and retry only if needed.",
+    );
+    expect(trigger).toHaveAccessibleDescription(
+      "Backend Unavailable Messages aren't sent while the local service is unavailable. When it returns, review the failed turn and retry only if needed.",
+    );
+    expect(recovery).not.toHaveTextContent(/\bqueued\b|automatically|auto.?retry|deliver(?:ed|y)?|replay/i);
+    expect(screen.queryByRole('status', { name: /queued|sent when/i })).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/\bqueued\b|sent when .*restored/i);
   });
 });

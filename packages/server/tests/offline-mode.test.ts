@@ -134,8 +134,11 @@ describe('OfflineManager', () => {
     expect(mgr.state.since).not.toBeNull();
     expect(notifications).toHaveLength(1);
     expect(notifications[0].title).toBe('Offline');
-    expect(notifications[0].body).toMatch(/retry failed chat turns after it reconnects/i);
-    expect(notifications[0].body).not.toMatch(/queued|sent when/i);
+    expect(notifications[0]).toEqual(expect.objectContaining({
+      title: 'Offline',
+      body: 'Model connection lost. Local tools still work. Review failed chat turns after it reconnects; retry only if needed.',
+    }));
+    expect(notifications[0].body).not.toMatch(/\bqueued\b|sent when|automatically/i);
 
     globalThis.fetch = originalFetch;
     fs.rmSync(dir, { recursive: true, force: true });
@@ -217,10 +220,14 @@ describe('OfflineManager', () => {
     expect(mgr.isOffline).toBe(false);
     expect(notifications).toHaveLength(2);
     expect(notifications[1].title).toBe('Back online');
-    expect(notifications[1].body).toMatch(/retry any failed chat turn/i);
-    expect(notifications[1].body).not.toMatch(/queued|sent automatically/i);
+    expect(notifications[1]).toEqual(expect.objectContaining({
+      title: 'Back online',
+      body: 'Model connection restored. Review any failed chat turn and retry only if needed.',
+    }));
+    expect(notifications[1].body).not.toMatch(/\bqueued\b|sent automatically|auto.?retry/i);
+    expect(mgr.getQueue()).toHaveLength(1);
     expect(stateChanges).toHaveLength(2);
-    expect(stateChanges[1].offline).toBe(false);
+    expect(stateChanges[1]).toEqual({ offline: false, queuedMessages: 1 });
 
     globalThis.fetch = originalFetch;
     fs.rmSync(dir, { recursive: true, force: true });
