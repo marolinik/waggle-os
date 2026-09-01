@@ -6,7 +6,14 @@
 import type { FastifyInstance } from 'fastify';
 import { parseTier, type GoalAncestry } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
-import { runAgentLoop, isEnabled, detectTaskShape, listPersonas } from '@waggle/agent';
+import {
+  TraceRecorder,
+  runAgentLoop,
+  isEnabled,
+  detectTaskShape,
+  listPersonas,
+  type TraceHandle,
+} from '@waggle/agent';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { persistMessage } from './chat-persistence.js';
 import { createLogger } from '../logger.js';
@@ -140,9 +147,16 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       return reply.code(409).send({ error: 'spawn_failed', message });
     }
 
-    // Synchronously emit the spawn signal so Waggle Dance shows the new
-    // entry within the same response cycle.
-    emitWaggleSignal({
+    const emitSignalBestEffort = (signal: Parameters<typeof emitWaggleSignal>[0]): void => {
+      try {
+        emitWaggleSignal(signal);
+      } catch (err) {
+        log.warn(`[fleet/spawn] activity projection failed: ${(err as Error).message}`);
+      }
+    };
+
+    // Synchronously project the spawn so Waggle Dance can show the new entry.
+    emitSignalBestEffort({
       type: 'agent:spawned',
       workspaceId: wsId,
       content: task.length > 200 ? `${task.slice(0, 197)}…` : task,
@@ -175,9 +189,13 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       log.warn(`[fleet/spawn] persist user message failed: ${(err as Error).message}`);
     }
 
+    const runSignal = session.abortController.signal;
     void (async () => {
+      let traceRecorder: TraceRecorder | undefined;
+      let traceHandle: TraceHandle | undefined;
+      const observedTools = new Set<string>();
       try {
-        emitWaggleSignal({
+        emitSignalBestEffort({
           type: 'agent:started',
           workspaceId: wsId,
           content: task.length > 200 ? `${task.slice(0, 197)}…` : task,
@@ -223,6 +241,17 @@ export async function fleetRoutes(fastify: FastifyInstance) {
           systemPrompt = session.orchestrator.buildSystemPrompt();
         }
 
+        if (fastify.traceStore) {
+          traceRecorder = new TraceRecorder(fastify.traceStore);
+          traceHandle = traceRecorder.start({
+            sessionId: spawnSessionId,
+            personaId: session.personaId ?? persona ?? null,
+            workspaceId: wsId,
+            model: resolvedModel,
+            input: task,
+            tags: ['fleet:legacy'],
+          });
+        }
         const result = await runAgentLoop({
           litellmUrl: fastify.localConfig.litellmUrl,
           litellmApiKey: fastify.agentState.litellmApiKey,
@@ -231,16 +260,31 @@ export async function fleetRoutes(fastify: FastifyInstance) {
           tools: session.tools,
           messages: [userMessage],
           maxTurns: 10,
-          signal: session.abortController.signal,
-          onToolUse: (name, input) => {
-            emitWaggleSignal({
+          signal: runSignal,
+          ...(traceRecorder && traceHandle ? {
+            traceRecording: {
+              recorder: traceRecorder,
+              handle: traceHandle,
+            },
+          } : {}),
+          onToolUse: (name) => {
+            observedTools.add(name);
+            emitSignalBestEffort({
               type: 'tool:called',
               workspaceId: wsId,
-              content: `${name}(${JSON.stringify(input).slice(0, 100)})`,
+              content: `${name} called`,
               metadata: { sessionId: spawnSessionId },
             });
           },
         });
+        if (runSignal.aborted) {
+          throw Object.assign(new Error('Agent loop aborted (workspace paused).'), {
+            name: 'AgentLoopAbortError',
+            code: 'AGENT_LOOP_ABORTED',
+            toolsUsed: result.toolsUsed,
+            usage: result.usage,
+          });
+        }
 
         try {
           persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
@@ -255,7 +299,20 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         if (totalTokens > 0) fastify.sessionManager.addTokens(wsId, totalTokens);
         fastify.sessionManager.touch(wsId);
 
-        emitWaggleSignal({
+        if (traceRecorder && traceHandle) {
+          try {
+            traceRecorder.finalize(traceHandle, {
+              outcome: 'success',
+              output: result.content,
+              tokens: {
+                input: result.usage?.inputTokens ?? 0,
+                output: result.usage?.outputTokens ?? 0,
+              },
+            });
+          } catch { /* best-effort trace projection */ }
+        }
+
+        emitSignalBestEffort({
           type: 'agent:completed',
           workspaceId: wsId,
           content: `Completed: ${result.toolsUsed.length} tool${result.toolsUsed.length === 1 ? '' : 's'} used, ${totalTokens.toLocaleString()} tokens`,
@@ -270,21 +327,98 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         log.error(`[fleet/spawn] agent loop failed for ${wsId}/${spawnSessionId}: ${msg}`);
+        const abortPayload = err && typeof err === 'object'
+          && 'code' in err && err.code === 'AGENT_LOOP_ABORTED'
+          ? err as {
+              usage?: { inputTokens?: unknown; outputTokens?: unknown };
+              toolsUsed?: unknown;
+            }
+          : undefined;
+        if (runSignal.aborted && abortPayload) {
+          const normalizeTokenCount = (value: unknown): number => (
+            typeof value === 'number' && Number.isFinite(value) && value >= 0
+              ? Math.floor(value)
+              : 0
+          );
+          const abortTools = Array.isArray(abortPayload.toolsUsed)
+            ? abortPayload.toolsUsed
+              .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+              .map(name => name.trim())
+            : [];
+          const toolsUsed = [...new Set([...observedTools, ...abortTools])];
+          const inputTokens = normalizeTokenCount(abortPayload.usage?.inputTokens);
+          const outputTokens = normalizeTokenCount(abortPayload.usage?.outputTokens);
+          const totalTokens = inputTokens + outputTokens;
+          const summary = toolsUsed.length > 0
+            ? `This run was stopped after Waggle recorded tool activity: ${toolsUsed.join(', ')}. Review completed or in-flight activity before retrying so actions are not duplicated.`
+            : 'This run was stopped. An external action may have been in flight. Review activity before retrying so actions are not duplicated.';
+
+          if (totalTokens > 0 && fastify.sessionManager.get(wsId)) {
+            fastify.sessionManager.addTokens(wsId, totalTokens);
+            fastify.sessionManager.touch(wsId);
+          }
+          try {
+            persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
+              role: 'assistant',
+              content: summary,
+            });
+          } catch { /* persist best-effort */ }
+          if (traceRecorder && traceHandle) {
+            try {
+              traceRecorder.finalize(traceHandle, {
+                outcome: 'abandoned',
+                output: summary,
+                tokens: { input: inputTokens, output: outputTokens },
+              });
+            } catch { /* best-effort trace projection */ }
+          }
+          emitSignalBestEffort({
+            type: 'agent:cancelled',
+            workspaceId: wsId,
+            content: summary.slice(0, 200),
+            metadata: {
+              sessionId: spawnSessionId,
+              model: resolvedModel,
+              toolsUsed,
+              inputTokens,
+              outputTokens,
+            },
+          });
+          return;
+        }
+        const failedTools = [...new Set(
+          [...observedTools]
+            .filter(name => name.trim().length > 0)
+            .map(name => name.trim()),
+        )];
+        const failureSummary = failedTools.length > 0
+          ? `This run failed after Waggle recorded tool activity: ${failedTools.join(', ')}. Review completed or in-flight activity before retrying so actions are not duplicated.`
+          : `I couldn't finish this run — the model didn't respond. Nothing was changed. You can retry from the Agent Center, or pick a different model in the chat header. (Details are in Events & Logs.)`;
         try {
-          // Human-readable failure in the chat — the raw error (often a JSON
-          // blob) is logged above and carried on the agent:error signal; a
-          // verbatim dump rendered as the assistant's reply read as the
-          // product being broken on every judge persona.
+          // The raw provider/tool error remains in the local log above. Durable
+          // user-facing projections keep only safe retry guidance.
           persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
             role: 'assistant',
-            content: `I couldn't finish this run — the model didn't respond. Nothing was changed. You can retry from the Agent Center, or pick a different model in the chat header. (Details are in Events & Logs.)`,
+            content: failureSummary,
           });
         } catch { /* persist best-effort */ }
-        emitWaggleSignal({
+        if (traceRecorder && traceHandle) {
+          try {
+            traceRecorder.finalize(traceHandle, {
+              outcome: 'abandoned',
+              output: failureSummary,
+            });
+          } catch { /* best-effort trace projection */ }
+        }
+        emitSignalBestEffort({
           type: 'agent:error',
           workspaceId: wsId,
-          content: `Failed: ${msg.length > 200 ? `${msg.slice(0, 197)}…` : msg}`,
-          metadata: { sessionId: spawnSessionId, model: resolvedModel },
+          content: failureSummary.slice(0, 200),
+          metadata: {
+            sessionId: spawnSessionId,
+            model: resolvedModel,
+            toolsUsed: failedTools,
+          },
         });
       }
     })();

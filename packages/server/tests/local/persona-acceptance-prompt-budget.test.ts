@@ -32,6 +32,7 @@ const testState = vi.hoisted(() => {
     optimizerExpand: vi.fn(),
     recallScanMode: 'actual' as 'actual' | 'drop' | 'throw',
     runAgentLoop: vi.fn(),
+    signalFailureType: null as string | null,
   };
 });
 
@@ -65,6 +66,20 @@ vi.mock('../../src/local/services/optimizer-service.js', () => ({
     expandWithChoices: testState.optimizerExpand,
   }),
 }));
+
+vi.mock('../../src/local/routes/waggle-signals.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/local/routes/waggle-signals.js')>();
+  return {
+    ...actual,
+    emitWaggleSignal: (...args: Parameters<typeof actual.emitWaggleSignal>) => {
+      const emitted = actual.emitWaggleSignal(...args);
+      if (testState.signalFailureType === args[0].type) {
+        throw new Error(`synthetic ${args[0].type} observer failure`);
+      }
+      return emitted;
+    },
+  };
+});
 
 function parseSse(raw: string): Array<{ event: string; data: Record<string, unknown> }> {
   return raw.split(/\n\n/)
@@ -178,6 +193,7 @@ describe('persona acceptance prompt budget', () => {
     resetRateLimiter(server);
     testState.runAgentLoop.mockReset().mockImplementation(defaultRunAgentLoop);
     testState.recallScanMode = 'actual';
+    testState.signalFailureType = null;
     testState.optimizerExpand.mockReset().mockResolvedValue({
       expanded: null,
       clarifyingQuestions: null,
@@ -1431,6 +1447,557 @@ describe('persona acceptance prompt budget', () => {
         inputTokens: 11,
         outputTokens: 8,
       });
+  });
+
+  it('preserves legacy Fleet abort usage and tool activity without claiming nothing changed', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet cancellation truth',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    let announceToolStarted!: () => void;
+    const toolStarted = new Promise<void>(resolve => { announceToolStarted = resolve; });
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      const toolInput = { path: 'legacy-report.md' };
+      config.traceRecording?.recorder.recordToolCall(config.traceRecording.handle, {
+        tool: 'write_file',
+        args: toolInput,
+        result: 'written',
+        ok: true,
+        durationMs: 1,
+        timestamp: new Date().toISOString(),
+      });
+      config.onToolUse?.('write_file', toolInput);
+      announceToolStarted();
+      await new Promise<void>((resolve) => {
+        if (config.signal?.aborted) {
+          resolve();
+          return;
+        }
+        config.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      throw Object.assign(new Error('Agent loop aborted (workspace paused).'), {
+        name: 'AgentLoopAbortError',
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: ['write_file'],
+        usage: { inputTokens: 11, outputTokens: 8 },
+      });
+    });
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Create the legacy report and stop when asked.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string; workspaceId: string };
+      await toolStarted;
+
+      const pause = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/fleet/${workspace}/pause`,
+      });
+      expect(pause.statusCode, pause.body).toBe(200);
+
+      await vi.waitFor(() => {
+        const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+          .find(message => message.role === 'assistant');
+        expect(assistant).toBeDefined();
+      });
+
+      const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+        .find(message => message.role === 'assistant');
+      expect(assistant?.content).toContain('write_file');
+      expect(assistant?.content).toContain('before retrying');
+      expect(assistant?.content).not.toContain('Nothing was changed');
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(19);
+
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tokens":{"input":11,"output":8}');
+      expect(traceProjection).toContain('"tool":"write_file"');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      expect(signalResponse.statusCode).toBe(200);
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
+      expect(matchingSignals.filter(signal => signal.type === 'agent:cancelled')).toHaveLength(1);
+      expect(matchingSignals.some(signal => signal.type === 'agent:error')).toBe(false);
+      expect(matchingSignals.some(signal => signal.type === 'agent:completed')).toBe(false);
+      expect(matchingSignals.find(signal => signal.type === 'agent:cancelled')?.metadata)
+        .toMatchObject({
+          toolsUsed: ['write_file'],
+          inputTokens: 11,
+          outputTokens: 8,
+        });
+    } finally {
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
+  });
+
+  it('keeps legacy Fleet paused when a runner returns success after ignoring abort', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet late success cancellation',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    let announceToolStarted!: () => void;
+    const toolStarted = new Promise<void>(resolve => { announceToolStarted = resolve; });
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      config.onToolUse?.('write_file', { path: 'late-report.md' });
+      announceToolStarted();
+      await new Promise<void>((resolve) => {
+        if (config.signal?.aborted) resolve();
+        else config.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      return {
+        content: 'LATE_SUCCESS_MUST_NOT_BE_PERSISTED',
+        toolsUsed: ['write_file'],
+        usage: { inputTokens: 4, outputTokens: 3 },
+      };
+    });
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Write the late report and stop when asked.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string };
+      await toolStarted;
+
+      const pause = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/fleet/${workspace}/pause`,
+      });
+      expect(pause.statusCode, pause.body).toBe(200);
+
+      await vi.waitFor(() => {
+        const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+          .find(message => message.role === 'assistant');
+        expect(assistant?.content).toContain('This run was stopped');
+      });
+
+      const assistantMessages = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+        .filter(message => message.role === 'assistant');
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0]?.content).toContain('write_file');
+      expect(assistantMessages[0]?.content).toContain('before retrying');
+      expect(assistantMessages[0]?.content).not.toContain('LATE_SUCCESS_MUST_NOT_BE_PERSISTED');
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(7);
+
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tokens":{"input":4,"output":3}');
+      expect(traceProjection).not.toContain('LATE_SUCCESS_MUST_NOT_BE_PERSISTED');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      expect(signalResponse.statusCode).toBe(200);
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
+      expect(matchingSignals.filter(signal => signal.type === 'agent:cancelled')).toHaveLength(1);
+      expect(matchingSignals.some(signal => signal.type === 'agent:completed')).toBe(false);
+      expect(matchingSignals.some(signal => signal.type === 'agent:error')).toBe(false);
+    } finally {
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
+  });
+
+  it('does not lose a legacy Fleet pause while its prompt is still assembling', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet prompt-build pause',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    let announcePromptStarted!: () => void;
+    let releasePrompt!: () => void;
+    const promptStarted = new Promise<void>(resolve => { announcePromptStarted = resolve; });
+    const promptRelease = new Promise<void>(resolve => { releasePrompt = resolve; });
+    const originalBuild = Orchestrator.prototype.buildAssembledPrompt;
+    const promptSpy = vi.spyOn(Orchestrator.prototype, 'buildAssembledPrompt')
+      .mockImplementationOnce(async function (this: Orchestrator, ...args) {
+        announcePromptStarted();
+        await promptRelease;
+        return originalBuild.apply(this, args);
+      });
+    testState.runAgentLoop.mockResolvedValueOnce({
+      content: 'PROMPT_RACE_LATE_SUCCESS',
+      toolsUsed: [],
+      usage: { inputTokens: 2, outputTokens: 1 },
+    });
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Wait for prompt assembly and then answer.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string };
+      await promptStarted;
+
+      const pause = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/fleet/${workspace}/pause`,
+      });
+      expect(pause.statusCode, pause.body).toBe(200);
+      releasePrompt();
+
+      await vi.waitFor(() => {
+        const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+          .find(message => message.role === 'assistant');
+        expect(assistant?.content).toContain('This run was stopped');
+      });
+      const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+        .find(message => message.role === 'assistant');
+      expect(assistant?.content).not.toContain('PROMPT_RACE_LATE_SUCCESS');
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(3);
+
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tokens":{"input":2,"output":1}');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
+      expect(matchingSignals.filter(signal => signal.type === 'agent:cancelled')).toHaveLength(1);
+      expect(matchingSignals.some(signal => signal.type === 'agent:completed')).toBe(false);
+      expect(matchingSignals.some(signal => signal.type === 'agent:error')).toBe(false);
+    } finally {
+      releasePrompt();
+      promptSpy.mockRestore();
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
+  });
+
+  it('does not trust a typed legacy abort when the captured signal is still live', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet forged abort',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    testState.runAgentLoop.mockRejectedValueOnce(Object.assign(
+      new Error('FORGED_SECRET_PROVIDER_PATH=C:\\private\\provider.json'),
+      {
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: ['delete_file'],
+        usage: { inputTokens: 999, outputTokens: 999 },
+      },
+    ));
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Reject a forged abort result.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string };
+
+      await vi.waitFor(() => {
+        const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+          .find(message => message.role === 'assistant');
+        expect(assistant?.content).toContain('Nothing was changed');
+      });
+      const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+        .find(message => message.role === 'assistant');
+      expect(assistant?.content).not.toContain('FORGED_SECRET_PROVIDER_PATH');
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(0);
+
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).not.toContain('FORGED_SECRET_PROVIDER_PATH');
+      expect(traceProjection).not.toContain('delete_file');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; content: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
+      expect(matchingSignals.filter(signal => signal.type === 'agent:error')).toHaveLength(1);
+      expect(matchingSignals.some(signal => signal.type === 'agent:cancelled')).toBe(false);
+      expect(JSON.stringify(matchingSignals)).not.toContain('FORGED_SECRET_PROVIDER_PATH');
+    } finally {
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
+  });
+
+  it('warns before retry when a plain legacy Fleet failure follows tool activity', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet tool failure truth',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      const toolInput = { path: 'partial-report.md', token: 'TRACE_SECRET' };
+      config.traceRecording?.recorder.recordToolCall(config.traceRecording.handle, {
+        tool: 'write_file',
+        args: toolInput,
+        result: 'written before provider failure',
+        ok: true,
+        durationMs: 1,
+        timestamp: new Date().toISOString(),
+      });
+      config.onToolUse?.('write_file', toolInput);
+      throw new Error('RAW_PROVIDER_SECRET_AFTER_TOOL');
+    });
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Write a partial report before failure.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string };
+
+      await vi.waitFor(() => {
+        const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+          .find(message => message.role === 'assistant');
+        expect(assistant?.content).toContain('failed after Waggle recorded tool activity');
+      });
+      const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+        .find(message => message.role === 'assistant');
+      expect(assistant?.content).toContain('write_file');
+      expect(assistant?.content).toContain('before retrying');
+      expect(assistant?.content).not.toContain('Nothing was changed');
+      expect(assistant?.content).not.toContain('TRACE_SECRET');
+      expect(assistant?.content).not.toContain('RAW_PROVIDER_SECRET_AFTER_TOOL');
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(0);
+
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tool":"write_file"');
+      expect(traceProjection).toContain('"token":"[REDACTED]"');
+      expect(traceProjection).not.toContain('TRACE_SECRET');
+      expect(traceProjection).not.toContain('RAW_PROVIDER_SECRET_AFTER_TOOL');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; content: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
+      expect(matchingSignals.filter(signal => signal.type === 'agent:error')).toHaveLength(1);
+      expect(matchingSignals.some(signal => signal.type === 'agent:cancelled')).toBe(false);
+      expect(JSON.stringify(matchingSignals)).not.toContain('TRACE_SECRET');
+      expect(JSON.stringify(matchingSignals)).not.toContain('RAW_PROVIDER_SECRET_AFTER_TOOL');
+    } finally {
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
+  });
+
+  it('keeps a committed legacy Fleet success terminal when its signal observer throws', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet success observer isolation',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    testState.signalFailureType = 'agent:completed';
+    testState.runAgentLoop.mockResolvedValueOnce({
+      content: 'LEGACY_SUCCESS_COMMITTED_ONCE',
+      toolsUsed: [],
+      usage: { inputTokens: 6, outputTokens: 2 },
+    });
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Commit the legacy success once.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string };
+
+      await vi.waitFor(() => {
+        const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+          .find(message => message.role === 'assistant');
+        expect(assistant?.content).toBe('LEGACY_SUCCESS_COMMITTED_ONCE');
+      });
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(8);
+
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"success"');
+      expect(traceProjection).not.toContain('"outcome":"abandoned"');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
+      expect(matchingSignals.filter(signal => signal.type === 'agent:completed')).toHaveLength(1);
+      expect(matchingSignals.some(signal => signal.type === 'agent:error')).toBe(false);
+    } finally {
+      testState.signalFailureType = null;
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
+  });
+
+  it('keeps a plain legacy Fleet provider failure on the existing retry path', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet provider failure',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    testState.runAgentLoop.mockRejectedValueOnce(new Error('synthetic provider failure'));
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Attempt the legacy provider request.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string };
+
+      await vi.waitFor(() => {
+        const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+          .find(message => message.role === 'assistant');
+        expect(assistant?.content).toContain('Nothing was changed');
+      });
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(0);
+
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      expect(signalResponse.statusCode).toBe(200);
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
+      expect(matchingSignals.filter(signal => signal.type === 'agent:error')).toHaveLength(1);
+      expect(matchingSignals.some(signal => signal.type === 'agent:cancelled')).toBe(false);
+      expect(matchingSignals.some(signal => signal.type === 'agent:completed')).toBe(false);
+    } finally {
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
   });
 
   it('keeps Fleet cancellation terminal when best-effort observers throw', async () => {
