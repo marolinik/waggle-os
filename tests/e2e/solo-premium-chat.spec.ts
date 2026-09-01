@@ -642,7 +642,7 @@ test.describe('Windows Solo premium chat journey', () => {
         status: 'active',
       }));
 
-      const skillPrompt = 'Use the installed decision-matrix skill. Before answering, call read_skill with the exact name decision-matrix. Compare Option A and Option B using criteria cost (weight 5), speed (3), privacy (5). Score A as 4/3/5 and B as 2/5/4. Follow the complete workflow, include raw and weighted scores, totals, recommendation, weakest critical criterion, and sensitivity analysis.';
+      const skillPrompt = 'Use the installed decision-matrix skill. Before answering, call read_skill with the exact name decision-matrix. Compare Option A and Option B using criteria cost (weight 5), speed (3), privacy (5). Score A as 4/3/5 and B as 2/5/4. Follow the complete workflow, include raw and weighted scores, checksums, totals, recommendation, weakest critical criterion, and run sensitivity analysis on speed.';
       await composer.fill(skillPrompt);
       const skillWire = await captureChatTurn(page, async () => {
         await page.getByRole('button', { name: 'Send' }).click();
@@ -657,24 +657,95 @@ test.describe('Windows Solo premium chat journey', () => {
         && typeof event.data === 'object'
         && event.data?.name === 'read_skill'
       ));
+      const calculatorStart = skillWire.events.filter(event => (
+        event.event === 'tool'
+        && typeof event.data === 'object'
+        && event.data?.name === 'calculate_decision_matrix'
+      ));
+      const calculatorResult = skillWire.events.filter(event => (
+        event.event === 'tool_result'
+        && typeof event.data === 'object'
+        && event.data?.name === 'calculate_decision_matrix'
+      ));
+      expect(skillWire.events
+        .filter(event => (
+          ['tool', 'tool_result'].includes(event.event)
+          && typeof event.data === 'object'
+          && ['read_skill', 'calculate_decision_matrix'].includes(String(event.data?.name))
+        ))
+        .map(event => `${event.event}:${String((event.data as Record<string, unknown>).name)}`))
+        .toEqual([
+          'tool:read_skill',
+          'tool_result:read_skill',
+          'tool:calculate_decision_matrix',
+          'tool_result:calculate_decision_matrix',
+        ]);
       expect(skillStart).toHaveLength(1);
       expect(skillStart[0]?.data).toMatchObject({ input: { name: 'decision-matrix' } });
       expect(skillResult).toHaveLength(1);
       expect(skillResult[0]?.data).toMatchObject({ isError: false });
+      expect(calculatorStart).toHaveLength(1);
+      expect(calculatorStart[0]?.data).toMatchObject({
+        input: {
+          criteria: [
+            { name: 'cost', weight: 5 },
+            { name: 'speed', weight: 3 },
+            { name: 'privacy', weight: 5 },
+          ],
+          options: [
+            { name: 'Option A', scores: [4, 3, 5] },
+            { name: 'Option B', scores: [2, 5, 4] },
+          ],
+          sensitivityCriterion: 'speed',
+        },
+      });
+      expect(calculatorResult).toHaveLength(1);
+      expect(calculatorResult[0]?.data).toMatchObject({ isError: false });
       const skillGuidance = String(
         typeof skillResult[0]?.data === 'object' && skillResult[0]?.data
           ? skillResult[0].data.result ?? ''
           : '',
       );
       expect(skillGuidance).toContain('Decision Matrix — Weighted Option Comparison');
-      expect(skillGuidance).toContain('Criteria (weight)');
-      expect(skillGuidance).toContain('Offer sensitivity analysis');
+      expect(skillGuidance).toContain('calculate_decision_matrix');
+      expect(skillGuidance).toContain('sole numeric authority');
+      const calculatorGuidance = JSON.parse(String(
+        typeof calculatorResult[0]?.data === 'object' && calculatorResult[0]?.data
+          ? calculatorResult[0].data.result ?? ''
+          : '',
+      )) as {
+        options?: Array<{ checksum?: string; total?: number }>;
+        decision?: { winner?: string };
+        sensitivity?: {
+          tieWeight?: number;
+          firstWholeNumberWeightWhereWinnerChanges?: number;
+          winnerAtFirstWholeNumber?: string;
+        };
+      };
+      expect(calculatorGuidance.options).toEqual(expect.arrayContaining([
+        expect.objectContaining({ checksum: '20 + 9 + 25 = 54', total: 54 }),
+        expect.objectContaining({ checksum: '10 + 15 + 20 = 45', total: 45 }),
+      ]));
+      expect(calculatorGuidance.decision?.winner).toBe('Option A');
+      expect(calculatorGuidance.sensitivity).toMatchObject({
+        tieWeight: 7.5,
+        firstWholeNumberWeightWhereWinnerChanges: 8,
+        winnerAtFirstWholeNumber: 'Option B',
+      });
       const skillAnswer = normalizeText(String(skillWire.done.content ?? ''));
       expect(skillAnswer).toMatch(/Option A/i);
-      expect(skillAnswer).toMatch(/54/);
-      expect(skillAnswer).toMatch(/45/);
+      expect(skillAnswer).toMatch(/20\s*\+\s*9\s*\+\s*25\s*=\s*(?:\*{2})?54(?:\*{2})?/);
+      expect(skillAnswer).toMatch(/10\s*\+\s*15\s*\+\s*20\s*=\s*(?:\*{2})?45(?:\*{2})?/);
       expect(skillAnswer).toMatch(/recommend/i);
       expect(skillAnswer).toMatch(/sensitivity/i);
+      expect(skillAnswer).toMatch(/7\.5/);
+      expect(skillAnswer).toMatch(/\b8\b/);
+      expect(skillWire.done.toolsUsed).toEqual(['read_skill', 'calculate_decision_matrix']);
+      expect(skillWire.events.some(event => (
+        event.event === 'step'
+        && typeof event.data === 'object'
+        && /auto-saved/i.test(String(event.data?.content ?? ''))
+      ))).toBe(false);
 
       const skillActivity = page.getByTestId('chat-activity').last();
       const skillActivityToggle = skillActivity.getByTestId('chat-activity-toggle');
@@ -685,8 +756,13 @@ test.describe('Windows Solo premium chat journey', () => {
       await expect(skillRow.getByTestId('chat-tool-activity-toggle')).toContainText('Opened Decision Matrix skill');
       await skillRow.getByTestId('chat-tool-activity-toggle').click();
       await expect(skillRow.getByTestId('chat-tool-activity-details')).toContainText('"name": "decision-matrix"');
-      await expect(skillRow.getByTestId('chat-tool-activity-details')).toContainText('Criteria (weight)');
+      await expect(skillRow.getByTestId('chat-tool-activity-details')).toContainText('sole numeric authority');
       await expect(skillRow.getByTestId('chat-tool-activity-details')).not.toContainText(/applied skill|used skill/i);
+      const calculatorRow = skillActivity.locator('[data-testid="chat-tool-activity"][data-tool-name="calculate_decision_matrix"]');
+      await expect(calculatorRow).toHaveAttribute('data-tool-status', 'done');
+      await expect(calculatorRow.getByTestId('chat-tool-activity-toggle')).toContainText('Calculate Decision Matrix');
+      await calculatorRow.getByTestId('chat-tool-activity-toggle').click();
+      await expect(calculatorRow.getByTestId('chat-tool-activity-details')).toContainText('20 + 9 + 25 = 54');
 
       const memoryTopic = `pilot-${randomUUID().slice(0, 8)}`;
       const memorySecret = `ORCHID-${randomUUID().slice(0, 12).toUpperCase()}`;
@@ -764,7 +840,7 @@ test.describe('Windows Solo premium chat journey', () => {
       });
       expect(Number((recallWire.done.memoryContext as { count?: unknown })?.count)).toBeGreaterThan(0);
       expect(normalizeText(String(recallWire.done.content ?? '')).replace(/[.`]/g, '')).toBe(memorySecret);
-      await expect(page.getByText('Memory brought forward')).toBeVisible();
+      await expect(page.getByText('Memory brought forward', { exact: true })).toBeVisible();
       const recallActivity = page.getByTestId('chat-activity').last();
       await expect(recallActivity.getByTestId('chat-activity-toggle')).toContainText('Used saved memory');
       const recallToggle = recallActivity.getByTestId('chat-activity-toggle');

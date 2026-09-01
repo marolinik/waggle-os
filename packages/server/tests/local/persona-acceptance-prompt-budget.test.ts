@@ -342,7 +342,7 @@ describe('persona acceptance prompt budget', () => {
       expect(capturedConfig!.maxToolRounds).toBe(2);
       expect(capturedConfig!.maxTokenBudget).toBe(18_000);
       expect(capturedConfig!.synthesisReserveTokens).toBe(2_500);
-      expect(capturedConfig!.maxOutputTokens).toBe(1_024);
+      expect(capturedConfig!.maxOutputTokens).toBe(768);
       expect(capturedConfig!.toolContextBudget).toEqual({
         maxSingleResultChars: 3_000,
         recentResultCount: 2,

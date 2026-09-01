@@ -3683,7 +3683,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               recentResultCount: 2,
             },
           };
-          maxOutputTokens = 1_024;
+          maxOutputTokens = 768;
         } else if (explicitReadOnlyToolChoice && packageMode === 'compact') {
           agentRunBudget = {
             ...agentRunBudget,
