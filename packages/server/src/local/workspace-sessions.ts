@@ -14,6 +14,8 @@
 import type { MindDB } from '@waggle/core';
 import type { ToolDefinition, Orchestrator } from '@waggle/agent';
 
+const RESIDENT_SESSION_BUDGET = 20;
+
 export interface WorkspaceSession {
   workspaceId: string;
   mind: MindDB;
@@ -40,8 +42,16 @@ export interface WorkspaceSession {
   release?: () => void;
 }
 
+export interface WorkspaceSessionActivityLease {
+  readonly session: WorkspaceSession;
+  release(): void;
+}
+
 export class WorkspaceSessionManager {
   private sessions = new Map<string, WorkspaceSession>();
+  private activeActivities = new WeakMap<WorkspaceSession, number>();
+  private retiredSessions = new WeakSet<WorkspaceSession>();
+  private finalizedSessions = new WeakSet<WorkspaceSession>();
   private maxSessions: number;
 
   constructor(maxSessions = 3) {
@@ -109,6 +119,9 @@ export class WorkspaceSessionManager {
     }
     if (this.sessions.size >= this.maxSessions) {
       throw new Error(`Max concurrent sessions reached (${this.maxSessions}). Close a workspace first.`);
+    }
+    if (this.sessions.size >= RESIDENT_SESSION_BUDGET) {
+      this.trimResidentSessions(RESIDENT_SESSION_BUDGET - 1);
     }
 
     const session: WorkspaceSession = {
@@ -185,6 +198,37 @@ export class WorkspaceSessionManager {
     }
   }
 
+  /**
+   * Borrow the current session generation for an asynchronous operation.
+   * The returned release is idempotent and remains bound to that exact object,
+   * so releasing an old request can never decrement or tear down a replacement
+   * session that reused the same workspace ID.
+   */
+  acquireActivity(workspaceId: string): WorkspaceSessionActivityLease | undefined {
+    const session = this.sessions.get(workspaceId);
+    if (!session || session.status !== 'active') return undefined;
+
+    this.activeActivities.set(session, this.activityCount(session) + 1);
+    session.lastActivity = Date.now();
+    let released = false;
+
+    return {
+      session,
+      release: () => {
+        if (released) return;
+        released = true;
+
+        const remaining = Math.max(0, this.activityCount(session) - 1);
+        this.activeActivities.set(session, remaining);
+        session.lastActivity = Date.now();
+        if (remaining === 0 && this.retiredSessions.has(session)) {
+          this.finalizeSession(session);
+        }
+        this.trimResidentSessions(RESIDENT_SESSION_BUDGET);
+      },
+    };
+  }
+
   /** Pause a session (abort current agent loop, keep session open) */
   pause(workspaceId: string): boolean {
     const session = this.sessions.get(workspaceId);
@@ -214,16 +258,11 @@ export class WorkspaceSessionManager {
     if (!session) return false;
 
     session.abortController.abort();
-    // The MultiMindCache owns the MindDB lifecycle for pinned sessions — drop the
-    // pin instead of closing the shared handle (closing it would poison other
-    // borrows of the same workspace mind). Standalone/test sessions that own
-    // their handle have no `release` and fall back to closing it directly.
-    if (session.release) {
-      try { session.release(); } catch { /* pin already released */ }
-    } else {
-      try { session.mind.close(); } catch { /* already closed */ }
-    }
     this.sessions.delete(workspaceId);
+    this.retiredSessions.add(session);
+    if (this.activityCount(session) === 0) {
+      this.finalizeSession(session);
+    }
     return true;
   }
 
@@ -236,7 +275,7 @@ export class WorkspaceSessionManager {
     let closed = 0;
 
     for (const [id, session] of [...this.sessions]) { // snapshot to avoid mutation during iteration
-      if (now - session.lastActivity > maxIdleMs) {
+      if (this.activityCount(session) === 0 && now - session.lastActivity > maxIdleMs) {
         this.close(id);
         closed++;
       }
@@ -249,6 +288,33 @@ export class WorkspaceSessionManager {
   closeAll(): void {
     for (const id of [...this.sessions.keys()]) {
       this.close(id);
+    }
+  }
+
+  private activityCount(session: WorkspaceSession): number {
+    return this.activeActivities.get(session) ?? 0;
+  }
+
+  private finalizeSession(session: WorkspaceSession): void {
+    if (this.finalizedSessions.has(session)) return;
+    this.finalizedSessions.add(session);
+
+    // The MultiMindCache owns borrowed handles; standalone/test sessions own
+    // their MindDB directly. Finalization runs once, after all activity drains.
+    if (session.release) {
+      try { session.release(); } catch { /* pin already released */ }
+    } else {
+      try { session.mind.close(); } catch { /* already closed */ }
+    }
+  }
+
+  private trimResidentSessions(targetSize: number): void {
+    while (this.sessions.size > targetSize) {
+      const candidate = [...this.sessions.values()]
+        .filter(session => session.status === 'active' && this.activityCount(session) === 0)
+        .sort((left, right) => left.lastActivity - right.lastActivity)[0];
+      if (!candidate) return;
+      this.close(candidate.workspaceId);
     }
   }
 }
