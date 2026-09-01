@@ -789,6 +789,13 @@ export interface Settings {
   model: string;
   /** Canonical server-side model preference; `model` remains for legacy payloads. */
   defaultModel?: string;
+  fallbackModel?: string | null;
+  budgetModel?: string | null;
+  budgetThreshold?: number;
+  dailyBudget?: number | null;
+  budgetHardCap?: boolean;
+  /** Requests atomic server-side verification before any model setting is persisted. */
+  verifyModelSettings?: true;
   provider: string;
   apiKey?: string;
   tokenLimit: number;

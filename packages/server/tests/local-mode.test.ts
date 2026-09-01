@@ -869,20 +869,45 @@ describe('Local Server Mode', () => {
     });
 
     it('updates and reads back settings', async () => {
-      // Update
-      const putRes = await injectWithAuth(server, {
-        method: 'PUT',
-        url: '/api/settings',
-        payload: { defaultModel: 'claude-opus-4-6' },
-      });
-      expect(putRes.statusCode).toBe(200);
-      const putBody = JSON.parse(putRes.body);
-      expect(putBody.defaultModel).toBe('claude-opus-4-6');
+      const previousAnthropic = server.vault.get('anthropic');
+      const previousProvider = { ...server.agentState.llmProvider };
+      server.vault.set('anthropic', 'local-mode-settings-test-key');
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        detail: 'Built-in provider proxy verified for settings test',
+        checkedAt: new Date().toISOString(),
+      };
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
+        new Response(JSON.stringify({
+          choices: [{ message: { content: 'WAGGLE_OK' } }],
+        }), { status: 200 }),
+      ));
+      try {
+        // Update
+        const putRes = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: { defaultModel: 'claude-opus-4-6' },
+        });
+        expect(fetchMock, putRes.body).toHaveBeenCalled();
+        expect(putRes.statusCode, putRes.body).toBe(200);
+        const putBody = JSON.parse(putRes.body);
+        expect(putBody.defaultModel).toBe('claude-opus-4-6');
 
-      // Read back
-      const getRes = await injectWithAuth(server, { method: 'GET', url: '/api/settings' });
-      const getBody = JSON.parse(getRes.body);
-      expect(getBody.defaultModel).toBe('claude-opus-4-6');
+        // Read back
+        const getRes = await injectWithAuth(server, { method: 'GET', url: '/api/settings' });
+        const getBody = JSON.parse(getRes.body);
+        expect(getBody.defaultModel).toBe('claude-opus-4-6');
+      } finally {
+        fetchMock.mockRestore();
+        server.agentState.llmProvider = previousProvider;
+        if (previousAnthropic) {
+          server.vault.set('anthropic', previousAnthropic.value, previousAnthropic.metadata);
+        } else {
+          server.vault.delete('anthropic');
+        }
+      }
     });
 
     it('hydrates a saved hard budget and refreshes daily-budget-only updates', async () => {

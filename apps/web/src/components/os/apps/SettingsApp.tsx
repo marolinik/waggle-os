@@ -46,6 +46,17 @@ type SettingsApproval =
   | { kind: 'clear-telemetry' }
   | { kind: 'restore-backup'; file: File };
 type BackupStatus = { tone: 'success' | 'error'; message: string };
+type ModelPilotUpdate = {
+  defaultModel?: string;
+  fallbackModel?: string | null;
+  budgetModel?: string | null;
+  budgetThreshold?: number;
+  dailyBudget?: number | null;
+};
+type ModelPilotSaveState =
+  | { status: 'idle' }
+  | { status: 'verifying' | 'saving' | 'saved'; label: string; verifiesModel: boolean }
+  | { status: 'error'; label: string; message: string };
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Palette },
@@ -81,6 +92,11 @@ const SettingsApp = () => {
   const [dailyBudget, setDailyBudget] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const modelPilotRequestRef = useRef(0);
+  const pendingModelPilotUpdateRef = useRef<ModelPilotUpdate>({});
+  const thresholdSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failedModelPilotUpdateRef = useRef<{ fields: ModelPilotUpdate; label: string } | null>(null);
+  const [modelPilotSaveState, setModelPilotSaveState] = useState<ModelPilotSaveState>({ status: 'idle' });
 
   // CC Session A §2.2 — Phase 1 GEPA prompt shape selection. Persisted in
   // localStorage; threaded into adapter.sendMessage body. Sidecar honors it
@@ -198,7 +214,7 @@ const SettingsApp = () => {
 
   // Load settings
   useEffect(() => {
-    adapter.getSettings().then((s: { defaultModel?: string; model?: string; dailyBudget?: number; tier?: string; fallbackModel?: string; budgetModel?: string; budgetThreshold?: number }) => {
+    adapter.getSettings().then((s) => {
       setDefaultModel(s.defaultModel ?? s.model ?? '');
       setFallbackModel(s.fallbackModel ?? null);
       setBudgetModel(s.budgetModel ?? null);
@@ -224,19 +240,137 @@ const SettingsApp = () => {
     }).catch(() => {});
   }, []);
 
-  const handleSaveModel = async () => {
-    setSaving(true);
+  const modelPilotLabel = (fields: ModelPilotUpdate): string => {
+    const labels = [
+      fields.defaultModel !== undefined ? 'Primary' : null,
+      fields.fallbackModel !== undefined ? 'Fallback' : null,
+      fields.budgetModel !== undefined ? 'Budget Saver' : null,
+      fields.budgetThreshold !== undefined ? 'Budget threshold' : null,
+    ].filter((label): label is string => Boolean(label));
+    return labels.length === 1 ? labels[0] : 'Model chain';
+  };
+
+  useEffect(() => () => {
+    if (thresholdSaveTimerRef.current) clearTimeout(thresholdSaveTimerRef.current);
+  }, []);
+
+  const hasModelSelection = (fields: ModelPilotUpdate): boolean => (
+    [fields.defaultModel, fields.fallbackModel, fields.budgetModel]
+      .some((model) => typeof model === 'string' && model.trim().length > 0)
+  );
+
+  const saveModelPilotUpdate = async (
+    fields: ModelPilotUpdate,
+    label: string,
+    request = ++modelPilotRequestRef.current,
+  ): Promise<boolean> => {
+    const verifiesModel = hasModelSelection(fields);
+    setModelPilotSaveState({ status: verifiesModel ? 'verifying' : 'saving', label, verifiesModel });
+
+    const verifiedFields = {
+      ...fields,
+      verifyModelSettings: true as const,
+    };
     try {
-      const updates: Record<string, unknown> = { defaultModel };
-      if (fallbackModel !== undefined) updates.fallbackModel = fallbackModel;
-      if (budgetModel !== undefined) updates.budgetModel = budgetModel;
-      if (budgetThreshold !== undefined) updates.budgetThreshold = budgetThreshold;
-      if (dailyBudget) updates.dailyBudget = parseFloat(dailyBudget);
-      await adapter.saveSettings(updates);
-      setSaveMsg('Saved');
-      setTimeout(() => setSaveMsg(''), 2000);
-    } catch { setSaveMsg('Failed'); }
-    finally { setSaving(false); }
+      await adapter.saveSettings(verifiedFields);
+      if (request !== modelPilotRequestRef.current) return true;
+      pendingModelPilotUpdateRef.current = {};
+      failedModelPilotUpdateRef.current = null;
+      setModelPilotSaveState({ status: 'saved', label, verifiesModel });
+      return true;
+    } catch {
+      if (request !== modelPilotRequestRef.current) return false;
+      failedModelPilotUpdateRef.current = { fields, label };
+      setModelPilotSaveState({
+        status: 'error',
+        label,
+        message: verifiesModel
+          ? `${label} was not saved. Verify the selected model, then retry.`
+          : `${label} was not saved. Retry the change.`,
+      });
+      return false;
+    }
+  };
+
+  const handleModelPilotUpdate = (fields: ModelPilotUpdate) => {
+    if (fields.defaultModel !== undefined) setDefaultModel(fields.defaultModel);
+    if (fields.fallbackModel !== undefined) setFallbackModel(fields.fallbackModel);
+    if (fields.budgetModel !== undefined) setBudgetModel(fields.budgetModel);
+    if (fields.budgetThreshold !== undefined) setBudgetThreshold(fields.budgetThreshold);
+
+    const pendingFields = { ...pendingModelPilotUpdateRef.current, ...fields };
+    pendingModelPilotUpdateRef.current = pendingFields;
+    const label = modelPilotLabel(pendingFields);
+    failedModelPilotUpdateRef.current = null;
+    const thresholdOnly = Object.keys(fields).length === 1 && fields.budgetThreshold !== undefined;
+    if (thresholdOnly) {
+      if (thresholdSaveTimerRef.current) clearTimeout(thresholdSaveTimerRef.current);
+      const request = ++modelPilotRequestRef.current;
+      const verifiesModel = hasModelSelection(pendingFields);
+      setModelPilotSaveState({ status: verifiesModel ? 'verifying' : 'saving', label, verifiesModel });
+      thresholdSaveTimerRef.current = setTimeout(() => {
+        thresholdSaveTimerRef.current = null;
+        if (request !== modelPilotRequestRef.current) return;
+        const latestFields = pendingModelPilotUpdateRef.current;
+        void saveModelPilotUpdate(latestFields, modelPilotLabel(latestFields), request);
+      }, 300);
+      return;
+    }
+    if (thresholdSaveTimerRef.current) {
+      clearTimeout(thresholdSaveTimerRef.current);
+      thresholdSaveTimerRef.current = null;
+    }
+    void saveModelPilotUpdate(pendingFields, label);
+  };
+
+  const retryModelPilotSave = () => {
+    const failed = failedModelPilotUpdateRef.current;
+    if (!failed) return;
+    void saveModelPilotUpdate(failed.fields, failed.label);
+  };
+
+  const handleSaveModel = async () => {
+    if (!defaultModel.trim()) {
+      setSaveMsg('Choose a Primary model before saving.');
+      return;
+    }
+    setSaving(true);
+    setSaveMsg('Verifying selected models…');
+    if (thresholdSaveTimerRef.current) {
+      clearTimeout(thresholdSaveTimerRef.current);
+      thresholdSaveTimerRef.current = null;
+    }
+    const updates: ModelPilotUpdate = {
+      defaultModel,
+      fallbackModel,
+      budgetModel,
+      budgetThreshold,
+      dailyBudget: dailyBudget ? parseFloat(dailyBudget) : null,
+    };
+    pendingModelPilotUpdateRef.current = {
+      ...pendingModelPilotUpdateRef.current,
+      ...updates,
+    };
+    const request = ++modelPilotRequestRef.current;
+    try {
+      const saved = await saveModelPilotUpdate(
+        pendingModelPilotUpdateRef.current,
+        'Model chain',
+        request,
+      );
+      if (request !== modelPilotRequestRef.current) {
+        setSaveMsg('');
+        return;
+      }
+      if (saved) {
+        setSaveMsg('Verified & saved');
+        setTimeout(() => setSaveMsg(''), 2000);
+      } else {
+        setSaveMsg('Model settings were not saved. Check each selected model and retry.');
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSavePermissions = async (next?: { defaultAutonomy?: AutonomyLevel; externalGates?: string[] }) => {
@@ -580,7 +714,9 @@ const SettingsApp = () => {
             <ModelGate
               variant="settings"
               onModelReady={(modelId) => {
-                if (modelId) setDefaultModel(modelId);
+                if (modelId) {
+                  setDefaultModel(modelId);
+                }
                 void refreshProviders();
               }}
             />
@@ -592,13 +728,44 @@ const SettingsApp = () => {
               budgetThreshold={budgetThreshold}
               dailyBudget={dailyBudget ? parseFloat(dailyBudget) : null}
               providers={providers}
-              onUpdate={(fields) => {
-                if (fields.defaultModel !== undefined) setDefaultModel(fields.defaultModel);
-                if (fields.fallbackModel !== undefined) setFallbackModel(fields.fallbackModel);
-                if (fields.budgetModel !== undefined) setBudgetModel(fields.budgetModel);
-                if (fields.budgetThreshold !== undefined) setBudgetThreshold(fields.budgetThreshold);
-              }}
+              onUpdate={handleModelPilotUpdate}
             />
+
+            {modelPilotSaveState.status !== 'idle' && (
+              <div
+                role={modelPilotSaveState.status === 'error' ? 'alert' : 'status'}
+                aria-live={modelPilotSaveState.status === 'error' ? 'assertive' : 'polite'}
+                className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                  modelPilotSaveState.status === 'error'
+                    ? 'border-destructive/40 bg-destructive/5 text-destructive'
+                    : 'border-primary/20 bg-primary/5 text-foreground'
+                }`}
+              >
+                {(modelPilotSaveState.status === 'verifying' || modelPilotSaveState.status === 'saving') && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                )}
+                <span>
+                  {modelPilotSaveState.status === 'verifying' && `Verifying ${modelPilotSaveState.label}…`}
+                  {modelPilotSaveState.status === 'saving' && `Saving ${modelPilotSaveState.label}…`}
+                  {modelPilotSaveState.status === 'saved' && (
+                    modelPilotSaveState.verifiesModel
+                      ? `${modelPilotSaveState.label} verified & saved`
+                      : `${modelPilotSaveState.label} saved`
+                  )}
+                  {modelPilotSaveState.status === 'error' && modelPilotSaveState.message}
+                </span>
+                {modelPilotSaveState.status === 'error' && (
+                  <button
+                    type="button"
+                    onClick={retryModelPilotSave}
+                    className="ml-auto rounded-md border border-destructive/30 px-2 py-1 font-display font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Retry saving ${modelPilotSaveState.label}`}
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            )}
 
             <EmbeddingRoutingCard providers={providers} tier={tier} />
 
@@ -607,7 +774,12 @@ const SettingsApp = () => {
             {/* Default model selector — from /api/providers */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1.5">Default Model</label>
-              <ModelSelector value={defaultModel} onChange={setDefaultModel} providers={providers} variant="dropdown" />
+              <ModelSelector
+                value={defaultModel}
+                onChange={setDefaultModel}
+                providers={providers}
+                variant="dropdown"
+              />
             </div>
 
             {/* CC Session A §2.2 — Phase 1 GEPA prompt shape selector */}
@@ -644,7 +816,9 @@ const SettingsApp = () => {
               <label htmlFor="settings-daily-budget" className="text-xs text-muted-foreground block mb-1">
                 <DollarSign className="w-3 h-3 inline mr-1" />Daily Budget (USD)
               </label>
-              <Input id="settings-daily-budget" name="dailyBudget" autoComplete="off" value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="No limit"
+              <Input id="settings-daily-budget" name="dailyBudget" autoComplete="off" value={dailyBudget} onChange={e => {
+                setDailyBudget(e.target.value);
+              }} placeholder="No limit"
                 type="number" min="0" step="1"
                 className="w-full bg-muted/50 h-auto py-1.5" />
             </div>
@@ -1291,7 +1465,12 @@ const SettingsApp = () => {
 
         {/* Save status toast */}
         {saveMsg && (
-          <div className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-honey inline-block">
+          <div
+            role={/failed|not saved|changed while saving|choose a primary/i.test(saveMsg) ? 'alert' : 'status'}
+            aria-live={/failed|not saved|changed while saving|choose a primary/i.test(saveMsg) ? 'assertive' : 'polite'}
+            aria-atomic="true"
+            className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-honey inline-block"
+          >
             {saveMsg}
           </div>
         )}
