@@ -57,25 +57,39 @@ describe('persona defaults yield without losing domain discipline', () => {
     const prompt = personaPrompt('writer');
     expect(prompt).toMatch(/closed-world rewrite/i);
     expect(prompt).toMatch(/do not add.*claims/i);
+    expect(prompt).toMatch(/preserve the meaning.*retained.*requested selection or summary/i);
+    expect(prompt).toMatch(/do not invent or strengthen.*urgency.*risks.*consequences.*rationale.*certainty/i);
     expect(prompt).toMatch(/follow-up.*file/i);
   });
 
-  it('Project Manager labels unsupplied dates, deadlines, and requirements', () => {
+  it('Project Manager maps directed dependencies without inventing release requirements', () => {
     const prompt = personaPrompt('project-manager');
     expect(prompt).toMatch(/dates, deadlines, or requirements/i);
     expect(prompt).toMatch(/supplied.*labeled assumptions/i);
+    expect(prompt).toMatch(/milestone-plan requests.*directed milestone dependency edges/i);
+    expect(prompt).toMatch(/task, approval, resource, and external dependencies.*explicit/i);
+    expect(prompt).toMatch(/do not invent.*platforms.*metrics.*requirements/i);
   });
 
-  it('Executive Assistant suppresses prohibited follow-ups and artifacts', () => {
+  it('Executive Assistant completes timed agendas and suppresses prohibited follow-ups', () => {
     const prompt = personaPrompt('executive-assistant');
+    expect(prompt).toMatch(/before concluding.*each requested element.*time block.*desired decision.*pre-read checklist/i);
     expect(prompt).toMatch(/no follow-up/i);
     expect(prompt).toMatch(/calendar events.*files/i);
   });
 
-  it('Business Finance checks units and does not append prohibited actions', () => {
+  it('Business Finance makes runway calculations and actions explicit', () => {
     const prompt = personaPrompt('finance-owner');
     expect(prompt).toMatch(/unit semantics/i);
+    expect(prompt).toMatch(/cash\s*\/\s*net monthly burn/i);
+    expect(prompt).toMatch(/when the user asks for recommendations.*distinct actions.*cost reduction.*cash inflow/i);
     expect(prompt).toMatch(/files or schedules/i);
+  });
+
+  it('General Purpose keeps operational recommendations evidence-bounded', () => {
+    const prompt = personaPrompt('general-purpose');
+    expect(prompt).toMatch(/operational recommendations.*supplied or verified tool-derived evidence/i);
+    expect(prompt).toMatch(/do not invent absolute instructions or urgency/i);
   });
 
   it('Data Engineer self-checks and scopes compact examples before presenting them', () => {
@@ -99,7 +113,7 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/schema, field set, or tagged envelope alone is not exclusive/i);
     expect(prompt).toMatch(/one requested payload and nothing else/i);
     expect(prompt).toMatch(/add no headings, commentary, offers, extra fields, or second VERDICT line/i);
-    expect(prompt).toMatch(/never wrap.*Markdown code fence/i);
+    expect(prompt).toMatch(/raw means no Markdown fence, not no wrapper/i);
     expect(prompt).toMatch(/preserve.*JSON value types.*numeric literals.*unquoted/is);
     expect(prompt).toMatch(/syntax\/shape override never relaxes read-only, evidence, attribution, anti-fabrication/is);
     expect(prompt).toMatch(/Never emit a fixed result contrary to evidence/i);
