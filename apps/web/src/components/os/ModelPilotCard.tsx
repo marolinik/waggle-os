@@ -7,7 +7,7 @@
  * Does NOT save — the parent SettingsApp handles persistence.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import {
   Zap, Shield, Coins, ChevronDown, Info, ToggleLeft, ToggleRight, Key,
 } from 'lucide-react';
@@ -87,6 +87,8 @@ const LaneDropdown = ({
   onChange,
   onClose,
   sameAsPrimaryId,
+  pickerId,
+  laneLabel,
 }: {
   providers: Provider[];
   value: string | null;
@@ -94,6 +96,8 @@ const LaneDropdown = ({
   onClose: () => void;
   /** W2C: model id equal to Primary — disabled here (a fallback == primary can never fire). */
   sameAsPrimaryId?: string;
+  pickerId: string;
+  laneLabel: string;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -110,6 +114,9 @@ const LaneDropdown = ({
   return (
     <div
       ref={ref}
+      id={pickerId}
+      role="group"
+      aria-label={`${laneLabel} model options`}
       className="absolute top-full left-0 right-0 mt-1 z-50 bg-card border border-border rounded-xl shadow-lg max-h-56 overflow-auto"
     >
       {providers.map(provider => (
@@ -245,6 +252,7 @@ const ModelPilotCard = ({
   const [singleMode, setSingleMode] = useState(false);
   const [openLane, setOpenLane] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
+  const pickerIdPrefix = useId();
 
   const handleClose = useCallback(() => setOpenLane(null), []);
 
@@ -341,6 +349,7 @@ const ModelPilotCard = ({
           const cost = resolveModelCost(modelId, providers);
           const isFree = modelId?.includes(':free') ?? false;
           const isOpen = openLane === lane.key;
+          const pickerId = `${pickerIdPrefix}-${lane.key}-model-options`;
 
           return (
             <div key={lane.key} className="relative rounded-lg border border-[var(--line-soft)] bg-card p-2.5 pl-3.5 shadow-[var(--shadow-sm)]">
@@ -390,11 +399,15 @@ const ModelPilotCard = ({
 
                   {/* Change button */}
                   <button
+                    type="button"
+                    aria-label={`Change ${lane.label} model`}
+                    aria-expanded={isOpen}
+                    aria-controls={pickerId}
                     onClick={() => setOpenLane(isOpen ? null : lane.key)}
-                    className="flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-display bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    className="flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-display bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   >
                     Change
-                    <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown aria-hidden="true" className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
                 </div>
               </div>
@@ -407,6 +420,8 @@ const ModelPilotCard = ({
                   onChange={(id) => handleLaneChange(lane.key, id)}
                   onClose={handleClose}
                   sameAsPrimaryId={lane.key === 'fallback' ? (defaultModel || undefined) : undefined}
+                  pickerId={pickerId}
+                  laneLabel={lane.label}
                 />
               )}
             </div>

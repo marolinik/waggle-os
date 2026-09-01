@@ -21,6 +21,43 @@ const PROVIDERS: Provider[] = [
 ];
 
 describe('ModelPilotCard', () => {
+  it('exposes lane-specific model controls and their expanded picker', () => {
+    render(
+      <TooltipProvider>
+        <ModelPilotCard
+          defaultModel="gpt-5"
+          fallbackModel="gpt-5-mini"
+          budgetModel="gpt-5-nano"
+          budgetThreshold={0.6}
+          dailyBudget={20}
+          providers={PROVIDERS}
+          onUpdate={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+
+    for (const lane of ['Primary', 'Fallback', 'Budget Saver']) {
+      const control = screen.getByRole('button', { name: `Change ${lane} model` });
+      const popupId = control.getAttribute('aria-controls');
+
+      expect(popupId).toBeTruthy();
+      expect(control).toHaveAttribute('type', 'button');
+      expect(control).toHaveAttribute('aria-expanded', 'false');
+      expect(document.getElementById(popupId!)).not.toBeInTheDocument();
+
+      fireEvent.click(control);
+
+      expect(control).toHaveAttribute('aria-expanded', 'true');
+      const popup = document.getElementById(popupId!);
+      expect(popup).toHaveAttribute('role', 'group');
+      expect(popup).toHaveAccessibleName(`${lane} model options`);
+
+      fireEvent.click(control);
+      expect(control).toHaveAttribute('aria-expanded', 'false');
+      expect(document.getElementById(popupId!)).not.toBeInTheDocument();
+    }
+  });
+
   it('names the budget threshold slider and preserves update behavior', () => {
     const onUpdate = vi.fn();
 
