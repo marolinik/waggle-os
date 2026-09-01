@@ -13,7 +13,10 @@ import {
 } from '../../../../tests/vision/verifier-contract.js';
 import { buildLocalServer } from '../../src/local/index.js';
 import {
+  bindExactWorkspaceMemorySearchTool,
+  isBoundedExactPersistedMemoryLookup,
   isCurrentConversationOnlyReferenceRequest,
+  isDecisionMatrixSkillRequest,
   isExplicitDecisionMatrixSkillDirective,
 } from '../../src/local/routes/chat.js';
 import { closeAuditDb, getAuditDb } from '../../src/local/routes/events.js';
@@ -289,9 +292,18 @@ describe('persona acceptance prompt budget', () => {
     expect(config.systemPrompt).not.toContain('# Recalled Memories');
   });
 
-  it('packages the exact decision-matrix journey as one ordered, current-message-only tool sequence', async () => {
-    const session = 'decision-matrix-sequence-budget';
-    const message = 'Use the installed decision-matrix skill. Before answering, call read_skill with the exact name decision-matrix. Compare Option A and Option B using Cost weight 5 scores 4 and 2, Speed weight 3 scores 3 and 5, and Quality weight 5 scores 5 and 4.';
+  it.each([
+    [
+      'labeled options',
+      'Help me make a reliable weighted decision between Option A and Option B. Use criteria Cost (weight 5), Speed (3), and Quality (5). Score A as 4/3/5 and B as 2/5/4. Show the raw and weighted scores, checksums, totals, recommendation, weakest critical criterion, and sensitivity analysis on Speed.',
+    ],
+    [
+      'named alternatives with memory denied',
+      'Do not use saved memory. Compare Alpha and Beta with weighted scoring. Use criteria Cost, Speed, and Quality; weights are 5/3/5 and scores are Alpha 4/3/5, Beta 2/5/4. Recommend the winner with sensitivity analysis.',
+    ],
+  ])('discovers and packages the decision-matrix skill from a natural weighted-decision request: %s', async (label, message) => {
+    const session = `decision-matrix-sequence-budget-${label.replace(/\W+/g, '-')}`;
+    expect(isDecisionMatrixSkillRequest(message)).toBe(true);
     persistMessage(tmpDir, collaborationWorkspaceId, session, {
       role: 'user',
       content: 'Private stale history must not enter the decision-matrix calculation.',
@@ -452,6 +464,168 @@ describe('persona acceptance prompt budget', () => {
     ['compound tool action', 'Call read_skill with the exact name decision-matrix. Then call delete_skill once.'],
   ])('does not activate the decision-matrix sequence for %s', (_label, message) => {
     expect(isExplicitDecisionMatrixSkillDirective(message)).toBe(false);
+  });
+
+  it.each([
+    ['quoted request', 'Explain "Help me make a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4."'],
+    ['calculation denied', 'Help me make a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4, but do not calculate it.'],
+    ['missing structured inputs', 'Help me decide between Option A and Option B.'],
+    ['descriptive text', 'A weighted decision uses criteria, weights, and scores for Option A and Option B, such as 1/2/3/4.'],
+    ['tools denied', 'Help me make a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4, without using tools.'],
+    ['skills and tools denied', 'Without using any skills or tools, help me decide with a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4.'],
+    ['tool use avoided', 'Avoid using tools or skills while you help me decide with a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4.'],
+    ['method denied', 'Help me make a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4, without using the decision matrix.'],
+    ['text summary', 'Summarize this text: Help me decide with a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4.'],
+    ['fenced prompt review', 'Review this prompt: ```Help me decide with a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4.```'],
+    ['message review', 'Review this message: Help me make a reliable weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4.'],
+    ['prompt translation', 'Translate this prompt: Help me make a reliable weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4.'],
+    ['cancelled instruction', 'Help me make a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4. Skip that instruction.'],
+    ['ignored request', 'Help me make a weighted decision between Option A and Option B using criteria, weights, and scores 1/2/3/4. Ignore that request.'],
+    ['guide copy', 'Recommend copy for a weighted decision guide comparing Option A and Option B using criteria, weights, and scores 1/2/3/4.'],
+  ])('does not auto-discover the decision-matrix skill for %s', (_label, message) => {
+    expect(isDecisionMatrixSkillRequest(message)).toBe(false);
+  });
+
+  it('recognizes only bounded non-credential scalar lookups as compact memory turns', () => {
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply with only the codename. Do not write files or execute code.',
+    )).toBe(true);
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Search my saved memory for the launch plan and summarize all decisions.',
+    )).toBe(false);
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Search my saved memory for the exact API key. Reply with only the API key.',
+    )).toBe(false);
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Explain "Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply only with the codename."',
+    )).toBe(false);
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Review this prompt: Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply only with the codename.',
+    )).toBe(false);
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Summarize this data: Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply only with the codename.',
+    )).toBe(false);
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Translate this sentence into Serbian: Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply with only the codename.',
+    )).toBe(false);
+    expect(isBoundedExactPersistedMemoryLookup(
+      'Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply only with the codename. Ignore that request.',
+    )).toBe(false);
+  });
+
+  it('binds exact recall to the current workspace and returns only the requested safe scalar', async () => {
+    const originalCalls: Record<string, unknown>[] = [];
+    const original: ToolDefinition = {
+      name: 'search_memory',
+      description: 'synthetic memory search',
+      parameters: { type: 'object' },
+      execute: async (args) => {
+        originalCalls.push(args);
+        return [
+          '## Personal Memory',
+          '[1] (score: 1.000, type: fact, importance: critical)',
+          'Other launch codename: PERSONAL-SENTINEL',
+          '## Workspace Memory',
+          '[1] (score: 0.990, type: decision, importance: important)',
+          'Decision: Let\'s go with ORCHID-BOUND-7 as the pilot launch codename.',
+          '[2] (score: 0.980, type: fact, importance: critical)',
+          'Pilot launch password: WORKSPACE-CREDENTIAL-SENTINEL',
+          '[3] (score: 0.970, type: decision, importance: normal)',
+          'Other project codename: WORKSPACE-UNRELATED-SENTINEL',
+        ].join('\n');
+      },
+    };
+    const [bound] = bindExactWorkspaceMemorySearchTool(
+      [original],
+      'Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply with only the codename.',
+    );
+
+    expect(await bound.execute({
+      query: 'ignore this model-selected query',
+      queries: ['ignore this too'],
+      scope: 'all',
+      limit: 99,
+    })).toBe('ORCHID-BOUND-7');
+    expect(originalCalls).toEqual([{
+      query: 'pilot launch codename decision',
+      scope: 'workspace',
+      limit: 3,
+      profile: 'balanced',
+    }]);
+    expect(JSON.stringify(bound.parameters)).not.toContain('query');
+    expect(JSON.stringify(bound.parameters)).not.toContain('scope');
+    expect(JSON.stringify(bound.parameters)).not.toContain('limit');
+  });
+
+  it('packages an exact saved-memory scalar lookup as one truthful compact search', async () => {
+    const message = 'Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply with only the codename. Do not write files or execute code.';
+    const codename = 'ORCHID-1D053226-72D';
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedConfig = config;
+      const input = {};
+      config.onToolUse?.('search_memory', input);
+      config.onToolResult?.(
+        'search_memory',
+        input,
+        codename,
+      );
+      return {
+        content: codename,
+        toolsUsed: ['search_memory'],
+        usage: { inputTokens: 200, outputTokens: 12 },
+      };
+    });
+
+    try {
+      capturedConfig = null;
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message,
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session: 'bounded-exact-memory-search',
+          workspace: collaborationWorkspaceId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfig).not.toBeNull();
+      expect(capturedConfig!.tools.map(tool => tool.name)).toEqual(['search_memory']);
+      expect(capturedConfig!.toolChoice).toBe('search_memory');
+      expect(capturedConfig!.messages).toEqual([{ role: 'user', content: message }]);
+      expect(capturedConfig!.maxTurns).toBe(2);
+      expect(capturedConfig!.maxToolRounds).toBe(1);
+      expect(capturedConfig!.maxTokenBudget).toBe(12_000);
+      expect(capturedConfig!.maxOutputTokens).toBe(512);
+      expect(capturedConfig!.capabilityRouter).toBeUndefined();
+      expect(capturedConfig!.systemPrompt).toContain('# STRICT READ-ONLY TOOL TURN');
+      expect(capturedConfig!.systemPrompt).toContain('one non-credential value from their own saved memory');
+      expect(capturedConfig!.systemPrompt).toContain('return that requested value exactly');
+      expect(capturedConfig!.systemPrompt).not.toContain(PERSISTED_MEMORY_SENTINEL);
+
+      const events = parseSse(response.body);
+      expect(events
+        .filter(event => ['tool', 'tool_result', 'done'].includes(event.event))
+        .map(event => event.event === 'done' ? 'done' : `${event.event}:${String(event.data.name)}`))
+        .toEqual(['tool:search_memory', 'tool_result:search_memory', 'done']);
+      expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+      expect(events.find(event => event.event === 'tool_result')?.data.result)
+        .toBe('Found one matching value in this workspace.');
+      const done = events.find(event => event.event === 'done')?.data;
+      expect(done?.content).toBe(codename);
+      expect(done?.toolsUsed).toEqual(['search_memory']);
+      expect(done?.memoryContext).toEqual({ included: false, count: 0 });
+      expect(done?.contextMetrics).toMatchObject({
+        packageMode: 'compact',
+        toolSelectedCount: 1,
+      });
+    } finally {
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
   });
 
   it('keeps task-relevant example wording eligible for the exact decision sequence', () => {

@@ -407,8 +407,15 @@ function hasCancelledToolDirectiveSuffix(suffix: string): boolean {
     || /\btreat\b[^.!?;]{0,80}\b(?:it|that|this|preceding|above)\b[^.!?;]{0,80}\bas\b[^.!?;]{0,40}\b(?:data|example|hypothetical|quote)\b/i.test(withoutAffirmedExecution);
 }
 
+function hasCancelledPriorRequest(text: string): boolean {
+  const withoutAffirmedExecution = text.replace(AFFIRMED_TOOL_DIRECTIVE_PATTERN, 'affirm execution');
+  return CANCELLED_PRIOR_TOOL_DIRECTIVE_PATTERN.test(withoutAffirmedExecution)
+    || /(?:^|[.!?;\r\n]\s*)(?:(?:actually|please)[,\s]+)?(?:stop|cancel|retract|abort|halt)\b/i.test(withoutAffirmedExecution)
+    || /\b(?:changed\s+my\s+mind|scratch\s+that|take\s+that\s+back)\b/i.test(withoutAffirmedExecution);
+}
+
 function hasNegatedDecisionToolAction(text: string): boolean {
-  const nominalTarget = String.raw`(?:calculator(?:\s+use)?|calculations?(?:\s+use)?|tool(?:\s+use)?|decision[- ]matrix(?:\s+use)?)`;
+  const nominalTarget = String.raw`(?:calculator(?:\s+use)?|calculations?(?:\s+use)?|skills?(?:\s+use)?|tools?(?:\s+use)?|decision[- ]matrix(?:\s+use)?)`;
   if (new RegExp(String.raw`\bno\s+${nominalTarget}\b`, 'i').test(text)
     || new RegExp(String.raw`\b${nominalTarget}\s+(?:is|are)\s+(?:forbidden|disallowed|not\s+(?:allowed|permitted))\b`, 'i').test(text)) {
     return true;
@@ -418,9 +425,18 @@ function hasNegatedDecisionToolAction(text: string): boolean {
     'use the verified calculator',
   );
   return /\b(?:do\s+not|don['\u2019]t|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|cannot|can['\u2019]t|you\s+are\s+not\s+to)\b[^.!?;]{0,100}\b(?:compare|evaluate|score|rank|choose|decide|calculate|read|execute|run|invoke|call)\b/i.test(normalized)
-    || /\b(?:avoid|refrain\s+from)\b[^.!?;]{0,80}\b(?:comparing|evaluating|scoring|ranking|choosing|deciding|calculating|reading|executing|running|invoking|calling)\b/i.test(normalized)
+    || /\b(?:avoid|refrain\s+from)\b[^.!?;]{0,80}\b(?:comparing|evaluating|scoring|ranking|choosing|deciding|calculating|reading|executing|running|invoking|calling|using\b[^.!?;]{0,50}\b(?:tools?|skills?|decision[- ]matrix|calculator|read_skill))\b/i.test(normalized)
     || /\bwithout\b[^.!?;]{0,80}\b(?:comparing|evaluating|scoring|ranking|choosing|deciding|calculating|reading|executing|running|invoking|calling)\b/i.test(normalized)
-    || /\b(?:do\s+not|don['\u2019]t|never|must\s+not|should\s+not|cannot|can['\u2019]t)\b[^.!?;]{0,80}\buse\b[^.!?;]{0,50}\b(?:decision[- ]matrix|tool|read_skill)\b/i.test(normalized);
+    || /\bwithout\b[^.!?;]{0,80}\b(?:using|calling|invoking|running)\b[^.!?;]{0,50}\b(?:tools?|skills?|decision[- ]matrix|calculator|read_skill)\b/i.test(normalized)
+    || /\bwithout\s+(?:the\s+|any\s+)?(?:tools?|skills?|decision[- ]matrix|calculator|read_skill)\b/i.test(normalized)
+    || /\b(?:do\s+not|don['\u2019]t|never|must\s+not|should\s+not|cannot|can['\u2019]t)\b[^.!?;]{0,80}\buse\b[^.!?;]{0,50}\b(?:decision[- ]matrix|tools?|skills?|read_skill)\b/i.test(normalized);
+}
+
+function isMetaDecisionContentRequest(message: string): boolean {
+  if (/```|~~~/.test(message)) return true;
+  const normalized = message.replace(QUOTED_TOOL_DIRECTIVE_PATTERN, ' ').trim();
+  return /^(?:please\s+)?(?:summari[sz]e|review|analy[sz]e|explain|translate|extract|paraphrase|critique|edit|rewrite|classify)\b[^.!?;\r\n]{0,100}\b(?:this|that|the\s+following|an?\s+)?(?:text|message|sentence|phrase|prompt|document|data|content|passage|readme|copy|guide|example|instructions?|tutorial)\b/i.test(normalized)
+    || /\b(?:write|draft|create|recommend|suggest|improve|review|summari[sz]e|explain|analy[sz]e)\b[^.!?;\r\n]{0,100}\b(?:copy|guide|article|document|text|prompt|template|instructions?|tutorial)\b/i.test(normalized);
 }
 
 interface ExplicitReadSkillDirective {
@@ -490,6 +506,41 @@ export function isExplicitDecisionMatrixSkillDirective(message: string): boolean
     || /^(?:compare|evaluate|score|rank|choose|decide|calculate)\b/i.test(positiveSuffix)
     || /^ignore\s+(?:ties|equal\s+scores?|missing\s+values?)\b[^.!?;]*\b(?:rank|compare|score|choose|decide)\b/i.test(positiveSuffix)
     || /^wait\s+for\s+(?:the\s+)?calculator\s+result\b[^.!?;]*(?:before\s+(?:answering|recommending))?/i.test(positiveSuffix);
+}
+
+export function isDecisionMatrixSkillRequest(message: string): boolean {
+  if (isExplicitDecisionMatrixSkillDirective(message)) return true;
+
+  const actionable = message.replace(QUOTED_TOOL_DIRECTIVE_PATTERN, ' ').trim();
+  if (!actionable
+    || isExclusiveSuppliedOnlyResponseRequest(message)
+    || hasMetaToolDirectivePrefix(actionable)
+    || isMetaDecisionContentRequest(message)
+    || hasCancelledPriorRequest(actionable)
+    || /(?:^|[.!?;\r\n]\s*)(?:(?:actually|please)[,\s]+)?(?:stop|cancel|retract|abort|halt)\b/i.test(actionable)
+    || /\b(?:changed\s+my\s+mind|scratch\s+that|take\s+that\s+back)\b/i.test(actionable)
+    || hasNegatedDecisionToolAction(actionable)) return false;
+
+  const asksForDecision = /\b(?:help\s+(?:me\s+)?(?:decide|choose)|make\s+(?:me\s+)?(?:a\s+)?(?:reliable\s+)?(?:weighted\s+)?decision|compare|evaluate|score|rank|choose|decide|recommend)\b/i.test(actionable);
+  const namesWeightedMethod = /\b(?:weighted\s+(?:decision|comparison|scor(?:e|ing)|ranking)|decision[- ]matrix)\b/i.test(actionable);
+  const suppliesCriteria = /\bcriteri(?:on|a)\b/i.test(actionable);
+  const suppliesWeights = /\bweights?\b/i.test(actionable);
+  const suppliesScores = /\bscores?\b/i.test(actionable);
+  const optionNames = new Set(
+    Array.from(actionable.matchAll(/\boption\s+([a-z0-9][\w-]*)\b/gi), match => match[1].toLowerCase()),
+  );
+  const suppliesTwoOptions = optionNames.size >= 2
+    || /\bbetween\s+[^.!?;,]{1,60}\s+and\s+[^.!?;,]{1,60}/i.test(actionable)
+    || /\b(?:compare|evaluate|score|rank)\s+[^.!?;,]{1,60}?\s+(?:and|vs\.?|versus|against)\s+[^.!?;,]{1,60}?(?=\s+(?:with|using|on|across|based)\b|[.!?;,]|$)/i.test(actionable);
+  const suppliedNumbers = actionable.match(/(?<![\w.])[-+]?\d[\d,.]*(?:\.\d+)?%?/g) ?? [];
+
+  return asksForDecision
+    && namesWeightedMethod
+    && suppliesCriteria
+    && suppliesWeights
+    && suppliesScores
+    && suppliesTwoOptions
+    && suppliedNumbers.length >= 4;
 }
 
 function stripNamedToolActionSentences(message: string): string {
@@ -669,6 +720,28 @@ export function isCurrentConversationOnlyReferenceRequest(message: string): bool
 function shouldUsePersistedMemoryForTurn(message: string): boolean {
   return isExplicitMemoryRecallRequest(message)
     && !isCurrentConversationOnlyReferenceRequest(message);
+}
+
+export function isBoundedExactPersistedMemoryLookup(message: string): boolean {
+  const request = message.trim();
+  const actionable = request.replace(QUOTED_TOOL_DIRECTIVE_PATTERN, ' ').trim();
+  const quotedOnlyRecall = actionable !== request
+    && !hasExplicitPersistedMemoryRecallSignal(actionable);
+  const directLookup = /^(?:please\s+)?(?:search|look\s+(?:in|through))\s+(?:my\s+)?(?:saved\s+|persisted\s+)?memory\b/i.test(actionable);
+  if (!shouldUsePersistedMemoryForTurn(request)
+    || request.length > 280
+    || /[\r\n`]/.test(request)
+    || quotedOnlyRecall
+    || !directLookup
+    || hasMetaToolDirectivePrefix(actionable)
+    || isMetaDecisionContentRequest(request)
+    || hasCancelledPriorRequest(actionable)
+    || /\b(?:password|passcode|one[- ]time\s+(?:password|code)|otp|token|api[_ -]?key|credential|private\s+key|secret)\b/i.test(request)) return false;
+
+  const asksForExactScalar = /\b(?:what|which)\s+(?:(?:is|was|are|were)\s+)?(?:the\s+)?exact\s+(?:codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i.test(request)
+    || /\b(?:repeat|return|give\s+me|tell\s+me)\s+(?:the\s+)?exact\s+(?:codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i.test(request);
+  const requestsOnlyScalar = /\b(?:reply|respond|return|answer)\s+(?:with\s+)?(?:only|just)\s+(?:the\s+|that\s+)?(?:codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i.test(request);
+  return asksForExactScalar && requestsOnlyScalar;
 }
 
 export function isExplicitMemorySaveRequest(message: string): boolean {
@@ -928,6 +1001,130 @@ function bindExactReadSkillTool(
           return `Error: read_skill must use the exact requested skill name: ${expectedSkillName}`;
         }
         return tool.execute(args);
+      },
+    };
+  });
+}
+
+const BOUNDED_EXACT_MEMORY_SEARCH_LIMIT = 3;
+const BOUNDED_EXACT_MEMORY_SENSITIVE_PATTERN = /\b(?:password|passcode|one[- ]time\s+(?:password|code)|otp|access[_ -]?token|api[_ -]?key|credential|private\s+key|client[_ -]?secret)\b/i;
+const BOUNDED_EXACT_MEMORY_TOPIC_STOPWORDS = new Set([
+  'about', 'choose', 'chose', 'decision', 'exact', 'memory',
+  'saved', 'search', 'what', 'which', 'with', 'only', 'reply', 'respond', 'return',
+  'codename', 'name', 'label', 'identifier', 'project', 'code', 'date', 'number',
+  'value', 'choice', 'option',
+]);
+
+interface BoundedExactMemoryRequest {
+  fieldPattern: string;
+  query: string;
+  topicTerms: string[];
+}
+
+function parseBoundedExactMemoryRequest(message: string): BoundedExactMemoryRequest | null {
+  const field = message.match(/\bexact\s+(codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i)?.[1];
+  if (!field) return null;
+  const topic = message.match(
+    /\b(?:search|look\s+(?:in|through))\s+(?:my\s+)?(?:saved\s+|persisted\s+)?memory\s+(?:for|about)\s+([^.!?]{3,160})/i,
+  )?.[1]?.replace(/^(?:our|the|my)\s+/i, '').trim();
+  if (!topic) return null;
+  const topicTerms = Array.from(new Set(
+    (topic.toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? [])
+      .filter(term => !BOUNDED_EXACT_MEMORY_TOPIC_STOPWORDS.has(term)),
+  ));
+  if (topicTerms.length === 0) return null;
+  return {
+    fieldPattern: field.toLowerCase() === 'project code'
+      || field.toLowerCase() === 'project_code'
+      ? String.raw`project[_ -]?code`
+      : field.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    query: topic,
+    topicTerms,
+  };
+}
+
+function extractWorkspaceMemorySection(result: string): string | null {
+  const marker = /^## Workspace Memory\s*$/m.exec(result);
+  if (!marker || marker.index === undefined) return null;
+  const start = marker.index + marker[0].length;
+  const remainder = result.slice(start);
+  const nextSection = /\n## [^\r\n]+/m.exec(remainder);
+  return remainder.slice(0, nextSection?.index ?? remainder.length).trim();
+}
+
+function extractBoundedExactWorkspaceMemoryValue(
+  result: string,
+  request: BoundedExactMemoryRequest,
+): string | null {
+  const workspaceSection = extractWorkspaceMemorySection(result);
+  if (!workspaceSection) return null;
+  const contents = workspaceSection
+    .split(/\n(?=\[\d+\]\s+\()/)
+    .map(entry => entry.replace(/^\[\d+\]\s+\([^\r\n]*\)\s*/i, '').trim())
+    .filter(Boolean);
+  const candidates: Array<{ value: string; relevance: number }> = [];
+  const field = request.fieldPattern;
+  const scalar = String.raw`[A-Za-z0-9][A-Za-z0-9._ -]{0,79}?`;
+  const beforeField = new RegExp(
+    String.raw`\b(?:choose|chose|selected|pick|picked|use|using|go\s+with|went\s+with)\s+(?:the\s+)?(${scalar})\s+(?:as|for)\s+(?:the\s+|our\s+)?[^.\r\n]{0,100}\b${field}\b`,
+    'i',
+  );
+  const afterField = new RegExp(
+    String.raw`\b${field}\b[^.\r\n]{0,40}?\b(?:is|was|equals?|set\s+to)\b\s*["'“”]?(${scalar})`,
+    'i',
+  );
+  const labelledField = new RegExp(
+    String.raw`\b${field}\b(?:\s+(?:decision|choice|selected|chosen))?\s*[:=]\s*["'“”]?(${scalar})`,
+    'i',
+  );
+
+  for (const content of contents) {
+    for (const line of content.split(/\r?\n/).map(value => value.trim()).filter(Boolean)) {
+      if (BOUNDED_EXACT_MEMORY_SENSITIVE_PATTERN.test(line)) continue;
+      const normalized = line.toLowerCase();
+      const relevance = request.topicTerms.filter(term => normalized.includes(term)).length;
+      if (relevance === 0) continue;
+      const match = beforeField.exec(line) ?? labelledField.exec(line) ?? afterField.exec(line);
+      const value = match?.[1]
+        ?.trim()
+        .replace(/^["'“”]+|["'“”,;:.]+$/g, '');
+      if (value && value.length <= 80 && !BOUNDED_EXACT_MEMORY_SENSITIVE_PATTERN.test(value)) {
+        candidates.push({ value, relevance });
+      }
+    }
+  }
+  candidates.sort((left, right) => right.relevance - left.relevance);
+  return candidates[0]?.value ?? null;
+}
+
+export function bindExactWorkspaceMemorySearchTool(
+  tools: ToolDefinition[],
+  message: string,
+): ToolDefinition[] {
+  const request = parseBoundedExactMemoryRequest(message);
+  return tools.map((tool) => {
+    if (tool.name !== 'search_memory') return tool;
+    return {
+      ...tool,
+      description: 'Return the one exact non-credential value requested from the current workspace memory.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async (_args) => {
+        if (!request) {
+          return 'Error: exact workspace memory lookup could not bind the current request.';
+        }
+        const rawResult = await tool.execute({
+          query: request.query,
+          scope: 'workspace',
+          limit: BOUNDED_EXACT_MEMORY_SEARCH_LIMIT,
+          profile: 'balanced',
+        });
+        const value = extractBoundedExactWorkspaceMemoryValue(rawResult, request);
+        return value ?? 'Error: the requested exact workspace memory value could not be isolated safely.';
       },
     };
   });
@@ -1952,7 +2149,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       message,
       Array.from(EXPLICIT_READ_ONLY_TOOL_NAMES, name => ({ name })),
     );
-    const decisionMatrixToolSequenceRequested = isExplicitDecisionMatrixSkillDirective(message)
+    const decisionMatrixToolSequenceRequested = isDecisionMatrixSkillRequest(message)
+      && autonomyLevel === 'normal'
+      && !isAutomatedTurn
+      && turnMutationPolicy.contextScope === 'default';
+    const boundedExactPersistedMemoryLookup = isBoundedExactPersistedMemoryLookup(message)
       && autonomyLevel === 'normal'
       && !isAutomatedTurn
       && turnMutationPolicy.contextScope === 'default';
@@ -1965,9 +2166,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       ? 'read_file'
       : undefined;
     const preScanExplicitReadOnlyToolCandidate = directReadFileCandidate
-      ?? (decisionMatrixToolSequenceRequested && resolvedReadOnlyToolDirective === 'read_skill'
+      ?? (decisionMatrixToolSequenceRequested
         ? 'read_skill'
         : undefined)
+      ?? (boundedExactPersistedMemoryLookup ? 'search_memory' : undefined)
       ?? (resolvedReadOnlyToolDirective === 'list_skills'
         && autonomyLevel === 'normal'
         && !isAutomatedTurn
@@ -2437,6 +2639,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       allowResponseDecoration = !toolFreeAdvisory && turnAllowsResponseDecoration;
       if ((explicitReadOnlyToolCandidate === 'read_file'
           && directReadFileDirective.kind === 'valid')
+        || explicitReadOnlyToolCandidate === 'search_memory'
         || decisionMatrixToolSequenceRequested) {
         allowMemoryPersistence = false;
         allowDerivedPersistence = false;
@@ -3371,11 +3574,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             effectiveTools = effectiveTools.filter(tool => !blockedTools.has(tool.name));
             spawnAvailableTools = spawnAvailableTools.filter(tool => !blockedTools.has(tool.name));
           }
+          const policyInputTools = effectiveTools;
           effectiveTools = filterToolsByTurnMutationPolicy(
             effectiveTools,
             turnMutationPolicy,
             externalToolNames,
           );
+          if (decisionMatrixToolSequenceRequested && turnMutationPolicy.denyMemoryRead) {
+            const builtInReadSkill = policyInputTools.find(tool => (
+              tool.name === 'read_skill' && !externalToolNames.has(tool.name)
+            ));
+            if (builtInReadSkill && !effectiveTools.some(tool => tool.name === 'read_skill')) {
+              // A saved-memory opt-out must not disable an explicitly bounded
+              // installed-skill read. The sequence below binds this built-in
+              // tool to decision-matrix before anything reaches the model.
+              effectiveTools = [...effectiveTools, builtInReadSkill];
+            }
+          }
           spawnAvailableTools = filterToolsByTurnMutationPolicy(
             spawnAvailableTools,
             turnMutationPolicy,
@@ -3406,6 +3621,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               && effectiveTools.some(tool => tool.name === 'read_file')
               ? 'read_file'
               : undefined;
+          } else if (explicitReadOnlyToolCandidate === 'search_memory') {
+            explicitReadOnlyToolChoice = injectionResult.safe
+              && boundedExactPersistedMemoryLookup
+              && effectiveTools.some(tool => tool.name === 'search_memory')
+              ? 'search_memory'
+              : undefined;
+            if (explicitReadOnlyToolChoice) {
+              effectiveTools = bindExactWorkspaceMemorySearchTool(effectiveTools, agentMessage);
+            }
           } else {
             explicitReadOnlyToolChoice = injectionResult.safe
               ? resolveExplicitReadOnlyToolChoice(agentMessage, effectiveTools)
@@ -3713,8 +3937,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             maxTokenBudget: 18_000,
             synthesisReserveTokens: 2_500,
             toolContextBudget: {
-              ...agentRunBudget.toolContextBudget,
+              maxSingleResultChars: 3_000,
               recentResultCount: 2,
+              historicalResultChars: 900,
             },
           };
           maxOutputTokens = 768;
@@ -3838,11 +4063,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               explicitReadOnlyToolWasUsed = true;
             }
             // Send human-readable step description + raw tool event
-            const stepText = describeToolUse(name, input);
+            const disclosedInput = name === 'search_memory'
+              && explicitReadOnlyToolChoice === 'search_memory'
+              && boundedExactPersistedMemoryLookup
+              ? {}
+              : input;
+            const stepText = describeToolUse(name, disclosedInput);
             sendEvent('step', { content: stepText });
-            sendEvent('tool', { name, input });
+            sendEvent('tool', { name, input: disclosedInput });
             // Waggle Dance: emit tool call signal
-          emitWaggleSignal({ type: 'tool:called', workspaceId: executionScopeId, content: `${name}(${retainedTurnJson(input).slice(0, 100)})` });
+          emitWaggleSignal({ type: 'tool:called', workspaceId: executionScopeId, content: `${name}(${retainedTurnJson(disclosedInput).slice(0, 100)})` });
             // Track start time for duration calculation
             toolStartTimes.set(name + ':' + toolStartCounter++, Date.now());
           // F2: Audit trail — log tool call
@@ -3850,7 +4080,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             workspaceId: executionScopeId,
               eventType: 'tool_call',
               toolName: name,
-              input: retainedTurnJson(input),
+              input: retainedTurnJson(disclosedInput),
               sessionId,
               model: resolvedModel,
             });
@@ -3900,16 +4130,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 });
               }
             } else {
-              sendEvent('tool_result', { name, result, duration, isError });
+              const disclosedResult = name === 'search_memory'
+                && explicitReadOnlyToolChoice === 'search_memory'
+                && boundedExactPersistedMemoryLookup
+                && !isError
+                ? 'Found one matching value in this workspace.'
+                : result;
+              sendEvent('tool_result', { name, result: disclosedResult, duration, isError });
             }
           // F2: Audit trail — log tool result (truncated output)
+          const auditedResult = name === 'search_memory'
+            && explicitReadOnlyToolChoice === 'search_memory'
+            && boundedExactPersistedMemoryLookup
+            && !isError
+            ? 'Found one matching value in this workspace.'
+            : result;
           emitAuditEvent(server, {
             workspaceId: executionScopeId,
               eventType: 'tool_result',
               toolName: name,
-              output: retainedTurnText(result).length > 2000
-                ? retainedTurnText(result).slice(0, 2000) + '...[truncated]'
-                : retainedTurnText(result),
+              output: retainedTurnText(auditedResult).length > 2000
+                ? retainedTurnText(auditedResult).slice(0, 2000) + '...[truncated]'
+                : retainedTurnText(auditedResult),
               sessionId,
             });
 
@@ -4208,6 +4450,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   explicitReadOnlyToolResult,
                 ),
               }
+            : explicitReadOnlyToolChoice === 'search_memory'
+              && boundedExactPersistedMemoryLookup
+              && explicitReadOnlyToolResult !== null
+              ? {
+                  ...attemptedResult,
+                  content: explicitReadOnlyToolResult,
+                }
             : attemptedResult;
           if (!completedResult.content.trim()) {
             const emptyError = emptyModelResponseError(completedResult);

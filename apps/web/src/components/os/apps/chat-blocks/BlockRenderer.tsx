@@ -100,6 +100,11 @@ function toolActionLabel(block: ToolUseContentBlock): string {
     if (block.status === 'done') return 'Searched skills';
     return "Couldn't search skills";
   }
+  if (block.name === 'search_memory') {
+    if (block.status === 'running') return 'Searching memory';
+    if (block.status === 'done') return 'Searched memory';
+    return "Couldn't search memory";
+  }
   return formatToolName(block.name);
 }
 
@@ -120,6 +125,9 @@ function ToolActivityDetails({
         ? 'Denied'
         : 'Failed';
   const hasDetails = !!block.input || typeof block.result === 'string';
+  const visiblePrelude = block.name === 'search_memory' && block.status !== 'running'
+    ? undefined
+    : prelude;
   return (
     <span
       data-testid="chat-tool-activity"
@@ -136,8 +144,8 @@ function ToolActivityDetails({
         onClick={() => hasDetails && setOpen(value => !value)}
         className="flex min-w-0 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:cursor-default"
       >
-        <span className="font-medium text-[var(--text-2)]">{prelude ?? toolActionLabel(block)}</span>
-        {prelude && <span className="text-xs text-[var(--text-dim)]">{toolActionLabel(block)}</span>}
+        <span className="font-medium text-[var(--text-2)]">{visiblePrelude ?? toolActionLabel(block)}</span>
+        {visiblePrelude && <span className="text-xs text-[var(--text-dim)]">{toolActionLabel(block)}</span>}
         {block.name !== 'read_skill' && block.name !== 'search_skills' && (
           <span className="text-xs text-[var(--text-dim)]">{status}</span>
         )}
