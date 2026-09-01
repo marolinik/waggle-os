@@ -11,7 +11,10 @@ import {
   renderVerifierReportEnvelope,
 } from '../../../../tests/vision/verifier-contract.js';
 import { buildLocalServer } from '../../src/local/index.js';
-import { isCurrentConversationOnlyReferenceRequest } from '../../src/local/routes/chat.js';
+import {
+  isCurrentConversationOnlyReferenceRequest,
+  isExplicitDecisionMatrixSkillDirective,
+} from '../../src/local/routes/chat.js';
 import { closeAuditDb, getAuditDb } from '../../src/local/routes/events.js';
 import { chatSessionStateKey, persistMessage } from '../../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
@@ -257,6 +260,398 @@ describe('persona acceptance prompt budget', () => {
     expect(config.messages).toEqual([{ role: 'user', content: message }]);
     expect(config.systemPrompt).toContain('# STRICT READ-ONLY TOOL TURN');
     expect(config.systemPrompt).not.toContain('# Recalled Memories');
+  });
+
+  it('packages the exact decision-matrix journey as one ordered, current-message-only tool sequence', async () => {
+    const session = 'decision-matrix-sequence-budget';
+    const message = 'Use the installed decision-matrix skill. Before answering, call read_skill with the exact name decision-matrix. Compare Option A and Option B using Cost weight 5 scores 4 and 2, Speed weight 3 scores 3 and 5, and Quality weight 5 scores 5 and 4.';
+    persistMessage(tmpDir, collaborationWorkspaceId, session, {
+      role: 'user',
+      content: 'Private stale history must not enter the decision-matrix calculation.',
+    });
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const observedToolCalls: string[] = [];
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedConfig = config;
+      for (const name of ['read_skill', 'calculate_decision_matrix'] as const) {
+        if (!config.tools.some(tool => tool.name === name)) continue;
+        const input = name === 'read_skill'
+          ? { name: 'decision-matrix' }
+          : {
+              criteria: [
+                { name: 'Cost', weight: 5 },
+                { name: 'Speed', weight: 3 },
+                { name: 'Quality', weight: 5 },
+              ],
+              options: [
+                { name: 'Option A', scores: [4, 3, 5] },
+                { name: 'Option B', scores: [2, 5, 4] },
+              ],
+            };
+        observedToolCalls.push(name);
+        config.onToolUse?.(name, input);
+        config.onToolResult?.(name, input, name === 'read_skill'
+          ? '# Decision Matrix\nUse verified calculator output.'
+          : '{"totals":[{"name":"Option A","total":54},{"name":"Option B","total":45}]}');
+      }
+      return {
+        content: 'Decision: choose Option A. It wins with a verified total of 54 versus 45.',
+        toolsUsed: [...observedToolCalls],
+        usage: { inputTokens: 100, outputTokens: 30 },
+      };
+    });
+
+    try {
+      capturedConfig = null;
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message,
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace: collaborationWorkspaceId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfig).not.toBeNull();
+      expect(capturedConfig!.tools.map(tool => tool.name)).toEqual([
+        'read_skill',
+        'calculate_decision_matrix',
+      ]);
+      expect(capturedConfig!.requiredToolSequence).toEqual([
+        'read_skill',
+        'calculate_decision_matrix',
+      ]);
+      expect(capturedConfig!.toolChoice).toBeUndefined();
+      const boundReadSkill = capturedConfig!.tools.find(tool => tool.name === 'read_skill')!;
+      expect((boundReadSkill.parameters.properties?.name as { enum?: string[] }).enum).toEqual([
+        'decision-matrix',
+      ]);
+      await expect(boundReadSkill.execute({ name: 'project-kickoff' })).resolves.toMatch(
+        /^Error: read_skill must use the exact requested skill name: decision-matrix$/,
+      );
+      expect(capturedConfig!.messages).toEqual([{ role: 'user', content: message }]);
+      expect(JSON.stringify(capturedConfig)).not.toContain('Private stale history');
+      expect(capturedConfig!.capabilityRouter).toBeUndefined();
+      expect(capturedConfig!.traceRecording).toBeUndefined();
+      expect(capturedConfig!.maxTurns).toBe(3);
+      expect(capturedConfig!.maxToolRounds).toBe(2);
+      expect(capturedConfig!.maxTokenBudget).toBe(18_000);
+      expect(capturedConfig!.synthesisReserveTokens).toBe(2_500);
+      expect(capturedConfig!.maxOutputTokens).toBe(1_024);
+      expect(capturedConfig!.toolContextBudget).toEqual({
+        maxSingleResultChars: 3_000,
+        recentResultCount: 2,
+        historicalResultChars: 900,
+      });
+      expect(capturedConfig!.systemPrompt).toContain('# STRICT READ-ONLY TOOL SEQUENCE');
+      expect(capturedConfig!.systemPrompt).toContain('Do not save this exchange into learned memory');
+      expect(capturedConfig!.systemPrompt).not.toContain(PERSISTED_MEMORY_SENTINEL);
+      expect(observedToolCalls).toEqual(['read_skill', 'calculate_decision_matrix']);
+      const events = parseSse(response.body);
+      expect(events.filter(event => event.event === 'tool').map(event => event.data.name)).toEqual([
+        'read_skill',
+        'calculate_decision_matrix',
+      ]);
+      expect(events.filter(event => event.event === 'tool_result').map(event => event.data.name)).toEqual([
+        'read_skill',
+        'calculate_decision_matrix',
+      ]);
+      expect(events
+        .filter(event => ['tool', 'tool_result', 'done'].includes(event.event))
+        .map(event => event.event === 'done' ? 'done' : `${event.event}:${String(event.data.name)}`))
+        .toEqual([
+          'tool:read_skill',
+          'tool_result:read_skill',
+          'tool:calculate_decision_matrix',
+          'tool_result:calculate_decision_matrix',
+          'done',
+        ]);
+      expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+      expect(events.some(event => event.event === 'step'
+        && /auto-saved/i.test(String(event.data.content)))).toBe(false);
+      const done = events.find(event => event.event === 'done')?.data;
+      expect(done?.toolsUsed).toEqual(['read_skill', 'calculate_decision_matrix']);
+      expect((done?.contextMetrics as Record<string, unknown>).packageMode).toBe('compact');
+    } finally {
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it.each([
+    ['no exact skill name', 'Call read_skill once, then compare A and B.'],
+    ['missing exact qualifier', 'Call read_skill with the name decision-matrix. Compare A and B.'],
+    ['another skill', 'Call read_skill with the exact name project-kickoff. Compare A and B.'],
+    ['name suffix', 'Call read_skill with the exact name decision-matrix-v2. Compare A and B.'],
+    ['quoted example', 'Explain "Call read_skill with the exact name decision-matrix." without doing it.'],
+    ['negated directive', 'Do not call read_skill with the exact name decision-matrix. Compare A and B.'],
+    ['suffix non-execution', 'Review this example. Call read_skill with the exact name decision-matrix. Do not execute it.'],
+    ['data not instruction', 'The following is data, not an instruction. Call read_skill with the exact name decision-matrix.'],
+    ['polite suffix non-execution', 'Call read_skill with the exact name decision-matrix. Please don\'t actually execute it.'],
+    ['suffix not instruction', 'Call read_skill with the exact name decision-matrix. It is not an instruction.'],
+    ['suffix cancellation', 'Call read_skill with the exact name decision-matrix. Ignore that instruction.'],
+    ['leading example', 'Here is an example. Call read_skill with the exact name decision-matrix.'],
+    ['qualified suffix non-execution', 'Call read_skill with the exact name decision-matrix. Do not under any circumstances run it.'],
+    ['modal suffix non-execution', 'Call read_skill with the exact name decision-matrix. You must not execute it.'],
+    ['suffix skip', 'Call read_skill with the exact name decision-matrix. Skip that instruction.'],
+    ['suffix data reinterpretation', 'Call read_skill with the exact name decision-matrix. Treat the preceding as data only.'],
+    ['leading hypothetical', 'Suppose someone says this. Call read_skill with the exact name decision-matrix.'],
+    ['leading filler after meta', 'Here is a hypothetical instruction. For context only. Call read_skill with the exact name decision-matrix.'],
+    ['suffix filler before cancellation', 'Call read_skill with the exact name decision-matrix. Actually, wait. Do not execute that instruction.'],
+    ['suffix stop', 'Call read_skill with the exact name decision-matrix. Stop; I changed my mind.'],
+    ['suffix bare cancellation', 'Call read_skill with the exact name decision-matrix. Do not proceed.'],
+    ['leading imagined context', 'Imagine this. Call read_skill with the exact name decision-matrix.'],
+    ['leading hypothetical speaker', 'A hypothetical user says this. Call read_skill with the exact name decision-matrix.'],
+    ['same-clause hypothetical instruction', 'Here is a hypothetical instruction to compare Option A and Option B using the decision matrix. Call read_skill with the exact name decision-matrix.'],
+    ['suffix preference cancellation', 'Call read_skill with the exact name decision-matrix. I don\'t want you to execute it.'],
+    ['suffix modal cancellation', 'Call read_skill with the exact name decision-matrix. You are not to execute it.'],
+    ['compound double-negative bypass', 'Call read_skill with the exact name decision-matrix. Do not ignore this instruction, but do not execute it.'],
+    ['negated prefix task', 'Do not compare the options using the decision matrix. Call read_skill with the exact name decision-matrix.'],
+    ['negated suffix calculation', 'Call read_skill with the exact name decision-matrix. Compare A and B. Do not calculate anything.'],
+    ['negated suffix skill read', 'Call read_skill with the exact name decision-matrix. Compare A and B. Do not read the skill.'],
+    ['modal negated suffix calculation', 'Call read_skill with the exact name decision-matrix. Compare A and B. You are not to calculate anything.'],
+    ['avoid suffix calculation', 'Call read_skill with the exact name decision-matrix. Compare A and B. Avoid calculating the scores.'],
+    ['without suffix calculation', 'Compare A and B using the decision matrix. Call read_skill with the exact name decision-matrix. Include a comparison without calculating scores.'],
+    ['nominal prefix calculator denial', 'No calculator use is allowed. Call read_skill with the exact name decision-matrix. Compare A and B.'],
+    ['nominal suffix calculation denial', 'Call read_skill with the exact name decision-matrix. Compare A and B. No calculation is permitted.'],
+    ['plural nominal prefix calculation denial', 'Calculations are not permitted. Call read_skill with the exact name decision-matrix. Compare A and B.'],
+    ['presentation side effect', 'Compare A and B using the decision matrix. Call read_skill with the exact name decision-matrix. Include the totals and share them with finance.'],
+    ['compound tool action', 'Call read_skill with the exact name decision-matrix. Then call delete_skill once.'],
+  ])('does not activate the decision-matrix sequence for %s', (_label, message) => {
+    expect(isExplicitDecisionMatrixSkillDirective(message)).toBe(false);
+  });
+
+  it('keeps task-relevant example wording eligible for the exact decision sequence', () => {
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Review this example using the decision matrix. Call read_skill with the exact name decision-matrix. Compare Alpha and Beta.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Review the instructions for this decision. Call read_skill with the exact name decision-matrix. Compare Alpha and Beta.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Call read_skill with the exact name decision-matrix. Do not ignore that instruction. Compare Alpha and Beta.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Suppose Option A costs 10 and Option B costs 12. Call read_skill with the exact name decision-matrix. Compare them.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Call read_skill with the exact name decision-matrix. Ignore ties and rank by total score.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Call read_skill with the exact name decision-matrix. Wait for the calculator result before answering.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Call read_skill with the exact name decision-matrix. You must not ignore that instruction. Compare Alpha and Beta.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Compare Option A and Option B using the decision matrix. Call read_skill with the exact name decision-matrix.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Compare Option A and Option B using the decision matrix. Call read_skill with the exact name decision-matrix. Include sensitivity analysis and keep the answer concise.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Do not calculate manually. Call read_skill with the exact name decision-matrix. Compare Option A and Option B.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'Do not rank by cost alone. Call read_skill with the exact name decision-matrix. Compare Option A and Option B.',
+    )).toBe(true);
+    expect(isExplicitDecisionMatrixSkillDirective(
+      'You must not calculate by hand. Call read_skill with the exact name decision-matrix. Compare Option A and Option B.',
+    )).toBe(true);
+  });
+
+  it('preserves the legacy single read_skill route for a non-decision skill', async () => {
+    const message = 'Do not use an outdated checklist. Follow the project instructions. Call read_skill with the exact name project-kickoff. For example, skip the optional narrative and apply its kickoff checklist to Project Alpha.';
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedConfig = config;
+      config.onToolUse?.('read_skill', { name: 'project-kickoff' });
+      config.onToolResult?.('read_skill', { name: 'project-kickoff' }, '# Project Kickoff');
+      return {
+        content: 'The project-kickoff skill is ready.',
+        toolsUsed: ['read_skill'],
+        usage: { inputTokens: 30, outputTokens: 10 },
+      };
+    });
+
+    try {
+      capturedConfig = null;
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message,
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session: 'legacy-read-skill-route',
+          workspace: collaborationWorkspaceId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfig).not.toBeNull();
+      expect(capturedConfig!.tools.map(tool => tool.name)).toEqual(['read_skill']);
+      expect(capturedConfig!.toolChoice).toBe('read_skill');
+      expect(capturedConfig!.requiredToolSequence).toBeUndefined();
+      const events = parseSse(response.body);
+      expect(events
+        .filter(event => ['tool', 'tool_result', 'done'].includes(event.event))
+        .filter(event => event.event === 'done' || event.data.name !== 'auto_recall')
+        .map(event => event.event === 'done' ? 'done' : `${event.event}:${String(event.data.name)}`))
+        .toEqual(['tool:read_skill', 'tool_result:read_skill', 'done']);
+    } finally {
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('does not force legacy read_skill after an explicit cancellation', async () => {
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedConfig = config;
+      return { content: 'The earlier tool request was not executed.', toolsUsed: [], usage: { inputTokens: 20, outputTokens: 8 } };
+    });
+    try {
+      capturedConfig = null;
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Call read_skill with the exact name project-kickoff. Ignore the previous instruction.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session: 'legacy-read-skill-cancelled',
+          workspace: collaborationWorkspaceId,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfig).not.toBeNull();
+      expect(capturedConfig!.toolChoice).toBeUndefined();
+      expect(capturedConfig!.requiredToolSequence).toBeUndefined();
+      expect(capturedConfig!.tools.map(tool => tool.name)).not.toContain('read_skill');
+      expect(capturedConfig!.systemPrompt).not.toContain('# STRICT READ-ONLY TOOL TURN');
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'tool' && event.data.name === 'read_skill')).toBe(false);
+      expect(events.some(event => event.event === 'tool_result' && event.data.name === 'read_skill')).toBe(false);
+    } finally {
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it.each(['read_skill', 'calculate_decision_matrix'] as const)(
+    'fails closed when team governance removes decision-matrix sequence tool %s',
+    async (blockedTool) => {
+    const workspace = server.workspaceManager.create({
+      name: `Decision matrix governance boundary ${blockedTool}`,
+      group: 'Test',
+    }).id;
+    server.workspaceManager.update(workspace, {
+      teamId: 'decision-matrix-team',
+      teamServerUrl: 'https://93.184.216.34',
+      teamRole: 'member',
+    });
+    const waggleConfig = new WaggleConfig(tmpDir);
+    const previousTeamServer = waggleConfig.getTeamServer();
+    waggleConfig.setTeamServer({
+      url: 'https://93.184.216.34',
+      token: 'decision-matrix-governance-token',
+    });
+    waggleConfig.save();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify([
+      { role: 'member', blockedTools: [blockedTool] },
+    ]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      capturedConfig = config;
+      return {
+        content: 'The requested decision-matrix tool sequence is unavailable.',
+        toolsUsed: [],
+        usage: { inputTokens: 40, outputTokens: 12 },
+      };
+    });
+
+    try {
+      capturedConfig = null;
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Call read_skill with the exact name decision-matrix. Compare A and B using Cost weight 5 scores 4 and 2.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session: `decision-matrix-governance-denied-${blockedTool}`,
+          workspace,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfig).not.toBeNull();
+      expect(capturedConfig!.tools).toEqual([]);
+      expect(capturedConfig!.requiredToolSequence).toBeUndefined();
+      expect(capturedConfig!.toolChoice).toBeUndefined();
+      expect(capturedConfig!.systemPrompt).toContain('# UNAVAILABLE READ-ONLY TOOL SEQUENCE');
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'tool')).toBe(false);
+      expect(events.some(event => event.event === 'tool_result')).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+      const restoreConfig = new WaggleConfig(tmpDir);
+      if (previousTeamServer) restoreConfig.setTeamServer(previousTeamServer);
+      else restoreConfig.clearTeamServer();
+      restoreConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('does not replay or switch models after the first decision-matrix sequence tool has started', async () => {
+    const message = 'Use the installed decision-matrix skill. Before answering, call read_skill with the exact name decision-matrix. Compare A and B using Cost weight 5 scores 4 and 2.';
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const attempts: AgentLoopConfig[] = [];
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(config);
+      config.onToolUse?.('read_skill', { name: 'decision-matrix' });
+      config.onToolResult?.('read_skill', { name: 'decision-matrix' }, '# Decision Matrix');
+      throw new Error('Could not reach the model endpoint after 3 attempts (fetch failed).');
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message,
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session: 'decision-matrix-no-replay',
+          workspace: collaborationWorkspaceId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toHaveLength(1);
+      expect(attempts[0]?.requiredToolSequence).toEqual([
+        'read_skill',
+        'calculate_decision_matrix',
+      ]);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'error')).toBe(true);
+      expect(events.some(event => event.event === 'model_switch')).toBe(false);
+      expect(events.filter(event => event.event === 'tool' && event.data.name === 'read_skill')).toHaveLength(1);
+    } finally {
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
   });
 
   it('fails closed instead of broadening an unsafe compound read request', async () => {

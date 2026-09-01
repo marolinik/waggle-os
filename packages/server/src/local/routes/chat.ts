@@ -94,6 +94,7 @@ import {
   composeClosedWorldChatPrompt,
   composeEvidenceBoundedChatPrompt,
   composeStrictReadOnlyToolChatPrompt,
+  composeStrictReadOnlyToolSequenceChatPrompt,
   composeToolFreeAdvisoryChatPrompt,
   composeChatPromptTail,
   selectChatPromptPackageMode,
@@ -256,6 +257,7 @@ const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
 ]);
 const EXPLICIT_READ_ONLY_TOOL_NAMES = new Set([...READONLY_TOOLS, 'read_skill']);
 const PLAN_AUTHORING_TOOL_NAMES = new Set(['create_plan', 'add_plan_step']);
+const DECISION_MATRIX_TOOL_SEQUENCE = ['read_skill', 'calculate_decision_matrix'] as const;
 
 /**
  * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
@@ -303,6 +305,10 @@ export function hasRegulatedDisclaimer(content: string, personaId: string): bool
 const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|explore|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
 const AMBIGUOUS_GATED_ACTION_VERB_SOURCE = String.raw`(?:message|share|post|update)`;
 const NEGATABLE_CAPABILITY_VERB_SOURCE = String.raw`(?:${EXPLICIT_GATED_ACTION_VERB_SOURCE}|${AMBIGUOUS_GATED_ACTION_VERB_SOURCE}|use|call|invoke|search|research|investigate|try|retry)`;
+const PRESENTATION_SIDE_EFFECT_PATTERN = new RegExp(
+  String.raw`\b(?:${NEGATABLE_CAPABILITY_VERB_SOURCE}|persist|store|remember|launch)\b`,
+  'i',
+);
 const CAPABILITY_GERUND_SOURCE = String.raw`(?:writing|reading|editing|modifying|creating|generating|exporting|downloading|committing|pushing|pulling|merging|branching|running|executing|installing|deleting|removing|inspecting|exploring|reviewing|analy[sz]ing|fixing|debugging|testing|validating|verifying|checking|building|compiling|typechecking|linting|refactoring|implementing|drafting|preparing|scheduling|sending|emailing|messaging|sharing|publishing|uploading|updating|posting|delegating|coordinating|orchestrating|browsing|navigating|opening|clicking|filling|querying|calculating|computing|using|calling|invoking|searching|researching|investigating|trying|retrying)`;
 const NEGATABLE_CAPABILITY_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|shell|browser|web|internet)`;
 const NEGATED_CAPABILITY_RESUME_SOURCE = String.raw`(?:\b(?:but|however|yet|instead|then)\b|[:\u2013\u2014]\s*(?=(?:please\s+)?${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
@@ -352,16 +358,131 @@ const AMBIGUOUS_GATED_ACTION_PATTERN = new RegExp(
 
 const QUOTED_TOOL_DIRECTIVE_PATTERN = /"[^"\r\n]*"|“[^”\r\n]*”|«[^»\r\n]*»|'[^'\r\n]*'/g;
 const EXPLICIT_NAMED_TOOL_ACTION_SOURCE = String.raw`(?:^|[.!?]\s+)(?:(?:before|after)\b[^,.;!?\r\n]{0,40},\s*)?(?:(?:(?:can|could|would)\s+you(?:\s+please)?|please|then)\s+)?(?:use|call|invoke|run)\s+(?:(?:the|a|an|installed)\s+)*(?:tool\s+)?(?<name>[a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b`;
+const PRIOR_TOOL_DIRECTIVE_REFERENCE_SOURCE = String.raw`(?:it|(?:that|this)(?:\s+(?:instruction|directive|request|command|sequence))?|(?:(?:the|my|your|our)\s+)?(?:(?:previous|preceding|above|earlier|prior)\s+)?(?:instruction|directive|request|command|sequence))`;
+const AFFIRMED_TOOL_DIRECTIVE_SOURCE = String.raw`(?:(?:you\s+)?(?:do\s+not|don['\u2019]t|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t))\s+(?:ignore|skip|disregard)\s+${PRIOR_TOOL_DIRECTIVE_REFERENCE_SOURCE}`;
+const AFFIRMED_TOOL_DIRECTIVE_PATTERN = new RegExp(
+  String.raw`\b${AFFIRMED_TOOL_DIRECTIVE_SOURCE}\b`,
+  'gi',
+);
+const AFFIRMED_TOOL_DIRECTIVE_PREFIX_PATTERN = new RegExp(
+  String.raw`^${AFFIRMED_TOOL_DIRECTIVE_SOURCE}\b[.!?;]?\s*`,
+  'i',
+);
+const CANCELLED_PRIOR_TOOL_DIRECTIVE_PATTERN = new RegExp(
+  String.raw`\b(?:skip|ignore|disregard)\s+${PRIOR_TOOL_DIRECTIVE_REFERENCE_SOURCE}\b`,
+  'i',
+);
 
-function isExplicitReadSkillDirective(message: string): boolean {
+function hasMetaToolDirectivePrefix(prefix: string): boolean {
+  return prefix.split(/[.!?;\r\n]+/).some((rawClause) => {
+    const clause = rawClause.trim();
+    if (!clause) return false;
+    const explicitMeta = /^(?:suppose|imagine|pretend)\b[^.!?;]*\b(?:someone|a\s+user|this|an?\s+(?:example|quote|instruction|directive|prompt))\b/i.test(clause)
+      || /^(?:here\s+(?:is|['\u2019]s)|this\s+is|the\s+following\s+is|what\s+follows\s+is)\b[^.!?;]*\b(?:example|quote|quoted|quotation|data|hypothetical|instruction|directive|prompt)\b/i.test(clause)
+      || /\bhypothetical\s+(?:user|instruction|directive|prompt)\b[^.!?;]*\b(?:says|said)\b/i.test(clause)
+      || /\bnot\s+an?\s+instruction\b/i.test(clause);
+    if (explicitMeta) return true;
+    if (/\b(?:review|compare|evaluate|score|rank|analy[sz]e)\b[^.!?;]*\b(?:using|with)\s+(?:the\s+)?decision[- ]matrix\b/i.test(clause)) return false;
+    return /^(?:review|explain|analy[sz]e|discuss)\s+(?:this|the\s+following|that)\s+(?:example|quote|text|directive)\b/i.test(clause);
+  });
+}
+
+function hasCancelledToolDirectiveSuffix(suffix: string): boolean {
+  const withoutAffirmedExecution = suffix.replace(
+    AFFIRMED_TOOL_DIRECTIVE_PATTERN,
+    'affirm execution',
+  );
+  return /\b(?:do\s+not|don['\u2019]t|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|cannot|can['\u2019]t|i\s+don['\u2019]t\s+want\s+you\s+to|you\s+are\s+not\s+to)\b[^.!?;]{0,100}\b(?:execute|run|invoke|call|use|proceed|follow|perform)\b/i.test(withoutAffirmedExecution)
+    || /(?:^|[.!?;\r\n]\s*)(?:(?:actually|please)[,\s]+)?(?:stop|cancel|retract|abort|halt)\b/i.test(withoutAffirmedExecution)
+    || /\b(?:changed\s+my\s+mind|scratch\s+that|take\s+that\s+back)\b/i.test(withoutAffirmedExecution)
+    || CANCELLED_PRIOR_TOOL_DIRECTIVE_PATTERN.test(withoutAffirmedExecution)
+    || /\b(?:it|that|this|(?:the\s+)?(?:preceding|above|text|directive|request|command))\b[^.!?;]{0,80}\bnot\s+an?\s+instruction\b/i.test(withoutAffirmedExecution)
+    || /\btreat\b[^.!?;]{0,80}\b(?:it|that|this|preceding|above)\b[^.!?;]{0,80}\bas\b[^.!?;]{0,40}\b(?:data|example|hypothetical|quote)\b/i.test(withoutAffirmedExecution);
+}
+
+function hasNegatedDecisionToolAction(text: string): boolean {
+  const nominalTarget = String.raw`(?:calculator(?:\s+use)?|calculations?(?:\s+use)?|tool(?:\s+use)?|decision[- ]matrix(?:\s+use)?)`;
+  if (new RegExp(String.raw`\bno\s+${nominalTarget}\b`, 'i').test(text)
+    || new RegExp(String.raw`\b${nominalTarget}\s+(?:is|are)\s+(?:forbidden|disallowed|not\s+(?:allowed|permitted))\b`, 'i').test(text)) {
+    return true;
+  }
+  const normalized = text.replace(
+    /\b(?:do\s+not|don['\u2019]t|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|cannot|can['\u2019]t|you\s+are\s+not\s+to)\s+(?:compare|evaluate|score|rank|choose|decide|calculate)\b(?:(?!\b(?:and|or|but|nor)\b)[^.!?;]){0,80}\b(?:manually|by\s+hand|yourself|from\s+memory|by\s+(?:(?!\b(?:and|or|but|nor)\b)[^.!?;,]){1,40}\balone)\b\s*(?=[.!?;]|$)/gi,
+    'use the verified calculator',
+  );
+  return /\b(?:do\s+not|don['\u2019]t|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|cannot|can['\u2019]t|you\s+are\s+not\s+to)\b[^.!?;]{0,100}\b(?:compare|evaluate|score|rank|choose|decide|calculate|read|execute|run|invoke|call)\b/i.test(normalized)
+    || /\b(?:avoid|refrain\s+from)\b[^.!?;]{0,80}\b(?:comparing|evaluating|scoring|ranking|choosing|deciding|calculating|reading|executing|running|invoking|calling)\b/i.test(normalized)
+    || /\bwithout\b[^.!?;]{0,80}\b(?:comparing|evaluating|scoring|ranking|choosing|deciding|calculating|reading|executing|running|invoking|calling)\b/i.test(normalized)
+    || /\b(?:do\s+not|don['\u2019]t|never|must\s+not|should\s+not|cannot|can['\u2019]t)\b[^.!?;]{0,80}\buse\b[^.!?;]{0,50}\b(?:decision[- ]matrix|tool|read_skill)\b/i.test(normalized);
+}
+
+interface ExplicitReadSkillDirective {
+  skillName: string | null;
+  exactName: boolean;
+  prefix: string;
+  suffix: string;
+}
+
+function parseExplicitReadSkillDirective(message: string): ExplicitReadSkillDirective | null {
   const actionable = message.replace(QUOTED_TOOL_DIRECTIVE_PATTERN, ' ');
   const matches = Array.from(actionable.matchAll(new RegExp(EXPLICIT_NAMED_TOOL_ACTION_SOURCE, 'gi')));
-  if (matches.length !== 1 || matches[0].groups?.name?.toLowerCase() !== 'read_skill') return false;
+  if (matches.length !== 1 || matches[0].groups?.name?.toLowerCase() !== 'read_skill') return null;
 
   const directiveEnd = (matches[0].index ?? 0) + matches[0][0].length;
-  const sentenceTail = actionable.slice(directiveEnd).split(/[.!?\r\n]/, 1)[0].trim();
-  return sentenceTail === ''
-    || /^(?:(?:with|using)\s+(?:the\s+)?(?:exact\s+)?name\s+[a-z0-9][\w.-]*|(?:exactly\s+once|once))$/i.test(sentenceTail);
+  const directiveRemainder = actionable.slice(directiveEnd);
+  const sentenceTerminatorOffset = directiveRemainder.search(/[.!?\r\n]/);
+  const directiveSentenceEnd = sentenceTerminatorOffset === -1
+    ? actionable.length
+    : directiveEnd + sentenceTerminatorOffset + 1;
+  const directivePrefix = actionable.slice(0, matches[0].index ?? 0).trim();
+  const directiveSuffix = actionable.slice(directiveSentenceEnd).trim();
+  if (hasMetaToolDirectivePrefix(directivePrefix)
+    || hasCancelledToolDirectiveSuffix(directiveSuffix)) return null;
+
+  const sentenceTail = directiveRemainder.split(/[.!?\r\n]/, 1)[0].trim();
+  if (sentenceTail === '' || /^(?:exactly\s+once|once)$/i.test(sentenceTail)) {
+    return { skillName: null, exactName: false, prefix: directivePrefix, suffix: directiveSuffix };
+  }
+  const named = sentenceTail.match(
+    /^(?:with|using)\s+(?:the\s+)?(?<exact>exact\s+)?name\s+(?<skillName>[a-z0-9][\w.-]*)$/i,
+  );
+  return named?.groups?.skillName
+    ? {
+        skillName: named.groups.skillName.toLowerCase(),
+        exactName: Boolean(named.groups.exact),
+        prefix: directivePrefix,
+        suffix: directiveSuffix,
+      }
+    : null;
+}
+
+function isExplicitReadSkillDirective(message: string): boolean {
+  return parseExplicitReadSkillDirective(message) !== null;
+}
+
+export function isExplicitDecisionMatrixSkillDirective(message: string): boolean {
+  const directive = parseExplicitReadSkillDirective(message);
+  if (directive?.skillName !== 'decision-matrix' || !directive.exactName) return false;
+  if (hasNegatedDecisionToolAction(directive.prefix)
+    || hasNegatedDecisionToolAction(directive.suffix)) return false;
+  const positivePrefixTask = /\b(?:compare|evaluate|score|rank|choose|decide|calculate)\b[^.!?;]*(?:\bdecision[- ]matrix\b|\b(?:option|criterion|criteria|weight|scores?|cost|benefit|risk|time)\b)/i.test(directive.prefix);
+
+  const positiveSuffix = directive.suffix.replace(
+    AFFIRMED_TOOL_DIRECTIVE_PREFIX_PATTERN,
+    '',
+  );
+  const presentationOnlySuffix = positiveSuffix !== ''
+    && positiveSuffix.split(/[.!?;\r\n]+/).every((rawClause) => {
+      const clause = rawClause.trim();
+      if (!clause) return true;
+      const lead = clause.match(/^(?:include|show|return|format|present|summari[sz]e|explain|keep|make)\b/i);
+      return Boolean(lead)
+        && !PRESENTATION_SIDE_EFFECT_PATTERN.test(clause.slice(lead?.[0].length ?? 0));
+    });
+  return (positivePrefixTask && (positiveSuffix === '' || presentationOnlySuffix))
+    || /^(?:compare|evaluate|score|rank|choose|decide|calculate)\b/i.test(positiveSuffix)
+    || /^ignore\s+(?:ties|equal\s+scores?|missing\s+values?)\b[^.!?;]*\b(?:rank|compare|score|choose|decide)\b/i.test(positiveSuffix)
+    || /^wait\s+for\s+(?:the\s+)?calculator\s+result\b[^.!?;]*(?:before\s+(?:answering|recommending))?/i.test(positiveSuffix);
 }
 
 function stripNamedToolActionSentences(message: string): string {
@@ -489,6 +610,19 @@ function hasExplicitPersistedMemoryRecallSignal(message: string): boolean {
   return directRecall
     || explicitMemoryLookup.test(message)
     || ownedContextLookup.test(message);
+}
+
+function isReportedToolFailure(result: string): boolean {
+  const trimmed = result.trim();
+  if (/^(?:error|failed|denied|blocked)(?::|\s|$)/i.test(trimmed)) return true;
+  try {
+    const parsed = JSON.parse(trimmed) as { error?: unknown; ok?: unknown; success?: unknown };
+    return parsed.ok === false
+      || parsed.success === false
+      || (typeof parsed.error === 'string' && parsed.error.trim().length > 0);
+  } catch {
+    return false;
+  }
 }
 
 export function isExplicitMemoryRecallRequest(message: string): boolean {
@@ -757,6 +891,36 @@ function bindDirectReadFileTool(
         }
         reportOutcome(outcome);
         return outcome.content;
+      },
+    };
+  });
+}
+
+function bindExactReadSkillTool(
+  tools: ToolDefinition[],
+  expectedSkillName: string,
+): ToolDefinition[] {
+  return tools.map((tool) => {
+    if (tool.name !== 'read_skill') return tool;
+    return {
+      ...tool,
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            enum: [expectedSkillName],
+            description: `Exact installed skill name: ${expectedSkillName}`,
+          },
+        },
+        required: ['name'],
+        additionalProperties: false,
+      },
+      execute: async (args) => {
+        if (Object.keys(args).length !== 1 || args.name !== expectedSkillName) {
+          return `Error: read_skill must use the exact requested skill name: ${expectedSkillName}`;
+        }
+        return tool.execute(args);
       },
     };
   });
@@ -1226,6 +1390,7 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
     contextScope: TurnContextScope = 'default',
     selectedToolCount = 0,
     explicitReadOnlyToolChoice?: string,
+    explicitReadOnlyToolSequence?: readonly string[],
     selectedModel?: string,
     cacheWorkspaceId = workspaceId ?? 'default',
     toolFreeAdvisory = false,
@@ -1236,6 +1401,22 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
     const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
 
+    if (explicitReadOnlyToolSequence?.length
+      && selectedToolCount !== explicitReadOnlyToolSequence.length) {
+      return composeStrictReadOnlyToolSequenceChatPrompt({
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+        toolNames: explicitReadOnlyToolSequence,
+        toolAvailable: false,
+      });
+    }
+    if (explicitReadOnlyToolSequence?.length
+      && packageMode === 'compact'
+      && selectedToolCount === explicitReadOnlyToolSequence.length) {
+      return composeStrictReadOnlyToolSequenceChatPrompt({
+        behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
+        toolNames: explicitReadOnlyToolSequence,
+      });
+    }
     if (explicitReadOnlyToolChoice && toolFreeAdvisory) {
       return composeStrictReadOnlyToolChatPrompt({
         behavioralSpec: server.activeBehavioralSpec ?? BEHAVIORAL_SPEC,
@@ -1762,8 +1943,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
     const resolvedReadOnlyToolDirective = resolveExplicitReadOnlyToolChoice(
       message,
-      Array.from(READONLY_TOOLS, name => ({ name })),
+      Array.from(EXPLICIT_READ_ONLY_TOOL_NAMES, name => ({ name })),
     );
+    const decisionMatrixToolSequenceRequested = isExplicitDecisionMatrixSkillDirective(message)
+      && autonomyLevel === 'normal'
+      && !isAutomatedTurn
+      && turnMutationPolicy.contextScope === 'default';
     const directReadFileDirective = parseDirectReadFileDirective(message);
     const directReadFileCandidate = directReadFileDirective.kind !== 'unrelated'
       && autonomyLevel === 'normal'
@@ -1773,6 +1958,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       ? 'read_file'
       : undefined;
     const preScanExplicitReadOnlyToolCandidate = directReadFileCandidate
+      ?? (decisionMatrixToolSequenceRequested && resolvedReadOnlyToolDirective === 'read_skill'
+        ? 'read_skill'
+        : undefined)
       ?? (resolvedReadOnlyToolDirective === 'list_skills'
         && autonomyLevel === 'normal'
         && !isAutomatedTurn
@@ -2213,8 +2401,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       allowMemoryPersistence = !toolFreeAdvisory && turnPersistence.allowMemoryPersistence;
       allowDerivedPersistence = !toolFreeAdvisory && turnPersistence.allowDerivedPersistence;
       allowResponseDecoration = !toolFreeAdvisory && turnAllowsResponseDecoration;
-      if (explicitReadOnlyToolCandidate === 'read_file'
-        && directReadFileDirective.kind === 'valid') {
+      if ((explicitReadOnlyToolCandidate === 'read_file'
+          && directReadFileDirective.kind === 'valid')
+        || decisionMatrixToolSequenceRequested) {
         allowMemoryPersistence = false;
         allowDerivedPersistence = false;
         allowResponseDecoration = false;
@@ -2894,6 +3083,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let packageMode: ChatPromptPackageMode | 'custom' = 'custom';
         let spawnAvailableTools = effectiveTools;
         let explicitReadOnlyToolChoice: string | undefined;
+        let requiredToolSequence: readonly string[] | undefined;
         let directReadFileExecutionOutcome: ToolExecutionOutcome | null = null;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
@@ -3160,7 +3350,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
 
           const beforeNarrowing = effectiveTools.length;
-          if (explicitReadOnlyToolCandidate === 'read_file') {
+          if (decisionMatrixToolSequenceRequested
+            && explicitReadOnlyToolCandidate === 'read_skill') {
+            const sequenceTools = DECISION_MATRIX_TOOL_SEQUENCE.map(name => (
+              effectiveTools.filter(tool => tool.name === name)
+            ));
+            const sequenceAvailable = injectionResult.safe
+              && sequenceTools.every(matches => matches.length === 1);
+            if (sequenceAvailable) {
+              requiredToolSequence = DECISION_MATRIX_TOOL_SEQUENCE;
+              effectiveTools = DECISION_MATRIX_TOOL_SEQUENCE.map((name, index) => sequenceTools[index][0]);
+              effectiveTools = bindExactReadSkillTool(effectiveTools, 'decision-matrix');
+            } else {
+              effectiveTools = [];
+            }
+            explicitReadOnlyToolChoice = undefined;
+          } else if (explicitReadOnlyToolCandidate === 'read_file') {
             explicitReadOnlyToolChoice = injectionResult.safe
               && directReadFileDirective.kind === 'valid'
               && turnTaskShape.complexity === 'simple'
@@ -3172,7 +3377,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               ? resolveExplicitReadOnlyToolChoice(agentMessage, effectiveTools)
               : undefined;
           }
-          if (explicitReadOnlyToolCandidate) {
+          if (requiredToolSequence) {
+            // Exact sequence is already narrowed, ordered, and bound above.
+          } else if (explicitReadOnlyToolCandidate) {
             effectiveTools = explicitReadOnlyToolChoice
               ? effectiveTools.filter(tool => tool.name === explicitReadOnlyToolChoice)
               : [];
@@ -3275,6 +3482,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             recentToolNames: previousToolSequence,
             preferredToolNames: activePersona?.tools ?? [],
             mandatoryToolNames: [
+              ...(requiredToolSequence ?? []),
               ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
               ...(shouldUsePersistedMemoryForTurn(agentMessage) ? ['search_memory'] : []),
               ...(shouldRequireCapabilityAcquisitionTools(agentMessage)
@@ -3292,6 +3500,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           toolOmittedCount = selection.omittedCount;
           transmittedToolSchemaChars = toolSelectedCount > 0 ? selection.schemaChars : 0;
           log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
+        }
+        if (requiredToolSequence) {
+          const selectedNames = effectiveTools.map(tool => tool.name);
+          const sequenceIntact = selectedNames.length === requiredToolSequence.length
+            && requiredToolSequence.every((name, index) => selectedNames[index] === name);
+          if (!sequenceIntact) {
+            requiredToolSequence = undefined;
+            effectiveTools = [];
+            toolSelectedCount = 0;
+            transmittedToolSchemaChars = 0;
+          }
         }
         if (explicitReadOnlyToolChoice
           && !effectiveTools.some(tool => tool.name === explicitReadOnlyToolChoice)) {
@@ -3343,6 +3562,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             explicitReadOnlyToolChoice: explicitReadOnlyToolChoice === explicitReadOnlyToolCandidate
               ? explicitReadOnlyToolChoice
               : undefined,
+            explicitReadOnlyToolSequence: decisionMatrixToolSequenceRequested
+              ? DECISION_MATRIX_TOOL_SEQUENCE
+              : undefined,
             explicitToolFreeAdvisory: toolFreeAdvisory,
             exclusiveSuppliedOnlyResponseContract: closedWorldRewrite
               || isExclusiveSuppliedOnlyResponseRequest(agentMessage),
@@ -3382,10 +3604,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               closedWorldRewrite,
               turnMutationPolicy.contextScope,
               effectiveTools.length,
-              explicitReadOnlyToolChoice ?? explicitReadOnlyToolCandidate,
+              decisionMatrixToolSequenceRequested
+                ? undefined
+                : explicitReadOnlyToolChoice ?? explicitReadOnlyToolCandidate,
+              decisionMatrixToolSequenceRequested ? DECISION_MATRIX_TOOL_SEQUENCE : undefined,
               logicalModel,
               activeSessionStateWorkspaceId,
-              toolFreeAdvisory || Boolean(explicitReadOnlyToolCandidate && !explicitReadOnlyToolChoice),
+              toolFreeAdvisory || Boolean(
+                explicitReadOnlyToolCandidate
+                && !explicitReadOnlyToolChoice
+                && !requiredToolSequence,
+              ),
               persistedMemoryReadAllowed,
               allowsConversationHistory(turnMutationPolicy),
             );
@@ -3437,11 +3666,25 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let maxOutputTokens: number | undefined;
         const reasoningForModelAttempt = (logicalModel: string): AgentLoopConfig['reasoning'] =>
           toolFreeAdvisory
+          && !requiredToolSequence
           && packageMode === 'compact'
           && logicalModel.trim().toLowerCase() === 'openrouter/anthropic/claude-sonnet-5'
             ? { enabled: true, effort: 'low' }
             : undefined;
-        if (explicitReadOnlyToolChoice && packageMode === 'compact') {
+        if (requiredToolSequence && packageMode === 'compact') {
+          agentRunBudget = {
+            ...agentRunBudget,
+            maxTurns: 3,
+            maxToolRounds: 2,
+            maxTokenBudget: 18_000,
+            synthesisReserveTokens: 2_500,
+            toolContextBudget: {
+              ...agentRunBudget.toolContextBudget,
+              recentResultCount: 2,
+            },
+          };
+          maxOutputTokens = 1_024;
+        } else if (explicitReadOnlyToolChoice && packageMode === 'compact') {
           agentRunBudget = {
             ...agentRunBudget,
             maxTurns: 2,
@@ -3500,6 +3743,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let explicitReadOnlyToolWasUsed = false;
         let explicitReadOnlyToolResult: string | null = null;
         let explicitReadOnlyToolFailure: string | null = null;
+        let requiredToolSequenceStarted = false;
+        const requiredToolSequenceUseOrder: string[] = [];
+        const requiredToolSequenceResultOrder: string[] = [];
+        let requiredToolSequenceFailure: string | null = null;
 
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
@@ -3514,6 +3761,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           spendWorkspaceId: executionScopeId,
           systemPrompt,
           tools: effectiveTools,
+          ...(requiredToolSequence ? { requiredToolSequence } : {}),
           messages: windowedMessages,
           stream: true,
           ...agentRunBudget,
@@ -3542,6 +3790,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
           onToolUse: (name: string, input: Record<string, unknown>) => {
             pendingExplicitReadOnlyToolChoice = undefined;
+            if (requiredToolSequence) {
+              requiredToolSequenceStarted = true;
+              requiredToolSequenceUseOrder.push(name);
+            }
             if (explicitReadOnlyToolChoice && name === explicitReadOnlyToolChoice) {
               explicitReadOnlyToolWasUsed = true;
             }
@@ -3568,7 +3820,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               ? directReadFileExecutionOutcome === null
                 || directReadFileExecutionOutcome.isError
                 || directReadFileExecutionOutcome.content !== result
-              : result.startsWith('Error:') || result.startsWith('Error ');
+              : isReportedToolFailure(result);
+            if (requiredToolSequence) {
+              requiredToolSequenceResultOrder.push(name);
+              if (isError) requiredToolSequenceFailure = result;
+            }
             if (explicitReadOnlyToolChoice && name === explicitReadOnlyToolChoice) {
               if (isError) {
                 explicitReadOnlyToolFailure = result;
@@ -3773,6 +4029,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         };
 
         const runAgentAttempt = async (config: typeof runConfig) => {
+          if (requiredToolSequence && requiredToolSequenceStarted) {
+            throw new Error('Required read-only tool sequence cannot be replayed after execution started.');
+          }
           bufferedAgentTokens = [];
           capabilityReceipt = null;
           pendingCapabilityToolResults = [];
@@ -3815,6 +4074,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             abortedAttemptUsage = getBillableUsage(attemptedResult.usage);
             throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
           }
+          if (requiredToolSequence) {
+            const sequenceCompleted = requiredToolSequenceFailure === null
+              && requiredToolSequenceUseOrder.length === requiredToolSequence.length
+              && requiredToolSequenceResultOrder.length === requiredToolSequence.length
+              && requiredToolSequence.every((name, index) => (
+                requiredToolSequenceUseOrder[index] === name
+                && requiredToolSequenceResultOrder[index] === name
+              ));
+            if (!sequenceCompleted) {
+              throw new Error(requiredToolSequenceFailure
+                ? `Required read-only tool sequence failed: ${requiredToolSequenceFailure}`
+                : 'Required read-only tool sequence did not complete exactly once in order.');
+            }
+          }
           if (explicitReadOnlyToolFailure) {
             throw new Error(`Required read-only tool ${explicitReadOnlyToolChoice} failed: ${explicitReadOnlyToolFailure}`);
           }
@@ -3854,6 +4127,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           initialError: unknown,
           allowNonRetryableConfiguredFallback = false,
         ) => {
+          if (requiredToolSequenceStarted) throw initialError;
           // The agent may already have executed tools before detecting a
           // truncated final completion. Replaying the whole run on another
           // model would repeat those side effects, so this signal is terminal.
@@ -3883,6 +4157,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             try {
               return await runAgentAttempt(await configForModelAttempt(resolvedModel));
             } catch (primaryRunError) {
+              if (requiredToolSequenceStarted) throw primaryRunError;
               if (isIncompleteCompletionError(primaryRunError)
                 || isTerminalEmptyModelResponse(primaryRunError)
                 || isTerminalModelBudgetError(primaryRunError)) {
@@ -3915,6 +4190,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
           if (turnSignal.aborted) throw primaryErr;
+          if (requiredToolSequenceStarted) throw primaryErr;
           if (explicitReadOnlyToolWasUsed && explicitReadOnlyToolResult === null) {
             throw primaryErr;
           }
@@ -3959,6 +4235,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 break;
               } catch (nextCredentialError) {
                 if (turnSignal.aborted) throw nextCredentialError;
+                if (requiredToolSequenceStarted) throw nextCredentialError;
                 if (isEmptyModelResponseError(nextCredentialError)) {
                   credentialError = nextCredentialError;
                   break;
