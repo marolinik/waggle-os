@@ -1,7 +1,7 @@
 /**
  * Completion-time gates for the agent loop.
  *
- * Extracted from agent-loop.ts (PR-D, 2026-05-27). Two gates fire from the
+ * Extracted from agent-loop.ts (PR-D, 2026-05-27). Completion gates fire from the
  * no-tool-calls branch when the model returns a "final" answer:
  *
  *   D3 verification gate — if the model claims verified/passing/working
@@ -37,6 +37,8 @@ import { logTurnEvent } from './turn-context.js';
  * `maybeFireCompletionGate` calls so each gate fires AT MOST ONCE per run.
  */
 export interface GateState {
+  /** True after one atomic structured-draft repair has been attempted. */
+  completionIntegrityRepairUsed: boolean;
   /** True after the D3 verification gate has fired (one-shot) */
   verificationCorrectionUsed: boolean;
   /** True after the D1 skill-distillation gate has fired (one-shot) */
@@ -54,6 +56,7 @@ export interface GateState {
 
 export function initialGateState(): GateState {
   return {
+    completionIntegrityRepairUsed: false,
     verificationCorrectionUsed: false,
     skillDistillationUsed: false,
     preservedAnswerForDistillation: null,
@@ -72,6 +75,40 @@ type GateMessage = {
   tool_call_id?: string;
 };
 
+const STRUCTURED_DRAFT_REQUEST = /\b(?:draft|create|prepare|produce|write|build)\b[\s\S]{0,160}\b(?:agenda|plan|memo|report|brief|checklist|schedule|table|outline)\b/i;
+const OPENING_METADATA_FIELD = /^\s*(?:title|duration|participants?|audience|purpose|date|owner|prepared\s+(?:for|by))\s*:/i;
+
+function hasMultipleTimeBlocks(content: string): boolean {
+  const blocks = content.match(/(?:^|\n)\s*(?:[-*]\s*)?(?:\d{1,3}\s*[–—-]\s*)?\d{1,3}\s*(?:min(?:ute)?s?)\b/gim);
+  return (blocks?.length ?? 0) >= 2;
+}
+
+function missingStructuredDraftComponents(userRequest: string, content: string): string[] {
+  if (!STRUCTURED_DRAFT_REQUEST.test(userRequest)) return [];
+  const components: Array<{ label: string; requested: RegExp; present: (value: string) => boolean }> = [
+    { label: 'time blocks', requested: /\btime blocks?\b/i, present: hasMultipleTimeBlocks },
+    { label: 'desired decisions', requested: /\bdesired decisions?\b/i, present: value => /\bdesired decisions?\b|\bdecision\s*:/i.test(value) },
+    { label: 'pre-read checklist', requested: /\bpre[- ]read\b[\s\S]{0,40}\bchecklist\b|\bchecklist\b[\s\S]{0,40}\bpre[- ]read\b/i, present: value => /\bpre[- ]read\b/i.test(value) && /\bchecklist\b|\[[ x]\]/i.test(value) },
+    { label: 'dependencies', requested: /\bdependencies\b/i, present: value => /\bdepend(?:s|encies|ency)?\b/i.test(value) },
+    { label: 'owners by role', requested: /\bowners?\b[\s\S]{0,30}\brole\b|\brole\b[\s\S]{0,30}\bowners?\b/i, present: value => /\bowners?\b/i.test(value) && /\brole\b/i.test(value) },
+    { label: 'risks', requested: /\brisks?\b/i, present: value => /\brisks?\b/i.test(value) },
+    { label: 'exit criteria', requested: /\bexit criteria\b/i, present: value => /\bexit criteria\b/i.test(value) },
+    { label: 'decision table', requested: /\bdecision table\b/i, present: value => /\|[^\n]+\|[\s\S]*\|\s*:?-{3,}/m.test(value) },
+    { label: 'recommendation', requested: /\brecommendation\b/i, present: value => /\brecommend(?:ation|ed)?\b/i.test(value) },
+  ];
+  const requested = components.filter(component => component.requested.test(userRequest));
+  if (requested.length < 3) return [];
+  return requested.filter(component => !component.present(content)).map(component => component.label);
+}
+
+function endsAfterOpeningMetadataScaffold(content: string): boolean {
+  const lines = content.trim().split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const tail = lines.slice(-6);
+  return tail.length >= 2
+    && OPENING_METADATA_FIELD.test(tail[tail.length - 1] ?? '')
+    && tail.filter(line => OPENING_METADATA_FIELD.test(line)).length >= 2;
+}
+
 export interface MaybeFireCompletionGateArgs {
   /** Current turn's final assistant content (concatenated from streaming or non-streaming) */
   content: string;
@@ -83,6 +120,10 @@ export interface MaybeFireCompletionGateArgs {
   messages: GateMessage[];
   /** Current user-authored request, captured before internal directives are added. */
   userRequest?: string;
+  /** Provider terminal reason for the candidate completion. */
+  finishReason?: string | null;
+  /** True when the candidate has not been exposed and can be replaced atomically. */
+  atomicRepairAvailable?: boolean;
   /** Current gate state (returned with one-shot flags flipped if a gate fires) */
   state: GateState;
   /** Default true — set false to opt out of D3 */
@@ -110,10 +151,14 @@ export interface GateResult {
   state: GateState;
   /** Deterministic local suffix used when a claim cannot be verified by any available tool. */
   contentSuffix?: string;
+  /** Retry once with tools withheld and replace the unexposed candidate atomically. */
+  atomicRepair?: boolean;
+  /** Reject this candidate through the canonical incomplete-completion path. */
+  rejectIncompleteReason?: string;
 }
 
 /**
- * Try the completion-time gates in declared order (D3 first, then D1).
+ * Try the completion-time gates in declared order (integrity repair, D3, then D1).
  * At most one gate fires per call. Returns { fired, state } — caller
  * continues the loop iff `fired` is true.
  */
@@ -124,6 +169,8 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     availableToolNames = [],
     messages,
     userRequest = '',
+    finishReason = null,
+    atomicRepairAvailable = false,
     state,
     enableVerification = true,
     enableSkillDistillation = true,
@@ -132,6 +179,38 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   } = args;
   let nextState = state;
   let contentSuffix: string | undefined;
+
+  const missingDraftComponents = finishReason === 'stop'
+    ? missingStructuredDraftComponents(userRequest, content)
+    : [];
+  if (missingDraftComponents.length >= 2 && endsAfterOpeningMetadataScaffold(content)) {
+    const reason = 'structured draft ended after its opening scaffold';
+    if (state.completionIntegrityRepairUsed || !atomicRepairAvailable) {
+      return { fired: false, state, rejectIncompleteReason: reason };
+    }
+    const systemMessage = messages.find(message => message.role === 'system');
+    const directive = [
+      '# Internal completion-integrity correction',
+      'The prior candidate stopped after its opening metadata scaffold and was not shown to the user.',
+      `Redraft the answer from the beginning and include every explicit requirement, especially: ${missingDraftComponents.join(', ')}.`,
+      'Do not mention this correction and do not call tools.',
+    ].join('\n');
+    if (systemMessage && typeof systemMessage.content === 'string') {
+      systemMessage.content += `\n\n${directive}`;
+    } else {
+      messages.unshift({ role: 'system', content: directive });
+    }
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.completion-integrity-repair.fired',
+      missingComponents: missingDraftComponents,
+      contentChars: content.length,
+    });
+    return {
+      fired: true,
+      atomicRepair: true,
+      state: { ...state, completionIntegrityRepairUsed: true },
+    };
+  }
 
   // ── D3 verification-before-completion gate ──
   if (

@@ -1365,8 +1365,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     modelOperationDeadlineAt = undefined;
 
     // Provider usage is authoritative and known only after the response. Once
-    // the hard budget is exhausted, do not execute pending tools, completion
-    // gates, or a second synthesis request.
+    // the hard budget is exhausted, do not execute pending tools or issue a
+    // second request. Still reject a structurally incomplete candidate before
+    // the budget-stop path can expose it.
     if (maxTokenBudget !== undefined && (totalInputTokens + totalOutputTokens) >= maxTokenBudget) {
       if (pendingRequiredTool) {
         throw new Error(`Required tool ${pendingRequiredTool} could not complete within the token budget`);
@@ -1374,6 +1375,26 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const usableContent = assistantMessage.tool_calls?.length && !synthesisForced
         ? undefined
         : ((assistantMessage.content ?? '').trim() || allStreamedContent.trim() || undefined);
+      if (usableContent && (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0)) {
+        const integrityGate = await maybeFireCompletionGate({
+          content: usableContent,
+          toolsUsed,
+          messages,
+          userRequest,
+          finishReason: completionFinishReason,
+          atomicRepairAvailable: false,
+          state: gateState,
+          enableVerification: false,
+          enableSkillDistillation: false,
+          turnId,
+        });
+        if (integrityGate.rejectIncompleteReason) {
+          throw incompleteCompletionError(
+            integrityGate.rejectIncompleteReason,
+            { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+          );
+        }
+      }
       const result = budgetStopResponse(
         usableContent
           ?? (synthesisReserveTokens
@@ -1416,6 +1437,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         availableToolNames: currentRequestToolNames,
         messages,
         userRequest,
+        finishReason: completionFinishReason,
+        atomicRepairAvailable: !requestUsesStream || bufferReasoningSensitiveStream,
         state: gateState,
         enableVerification: verificationGate,
         enableSkillDistillation: skillDistillationGate,
@@ -1424,12 +1447,22 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       });
       if (config.signal?.aborted) throw clientAbortError();
       gateState = gate.state;
-    if (gate.fired) {
-      if (stream && !bufferReasoningSensitiveStream && onToken && gate.contentSuffix) {
-        onToken(gate.contentSuffix);
+      if (gate.rejectIncompleteReason) {
+        throw incompleteCompletionError(
+          gate.rejectIncompleteReason,
+          { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+        );
       }
-      continue;
-    }
+      if (gate.fired) {
+        if (gate.atomicRepair) {
+          synthesisForced = true;
+          turn--;
+        }
+        if (stream && !bufferReasoningSensitiveStream && onToken && gate.contentSuffix) {
+          onToken(gate.contentSuffix);
+        }
+        continue;
+      }
 
       const acceptedContent = `${content}${gate.contentSuffix ?? ''}`;
       // Once D1 has fired, surface the preserved user answer instead of the
