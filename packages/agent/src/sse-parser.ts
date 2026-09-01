@@ -37,6 +37,8 @@ export interface SseParseOptions {
   onToken?: (token: string) => void;
   /** Signals private provider reasoning activity without exposing its contents. */
   onReasoningActivity?: () => void;
+  /** Signals the first substantive reasoning, content, or tool-call delta. */
+  onActivity?: () => void;
 }
 
 function incompleteStreamError(
@@ -72,7 +74,7 @@ export async function parseChatCompletionStream(
   body: ReadableStream<Uint8Array>,
   options: SseParseOptions = {},
 ): Promise<ParsedChatCompletionStream> {
-  const { onToken, onReasoningActivity } = options;
+  const { onToken, onReasoningActivity, onActivity } = options;
   let content = '';
   let inputTokens = 0;
   let outputTokens = 0;
@@ -159,6 +161,7 @@ export async function parseChatCompletionStream(
         if (!delta) continue;
 
         const reasoning = delta.reasoning_content ?? delta.reasoning;
+        if (reasoning || delta.content || delta.tool_calls?.length) onActivity?.();
         if (reasoning) onReasoningActivity?.();
 
         if (delta.content) {

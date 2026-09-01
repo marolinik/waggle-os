@@ -101,6 +101,8 @@ export interface AgentLoopConfig {
    * backoff. It resets after an accepted response, before any tool executes.
    */
   modelOperationTimeoutMs?: number;
+  /** One-shot deadline for first provider activity on the first model request. */
+  initialModelActivityTimeoutMs?: number;
   /** Optional provider-native reasoning policy. Omitted to preserve provider defaults. */
   reasoning?: {
     enabled: boolean;
@@ -367,6 +369,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   ) {
     throw new RangeError('modelOperationTimeoutMs must be a positive finite number');
   }
+  if (
+    config.initialModelActivityTimeoutMs !== undefined
+    && (!Number.isFinite(config.initialModelActivityTimeoutMs) || config.initialModelActivityTimeoutMs < 1)
+  ) {
+    throw new RangeError('initialModelActivityTimeoutMs must be a positive finite number');
+  }
 
   const userRequest = [...inputMessages]
     .reverse()
@@ -524,6 +532,16 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     ? undefined
     : Math.floor(config.modelOperationTimeoutMs);
   let modelOperationDeadlineAt: number | undefined;
+  const initialModelActivityTimeoutMs = config.initialModelActivityTimeoutMs === undefined
+    ? undefined
+    : Math.floor(config.initialModelActivityTimeoutMs);
+  let initialModelActivityArmed = initialModelActivityTimeoutMs !== undefined;
+  let initialModelActivityDeadlineAt: number | undefined;
+  let initialModelActivityTimer: ReturnType<typeof setTimeout> | undefined;
+  const initialModelActivityController = new AbortController();
+  let activeRequestEstimatedInputTokens = 0;
+  let activeRequestEstimatedInputCommitted = false;
+  let initialActivityCommittedEstimatedInputTokens = 0;
   const modelOperationTimeoutError = (): Error & {
     code: 'MODEL_OPERATION_TIMEOUT';
     usage: { inputTokens: number; outputTokens: number };
@@ -545,6 +563,73 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     error.usage = { inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
     error.toolsUsed = [...toolsUsed];
     return error;
+  };
+  const initialModelActivityTimeoutError = (): Error & {
+    code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT';
+    retryable: true;
+    usageEstimated: true;
+    usage: { inputTokens: number; outputTokens: number };
+    toolsUsed: string[];
+  } => {
+    const seconds = (initialModelActivityTimeoutMs ?? 0) / 1_000;
+    const error = new Error(
+      `Initial model activity timed out after ${seconds} seconds. The provider may be unavailable; retry this turn.`,
+    ) as Error & {
+      code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT';
+      retryable: true;
+      usageEstimated: true;
+      usage: { inputTokens: number; outputTokens: number };
+      toolsUsed: string[];
+    };
+    error.name = 'InitialModelActivityTimeoutError';
+    error.code = 'INITIAL_MODEL_ACTIVITY_TIMEOUT';
+    error.retryable = true;
+    error.usageEstimated = true;
+    error.usage = {
+      inputTokens: totalInputTokens
+        + initialActivityCommittedEstimatedInputTokens
+        + (activeRequestEstimatedInputCommitted ? 0 : activeRequestEstimatedInputTokens),
+      outputTokens: totalOutputTokens,
+    };
+    error.toolsUsed = [...toolsUsed];
+    return error;
+  };
+  const disarmInitialModelActivityTimeout = (): void => {
+    if (!initialModelActivityArmed) return;
+    initialModelActivityArmed = false;
+    initialModelActivityDeadlineAt = undefined;
+    if (initialModelActivityTimer !== undefined) clearTimeout(initialModelActivityTimer);
+    initialModelActivityTimer = undefined;
+    activeRequestEstimatedInputTokens = 0;
+    activeRequestEstimatedInputCommitted = false;
+    initialActivityCommittedEstimatedInputTokens = 0;
+  };
+  const commitReservedModelSpend = (reservation: ModelSpendReservation): void => {
+    if (initialModelActivityArmed && !activeRequestEstimatedInputCommitted) {
+      initialActivityCommittedEstimatedInputTokens += activeRequestEstimatedInputTokens;
+      activeRequestEstimatedInputCommitted = true;
+    }
+    config.modelSpendBudget?.commitReservedModelSpend(reservation);
+  };
+  const ensureInitialModelActivityDeadline = (): AbortSignal | undefined => {
+    if (!initialModelActivityArmed || initialModelActivityTimeoutMs === undefined) return undefined;
+    if (initialModelActivityDeadlineAt === undefined) {
+      initialModelActivityDeadlineAt = Date.now() + initialModelActivityTimeoutMs;
+      initialModelActivityTimer = setTimeout(() => {
+        if (initialModelActivityArmed) {
+          initialModelActivityController.abort(initialModelActivityTimeoutError());
+        }
+      }, initialModelActivityTimeoutMs);
+    }
+    return initialModelActivityController.signal;
+  };
+  const initialModelActivityExpired = (deadlineSignal?: AbortSignal): boolean => (
+    initialModelActivityArmed
+    && initialModelActivityDeadlineAt !== undefined
+    && (deadlineSignal?.aborted === true || Date.now() >= initialModelActivityDeadlineAt)
+  );
+  const throwIfInitialModelActivityExpired = (deadlineSignal?: AbortSignal): void => {
+    if (initialModelActivityExpired(deadlineSignal)) throw initialModelActivityTimeoutError();
   };
   const clientAbortError = (usage = {
     inputTokens: totalInputTokens,
@@ -617,6 +702,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const onAbort = () => {
         const reason = config.signal?.aborted
           ? clientAbortError()
+          : initialModelActivityExpired(initialModelActivityController.signal)
+            ? initialModelActivityTimeoutError()
           : modelOperationExpired(deadlineSignal)
             ? modelOperationTimeoutError()
             : requestSignal.reason ?? new Error('LLM request aborted.');
@@ -659,20 +746,34 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     const deadlineAt = modelOperationDeadlineAt;
     const remainingMs = deadlineAt === undefined ? undefined : deadlineAt - Date.now();
     if (remainingMs !== undefined && remainingMs <= 0) throw modelOperationTimeoutError();
-    const boundedWaitMs = remainingMs === undefined ? waitMs : Math.min(waitMs, remainingMs);
+    const initialRemainingMs = initialModelActivityArmed && initialModelActivityDeadlineAt !== undefined
+      ? initialModelActivityDeadlineAt - Date.now()
+      : undefined;
+    if (initialRemainingMs !== undefined && initialRemainingMs <= 0) throw initialModelActivityTimeoutError();
+    const boundedWaitMs = Math.min(waitMs, remainingMs ?? waitMs, initialRemainingMs ?? waitMs);
 
     await new Promise<void>((resolve, reject) => {
       const onAbort = () => {
         clearTimeout(timer);
         reject(clientAbortError());
       };
+      const onInitialActivityTimeout = () => {
+        clearTimeout(timer);
+        config.signal?.removeEventListener('abort', onAbort);
+        reject(initialModelActivityTimeoutError());
+      };
       const timer = setTimeout(() => {
         config.signal?.removeEventListener('abort', onAbort);
+        initialModelActivityController.signal.removeEventListener('abort', onInitialActivityTimeout);
         resolve();
       }, boundedWaitMs);
       config.signal?.addEventListener('abort', onAbort, { once: true });
+      if (initialModelActivityArmed) {
+        initialModelActivityController.signal.addEventListener('abort', onInitialActivityTimeout, { once: true });
+      }
     });
 
+    throwIfInitialModelActivityExpired(initialModelActivityController.signal);
     throwIfModelOperationExpired();
   };
   // One-shot completion gates (D3 verification, D1 skill distillation) +
@@ -760,6 +861,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     });
   };
 
+  try {
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
     if (config.signal?.aborted) {
@@ -816,6 +918,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       }
       return budgetStopResponse();
     }
+    activeRequestEstimatedInputTokens = estimatedNextRequestTokens;
+    activeRequestEstimatedInputCommitted = false;
 
     const body: Record<string, unknown> = {
       model,
@@ -868,6 +972,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     // instead of consuming the stream to completion. Merged with a per-request
     // timeout so a hung connection can't wedge the turn forever.
     const deadlineAt = ensureModelOperationDeadline();
+    const initialModelActivitySignal = ensureInitialModelActivityDeadline();
     const remainingModelOperationMs = deadlineAt === undefined ? undefined : deadlineAt - Date.now();
     if (remainingModelOperationMs !== undefined && remainingModelOperationMs <= 0) {
       throw modelOperationTimeoutError();
@@ -876,7 +981,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     const modelOperationSignal = remainingModelOperationMs === undefined
       ? undefined
       : AbortSignal.timeout(Math.max(1, remainingModelOperationMs));
-    const requestSignals = [config.signal, timeoutSignal, modelOperationSignal]
+    const requestSignals = [config.signal, timeoutSignal, modelOperationSignal, initialModelActivitySignal]
       .filter((signal): signal is AbortSignal => signal !== undefined);
     const requestSignal = requestSignals.length === 1
       ? requestSignals[0]
@@ -927,7 +1032,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         }
       }
       if (spendReservation) {
-        config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+        commitReservedModelSpend(spendReservation);
         spendReservation = undefined;
       }
       // The fetch promise itself rejected — a network-level failure (endpoint
@@ -940,6 +1045,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       if (config.signal?.aborted) {
         throw clientAbortError();
       }
+      if (initialModelActivityExpired(initialModelActivitySignal)) throw initialModelActivityTimeoutError();
       if (modelOperationExpired(modelOperationSignal)) throw modelOperationTimeoutError();
       const action = handleNetworkError(netErr, retryState);
       if (action.kind === 'fatal') throw action.error;
@@ -961,10 +1067,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       }
     }
     try {
+      throwIfInitialModelActivityExpired(initialModelActivitySignal);
       throwIfModelOperationExpired(modelOperationSignal);
     } catch (error) {
       if (spendReservation) {
-        config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+        commitReservedModelSpend(spendReservation);
         spendReservation = undefined;
       }
       throw error;
@@ -983,7 +1090,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
             config.modelSpendBudget?.releaseReservedModelSpend(spendReservation);
           } else {
             // Server-side failures can be ambiguous about inference/token use.
-            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            commitReservedModelSpend(spendReservation);
           }
           spendReservation = undefined;
         }
@@ -995,7 +1102,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         continue;
       } catch (error) {
         if (spendReservation) {
-          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+          commitReservedModelSpend(spendReservation);
           spendReservation = undefined;
         }
         if (config.signal?.aborted) {
@@ -1035,6 +1142,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
                 },
               });
               return parseChatCompletionStream(cancellableBody, {
+                onActivity: () => {
+                  if (!streamStageActive || requestSignal.aborted) return;
+                  disarmInitialModelActivityTimeout();
+                },
                 onToken: (token) => {
                   if (!streamStageActive || requestSignal.aborted || modelOperationExpired(modelOperationSignal)) {
                     return;
@@ -1055,6 +1166,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
             modelOperationSignal,
             reason => { void upstreamReader?.cancel(reason).catch(() => undefined); },
           );
+          throwIfInitialModelActivityExpired(initialModelActivitySignal);
           throwIfModelOperationExpired(modelOperationSignal);
         } finally {
           streamStageActive = false;
@@ -1062,17 +1174,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       } catch (error) {
         if (config.signal?.aborted) {
           if (spendReservation) {
-            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            commitReservedModelSpend(spendReservation);
             spendReservation = undefined;
           }
           throw clientAbortError();
         }
-        const bodyReadError = modelOperationExpired(modelOperationSignal)
-          ? modelOperationTimeoutError()
-          : error;
+        const bodyReadError = initialModelActivityExpired(initialModelActivitySignal)
+          ? initialModelActivityTimeoutError()
+          : modelOperationExpired(modelOperationSignal)
+            ? modelOperationTimeoutError()
+            : error;
         if (!isIncompleteCompletionError(bodyReadError)) {
           if (spendReservation) {
-            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            commitReservedModelSpend(spendReservation);
             spendReservation = undefined;
           }
           throw bodyReadError;
@@ -1099,7 +1213,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
               outputTokens: failedOutputTokens,
             });
           } else {
-            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            commitReservedModelSpend(spendReservation);
           }
           spendReservation = undefined;
         }
@@ -1144,23 +1258,29 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           );
         }
         assistantMessage = choice.message;
+        if ((assistantMessage.content ?? '').length > 0 || assistantMessage.tool_calls?.length) {
+          disarmInitialModelActivityTimeout();
+        }
         completionFinishReason = choice.finish_reason ?? null;
       turnInputTokens = data.usage?.prompt_tokens ?? 0;
       turnOutputTokens = data.usage?.completion_tokens ?? 0;
+      throwIfInitialModelActivityExpired(initialModelActivitySignal);
       throwIfModelOperationExpired(modelOperationSignal);
       } catch (error) {
         if (config.signal?.aborted) {
           if (spendReservation) {
-            config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+            commitReservedModelSpend(spendReservation);
             spendReservation = undefined;
           }
           throw clientAbortError();
         }
-        const bodyReadError = modelOperationExpired(modelOperationSignal)
-          ? modelOperationTimeoutError()
-          : error;
+        const bodyReadError = initialModelActivityExpired(initialModelActivitySignal)
+          ? initialModelActivityTimeoutError()
+          : modelOperationExpired(modelOperationSignal)
+            ? modelOperationTimeoutError()
+            : error;
         if (spendReservation) {
-          config.modelSpendBudget?.commitReservedModelSpend(spendReservation);
+          commitReservedModelSpend(spendReservation);
           spendReservation = undefined;
         }
         throw bodyReadError;
@@ -1239,6 +1359,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       });
     }
 
+    disarmInitialModelActivityTimeout();
     lastRequestInputTokens = turnInputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
     modelOperationDeadlineAt = undefined;
@@ -1494,4 +1615,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     toolsUsed,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
   };
+  } finally {
+    disarmInitialModelActivityTimeout();
+  }
 }

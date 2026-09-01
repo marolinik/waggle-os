@@ -371,6 +371,7 @@ describe('persona acceptance prompt budget', () => {
       expect(capturedConfig!.synthesisReserveTokens).toBe(2_500);
       expect(capturedConfig!.maxOutputTokens).toBe(768);
       expect(capturedConfig!.modelOperationTimeoutMs).toBe(100_000);
+      expect(capturedConfig!.initialModelActivityTimeoutMs).toBeUndefined();
       expect(capturedConfig!.toolContextBudget).toEqual({
         maxSingleResultChars: 3_000,
         recentResultCount: 2,
@@ -744,16 +745,15 @@ describe('persona acceptance prompt budget', () => {
     testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
       attempts.push(config);
       if (attempts.length === 1) {
-        const input = { path: 'README.md' };
-        config.onToolUse?.('read_file', input);
-        config.onToolResult?.('read_file', input, '# Waggle');
         throw Object.assign(new Error(
-          'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+          'Initial model activity timed out after 30 seconds. The provider may be unavailable; retry this turn.',
         ), {
-          name: 'ModelOperationTimeoutError',
-          code: 'MODEL_OPERATION_TIMEOUT',
-          toolsUsed: ['read_file'],
-          usage: { inputTokens: 17, outputTokens: 6 },
+          name: 'InitialModelActivityTimeoutError',
+          code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT',
+          retryable: true,
+          usageEstimated: true,
+          toolsUsed: [],
+          usage: { inputTokens: 17, outputTokens: 0 },
         });
       }
       return {
@@ -778,22 +778,30 @@ describe('persona acceptance prompt budget', () => {
 
       expect(response.statusCode).toBe(200);
       expect(attempts).toHaveLength(2);
+      expect(attempts.map(attempt => ({
+        modelOperationTimeoutMs: attempt.modelOperationTimeoutMs,
+        initialModelActivityTimeoutMs: attempt.initialModelActivityTimeoutMs,
+      }))).toEqual([
+        { modelOperationTimeoutMs: 100_000, initialModelActivityTimeoutMs: 30_000 },
+        { modelOperationTimeoutMs: 100_000, initialModelActivityTimeoutMs: undefined },
+      ]);
       const events = parseSse(response.body);
       expect(events.some(event => event.event === 'model_switch')).toBe(true);
       expect(events.some(event => event.event === 'error')).toBe(false);
       expect(events.find(event => event.event === 'done')?.data).toMatchObject({
-        usage: { inputTokens: 24, outputTokens: 9 },
-        tokens: { input: 24, output: 9 },
-        toolsUsed: ['read_file'],
+        usage: { inputTokens: 24, outputTokens: 3 },
+        usageEstimated: true,
+        tokens: { input: 24, output: 3 },
+        toolsUsed: [],
       });
-      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(33);
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(27);
       const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
       expect(traceProjection).toContain('"outcome":"success"');
-      expect(traceProjection).toContain('"tokens":{"input":24,"output":9}');
+      expect(traceProjection).toContain('"tokens":{"input":24,"output":3}');
       expect(calculateUsageCost).toHaveBeenNthCalledWith(1, {
         model: 'openrouter/anthropic/claude-sonnet-5',
         input: 17,
-        output: 6,
+        output: 0,
         billingClass: 'priced',
       });
       expect(calculateUsageCost).toHaveBeenNthCalledWith(2, {

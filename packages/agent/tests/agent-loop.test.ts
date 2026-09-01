@@ -4,6 +4,7 @@ import type { ToolDefinition } from '../src/tools.js';
 import { CapabilityRouter } from '../src/capability-router.js';
 import { HookRegistry } from '../src/hooks.js';
 import { needsConfirmationWithAutonomy } from '../src/confirmation.js';
+import type { ModelSpendBudget, ModelSpendReservationRequest } from '../src/cost-tracker.js';
 import Database from 'better-sqlite3';
 
 /**
@@ -1133,6 +1134,194 @@ describe('runAgentLoop', () => {
       abortController.abort();
       await vi.runAllTimersAsync();
       await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails with a typed retryable timeout when the first stream stays silent', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({ start() {} }),
+    } as unknown as Response));
+    let rejection: unknown;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).catch(error => { rejection = error; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(rejection).toMatchObject({
+        name: 'InitialModelActivityTimeoutError',
+        code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT',
+        retryable: true,
+        usageEstimated: true,
+        usage: { outputTokens: 0 },
+        toolsUsed: [],
+      });
+      expect((rejection as { usage: { inputTokens: number } }).usage.inputTokens).toBeGreaterThan(0);
+    } finally {
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('accounts every committed retry estimate before the first-activity timeout', async () => {
+    vi.useFakeTimers();
+    const reservations: ModelSpendReservationRequest[] = [];
+    const modelSpendBudget: ModelSpendBudget = {
+      reserveModelSpend: vi.fn(request => {
+        reservations.push(request);
+        return { id: `reservation-${reservations.length}` };
+      }),
+      reconcileModelSpend: vi.fn(() => true),
+      commitReservedModelSpend: vi.fn(() => true),
+      releaseReservedModelSpend: vi.fn(() => true),
+    };
+    const fetch = vi.fn()
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({ start() {} }),
+      } as unknown as Response);
+    let rejection: unknown;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      modelSpendBudget,
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).catch(error => { rejection = error; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      await run;
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(modelSpendBudget.commitReservedModelSpend).toHaveBeenCalledTimes(2);
+      expect(rejection).toMatchObject({
+        code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT',
+        usageEstimated: true,
+        usage: {
+          inputTokens: reservations.reduce((total, request) => total + request.inputTokens, 0),
+          outputTokens: 0,
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['reasoning', { reasoning_content: 'private' }],
+    ['content', { content: 'Ready.' }],
+  ])('permanently disarms the first-activity timeout for buffered Qwen %s activity', async (_kind, firstDelta) => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          setTimeout(() => controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({ choices: [{ delta: firstDelta }] })}\n\n`,
+          )), 29_000);
+          setTimeout(() => {
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: firstDelta.content ? {} : { content: 'Ready.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\n`,
+            ));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          }, 60_000);
+        },
+      }),
+    } as unknown as Response));
+    let result: Awaited<ReturnType<typeof runAgentLoop>> | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).then(value => { result = value; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(60_000);
+      await run;
+      expect(result?.content).toBe('Ready.');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('disarms the first-activity timeout on a tool-call delta and never rearms it', async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const tool: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List skills',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => '[]'),
+    };
+    let request = 0;
+    const fetch = vi.fn(async () => {
+      request++;
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            const delay = request === 1 ? 29_000 : 31_000;
+            setTimeout(() => {
+              const event = request === 1
+                ? {
+                    choices: [{
+                      delta: {
+                        tool_calls: [{
+                          index: 0,
+                          id: 'call-1',
+                          type: 'function',
+                          function: { name: 'list_skills', arguments: '{}' },
+                        }],
+                      },
+                      finish_reason: 'tool_calls',
+                    }],
+                    usage: { prompt_tokens: 10, completion_tokens: 5 },
+                  }
+                : {
+                    choices: [{ delta: { content: 'Finished.' }, finish_reason: 'stop' }],
+                    usage: { prompt_tokens: 12, completion_tokens: 4 },
+                  };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            }, delay);
+          },
+        }),
+      } as unknown as Response;
+    });
+    let result: Awaited<ReturnType<typeof runAgentLoop>> | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      tools: [tool],
+      maxTurns: 3,
+      modelOperationTimeoutMs: 100_000,
+      initialModelActivityTimeoutMs: 30_000,
+    })).then(value => { result = value; });
+
+    try {
+      await vi.advanceTimersByTimeAsync(61_000);
+      await run;
+      expect(result?.content).toBe('Finished.');
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(tool.execute).toHaveBeenCalledTimes(1);
+    } finally {
       vi.useRealTimers();
     }
   });

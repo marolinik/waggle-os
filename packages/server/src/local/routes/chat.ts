@@ -210,6 +210,7 @@ function getFailedCompletionUsage(
     !isIncompleteCompletionError(error)
     && !isEmptyModelResponseError(error)
     && code !== 'MODEL_OPERATION_TIMEOUT'
+    && code !== 'INITIAL_MODEL_ACTIVITY_TIMEOUT'
     && code !== 'AGENT_LOOP_ABORTED'
   ) return null;
   return getBillableUsage((error as { usage?: unknown }).usage);
@@ -2168,6 +2169,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       model: string;
       billingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']>;
       usage: { inputTokens: number; outputTokens: number };
+      estimated?: boolean;
     }> = [];
     const failedAttemptToolsUsed = new Set<string>();
     let completedAttemptUsageReceipt: {
@@ -2348,6 +2350,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
       throwIfTurnAborted();
+
+      const configuredFallbackModel = fallbackModel
+        ? canonicalizeModelReference(fallbackModel)
+        : null;
+      const hasDistinctConfiguredFallback = Boolean(
+        configuredFallbackModel
+        && canonicalizeModelReference(resolvedModel) !== configuredFallbackModel,
+      );
 
       // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
 
@@ -3790,6 +3800,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           messages: windowedMessages,
           stream: true,
           modelOperationTimeoutMs: 100_000,
+          ...(hasDistinctConfiguredFallback ? { initialModelActivityTimeoutMs: 30_000 } : {}),
           ...agentRunBudget,
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
           reasoning: reasoningForModelAttempt(resolvedModel),
@@ -4053,10 +4064,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               : 'priced',
             litellmUrl: useOllama ? ollamaUrl : getLitellmUrl(),
             litellmApiKey: apiKey,
+            modelOperationTimeoutMs: 100_000,
+            initialModelActivityTimeoutMs: undefined,
             reasoning: reasoningForModelAttempt(logicalModel),
           };
         };
 
+        let initialActivityDeadlineAvailable = true;
         const runAgentAttempt = async (config: typeof runConfig) => {
           if (requiredToolSequence && requiredToolSequenceStarted) {
             throw new Error('Required read-only tool sequence cannot be replayed after execution started.');
@@ -4072,6 +4086,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           attemptedBillingClasses.add(activeAttemptBillingClass);
           abortedAttemptUsage = null;
           const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
+          const initialModelActivityTimeoutMs = initialActivityDeadlineAvailable
+            ? attemptBaseConfig.initialModelActivityTimeoutMs
+            : undefined;
+          initialActivityDeadlineAvailable = false;
           const strictToolRetryContext = explicitReadOnlyToolChoice
             && !pendingExplicitReadOnlyToolChoice
             && explicitReadOnlyToolWasUsed
@@ -4091,6 +4109,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           try {
             attemptedResult = await agentRunner({
               ...attemptBaseConfig,
+              initialModelActivityTimeoutMs,
               ...(pendingExplicitReadOnlyToolChoice
                 ? { toolChoice: pendingExplicitReadOnlyToolChoice }
                 : explicitReadOnlyToolChoice
@@ -4118,6 +4137,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 model: activeAttemptModel,
                 billingClass: activeAttemptBillingClass,
                 usage: failedUsage,
+                ...((error as { usageEstimated?: unknown }).usageEstimated === true
+                  ? { estimated: true }
+                  : {}),
               });
             }
             throw error;
@@ -4688,6 +4710,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         sendEvent('done', {
           content: finalContent,
           usage: totalTurnUsage,
+          usageEstimated: failedAttemptUsageReceipts.some(receipt => receipt.estimated === true),
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
           billingClass: messageBillingClass,
