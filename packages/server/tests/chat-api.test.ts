@@ -362,7 +362,7 @@ describe('Chat Streaming API', () => {
       expect(configured.statusCode).toBe(200);
       const done = parseSSE(configured.body).find(event => event.event === 'done');
       expect(done).toBeDefined();
-      expect(JSON.parse(done!.data)).toMatchObject({ cost: 0 });
+      expect(JSON.parse(done!.data)).toMatchObject({ cost: 0, billingClass: 'free' });
       const [trace] = localServer.traceStore.query({
         sessionId: 'configured-keyless-billing',
         limit: 1,
@@ -401,6 +401,7 @@ describe('Chat Streaming API', () => {
       });
       const unlistedDone = parseSSE(unlisted.body).find(event => event.event === 'done');
       expect(unlistedDone).toBeDefined();
+      expect(JSON.parse(unlistedDone!.data)).toMatchObject({ billingClass: 'priced' });
       expect(JSON.parse(unlistedDone!.data).cost).toBeCloseTo(0.000078, 9);
       const [unlistedTrace] = localServer.traceStore.query({
         sessionId: 'unlisted-compatible-billing',
@@ -486,12 +487,89 @@ describe('Chat Streaming API', () => {
         .toEqual(['free', 'free']);
       const done = parseSSE(response.body).find(event => event.event === 'done');
       expect(done).toBeDefined();
-      expect(JSON.parse(done!.data)).toMatchObject({ cost: 0 });
+      expect(JSON.parse(done!.data)).toMatchObject({ cost: 0, billingClass: 'free' });
       const [trace] = localServer.traceStore.query({
         sessionId: 'configured-keyless-fallback-billing',
         limit: 1,
       });
       expect(trace).toMatchObject({ model: fallbackModel, cost_usd: 0 });
+    } finally {
+      await localServer.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['the paid attempt reports billable usage', 'empty-with-usage', true],
+    ['the paid attempt fails without usage metadata', 'throw-without-usage', false],
+  ] as const)('keeps the whole turn priced when %s before a free fallback', async (
+    _case,
+    firstAttempt,
+    expectsPositiveCost,
+  ) => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-mixed-fallback-billing-'));
+    const primaryModel = 'openai-compatible/acme/unlisted-paid-primary';
+    const fallbackModel = 'openai-compatible/acme/configured-free-fallback';
+    const config = new WaggleConfig(dataDir);
+    config.setDefaultModel(primaryModel);
+    config.setFallbackModel(fallbackModel);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      models: ['acme/configured-free-fallback'],
+      baseUrl: 'http://127.0.0.1:1/v1',
+    });
+    config.save();
+    const localServer = await buildLocalServer({ dataDir });
+    const capturedConfigs: AgentLoopConfig[] = [];
+    localServer.agentRunner = async (runnerConfig): Promise<AgentResponse> => {
+      capturedConfigs.push(runnerConfig);
+      if (capturedConfigs.length === 1) {
+        if (firstAttempt === 'throw-without-usage') {
+          throw new Error('Could not reach model endpoint after 3 attempts (fetch failed).');
+        }
+        return {
+          content: '',
+          toolsUsed: [],
+          usage: { inputTokens: 11, outputTokens: 3 },
+        };
+      }
+      runnerConfig.onToken?.('mixed-fallback-ok');
+      return {
+        content: 'mixed-fallback-ok',
+        toolsUsed: [],
+        usage: { inputTokens: 7, outputTokens: 2 },
+      };
+    };
+
+    try {
+      const response = await injectWithAuth(localServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Fallback without erasing paid attempt provenance.',
+          model: primaryModel,
+          session: 'mixed-fallback-billing',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedConfigs.map(attempt => attempt.modelSpendBillingClass))
+        .toEqual(['priced', 'free']);
+      const done = parseSSE(response.body).find(event => event.event === 'done');
+      expect(done).toBeDefined();
+      const doneData = JSON.parse(done!.data) as { billingClass: string; cost: number };
+      expect(doneData).toMatchObject({ billingClass: 'priced' });
+      const expectedCost = expectsPositiveCost ? 0.000078 : 0;
+      if (expectsPositiveCost) {
+        expect(doneData.cost).toBeCloseTo(expectedCost, 9);
+      } else {
+        expect(doneData.cost).toBe(expectedCost);
+      }
+      const [trace] = localServer.traceStore.query({
+        sessionId: 'mixed-fallback-billing',
+        limit: 1,
+      });
+      expect(trace.cost_usd).toBeCloseTo(expectedCost, 9);
     } finally {
       await localServer.close();
       fs.rmSync(dataDir, { recursive: true, force: true });

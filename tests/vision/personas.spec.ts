@@ -45,6 +45,7 @@ const ARTIFACTS = resolve(
 const ACCEPTANCE_RUN_ID = process.env.WAGGLE_PERSONA_RUN_ID?.trim() || null;
 const EXPECTED_LLM_PROVIDER = process.env.WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER?.trim() || null;
 const EXPECTED_LLM_DETAIL = process.env.WAGGLE_PERSONA_EXPECTED_LLM_DETAIL?.trim() || null;
+const EXPECTED_BILLING_CLASS = process.env.WAGGLE_PERSONA_EXPECTED_BILLING_CLASS?.trim() || null;
 
 function gitOutput(args: string[]): string | null {
   try {
@@ -1139,17 +1140,21 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
     if (RUN_MODE.gating) {
       expect(
         process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER,
-        'paid acceptance requires a freshly built server (WAGGLE_E2E_REUSE_EXISTING_SERVER=0)',
+        'acceptance requires a freshly built server (WAGGLE_E2E_REUSE_EXISTING_SERVER=0)',
       ).toBe('0');
-      expect(ACCEPTANCE_RUN_ID, 'paid acceptance requires WAGGLE_PERSONA_RUN_ID').toMatch(/\S/);
+      expect(ACCEPTANCE_RUN_ID, 'acceptance requires WAGGLE_PERSONA_RUN_ID').toMatch(/\S/);
       expect(
         EXPECTED_LLM_PROVIDER,
-        'paid acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER',
+        'acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER',
       ).toMatch(/\S/);
       expect(
         EXPECTED_LLM_DETAIL,
-        'paid acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_DETAIL',
+        'acceptance requires WAGGLE_PERSONA_EXPECTED_LLM_DETAIL',
       ).toMatch(/\S/);
+      expect(
+        EXPECTED_BILLING_CLASS,
+        'acceptance requires WAGGLE_PERSONA_EXPECTED_BILLING_CLASS=priced|free',
+      ).toMatch(/^(priced|free)$/);
     }
     const response = await request.get(`${BASE}/api/personas`);
     expect(response.ok(), 'live persona catalog is available before acceptance trials').toBe(true);
@@ -1204,7 +1209,12 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           : [];
         const inputTokens = numeric(usage?.inputTokens ?? usage?.prompt_tokens ?? tokens?.input);
         const outputTokens = numeric(usage?.outputTokens ?? usage?.completion_tokens ?? tokens?.output);
-        const estimatedCostUsd = numeric(wire.done?.cost);
+        const billingClass = wire.done?.billingClass === 'priced' || wire.done?.billingClass === 'free'
+          ? wire.done.billingClass
+          : null;
+        const estimatedCostUsd = typeof wire.done?.cost === 'number' && Number.isFinite(wire.done.cost)
+          ? wire.done.cost
+          : null;
         const contextMetrics = asRecord(wire.done?.contextMetrics);
         const toolCatalogCount = finiteContextMetric(contextMetrics, 'toolCatalogCount');
         const toolEligibleCount = finiteContextMetric(contextMetrics, 'toolEligibleCount');
@@ -1350,7 +1360,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         };
         const score = scorePersonaTrial(persona, evidence);
         const artifact = {
-          schemaVersion: 7,
+          schemaVersion: 8,
           runId: ACCEPTANCE_RUN_ID,
           runStartedAt,
           runCompletedAt: new Date().toISOString(),
@@ -1389,6 +1399,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             doneEventCount,
             httpStatus: wire.httpStatus,
             model: wire.done?.model ?? null,
+            billingClass,
             estimatedCostUsd,
             durationMs: wire.durationMs,
             tokens: { input: inputTokens, output: outputTokens },
@@ -1409,6 +1420,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             llmHealthy: runtimeLlmHealthy,
             expectedProvider: EXPECTED_LLM_PROVIDER,
             expectedDetail: EXPECTED_LLM_DETAIL,
+            expectedBillingClass: EXPECTED_BILLING_CLASS,
           },
           journey: {
             renderedConversation,
@@ -1551,7 +1563,13 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         expect(providerInputTokens, 'provider input tokens are positive').toBeGreaterThan(0);
         expect(providerOutputTokens, 'provider output tokens are positive').toBeGreaterThan(0);
         if (RUN_MODE.gating) {
-          expect(estimatedCostUsd, 'Waggle returned a positive paid-call cost estimate').toBeGreaterThan(0);
+          expect(billingClass, 'Waggle returned an explicit billing class').toBe(EXPECTED_BILLING_CLASS);
+          expect(estimatedCostUsd, 'Waggle returned an explicit finite cost').not.toBeNull();
+          if (EXPECTED_BILLING_CLASS === 'free') {
+            expect(estimatedCostUsd, 'free provider cost is exactly zero').toBe(0);
+          } else {
+            expect(estimatedCostUsd, 'priced provider cost is positive').toBeGreaterThan(0);
+          }
         }
         if (RUN_MODE.gating) {
           expect(

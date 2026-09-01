@@ -2162,6 +2162,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     let activeAttemptModel: string | null = null;
     let activeAttemptBillingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']> = 'priced';
+    const attemptedBillingClasses = new Set<NonNullable<AgentLoopConfig['modelSpendBillingClass']>>();
     let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
     const failedAttemptUsageReceipts: Array<{
       model: string;
@@ -4068,6 +4069,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           pendingCapabilityToolResults = [];
           activeAttemptModel = config.billingModel ?? resolvedModel;
           activeAttemptBillingClass = config.modelSpendBillingClass ?? 'priced';
+          attemptedBillingClasses.add(activeAttemptBillingClass);
           abortedAttemptUsage = null;
           const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
           const strictToolRetryContext = explicitReadOnlyToolChoice
@@ -4175,7 +4177,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             : attemptedResult;
           if (!completedResult.content.trim()) {
-            throw emptyModelResponseError(completedResult);
+            const emptyError = emptyModelResponseError(completedResult);
+            for (const tool of completedResult.toolsUsed) failedAttemptToolsUsed.add(tool);
+            const failedUsage = getFailedCompletionUsage(emptyError);
+            if (failedUsage && activeAttemptModel) {
+              failedAttemptUsageReceipts.push({
+                model: activeAttemptModel,
+                billingClass: activeAttemptBillingClass,
+                usage: failedUsage,
+              });
+            }
+            throw emptyError;
           }
           return strictToolRetryContext
             ? {
@@ -4402,6 +4414,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...failedAttemptUsageReceipts,
           ...(completedAttemptUsageReceipt ? [completedAttemptUsageReceipt] : []),
         ];
+        // Whole-turn provenance must remain priced if any attempted model was
+        // priced. A later free fallback cannot erase spend already incurred.
+        const messageBillingClass = attemptedBillingClasses.size > 0
+          && [...attemptedBillingClasses].every(billingClass => billingClass === 'free')
+          ? 'free'
+          : 'priced';
         let resultCost = successfulAttemptReceipts.reduce((total, receipt) => (
           total + costTracker.calculateUsageCost({
             model: receipt.model,
@@ -4672,6 +4690,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           usage: totalTurnUsage,
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
+          billingClass: messageBillingClass,
           memoryContext,
           contextMetrics: {
             toolCatalogCount,

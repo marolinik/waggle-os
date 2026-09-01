@@ -38,6 +38,7 @@ export interface PersonaAcceptanceSealManifest {
   repeats: number;
   expectedProvider: string;
   expectedDetail: string;
+  expectedBillingClass: 'priced' | 'free';
   allowedModels: string[];
   receipts: PersonaAcceptanceReceiptManifest[];
   diagnosticCostLedger: PersonaAcceptanceDiagnosticCostEntry[];
@@ -84,6 +85,7 @@ export interface SealedPersonaReceipt {
   scoreMode: ReceiptScore['scoreMode'];
   model: string | null;
   provider: string;
+  billingClass: 'priced' | 'free';
   estimatedCostUsd: string;
   workspaceId: string;
   sessionId: string;
@@ -144,10 +146,12 @@ function formatUsdMicros(value: bigint): string {
   return `${whole}.${(value % 1_000_000n).toString().padStart(6, '0')}`;
 }
 
-function estimatedCostMicros(value: unknown): bigint | null {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+function estimatedCostMicros(value: unknown, billingClass: 'priced' | 'free' | null): bigint | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || billingClass === null) return null;
+  if (billingClass === 'free') return value === 0 ? 0n : null;
   const scaled = Math.round(value * 1_000_000);
-  return Math.abs(value - (scaled / 1_000_000)) <= 1e-9 ? BigInt(scaled) : null;
+  if (Math.abs(value - (scaled / 1_000_000)) > 1e-9) return null;
+  return scaled > 0 ? BigInt(scaled) : null;
 }
 
 function gitOutput(args: string[]): string | null {
@@ -287,6 +291,10 @@ export function buildPersonaAcceptanceSeal(
   const scoreArtifact = options.scoreArtifact ?? scoreWithCurrentScorer;
   const runtimeProvenance = options.runtimeProvenance ?? currentRuntimeProvenance();
   const allowedModels = Array.isArray(manifest.allowedModels) ? manifest.allowedModels : [];
+  const expectedBillingClass = manifest.expectedBillingClass === 'priced'
+    || manifest.expectedBillingClass === 'free'
+    ? manifest.expectedBillingClass
+    : null;
   const manifestErrors: string[] = [];
   const invalidReceipts: InvalidReceipt[] = [];
   const duplicateSlots = new Set<string>();
@@ -314,8 +322,9 @@ export function buildPersonaAcceptanceSeal(
   }
   if (!manifest.expectedProvider?.trim()) manifestErrors.push('expectedProvider is required');
   if (!manifest.expectedDetail?.trim()) manifestErrors.push('expectedDetail is required');
+  if (!expectedBillingClass) manifestErrors.push('expectedBillingClass must be priced or free');
   if (allowedModels.length === 0) {
-    manifestErrors.push('allowedModels must contain at least one paid model');
+    manifestErrors.push('allowedModels must contain at least one model');
   } else if (new Set(allowedModels).size !== allowedModels.length) {
     manifestErrors.push('allowedModels must not contain duplicates');
   }
@@ -353,7 +362,7 @@ export function buildPersonaAcceptanceSeal(
     const personaId = typeof persona.id === 'string' ? persona.id : '';
     const repeat = numberOrNull(persona.repeat);
     const receiptSlot = personaId && repeat !== null ? slot(personaId, repeat) : null;
-    if (artifact.schemaVersion !== 7) reasons.push('artifact schemaVersion must be 7');
+    if (artifact.schemaVersion !== 8) reasons.push('artifact schemaVersion must be 8');
     if (!receiptSlot || !expectedSlotSet.has(receiptSlot)) reasons.push('artifact persona/repeat is outside the expected matrix');
     if (persona.repeatCount !== repeats) reasons.push(`artifact repeatCount must be ${repeats}`);
     if (persona.gating !== true) reasons.push('artifact was not captured in gating mode');
@@ -371,14 +380,17 @@ export function buildPersonaAcceptanceSeal(
     if (runtime.healthStatus !== 200) reasons.push('runtime health endpoint did not return 200');
     if (runtime.llmHealthy !== true || runtimeLlm.health !== 'healthy') reasons.push('runtime LLM was not healthy');
     if (runtime.expectedProvider !== manifest.expectedProvider || runtimeLlm.provider !== manifest.expectedProvider) {
-      reasons.push('runtime provider does not match the paid provider contract');
+      reasons.push('runtime provider does not match the provider contract');
     }
     if (
       runtime.expectedDetail !== manifest.expectedDetail
       || typeof runtimeLlm.detail !== 'string'
       || !runtimeLlm.detail.includes(manifest.expectedDetail)
     ) {
-      reasons.push('runtime provider detail does not match the paid provider contract');
+      reasons.push('runtime provider detail does not match the provider contract');
+    }
+    if (runtime.expectedBillingClass !== expectedBillingClass) {
+      reasons.push('runtime billing class does not match the manifest contract');
     }
     const response = record(artifact.response);
     if (response.httpStatus !== 200) reasons.push('chat response did not return 200');
@@ -403,13 +415,29 @@ export function buildPersonaAcceptanceSeal(
     }
     const model = typeof response.model === 'string' ? response.model : '';
     if (!model || !allowedModels.includes(model)) reasons.push('response model is missing or not allowed');
-    const costMicros = estimatedCostMicros(response.estimatedCostUsd);
-    if (costMicros === null) reasons.push('positive Waggle-estimated cost with at most six decimal places is required');
+    const responseBillingClass = response.billingClass === 'priced' || response.billingClass === 'free'
+      ? response.billingClass
+      : null;
+    if (responseBillingClass !== expectedBillingClass) {
+      reasons.push('response billing class does not match the manifest contract');
+    }
+    const costMicros = estimatedCostMicros(response.estimatedCostUsd, expectedBillingClass);
+    if (costMicros === null) {
+      reasons.push(expectedBillingClass === 'free'
+        ? 'free billing requires an explicit zero Waggle-estimated cost'
+        : 'priced billing requires a positive Waggle-estimated cost with at most six decimal places');
+    }
     const doneEvents = Array.isArray(response.sseEvents)
       ? response.sseEvents.map(record).filter(event => event.event === 'done')
       : [];
     const doneData = record(doneEvents[0]?.data);
-    const doneCostMicros = estimatedCostMicros(doneData.cost);
+    const doneBillingClass = doneData.billingClass === 'priced' || doneData.billingClass === 'free'
+      ? doneData.billingClass
+      : null;
+    if (doneBillingClass !== expectedBillingClass || doneBillingClass !== responseBillingClass) {
+      reasons.push('billing class does not match the single done event');
+    }
+    const doneCostMicros = estimatedCostMicros(doneData.cost, expectedBillingClass);
     if (doneEvents.length !== 1 || doneCostMicros === null || doneCostMicros !== costMicros) {
       reasons.push('estimated cost does not match the single done event');
     }
@@ -461,6 +489,7 @@ export function buildPersonaAcceptanceSeal(
       scoreMode: rescored.scoreMode,
       model,
       provider: manifest.expectedProvider,
+      billingClass: responseBillingClass as 'priced' | 'free',
       estimatedCostUsd: formatUsdMicros(costMicros),
       workspaceId,
       sessionId,
