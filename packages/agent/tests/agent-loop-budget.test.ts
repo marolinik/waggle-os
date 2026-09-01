@@ -837,7 +837,7 @@ describe('hard request dispatch budget', () => {
     const tracker = new CostTracker({ paid: { inputPer1k: 0.001, outputPer1k: 0.001 } });
     tracker.setBudget(10, 'hard');
 
-    const result = await runAgentLoop({
+    await expect(runAgentLoop({
       litellmUrl: 'http://localhost:4000',
       litellmApiKey: 'test-key',
       model: 'paid',
@@ -850,9 +850,12 @@ describe('hard request dispatch budget', () => {
       verificationGate: false,
       skillDistillationGate: false,
       modelSpendBudget: tracker,
+    })).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      toolsUsed: [],
     });
-
-    expect(result.content).toMatch(/aborted/i);
     expect(tracker.getReservedDailyTotal()).toBe(0);
     expect(tracker.getDailyTotal()).toBeGreaterThan(0);
   });

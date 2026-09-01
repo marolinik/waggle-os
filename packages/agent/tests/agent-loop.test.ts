@@ -1091,6 +1091,327 @@ describe('runAgentLoop', () => {
     expect(callCount).toBe(3);
   });
 
+  it('bounds one logical model operation across slow 503 retries and backoff', async () => {
+    vi.useFakeTimers();
+    const abortController = new AbortController();
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    let responseCount = 0;
+    const fetch = vi.fn(() => new Promise<Response>((resolve) => {
+      setTimeout(() => {
+        responseCount++;
+        resolve({
+          ok: false,
+          status: 503,
+          headers: { get: () => null },
+          text: responseCount === 1
+            ? async () => 'temporarily unavailable'
+            : () => new Promise<string>(resolveBody => {
+                setTimeout(() => resolveBody('still unavailable'), 5_000);
+              }),
+        } as unknown as Response);
+      }, 48_000);
+    }));
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      signal: abortController.signal,
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      abortController.abort();
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a delayed response body within the same model-operation deadline', async () => {
+    vi.useFakeTimers();
+    const tool = {
+      name: 'must_not_run',
+      description: 'Would prove a body completed after the deadline.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'unexpected'),
+    } satisfies ToolDefinition;
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => new Promise((resolve) => {
+        setTimeout(() => resolve({
+          choices: [{
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [{ id: 'late_call', function: { name: 'must_not_run', arguments: '{}' } }],
+            },
+            finish_reason: 'tool_calls',
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+        }), 120_000);
+      }),
+    } as unknown as Response));
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      tools: [tool],
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(tool.execute).not.toHaveBeenCalled();
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds a partial SSE stream within the same model-operation deadline', async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const cancel = vi.fn();
+    const onToken = vi.fn();
+    const onReasoningActivity = vi.fn();
+    const tool = {
+      name: 'must_not_run',
+      description: 'Would prove an incomplete stream executed a tool.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'unexpected'),
+    } satisfies ToolDefinition;
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const fetch = vi.fn(async () => ({
+      ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'private', content: 'partial' } }] })}\n\n`,
+            ));
+          },
+          cancel,
+        }),
+    } as unknown as Response));
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      tools: [tool],
+      onToken,
+      onReasoningActivity,
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(tool.execute).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(onToken).toHaveBeenCalledTimes(1);
+      expect(onReasoningActivity).toHaveBeenCalledTimes(1);
+    } finally {
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('suppresses late SSE callbacks from a non-cooperative reader after timeout', async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const onToken = vi.fn();
+    const onReasoningActivity = vi.fn();
+    const cancel = vi.fn(async () => undefined);
+    let readCount = 0;
+    const reader = {
+      read: vi.fn(() => {
+        readCount += 1;
+        if (readCount === 1) {
+          return Promise.resolve({
+            done: false,
+            value: encoder.encode(
+              `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'private', content: 'partial' } }] })}\n\n`,
+            ),
+          });
+        }
+        if (readCount === 2) {
+          return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
+            setTimeout(() => resolve({
+              done: false,
+              value: encoder.encode(
+                `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'late-private', content: 'late' } }] })}\n\n`,
+              ),
+            }), 120_000);
+          });
+        }
+        return Promise.resolve({ done: true, value: undefined });
+      }),
+      cancel,
+    };
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: { getReader: () => reader },
+    }) as unknown as Response);
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      stream: true,
+      onToken,
+      onReasoningActivity,
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(onToken).toHaveBeenCalledTimes(1);
+      expect(onReasoningActivity).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100_000);
+      expect(settlement?.kind).toBe('rejected');
+      expect(cancel).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(onToken).toHaveBeenCalledTimes(1);
+      expect(onReasoningActivity).toHaveBeenCalledTimes(1);
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not start response-body work after the client aborts between stages', async () => {
+    const abortController = new AbortController();
+    const json = vi.fn(async () => ({
+      choices: [{ message: { role: 'assistant', content: 'too late' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }));
+    const response = { status: 200, json } as unknown as Response;
+    Object.defineProperty(response, 'ok', {
+      get() {
+        abortController.abort();
+        return true;
+      },
+    });
+
+    await expect(runAgentLoop(makeConfig({
+      signal: abortController.signal,
+      fetch: vi.fn(async () => response),
+      modelOperationTimeoutMs: 100_000,
+    }))).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+    });
+    expect(json).not.toHaveBeenCalled();
+  });
+
+  it('enforces a fresh model-operation deadline after a long tool finishes', async () => {
+    vi.useFakeTimers();
+    const slowTool: ToolDefinition = {
+      name: 'slow_tool',
+      description: 'Completes after a long-running local operation.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => new Promise<string>((resolve) => {
+        setTimeout(() => resolve('tool-finished'), 120_000);
+      })),
+    };
+    let callCount = 0;
+    const fetch = vi.fn(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [{ id: 'call_1', function: { name: 'slow_tool', arguments: '{}' } }],
+              },
+              finish_reason: 'tool_calls',
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        } as unknown as Response;
+      }
+      return new Promise<Response>((resolve) => {
+        setTimeout(() => resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { role: 'assistant', content: 'too late' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        } as unknown as Response), 120_000);
+      });
+    });
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      tools: [slowTool],
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as Error).message).toBe(
+        'Model operation timed out after 100 seconds. Review completed activity before retrying to avoid duplicate actions.',
+      );
+      expect(settlement?.value).toMatchObject({
+        name: 'ModelOperationTimeoutError',
+        code: 'MODEL_OPERATION_TIMEOUT',
+        usage: { inputTokens: 10, outputTokens: 5 },
+        toolsUsed: ['slow_tool'],
+      });
+      expect(slowTool.execute).toHaveBeenCalledTimes(1);
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
   it('resets retry count after a successful response', async () => {
     let callCount = 0;
     const fetch = vi.fn(async () => {
@@ -1191,13 +1512,48 @@ describe('runAgentLoop', () => {
       { content: 'Should not appear.', usage: { prompt_tokens: 10, completion_tokens: 5 } },
     ]);
 
-    const result = await runAgentLoop(
+    await expect(runAgentLoop(
       makeConfig({ fetch, tools: [tool], signal: abortController.signal })
-    );
-
-    expect(result.content).toBe('Agent loop aborted (client disconnected).');
-    expect(result.toolsUsed).toEqual(['slow_tool']);
+    )).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      message: 'Agent loop aborted (client disconnected).',
+      toolsUsed: ['slow_tool'],
+    });
     // Only one fetch call — the loop exited before making a second LLM request
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an abort during a tool on the final turn with recorded tool activity', async () => {
+    const abortController = new AbortController();
+    const tool: ToolDefinition = {
+      name: 'final_turn_write',
+      description: 'Aborts after recording one final-turn tool result.',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => {
+        abortController.abort();
+        return 'write-finished';
+      },
+    };
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [
+        { id: 'call_final', function: { name: 'final_turn_write', arguments: '{}' } },
+      ],
+      usage: { prompt_tokens: 14, completion_tokens: 6 },
+    }]);
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [tool],
+      signal: abortController.signal,
+      maxTurns: 1,
+    }))).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      toolsUsed: ['final_turn_write'],
+      usage: { inputTokens: 14, outputTokens: 6 },
+    });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -1229,9 +1585,9 @@ describe('runAgentLoop', () => {
     expect(init.signal.aborted).toBe(true);
   });
 
-  // R3-008: an abort that fires while the in-flight response is being read must
+  // R3-008: an abort that fires while the in-flight response body is being read must
   // short-circuit the turn before tool calls run or a second request is issued.
-  it('returns promptly when aborted during the in-flight request', async () => {
+  it('rejects promptly when aborted during the in-flight response body', async () => {
     const abortController = new AbortController();
     const tool: ToolDefinition = {
       name: 'should_not_run',
@@ -1240,39 +1596,39 @@ describe('runAgentLoop', () => {
       execute: vi.fn(async () => 'tool-result'),
     };
 
-    // Fetch resolves only after the signal has aborted, simulating a client
-    // disconnect during the in-flight read.
-    const fetch = vi.fn(async (_url: string, _init?: RequestInit) => {
-      abortController.abort();
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          choices: [
-            {
-              message: {
-                role: 'assistant' as const,
-                content: null,
-                tool_calls: [
-                  { id: 'call_1', type: 'function', function: { name: 'should_not_run', arguments: '{}' } },
-                ],
-              },
-              finish_reason: 'tool_calls',
-            },
-          ],
-          usage: { prompt_tokens: 10, completion_tokens: 5 },
-        }),
-      } as unknown as Response;
+    let markBodyStarted!: () => void;
+    const bodyStarted = new Promise<void>((resolve) => {
+      markBodyStarted = resolve;
+    });
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => {
+        markBodyStarted();
+        return new Promise<never>(() => undefined);
+      },
+    }) as unknown as Response);
+
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      tools: [tool],
+      signal: abortController.signal,
+      modelOperationTimeoutMs: 100_000,
+    }));
+    const rejection = expect(run).rejects.toMatchObject({
+      name: 'AgentLoopAbortError',
+      code: 'AGENT_LOOP_ABORTED',
+      message: 'Agent loop aborted (client disconnected).',
+      toolsUsed: [],
     });
 
-    const result = await runAgentLoop(
-      makeConfig({ fetch, tools: [tool], signal: abortController.signal })
-    );
+    await bodyStarted;
+    abortController.abort();
+    await rejection;
 
-    expect(result.content).toBe('Agent loop aborted (client disconnected).');
-    expect(result.toolsUsed).toEqual([]);
     expect(tool.execute).not.toHaveBeenCalled();
-    // Only one fetch call — the loop exited before making a second LLM request
+    // No model-deadline advancement is needed: the client signal settles the
+    // pending body immediately, before either tools or a retry can start.
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
