@@ -4070,6 +4070,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           };
         };
 
+        let announcedModelSwitchKey: string | null = null;
+        const announceModelSwitch = (attemptModel: string) => {
+          if (!modelSwitchReason) return;
+          const switchKey = `${attemptModel}\u0000${modelSwitchReason}`;
+          if (announcedModelSwitchKey === switchKey) return;
+          announcedModelSwitchKey = switchKey;
+          sendEvent('model_switch', { model: attemptModel, reason: modelSwitchReason, primary: primaryModel });
+          sendEvent('step', { content: `⬡ Switched to ${attemptModel} — ${modelSwitchReason}` });
+        };
+
         let initialActivityDeadlineAvailable = true;
         const runAgentAttempt = async (config: typeof runConfig) => {
           if (requiredToolSequence && requiredToolSequenceStarted) {
@@ -4083,6 +4093,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           pendingCapabilityToolResults = [];
           activeAttemptModel = config.billingModel ?? resolvedModel;
           activeAttemptBillingClass = config.modelSpendBillingClass ?? 'priced';
+          announceModelSwitch(activeAttemptModel);
           attemptedBillingClasses.add(activeAttemptBillingClass);
           abortedAttemptUsage = null;
           const { toolChoice: _staleToolChoice, ...attemptBaseConfig } = config;
@@ -4410,12 +4421,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           throwIfTurnAborted();
         }
         pendingCapabilityToolResults = [];
-
-        // Notify client of model switch
-        if (modelSwitchReason) {
-          sendEvent('model_switch', { model: resolvedModel, reason: modelSwitchReason, primary: primaryModel });
-          sendEvent('step', { content: `⬡ Switched to ${resolvedModel} — ${modelSwitchReason}` });
-        }
 
         // Track iteration and inject budget pressure
         iterBudget.tick();

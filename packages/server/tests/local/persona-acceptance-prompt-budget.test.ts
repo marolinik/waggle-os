@@ -818,6 +818,119 @@ describe('persona acceptance prompt budget', () => {
     }
   });
 
+  it('announces a configured model fallback before the fallback response completes', async () => {
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+    const workspace = server.workspaceManager.create({
+      name: 'Immediate fallback progress',
+      group: 'Test',
+    }).id;
+    let fallbackStartedResolve!: () => void;
+    const fallbackStarted = new Promise<void>(resolve => {
+      fallbackStartedResolve = resolve;
+    });
+    let fallbackResolve!: (response: AgentResponse) => void;
+
+    testState.runAgentLoop.mockImplementation(async (): Promise<AgentResponse> => {
+      if (!fallbackResolve) {
+        fallbackResolve = () => undefined;
+        throw Object.assign(new Error(
+          'Initial model activity timed out after 20 seconds. The provider may be unavailable; retry this turn.',
+        ), {
+          name: 'InitialModelActivityTimeoutError',
+          code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT',
+          retryable: true,
+          usageEstimated: true,
+          toolsUsed: [],
+          usage: { inputTokens: 17, outputTokens: 0 },
+        });
+      }
+      fallbackStartedResolve();
+      return await new Promise<AgentResponse>(resolve => {
+        fallbackResolve = resolve;
+      });
+    });
+
+    const address = await server.listen({ host: '127.0.0.1', port: 0 });
+    const response = await fetch(`${address}/api/chat`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${server.agentState.wsSessionToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: 'Summarize the launch state.',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session: 'immediate-fallback-progress',
+        workspace,
+      }),
+    });
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let streamed = '';
+    let switchSeenResolve!: (seen: boolean) => void;
+    const switchSeen = new Promise<boolean>(resolve => {
+      switchSeenResolve = resolve;
+    });
+    let switchSeenSettled = false;
+    const streamCompleted = (async () => {
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        streamed += decoder.decode(chunk.value, { stream: true });
+        if (!switchSeenSettled && streamed.includes('event: model_switch')) {
+          switchSeenSettled = true;
+          switchSeenResolve(true);
+        }
+      }
+      if (!switchSeenSettled) switchSeenResolve(false);
+    })();
+
+    try {
+      expect(response.status).toBe(200);
+      await fallbackStarted;
+      const switchObserved = await Promise.race([
+        switchSeen,
+        new Promise<false>(resolve => setTimeout(() => resolve(false), 1_500)),
+      ]);
+      fallbackResolve({
+        content: 'Fallback completed.',
+        toolsUsed: [],
+        usage: { inputTokens: 7, outputTokens: 3 },
+      });
+      await streamCompleted;
+      expect(switchObserved).toBe(true);
+      const events = parseSse(streamed);
+      const switchEvents = events.filter(event => event.event === 'model_switch');
+      expect(switchEvents).toEqual([{
+        event: 'model_switch',
+        data: {
+          model: 'openrouter/openai/gpt-5.4',
+          reason: 'openrouter/anthropic/claude-sonnet-5 failed (timeout); configured fallback selected',
+          primary: 'openrouter/anthropic/claude-sonnet-5',
+        },
+      }]);
+      expect(events.filter(event => event.event === 'step'
+        && event.data.content === '⬡ Switched to openrouter/openai/gpt-5.4 — openrouter/anthropic/claude-sonnet-5 failed (timeout); configured fallback selected')).toHaveLength(1);
+      const switchIndex = events.findIndex(event => event.event === 'model_switch');
+      expect(switchIndex).toBeLessThan(events.findIndex(event => event.event === 'token'));
+      expect(switchIndex).toBeLessThan(events.findIndex(event => event.event === 'done'));
+    } finally {
+      fallbackResolve({
+        content: 'Fallback completed.',
+        toolsUsed: [],
+        usage: { inputTokens: 7, outputTokens: 3 },
+      });
+      await reader.cancel().catch(() => undefined);
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
   it('preserves both attempts when cancellation lands after fallback returns', async () => {
     const previousImplementation = testState.runAgentLoop.getMockImplementation();
     const attempts: AgentLoopConfig[] = [];
