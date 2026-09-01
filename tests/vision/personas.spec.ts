@@ -147,6 +147,7 @@ interface ApprovalAutoDenial {
 interface SendAndCaptureOptions {
   bodyTimeoutMs: number;
   approvalScreenshotPrefix: string;
+  authorizedRetryHeaderTimeoutMs?: number;
 }
 
 interface WireTurn {
@@ -334,6 +335,7 @@ async function armChatWireCapture(page: Page): Promise<number> {
       error: string | null;
       settled: boolean;
       terminal: boolean;
+      abort: (() => void) | null;
     }
     interface BrowserChatCaptureRegistry {
       captures: BrowserChatCapture[];
@@ -349,7 +351,14 @@ async function armChatWireCapture(page: Page): Promise<number> {
     scope.__wagglePersonaChatCapture = registry;
     registry.restore?.();
 
-    const cursor = registry.captures.length;
+    const capture: BrowserChatCapture = {
+      bodyText: '',
+      error: null,
+      settled: false,
+      terminal: false,
+      abort: null,
+    };
+    const cursor = registry.captures.push(capture) - 1;
     const originalFetch = window.fetch.bind(window);
     let restored = false;
     const restore = () => {
@@ -390,26 +399,47 @@ async function armChatWireCapture(page: Page): Promise<number> {
           : String(input);
       const isChatRequest = method === 'POST'
         && new URL(rawUrl, window.location.href).pathname === '/api/chat';
+      const controller = isChatRequest ? new AbortController() : null;
+      const callerSignal = init?.signal
+        ?? (input instanceof Request ? input.signal : null);
+      const forwardCallerAbort = () => controller?.abort(callerSignal?.reason);
+      if (controller && callerSignal) {
+        if (callerSignal.aborted) forwardCallerAbort();
+        else callerSignal.addEventListener('abort', forwardCallerAbort, { once: true });
+      }
+      const removeCallerAbort = () => callerSignal?.removeEventListener('abort', forwardCallerAbort);
+      if (controller) {
+        capture.abort = () => controller.abort(new DOMException(
+          'Persona harness stream completion deadline expired.',
+          'AbortError',
+        ));
+      }
       try {
-        const response = await originalFetch(input, init);
+        const response = await originalFetch(
+          input,
+          controller ? { ...init, signal: controller.signal } : init,
+        );
         const isSuccessfulSse = isChatRequest
           && response.ok
           && (response.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream');
-        if (!isSuccessfulSse) return response;
+        if (!isSuccessfulSse) {
+          if (isChatRequest) capture.abort = null;
+          removeCallerAbort();
+          return response;
+        }
 
-        const capture: BrowserChatCapture = {
-          bodyText: '',
-          error: null,
-          settled: false,
-          terminal: false,
-        };
-        registry.captures.push(capture);
+        capture.bodyText = '';
+        capture.error = null;
+        capture.settled = false;
+        capture.terminal = false;
         try {
           const clone = response.clone();
           const reader = clone.body?.getReader();
           if (!reader) {
             capture.error = 'Chat SSE response did not expose a readable body.';
             capture.settled = true;
+            capture.abort = null;
+            removeCallerAbort();
           } else {
             void (async () => {
               const decoder = new TextDecoder('utf-8');
@@ -434,6 +464,8 @@ async function armChatWireCapture(page: Page): Promise<number> {
                 }
                 capture.settled = true;
               } finally {
+                capture.abort = null;
+                removeCallerAbort();
                 try { reader.releaseLock(); } catch { /* reader already released */ }
               }
             })();
@@ -441,10 +473,18 @@ async function armChatWireCapture(page: Page): Promise<number> {
         } catch (error) {
           capture.error = error instanceof Error ? error.message : String(error);
           capture.settled = true;
+          capture.abort = null;
+          removeCallerAbort();
         }
         restore();
         return response;
       } catch (error) {
+        removeCallerAbort();
+        if (isChatRequest) {
+          capture.error = error instanceof Error ? error.message : String(error);
+          capture.settled = true;
+          capture.abort = null;
+        }
         if (isChatRequest) restore();
         throw error;
       }
@@ -499,12 +539,27 @@ async function disarmChatWireCapture(page: Page): Promise<void> {
   }).catch(() => {});
 }
 
+async function abortCapturedChatRequest(page: Page, cursor: number): Promise<void> {
+  await page.evaluate((captureCursor) => {
+    const scope = window as typeof window & {
+      __wagglePersonaChatCapture?: {
+        captures: Array<{ abort?: (() => void) | null }>;
+      };
+    };
+    scope.__wagglePersonaChatCapture?.captures[captureCursor]?.abort?.();
+  }, cursor).catch(() => {});
+}
+
 function isTimeoutFailure(error: unknown): boolean {
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
   return /(?:timed out|timeout|deadline expired)/i.test(message);
 }
 
-async function captureBodyWithApprovalDenials(
+function isAbsoluteResponseDeadlineFailure(error: unknown, deadlineAt: number): boolean {
+  return isTimeoutFailure(error) && deadlineAt - Date.now() <= 10;
+}
+
+async function captureBodyWithApprovalDenialsInternal(
   page: Page,
   bodyPromise: Promise<Buffer>,
   deadlineAt: number,
@@ -620,6 +675,29 @@ async function captureBodyWithApprovalDenials(
   }
 }
 
+async function captureBodyWithApprovalDenials(
+  page: Page,
+  bodyPromise: Promise<Buffer>,
+  deadlineAt: number,
+  screenshotPrefix: string,
+  approvalAutoDenials: ApprovalAutoDenial[],
+): Promise<Buffer> {
+  try {
+    return await captureBodyWithApprovalDenialsInternal(
+      page,
+      bodyPromise,
+      deadlineAt,
+      screenshotPrefix,
+      approvalAutoDenials,
+    );
+  } catch (error) {
+    if (isAbsoluteResponseDeadlineFailure(error, deadlineAt)) {
+      throw new Error(STREAM_COMPLETION_DEADLINE_ERROR);
+    }
+    throw error;
+  }
+}
+
 async function sendAndCapture(
   page: Page,
   prompt: string,
@@ -686,12 +764,12 @@ async function sendAndCapture(
       const retryWaitMs = remainingDeadlineMs(
         deadlineAt,
         'waiting for the authorized chat retry',
-        20_000,
+        options.authorizedRetryHeaderTimeoutMs ?? 20_000,
       );
       const retryOutcome = await Promise.race([
         retryResponseResult,
         page.waitForTimeout(retryWaitMs).then(() => {
-          throw new Error('Chat request remained unauthorized after HTTP 401; no retry response arrived.');
+          throw new Error('Chat response deadline expired while waiting for authorized retry headers after HTTP 401.');
         }),
       ]);
       if (retryOutcome.error) throw retryOutcome.error;
@@ -738,6 +816,10 @@ async function sendAndCapture(
       approvalAutoDenials,
     };
   } catch (error) {
+    const timedOut = isAbsoluteResponseDeadlineFailure(error, deadlineAt);
+    if (captureCursor !== null) {
+      await abortCapturedChatRequest(page, captureCursor);
+    }
     return {
       requestUrl,
       requestPayload,
@@ -746,7 +828,7 @@ async function sendAndCapture(
       events: [],
       parseErrors: [],
       done: null,
-      timedOut: isTimeoutFailure(error),
+      timedOut,
       transportError: redactDiagnosticText(error instanceof Error ? error.message : String(error)),
       approvalAutoDenials,
     };
@@ -824,6 +906,8 @@ interface VisibleAssistantEvidence {
   text: string;
   codeSegments: string[];
 }
+
+const STREAM_COMPLETION_DEADLINE_ERROR = 'Chat response body deadline expired while waiting for stream completion.';
 
 function shouldReadAssistantUiEvidence(wire: WireTurn, responseText: string): boolean {
   return !wire.timedOut && wire.done !== null && responseText.trim().length > 0;
@@ -1080,7 +1164,7 @@ test('persona harness preserves denial evidence and exits at the absolute body d
     startedAt + 800,
     join(ARTIFACTS, 'harness-approval-deadline'),
     approvalAutoDenials,
-  )).rejects.toThrow(/deadline expired/i);
+  )).rejects.toThrow(STREAM_COMPLETION_DEADLINE_ERROR);
 
   expect(Date.now() - startedAt).toBeLessThan(2_000);
   expect(approvalAutoDenials).toHaveLength(1);
@@ -1099,6 +1183,12 @@ test('persona harness distinguishes transport failures from response deadlines',
   expect(isTimeoutFailure(new Error(
     'Chat response body deadline expired while waiting for stream completion.',
   ))).toBe(true);
+});
+
+test('persona harness does not classify an early operation cap as the response deadline', () => {
+  const operationTimeout = new Error('locator.click: Timeout 3000ms exceeded.');
+  expect(isAbsoluteResponseDeadlineFailure(operationTimeout, Date.now() + 2_000)).toBe(false);
+  expect(isAbsoluteResponseDeadlineFailure(operationTimeout, Date.now())).toBe(true);
 });
 
 test('persona harness preserves timeout artifacts without waiting for absent assistant UI', async ({ page: _page }, testInfo) => {
@@ -1175,6 +1265,19 @@ test('persona harness captures completed SSE when the browser consumer cancels a
   const terminalDataLine = 'data: {"content":"captured"}\n';
   const terminalData = 'data: {"content":"captured"}\n\n';
   const duplicateTerminal = 'event: done\ndata: {"content":"captured"}\n\n';
+  let resolveStalledSocketClosed: (() => void) | undefined;
+  const stalledSocketClosed = new Promise<void>((resolve) => {
+    resolveStalledSocketClosed = resolve;
+  });
+  let resolveStalledHeaderSocketClosed: (() => void) | undefined;
+  const stalledHeaderSocketClosed = new Promise<void>((resolve) => {
+    resolveStalledHeaderSocketClosed = resolve;
+  });
+  let resolveRetryHeaderSocketClosed: (() => void) | undefined;
+  const retryHeaderSocketClosed = new Promise<void>((resolve) => {
+    resolveRetryHeaderSocketClosed = resolve;
+  });
+  const chatAttempts = new Map<string, number>();
   const server = createServer((request, response) => {
     if (request.url === '/api/chat') {
       let requestBody = '';
@@ -1182,6 +1285,28 @@ test('persona harness captures completed SSE when the browser consumer cancels a
       request.on('data', chunk => { requestBody += chunk; });
       request.on('end', () => {
         const message = (JSON.parse(requestBody) as { message?: string }).message;
+        const attempt = (chatAttempts.get(message ?? '') ?? 0) + 1;
+        chatAttempts.set(message ?? '', attempt);
+        if (message === 'stall headers') {
+          const lateHeader = setTimeout(() => {
+            if (!response.destroyed) response.writeHead(200).end();
+          }, 5_000);
+          response.once('close', () => {
+            clearTimeout(lateHeader);
+            resolveStalledHeaderSocketClosed?.();
+          });
+          return;
+        }
+        if (message === 'auth retry stall headers' && attempt > 1) {
+          const lateHeader = setTimeout(() => {
+            if (!response.destroyed) response.writeHead(200).end();
+          }, 5_000);
+          response.once('close', () => {
+            clearTimeout(lateHeader);
+            resolveRetryHeaderSocketClosed?.();
+          });
+          return;
+        }
         if (message === 'http failure' || message?.startsWith('auth ')) {
           const status = message === 'http failure' ? 500 : 401;
           response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -1194,6 +1319,11 @@ test('persona harness captures completed SSE when the browser consumer cancels a
           'content-type': 'text/event-stream; charset=utf-8',
         });
         response.flushHeaders();
+        if (message === 'stall stream') {
+          response.write('event: heartbeat\ndata: {"status":"working"}\n\n');
+          response.once('close', () => resolveStalledSocketClosed?.());
+          return;
+        }
         response.write(responsePrefix);
         const splitBeforeDelimiter = message === 'capture split terminal';
         const sendTerminal = setTimeout(
@@ -1274,6 +1404,64 @@ test('persona harness captures completed SSE when the browser consumer cancels a
     expect(wire.done).toMatchObject({ content: 'captured' });
     expect(wire.events.filter(event => event.event === 'done')).toHaveLength(2);
 
+    const stalledWire = await sendAndCapture(page, 'stall stream', {
+      bodyTimeoutMs: 800,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-stalled-stream'),
+    });
+    expect(stalledWire.timedOut).toBe(true);
+    expect(stalledWire.transportError).toBe(STREAM_COMPLETION_DEADLINE_ERROR);
+    expect(stalledWire.approvalAutoDenials).toEqual([]);
+    await Promise.race([
+      stalledSocketClosed,
+      page.waitForTimeout(1_000).then(() => {
+        throw new Error('Timed-out persona request left the server socket open.');
+      }),
+    ]);
+
+    const stalledHeaderWire = await sendAndCapture(page, 'stall headers', {
+      bodyTimeoutMs: 800,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-stalled-headers'),
+    });
+    expect(stalledHeaderWire.timedOut).toBe(true);
+    expect(stalledHeaderWire.approvalAutoDenials).toEqual([]);
+    await Promise.race([
+      stalledHeaderSocketClosed,
+      page.waitForTimeout(1_000).then(() => {
+        throw new Error('Pre-header timeout left the server socket open.');
+      }),
+    ]);
+
+    const postTimeoutWire = await sendAndCapture(page, 'capture split terminal', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-post-timeout-isolation'),
+    });
+    expect(postTimeoutWire.transportError).toBeNull();
+    expect(postTimeoutWire.done).toMatchObject({ content: 'captured' });
+
+    const stalledRetryWire = await sendAndCapture(page, 'auth retry stall headers', {
+      bodyTimeoutMs: 3_000,
+      authorizedRetryHeaderTimeoutMs: 300,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-auth-retry-stalled-headers'),
+    });
+    expect(stalledRetryWire.timedOut).toBe(false);
+    expect(stalledRetryWire.transportError).toContain(
+      'deadline expired while waiting for authorized retry headers after HTTP 401',
+    );
+    expect(stalledRetryWire.approvalAutoDenials).toEqual([]);
+    await Promise.race([
+      retryHeaderSocketClosed,
+      page.waitForTimeout(1_000).then(() => {
+        throw new Error('Authorized-retry header timeout left the server socket open.');
+      }),
+    ]);
+
+    const postRetryTimeoutWire = await sendAndCapture(page, 'capture split terminal', {
+      bodyTimeoutMs: 3_000,
+      approvalScreenshotPrefix: join(ARTIFACTS, 'harness-post-retry-timeout-isolation'),
+    });
+    expect(postRetryTimeoutWire.transportError).toBeNull();
+    expect(postRetryTimeoutWire.done).toMatchObject({ content: 'captured' });
+
     const httpFailure = await sendAndCapture(page, 'http failure', {
       bodyTimeoutMs: 3_000,
       approvalScreenshotPrefix: join(ARTIFACTS, 'harness-http-failure'),
@@ -1298,8 +1486,10 @@ test('persona harness captures completed SSE when the browser consumer cancels a
       approvalScreenshotPrefix: join(ARTIFACTS, 'harness-auth-refresh-failure'),
     });
     expect(authRefreshFailure.httpStatus).toBe(401);
-    expect(authRefreshFailure.timedOut).toBe(false);
-    expect(authRefreshFailure.transportError).toContain('remained unauthorized after HTTP 401');
+    expect(authRefreshFailure.timedOut).toBe(true);
+    expect(authRefreshFailure.transportError).toContain(
+      'deadline expired while waiting for authorized retry headers after HTTP 401',
+    );
   } finally {
     server.closeAllConnections();
     await new Promise<void>(resolveClose => server.close(() => resolveClose()));
