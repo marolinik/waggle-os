@@ -12,7 +12,7 @@
 import { expect, test, type Page, type Request, type Response, type TestInfo } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import {
@@ -825,6 +825,48 @@ interface VisibleAssistantEvidence {
   codeSegments: string[];
 }
 
+function shouldReadAssistantUiEvidence(wire: WireTurn, responseText: string): boolean {
+  return !wire.timedOut && wire.done !== null && responseText.trim().length > 0;
+}
+
+async function collectAssistantUiEvidence(
+  wire: WireTurn,
+  responseText: string,
+  readCopied: () => Promise<string>,
+  readVisible: () => Promise<VisibleAssistantEvidence>,
+): Promise<{ copiedAssistantResponse: string; visibleAssistant: VisibleAssistantEvidence }> {
+  if (!shouldReadAssistantUiEvidence(wire, responseText)) {
+    return { copiedAssistantResponse: '', visibleAssistant: { text: '', codeSegments: [] } };
+  }
+  return {
+    copiedAssistantResponse: await readCopied(),
+    visibleAssistant: await readVisible(),
+  };
+}
+
+async function persistPersonaArtifactAndAssertTransport(
+  artifactPath: string,
+  artifact: unknown,
+  score: unknown,
+  wire: WireTurn,
+  testInfo: TestInfo,
+): Promise<void> {
+  writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
+  await testInfo.attach('persona-acceptance-score', {
+    body: Buffer.from(JSON.stringify(score, null, 2)),
+    contentType: 'application/json',
+  });
+  expect(wire.httpStatus, 'chat request succeeded').toBe(200);
+  expect(wire.timedOut, 'chat request completed before timeout').toBe(false);
+}
+
+function personaTransportArtifactFields(wire: WireTurn): {
+  timedOut: boolean;
+  transportError: string | null;
+} {
+  return { timedOut: wire.timedOut, transportError: wire.transportError };
+}
+
 async function readVisibleAssistantEvidence(page: Page): Promise<VisibleAssistantEvidence> {
   const copyButton = page.getByTestId('chat-msg-copy').last();
   await copyButton.waitFor({ state: 'visible', timeout: 10_000 });
@@ -1057,6 +1099,70 @@ test('persona harness distinguishes transport failures from response deadlines',
   expect(isTimeoutFailure(new Error(
     'Chat response body deadline expired while waiting for stream completion.',
   ))).toBe(true);
+});
+
+test('persona harness preserves timeout artifacts without waiting for absent assistant UI', async ({ page: _page }, testInfo) => {
+  const timedOutWire: WireTurn = {
+    requestUrl: `${BASE}/api/chat`,
+    requestPayload: { message: 'test' },
+    httpStatus: 200,
+    durationMs: 60_000,
+    events: [],
+    parseErrors: [],
+    done: null,
+    timedOut: true,
+    transportError: 'Chat response body deadline expired while waiting for stream completion.',
+    approvalAutoDenials: [],
+  };
+
+  let copiedReads = 0;
+  let visibleReads = 0;
+  const readCopied = async () => { copiedReads += 1; return 'complete'; };
+  const readVisible = async () => {
+    visibleReads += 1;
+    return { text: 'complete', codeSegments: [] };
+  };
+  const timedOutEvidence = await collectAssistantUiEvidence(
+    timedOutWire,
+    '',
+    readCopied,
+    readVisible,
+  );
+  expect(timedOutEvidence).toEqual({
+    copiedAssistantResponse: '',
+    visibleAssistant: { text: '', codeSegments: [] },
+  });
+  expect([copiedReads, visibleReads]).toEqual([0, 0]);
+
+  const completedWire = {
+    ...timedOutWire,
+    done: { content: 'complete' },
+    timedOut: false,
+    transportError: null,
+  };
+  expect(await collectAssistantUiEvidence(
+    completedWire,
+    'complete',
+    readCopied,
+    readVisible,
+  )).toEqual({
+    copiedAssistantResponse: 'complete',
+    visibleAssistant: { text: 'complete', codeSegments: [] },
+  });
+  expect([copiedReads, visibleReads]).toEqual([1, 1]);
+
+  const artifactPath = testInfo.outputPath('timeout-artifact.json');
+  const artifact = {
+    response: personaTransportArtifactFields(timedOutWire),
+  };
+  await expect(persistPersonaArtifactAndAssertTransport(
+    artifactPath,
+    artifact,
+    { passed: false },
+    timedOutWire,
+    testInfo,
+  )).rejects.toThrow(/chat request completed before timeout/);
+  expect(JSON.parse(readFileSync(artifactPath, 'utf8'))).toEqual(artifact);
 });
 
 test('persona harness captures completed SSE when the browser consumer cancels after done', async ({ page }) => {
@@ -1339,8 +1445,12 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         );
         if (chatScreenshot) screenshots.push(chatScreenshot);
         const renderedConversation = await page.locator('body').innerText().catch(() => '');
-        const copiedAssistantResponse = await readCopiedAssistantResponse(page);
-        const visibleAssistant = await readVisibleAssistantEvidence(page);
+        const { copiedAssistantResponse, visibleAssistant } = await collectAssistantUiEvidence(
+          wire,
+          responseText,
+          () => readCopiedAssistantResponse(page),
+          () => readVisibleAssistantEvidence(page),
+        );
         const expectedCodeSegments = extractMarkdownCodeSegments(responseText);
 
         await page.goto(
@@ -1477,7 +1587,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             approvalAutoDenials: wire.approvalAutoDenials,
             sseEvents: wire.events,
             parseErrors: wire.parseErrors,
-            transportError: wire.transportError,
+            ...personaTransportArtifactFields(wire),
           },
           runtime: {
             healthStatus: runtimeHealthResponse?.status() ?? null,
@@ -1510,14 +1620,13 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           score,
         };
         const artifactPath = join(ARTIFACTS, `${stem}.json`);
-        writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
-        await testInfo.attach('persona-acceptance-score', {
-          body: Buffer.from(JSON.stringify(score, null, 2)),
-          contentType: 'application/json',
-        });
-
-        expect(wire.httpStatus, 'chat request succeeded').toBe(200);
-        expect(wire.timedOut, 'chat request completed before the timeout').toBe(false);
+        await persistPersonaArtifactAndAssertTransport(
+          artifactPath,
+          artifact,
+          score,
+          wire,
+          testInfo,
+        );
         expect(wire.parseErrors, 'every SSE event was valid JSON').toEqual([]);
         expect(runtimeHealthResponse?.ok(), 'runtime health endpoint responded after the provider turn').toBe(true);
         expect(runtimeLlm?.health, 'runtime LLM health is verified after the provider turn').toBe('healthy');
