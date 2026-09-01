@@ -8,7 +8,10 @@ import { createLogger } from '../logger.js';
 const log = createLogger('chat');
 import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, isCriticalNeverAutopass, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, needsCompression, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, isBoundedSingleFileRoundTrip, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, capToolResultForModel, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, executeToolWithStatus, type ToolDefinition, type ToolExecutionOutcome, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
-import type { WorkspaceSession } from '../workspace-sessions.js';
+import type {
+  WorkspaceSession,
+  WorkspaceSessionActivityLease,
+} from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
 import { emitNotification } from './notifications.js';
@@ -2345,6 +2348,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
     let activeChatRuntime: { workspaceSession: WorkspaceSession; sessionId: string; runtime: ChatRuntime } | undefined;
+    let workspaceSessionActivity: WorkspaceSessionActivityLease | undefined;
     let workspaceTurnScope: WorkspaceTurnScope | undefined;
     // Turn-scoped pin for an implicit/default request-owned workspace mind.
     // Hoisted so the outer finally can release it.
@@ -2362,6 +2366,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       activeSessionId,
     );
     const sessionPersistenceDataDir = historyTarget.dataDir;
+    const accountWorkspaceSessionTokens = (delta: number): void => {
+      if (!Number.isFinite(delta) || delta <= 0) return;
+      if (workspaceSessionActivity) {
+        const leasedSession = workspaceSessionActivity.session;
+        if (server.sessionManager.get(leasedSession.workspaceId) === leasedSession) {
+          server.sessionManager.addTokens(leasedSession.workspaceId, delta);
+        }
+        return;
+      }
+      // Injectable runners may execute without a managed workspace session.
+      // Preserve the legacy best-effort accounting attempt only when there is
+      // no live generation that this unleased request could mutate.
+      if (activeExecutionWorkspaceId && !server.sessionManager.get(activeExecutionWorkspaceId)) {
+        server.sessionManager.addTokens(activeExecutionWorkspaceId, delta);
+      }
+    };
     let activeHistory: Array<{ role: string; content: string; model?: string }> | undefined;
     let activeAttemptModel: string | null = null;
     let activeAttemptBillingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']> = 'priced';
@@ -2435,12 +2455,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
             () => server.mindCache.release(effectiveWorkspace),
           );
-          if (candidateSession.status !== 'active') {
+          workspaceSessionActivity = server.sessionManager.acquireActivity(effectiveWorkspace);
+          if (!workspaceSessionActivity) {
             throw new Error(`Workspace session is ${candidateSession.status}`);
           }
+          const activeWorkspaceSession = workspaceSessionActivity.session;
           turnSignal = AbortSignal.any([
             abortController.signal,
-            candidateSession.abortController.signal,
+            activeWorkspaceSession.abortController.signal,
           ]);
           if (turnSignal.aborted) {
             throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
@@ -2449,14 +2471,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           server.mindCache.acquire(effectiveWorkspace);
           pinnedWorkspaceMindId = effectiveWorkspace;
           const runtime = acquireChatRuntime(
-            candidateSession,
+            activeWorkspaceSession,
             sessionId,
             executionWorkspacePath ?? effectiveWorkspace,
             effectiveWorkspace,
           );
 
-          wsSession = candidateSession;
-          activeChatRuntime = { workspaceSession: candidateSession, sessionId, runtime };
+          wsSession = activeWorkspaceSession;
+          activeChatRuntime = { workspaceSession: activeWorkspaceSession, sessionId, runtime };
           sessionOrch = runtime.orchestrator;
           sessionTools = runtime.tools;
         } catch (err) {
@@ -4719,12 +4741,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // L-17 C3: per-session token accumulation for /api/fleet visibility.
         // costTracker is per-workspace cost; sessionManager holds per-session
         // token totals that persist for the life of the active session.
-      if (effectiveWorkspace) {
-          server.sessionManager?.addTokens(
-            effectiveWorkspace,
-            totalTurnUsage.inputTokens + totalTurnUsage.outputTokens,
-          );
-      }
+        accountWorkspaceSessionTokens(
+          totalTurnUsage.inputTokens + totalTurnUsage.outputTokens,
+        );
         usageAccounted = true;
 
         // M8: commit deferred signal markings now that model call succeeded
@@ -5115,9 +5134,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               );
             }
           }
-          if (!usageAccounted && activeExecutionWorkspaceId) {
-            server.sessionManager?.addTokens(
-              activeExecutionWorkspaceId,
+          if (!usageAccounted) {
+            accountWorkspaceSessionTokens(
               billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,
             );
           }
@@ -5264,10 +5282,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } catch { /* best-effort */ }
       }
       activeChatTurns.delete(activeSessionStateKey);
+      // End the SSE stream before releasing the exact workspace generation.
+      // This lives inside the outer finally so post-commit early returns and
+      // observer failures cannot leak the activity lease.
+      try {
+        if (!raw.destroyed && !raw.writableEnded) raw.end();
+      } finally {
+        workspaceSessionActivity?.release();
+      }
     }
-
-    // End the SSE stream
-    if (!raw.destroyed && !raw.writableEnded) raw.end();
   });
 
   // DELETE /api/chat/history — clear session history AND all per-session in-process state.

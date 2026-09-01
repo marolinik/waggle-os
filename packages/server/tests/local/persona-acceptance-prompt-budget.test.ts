@@ -1453,6 +1453,19 @@ describe('persona acceptance prompt budget', () => {
       group: 'Test',
     }).id;
     const session = 'typed-abort-usage-accounting';
+    const originalAcquireActivity = server.sessionManager.acquireActivity.bind(server.sessionManager);
+    let activityReleases = 0;
+    const activitySpy = vi.spyOn(server.sessionManager, 'acquireActivity').mockImplementation((id) => {
+      const lease = originalAcquireActivity(id);
+      if (!lease) return undefined;
+      return {
+        session: lease.session,
+        release: () => {
+          activityReleases += 1;
+          lease.release();
+        },
+      };
+    });
     testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
       Object.defineProperty(config.signal!, 'aborted', { value: true, configurable: true });
       throw Object.assign(new Error('Agent loop aborted (client disconnected).'), {
@@ -1463,26 +1476,31 @@ describe('persona acceptance prompt budget', () => {
       });
     });
 
-    const response = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: {
-        message: 'Prepare the report.',
-        model: 'openrouter/anthropic/claude-sonnet-5',
-        persona: 'general-purpose',
-        session,
-        workspace,
-      },
-    });
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Prepare the report.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace,
+        },
+      });
 
-    expect(response.statusCode).toBe(200);
-    const events = parseSse(response.body);
-    expect(events.some(event => event.event === 'error')).toBe(false);
-    expect(events.some(event => event.event === 'done')).toBe(false);
-    expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(28);
-    const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
-    expect(traceProjection).toContain('"outcome":"abandoned"');
-    expect(traceProjection).toContain('"tokens":{"input":23,"output":5}');
+      expect(response.statusCode).toBe(200);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'error')).toBe(false);
+      expect(events.some(event => event.event === 'done')).toBe(false);
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(28);
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tokens":{"input":23,"output":5}');
+      expect(activityReleases).toBe(1);
+    } finally {
+      activitySpy.mockRestore();
+    }
   });
 
   it('accounts completed model usage carried by a typed model-operation timeout', async () => {
@@ -1628,6 +1646,19 @@ describe('persona acceptance prompt budget', () => {
     const session = 'post-commit-observer-isolation';
     const responseMarker = 'POST_COMMIT_OBSERVER_RESPONSE_20260901';
     const throwingListener = () => { throw new Error('notification observer unavailable'); };
+    const originalAcquireActivity = server.sessionManager.acquireActivity.bind(server.sessionManager);
+    let activityReleases = 0;
+    const activitySpy = vi.spyOn(server.sessionManager, 'acquireActivity').mockImplementation((id) => {
+      const lease = originalAcquireActivity(id);
+      if (!lease) return undefined;
+      return {
+        session: lease.session,
+        release: () => {
+          activityReleases += 1;
+          lease.release();
+        },
+      };
+    });
     server.eventBus?.on('notification', throwingListener);
     testState.runAgentLoop.mockImplementationOnce(async () => ({
       content: responseMarker,
@@ -1659,8 +1690,10 @@ describe('persona acceptance prompt budget', () => {
       const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
       expect(traceProjection).toContain('"outcome":"success"');
       expect(traceProjection).not.toContain('"outcome":"abandoned"');
+      expect(activityReleases).toBe(1);
     } finally {
       server.eventBus?.off('notification', throwingListener);
+      activitySpy.mockRestore();
     }
   });
 

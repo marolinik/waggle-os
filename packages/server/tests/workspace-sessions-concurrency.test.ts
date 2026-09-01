@@ -20,7 +20,10 @@ import fs from 'node:fs';
 import { MindDB, type Embedder } from '@waggle/core';
 import { Orchestrator } from '@waggle/agent';
 import { buildLocalServer } from '../src/local/index.js';
-import { chatSessionStateKey } from '../src/local/routes/chat-persistence.js';
+import {
+  chatSessionStateKey,
+  loadSessionMessages,
+} from '../src/local/routes/chat-persistence.js';
 import { WorkspaceSessionManager } from '../src/local/workspace-sessions.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
@@ -323,6 +326,33 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
     const previousOllamaHost = process.env.OLLAMA_HOST;
     const previousReranker = process.env.WAGGLE_RERANKER;
     const releaseSpy = vi.spyOn(server.mindCache, 'release');
+    const originalAcquireActivity = server.sessionManager.acquireActivity.bind(server.sessionManager);
+    const activityReleaseSnapshots: Array<{
+      sessionAHistory: number;
+      sessionBHistory: number;
+      sessionADiskHistory: number;
+      sessionBDiskHistory: number;
+    }> = [];
+    const activitySpy = vi.spyOn(server.sessionManager, 'acquireActivity').mockImplementation((id) => {
+      const lease = originalAcquireActivity(id);
+      if (!lease) return undefined;
+      return {
+        session: lease.session,
+        release: () => {
+          activityReleaseSnapshots.push({
+            sessionAHistory: server.agentState.sessionHistories.get(
+              chatSessionStateKey(workspaceId!, sessionA),
+            )?.length ?? 0,
+            sessionBHistory: server.agentState.sessionHistories.get(
+              chatSessionStateKey(workspaceId!, sessionB),
+            )?.length ?? 0,
+            sessionADiskHistory: loadSessionMessages(dataDir, workspaceId!, sessionA).length,
+            sessionBDiskHistory: loadSessionMessages(dataDir, workspaceId!, sessionB).length,
+          });
+          lease.release();
+        },
+      };
+    });
     const createdWorkspaceIds: string[] = [workspaceId!];
 
     const deferred = () => {
@@ -497,6 +527,12 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       expect(responseA.statusCode).toBe(200);
       expect(responseA.body).toContain(`${markerA} complete`);
       expect(providerOrder).toEqual(['A#1', 'B#1', 'B#2', 'B#3', 'A#2', 'A#3']);
+      expect(activitySpy).toHaveBeenCalledTimes(2);
+      expect(activityReleaseSnapshots).toHaveLength(2);
+      expect(activityReleaseSnapshots.some(snapshot => snapshot.sessionAHistory === 2)).toBe(true);
+      expect(activityReleaseSnapshots.some(snapshot => snapshot.sessionBHistory === 2)).toBe(true);
+      expect(activityReleaseSnapshots.some(snapshot => snapshot.sessionADiskHistory === 2)).toBe(true);
+      expect(activityReleaseSnapshots.some(snapshot => snapshot.sessionBDiskHistory === 2)).toBe(true);
       const aPhases = stepPhases(responseA.body);
       const bPhases = stepPhases(responseB.body);
       expect(aPhases).not.toContain('workspace_queue');
@@ -611,6 +647,7 @@ describe('WorkspaceSessionManager — Phase A.1 concurrency invariants', () => {
       await Promise.allSettled([requestA, requestB].filter(Boolean) as Promise<unknown>[]);
       fetchSpy.mockRestore();
       acquireSpy.mockRestore();
+      activitySpy.mockRestore();
       releaseSpy.mockRestore();
       await server.close();
       if (previousOllamaHost === undefined) delete process.env.OLLAMA_HOST;
