@@ -14,12 +14,14 @@ import {
   USER_RESPONSE_FORMAT_PRECEDENCE,
   buildTemplateWelcomePrompt,
   classifyExplicitTurnMutationPolicy,
+  isExplicitToolFreeAdvisoryRequest,
 } from '../../src/local/routes/chat-helpers.js';
 import {
   conversationalToolPolicyPrompt,
   filterGatedToolsForConversationalTurn,
   filterPluginToolsForConversationalTurn,
   hasRegulatedDisclaimer,
+  isExplicitExternalResearchRequest,
   isExplicitGatedToolRequest,
   resolveExplicitReadOnlyToolChoice,
   shouldPackageSystemPromptForTurn,
@@ -79,7 +81,7 @@ function assembled(system: string, responseScaffold: string | null): AssembledPr
   };
 }
 
-function canonicalPrompt(id: 'coder' | 'verifier'): string {
+function canonicalPrompt(id: 'coder' | 'project-manager' | 'verifier'): string {
   const acceptanceCase = PERSONA_CASES.find(item => item.id === id);
   if (!acceptanceCase) throw new Error(`Missing canonical persona case: ${id}`);
   return acceptanceCase.prompt;
@@ -103,6 +105,25 @@ describe('chat prompt packaging', () => {
     expect(selectChatPromptPackageMode({
       ...baseModeInput,
       message: livePremiumWorkspacePrompt,
+    })).toBe('compact');
+  });
+
+  it('keeps the canonical self-contained release plan compact without external research', () => {
+    const message = canonicalPrompt('project-manager');
+    const taskShape = detectTaskShape(message);
+    const explicitCapabilityRequest = isExplicitExternalResearchRequest(message);
+    const policy = classifyExplicitTurnMutationPolicy(message);
+    const explicitToolFreeAdvisory = isExplicitToolFreeAdvisoryRequest(message, policy);
+
+    expect(taskShape.complexity).toBe('simple');
+    expect(explicitCapabilityRequest).toBe(false);
+    expect(explicitToolFreeAdvisory).toBe(true);
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message,
+      explicitCapabilityRequest,
+      explicitToolFreeAdvisory,
+      taskComplexity: taskShape.complexity,
     })).toBe('compact');
   });
 
@@ -780,6 +801,8 @@ describe('chat prompt packaging', () => {
     expect(output).toContain('Verifier');
     expect(output).toMatch(/No tools are available/i);
     expect(output).toMatch(/current user message is the complete evidence boundary/i);
+    expect(output).toMatch(/tagged envelope.*opening tag.*closing tag/is);
+    expect(output).toMatch(/never substitute bare JSON/i);
     expect(output).not.toContain('# Context From Your Memory');
     expect(output).not.toContain('# Recalled Memories');
     expect(output).not.toContain("# Why You're Here");

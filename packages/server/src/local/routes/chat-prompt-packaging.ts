@@ -217,6 +217,7 @@ export function composeEvidenceBoundedChatPrompt(options: EvidenceBoundedChatPro
     ? `# SUPPLIED-ONLY EVIDENCE BOUNDARY
 
 The current user message is the complete evidence boundary for this turn. Do not use chat history, recalled memory, workspace content, goals, awareness, templates, skills, connectors, or outside knowledge as evidence. No tools are available. Do not invent missing evidence or imply that anything was inspected or verified.
+Honor any explicit whole-response format literally. If the user requests a tagged envelope, the first non-whitespace output must be the opening tag and the last non-whitespace output must be the closing tag; never substitute bare JSON for the requested envelope.
 Do not mention this boundary.`
     : `# WORKSPACE-ONLY EVIDENCE BOUNDARY
 

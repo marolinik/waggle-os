@@ -1144,7 +1144,7 @@ export function isExplicitToolFreeAdvisoryRequest(
     /\b(?:do not|don['\u2019]t|never|without)\b[^.?!;:\r\n]*?(?=\s*(?:,\s*(?=(?:but|however|yet|then|using|from|via|inspect|search|browse|read|open|list|scan|query|retrieve|recall|look up|find)\b)|[;:]|\bbut\b|\bhowever\b|\byet\b|\bbased on\b|[.?!]|$))/gi,
     ' ',
   );
-  if (!/\b(?:design|decompose|outline|explain|compare|describe|discuss|teach|summari[sz]e|draft|prepare|propose|recommend|map|write|provide|produce|generate|implement)\b/i.test(affirmative)) {
+  if (!/\b(?:turn|design|decompose|outline|explain|compare|describe|discuss|teach|summari[sz]e|draft|prepare|propose|recommend|map|write|provide|produce|generate|implement)\b/i.test(affirmative)) {
     return false;
   }
 
@@ -1160,6 +1160,7 @@ export function isExplicitToolFreeAdvisoryRequest(
     && (!onlyTechnologyFilenames || !technologyNameUsage || technologyFileIntent))
     || /(?:^|[\s"'`])(?:Dockerfile|Makefile|Jenkinsfile|Procfile|README(?:\.[A-Za-z0-9_-]+)?|\.gitignore|\.gitattributes|\.npmrc|\.nvmrc|\.env(?:\.[A-Za-z0-9_-]+)?)(?=$|[\s"'`,;:.!?])/i.test(message);
   const methodExplanation = /\b(?:explain|describe|outline)\s+how\s+to\b/i.test(affirmative);
+  const inlineDefinedCurrentObject = /\b(?:turn|convert|transform)\s+this\s+(?:release\s+)?(?:goal|brief|objective|plan|request)\s+into\b[^:\r\n]{0,200}:\s*\S/i.test(affirmative);
   const explicitLookup = /https?:\/\//i.test(affirmative)
     || /\b(?:search|browse|inspect|read|open|list|scan|query|retrieve|recall|look up|find)\b[^.?!\r\n]{0,100}\b(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|web|internet|online|sources?|documents?|documentation)\b/i.test(affirmative)
     || /\b(?:current|existing|this|our|my|saved|previous|prior|attached|uploaded)\s+(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|documents?|pdfs?|emails?|messages?|spreadsheets?|tickets?|records?|inbox|calendar|tasks?)\b/i.test(affirmative)
@@ -1178,7 +1179,8 @@ export function isExplicitToolFreeAdvisoryRequest(
     || /\bgit\s+(?:status|diff|log|show|branch)\b/i.test(affirmative)
     || /(?:^|[.?!]\s*|[,;:\u2014]\s*|\b(?:and|then|also|but|however)\s+)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge(?!\s+criteria\b)|deploy)\b/i.test(affirmative)
     || /\b(?:once\s+(?:done|complete)|after(?:wards|\s+that)?)\b[^.?!\r\n]{0,40}\b(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge|deploy)\b/i.test(affirmative)
-    || /\b(?:that|this|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
+    || /\b(?:that|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
+    || (!inlineDefinedCurrentObject && /\bthis\b/i.test(affirmative))
     || /\b(?:we|you)\s+(?:discussed|mentioned|agreed)\b/i.test(affirmative)
     || /\bfrom\s+before\b/i.test(affirmative)
     || /\b(?:attached|uploaded|below)\b/i.test(message)

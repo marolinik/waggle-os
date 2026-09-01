@@ -676,7 +676,7 @@ export function isExplicitMemorySaveRequest(message: string): boolean {
 
 export function isExplicitExternalResearchRequest(message: string): boolean {
   return /https?:\/\//i.test(message)
-    || /\b(web|internet|online|current|latest|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|look up|find out|dig into|study|survey|external)\b/i.test(message);
+    || /\b(web|internet|online|current|latest|news|recent|source|sources|citation|cite|docs?|documentation|pricing|benchmark|research|look up|find out|dig into|study|survey|external)\b/i.test(message);
 }
 
 export function shouldNarrowToolsForConversationalTurn(

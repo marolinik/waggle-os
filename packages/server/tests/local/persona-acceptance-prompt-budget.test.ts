@@ -214,7 +214,7 @@ describe('persona acceptance prompt budget', () => {
     }
   });
 
-  async function capturePersonaTurn(personaId: 'coder' | 'data-engineer' | 'coordinator') {
+  async function capturePersonaTurn(personaId: 'coder' | 'data-engineer' | 'project-manager' | 'coordinator') {
     const persona = PERSONA_CASES.find(item => item.id === personaId)!;
     capturedConfig = null;
     capturedSyntheticInputUpperBound = 0;
@@ -2353,6 +2353,25 @@ describe('persona acceptance prompt budget', () => {
 
     const metrics = events.find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
     expect(metrics).toMatchObject({ packageMode: 'compact', toolSelectedCount: 0 });
+  });
+
+  it('keeps the exact Project Manager release plan tool-free, recall-free, compact, and completion-bounded', async () => {
+    const { persona, config, events, syntheticInputUpperBound } = await capturePersonaTurn('project-manager');
+
+    expect(config.tools).toEqual([]);
+    expect(config.messages).toEqual([{ role: 'user', content: persona.prompt }]);
+    expect(config.maxOutputTokens).toBeLessThanOrEqual(persona.maxOutputTokens);
+    expect(config.reasoning).toEqual({ enabled: true, effort: 'low' });
+    expect(syntheticInputUpperBound).toBeLessThan(persona.maxInputTokens);
+    expect(config.systemPrompt.length).toBeLessThan(13_000);
+    expect(config.systemPrompt).toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(config.systemPrompt).not.toContain('# Context From Your Memory');
+    expect(config.systemPrompt).not.toContain('# Recalled Memories');
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+
+    const done = events.find(event => event.event === 'done')?.data;
+    expect(done?.memoryContext).toEqual({ included: false, count: 0 });
+    expect(done?.contextMetrics).toMatchObject({ packageMode: 'compact', toolSelectedCount: 0 });
   });
 
   it('keeps the exact Coordinator decomposition tool-free, recall-free, compact, and bounded', async () => {
