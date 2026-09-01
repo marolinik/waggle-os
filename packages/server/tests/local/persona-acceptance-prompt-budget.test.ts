@@ -36,6 +36,11 @@ const testState = vi.hoisted(() => {
     recallScanMode: 'actual' as 'actual' | 'drop' | 'throw',
     runAgentLoop: vi.fn(),
     signalFailureType: null as string | null,
+    emittedSignals: [] as Array<{
+      type: string;
+      workspaceId: string;
+      metadata?: Record<string, unknown>;
+    }>,
   };
 });
 
@@ -76,6 +81,7 @@ vi.mock('../../src/local/routes/waggle-signals.js', async (importOriginal) => {
     ...actual,
     emitWaggleSignal: (...args: Parameters<typeof actual.emitWaggleSignal>) => {
       const emitted = actual.emitWaggleSignal(...args);
+      testState.emittedSignals.push(args[0]);
       if (testState.signalFailureType === args[0].type) {
         throw new Error(`synthetic ${args[0].type} observer failure`);
       }
@@ -197,6 +203,7 @@ describe('persona acceptance prompt budget', () => {
     testState.runAgentLoop.mockReset().mockImplementation(defaultRunAgentLoop);
     testState.recallScanMode = 'actual';
     testState.signalFailureType = null;
+    testState.emittedSignals.length = 0;
     testState.optimizerExpand.mockReset().mockResolvedValue({
       expanded: null,
       clarifyingQuestions: null,
@@ -240,6 +247,53 @@ describe('persona acceptance prompt budget', () => {
       events: parseSse(response.body),
       syntheticInputUpperBound: capturedSyntheticInputUpperBound,
     };
+  }
+
+  function observeFleetActivityRelease(workspaceId: string, terminalType: string) {
+    const originalAcquireActivity = server.sessionManager.acquireActivity.bind(server.sessionManager);
+    let announceReleased!: () => void;
+    const released = new Promise<void>(resolve => { announceReleased = resolve; });
+    const state = {
+      acquisitions: 0,
+      attempts: 0,
+      snapshot: undefined as undefined | {
+        sessionId: string | undefined;
+        assistant: string | undefined;
+        traceProjection: string;
+        terminalSignalCount: number;
+      },
+    };
+    const spy = vi.spyOn(server.sessionManager, 'acquireActivity')
+      .mockImplementation((requestedWorkspaceId) => {
+        const lease = originalAcquireActivity(requestedWorkspaceId);
+        if (!lease || requestedWorkspaceId !== workspaceId) return lease;
+        state.acquisitions += 1;
+        return {
+          session: lease.session,
+          release: () => {
+            state.attempts += 1;
+            const terminalSignals = testState.emittedSignals.filter(signal => (
+              signal.workspaceId === workspaceId && signal.type === terminalType
+            ));
+            const sessionId = terminalSignals[0]?.metadata?.sessionId;
+            const exactSessionId = typeof sessionId === 'string' ? sessionId : undefined;
+            state.snapshot = {
+              sessionId: exactSessionId,
+              assistant: exactSessionId
+                ? loadSessionMessages(tmpDir, workspaceId, exactSessionId)
+                  .find(message => message.role === 'assistant')?.content
+                : undefined,
+              traceProjection: exactSessionId
+                ? JSON.stringify(server.traceStore.queryParsed({ sessionId: exactSessionId }))
+                : '',
+              terminalSignalCount: terminalSignals.length,
+            };
+            lease.release();
+            announceReleased();
+          },
+        };
+      });
+    return { state, released, restore: () => spy.mockRestore() };
   }
 
   it('supports Coder search then read within a lean three-dispatch envelope', async () => {
@@ -1883,6 +1937,104 @@ describe('persona acceptance prompt budget', () => {
     }
   });
 
+  it('keeps a killed legacy Fleet mind pinned until cancellation evidence is durable', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Legacy Fleet kill lease ordering',
+      group: 'Test',
+    }).id;
+    const durableRegistry = server.agentRunRegistry;
+    const releaseObservation = observeFleetActivityRelease(workspace, 'agent:cancelled');
+    const mindRelease = vi.spyOn(server.mindCache, 'release');
+    let announceAbortObserved!: () => void;
+    let allowRunnerReturn!: () => void;
+    const abortObserved = new Promise<void>(resolve => { announceAbortObserved = resolve; });
+    const runnerReturn = new Promise<void>(resolve => { allowRunnerReturn = resolve; });
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      config.onToolUse?.('write_file', { path: 'kill-ordering-report.md' });
+      await new Promise<void>((resolve) => {
+        if (config.signal?.aborted) resolve();
+        else config.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      announceAbortObserved();
+      await runnerReturn;
+      throw Object.assign(new Error('Agent loop aborted (workspace killed).'), {
+        name: 'AgentLoopAbortError',
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: ['write_file'],
+        usage: { inputTokens: 7, outputTokens: 3 },
+      });
+    });
+
+    Object.defineProperty(server, 'agentRunRegistry', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Start the report, then preserve cancellation truth when killed.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(200);
+      const spawned = spawn.json() as { sessionId: string };
+
+      const kill = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/fleet/${workspace}/kill`,
+      });
+      expect(kill.statusCode, kill.body).toBe(200);
+      await abortObserved;
+
+      expect(server.sessionManager.get(workspace)).toBeUndefined();
+      expect(releaseObservation.state.attempts).toBe(0);
+      expect(mindRelease.mock.calls.filter(([id]) => id === workspace)).toHaveLength(0);
+
+      const replacement = server.sessionManager.getOrCreate(
+        workspace,
+        () => server.mindCache.acquire(workspace),
+        mind => server.agentState.createSessionOrchestrator(mind),
+        (mind, orchestrator) => server.agentState.buildToolsForSession(
+          orchestrator,
+          workspace,
+          workspace,
+        ),
+        'coder',
+        () => server.mindCache.release(workspace),
+      );
+      expect(replacement.tokensUsed).toBe(0);
+
+      allowRunnerReturn();
+      await vi.waitFor(() => expect(releaseObservation.state.attempts).toBe(1));
+      expect(mindRelease.mock.calls.filter(([id]) => id === workspace)).toHaveLength(1);
+      expect(server.sessionManager.get(workspace)).toBe(replacement);
+      expect(replacement.tokensUsed).toBe(0);
+      expect(server.mindCache.getIfOpen(workspace)).toBe(replacement.mind);
+      expect(releaseObservation.state.snapshot).toMatchObject({
+        sessionId: spawned.sessionId,
+        terminalSignalCount: 1,
+      });
+      expect(releaseObservation.state.snapshot?.assistant).toContain('write_file');
+      expect(releaseObservation.state.snapshot?.assistant).toContain('before retrying');
+      expect(releaseObservation.state.snapshot?.traceProjection).toContain('"outcome":"abandoned"');
+    } finally {
+      allowRunnerReturn();
+      server.sessionManager.close(workspace);
+      if (releaseObservation.state.acquisitions > 0) await releaseObservation.released;
+      releaseObservation.restore();
+      mindRelease.mockRestore();
+      Object.defineProperty(server, 'agentRunRegistry', {
+        configurable: true,
+        writable: true,
+        value: durableRegistry,
+      });
+    }
+  });
+
   it('keeps legacy Fleet paused when a runner returns success after ignoring abort', async () => {
     const workspace = server.workspaceManager.create({
       name: 'Legacy Fleet late success cancellation',
@@ -2213,6 +2365,7 @@ describe('persona acceptance prompt budget', () => {
       group: 'Test',
     }).id;
     const durableRegistry = server.agentRunRegistry;
+    const releaseObservation = observeFleetActivityRelease(workspace, 'agent:completed');
     testState.signalFailureType = 'agent:completed';
     testState.runAgentLoop.mockResolvedValueOnce({
       content: 'LEGACY_SUCCESS_COMMITTED_ONCE',
@@ -2260,8 +2413,16 @@ describe('persona acceptance prompt budget', () => {
       }).signals.filter(signal => signal.metadata?.sessionId === spawned.sessionId);
       expect(matchingSignals.filter(signal => signal.type === 'agent:completed')).toHaveLength(1);
       expect(matchingSignals.some(signal => signal.type === 'agent:error')).toBe(false);
+      await vi.waitFor(() => expect(releaseObservation.state.attempts).toBe(1));
+      expect(releaseObservation.state.snapshot).toMatchObject({
+        sessionId: spawned.sessionId,
+        assistant: 'LEGACY_SUCCESS_COMMITTED_ONCE',
+        terminalSignalCount: 1,
+      });
+      expect(releaseObservation.state.snapshot?.traceProjection).toContain('"outcome":"success"');
     } finally {
       testState.signalFailureType = null;
+      releaseObservation.restore();
       Object.defineProperty(server, 'agentRunRegistry', {
         configurable: true,
         writable: true,
@@ -2276,6 +2437,7 @@ describe('persona acceptance prompt budget', () => {
       group: 'Test',
     }).id;
     const durableRegistry = server.agentRunRegistry;
+    const releaseObservation = observeFleetActivityRelease(workspace, 'agent:error');
     testState.runAgentLoop.mockRejectedValueOnce(new Error('synthetic provider failure'));
 
     Object.defineProperty(server, 'agentRunRegistry', {
@@ -2319,7 +2481,15 @@ describe('persona acceptance prompt budget', () => {
       expect(matchingSignals.filter(signal => signal.type === 'agent:error')).toHaveLength(1);
       expect(matchingSignals.some(signal => signal.type === 'agent:cancelled')).toBe(false);
       expect(matchingSignals.some(signal => signal.type === 'agent:completed')).toBe(false);
+      await vi.waitFor(() => expect(releaseObservation.state.attempts).toBe(1));
+      expect(releaseObservation.state.snapshot).toMatchObject({
+        sessionId: spawned.sessionId,
+        terminalSignalCount: 1,
+      });
+      expect(releaseObservation.state.snapshot?.assistant).toContain('Nothing was changed');
+      expect(releaseObservation.state.snapshot?.traceProjection).toContain('"outcome":"abandoned"');
     } finally {
+      releaseObservation.restore();
       Object.defineProperty(server, 'agentRunRegistry', {
         configurable: true,
         writable: true,

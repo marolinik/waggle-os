@@ -20,6 +20,7 @@ import { createLogger } from '../logger.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 import { spawnIsolatedFleetRun } from '../fleet-run-executor.js';
 import { resolveUsableModel } from '../model-availability.js';
+import type { WorkspaceSessionActivityLease } from '../workspace-sessions.js';
 
 /**
  * AI-OS #6 fast-follow — durable "why" for an agent spawn: project ← workspace
@@ -131,8 +132,9 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     const resolvedModel = await resolveUsableModel(fastify, selectedModel);
 
     let session;
+    let sessionActivity: WorkspaceSessionActivityLease;
     try {
-      session = sessionManager.getOrCreate(
+      const candidateSession = sessionManager.getOrCreate(
         wsId,
         // Pin the shared cache handle for this session's lifetime so an LRU
         // eviction elsewhere cannot close this spawn's mind out from under it.
@@ -142,6 +144,12 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         persona ?? fastify.workspaceManager?.get(wsId)?.personaId ?? undefined,
         () => fastify.mindCache.release(wsId),
       );
+      const acquiredActivity = sessionManager.acquireActivity(wsId);
+      if (!acquiredActivity) {
+        throw new Error(`Workspace session is ${candidateSession.status}`);
+      }
+      sessionActivity = acquiredActivity;
+      session = acquiredActivity.session;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return reply.code(409).send({ error: 'spawn_failed', message });
@@ -190,6 +198,14 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     }
 
     const runSignal = session.abortController.signal;
+    const accountSessionTokens = (totalTokens: number): void => {
+      if (
+        totalTokens > 0
+        && fastify.sessionManager.get(wsId) === session
+      ) {
+        fastify.sessionManager.addTokens(wsId, totalTokens);
+      }
+    };
     void (async () => {
       let traceRecorder: TraceRecorder | undefined;
       let traceHandle: TraceHandle | undefined;
@@ -296,8 +312,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         }
 
         const totalTokens = (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0);
-        if (totalTokens > 0) fastify.sessionManager.addTokens(wsId, totalTokens);
-        fastify.sessionManager.touch(wsId);
+        accountSessionTokens(totalTokens);
 
         if (traceRecorder && traceHandle) {
           try {
@@ -353,10 +368,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
             ? `This run was stopped after Waggle recorded tool activity: ${toolsUsed.join(', ')}. Review completed or in-flight activity before retrying so actions are not duplicated.`
             : 'This run was stopped. An external action may have been in flight. Review activity before retrying so actions are not duplicated.';
 
-          if (totalTokens > 0 && fastify.sessionManager.get(wsId)) {
-            fastify.sessionManager.addTokens(wsId, totalTokens);
-            fastify.sessionManager.touch(wsId);
-          }
+          accountSessionTokens(totalTokens);
           try {
             persistMessage(fastify.localConfig.dataDir, wsId, spawnSessionId, {
               role: 'assistant',
@@ -420,6 +432,8 @@ export async function fleetRoutes(fastify: FastifyInstance) {
             toolsUsed: failedTools,
           },
         });
+      } finally {
+        sessionActivity.release();
       }
     })();
 
