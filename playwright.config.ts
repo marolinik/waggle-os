@@ -20,6 +20,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveE2EBaseUrl } from './tests/vision/_helpers.js';
 
 // Playwright enables FORCE_COLOR for its workers; remove an inherited
 // NO_COLOR flag first so Node does not report the conflicting pair.
@@ -28,13 +29,12 @@ delete process.env.NO_COLOR;
 
 const e2eDataDir = process.env.WAGGLE_E2E_DATA_DIR
   ?? path.join(os.tmpdir(), `waggle-os-playwright-${process.pid}`);
-const e2eBaseURL = process.env.WAGGLE_E2E_BASE_URL
-  ?? `http://127.0.0.1:${process.env.WAGGLE_E2E_PORT ?? '3333'}`;
+const e2eBaseURL = resolveE2EBaseUrl(process.env);
 const e2eURL = new URL(e2eBaseURL);
 const e2ePort = Number.parseInt(
-  process.env.WAGGLE_E2E_PORT ?? e2eURL.port ?? '3333',
+  e2eURL.port || (e2eURL.protocol === 'https:' ? '443' : '80'),
   10,
-) || 3333;
+);
 const e2eSkipLiteLLM = process.env.WAGGLE_E2E_SKIP_LITELLM !== '0';
 const e2eReuseExistingServer = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER !== '0';
 const e2eNodeEnvName = 'WAGGLE_E2E_NODE_EXEC';

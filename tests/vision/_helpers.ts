@@ -8,7 +8,20 @@
  */
 import type { Page } from '@playwright/test';
 
-export const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
+type E2ETargetEnv = Partial<Record<'WAGGLE_E2E_BASE_URL' | 'WAGGLE_E2E_PORT', string>>;
+
+export function resolveE2EBaseUrl(env: E2ETargetEnv): string {
+  const explicit = env.WAGGLE_E2E_BASE_URL?.trim();
+  if (explicit) return explicit;
+  const rawPort = env.WAGGLE_E2E_PORT?.trim() ?? '';
+  const parsedPort = /^\d+$/.test(rawPort) ? Number.parseInt(rawPort, 10) : Number.NaN;
+  const port = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65_535
+    ? parsedPort
+    : 3333;
+  return `http://127.0.0.1:${port}`;
+}
+
+export const BASE = resolveE2EBaseUrl(process.env);
 
 /** Console errors / pageerrors / failed requests that are environmental noise,
  * not product defects (mirrors full-product-audit.spec.ts:312). */

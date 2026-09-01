@@ -4,7 +4,35 @@ import {
   attachConsoleCapture,
   redactDiagnosticText,
   redactDiagnosticUrl,
+  resolveE2EBaseUrl,
 } from './_helpers.js';
+
+describe('vision harness server target', () => {
+  it('uses the isolated E2E port when no explicit base URL is set', () => {
+    expect(resolveE2EBaseUrl({ WAGGLE_E2E_PORT: '3355' }))
+      .toBe('http://127.0.0.1:3355');
+  });
+
+  it('keeps an explicit E2E base URL authoritative', () => {
+    expect(resolveE2EBaseUrl({
+      WAGGLE_E2E_BASE_URL: 'http://127.0.0.1:4499',
+      WAGGLE_E2E_PORT: '3355',
+    })).toBe('http://127.0.0.1:4499');
+  });
+
+  it.each(['0', '65536', '3355junk', '-1', ''])(
+    'falls back safely for invalid E2E port %j',
+    (port) => {
+      expect(resolveE2EBaseUrl({ WAGGLE_E2E_PORT: port }))
+        .toBe('http://127.0.0.1:3333');
+    },
+  );
+
+  it('accepts the highest valid TCP port', () => {
+    expect(resolveE2EBaseUrl({ WAGGLE_E2E_PORT: '65535' }))
+      .toBe('http://127.0.0.1:65535');
+  });
+});
 
 describe('vision diagnostic redaction', () => {
   it('redacts credentials and repeated sensitive query keys without losing useful URL context', () => {
