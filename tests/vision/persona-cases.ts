@@ -97,7 +97,7 @@ const primaryResearchDomains = [
 
 const affirmedFactClause = String.raw`(?<!not true that )(?<!not true that the )(?<!not true that \*\*)(?<!not true that __)(?<!not true that \*)(?<!not true that _)(?<!false that )(?<!false that the )(?<!false that \*\*)(?<!false that __)(?<!false that \*)(?<!false that _)`;
 const affirmedBrowserTests = `${affirmedFactClause}${String.raw`\bbrowser test(?:s|ing)\b`}`;
-const positiveFailureVerb = String.raw`(?<!not )(?<!cannot )(?<!can't )(?<!don't )(?<!doesn't )(?<!didn't )(?<!aren't )(?<!isn't )(?<!never )(?<!no longer )\b(?:currently\s+show(?:s|ing)?\s+(?:two|2)\s+remaining\s+failures?|(?:(?:still\s+)?(?:show(?:s|ing)?|have|report(?:s|ing)?|return(?:s|ing)?|produce(?:s|ing)?)|remain(?:s|ing)?)\s+(?:two|2)\s+failures?)\b`;
+const positiveFailureVerb = String.raw`(?<!not )(?<!cannot )(?<!can't )(?<!don't )(?<!doesn't )(?<!didn't )(?<!aren't )(?<!isn't )(?<!never )(?<!no longer )\b(?:currently\s+show(?:s|ing)?\s+(?:two|2)\s+remaining\s+failures?|(?:(?:still\s+)?(?:show(?:s|ing)?|have|report(?:s|ing)?|return(?:s|ing)?|produce(?:s|ing)?|retain(?:s|ed|ing)?)|remain(?:s|ing)?)\s+(?:two|2)\s+failures?)\b`;
 const windowsBrowserFailuresPattern = new RegExp([
   `${affirmedBrowserTests}${String.raw`\s*:\s*(?:still\s+)?(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\s+on\s+Windows\b(?![^.\r\n]{0,80}\b(?:(?:were|are|have been)\s+)?(?:fixed|resolved|closed)\b)`}`,
   `${String.raw`(?<!could )(?<!can )(?<!may )(?<!might )`}${affirmedBrowserTests}${String.raw`(?![^.\r\n]*\?)[ \t]+(?:currently[ \t]+|still[ \t]+)?(?:show(?:s|ing)?|is[ \t]+showing|report(?:s|ing)?|has|found)\s+(?:two|2)\s+(?:unresolved|open)\s+failures?\b(?![^.\r\n]{0,80}\b(?:incorrect|wrong|false|resolved|untrue|not[ \t]+true|disputed)\b)[^.\r\n]{0,60}\bWindows\b`}`,
@@ -108,8 +108,10 @@ const windowsBrowserFailuresPattern = new RegExp([
 ].join('|'), 'i');
 const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:(?:\d+[.)]|[-*])[ \t]*|\|[ \t]*\d+[ \t]*\|[ \t]*)?(?:\*\*)?(?:(?:we|you|the team)[ \t]+should[ \t]+)?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
 const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}(?:\?|\b(?:cannot|can't|do not|don't|must not|should not|never|impossible|merely reported|no longer recommend(?:ed|ing)?|(?:not|(?:is|are|was|were)n['’]t)[ \t]+(?:(?:an?|the|this|that|my|your|our|their|his|her|its)[ \t]+)?recommendations?|decid(?:e[sd]?|ing) against|not (?:advisable|feasible|possible|recommended))\b))`;
-const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:audit\s+and\s+)?(?:reduce|cut|lower))\b[^.\r\n]{0,60}(?:costs?|expenses?|burn)`}${positiveActionSuffix}`, 'im');
-const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise|start[ \t]+generating)\b[^.\r\n]{0,80}(?:revenue(?![ \t]+(?:loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)|customers?(?![ \t]+(?:(?:acquisition\s+)?(?:costs?|expenses?)|complaints?|churn|loss(?:es)?)\b)|funding(?![ \t]+(?:costs?|fees?|burden)\b)|cash(?![ \t]+(?:burn|outflows?|loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)(?:[ \t]+inflows?)?)|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)|accelerate\b(?:[ \t]+time[- ]to[- ]revenue\b|[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)))`}${positiveActionSuffix}`, 'im');
+const nonActionRunwayArtifact = String.raw`(?:report|memo|briefing|presentation|deck|document|summary|analysis|forecast|plan|dashboard|statement|workshop|meeting|review|session|discussion|assessment|study)`;
+const directFundingAction = String.raw`(?:secure|obtain|arrange)\b[ \t]+(?:(?:an?|additional|new|short[- ]term|near[- ]term|emergency|external|temporary|working[- ]capital)\b[ \t]+){0,3}(?:bridge[ \t]+loan|financing|funding|(?:line|facility)[ \t]+of[ \t]+credit)(?![ \t]+${nonActionRunwayArtifact}\b)`;
+const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`(?:\b(?:(?:audit\s+and\s+)?(?:reduce|cut|lower))\b[^.\r\n]{0,60}(?:costs?|expenses?|burn)|\b(?:enact|implement|adopt)\b(?![^.\r\n]{0,50}\b(?:no|not|never|without|avoid|against)\b)[^.\r\n]{0,100}\bcost[- ]reduction\s+measures?\b)`}${positiveActionSuffix}`, 'im');
+const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise|start[ \t]+generating)\b[^.\r\n]{0,80}(?:revenue(?![ \t]+(?:loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)|customers?(?![ \t]+(?:(?:acquisition\s+)?(?:costs?|expenses?)|complaints?|churn|loss(?:es)?)\b)|funding(?![ \t]+(?:costs?|fees?|burden)\b)|cash(?![ \t]+(?:burn|outflows?|loss(?:es)?|forecast|report|projection|model|analysis|plan|statement|dashboard)\b)(?:[ \t]+inflows?)?)|${directFundingAction}|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)|accelerate\b(?:[ \t]+time[- ]to[- ]revenue\b|[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?)))`}${positiveActionSuffix}`, 'im');
 const verifierPairInstructions = VERIFIER_BLOCKER_CHECK_PAIRS
   .map(([blocker, [operation, target, passCondition]]) => (
     `${blocker} => ${JSON.stringify({ operation, target, passCondition })}`
@@ -137,7 +139,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'all-priorities', description: 'Addresses all three supplied priorities', kind: 'allPatterns', patterns: [/customer/i, /onboarding/i, /memory (?:bug|issue)/i], points: 10 },
-      { id: 'ordered-plan', description: 'Provides an explicit order', kind: 'pattern', pattern: /(?:priority order|\b1[.)]|\bfirst\b[\s\S]*\bsecond\b|(?:^|[\r\n])\s*(?:\*\*)?order(?:\*\*)?\s*:\s*[^\r\n]*(?:\u2192|->|=>)[^\r\n]*(?:\u2192|->|=>))/im, points: 10 },
+      { id: 'ordered-plan', description: 'Provides an explicit order', kind: 'pattern', pattern: /(?:priority order|\b1[.)]|\bfirst\b[\s\S]*\bsecond\b|(?:^|[\r\n])\s*(?:\*\*)?(?:recommended\s+)?order(?:\*\*)?\s*:\s*[^\r\n]*(?:\u2192|->|=>)[^\r\n]*(?:\u2192|->|=>))/im, points: 10 },
       {
         id: 'justification',
         description: 'Links each priority to a relevant decision basis',
@@ -145,9 +147,9 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
         criteria: [
           {
             topic: /\b(?:(?:production|memory) (?:bugs?|issues?)|memory leak)\b/i,
-            basis: /(?:\b(?:live|active) in production\b[^.!?\r\n]{0,220}\b(?:may|might|could|would)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,140}\b(?:degrad(?:e[ds]?|ation)|outage)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,180}\bcompounding (?:downside )?risk if delayed\b|\b(?:risk|churn|reliab(?:ility|le)|stabil(?:ity|ize)|stable|outage|trust|blast radius|unbounded downside|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b)/i,
+            basis: /(?:\b(?:live|active) in production\b[^.!?\r\n]{0,220}\b(?:may|might|could|would)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,140}\b(?:degrad(?:e[ds]?|ation)|outage)\b(?:(?![.!?\r\n]|\b(?:not|never|no|without|lacks?|cannot|fails?|unlikely)\b).){0,180}\bcompounding (?:downside )?risk if delayed\b|\b(?:risk|churn|data loss|instabil(?:ity|ities)|reliab(?:ility|le)|stabil(?:ity|ize)|stable|outage|trust|blast radius|unbounded downside|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b)/i,
             basisFamilies: [
-              /\b(?:reliab(?:ility|le)|stabil(?:ity|ize)|stable|trust)\b/i,
+              /\b(?:data loss|instabil(?:ity|ities)|reliab(?:ility|le)|stabil(?:ity|ize)|stable|trust)\b/i,
               /\b(?:outage|degrad(?:e[ds]?|ation)|crash(?:es|ed|ing)?)\b/i,
               /\b(?:risk|churn|blast radius|unbounded downside)\b/i,
             ],
@@ -225,7 +227,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'writerReleaseFacts', patterns: [/Friday/i, /API tests?\b\s*(?:(?:\*\*|__)\s*)?:?\s*(?:(?:\*\*|__)\s*)?(?:(?:are\s+)?pass(?:ed|ing)?|have\s+passed)\b/i, windowsBrowserFailuresPattern], points: 10 },
       { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'writerRouterFact', points: 10 },
       { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'writerDelayRecommendation', points: 10 },
-      { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b)/i, points: 10 },
+      { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date|\bunverified\s+risk\b|\brisk\s+to\s+(?:release\s+)?stability\b|\bensure(?:s|d|ing)?\s+(?:platform\s+)?stability\b|\bacross\s+all\s+environments\b)/i, points: 10 },
     ],
   },
   {

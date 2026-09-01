@@ -113,9 +113,9 @@ const EMPTY_WORKSPACE_CONTRADICTION_TOOL = /^read_file$/i;
 const EMPTY_WORKSPACE_TOOL_RESULT = /^\s*(?:no files?(?:\s+(?:were\s+)?found)?\.?|\[\]\s*)$/i;
 const READ_FILE_FAILURE_RESULT = /^(?:error(?::|\s)|file not found\b|no such file\b|enoent\b|permission denied\b|access denied\b|unable to read\b|could not read\b)/i;
 const EXHAUSTIVE_WORKSPACE_GLOB = /^\s*\*\*\/\*\s*$/;
-const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:current|fresh|virtual) workspace (?:is|was) empty\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
+const AFFIRMATIVE_EMPTY_WORKSPACE_CLAIM = /(?:\b(?:the|current|fresh|virtual) workspace (?:is|was) empty\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b|(?:^|[.!?]\s+)\s*this workspace directory is empty\b|(?:^|[.!?]\s+)\s*the workspace search returned\s+(?:\*\*)?no files\b(?:\*\*)?|(?:^|[.!?]\s+|\r?\n\s*\r?\n)\s*i ran\b[^.!?\r\n]{0,200}\band (?:it|the tool) returned\s+(?:\*\*)?no files\b(?:\*\*)?)/gi;
 const NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE = /\b(?:if|unless|whether|maybe|perhaps|possibly|may|might|could|cannot|can['’]t|doubt(?:ful)?|unclear|uncertain|unsure|unverified|unconfirmed|hypothetical(?:ly)?|suppose|assuming|failed|failure|unauthorized|unable)\b|\b(?:could|can|did|does|am|is|are|was|were|has|have|had)\s+not\b|\b(?:could|did|does|is|are|was|were|has|have|had)n['’]t\b|\bnot\s+(?:sure|certain|confirmed|verified)\b|\b(?:permission|access) denied\b/i;
-const CONTRADICTED_EMPTY_WORKSPACE_CLAIM = /\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:found|discovered)\b\s+(?![*_`]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{1,80}|\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:exists?|present|contains?|includes?)\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\bexcept\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b/i;
+const CONTRADICTED_EMPTY_WORKSPACE_CLAIM = /\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:found|discovered)\b\s+(?![*_`]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{1,80}|\b(?:but|however|actually|yet|later|second search)\b[^.!?\r\n]{0,160}\b(?:exists?|present|contains?|includes?)\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\bexcept\b[^.!?\r\n]{0,80}\b(?:README(?:\.md)?|package\.json|pyproject\.toml|files?)\b|\b(?:the\s+)?workspace\s+(?:is|was)\s+(?:actually\s+)?not\s+empty\b|\b(?:correction|update)\s*:[^.!?\r\n]{0,120}\b(?:empty[- ]workspace|workspace[- ]empty|workspace\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b[^.!?\r\n]{0,80}\b(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:that|this)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result)|(?:the\s+)?(?:earlier|prior|previous)\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\s+(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b|\b(?:correction|update)\s*:\s*(?:(?:I|we)\s+)?(?:retract|withdraw|disavow|reject)\s+(?:(?:that|this)(?:\s+(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))?|(?:the\s+)?(?:(?:earlier|prior|previous)\s+)?(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result))\b|\b(?:correction\s*:|actually\b)[^.!?\r\n]{0,140}(?:\bthere\s+(?:are|were)\s+(?:one\s+or\s+more\s+)?files?\b|(?<!no )(?<!zero )\bfiles?\s+(?:(?:were|are)\s+)?found\b|\b(?:README(?:\.md)?|package\.json|pyproject\.toml)\s+(?:exists?|is\s+present)\b|\bworkspace\s+(?:contains?|includes?|has)\s+files?\b)/i;
 const WORKSPACE_FILE_REFERENCE = String.raw`(?:README(?:\.md)?|(?:[\w.-]+[\\/])+[\w.-]+|[\w-]+\.(?:md|txt|json|ya?ml|toml|tsx?|jsx?|mjs|cjs|py|rs|go|java|cs|cpp|c|h|html|css|scss|sh|ps1|lock))`;
 const DIRECT_NONEMPTY_WORKSPACE_CLAIM = new RegExp(
   String.raw`(?:^|[.!?]\s+|\r?\n)\s*(?:(?:[-+*]|\d+[.)])\s+)?(?!(?:no|not|if|unless|maybe|perhaps|possibly|hypothetically|suppose|assuming)\b)(?:(?:(?:the|a|an)\s+)?[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*\s+(?:exists?|is\s+(?:present|located)|was\s+(?:found|discovered|located))\b|(?:(?:I|we)\s+(?:found|discovered|read|opened)|(?:(?:the\s+)?(?:workspace\s+)?search|(?:the\s+)?tool)\s+(?:found|discovered|returned))\b\s+(?![*_\x60]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{0,80}[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*|(?:the\s+)?workspace\s+(?:contains?|includes?|has|holds?)\b\s+(?![*_\x60]*\s*(?:no\b|nothing\b|zero\b))[^.!?\r\n]{0,80}[*_\x60]*${WORKSPACE_FILE_REFERENCE}[*_\x60]*)`,
@@ -236,7 +236,17 @@ function hasAffirmedEmptyWorkspaceResult(evidence: PersonaTrialEvidence): boolea
       ? matchEnd + Math.min(...boundaryOffsets)
       : evidence.response.length;
     const clause = evidence.response.slice(clauseStart, clauseEnd);
-    if (!NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(clause)) return true;
+    const trailingClauses = evidence.response
+      .slice(matchEnd)
+      .split(/(?<=[.!?])|\r?\n/);
+    const hasUnresolvedRevision = trailingClauses.some((trailingClause) => {
+      const revision = /\b(?:correction|update|revision)\s*:|\b(?:I|we)\s+(?:(?:retract|withdraw|disavow|reject)\b|take\s+(?:that|this|it)\s+back\b)|\b(?:disregard|ignore)\s+(?:that|this|the|previous|prior|earlier)\b|\b(?:that|this|it)\s+(?:(?:claim|statement|report|assertion|conclusion|finding|assessment|determination|result|takeaway)\s+)?(?:was|is)\s+(?:false|incorrect|wrong|retracted)\b/i.test(trailingClause);
+      if (!revision) return false;
+      return !/\b(?:(?:the|current|fresh|virtual)\s+workspace\s+(?:is|was)\s+empty|no\s+(?:workspace\s+)?files?\s+(?:exist|(?:were\s+)?found|(?:are\s+)?present))\b/i.test(trailingClause);
+    });
+    if (!NON_AFFIRMATIVE_EMPTY_WORKSPACE_CLAUSE.test(clause) && !hasUnresolvedRevision) {
+      return true;
+    }
   }
   return false;
 }
@@ -764,7 +774,7 @@ const RUNWAY_BURN_AMOUNT = String.raw`(?:[$\u20ac\u00a3]\s*)?10[,.]?000(?:\.0{1,
 const RUNWAY_BURN_AMOUNT_PERIOD = String.raw`${RUNWAY_BURN_AMOUNT}(?:\s*(?:\/\s*month|per\s+month))?`;
 const RUNWAY_BURN_CONTEXT = String.raw`${RUNWAY_BURN_SUBJECT}(?:\s*\(\s*(?:currently\s+)?${RUNWAY_BURN_AMOUNT_PERIOD}\s*\)|\s+(?:of|at)\s+${RUNWAY_BURN_AMOUNT_PERIOD})?(?:\s+and\s+(?:monthly\s+)?revenue)?`;
 const RUNWAY_BURN_STABILITY = new RegExp(String.raw`(?:${RUNWAY_BURN_CONTEXT}(?:${[
-  String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?|as)\s+(?:the\s+same|constant|flat|stable|steady|unchanged|fixed)\b`,
+  String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?|as)\s+(?:the\s+same|(?:(?:perfectly|fully|entirely|strictly)\s+)?(?:constant|flat|stable|steady|unchanged|fixed))\b`,
   String.raw`\s+(?:will\s+)?(?:stay(?:s)?|remain(?:s)?|is|be|continue(?:s)?|hold(?:s)?)\s+(?:(?:at|exactly)\s+)?${RUNWAY_BURN_AMOUNT}\b`,
   String.raw`\s+does\s+not\s+change\b`,
 ].join('|')})|\b(?:flat|constant|stable|steady|fixed)\s+${RUNWAY_BURN_SUBJECT}\s+of\s+${RUNWAY_BURN_AMOUNT_PERIOD}\b)`, 'gi');
@@ -978,15 +988,94 @@ function durationMentionIsAffirmed(text: string, start: number, end: number): bo
   return !/^\s*\?\s*(?:no|not)\b/i.test(suffix);
 }
 
+function hasAffirmedAgendaInvalidation(line: string): boolean {
+  return /(?<!do not )(?<!don't )(?<!never )(?<!not )\b(?:disregard|ignore|withdraw|cancel|abandon|rescind|supersede|replace)\b/i.test(line)
+    || /\b(?:do\s+not|don't|never|should\s+not|must\s+not)\s+(?:follow|use|adopt|approve)\b/i.test(line)
+    || /\b(?:agenda|schedule|table)\b[^.\r\n]{0,80}\b(?:hypothetical|(?:merely|only)\s+illustrative|illustrative\s+only|not\s+(?:adopted|approved|the\s+(?:agenda|schedule))|replacement|different\s+one)\b/i.test(line);
+}
+
+function hasAllowedExactAgendaSuffix(lines: readonly string[]): boolean {
+  let inSupportingChecklist = false;
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/^#{1,6}\s+(?:pre[- ]read|preparation|materials?)(?:\s+checklist)?\s*$/i.test(line)) {
+      inSupportingChecklist = true;
+      continue;
+    }
+    if (inSupportingChecklist
+      && /^[-*]\s+(?:\[[ xX]\]\s+)?(?:Engineering|QA|Product|Support)\s*:\s+\S/i.test(line)
+      && !hasAffirmedAgendaInvalidation(line)) continue;
+    return false;
+  }
+  return true;
+}
+
+function hasSelfContainedExactAgendaTable(
+  lines: readonly string[],
+  durationMinutes: number,
+  minimumBlocks: number,
+): boolean {
+  for (let headerIndex = 0; headerIndex < lines.length; headerIndex += 1) {
+    if (!/^\s*\|.*\|\s*$/.test(lines[headerIndex])) continue;
+    const headers = markdownTableCells(lines[headerIndex]);
+    if (!/^time blocks?$/i.test(headers[0] ?? '') || !/^duration$/i.test(headers[1] ?? '')) {
+      continue;
+    }
+
+    const blocks: Array<{ start: number; end: number; duration: number }> = [];
+    let malformed = false;
+    let tableEndIndex = headerIndex + 1;
+    for (let rowIndex = headerIndex + 1; rowIndex < lines.length; rowIndex += 1) {
+      const line = lines[rowIndex];
+      if (!/^\s*\|.*\|\s*$/.test(line)) break;
+      const cells = markdownTableCells(line);
+      if (cells.every(cell => /^:?-{3,}:?$/.test(cell))) continue;
+      const range = /^(\d{1,2}):([0-5]\d)\s*(?:-|[\u2013\u2014]|to)\s*(\d{1,2}):([0-5]\d)$/i.exec(cells[0] ?? '');
+      const duration = /^(\d{1,3})\s*(?:mins?|minutes?)$/i.exec(cells[1] ?? '');
+      if (!range || !duration || /\b(?:option|alternative|choice|scenario)\b/i.test(line)) {
+        malformed = true;
+        break;
+      }
+      const start = (Number(range[1]) * 60) + Number(range[2]);
+      const end = (Number(range[3]) * 60) + Number(range[4]);
+      blocks.push({ start, end, duration: Number(duration[1]) });
+      tableEndIndex = rowIndex + 1;
+    }
+    if (malformed || blocks.length < minimumBlocks || blocks[0]?.start !== 0) continue;
+    if (!hasAllowedExactAgendaSuffix(lines.slice(tableEndIndex))) continue;
+    if (blocks.some((block, index) => (
+      block.end <= block.start
+      || block.duration !== block.end - block.start
+      || (index > 0 && block.start !== blocks[index - 1].end)
+    ))) continue;
+    if (blocks.at(-1)?.end === durationMinutes
+      && blocks.reduce((total, block) => total + block.duration, 0) === durationMinutes) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasTimedAgenda(
   response: string,
   durationMinutes: number,
   minimumBlocks: number,
+  allowImplicitExactTable = true,
 ): boolean {
   const text = response
     .replace(/\r\n?/g, '\n')
     .replace(/[\u2018\u2019]/g, "'");
   const lines = text.split('\n');
+  if (allowImplicitExactTable
+    && hasSelfContainedExactAgendaTable(lines, durationMinutes, minimumBlocks)) {
+    return hasTimedAgenda(
+      `# Launch-readiness agenda — ${durationMinutes} minutes\n${text}`,
+      durationMinutes,
+      minimumBlocks,
+      false,
+    );
+  }
   const agendaParticipantMarkers = text.match(/\b(?:product|eng(?:ineering)?|qa|support)\b/gi) ?? [];
   const agendaParticipantCount = new Set(
     agendaParticipantMarkers.map((marker) => {
@@ -1889,7 +1978,9 @@ function hasAffirmedWriterReleaseFacts(response: string, patterns: readonly RegE
   });
 
   const browserFailureWasLaterResolved = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,100}\b(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\s+on\s+Windows\b[\s\S]{0,180}\b(?:update|correction)\s*:\s*(?:those|these|the)\s+failures?\s+(?:(?:have|has)\s+(?:now\s+)?been|were|are)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
+  const browserFailureWasResolvedInClause = /\bbrowser test(?:s|ing)?\b[^.\r\n]{0,120}\b(?:two|2)\s+(?:unresolved\s+|open\s+)?failures?\b[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,100}\b(?:but|however|yet)\b\s*(?:(?:both|those|these|the)\s+(?:failures?\s+)?)?(?:(?:have|has)\s+(?:now\s+)?been|were|are)\s+(?:resolved|fixed|closed|cleared)\b/i.test(response);
   return !browserFailureWasLaterResolved
+    && !browserFailureWasResolvedInClause
     && !hasDeniedFact(/\bFriday\b/i)
     && !hasDeniedFact(/\bAPI tests?\b/i)
     && !hasDeniedFact(/\bbrowser test(?:s|ing)?\b/i)
@@ -2003,8 +2094,46 @@ const NON_AFFIRMATIVE_ACTION_LINE = new RegExp(
 const EXPLICIT_AFFIRMATIVE_ACTION_SECTION = /\b(?:now\s+)?recommend(?:ed|ing)?\s+(?:these|the|following)?\s*actions?\b|\b(?:approved|selected) actions?\b|\bactions? to (?:improve|extend) runway\b/i;
 const GENERIC_ACTION_SECTION = /^\s*(?:two|2)\s+actions?\s*:?\s*$/i;
 const RESETTABLE_SCENARIO_ACTION_SECTION = /^\s*(?:(?:hypothetical|alternative)\s+)?(?:scenario|sensitivity)(?:\s+analysis)?\s*:?\s*$|^\s*hypothetical\s*:?\s*$/i;
-const RETRACTS_ALL_ACTIONS = /\b(?:(?:both|all|the|these)\s+(?:recommendations?|actions?)\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|vetoed|denied|cancelled|canceled|abandoned|scrapped|illustrative|quoted|ruled[- ]out|not approved|not endorsed|no longer recommended)|(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the|these)\s+(?:recommendations?|actions?)|no longer recommend(?:ed|ing)?\s+(?:both|all|the|these)\s+(?:recommendations?|actions?))\b/i;
-const NON_ACTIONABLE_RUNWAY_LINE = /\b(?:(?:generate|create|produce|prepare|write|raise)\s+(?:an?\s+)?(?:the\s+)?(?:costs?|cash(?:[- ]flow)?|revenue|funding)?\s*(?:memo|report|summary|analysis|forecast|projection|model|dashboard|statement)\b|(?:memo|report|summary|analysis|forecast|projection|model|dashboard|statement)\s+(?:on|of|for|about)\s+(?:costs?|cash(?:[- ]flow)?|revenue|funding)\b|(?:costs?|revenue|cash(?:[- ]flow)?|funding)\s+(?:memo|reporting|report|summary|analysis|forecast|projection|model|dashboard|statement)\b|(?:increase|grow|raise|generate)\s+(?:customer\s+(?:(?:acquisition\s+)?(?:costs?|expenses?)|complaints?|churn)|funding\s+costs?|revenue\s+loss(?:es)?|cash\s+(?:consumption|burn|outflows?|loss(?:es)?))\b)/i;
+const RUNWAY_ACTION_REFERENCE = String.raw`(?:actions?|recommendations?|steps?|measures?|proposals?)`;
+const RUNWAY_ARTIFACT_REFERENCE = String.raw`(?:memo|report|briefing|presentation|deck|document|summary|analysis|forecast|projection|model|dashboard|statement|workshop|meeting|review|session|discussion|assessment|study)`;
+function hasAffirmedActionInvalidation(line: string): boolean {
+  const hasScenarioDescriptor = /\b(?:hypothetical|illustrative)\b/i.test(line);
+  const scenarioDescriptorIsNegated = /\b(?:not|never)\s+(?:(?:merely|only)\s+)?(?:hypothetical|illustrative)\b|\bneither\b[^.\r\n]{0,80}\b(?:is|are|was|were)\s+(?:(?:merely|only)\s+)?(?:hypothetical|illustrative)\b/i.test(line);
+  const descriptorAffirmsApprovedActions = /\billustrative\b[^.\r\n]{0,80}\b(?:approved|selected|recommended)\s+actions?\b/i.test(line);
+  if (hasScenarioDescriptor && !scenarioDescriptorIsNegated && !descriptorAffirmsApprovedActions) {
+    return true;
+  }
+  if (/\b(?:do\s+not|don't|never|should\s+not|must\s+not)\s+(?:act|follow|implement|pursue|execute|adopt|take|use|recommend)\b/i.test(line)) {
+    return true;
+  }
+  if (new RegExp(
+    String.raw`\bneither\s+(?:of\s+(?:the|these|those)\s+)?${RUNWAY_ACTION_REFERENCE}\s+(?:(?:is|are|was|were)\s+|(?:has|have|had)\s+been\s+|(?:should|must|will|would|can|could|may|might)\s+be\s+)?(?:recommended|implemented|pursued|executed|adopted)\b`,
+    'i',
+  ).test(line)) {
+    return true;
+  }
+  return /(?<!not )(?<!n't )(?<!never )\b(?:disregard|ignore|retract|withdraw)\b/i.test(line);
+}
+const RETRACTS_ALL_ACTIONS = new RegExp([
+  String.raw`(?<!neither )(?<!no )\b(?:(?:(?:both|all|the|these)\s+)?(?:proposed\s+)?${RUNWAY_ACTION_REFERENCE}\s+(?:(?:are|were)\s+|(?:have|has|had)\s+been\s+)?(?:withdrawn|retracted|rejected|opposed|declined|deferred|vetoed|denied|cancelled|canceled|abandoned|scrapped|illustrative|hypothetical(?:\s+only)?|quoted|ruled[- ]out|not approved|not endorsed|no longer recommended)|(?<!not )(?<!n't )(?<!never )(?:withdraw|retract|reject|oppose|decline|defer)\w*\s+(?:both|all|the|these)\s+${RUNWAY_ACTION_REFERENCE}|no longer recommend(?:ed|ing)?\s+(?:both|all|the|these)\s+${RUNWAY_ACTION_REFERENCE})\b`,
+  String.raw`\b(?:do\s+not|don't|never)\s+(?:implement|pursue|execute|adopt|take)\s+(?:either|both|all|any|these|the)\s+${RUNWAY_ACTION_REFERENCE}\b`,
+  String.raw`\b(?:these|those|they)\s+(?:are|were)\s+(?:merely|only)\s+suggestions?\s*,?\s+not\s+recommendations?\b`,
+  String.raw`\b(?:the|this|that)\s+table\s+(?:is|was)\s+(?:(?:merely|only)\s+)?(?:hypothetical|illustrative)(?:\s+only)?\b(?![^.\r\n]{0,80}\b(?:approved|selected|recommended)\s+actions?\b)`,
+  String.raw`\bneither\s+${RUNWAY_ACTION_REFERENCE}\s+(?:is|was)\s+recommended\b`,
+  String.raw`(?<!not )(?<!n't )(?<!never )\b(?:disregard|ignore)\s+(?:both|either|all|these|the)\s+${RUNWAY_ACTION_REFERENCE}\b`,
+  String.raw`\b${RUNWAY_ACTION_REFERENCE}\s+(?:1|one)\s+(?:and|&)\s+(?:2|two)\s+(?:are|were)\s+(?:(?:only|merely)\s+)?(?:an?\s+)?(?:hypothetical|illustrative)(?:\s+only)?\b`,
+  String.raw`\beach(?:\s+of\s+(?:these|those|the))?\s+${RUNWAY_ACTION_REFERENCE}\s+(?:is|are|was|were)\s+(?:(?:only|merely)\s+)?(?:an?\s+)?(?:hypothetical|illustrative)(?:\s+only)?\b`,
+].join('|'), 'i');
+const NEGATED_RUNWAY_SCENARIO_DESCRIPTOR = new RegExp(
+  String.raw`\b(?:neither\s+(?:of\s+(?:the|these|those)\s+)?${RUNWAY_ACTION_REFERENCE}\s+(?:is|are|was|were)|(?:(?:both|all|the|these|those)\s+)?${RUNWAY_ACTION_REFERENCE}\s+(?:is|are|was|were)\s+(?:not|never))\s+(?:(?:merely|only)\s+)?(?:hypothetical|illustrative)\b`,
+  'gi',
+);
+const NON_ACTIONABLE_RUNWAY_LINE = new RegExp([
+  String.raw`\b(?:generate|create|produce|prepare|write|raise|arrange|schedule|organize|hold|conduct)\s+(?:an?\s+)?(?:the\s+)?(?:costs?|cash(?:[- ]flow)?|revenue|funding|financing)?\s*${RUNWAY_ARTIFACT_REFERENCE}\b`,
+  String.raw`\b${RUNWAY_ARTIFACT_REFERENCE}\s+(?:on|of|for|about)\s+(?:costs?|cash(?:[- ]flow)?|revenue|funding|financing)\b`,
+  String.raw`\b(?:costs?|revenue|cash(?:[- ]flow)?|funding|financing)\s+(?:reporting|${RUNWAY_ARTIFACT_REFERENCE})\b`,
+  String.raw`\b(?:increase|grow|raise|generate)\s+(?:customer\s+(?:(?:acquisition\s+)?(?:costs?|expenses?)|complaints?|churn)|funding\s+costs?|revenue\s+loss(?:es)?|cash\s+(?:consumption|burn|outflows?|loss(?:es)?))\b`,
+].join('|'), 'i');
 
 type ActionSectionState = 'active' | 'scenario' | 'hard';
 
@@ -2043,7 +2172,16 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
   let explicitActionSection = false;
 
   for (const line of response.replace(/\r\n?/g, '\n').split('\n')) {
-    if (RETRACTS_ALL_ACTIONS.test(line)) {
+    const isLabeledActionTableRow = /^\s*\|[ \t]*(?:\*\*)?(?:improvement[ \t]+)?action[ \t]+\d+(?:\*\*)?[ \t]*\|/i.test(line);
+    const containsAction = patterns.some(pattern => testPattern(pattern, line));
+    if ((matched.some(Boolean) || containsAction || isLabeledActionTableRow) && hasAffirmedActionInvalidation(line)) {
+      matched.fill(false);
+      sectionState = 'hard';
+      explicitActionSection = false;
+      continue;
+    }
+    const affirmedRetractionText = line.replace(NEGATED_RUNWAY_SCENARIO_DESCRIPTOR, '');
+    if (RETRACTS_ALL_ACTIONS.test(affirmedRetractionText)) {
       matched.fill(false);
       sectionState = 'hard';
       explicitActionSection = false;
@@ -2080,7 +2218,6 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
       );
       continue;
     }
-    const containsAction = patterns.some(pattern => testPattern(pattern, line));
     const introducesActionSection = /[:?]\s*$/.test(line)
       || /\b(?:actions?|recommendations?|options?)\b/i.test(line);
     if (!containsAction && introducesActionSection && (
@@ -2102,19 +2239,24 @@ function hasAffirmedRunwayActions(response: string, patterns: readonly RegExp[])
     const isTableRow = /^\s*\|/.test(line);
     const isNumberedTableRow = /^\s*\|[ \t]*\d+[ \t]*\|/.test(line);
     const isUnnumberedTableRow = isTableRow && !isNumberedTableRow;
-    const scorableLine = isUnnumberedTableRow && explicitActionSection
-      ? line.replace(/^\s*\|[ \t]*/, '')
-      : line;
+    const scorableLine = isLabeledActionTableRow
+      ? markdownTableCells(line).slice(1).join(' | ')
+      : isUnnumberedTableRow && explicitActionSection
+        ? line.replace(/^\s*\|[ \t]*/, '')
+        : line;
+    const primaryActionClause = isLabeledActionTableRow
+      ? scorableLine.split(/\s+\bor\b\s+|;/i, 1)[0]
+      : scorableLine;
     if (NON_AFFIRMATIVE_ACTION_LINE.test(line) || NON_ACTIONABLE_RUNWAY_LINE.test(line)) {
       patterns.forEach((pattern, index) => {
-        if (testPattern(pattern, scorableLine)) matched[index] = false;
+        if (testPattern(pattern, primaryActionClause)) matched[index] = false;
       });
       continue;
     }
     if (sectionState !== 'active') continue;
-    if (isUnnumberedTableRow && !explicitActionSection) continue;
+    if (isUnnumberedTableRow && !explicitActionSection && !isLabeledActionTableRow) continue;
     patterns.forEach((pattern, index) => {
-      if (!matched[index] && testPattern(pattern, scorableLine)) matched[index] = true;
+      if (!matched[index] && testPattern(pattern, primaryActionClause)) matched[index] = true;
     });
   }
 

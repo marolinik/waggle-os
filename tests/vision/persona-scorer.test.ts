@@ -7182,3 +7182,322 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 });
+
+describe('Qwen Flash Next exact-response regressions', () => {
+  const persona = (id: string) => {
+    const match = PERSONA_CASES.find(candidate => candidate.id === id);
+    if (!match) throw new Error(`Missing canonical persona ${id}`);
+    return match;
+  };
+
+  const scoreResponse = (
+    id: string,
+    response: string,
+    overrides: Partial<PersonaTrialEvidence> = {},
+  ) => {
+    const acceptanceCase = persona(id);
+    return scorePersonaTrial(acceptanceCase, evidence({
+      prompt: acceptanceCase.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: acceptanceCase.id,
+      ...overrides,
+    }));
+  };
+
+  it('accepts the exact ordered and justified Qwen prioritization response', () => {
+    const response = [
+      '**Recommended Order:** Investigate memory bug → Repair onboarding → Close customer.',
+      '',
+      '**Rationale:**',
+      'The production memory bug is the only item that threatens your existing user base, potentially causing data loss or instability. Fixing it first removes active harm. Onboarding repair is the highest-leverage growth lever; since closing one new customer provides only one data point, improving onboarding ensures you can capture the *next* five. The customer close is urgent but likely has a natural deadline or existing momentum. It should be your primary focus *after* stabilizing production, but not before, as a system failure during a critical pitch is catastrophic.',
+      '',
+      "**Today's First Action:**",
+      'Reproduce the production memory bug in a staging environment with a test user dataset.',
+    ].join('\n');
+
+    const result = scoreResponse('general-purpose', response);
+    expect(result.checks.find(check => check.id === 'ordered-plan')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'justification')?.passed).toBe(true);
+  });
+
+  it('recognizes the exact retained Windows failures while still rejecting its invented assurance', () => {
+    const response = [
+      '**MEMO: Release Delay Recommendation**',
+      '',
+      '**Status Update:**',
+      'We originally planned to ship on Friday. Current testing results are mixed. API tests pass successfully. However, browser tests retain two failures on Windows. Additionally, the smart router has not been exercised without cloud credentials.',
+      '',
+      '**Recommendation:**',
+      'Delay the release until these identified gaps are fully closed. This ensures platform stability and proper router functionality across all environments before shipment.',
+      '',
+      '**Action Required:**',
+      'Address Windows browser test failures and complete unauthenticated smart router testing prior to finalizing the release schedule.',
+    ].join('\n');
+
+    const result = scoreResponse('writer', response);
+    expect(result.checks.find(check => check.id === 'release-facts')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'no-new-claims')?.passed).toBe(false);
+    for (const resolvedClause of [
+      'browser tests retain two failures on Windows, but both were resolved.',
+      'browser tests retain two failures on Windows, but those failures were resolved.',
+    ]) {
+      const resolvedResponse = response.replace(
+        'browser tests retain two failures on Windows.',
+        resolvedClause,
+      );
+      const resolvedResult = scoreResponse('writer', resolvedResponse);
+      expect(
+        resolvedResult.checks.find(check => check.id === 'release-facts')?.passed,
+        resolvedClause,
+      ).toBe(false);
+    }
+  });
+
+  it('accepts the exact contiguous 30-minute Qwen agenda table without redundant prose', () => {
+    const response = [
+      '| Time Block | Duration | Topic & Lead | Desired Decision / Output |',
+      '|---|---|---|---|',
+      '| 0:00–0:05 | 5 min | **Welcome & Launch Criteria Review** (Product) | Confirm shared definition of “launch-ready”; align on go/no-go gate criteria |',
+      '| 0:05–0:13 | 8 min | **Engineering Status & Open Items** (Engineering) | Approve code freeze or identify blocking defects with owners and target resolution times |',
+      '| 0:13–0:21 | 8 min | **QA Coverage & Exit Report** (QA) | Sign off on test plan completion or authorize conditional pass with explicit exceptions and mitigation owners |',
+      '| 0:21–0:27 | 6 min | **Support Readiness & Rollout Plan** (Support) | Approve support runbook, escalation paths, and phased rollout percentages |',
+      '| 0:27–0:30 | 3 min | **Go/No-Go Decision & Next Steps** (Product) | Recorded launch decision with owner assignments and follow-up checkpoint time |',
+      '',
+      '### Pre-Read Checklist',
+      '- [ ] Engineering: open P0/P1 defects with assignees',
+      '- [ ] QA: final test execution summary',
+      '- [ ] Product: launch feature set',
+      '- [ ] Support: support runbook',
+    ].join('\n');
+
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    const supportingSchedule = scoreResponse(
+      'executive-assistant',
+      response.replace(
+        '- [ ] Product: launch feature set',
+        '- [ ] Product: launch schedule and scope',
+      ),
+    );
+    expect(supportingSchedule.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(true);
+    for (const invalidResponse of [
+      response.replace('\n\n### Pre-Read', '\nMeeting duration: 45 minutes.\n\n### Pre-Read'),
+      response.replace('\n\n### Pre-Read', '\nThis table is illustrative only and is not the agenda.\n\n### Pre-Read'),
+      `${response}\n### Notes\nThis table is illustrative only and is not the agenda.`,
+      `${response}\n### Notes\nThis table is merely illustrative.`,
+      `${response}\n### Notes\nThis is only an example schedule, not the agenda.`,
+      `${response}\n### Notes\nDisregard the table; it is not the agenda.`,
+      `${response}\n### Notes\nThe table above should not be used as the agenda.`,
+      `${response}\n### Notes\nThe table is hypothetical only.`,
+      `${response}\n### Notes\nWithdraw the schedule above; it is not adopted.`,
+      `${response}\n### Notes\nCancel the schedule above; it is not adopted.`,
+      `${response}\n### Notes\nAbandon the agenda above; it should not be used.`,
+      `${response}\n### Notes\nRescind the agenda above; do not follow it.`,
+      `${response}\n### Notes\nSupersede the schedule above; use a different one.`,
+      response.replace(
+        '- [ ] Engineering: open P0/P1 defects with assignees',
+        '- [ ] Product: Rescind the agenda above; do not follow it.',
+      ),
+      `## Pre-Read only\n${response}`,
+    ]) {
+      const invalidResult = scoreResponse('executive-assistant', invalidResponse);
+      expect(
+        invalidResult.checks.find(check => check.id === 'duration-blocks')?.passed,
+        invalidResponse,
+      ).toBe(false);
+    }
+  });
+
+  it('rejects a superficially exact agenda table whose duration cells contradict its ranges', () => {
+    const response = [
+      '| Time Block | Duration | Topic & Lead | Desired Decision / Output |',
+      '|---|---|---|---|',
+      '| 0:00–0:05 | 8 min | Welcome (Product) | Confirm criteria |',
+      '| 0:05–0:30 | 22 min | Decision (Engineering, QA, Support) | Approve launch |',
+      '',
+      '### Pre-Read Checklist',
+      '- [ ] Product, Engineering, QA, Support checklist',
+    ].join('\n');
+
+    const result = scoreResponse('executive-assistant', response);
+    expect(result.checks.find(check => check.id === 'duration-blocks')?.passed).toBe(false);
+  });
+
+  it('accepts the exact constant-burn assumption and two labeled table actions', () => {
+    const response = [
+      '| Category | Detail |',
+      '| --- | --- |',
+      '| **Runway** | 4.00 months |',
+      '| **Formula** | Runway = Current Cash ÷ Monthly Burn Rate ($40,000 ÷ $10,000) |',
+      '| **Biggest Assumption** | The monthly burn rate remains perfectly constant for the entire period (no new hires, tool renewals, or operational cost changes). |',
+      '| **Improvement Action 1** | Secure a bridge loan or negotiate favorable payment terms to increase available cash. |',
+      '| **Improvement Action 2** | Enact temporary cost-reduction measures (e.g., freezing new hires, pausing non-critical subscriptions) to lower monthly burn. |',
+    ].join('\n');
+
+    const result = scoreResponse('finance-owner', response);
+    const exactCashWithKnownCost = scoreResponse(
+      'finance-owner',
+      response.replace(
+        'Enact temporary cost-reduction measures (e.g., freezing new hires, pausing non-critical subscriptions) to lower monthly burn.',
+        'Reduce monthly burn by renegotiating vendors.',
+      ),
+    );
+    const exactCostWithKnownCash = scoreResponse(
+      'finance-owner',
+      response.replace(
+        'Secure a bridge loan or negotiate favorable payment terms to increase available cash.',
+        'Generate revenue to increase available cash.',
+      ),
+    );
+    expect(result.checks.find(check => check.id === 'assumption')?.passed).toBe(true);
+    expect(exactCashWithKnownCost.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    expect(exactCostWithKnownCash.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(true);
+    for (const invalidResponse of [
+      response.replace('Enact temporary cost-reduction measures', 'Enact no cost-reduction measures'),
+      response.replace('Secure a bridge loan', 'Secure a credit report'),
+      response.replace('Secure a bridge loan', 'Arrange a financing report for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a report on financing for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a briefing on financing for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a workshop on financing for the board'),
+      response.replace('Secure a bridge loan', 'Schedule a financing review for the board'),
+      response.replace('Secure a bridge loan', 'Arrange a consultation on financing for the board'),
+      response.replace('Secure a bridge loan', 'Arrange an evaluation of financing options for the board'),
+      response.replace(
+        'Secure a bridge loan or negotiate favorable payment terms to increase available cash.',
+        'Secure a bridge loan; do not act on this recommendation.',
+      ),
+      `${response}\n### Notes\nThese actions are hypothetical only and are not recommendations.`,
+      `${response}\n### Notes\nThe proposed actions are hypothetical only and are not recommendations.`,
+      `${response}\n### Notes\nDo not implement either action.`,
+      `${response}\n### Notes\nThese are merely suggestions, not recommendations.`,
+      `${response}\n### Notes\nThe table is hypothetical only.`,
+      `${response}\n### Notes\nNeither action is recommended.`,
+      `${response}\n### Notes\nDisregard both actions.`,
+      `${response}\n### Notes\nActions 1 and 2 are hypothetical only.`,
+      `${response}\n### Notes\nEach action is only hypothetical.`,
+      `${response}\n### Notes\nBoth steps are hypothetical only.`,
+      `${response}\n### Notes\nNeither step is recommended.`,
+      `${response}\n### Notes\nThese options are hypothetical only.`,
+      `${response}\n### Notes\nNeither proposal should be implemented.`,
+      `${response}\n### Notes\nTreat these measures as hypothetical only.`,
+    ]) {
+      const invalidResult = scoreResponse('finance-owner', invalidResponse);
+      expect(
+        invalidResult.checks.find(check => check.id === 'two-actions')?.passed,
+        invalidResponse,
+      ).toBe(false);
+    }
+    for (const affirmedResponse of [
+      `${response}\n### Notes\nThese actions are not hypothetical; implement both.`,
+      `${response}\n### Notes\nDo not disregard these actions; implement both.`,
+      `${response}\n### Notes\nDo not withdraw both actions; implement them.`,
+      `${response}\n### Notes\nI did not retract these actions; implement both.`,
+      `${response}\n### Notes\nNeither action is hypothetical; both are recommended.`,
+      `${response}\n### Notes\nNeither of these actions are hypothetical; both are recommended.`,
+      `${response}\n### Notes\nNeither of those recommendations is illustrative; both are approved.`,
+      `${response}\n### Notes\nNeither of the proposals is hypothetical; both are selected.`,
+      `${response}\n### Notes\nThe table is illustrative of the approved actions; implement both.`,
+    ]) {
+      const affirmedResult = scoreResponse('finance-owner', affirmedResponse);
+      expect(
+        affirmedResult.checks.find(check => check.id === 'two-actions')?.passed,
+        affirmedResponse,
+      ).toBe(true);
+    }
+  });
+
+  it('accepts the exact empty-workspace answer only with an exhaustive successful tool receipt', () => {
+    const response = [
+      'The workspace is empty.',
+      '',
+      '**What the tool established:**',
+      '- A single successful search of the workspace returned no files whatsoever.',
+      '- Therefore, there is nothing to inspect, no codebase to modify, and no evidence of prior artifacts in this workspace.',
+      '',
+      'One next engineering step:',
+      '- [ ] Verify the workspace path.',
+    ].join('\n');
+    const result = scoreResponse('coder', response, {
+      toolsUsed: ['search_files'],
+      sseEvents: [
+        { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+        { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: ['search_files'] } },
+      ],
+    });
+    const missingReceipt = scoreResponse('coder', response, { toolsUsed: [] });
+    const contradicted = scoreResponse(
+      'coder',
+      `${response}\nCorrection: this is false; the workspace is not empty.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    const retracted = scoreResponse(
+      'coder',
+      `${response}\nCorrection: the earlier empty-workspace statement was false.`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    );
+    const equivalentContradictions = [
+      'Correction: there are files.',
+      'Correction: files were found.',
+      'Actually, there are files.',
+      'Correction: README.md exists.',
+      'Correction: that statement was false.',
+      'Correction: that conclusion was wrong.',
+      'Correction: that finding was incorrect.',
+      'Correction: I retract that conclusion.',
+      'I retract that conclusion.',
+      'Correction: disregard the previous conclusion.',
+      'Update: that takeaway was incorrect.',
+      'I take that back.',
+      'That conclusion was wrong.',
+    ].map(tail => scoreResponse(
+      'coder',
+      `${response}\n${tail}`,
+      {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      },
+    ));
+
+    expect(result.checks.find(check => check.id === 'empty-result')?.passed).toBe(true);
+    expect(missingReceipt.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    expect(contradicted.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    expect(retracted.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    for (const contradiction of equivalentContradictions) {
+      expect(contradiction.checks.find(check => check.id === 'empty-result')?.passed).toBe(false);
+    }
+    for (const reaffirmation of [
+      'Actually, no files were found.',
+      'Correction: no files were found.',
+    ]) {
+      const reaffirmed = scoreResponse('coder', `${response}\n${reaffirmation}`, {
+        toolsUsed: ['search_files'],
+        sseEvents: [
+          { event: 'tool', data: { name: 'search_files', input: { pattern: '**/*' } } },
+          { event: 'tool_result', data: { name: 'search_files', result: 'No files found.', isError: false } },
+        ],
+      });
+      expect(
+        reaffirmed.checks.find(check => check.id === 'empty-result')?.passed,
+        reaffirmation,
+      ).toBe(true);
+    }
+  });
+});

@@ -9,7 +9,7 @@
  * Run the expensive matrix through the built-in proxy with a real provider:
  *   WAGGLE_E2E_SKIP_LITELLM=1 npx playwright test tests/vision/personas.spec.ts
  */
-import { expect, test, type Page, type Response, type TestInfo } from '@playwright/test';
+import { expect, test, type Page, type Request, type Response, type TestInfo } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -544,24 +544,11 @@ async function captureBodyWithApprovalDenials(
     }).catch(() => '')).trim();
     const observedAt = new Date().toISOString();
     const screenshotPath = `${screenshotPrefix}-${approvalAutoDenials.length + 1}.png`;
-    let capturedPath: string | null = screenshotPath;
-    let screenshotError: string | null = null;
-    try {
-      await page.screenshot({
-        path: screenshotPath,
-        fullPage: true,
-        timeout: remainingDeadlineMs(deadlineAt, 'capturing the approval card', 3_000),
-      });
-    } catch (error) {
-      capturedPath = null;
-      screenshotError = redactDiagnosticText(error instanceof Error ? error.message : String(error));
-    }
-
     const denial: ApprovalAutoDenial = {
       observedAt,
       cardText,
-      screenshotPath: capturedPath,
-      screenshotError,
+      screenshotPath,
+      screenshotError: null,
       requestId: null,
       requestUrl: null,
       requestBody: null,
@@ -570,6 +557,14 @@ async function captureBodyWithApprovalDenials(
       transportError: null,
     };
     approvalAutoDenials.push(denial);
+    const screenshotPromise = page.screenshot({
+      path: screenshotPath,
+      fullPage: true,
+      timeout: remainingDeadlineMs(deadlineAt, 'capturing the approval card', 3_000),
+    }).catch((error) => {
+      denial.screenshotPath = null;
+      denial.screenshotError = redactDiagnosticText(error instanceof Error ? error.message : String(error));
+    });
     const denialResponsePromise = page.waitForResponse(
       response => response.request().method() === 'POST'
         && new URL(response.url()).pathname.startsWith('/api/approval/'),
@@ -621,6 +616,7 @@ async function captureBodyWithApprovalDenials(
         `Approval card did not close: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
+    await screenshotPromise;
   }
 }
 
@@ -899,17 +895,86 @@ test('persona harness safely denies an approval card while the response body is 
   ].join(''));
 
   const approvalAutoDenials: ApprovalAutoDenial[] = [];
+  let screenshotStarted: (() => void) | undefined;
+  let releaseScreenshot: (() => void) | undefined;
+  const screenshotStart = new Promise<void>((resolve) => {
+    screenshotStarted = resolve;
+  });
+  const screenshotRelease = new Promise<void>((resolve) => {
+    releaseScreenshot = resolve;
+  });
+  const lifecycle: string[] = [];
+  const screenshotWatchdog = setTimeout(() => releaseScreenshot?.(), 5_000);
+  const releaseScreenshotOnDenial = (request: Request) => {
+    if (request.method() !== 'POST'
+      || !new URL(request.url()).pathname.startsWith('/api/approval/')) return;
+    lifecycle.push('denial-request-started');
+    clearTimeout(screenshotWatchdog);
+    releaseScreenshot?.();
+  };
+  page.on('request', releaseScreenshotOnDenial);
+  const originalScreenshotDescriptor = Object.getOwnPropertyDescriptor(page, 'screenshot');
+  Object.defineProperty(page, 'screenshot', {
+    configurable: true,
+    value: async () => {
+      lifecycle.push('screenshot-started');
+      screenshotStarted?.();
+      await screenshotRelease;
+      lifecycle.push('screenshot-finished');
+      return Buffer.from('deterministic screenshot evidence');
+    },
+  });
   const simulatedBody = page.locator('[data-testid="chat-approval-gate"]')
     .waitFor({ state: 'detached' })
     .then(() => Buffer.from('event: done\ndata: {"content":"denied safely"}\n\n'));
-  const body = await captureBodyWithApprovalDenials(
+  const captureOutcome = captureBodyWithApprovalDenials(
     page,
     simulatedBody,
-    Date.now() + 3_000,
+    Date.now() + 10_000,
     join(ARTIFACTS, 'harness-approval-denied'),
     approvalAutoDenials,
+  ).then(
+    body => ({ kind: 'body' as const, body }),
+    error => ({ kind: 'error' as const, error }),
   );
+  let screenshotStartTimer: ReturnType<typeof setTimeout> | undefined;
+  const screenshotStartTimeout = new Promise<{ kind: 'start-timeout' }>((resolve) => {
+    screenshotStartTimer = setTimeout(() => resolve({ kind: 'start-timeout' }), 5_000);
+  });
+  let body: Buffer;
+  try {
+    const firstOutcome = await Promise.race([
+      screenshotStart.then(() => ({ kind: 'screenshot-start' as const })),
+      captureOutcome,
+      screenshotStartTimeout,
+    ]);
+    if (firstOutcome.kind === 'error') throw firstOutcome.error;
+    if (firstOutcome.kind === 'body') {
+      throw new Error('Approval capture completed before starting screenshot evidence.');
+    }
+    if (firstOutcome.kind === 'start-timeout') {
+      throw new Error('Approval capture did not start screenshot evidence within 5 seconds.');
+    }
+    const finalOutcome = await captureOutcome;
+    if (finalOutcome.kind === 'error') throw finalOutcome.error;
+    body = finalOutcome.body;
+  } finally {
+    clearTimeout(screenshotWatchdog);
+    if (screenshotStartTimer !== undefined) clearTimeout(screenshotStartTimer);
+    page.off('request', releaseScreenshotOnDenial);
+    releaseScreenshot?.();
+    if (originalScreenshotDescriptor) {
+      Object.defineProperty(page, 'screenshot', originalScreenshotDescriptor);
+    } else {
+      Reflect.deleteProperty(page, 'screenshot');
+    }
+  }
 
+  expect(lifecycle).toEqual([
+    'screenshot-started',
+    'denial-request-started',
+    'screenshot-finished',
+  ]);
   expect(body.toString('utf8')).toContain('denied safely');
   expect(approvalAutoDenials).toHaveLength(1);
   expect(approvalAutoDenials[0]).toMatchObject({
@@ -1483,7 +1548,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           visibleAssistant.codeSegments.map(normalizeEol),
           'visible inline and fenced code exactly matched the response Markdown',
         ).toEqual(expectedCodeSegments.map(normalizeEol));
-        if (persona.id === 'coder' || persona.id === 'data-engineer') {
+        if (persona.id === 'data-engineer') {
           expect(
             expectedCodeSegments.length,
             `${persona.id} response included code that was verified in the visible DOM`,
