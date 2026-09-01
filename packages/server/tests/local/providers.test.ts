@@ -308,7 +308,9 @@ describe('Provider API', () => {
       const catalogServer = http.createServer((request, response) => {
         authorizationHeaders.push(request.headers.authorization);
         response.writeHead(200, { 'content-type': 'application/json' });
-        response.end(JSON.stringify({ data: [{ id: 'local-qwen', name: 'Local Qwen' }] }));
+        response.end(JSON.stringify(request.url?.endsWith('/chat/completions')
+          ? { choices: [{ message: { content: 'WAGGLE_OK' } }] }
+          : { data: [{ id: 'local-qwen', name: 'Local Qwen' }] }));
       });
       await new Promise<void>((resolve) => catalogServer.listen(0, '127.0.0.1', resolve));
       const { port } = catalogServer.address() as AddressInfo;
@@ -320,7 +322,10 @@ describe('Provider API', () => {
           url: '/api/settings',
           payload: {
             providers: {
-              'openai-compatible': { baseUrl: `  ${normalizedBaseUrl}/models///  ` },
+              'openai-compatible': {
+                baseUrl: `  ${normalizedBaseUrl}/models///  `,
+                models: ['openai-compatible/local-qwen'],
+              },
             },
           },
         });
@@ -344,7 +349,7 @@ describe('Provider API', () => {
           id: 'openai-compatible/local-qwen',
           name: 'Local Qwen',
         }));
-        expect(authorizationHeaders).toEqual([undefined]);
+        expect(authorizationHeaders).toEqual([undefined, undefined]);
 
         const keyOnlyUpdate = await injectWithAuth(server, {
           method: 'PUT',
@@ -357,6 +362,7 @@ describe('Provider API', () => {
         });
         expect(keyOnlyUpdate.statusCode).toBe(200);
         expect(keyOnlyUpdate.json().providers['openai-compatible'].baseUrl).toBe(normalizedBaseUrl);
+        expect(authorizationHeaders.at(-1)).toBe('Bearer optional-local-secret');
 
         const persisted = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf8')) as {
           providers?: Record<string, { baseUrl?: string }>;
@@ -397,12 +403,17 @@ describe('Provider API', () => {
       const baseUrl = `http://127.0.0.1:${port}/v1`;
 
       try {
-        const configured = await injectWithAuth(server, {
-          method: 'PUT',
-          url: '/api/settings',
-          payload: { providers: { 'openai-compatible': { baseUrl } } },
-        });
-        expect(configured.statusCode).toBe(200);
+        const configPath = path.join(tmpDir, 'config.json');
+        const seeded = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+          providers?: Record<string, unknown>;
+        };
+        seeded.providers ??= {};
+        seeded.providers['openai-compatible'] = {
+          apiKey: '',
+          baseUrl,
+          models: ['openai-compatible/recovered-qwen'],
+        };
+        fs.writeFileSync(configPath, JSON.stringify(seeded, null, 2), 'utf8');
 
         const unavailableResponse = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
         const unavailable = unavailableResponse.json().providers.find(
@@ -455,6 +466,13 @@ describe('Provider API', () => {
       const originalRuntimeModel = server.agentState.currentModel;
       const oldBaseUrl = 'https://old-endpoint.example.test/v1';
       const newBaseUrl = 'https://new-endpoint.example.test/v1';
+      const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })));
+      vi.stubGlobal('fetch', fetchMock);
 
       try {
         const seed = await injectWithAuth(server, {
@@ -485,6 +503,13 @@ describe('Provider API', () => {
           },
         });
         expect(sameUrlUpdate.statusCode).toBe(200);
+        const probeCall = fetchMock.mock.calls.find(([url]) =>
+          url === `${oldBaseUrl}/chat/completions`);
+        expect(probeCall).toBeDefined();
+        const [probeUrl, probeInit] = probeCall as [string, RequestInit];
+        expect(probeUrl).toBe(`${oldBaseUrl}/chat/completions`);
+        expect(probeInit.headers).toMatchObject({ Authorization: 'Bearer private-existing-key' });
+        expect(JSON.parse(String(probeInit.body))).toMatchObject({ model: 'old-model' });
         expect(sameUrlUpdate.json()).toMatchObject({
           defaultModel: 'openai-compatible/old-model',
           providers: {
@@ -498,6 +523,7 @@ describe('Provider API', () => {
         const diskBefore = fs.readFileSync(configPath, 'utf8');
         const vaultBefore = server.vault?.get('openai-compatible');
         const runtimeBefore = server.agentState.currentModel;
+        const callsBeforeRetarget = fetchMock.mock.calls.length;
 
         const response = await injectWithAuth(server, {
           method: 'PUT',
@@ -519,7 +545,10 @@ describe('Provider API', () => {
         expect(fs.readFileSync(configPath, 'utf8')).toBe(diskBefore);
         expect(server.vault?.get('openai-compatible')).toEqual(vaultBefore);
         expect(server.agentState.currentModel).toBe(runtimeBefore);
+        expect(fetchMock).toHaveBeenCalledTimes(callsBeforeRetarget);
+        expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith(newBaseUrl))).toBe(false);
       } finally {
+        vi.unstubAllGlobals();
         server.vault?.delete('openai-compatible');
         fs.writeFileSync(configPath, originalConfig, 'utf8');
         server.agentState.currentModel = originalRuntimeModel;
@@ -564,6 +593,54 @@ describe('Provider API', () => {
         server.vault?.delete('openai-compatible');
         if (originalConfig === null) fs.rmSync(configPath, { force: true });
         else fs.writeFileSync(configPath, originalConfig, 'utf8');
+        server.agentState.currentModel = originalRuntimeModel;
+      }
+    });
+
+    it('never forwards a legacy plaintext compatible key to a changed endpoint', async () => {
+      const configPath = path.join(tmpDir, 'config.json');
+      const originalConfig = fs.readFileSync(configPath, 'utf8');
+      const originalRuntimeModel = server.agentState.currentModel;
+      const fetchMock = vi.fn();
+
+      try {
+        const legacy = JSON.parse(originalConfig) as {
+          providers?: Record<string, unknown>;
+        };
+        legacy.providers ??= {};
+        legacy.providers['openai-compatible'] = {
+          apiKey: 'legacy-plaintext-secret',
+          baseUrl: 'https://old-endpoint.example.test/v1',
+          models: ['openai-compatible/legacy-model'],
+        };
+        fs.writeFileSync(configPath, JSON.stringify(legacy, null, 2), 'utf8');
+        server.vault?.delete('openai-compatible');
+        vi.stubGlobal('fetch', fetchMock);
+        const diskBefore = fs.readFileSync(configPath, 'utf8');
+
+        const response = await injectWithAuth(server, {
+          method: 'PUT',
+          url: '/api/settings',
+          payload: {
+            providers: {
+              'openai-compatible': {
+                baseUrl: 'https://attacker-endpoint.example.test/v1',
+                models: ['openai-compatible/legacy-model'],
+              },
+            },
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toMatch(/re-enter.*key|key.*different endpoint/i);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(fs.readFileSync(configPath, 'utf8')).toBe(diskBefore);
+        expect(server.vault?.get('openai-compatible')).toBeNull();
+        expect(server.agentState.currentModel).toBe(originalRuntimeModel);
+      } finally {
+        vi.unstubAllGlobals();
+        server.vault?.delete('openai-compatible');
+        fs.writeFileSync(configPath, originalConfig, 'utf8');
         server.agentState.currentModel = originalRuntimeModel;
       }
     });

@@ -8,7 +8,11 @@ import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { validateBody } from '../../validate-body.js';
 import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
-import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
+import {
+  canonicalizeModelReference,
+  resolveExplicitRoutableModel,
+  resolveUsableModel,
+} from '../model-availability.js';
 import { discoverProviderModels } from '../provider-model-catalog.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 import { applyProviderKeyToEnv } from '../provider-env.js';
@@ -27,7 +31,11 @@ const settingsUpdateSchema = z.object({
   fallbackModel: z.string().nullable().optional(),
   budgetModel: z.string().nullable().optional(),
   budgetThreshold: z.number().optional(),
+  verifyModelSettings: z.literal(true).optional(),
 });
+const settingsPatchSchema = z.object({
+  onboardingCompleted: z.boolean().optional(),
+}).strict();
 
 /** P4: migrate legacy `yoloMode: boolean` to the three-level enum. */
 function coerceDefaultAutonomy(parsed: Record<string, unknown>): AutonomyLevel {
@@ -66,9 +74,154 @@ function applyRuntimeTier(server: FastifyInstance, tier: Tier): void {
   server.sessionManager?.setMaxSessions(maxWorkspaceSessionsForTier(tier));
 }
 
+type ModelProbeResult = {
+  model: string | null;
+  configured: boolean;
+  verified: boolean;
+  rejected?: boolean;
+};
+
+async function probeConfiguredModel(
+  server: FastifyInstance,
+  preferred: string,
+  exact: boolean,
+): Promise<ModelProbeResult> {
+  if (!preferred) return { model: null, configured: false, verified: false };
+
+  const model = exact
+    ? await resolveExplicitRoutableModel(server, preferred)
+    : await resolveUsableModel(server, preferred);
+  if (!model) return { model: preferred, configured: false, verified: false };
+
+  const isOllama = model.startsWith('ollama/');
+  const addr = server.server.address();
+  const port = typeof addr === 'object' && addr ? addr.port : server.localConfig.port;
+  const url = isOllama
+    ? (process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434') + '/v1/chat/completions'
+    : `http://127.0.0.1:${port}/v1/chat/completions`;
+  const sendModel = isOllama ? model.slice('ollama/'.length) : model;
+  const isQwenModel = /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(sendModel);
+  const supportsThinkingFlag = model.startsWith('openai-compatible/') && isQwenModel;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), isQwenModel ? 15_000 : 5_000);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(!isOllama ? { Authorization: `Bearer ${server.agentState.wsSessionToken}` } : {}),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: sendModel,
+        max_tokens: isQwenModel ? 32 : 1,
+        messages: [{ role: 'user', content: 'Reply with exactly WAGGLE_OK.' }],
+        ...(supportsThinkingFlag ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+      }),
+    });
+    if (res.ok) {
+      const payload = await res.json().catch(() => null) as {
+        choices?: Array<{ message?: { content?: unknown } }>;
+      } | null;
+      const content = payload?.choices?.[0]?.message?.content;
+      return typeof content === 'string' && content.trim().length > 0
+        ? { model, configured: true, verified: true }
+        : { model, configured: true, verified: false };
+    }
+    const detail = `${res.status} ${await res.text().catch(() => '')}`;
+    return /401|403|authentication|model_not_found/i.test(detail)
+      ? { model, configured: true, verified: false, rejected: true }
+      : { model, configured: true, verified: false };
+  } catch {
+    return { model, configured: true, verified: false };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function probeCompatibleCandidate(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+): Promise<ModelProbeResult> {
+  if (!model.startsWith('openai-compatible/')) {
+    return { model, configured: false, verified: false, rejected: true };
+  }
+  const sendModel = model.slice('openai-compatible/'.length);
+  const isQwenModel = /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(sendModel);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), isQwenModel ? 90_000 : 45_000);
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: sendModel,
+        max_tokens: isQwenModel ? 32 : 1,
+        stream: false,
+        messages: [{ role: 'user', content: 'Reply with exactly WAGGLE_OK.' }],
+        ...(isQwenModel ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+      }),
+    });
+    if (response.ok) {
+      const payload = await response.json().catch(() => null) as {
+        choices?: Array<{ message?: { content?: unknown } }>;
+      } | null;
+      const content = payload?.choices?.[0]?.message?.content;
+      return typeof content === 'string' && content.trim().length > 0
+        ? { model, configured: true, verified: true }
+        : { model, configured: true, verified: false };
+    }
+    const detail = `${response.status} ${await response.text().catch(() => '')}`;
+    return /401|403|authentication|model_not_found/i.test(detail)
+      ? { model, configured: true, verified: false, rejected: true }
+      : { model, configured: true, verified: false };
+  } catch {
+    return { model, configured: true, verified: false };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export const settingsRoutes: FastifyPluginAsync = async (server) => {
+  let settingsMutationRevision = 0;
+  let latestVerifiedSettingsRequest = 0;
+  let pendingVerifiedSettings = 0;
+  const verifiedSettingsWaiters = new Set<() => void>();
+  const beginVerifiedSettingsMutation = (): (() => void) => {
+    pendingVerifiedSettings += 1;
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      pendingVerifiedSettings -= 1;
+      if (pendingVerifiedSettings === 0) {
+        for (const resolve of verifiedSettingsWaiters) resolve();
+        verifiedSettingsWaiters.clear();
+      }
+    };
+  };
+  const waitForVerifiedSettings = async (): Promise<void> => {
+    if (pendingVerifiedSettings === 0) return;
+    await new Promise<void>((resolve) => { verifiedSettingsWaiters.add(resolve); });
+  };
+  let settingsMutationTail = Promise.resolve();
+  const acquireSettingsMutation = async (): Promise<() => void> => {
+    let release!: () => void;
+    const previous = settingsMutationTail;
+    settingsMutationTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    return release;
+  };
   // GET /api/settings — read config (keys from vault, metadata from vault+config)
   server.get('/api/settings', async () => {
+    await waitForVerifiedSettings();
     const config = new WaggleConfig(server.localConfig.dataDir);
     const configProviders = config.getProviders();
 
@@ -130,11 +283,198 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       fallbackModel?: string | null;
       budgetModel?: string | null;
       budgetThreshold?: number;
+      verifyModelSettings?: true;
     };
   }>('/api/settings', { preHandler: validateBody(settingsUpdateSchema) }, async (request, reply) => {
+    const {
+      defaultModel,
+      providers,
+      dailyBudget,
+      budgetHardCap,
+      fallbackModel,
+      budgetModel,
+      budgetThreshold,
+      verifyModelSettings,
+    } = request.body;
+    if (defaultModel !== undefined && !defaultModel.trim()) {
+      return reply.code(400).send({
+        code: 'PRIMARY_MODEL_REQUIRED',
+        error: 'Choose a Primary model before saving model settings.',
+      });
+    }
+    const malformedModelLane = [defaultModel, fallbackModel, budgetModel].find((model) => (
+      typeof model === 'string' && (model.trim().length === 0 || model !== model.trim())
+    ));
+    if (malformedModelLane !== undefined) {
+      return reply.code(400).send({
+        code: 'MODEL_ID_INVALID',
+        error: 'Model identifiers cannot be blank or contain surrounding whitespace.',
+      });
+    }
+
+    const compatibleCandidate = providers?.['openai-compatible'];
+    const mutatesCompatibleProvider = Boolean(
+      compatibleCandidate && typeof compatibleCandidate === 'object',
+    );
+    const exactModels = Array.from(new Set([defaultModel, fallbackModel, budgetModel]
+      .filter((model): model is string => typeof model === 'string' && model.trim().length > 0)
+      .map((model) => model.trim())));
+    const requiresModelVerification = Boolean(
+      verifyModelSettings || exactModels.length > 0 || mutatesCompatibleProvider,
+    );
+    let expectedRevision: number | undefined;
+    let verificationRequest: number | undefined;
+    let finishVerifiedMutation: (() => void) | undefined;
+    if (requiresModelVerification) {
+      expectedRevision = settingsMutationRevision;
+      verificationRequest = ++latestVerifiedSettingsRequest;
+      const validationConfig = new WaggleConfig(server.localConfig.dataDir);
+      const effectivePrimary = (defaultModel ?? validationConfig.getDefaultModel() ?? '').trim();
+      if (exactModels.length > 0 && !effectivePrimary) {
+        return reply.code(400).send({
+          code: 'PRIMARY_MODEL_REQUIRED',
+          error: 'Choose a Primary model before saving model settings.',
+        });
+      }
+      if (mutatesCompatibleProvider) {
+        const candidate = compatibleCandidate as {
+          baseUrl?: unknown;
+          apiKey?: unknown;
+          models?: unknown;
+        };
+        const existingVault = server.vault?.get('openai-compatible');
+        const existingConfig = validationConfig.getProviders()['openai-compatible'];
+        const candidateBaseUrlRaw = typeof candidate.baseUrl === 'string'
+          ? candidate.baseUrl
+          : (existingVault?.metadata?.baseUrl as string | undefined) ?? existingConfig?.baseUrl;
+        const candidateBaseUrl = candidateBaseUrlRaw
+          ? normalizeOpenAiCompatibleBaseUrl(candidateBaseUrlRaw)
+          : null;
+        if (!candidateBaseUrl) {
+          return reply.code(400).send({
+            code: 'COMPATIBLE_ENDPOINT_REQUIRED',
+            error: 'Enter a valid http(s) OpenAI-compatible endpoint before saving.',
+          });
+        }
+        const submittedKey = typeof candidate.apiKey === 'string' ? candidate.apiKey.trim() : '';
+        const existingBaseUrlRaw = (existingVault?.metadata?.baseUrl as string | undefined)
+          ?? existingConfig?.baseUrl;
+        const existingBaseUrl = existingBaseUrlRaw
+          ? normalizeOpenAiCompatibleBaseUrl(existingBaseUrlRaw)
+          : null;
+        const storedKey = existingVault?.value ?? existingConfig?.apiKey ?? '';
+        const reenteredKey = Boolean(submittedKey)
+          && submittedKey !== (storedKey ? maskApiKey(storedKey) : '');
+        if (storedKey && candidateBaseUrl !== existingBaseUrl && !reenteredKey) {
+          return reply.code(400).send({
+            error: 'Re-enter the OpenAI-compatible API key before changing to a different endpoint.',
+          });
+        }
+        const candidateKey = submittedKey
+          || (candidateBaseUrl === existingBaseUrl ? storedKey : '');
+        const effectiveFallback = fallbackModel === null
+          ? null
+          : (fallbackModel ?? validationConfig.getFallbackModel());
+        const effectiveBudget = budgetModel === null
+          ? null
+          : (budgetModel ?? validationConfig.getBudgetModel());
+        const candidateModels = Array.isArray(candidate.models)
+          ? candidate.models.filter((model): model is string => typeof model === 'string')
+          : (existingVault?.metadata?.models as string[] | undefined) ?? existingConfig?.models ?? [];
+        const compatibleModels = Array.from(new Set([
+          effectivePrimary,
+          effectiveFallback,
+          effectiveBudget,
+        ].filter((model): model is string => (
+          typeof model === 'string' && model.startsWith('openai-compatible/')
+        ))));
+        if (compatibleModels.length === 0) {
+          const candidateModel = candidateModels.find((model) => model.startsWith('openai-compatible/'));
+          if (candidateModel) compatibleModels.push(candidateModel);
+        }
+        if (compatibleModels.length === 0) {
+          return reply.code(400).send({
+            code: 'COMPATIBLE_MODEL_REQUIRED',
+            error: 'Choose an OpenAI-compatible model before saving this provider.',
+          });
+        }
+        finishVerifiedMutation = beginVerifiedSettingsMutation();
+        for (const model of compatibleModels) {
+          const result = await probeCompatibleCandidate(candidateBaseUrl, candidateKey, model);
+          if (
+            !result.configured
+            || !result.verified
+            || result.model !== canonicalizeModelReference(model)
+          ) {
+            finishVerifiedMutation();
+            return reply.code(result.rejected ? 422 : 503).send({
+              code: 'MODEL_VERIFICATION_FAILED',
+              model,
+              error: result.rejected
+                ? 'The selected compatible model rejected the verification request.'
+                : 'The selected compatible model did not respond to verification.',
+            });
+          }
+        }
+        for (const model of exactModels.filter((value) => !value.startsWith('openai-compatible/'))) {
+          const result = await probeConfiguredModel(server, model, true);
+          if (
+            !result.configured
+            || !result.verified
+            || result.model !== canonicalizeModelReference(model)
+          ) {
+            finishVerifiedMutation();
+            return reply.code(result.rejected ? 422 : 503).send({
+              code: 'MODEL_VERIFICATION_FAILED',
+              model,
+              error: result.rejected
+                ? 'The selected model rejected the verification request.'
+                : 'The selected model did not respond to verification.',
+            });
+          }
+        }
+      } else {
+        finishVerifiedMutation = beginVerifiedSettingsMutation();
+        for (const model of exactModels) {
+          const result = await probeConfiguredModel(server, model, true);
+          if (
+            !result.configured
+            || !result.verified
+            || result.model !== canonicalizeModelReference(model)
+          ) {
+            finishVerifiedMutation();
+            return reply.code(result.rejected ? 422 : 503).send({
+              code: 'MODEL_VERIFICATION_FAILED',
+              model,
+              error: result.rejected
+                ? 'The selected model rejected the verification request.'
+                : 'The selected model did not respond to verification.',
+            });
+          }
+        }
+      }
+    }
+
+    const releaseMutation = await acquireSettingsMutation();
+    try {
+      if (
+        expectedRevision !== undefined
+        && (expectedRevision !== settingsMutationRevision
+          || verificationRequest !== latestVerifiedSettingsRequest)
+      ) {
+        return reply.code(409).send({
+          code: 'SETTINGS_CHANGED_RETRY',
+          error: 'Model settings changed while verification was running. Retry the latest selection.',
+        });
+      }
     const config = new WaggleConfig(server.localConfig.dataDir);
-    const { defaultModel, providers, dailyBudget, budgetHardCap, fallbackModel, budgetModel, budgetThreshold } = request.body;
     let providerKeyChanged = false;
+    const pendingVaultWrites: Array<{
+      name: string;
+      value: string;
+      metadata: { models: string[]; baseUrl?: string };
+      applyToEnvironment: boolean;
+    }> = [];
 
     const compatibleEntry = providers?.['openai-compatible'];
     if (compatibleEntry && typeof compatibleEntry === 'object') {
@@ -154,9 +494,10 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
           ? normalizeOpenAiCompatibleBaseUrl(existingBaseUrlRaw)
           : null;
         const submittedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+        const storedKey = existingVault?.value ?? existingConfig?.apiKey ?? '';
         const reenteredKey = Boolean(submittedKey)
-          && submittedKey !== (existingVault ? maskApiKey(existingVault.value) : '');
-        if (existingVault && submittedBaseUrl !== existingBaseUrl && !reenteredKey) {
+          && submittedKey !== (storedKey ? maskApiKey(storedKey) : '');
+        if (storedKey && submittedBaseUrl !== existingBaseUrl && !reenteredKey) {
           return reply.code(400).send({
             error: 'Re-enter the OpenAI-compatible API key before changing to a different endpoint.',
           });
@@ -166,10 +507,6 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
     if (defaultModel) {
       config.setDefaultModel(defaultModel);
-      // W2C: keep the in-memory runtime model in lockstep with the saved
-      // default so the top-bar chip tracks a Settings save live (it used to
-      // only change on restart, so Settings and the chip diverged until then).
-      server.agentState.currentModel = defaultModel;
     }
 
     // F8: Update daily cost budget
@@ -217,18 +554,23 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
           ?? (existingVault?.metadata?.baseUrl as string | undefined)
           ?? existingConfig?.baseUrl;
 
-        // Save secret to vault (encrypted)
-        if (apiKey && server.vault) {
-          server.vault.set(name, apiKey, { models: providerModels, baseUrl: providerBaseUrl });
-          applyProviderKeyToEnv(name, apiKey, true);
-          providerKeyChanged = true;
-          // Invalidate health check key cache so next /health re-validates
-          if (typeof server._invalidateKeyValidationCache === 'function') {
-            server._invalidateKeyValidationCache();
-          }
-        } else if (existingVault && server.vault && (models !== undefined || baseUrl !== undefined)) {
-          server.vault.set(name, existingVault.value, { models: providerModels, baseUrl: providerBaseUrl });
-        }
+      // Save secret to vault (encrypted)
+      if (apiKey && server.vault) {
+        pendingVaultWrites.push({
+          name,
+          value: apiKey,
+          metadata: { models: providerModels, baseUrl: providerBaseUrl },
+          applyToEnvironment: true,
+        });
+        providerKeyChanged = true;
+      } else if (existingVault && server.vault && (models !== undefined || baseUrl !== undefined)) {
+        pendingVaultWrites.push({
+          name,
+          value: existingVault.value,
+          metadata: { models: providerModels, baseUrl: providerBaseUrl },
+          applyToEnvironment: false,
+        });
+      }
 
         // Keep only non-secret provider metadata in config.json. The raw key is
         // Vault-only; an empty value preserves the legacy provider shape while
@@ -242,6 +584,18 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     }
 
     config.save();
+    for (const pending of pendingVaultWrites) {
+      server.vault?.set(pending.name, pending.value, pending.metadata);
+    }
+    for (const pending of pendingVaultWrites) {
+      if (pending.applyToEnvironment) {
+        applyProviderKeyToEnv(pending.name, pending.value, true);
+      }
+    }
+    if (providerKeyChanged && typeof server._invalidateKeyValidationCache === 'function') {
+      server._invalidateKeyValidationCache();
+    }
+    settingsMutationRevision += 1;
 
     // Apply the live guard only after the durable settings transaction wins.
     // A failed write must not leave this process less restrictive than disk.
@@ -286,16 +640,25 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
     return {
       defaultModel: config.getDefaultModel(),
+      fallbackModel: config.getFallbackModel(),
+      budgetModel: config.getBudgetModel(),
+      budgetThreshold: config.getBudgetThreshold(),
       providers: responseProviders,
       mindPath: config.getMindPath(),
       ...(router ? { router } : {}),
     };
+    } finally {
+      releaseMutation();
+      finishVerifiedMutation?.();
+    }
   });
 
   // PATCH /api/settings — partial update for non-provider settings (onboarding, preferences)
   server.patch<{
-    Body: { onboardingCompleted?: boolean; [key: string]: unknown };
-  }>('/api/settings', async (request) => {
+    Body: { onboardingCompleted?: boolean };
+  }>('/api/settings', { preHandler: validateBody(settingsPatchSchema) }, async (request) => {
+    const releaseMutation = await acquireSettingsMutation();
+    try {
     const configPath = path.join(server.localConfig.dataDir, 'config.json');
     let raw: Record<string, unknown> = {};
     try {
@@ -303,12 +666,14 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
         raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       }
     } catch { /* fresh config */ }
-    const { onboardingCompleted, ...rest } = request.body ?? {};
+    const { onboardingCompleted } = request.body ?? {};
     if (onboardingCompleted !== undefined) raw.onboardingCompleted = onboardingCompleted;
-    // Merge any other simple fields
-    Object.assign(raw, rest);
     fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf-8');
+    settingsMutationRevision += 1;
     return { updated: true, onboardingCompleted: raw.onboardingCompleted };
+    } finally {
+      releaseMutation();
+    }
   });
 
   // POST /api/settings/test-key — validate an API key.
@@ -454,75 +819,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
         new WaggleConfig(server.localConfig.dataDir).getDefaultModel() ??
         ''
       ).trim();
-      if (!preferred) return { model: null, configured: false, verified: false };
-
-      // A caller-supplied model is an exact-model gate. Never turn a successful
-      // probe of a different provider into false assurance for the requested
-      // model. Default probes retain normal fallback-capable resolution.
-      const model = request.body.model
-        ? await resolveExplicitRoutableModel(server, preferred)
-        : await resolveUsableModel(server, preferred);
-      if (!model) {
-        return { model: preferred, configured: false, verified: false };
-      }
-
-      // Endpoint selection mirrors chat.ts: Ollama models go direct to Ollama's
-      // OpenAI-compatible endpoint (strip the 'ollama/' prefix); everything else
-      // through the built-in proxy on this same sidecar (port from the address
-      // info, harvest.ts pattern).
-      const isOllama = model.startsWith('ollama/');
-      const addr = server.server.address();
-      const port = typeof addr === 'object' && addr ? addr.port : server.localConfig.port;
-      const url = isOllama
-        ? (process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434') + '/v1/chat/completions'
-        : `http://127.0.0.1:${port}/v1/chat/completions`;
-      const sendModel = isOllama ? model.slice('ollama/'.length) : model;
-      const isQwenModel = /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(sendModel);
-      const supportsThinkingFlag = model.startsWith('openai-compatible/') && isQwenModel;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), isQwenModel ? 15_000 : 5_000);
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(!isOllama
-              ? { Authorization: `Bearer ${server.agentState.wsSessionToken}` }
-              : {}),
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: sendModel,
-            max_tokens: isQwenModel ? 32 : 1,
-            messages: [{ role: 'user', content: 'Reply with exactly WAGGLE_OK.' }],
-            ...(supportsThinkingFlag ? { chat_template_kwargs: { enable_thinking: false } } : {}),
-          }),
-        });
-        if (res.ok) {
-          const payload = await res.json().catch(() => null) as {
-            choices?: Array<{ message?: { content?: unknown } }>;
-          } | null;
-          const content = payload?.choices?.[0]?.message?.content;
-          return typeof content === 'string' && content.trim().length > 0
-            ? { model, configured: true, verified: true }
-            : { model, configured: true, verified: false };
-        }
-        // Hard rejection (bad/absent key or unknown model) → client maps to
-        // 'failed'. Check status + body so a 401/403 or a model_not_found body
-        // both classify as rejected.
-        const detail = `${res.status} ${await res.text().catch(() => '')}`;
-        if (/401|403|authentication|model_not_found/i.test(detail)) {
-          return { model, configured: true, verified: false, rejected: true };
-        }
-        // Other non-2xx → transient (client maps to 'unverified').
-        return { model, configured: true, verified: false };
-      } catch {
-        // Timeout / network → transient.
-        return { model, configured: true, verified: false };
-      } finally {
-        clearTimeout(timeoutId);
-      }
+      return probeConfiguredModel(server, preferred, request.body.model !== undefined);
     },
   );
 

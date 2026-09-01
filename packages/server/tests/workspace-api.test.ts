@@ -749,7 +749,7 @@ describe('Workspace & Session API', () => {
     };
   }
 
-  function configureCompatibleProbeModel(model: string): () => void {
+  function configureCompatibleProbeModel(model: string, models = [model]): () => void {
     const configPath = path.join(dataDir, 'config.json');
     const originalConfig = fs.readFileSync(configPath, 'utf-8');
     const config = JSON.parse(originalConfig) as Record<string, unknown>;
@@ -762,7 +762,7 @@ describe('Workspace & Session API', () => {
       'openai-compatible': {
         apiKey: '',
         baseUrl: 'http://10.33.0.153:4000/v1',
-        models: [model],
+        models,
       },
     };
     fs.writeFileSync(configPath, JSON.stringify(config), 'utf-8');
@@ -998,6 +998,379 @@ describe('Workspace & Session API', () => {
       expect(body).toMatchObject({ configured: true, verified: false });
       expect(body.rejected).toBeUndefined();
     } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('atomically rejects a multi-lane save when any exact model fails verification', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallback = 'openai-compatible/qwen-fallback';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallback]);
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('model_not_found', { status: 404 })));
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          defaultModel: primary,
+          fallbackModel: fallback,
+          verifyModelSettings: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({
+        code: 'MODEL_VERIFICATION_FAILED',
+        model: fallback,
+      });
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('fails closed on an explicitly blank Primary without touching config', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { defaultModel: '', verifyModelSettings: true },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: 'PRIMARY_MODEL_REQUIRED' });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    { fallbackModel: '   ' },
+    { budgetModel: ' openai-compatible/qwen-budget ' },
+    { defaultModel: ' openrouter/openai/test-model ' },
+  ])('rejects non-canonical model lane values without probing or mutation: %j', async (payload) => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ code: 'MODEL_ID_INVALID' });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('uses a settings revision so a slower stale save cannot overwrite a newer session', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallbackA = 'openai-compatible/qwen-fallback-a';
+    const fallbackB = 'openai-compatible/qwen-fallback-b';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallbackA, fallbackB]);
+    let resolveSlow!: (response: Response) => void;
+    const slowResponse = new Promise<Response>((resolve) => { resolveSlow = resolve; });
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => slowResponse)
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const staleSave = injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { fallbackModel: fallbackA, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      const latestSave = injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { fallbackModel: fallbackB, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      expect((await latestSave).statusCode).toBe(200);
+
+      resolveSlow(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await staleSave).statusCode).toBe(409);
+
+      const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf-8'));
+      expect(saved.fallbackModel).toBe(fallbackB);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('always lets the newer verified request win when the older probe finishes first', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallbackA = 'openai-compatible/qwen-fallback-a';
+    const fallbackB = 'openai-compatible/qwen-fallback-b';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallbackA, fallbackB]);
+    let resolveA!: (response: Response) => void;
+    let resolveB!: (response: Response) => void;
+    const responseA = new Promise<Response>((resolve) => { resolveA = resolve; });
+    const responseB = new Promise<Response>((resolve) => { resolveB = resolve; });
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => responseA)
+      .mockImplementationOnce(() => responseB);
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const older = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackA, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const newer = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackB, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+      resolveA(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await older).statusCode).toBe(409);
+      resolveB(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await newer).statusCode).toBe(200);
+
+      const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf-8'));
+      expect(saved.fallbackModel).toBe(fallbackB);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not revive an older verified request after the newer request is rejected', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallbackA = 'openai-compatible/qwen-fallback-a';
+    const fallbackB = 'openai-compatible/qwen-fallback-b';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallbackA, fallbackB]);
+    let resolveA!: (response: Response) => void;
+    let resolveB!: (response: Response) => void;
+    const responseA = new Promise<Response>((resolve) => { resolveA = resolve; });
+    const responseB = new Promise<Response>((resolve) => { resolveB = resolve; });
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => responseA)
+      .mockImplementationOnce(() => responseB);
+    vi.stubGlobal('fetch', fetchMock);
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+
+    try {
+      const older = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackA, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const newer = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallbackB, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+      resolveB(new Response('model_not_found', { status: 404 }));
+      expect((await newer).statusCode).toBe(422);
+      resolveA(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await older).statusCode).toBe(409);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects protected keys through PATCH without touching settings', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+
+    const response = await injectWithAuth(server, {
+      method: 'PATCH',
+      url: '/api/settings',
+      payload: { defaultModel: 'openai-compatible/unverified' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+    expect(server.agentState.currentModel).toBe(runtimeBefore);
+  });
+
+  it('derives verification for an unflagged model write and rolls back rejection', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    const restoreModel = configureExactProbeModel();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('model_not_found', { status: 404 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { defaultModel: exactProbeModel },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({
+        code: 'MODEL_VERIFICATION_FAILED',
+        model: exactProbeModel,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rejects an unverified compatible provider tuple before config, Vault, or runtime mutation', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const runtimeBefore = server.agentState.currentModel;
+    const priorVault = server.vault.get('openai-compatible');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('model_not_found', { status: 404 }),
+    ));
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          defaultModel: 'openai-compatible/qwen-new',
+          providers: {
+            'openai-compatible': {
+              baseUrl: 'http://127.0.0.1:4010/v1',
+              apiKey: 'candidate-secret',
+              models: ['openai-compatible/qwen-new'],
+            },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({ code: 'MODEL_VERIFICATION_FAILED' });
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.agentState.currentModel).toBe(runtimeBefore);
+      expect(server.vault.get('openai-compatible')).toEqual(priorVault);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('holds a settings reload until an in-flight verified save reaches a terminal state', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallback = 'openai-compatible/qwen-fallback';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallback]);
+    let resolveProbe!: (response: Response) => void;
+    const probe = new Promise<Response>((resolve) => { resolveProbe = resolve; });
+    const fetchMock = vi.fn().mockImplementationOnce(() => probe);
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const save = injectWithAuth(server, {
+        method: 'PUT', url: '/api/settings',
+        payload: { fallbackModel: fallback, verifyModelSettings: true },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      let reloadSettled = false;
+      const reload = injectWithAuth(server, { method: 'GET', url: '/api/settings' })
+        .then((response) => { reloadSettled = true; return response; });
+      await new Promise<void>((resolve) => { setImmediate(resolve); });
+      expect(reloadSettled).toBe(false);
+
+      resolveProbe(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await save).statusCode).toBe(200);
+      const reloaded = await reload;
+      expect(reloaded.statusCode).toBe(200);
+      expect(reloaded.json()).toMatchObject({ fallbackModel: fallback });
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('blocks generic Vault credential replacement during an in-flight verified model save', async () => {
+    const primary = 'openai-compatible/qwen-primary';
+    const fallback = 'openai-compatible/qwen-fallback';
+    const restoreModel = configureCompatibleProbeModel(primary, [primary, fallback]);
+    server.vault.set('openai-compatible', 'verified-key-one', {
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      models: [primary, fallback],
+    });
+    let resolveProbe!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementation(() => new Promise<Response>((resolve) => {
+      resolveProbe = resolve;
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const save = injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: { fallbackModel: fallback },
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      const replacement = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/vault',
+        payload: { name: 'openai-compatible', value: 'unverified-key-two' },
+      });
+      expect(replacement.statusCode).toBe(409);
+      expect(server.vault.get('openai-compatible')?.value).toBe('verified-key-one');
+
+      resolveProbe(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }));
+      expect((await save).statusCode).toBe(200);
+      expect(server.vault.get('openai-compatible')?.value).toBe('verified-key-one');
+    } finally {
+      server.vault.delete('openai-compatible');
       restoreModel();
       vi.unstubAllGlobals();
     }

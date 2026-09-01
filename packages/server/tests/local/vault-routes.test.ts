@@ -99,7 +99,7 @@ describe('Vault Routes', () => {
       const body = res.json();
 
       expect(body.suggestedKeys).not.toContain('anthropic');
-      expect(body.suggestedKeys).toContain('openai');
+      expect(body.suggestedKeys).not.toContain('openai');
       expect(body.suggestedKeys).toContain('TAVILY_API_KEY');
     });
 
@@ -107,14 +107,16 @@ describe('Vault Routes', () => {
       const res = await server.inject({ method: 'GET', url: '/api/vault' });
       const body = res.json();
 
-      expect(body.suggestedKeys).toContain('anthropic');
-      expect(body.suggestedKeys).toContain('openai');
+      expect(body.suggestedKeys).not.toContain('anthropic');
+      expect(body.suggestedKeys).not.toContain('openai');
       expect(body.suggestedKeys).toContain('GITHUB_TOKEN');
-      expect(body.suggestedKeys.length).toBeGreaterThan(20);
+      expect(body.suggestedKeys.length).toBeGreaterThan(10);
       // Also has categorized suggestions
       expect(body.suggestedSecrets).toBeDefined();
       expect(body.suggestedSecrets.length).toBeGreaterThan(0);
-      expect(body.suggestedSecrets[0].category).toBe('LLM Providers');
+      expect(body.suggestedSecrets.flatMap((category: {
+        items: Array<{ name: string }>;
+      }) => category.items).some((item: { name: string }) => item.name === 'openai')).toBe(false);
     });
   });
 
@@ -163,6 +165,20 @@ describe('Vault Routes', () => {
       expect(res.statusCode).toBe(200);
       const stored = vault.get('MY_KEY');
       expect(stored!.value).toBe('new-value');
+    });
+
+    it('rejects LLM provider credential writes and preserves the verified value', async () => {
+      vault.set('openai', 'verified-provider-key');
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/vault',
+        payload: { name: 'openai', value: 'unverified-provider-key' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toMatchObject({ code: 'PROVIDER_CREDENTIAL_MANAGED_BY_SETTINGS' });
+      expect(vault.get('openai')?.value).toBe('verified-provider-key');
     });
 
     it('rejects missing name', async () => {
@@ -224,6 +240,19 @@ describe('Vault Routes', () => {
       const body = res.json();
       expect(body.error).toBe('Secret not found');
       expect(body.name).toBe('NONEXISTENT');
+    });
+
+    it('rejects LLM provider credential deletes and preserves the verified value', async () => {
+      vault.set('openai-compatible', 'verified-compatible-key');
+
+      const res = await server.inject({
+        method: 'DELETE',
+        url: '/api/vault/openai-compatible',
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toMatchObject({ code: 'PROVIDER_CREDENTIAL_MANAGED_BY_SETTINGS' });
+      expect(vault.get('openai-compatible')?.value).toBe('verified-compatible-key');
     });
   });
 
