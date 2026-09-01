@@ -487,7 +487,7 @@ describe('isolated Fleet execution', () => {
       result: { summary: 'Second completed' },
       memoryRefs: { status: 'complete' },
     });
-    expect(memoryRuns).toHaveLength(2);
+    expect(memoryRuns).toEqual([second.runId]);
     expect(releases).toEqual(['workspace-1', 'workspace-1']);
 
     const restored = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
@@ -512,7 +512,7 @@ describe('isolated Fleet execution', () => {
     const runnerMayFinish = deferred<void>();
     const mutationStarted = deferred<void>();
     const mutationMayFinish = deferred<void>();
-    const recorderCalled = deferred<void>();
+    let recorderCalled = false;
     const workspaceTurnCoordinator = new WorkspaceTurnCoordinator();
     const competingScope = workspaceTurnCoordinator.createScope(workspaceDir);
     let mutation: Promise<unknown> | undefined;
@@ -574,7 +574,7 @@ describe('isolated Fleet execution', () => {
       }, { once: true });
     }));
     server.decorate('fleetResultRecorder', async ({ run }) => {
-      recorderCalled.resolve(undefined);
+      recorderCalled = true;
       return {
         status: 'complete',
         personalFrameIds: [],
@@ -636,8 +636,8 @@ describe('isolated Fleet execution', () => {
       expect(mindCache.has('workspace-1')).toBe(true);
 
       runnerMayFinish.resolve(undefined);
-      await recorderCalled.promise;
       await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(recorderCalled).toBe(false);
       expect(cancelSettled).toBe(false);
       expect(concurrentCancelSettled).toBe(false);
       expect(registry.get(runId)?.status).toBe('cancelling');
@@ -668,6 +668,7 @@ describe('isolated Fleet execution', () => {
         .map((event) => event.run.status)
         .filter((status) => ['completed', 'failed', 'cancelled', 'interrupted'].includes(status));
       expect(terminalRunEvents).toEqual(['cancelled']);
+      expect(recorderCalled).toBe(false);
       await competing;
       expect(competingAcquired).toBe(true);
 

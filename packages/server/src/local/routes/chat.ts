@@ -205,7 +205,13 @@ function getBillableUsage(
 function getFailedCompletionUsage(
   error: unknown,
 ): { inputTokens: number; outputTokens: number } | null {
-  if (!isIncompleteCompletionError(error) && !isEmptyModelResponseError(error)) return null;
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (
+    !isIncompleteCompletionError(error)
+    && !isEmptyModelResponseError(error)
+    && code !== 'MODEL_OPERATION_TIMEOUT'
+    && code !== 'AGENT_LOOP_ABORTED'
+  ) return null;
   return getBillableUsage((error as { usage?: unknown }).usage);
 }
 
@@ -2157,6 +2163,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     let activeAttemptModel: string | null = null;
     let activeAttemptBillingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']> = 'priced';
     let abortedAttemptUsage: { inputTokens: number; outputTokens: number } | null = null;
+    const failedAttemptUsageReceipts: Array<{
+      model: string;
+      billingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']>;
+      usage: { inputTokens: number; outputTokens: number };
+    }> = [];
+    const failedAttemptToolsUsed = new Set<string>();
+    let completedAttemptUsageReceipt: {
+      model: string;
+      billingClass: NonNullable<AgentLoopConfig['modelSpendBillingClass']>;
+      usage: { inputTokens: number; outputTokens: number };
+    } | null = null;
+    let totalTurnUsage: { inputTokens: number; outputTokens: number } = {
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+    let usageAccounted = false;
+    let responseCommitted = false;
 
     // Mutable conversation-local state cannot accept two overlapping turns.
     // Reject the second request before model resolution or history mutation.
@@ -3744,6 +3767,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let explicitReadOnlyToolResult: string | null = null;
         let explicitReadOnlyToolFailure: string | null = null;
         let requiredToolSequenceStarted = false;
+        let nonReplayableToolExecutionStarted = false;
         const requiredToolSequenceUseOrder: string[] = [];
         const requiredToolSequenceResultOrder: string[] = [];
         let requiredToolSequenceFailure: string | null = null;
@@ -3764,6 +3788,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           ...(requiredToolSequence ? { requiredToolSequence } : {}),
           messages: windowedMessages,
           stream: true,
+          modelOperationTimeoutMs: 100_000,
           ...agentRunBudget,
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
           reasoning: reasoningForModelAttempt(resolvedModel),
@@ -3790,6 +3815,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
           onToolUse: (name: string, input: Record<string, unknown>) => {
             pendingExplicitReadOnlyToolChoice = undefined;
+            if (externalToolNames.has(name) || !EXPLICIT_READ_ONLY_TOOL_NAMES.has(name)) {
+              nonReplayableToolExecutionStarted = true;
+            }
             if (requiredToolSequence) {
               requiredToolSequenceStarted = true;
               requiredToolSequenceUseOrder.push(name);
@@ -4032,6 +4060,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (requiredToolSequence && requiredToolSequenceStarted) {
             throw new Error('Required read-only tool sequence cannot be replayed after execution started.');
           }
+          if (nonReplayableToolExecutionStarted) {
+            throw new Error('Model attempt cannot be replayed after a side-effecting tool started.');
+          }
           bufferedAgentTokens = [];
           capabilityReceipt = null;
           pendingCapabilityToolResults = [];
@@ -4054,25 +4085,59 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 ].join('\n'),
               }
             : null;
-          const attemptedResult = await agentRunner({
-            ...attemptBaseConfig,
-            ...(pendingExplicitReadOnlyToolChoice
-              ? { toolChoice: pendingExplicitReadOnlyToolChoice }
-              : explicitReadOnlyToolChoice
-                ? {
-                    tools: [],
-                    ...(strictToolRetryContext
-                      ? {
-                          systemPrompt: `${attemptBaseConfig.systemPrompt}\n\n# COMPLETED READ-ONLY TOOL CONTINUATION\nThe requested tool already ran exactly once. No tools remain available; synthesize only from the bounded result in the current messages.`,
-                          messages: [...attemptBaseConfig.messages, strictToolRetryContext],
-                        }
-                      : {}),
-                  }
-                : {}),
-          });
+          let attemptedResult: AgentResponse;
+          try {
+            attemptedResult = await agentRunner({
+              ...attemptBaseConfig,
+              ...(pendingExplicitReadOnlyToolChoice
+                ? { toolChoice: pendingExplicitReadOnlyToolChoice }
+                : explicitReadOnlyToolChoice
+                  ? {
+                      tools: [],
+                      ...(strictToolRetryContext
+                        ? {
+                            systemPrompt: `${attemptBaseConfig.systemPrompt}\n\n# COMPLETED READ-ONLY TOOL CONTINUATION\nThe requested tool already ran exactly once. No tools remain available; synthesize only from the bounded result in the current messages.`,
+                            messages: [...attemptBaseConfig.messages, strictToolRetryContext],
+                          }
+                        : {}),
+                    }
+                  : {}),
+            });
+          } catch (error) {
+            const failedUsage = getFailedCompletionUsage(error);
+            const failedTools = (error as { toolsUsed?: unknown } | null | undefined)?.toolsUsed;
+            if (Array.isArray(failedTools)) {
+              for (const tool of failedTools) {
+                if (typeof tool === 'string' && tool.trim()) failedAttemptToolsUsed.add(tool.trim());
+              }
+            }
+            if (failedUsage && activeAttemptModel) {
+              failedAttemptUsageReceipts.push({
+                model: activeAttemptModel,
+                billingClass: activeAttemptBillingClass,
+                usage: failedUsage,
+              });
+            }
+            throw error;
+          }
           if (turnSignal.aborted) {
-            abortedAttemptUsage = getBillableUsage(attemptedResult.usage);
-            throw turnSignal.reason ?? new Error('Chat or workspace cancelled');
+            completedAttemptUsageReceipt = {
+              model: activeAttemptModel ?? resolvedModel,
+              billingClass: activeAttemptBillingClass,
+              usage: {
+                inputTokens: attemptedResult.usage.inputTokens ?? 0,
+                outputTokens: attemptedResult.usage.outputTokens ?? 0,
+              },
+            };
+            totalTurnUsage = failedAttemptUsageReceipts.reduce(
+              (total, receipt) => ({
+                inputTokens: total.inputTokens + receipt.usage.inputTokens,
+                outputTokens: total.outputTokens + receipt.usage.outputTokens,
+              }),
+              { ...completedAttemptUsageReceipt.usage },
+            );
+            abortedAttemptUsage = getBillableUsage(totalTurnUsage);
+            throwIfTurnAborted();
           }
           if (requiredToolSequence) {
             const sequenceCompleted = requiredToolSequenceFailure === null
@@ -4127,7 +4192,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           initialError: unknown,
           allowNonRetryableConfiguredFallback = false,
         ) => {
-          if (requiredToolSequenceStarted) throw initialError;
+          if (requiredToolSequenceStarted || nonReplayableToolExecutionStarted) throw initialError;
           // The agent may already have executed tools before detecting a
           // truncated final completion. Replaying the whole run on another
           // model would repeat those side effects, so this signal is terminal.
@@ -4157,7 +4222,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             try {
               return await runAgentAttempt(await configForModelAttempt(resolvedModel));
             } catch (primaryRunError) {
-              if (requiredToolSequenceStarted) throw primaryRunError;
+              if (requiredToolSequenceStarted || nonReplayableToolExecutionStarted) throw primaryRunError;
               if (isIncompleteCompletionError(primaryRunError)
                 || isTerminalEmptyModelResponse(primaryRunError)
                 || isTerminalModelBudgetError(primaryRunError)) {
@@ -4190,7 +4255,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
           if (turnSignal.aborted) throw primaryErr;
-          if (requiredToolSequenceStarted) throw primaryErr;
+          if (requiredToolSequenceStarted || nonReplayableToolExecutionStarted) throw primaryErr;
           if (explicitReadOnlyToolWasUsed && explicitReadOnlyToolResult === null) {
             throw primaryErr;
           }
@@ -4235,7 +4300,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 break;
               } catch (nextCredentialError) {
                 if (turnSignal.aborted) throw nextCredentialError;
-                if (requiredToolSequenceStarted) throw nextCredentialError;
+                if (requiredToolSequenceStarted || nonReplayableToolExecutionStarted) {
+                  throw nextCredentialError;
+                }
                 if (isEmptyModelResponseError(nextCredentialError)) {
                   credentialError = nextCredentialError;
                   break;
@@ -4257,6 +4324,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } finally {
           agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));
         }
+
+        // The model response is complete, but proposal resolution below can
+        // still be interrupted. Preserve usage before any further awaited work.
+        result = {
+          ...result,
+          toolsUsed: [...new Set([...failedAttemptToolsUsed, ...(result.toolsUsed ?? [])])],
+        };
+        completedAttemptUsageReceipt = {
+          model: activeAttemptModel ?? resolvedModel,
+          billingClass: activeAttemptBillingClass,
+          usage: {
+            inputTokens: result.usage.inputTokens ?? 0,
+            outputTokens: result.usage.outputTokens ?? 0,
+          },
+        };
+        totalTurnUsage = failedAttemptUsageReceipts.reduce(
+          (total, receipt) => ({
+            inputTokens: total.inputTokens + receipt.usage.inputTokens,
+            outputTokens: total.outputTokens + receipt.usage.outputTokens,
+          }),
+          { ...completedAttemptUsageReceipt.usage },
+        );
+        abortedAttemptUsage = getBillableUsage(totalTurnUsage);
 
         const capabilityToolResults = pendingCapabilityToolResults as Array<{
           input: Record<string, unknown>;
@@ -4283,6 +4373,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             duration: capabilityToolResult.duration,
             isError: false,
           });
+          throwIfTurnAborted();
         }
         pendingCapabilityToolResults = [];
 
@@ -4306,91 +4397,44 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           unregisterHook = undefined;
         }
 
-        // Track cost with the ACTUALLY used model
-        let resultCost = costTracker.calculateUsageCost({
-          model: activeAttemptModel ?? resolvedModel,
-          input: result.usage.inputTokens,
-          output: result.usage.outputTokens,
-          billingClass: activeAttemptBillingClass,
-        });
+        // Track every dispatched attempt against the model that actually ran it.
+        const successfulAttemptReceipts = [
+          ...failedAttemptUsageReceipts,
+          ...(completedAttemptUsageReceipt ? [completedAttemptUsageReceipt] : []),
+        ];
+        let resultCost = successfulAttemptReceipts.reduce((total, receipt) => (
+          total + costTracker.calculateUsageCost({
+            model: receipt.model,
+            input: receipt.usage.inputTokens,
+            output: receipt.usage.outputTokens,
+            billingClass: receipt.billingClass,
+          })
+        ), 0);
         if (hasCustomRunner) {
-          costTracker.addUsage(
-            activeAttemptModel ?? resolvedModel,
-            result.usage.inputTokens,
-            result.usage.outputTokens,
-            executionScopeId,
-            { billingClass: activeAttemptBillingClass },
-          );
+          for (const receipt of successfulAttemptReceipts) {
+            costTracker.addUsage(
+              receipt.model,
+              receipt.usage.inputTokens,
+              receipt.usage.outputTokens,
+              executionScopeId,
+              { billingClass: receipt.billingClass },
+            );
+          }
         }
 
         // L-17 C3: per-session token accumulation for /api/fleet visibility.
         // costTracker is per-workspace cost; sessionManager holds per-session
         // token totals that persist for the life of the active session.
       if (effectiveWorkspace) {
-        server.sessionManager?.addTokens(
-          effectiveWorkspace,
-          (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0),
-        );
+          server.sessionManager?.addTokens(
+            effectiveWorkspace,
+            totalTurnUsage.inputTokens + totalTurnUsage.outputTokens,
+          );
       }
-
-        // ── Finalize the execution trace (self-evolution substrate) ──
-        // Default outcome is 'success'; correction-detector may downgrade to
-        // 'corrected' on the next turn via traceStore.markCorrected().
-        if (traceRecorder && traceHandle) {
-          try {
-            const finalizedTrace = traceRecorder.finalize(traceHandle, {
-              outcome: 'success',
-              output: retainedTurnText(result.content ?? ''),
-              model: activeAttemptModel ?? resolvedModel,
-              tokens: {
-                input: result.usage.inputTokens,
-                output: result.usage.outputTokens,
-              },
-              costUsd: resultCost,
-            });
-            resultCost = finalizedTrace?.cost_usd ?? resultCost;
-            traceFinalized = true;
-          } catch { /* tracing is best-effort — don't fail the response */ }
-        }
+        usageAccounted = true;
 
         // M8: commit deferred signal markings now that model call succeeded
         if (!hasCustomRunner && allowDerivedPersistence) sessionOrch.commitSurfacedSignals();
-
-        // ── Post-response memory write-back ──────────────────────
-        // If the agent didn't save memory itself, check if the exchange
-        // contains save-worthy content and auto-save it.
-        // Skipped for automated, evidence-bounded, and persona-read-only turns:
-        // none may re-save this exchange as learned memory.
-        if (!hasCustomRunner && allowMemoryPersistence) {
-          const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
-          if (!agentAlreadySaved) {
-            try {
-              const saved = await sessionOrch.autoSaveFromExchange(message, result.content, {
-                // PR3.5 frame↔trace backlink — link auto-saved frames to the
-                // turn's execution trace so Memory-Trust can answer "why is this
-                // memory here?". Undefined when no trace recorder (legacy/tests).
-                traceId: traceHandle ? String(traceHandle.id) : undefined,
-              });
-              throwIfTurnAborted();
-              if (saved.length > 0) {
-                sendEvent('step', { content: `Auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} from this exchange.` });
-              }
-            } catch (e) {
-              throwIfTurnAborted();
-              // Non-blocking. W4A: a closed-handle failure here is the signature
-              // of the MultiMindCache evicting this turn's mind mid-flight — log
-              // it with context so the flake is observable, but still fail soft.
-              if (isClosedDbError(e)) {
-                log.warn('[waggle][W4A] workspace mind handle closed mid-turn during auto-save', {
-                  workspaceId: effectiveWorkspace,
-                  sessionId,
-                  seam: 'autoSaveFromExchange',
-                  error: e instanceof Error ? e.message : String(e),
-                });
-              }
-            }
-          }
-        }
 
         // ── R1 closed learning loop: deterministic skill distillation ──
         // Hermes parity (premium-harness D1). The runtime — not just the
@@ -4572,21 +4616,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
-        // The agent loop streams every model turn, including provisional prose
-        // before tools, retries, and completion-gate corrections. Reconcile at
-        // the HTTP boundary so token events contain only the exact content in
-        // the authoritative done event. Preserve the original chunking when it
-        // already matches the fully post-processed response.
-        if (turnSignal.aborted) return;
-        const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
-          ? bufferedAgentTokens
-          : finalContent ? [finalContent] : [];
-        for (const token of finalTokenChunks) {
-          sendEvent('token', { content: token });
-        }
-        bufferedAgentTokens = [];
-
-        // Add assistant response to history (maintains context for next turn) and persist.
+        // Commit the authoritative response before any awaited post-response
+        // enrichment. This keeps a late cancellation from leaving auto-saved
+        // memory or a success trace hidden behind a missing assistant turn.
+        throwIfTurnAborted();
         const assistantMessage = {
           role: 'assistant',
           content: finalContent,
@@ -4598,12 +4631,45 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           persistMessage(sessionPersistenceDataDir, activeWorkspaceId, sessionId, assistantMessage);
         }
 
+        // Default trace outcome is success; correction-detector may downgrade
+        // it to corrected on the next turn. The assistant history above is the
+        // durable response commit that this trace describes.
+        if (traceRecorder && traceHandle) {
+          try {
+            const finalizedTrace = traceRecorder.finalize(traceHandle, {
+              outcome: 'success',
+              output: retainedTurnText(finalContent ?? ''),
+              model: activeAttemptModel ?? resolvedModel,
+              tokens: {
+                input: totalTurnUsage.inputTokens,
+                output: totalTurnUsage.outputTokens,
+              },
+              costUsd: resultCost,
+            });
+            resultCost = finalizedTrace?.cost_usd ?? resultCost;
+            traceFinalized = true;
+          } catch { /* tracing is best-effort — don't fail the response */ }
+        }
+
+        // The agent loop streams every model turn, including provisional prose
+        // before tools, retries, and completion-gate corrections. Reconcile at
+        // the HTTP boundary so token events contain only the exact content in
+        // the authoritative done event. Preserve the original chunking when it
+        // already matches the fully post-processed response.
+        const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
+          ? bufferedAgentTokens
+          : finalContent ? [finalContent] : [];
+        for (const token of finalTokenChunks) {
+          sendEvent('token', { content: token });
+        }
+        bufferedAgentTokens = [];
+
         // Send the done event with full response + model info + per-message cost
         const messageCost = result.usage ? resultCost : undefined;
         const doneAt = performance.now();
         sendEvent('done', {
           content: finalContent,
-          usage: result.usage,
+          usage: totalTurnUsage,
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
           memoryContext,
@@ -4623,22 +4689,25 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               : Math.max(0, Math.round(firstTokenAt - totalServerStartedAt)),
             agentLatencyMs,
             totalServerLatencyMs: Math.max(0, Math.round(doneAt - totalServerStartedAt)),
-            providerInputTokens: result.usage.inputTokens,
-            providerOutputTokens: result.usage.outputTokens,
+            providerInputTokens: totalTurnUsage.inputTokens,
+            providerOutputTokens: totalTurnUsage.outputTokens,
           },
           ...(messageCost !== undefined && {
             cost: Math.round(messageCost * 1_000_000) / 1_000_000,
-            tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
+            tokens: { input: totalTurnUsage.inputTokens, output: totalTurnUsage.outputTokens },
           }),
         });
+        responseCommitted = true;
 
       // Waggle Dance: emit agent completion signal
-      emitWaggleSignal({
-        type: 'agent:completed',
-        workspaceId: executionScopeId,
-          content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${result.usage?.outputTokens ?? 0} tokens`,
-          metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
-        });
+      try {
+        emitWaggleSignal({
+          type: 'agent:completed',
+          workspaceId: executionScopeId,
+            content: `Completed: ${(result.toolsUsed ?? []).length} tools used, ${totalTurnUsage.outputTokens} tokens`,
+            metadata: { model: resolvedModel, toolsUsed: result.toolsUsed, cost: messageCost },
+          });
+      } catch { /* best-effort activity projection */ }
 
         // Enriched so the notification identifies which agent/workspace/task and
         // deep-links to the output (was a generic "Your agent has completed the task").
@@ -4647,40 +4716,110 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         'Personal';
         const agentName = personaOverride ? (resolvePersona(personaOverride)?.name ?? 'Agent') : 'Agent';
         const toolCount = (result.toolsUsed ?? []).length;
-        emitNotification(server, {
-          title: `${agentName} finished in ${wsName}`,
-          body: toolCount > 0
-            ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
-            : `${resolvedModel} · response ready`,
-          category: 'agent',
-        actionUrl: effectiveWorkspace
-          ? `/workspaces/${effectiveWorkspace}/chat`
-          : '/',
-        });
+        try {
+          emitNotification(server, {
+            title: `${agentName} finished in ${wsName}`,
+            body: toolCount > 0
+              ? `${resolvedModel} · ${toolCount} tool${toolCount === 1 ? '' : 's'} used`
+              : `${resolvedModel} · response ready`,
+            category: 'agent',
+          actionUrl: effectiveWorkspace
+            ? `/workspaces/${effectiveWorkspace}/chat`
+            : '/',
+          });
+        } catch { /* best-effort notification projection */ }
+
+        // Auto-save is post-commit enrichment: the assistant history, success
+        // trace, token stream, and done event above already describe one
+        // coherent outcome. Keep this awaited so the workspace mind cannot be
+        // released mid-write, but never turn a late disconnect into a hidden
+        // memory write or contradict the response that was already committed.
+        if (!hasCustomRunner && allowMemoryPersistence) {
+          const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
+          if (!agentAlreadySaved) {
+            try {
+              const saved = await sessionOrch.autoSaveFromExchange(message, result.content, {
+                // PR3.5 frame↔trace backlink — link auto-saved frames to the
+                // turn's execution trace so Memory-Trust can answer why this
+                // memory exists. Undefined when tracing is unavailable.
+                traceId: traceHandle ? String(traceHandle.id) : undefined,
+              });
+              if (saved.length > 0) {
+                log.info(`[chat] auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} after response commit`);
+              }
+            } catch (e) {
+              // Post-commit enrichment is fail-soft. A closed handle indicates
+              // unexpected cache eviction and remains observable for diagnosis.
+              if (isClosedDbError(e)) {
+                log.warn('[waggle][W4A] workspace mind handle closed during post-commit auto-save', {
+                  workspaceId: effectiveWorkspace,
+                  sessionId,
+                  seam: 'autoSaveFromExchange',
+                  error: e instanceof Error ? e.message : String(e),
+                });
+              }
+            }
+          }
+        }
       }
     } catch (err) {
+      if (responseCommitted) {
+        log.warn('[chat] post-commit observer failed after the response was already delivered', {
+          workspaceId: activeWorkspaceId,
+          sessionId: activeSessionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        if (!raw.destroyed && !raw.writableEnded) raw.end();
+        return;
+      }
       const failedCompletionUsage = getFailedCompletionUsage(err);
-      const billableFailureUsage = failedCompletionUsage
+      const abortedErrorUsage = turnSignal.aborted
+        ? getBillableUsage((err as { usage?: unknown } | null | undefined)?.usage)
+        : null;
+      const billableAttemptReceipts = [
+        ...failedAttemptUsageReceipts,
+        ...(completedAttemptUsageReceipt ? [completedAttemptUsageReceipt] : []),
+      ];
+      const recordedAttemptUsage = billableAttemptReceipts.length > 0
+        ? billableAttemptReceipts.reduce((total, receipt) => ({
+            inputTokens: total.inputTokens + receipt.usage.inputTokens,
+            outputTokens: total.outputTokens + receipt.usage.outputTokens,
+          }), { inputTokens: 0, outputTokens: 0 })
+        : null;
+      const billableFailureUsage = recordedAttemptUsage
+        ?? failedCompletionUsage
+        ?? abortedErrorUsage
         ?? (turnSignal.aborted ? abortedAttemptUsage : null);
       let failureCostUsd: number | undefined;
       if (billableFailureUsage && activeAttemptModel) {
         try {
-          failureCostUsd = costTracker.calculateUsageCost({
-            model: activeAttemptModel,
-            input: billableFailureUsage.inputTokens,
-            output: billableFailureUsage.outputTokens,
-            billingClass: activeAttemptBillingClass,
-          });
-          if (hasCustomRunner) {
-            costTracker.addUsage(
-              activeAttemptModel,
-              billableFailureUsage.inputTokens,
-              billableFailureUsage.outputTokens,
-              activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
-              { billingClass: activeAttemptBillingClass },
-            );
+          const accountingReceipts = billableAttemptReceipts.length > 0
+            ? billableAttemptReceipts
+            : [{
+                model: activeAttemptModel,
+                billingClass: activeAttemptBillingClass,
+                usage: billableFailureUsage,
+              }];
+          failureCostUsd = accountingReceipts.reduce((total, receipt) => (
+            total + costTracker.calculateUsageCost({
+              model: receipt.model,
+              input: receipt.usage.inputTokens,
+              output: receipt.usage.outputTokens,
+              billingClass: receipt.billingClass,
+            })
+          ), 0);
+          if (!usageAccounted && hasCustomRunner) {
+            for (const receipt of accountingReceipts) {
+              costTracker.addUsage(
+                receipt.model,
+                receipt.usage.inputTokens,
+                receipt.usage.outputTokens,
+                activeExecutionWorkspaceId ?? PERSONAL_CHAT_SCOPE_ID,
+                { billingClass: receipt.billingClass },
+              );
+            }
           }
-          if (activeExecutionWorkspaceId) {
+          if (!usageAccounted && activeExecutionWorkspaceId) {
             server.sessionManager?.addTokens(
               activeExecutionWorkspaceId,
               billableFailureUsage.inputTokens + billableFailureUsage.outputTokens,

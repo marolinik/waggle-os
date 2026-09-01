@@ -236,8 +236,17 @@ async function executeFleetRun(
   const controller = new AbortController();
   let settleExecution!: () => void;
   const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
+  let completionCommitted = false;
   const unregister = server.agentRunRegistry.registerControls(run.id, {
     cancel: async () => {
+      if (completionCommitted) {
+        const current = server.agentRunRegistry.get(run.id);
+        if (current?.status === 'cancelling') {
+          server.agentRunRegistry.update(run.id, { status: 'running' });
+        }
+        await executionSettled;
+        return;
+      }
       controller.abort();
       await executionSettled;
     },
@@ -358,14 +367,43 @@ async function executeFleetRun(
         publishFleetDance(server, run, 'broadcast', 'discovery', { phase: 'tool', tool: name }, assignmentId);
       },
     });
-    persistMessage(server.localConfig.dataDir, run.workspaceId, sessionId, { role: 'assistant', content: result.content });
-    const memoryRefs = server.fleetResultRecorder
-      ? await server.fleetResultRecorder({ run, prompt: task, result, workspaceMind: mind })
-      : await recordFleetResult(server, run, task, result, mind);
+    if (controller.signal.aborted) {
+      throw Object.assign(new Error('Agent loop aborted (client disconnected).'), {
+        name: 'AgentLoopAbortError',
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: result.toolsUsed,
+        usage: result.usage,
+      });
+    }
+    // Runner completion is the atomic Fleet commit boundary. A later Stop may
+    // arrive while durable result recording drains, but it must not relabel a
+    // successfully persisted response and memory as cancelled/abandoned.
+    completionCommitted = true;
+    const postCommitWarnings: string[] = [];
+    try {
+      persistMessage(server.localConfig.dataDir, run.workspaceId, sessionId, {
+        role: 'assistant', content: result.content,
+      });
+    } catch (error) {
+      postCommitWarnings.push(`Assistant history could not be persisted: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    let memoryRefs: CollaborationRunMemoryRefs;
+    try {
+      memoryRefs = server.fleetResultRecorder
+        ? await server.fleetResultRecorder({ run, prompt: task, result, workspaceMind: mind })
+        : await recordFleetResult(server, run, task, result, mind);
+    } catch (error) {
+      postCommitWarnings.push(`Result memory could not be recorded: ${error instanceof Error ? error.message : String(error)}`);
+      memoryRefs = { status: 'failed', personalFrameIds: [], workspaceFrameIds: {} };
+    }
     const totalTokens = result.usage.inputTokens + result.usage.outputTokens;
     server.agentRunRegistry.update(run.id, {
-      status: controller.signal.aborted ? 'cancelling' : 'completed',
-      result: { summary: result.content, sessionId },
+      status: 'completed',
+      result: {
+        summary: result.content,
+        sessionId,
+        ...(postCommitWarnings.length > 0 ? { error: postCommitWarnings.join(' ') } : {}),
+      },
       metrics: {
         toolsUsed: result.toolsUsed,
         inputTokens: result.usage.inputTokens,
@@ -374,55 +412,151 @@ async function executeFleetRun(
       memoryRefs,
       progress: null,
     });
-    server.agentRunRegistry.update(run.roomId, {
-      result: { summary: result.content, sessionId },
-      memoryRefs,
-    });
-    if (traceId !== undefined) {
-      server.traceStore?.finalize(traceId, {
-        outcome: controller.signal.aborted ? 'abandoned' : 'success',
-        output: result.content,
-        tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
-        costUsd: fleetSpendMeter?.totalCostUsd(),
+    try {
+      server.agentRunRegistry.update(run.roomId, {
+        result: { summary: result.content, sessionId },
+        memoryRefs,
       });
+    } catch { /* best-effort room projection */ }
+    if (traceId !== undefined) {
+      try {
+        server.traceStore?.finalize(traceId, {
+          outcome: 'success',
+          output: result.content,
+          tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
+          costUsd: fleetSpendMeter?.totalCostUsd(),
+        });
+      } catch { /* best-effort trace projection */ }
     }
-    emitWaggleSignal({
-      type: controller.signal.aborted ? 'agent:cancelled' : 'agent:completed',
-      workspaceId: run.workspaceId,
-      content: controller.signal.aborted ? 'Cancelled' : `Completed · ${totalTokens.toLocaleString()} tokens`,
-      metadata: { runId: run.id, roomId: run.roomId, sessionId, toolsUsed: result.toolsUsed },
-    });
-    publishFleetDance(server, run, 'broadcast', 'routed_share', {
-      phase: controller.signal.aborted ? 'cancelled' : 'completed', result: result.content,
-    }, assignmentId);
+    try {
+      emitWaggleSignal({
+        type: 'agent:completed',
+        workspaceId: run.workspaceId,
+        content: `Completed · ${totalTokens.toLocaleString()} tokens`,
+        metadata: { runId: run.id, roomId: run.roomId, sessionId, toolsUsed: result.toolsUsed },
+      });
+    } catch { /* best-effort activity projection */ }
+    try {
+      publishFleetDance(server, run, 'broadcast', 'routed_share', {
+        phase: 'completed', result: result.content,
+      }, assignmentId);
+    } catch { /* best-effort collaboration projection */ }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const current = server.agentRunRegistry.get(run.id);
+    if (controller.signal.aborted && !completionCommitted) {
+      const abortPayload = err && typeof err === 'object'
+        && 'code' in err && err.code === 'AGENT_LOOP_ABORTED'
+        ? err as {
+            usage?: { inputTokens?: unknown; outputTokens?: unknown };
+            toolsUsed?: unknown;
+          }
+        : undefined;
+      const normalizeTokenCount = (...values: unknown[]): number => {
+        const value = values.find(candidate => (
+          typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0
+        ));
+        return typeof value === 'number' ? Math.floor(value) : 0;
+      };
+      const abortTools = Array.isArray(abortPayload?.toolsUsed)
+        ? abortPayload.toolsUsed
+          .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+          .map(name => name.trim())
+        : [];
+      const toolsUsed = [...new Set([
+        ...(current?.metrics?.toolsUsed ?? []),
+        ...abortTools,
+      ])];
+      const inputTokens = normalizeTokenCount(
+        abortPayload?.usage?.inputTokens,
+        current?.metrics?.inputTokens,
+      );
+      const outputTokens = normalizeTokenCount(
+        abortPayload?.usage?.outputTokens,
+        current?.metrics?.outputTokens,
+      );
+      const summary = toolsUsed.length > 0
+        ? `This run was stopped after Waggle recorded tool activity: ${toolsUsed.join(', ')}. Review completed or in-flight activity before retrying so actions are not duplicated.`
+        : 'This run was stopped. An external action may have been in flight. Review activity before retrying so actions are not duplicated.';
+
+      if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
+        server.agentRunRegistry.update(run.id, {
+          status: 'cancelling',
+          result: { summary, sessionId },
+          metrics: { toolsUsed, inputTokens, outputTokens },
+          progress: null,
+        });
+      }
+      try {
+        persistMessage(server.localConfig.dataDir, run.workspaceId, sessionId, {
+          role: 'assistant', content: summary,
+        });
+      } catch { /* best effort */ }
+      if (traceId !== undefined) {
+        try {
+          server.traceStore?.finalize(traceId, {
+            outcome: 'abandoned',
+            output: summary,
+            tokens: { input: inputTokens, output: outputTokens },
+            costUsd: fleetSpendMeter?.totalCostUsd(),
+          });
+        } catch { /* best-effort trace projection */ }
+      }
+      try {
+        emitWaggleSignal({
+          type: 'agent:cancelled',
+          workspaceId: run.workspaceId,
+          content: summary.slice(0, 200),
+          metadata: {
+            runId: run.id,
+            roomId: run.roomId,
+            sessionId,
+            toolsUsed,
+            inputTokens,
+            outputTokens,
+          },
+        });
+      } catch { /* best-effort activity projection */ }
+      try {
+        publishFleetDance(server, run, 'broadcast', 'routed_share', {
+          phase: 'cancelled', result: summary,
+        }, assignmentId);
+      } catch { /* best-effort collaboration projection */ }
+      return;
+    }
     if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
       server.agentRunRegistry.update(run.id, {
-        status: controller.signal.aborted ? 'cancelling' : 'failed',
+        status: 'failed',
         result: { summary: message, error: message, sessionId },
         progress: null,
       });
     }
     try {
       persistMessage(server.localConfig.dataDir, run.workspaceId, sessionId, {
-        role: 'assistant', content: controller.signal.aborted ? 'This run was cancelled.' : `I couldn't finish this run. ${message}`,
+        role: 'assistant', content: `I couldn't finish this run. ${message}`,
       });
     } catch { /* best effort */ }
-    if (traceId !== undefined) server.traceStore?.finalize(traceId, {
-      outcome: 'abandoned',
-      output: message,
-      costUsd: fleetSpendMeter?.totalCostUsd(),
-    });
-    emitWaggleSignal({
-      type: controller.signal.aborted ? 'agent:cancelled' : 'agent:error',
-      workspaceId: run.workspaceId, content: message.slice(0, 200),
-      metadata: { runId: run.id, roomId: run.roomId, sessionId },
-    });
-    publishFleetDance(server, run, 'broadcast', 'routed_share', {
-      phase: controller.signal.aborted ? 'cancelled' : 'failed', error: message,
-    }, assignmentId);
+    if (traceId !== undefined) {
+      try {
+        server.traceStore?.finalize(traceId, {
+          outcome: 'abandoned',
+          output: message,
+          costUsd: fleetSpendMeter?.totalCostUsd(),
+        });
+      } catch { /* best-effort trace projection */ }
+    }
+    try {
+      emitWaggleSignal({
+        type: 'agent:error',
+        workspaceId: run.workspaceId, content: message.slice(0, 200),
+        metadata: { runId: run.id, roomId: run.roomId, sessionId },
+      });
+    } catch { /* best-effort activity projection */ }
+    try {
+      publishFleetDance(server, run, 'broadcast', 'routed_share', {
+        phase: 'failed', error: message,
+      }, assignmentId);
+    } catch { /* best-effort collaboration projection */ }
   } finally {
     try {
       if (workspaceTurnScope) await workspaceTurnScope.release();

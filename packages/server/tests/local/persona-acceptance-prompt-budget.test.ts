@@ -3,7 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { MindDB, WaggleConfig } from '@waggle/core';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
+import { Orchestrator, type AgentLoopConfig, type AgentResponse, type ToolDefinition } from '@waggle/agent';
+import { MarketplaceInstaller } from '@waggle/marketplace';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
 import {
@@ -16,7 +17,11 @@ import {
   isExplicitDecisionMatrixSkillDirective,
 } from '../../src/local/routes/chat.js';
 import { closeAuditDb, getAuditDb } from '../../src/local/routes/events.js';
-import { chatSessionStateKey, persistMessage } from '../../src/local/routes/chat-persistence.js';
+import {
+  chatSessionStateKey,
+  loadSessionMessages,
+  persistMessage,
+} from '../../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from '../test-utils.js';
 
 const testState = vi.hoisted(() => {
@@ -165,7 +170,13 @@ describe('persona acceptance prompt budget', () => {
   });
 
   beforeEach(() => {
+    for (const session of server.sessionManager.getActive()) {
+      if (session.workspaceId !== collaborationWorkspaceId) {
+        server.sessionManager.close(session.workspaceId);
+      }
+    }
     resetRateLimiter(server);
+    testState.runAgentLoop.mockReset().mockImplementation(defaultRunAgentLoop);
     testState.recallScanMode = 'actual';
     testState.optimizerExpand.mockReset().mockResolvedValue({
       expanded: null,
@@ -343,6 +354,7 @@ describe('persona acceptance prompt budget', () => {
       expect(capturedConfig!.maxTokenBudget).toBe(18_000);
       expect(capturedConfig!.synthesisReserveTokens).toBe(2_500);
       expect(capturedConfig!.maxOutputTokens).toBe(768);
+      expect(capturedConfig!.modelOperationTimeoutMs).toBe(100_000);
       expect(capturedConfig!.toolContextBudget).toEqual({
         maxSingleResultChars: 3_000,
         recentResultCount: 2,
@@ -651,6 +663,967 @@ describe('persona acceptance prompt budget', () => {
       pilotConfig.clearFallbackModel();
       pilotConfig.save();
       if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('does not replay a completed side-effect tool after model synthesis times out', async () => {
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const attempts: AgentLoopConfig[] = [];
+    let sideEffectExecutions = 0;
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(config);
+      sideEffectExecutions++;
+      const input = { path: 'timeout-side-effect.txt', content: 'written once' };
+      config.onToolUse?.('write_file', input);
+      config.onToolResult?.('write_file', input, 'File written');
+      throw new Error(
+        'Model operation timed out after 100 seconds. Review completed activity before retrying to avoid duplicate actions.',
+      );
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Create timeout-side-effect.txt in the current workspace with the text written once.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session: 'side-effect-timeout-no-replay',
+          workspace: collaborationWorkspaceId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toHaveLength(1);
+      expect(sideEffectExecutions).toBe(1);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'error')).toBe(true);
+      expect(events.some(event => event.event === 'model_switch')).toBe(false);
+      expect(response.body).toContain('Review completed activity before retrying');
+    } finally {
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('carries failed timeout usage into a successful configured fallback', async () => {
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const attempts: AgentLoopConfig[] = [];
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+    const workspace = server.workspaceManager.create({
+      name: 'Timeout fallback accounting',
+      group: 'Test',
+    }).id;
+    const session = 'timeout-fallback-accounting';
+    const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(config);
+      if (attempts.length === 1) {
+        const input = { path: 'README.md' };
+        config.onToolUse?.('read_file', input);
+        config.onToolResult?.('read_file', input, '# Waggle');
+        throw Object.assign(new Error(
+          'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+        ), {
+          name: 'ModelOperationTimeoutError',
+          code: 'MODEL_OPERATION_TIMEOUT',
+          toolsUsed: ['read_file'],
+          usage: { inputTokens: 17, outputTokens: 6 },
+        });
+      }
+      return {
+        content: 'Fallback completed.',
+        toolsUsed: [],
+        usage: { inputTokens: 7, outputTokens: 3 },
+      };
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Summarize the launch state.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toHaveLength(2);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'model_switch')).toBe(true);
+      expect(events.some(event => event.event === 'error')).toBe(false);
+      expect(events.find(event => event.event === 'done')?.data).toMatchObject({
+        usage: { inputTokens: 24, outputTokens: 9 },
+        tokens: { input: 24, output: 9 },
+        toolsUsed: ['read_file'],
+      });
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(33);
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+      expect(traceProjection).toContain('"outcome":"success"');
+      expect(traceProjection).toContain('"tokens":{"input":24,"output":9}');
+      expect(calculateUsageCost).toHaveBeenNthCalledWith(1, {
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        input: 17,
+        output: 6,
+        billingClass: 'priced',
+      });
+      expect(calculateUsageCost).toHaveBeenNthCalledWith(2, {
+        model: 'openrouter/openai/gpt-5.4',
+        input: 7,
+        output: 3,
+        billingClass: 'priced',
+      });
+    } finally {
+      calculateUsageCost.mockRestore();
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('preserves both attempts when cancellation lands after fallback returns', async () => {
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const attempts: AgentLoopConfig[] = [];
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+    const workspace = server.workspaceManager.create({
+      name: 'Timeout fallback cancellation accounting',
+      group: 'Test',
+    }).id;
+    const session = 'timeout-fallback-cancellation-accounting';
+    const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(config);
+      if (attempts.length === 1) {
+        throw Object.assign(new Error(
+          'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+        ), {
+          name: 'ModelOperationTimeoutError',
+          code: 'MODEL_OPERATION_TIMEOUT',
+          toolsUsed: [],
+          usage: { inputTokens: 17, outputTokens: 6 },
+        });
+      }
+      Object.defineProperty(config.signal!, 'aborted', { value: true, configurable: true });
+      return {
+        content: 'Fallback completed just before cancellation.',
+        toolsUsed: [],
+        usage: { inputTokens: 7, outputTokens: 3 },
+      };
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Summarize the launch state before stopping.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toHaveLength(2);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'done')).toBe(false);
+      expect(events.some(event => event.event === 'error')).toBe(false);
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(33);
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tokens":{"input":24,"output":9}');
+      expect(calculateUsageCost).toHaveBeenNthCalledWith(1, {
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        input: 17,
+        output: 6,
+        billingClass: 'priced',
+      });
+      expect(calculateUsageCost).toHaveBeenNthCalledWith(2, {
+        model: 'openrouter/openai/gpt-5.4',
+        input: 7,
+        output: 3,
+        billingClass: 'priced',
+      });
+    } finally {
+      calculateUsageCost.mockRestore();
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('accounts a typed fallback abort after a failed timeout attempt', async () => {
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const attempts: AgentLoopConfig[] = [];
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+    const workspace = server.workspaceManager.create({
+      name: 'Timeout fallback typed-abort accounting',
+      group: 'Test',
+    }).id;
+    const session = 'timeout-fallback-typed-abort-accounting';
+    const calculateUsageCost = vi.spyOn(server.agentState.costTracker, 'calculateUsageCost');
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(config);
+      if (attempts.length === 1) {
+        throw Object.assign(new Error(
+          'Model operation timed out after 100 seconds. The provider may be unavailable; retry this turn.',
+        ), {
+          name: 'ModelOperationTimeoutError',
+          code: 'MODEL_OPERATION_TIMEOUT',
+          toolsUsed: [],
+          usage: { inputTokens: 17, outputTokens: 6 },
+        });
+      }
+      Object.defineProperty(config.signal!, 'aborted', { value: true, configurable: true });
+      throw Object.assign(new Error('Agent loop aborted'), {
+        name: 'AgentLoopAbortError',
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: ['read_file'],
+        usage: { inputTokens: 7, outputTokens: 3 },
+      });
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Read the launch state, then stop if cancelled.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toHaveLength(2);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'done')).toBe(false);
+      expect(events.some(event => event.event === 'error')).toBe(false);
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(33);
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tokens":{"input":24,"output":9}');
+      expect(calculateUsageCost).toHaveBeenNthCalledWith(1, {
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        input: 17,
+        output: 6,
+        billingClass: 'priced',
+      });
+      expect(calculateUsageCost).toHaveBeenNthCalledWith(2, {
+        model: 'openrouter/openai/gpt-5.4',
+        input: 7,
+        output: 3,
+        billingClass: 'priced',
+      });
+    } finally {
+      calculateUsageCost.mockRestore();
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('does not replay an external side-effect tool that collides with a native read-only name', async () => {
+    const previousImplementation = testState.runAgentLoop.getMockImplementation();
+    const attempts: AgentLoopConfig[] = [];
+    let sideEffectExecutions = 0;
+    const pilotConfig = new WaggleConfig(tmpDir);
+    pilotConfig.setFallbackModel('openrouter/openai/gpt-5.4');
+    pilotConfig.save();
+    const externalWebFetch: ToolDefinition = {
+      name: 'web_fetch',
+      description: 'External plugin tool with an intentionally colliding native name.',
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string' } },
+        required: ['url'],
+      },
+      execute: vi.fn(async () => {
+        sideEffectExecutions++;
+        return 'external plugin result';
+      }),
+    };
+    const pluginTools = vi.spyOn(
+      server.agentState.pluginRuntimeManager,
+      'getAllTools',
+    ).mockReturnValue([externalWebFetch]);
+
+    testState.runAgentLoop.mockImplementation(async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      attempts.push(config);
+      const selected = config.tools.find(tool => tool.name === 'web_fetch');
+      expect(selected).toBeDefined();
+      const input = { url: 'https://example.com' };
+      config.onToolUse?.('web_fetch', input);
+      const output = await selected!.execute(input);
+      config.onToolResult?.('web_fetch', input, output);
+      throw new Error(
+        'Model operation timed out after 100 seconds. Review completed activity before retrying to avoid duplicate actions.',
+      );
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Use web_fetch to fetch https://example.com and summarize the result.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'coder',
+          session: 'external-read-name-collision-no-replay',
+          workspace: collaborationWorkspaceId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(attempts).toHaveLength(1);
+      expect(sideEffectExecutions).toBe(1);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'error')).toBe(true);
+      expect(events.some(event => event.event === 'model_switch')).toBe(false);
+    } finally {
+      pluginTools.mockRestore();
+      pilotConfig.clearFallbackModel();
+      pilotConfig.save();
+      if (previousImplementation) testState.runAgentLoop.mockImplementation(previousImplementation);
+    }
+  });
+
+  it('keeps a body-stage cancellation out of success trace, memory, and assistant history', async () => {
+    const session = 'body-stage-abort-no-success-persistence';
+    const responseMarker = 'PRIVATE_ABORTED_ASSISTANT_RESPONSE_20260901';
+    const workspaceMind = server.mindCache.getOrOpen(collaborationWorkspaceId);
+    expect(workspaceMind).toBeDefined();
+    const memoryCountBefore = (workspaceMind!.getDatabase().prepare(
+      'SELECT COUNT(*) AS count FROM memory_frames',
+    ).get() as { count: number }).count;
+
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      Object.defineProperty(config.signal!, 'aborted', {
+        value: true,
+        configurable: true,
+      });
+      return {
+        content: responseMarker,
+        toolsUsed: [],
+        usage: { inputTokens: 13, outputTokens: 7 },
+      };
+    });
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Summarize the current launch plan briefly.',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace: collaborationWorkspaceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const events = parseSse(response.body);
+    expect(events.some(event => event.event === 'done')).toBe(false);
+    expect(response.body).not.toContain(responseMarker);
+    const persisted = loadSessionMessages(tmpDir, collaborationWorkspaceId, session);
+    expect(persisted.some(message => message.role === 'assistant')).toBe(false);
+    expect(JSON.stringify(persisted)).not.toContain(responseMarker);
+    const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+    expect(traceProjection).toContain('abandoned');
+    expect(traceProjection).not.toContain('"outcome":"success"');
+    expect(traceProjection).not.toContain(responseMarker);
+    const memoryCountAfter = (workspaceMind!.getDatabase().prepare(
+      'SELECT COUNT(*) AS count FROM memory_frames',
+    ).get() as { count: number }).count;
+    expect(memoryCountAfter).toBe(memoryCountBefore);
+  });
+
+  it('accounts completed model usage when cancellation lands during capability proposal resolution', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Capability proposal cancellation accounting',
+      group: 'Test',
+    }).id;
+    const session = 'capability-proposal-cancellation-accounting';
+    const packageId = server.marketplace?.search({ type: 'skill', limit: 1 }).packages[0]?.id;
+    const packageName = packageId ? server.marketplace?.getPackage(packageId)?.name : undefined;
+    expect(packageId).toBeTruthy();
+    expect(packageName).toBeTruthy();
+
+    let signal: AbortSignal | undefined;
+    let announceScan!: () => void;
+    let releaseScan!: () => void;
+    const scanStarted = new Promise<void>(resolve => { announceScan = resolve; });
+    const scanRelease = new Promise<void>(resolve => { releaseScan = resolve; });
+    const scanSpy = vi.spyOn(MarketplaceInstaller.prototype, 'scanOnly')
+      .mockImplementationOnce(async () => {
+        announceScan();
+        await scanRelease;
+        return null;
+      });
+    const input = { need: 'review source code' };
+    const toolOutput = [
+      'Recommended capability.',
+      `<!--waggle:capability_request ${JSON.stringify({
+        name: packageName,
+        source: 'marketplace',
+        kind: 'marketplace',
+        packageId,
+        installType: 'skill',
+      })}-->`,
+    ].join('\n');
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      signal = config.signal;
+      config.onToolUse?.('acquire_capability', input);
+      config.onToolResult?.('acquire_capability', input, toolOutput);
+      return {
+        content: 'Capability proposal prepared.',
+        toolsUsed: ['acquire_capability'],
+        usage: { inputTokens: 29, outputTokens: 13 },
+      };
+    });
+
+    try {
+      const responsePromise = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Find a capability that can review source code.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace,
+        },
+      });
+      await scanStarted;
+      expect(signal).toBeDefined();
+      Object.defineProperty(signal!, 'aborted', { value: true, configurable: true });
+      releaseScan();
+      const response = await responsePromise;
+
+      expect(response.statusCode).toBe(200);
+      const events = parseSse(response.body);
+      expect(events.some(event => event.event === 'error')).toBe(false);
+      expect(events.some(event => event.event === 'done')).toBe(false);
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(42);
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+      expect(traceProjection).toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain('"tokens":{"input":29,"output":13}');
+    } finally {
+      releaseScan();
+      scanSpy.mockRestore();
+    }
+  });
+
+  it('accounts usage carried by a typed agent-loop abort error', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Typed abort usage accounting',
+      group: 'Test',
+    }).id;
+    const session = 'typed-abort-usage-accounting';
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      Object.defineProperty(config.signal!, 'aborted', { value: true, configurable: true });
+      throw Object.assign(new Error('Agent loop aborted (client disconnected).'), {
+        name: 'AgentLoopAbortError',
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: ['write_file'],
+        usage: { inputTokens: 23, outputTokens: 5 },
+      });
+    });
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Prepare the report.',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const events = parseSse(response.body);
+    expect(events.some(event => event.event === 'error')).toBe(false);
+    expect(events.some(event => event.event === 'done')).toBe(false);
+    expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(28);
+    const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+    expect(traceProjection).toContain('"outcome":"abandoned"');
+    expect(traceProjection).toContain('"tokens":{"input":23,"output":5}');
+  });
+
+  it('accounts completed model usage carried by a typed model-operation timeout', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Typed timeout usage accounting',
+      group: 'Test',
+    }).id;
+    const session = 'typed-timeout-usage-accounting';
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      const input = { path: 'timeout-report.md', content: 'written once' };
+      config.onToolUse?.('write_file', input);
+      config.onToolResult?.('write_file', input, 'File written');
+      throw Object.assign(new Error(
+        'Model operation timed out after 100 seconds. Review completed activity before retrying to avoid duplicate actions.',
+      ), {
+        name: 'ModelOperationTimeoutError',
+        code: 'MODEL_OPERATION_TIMEOUT',
+        toolsUsed: ['write_file'],
+        usage: { inputTokens: 17, outputTokens: 6 },
+      });
+    });
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Prepare the timeout report.',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session,
+        workspace,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const events = parseSse(response.body);
+    expect(events.some(event => event.event === 'error')).toBe(true);
+    expect(events.some(event => event.event === 'model_switch')).toBe(false);
+    expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(23);
+    const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+    expect(traceProjection).toContain('"outcome":"abandoned"');
+    expect(traceProjection).toContain('"tokens":{"input":17,"output":6}');
+  });
+
+  it('commits the response before post-response memory save observes a late cancellation', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Post-commit memory cancellation',
+      group: 'Test',
+    }).id;
+    const session = 'post-commit-memory-cancellation';
+    const responseMarker = 'POST_COMMIT_MEMORY_RESPONSE_20260901';
+    const workspaceMind = server.mindCache.getOrOpen(workspace);
+    expect(workspaceMind).toBeDefined();
+    const memoryCountBefore = (workspaceMind!.getDatabase().prepare(
+      'SELECT COUNT(*) AS count FROM memory_frames',
+    ).get() as { count: number }).count;
+    let capturedSignal: AbortSignal | undefined;
+    let savedCount = 0;
+    let autoSaveError: unknown;
+    let assistantCommittedBeforeAutoSave = false;
+    let successTraceCommittedBeforeAutoSave = false;
+    const originalAutoSave = Orchestrator.prototype.autoSaveFromExchange;
+    const autoSaveSpy = vi.spyOn(Orchestrator.prototype, 'autoSaveFromExchange')
+      .mockImplementation(async function (
+        this: Orchestrator,
+        userMsg: string,
+        assistantMsg: string,
+        opts?: { traceId?: string },
+      ) {
+        assistantCommittedBeforeAutoSave = loadSessionMessages(tmpDir, workspace, session)
+          .some(message => message.role === 'assistant' && message.content.includes(responseMarker));
+        const traceBeforeAutoSave = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+        successTraceCommittedBeforeAutoSave = traceBeforeAutoSave.includes('"outcome":"success"')
+          && traceBeforeAutoSave.includes(responseMarker);
+        let saved: string[];
+        try {
+          saved = await originalAutoSave.call(this, userMsg, assistantMsg, opts);
+        } catch (error) {
+          autoSaveError = error;
+          throw error;
+        }
+        savedCount += saved.length;
+        Object.defineProperty(capturedSignal!, 'aborted', {
+          value: true,
+          configurable: true,
+        });
+        return saved;
+      });
+
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      capturedSignal = config.signal;
+      return {
+        content: responseMarker,
+        toolsUsed: [],
+        usage: { inputTokens: 17, outputTokens: 9 },
+      };
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'We decided to use PostgreSQL for the workspace database and keep that decision for future sessions.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const events = parseSse(response.body);
+      expect(events.filter(event => event.event === 'done')).toHaveLength(1);
+      expect(events.some(event => event.event === 'error')).toBe(false);
+      expect(response.body).toContain(responseMarker);
+      expect(assistantCommittedBeforeAutoSave).toBe(true);
+      expect(successTraceCommittedBeforeAutoSave).toBe(true);
+      expect(autoSaveError).toBeUndefined();
+      expect(savedCount).toBeGreaterThan(0);
+      const persisted = loadSessionMessages(tmpDir, workspace, session);
+      expect(persisted.some(message => (
+        message.role === 'assistant' && message.content.includes(responseMarker)
+      ))).toBe(true);
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+      expect(traceProjection).toContain('"outcome":"success"');
+      expect(traceProjection).not.toContain('"outcome":"abandoned"');
+      expect(traceProjection).toContain(responseMarker);
+      const memoryCountAfter = (workspaceMind!.getDatabase().prepare(
+        'SELECT COUNT(*) AS count FROM memory_frames',
+      ).get() as { count: number }).count;
+      expect(memoryCountAfter).toBeGreaterThan(memoryCountBefore);
+    } finally {
+      autoSaveSpy.mockRestore();
+    }
+  });
+
+  it('keeps a committed chat success coherent when a notification observer throws', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Post-commit observer isolation',
+      group: 'Test',
+    }).id;
+    const session = 'post-commit-observer-isolation';
+    const responseMarker = 'POST_COMMIT_OBSERVER_RESPONSE_20260901';
+    const throwingListener = () => { throw new Error('notification observer unavailable'); };
+    server.eventBus?.on('notification', throwingListener);
+    testState.runAgentLoop.mockImplementationOnce(async () => ({
+      content: responseMarker,
+      toolsUsed: [],
+      usage: { inputTokens: 13, outputTokens: 7 },
+    }));
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Return the committed observer response.',
+          model: 'openrouter/anthropic/claude-sonnet-5',
+          persona: 'general-purpose',
+          session,
+          workspace,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const events = parseSse(response.body);
+      expect(events.filter(event => event.event === 'done')).toHaveLength(1);
+      expect(events.some(event => event.event === 'error')).toBe(false);
+      expect(server.sessionManager.get(workspace)?.tokensUsed).toBe(20);
+      const persisted = loadSessionMessages(tmpDir, workspace, session);
+      expect(persisted.filter(message => message.role === 'assistant')).toHaveLength(1);
+      expect(JSON.stringify(persisted)).toContain(responseMarker);
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({ sessionId: session }));
+      expect(traceProjection).toContain('"outcome":"success"');
+      expect(traceProjection).not.toContain('"outcome":"abandoned"');
+    } finally {
+      server.eventBus?.off('notification', throwingListener);
+    }
+  });
+
+  it('preserves production Fleet abort usage and tool activity across registry, trace, and signal', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Production Fleet cancellation truth',
+      group: 'Test',
+    }).id;
+    let announceToolStarted!: () => void;
+    const toolStarted = new Promise<void>(resolve => { announceToolStarted = resolve; });
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      config.onToolUse?.('write_file', { path: 'report.md' });
+      announceToolStarted();
+      await new Promise<void>((resolve) => {
+        if (config.signal?.aborted) {
+          resolve();
+          return;
+        }
+        config.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      throw Object.assign(new Error('Agent loop aborted (client disconnected).'), {
+        name: 'AgentLoopAbortError',
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: ['write_file'],
+        usage: { inputTokens: 11, outputTokens: 8 },
+      });
+    });
+
+    const spawn = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: {
+        task: 'Create the requested report and stop when asked.',
+        persona: 'coder',
+        parentWorkspaceId: workspace,
+      },
+    });
+    expect(spawn.statusCode, spawn.body).toBe(202);
+    const spawned = spawn.json() as { runId: string; sessionId: string };
+    await toolStarted;
+    await server.agentRunRegistry.control(spawned.runId, 'cancel');
+
+    const run = server.agentRunRegistry.get(spawned.runId);
+    expect(run).toMatchObject({
+      status: 'cancelled',
+      metrics: {
+        toolsUsed: ['write_file'],
+        inputTokens: 11,
+        outputTokens: 8,
+      },
+    });
+    expect(run?.result?.summary).toContain('stopped');
+    expect(run?.result?.summary).toContain('before retrying');
+
+    const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+      .find(message => message.role === 'assistant');
+    expect(assistant?.content).toContain('write_file');
+    expect(assistant?.content).toContain('before retrying');
+
+    const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+      sessionId: spawned.sessionId,
+    }));
+    expect(traceProjection).toContain('"outcome":"abandoned"');
+    expect(traceProjection).toContain('"tokens":{"input":11,"output":8}');
+
+    const signalResponse = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/waggle/signals?limit=200',
+    });
+    expect(signalResponse.statusCode).toBe(200);
+    const matchingSignals = (signalResponse.json() as {
+      signals: Array<{ type: string; metadata?: Record<string, unknown> }>;
+    }).signals.filter(signal => signal.metadata?.runId === spawned.runId);
+    expect(matchingSignals.some(signal => signal.type === 'agent:cancelled')).toBe(true);
+    expect(matchingSignals.some(signal => signal.type === 'agent:error')).toBe(false);
+    expect(matchingSignals.find(signal => signal.type === 'agent:cancelled')?.metadata)
+      .toMatchObject({
+        toolsUsed: ['write_file'],
+        inputTokens: 11,
+        outputTokens: 8,
+      });
+  });
+
+  it('keeps Fleet cancellation terminal when best-effort observers throw', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Production Fleet cancellation observer isolation',
+      group: 'Test',
+    }).id;
+    let announceRunnerStarted!: () => void;
+    const runnerStarted = new Promise<void>(resolve => { announceRunnerStarted = resolve; });
+    testState.runAgentLoop.mockImplementationOnce(async (config: AgentLoopConfig) => {
+      announceRunnerStarted();
+      await new Promise<void>((resolve) => {
+        if (config.signal?.aborted) resolve();
+        else config.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      throw Object.assign(new Error('Agent loop aborted (client disconnected).'), {
+        name: 'AgentLoopAbortError',
+        code: 'AGENT_LOOP_ABORTED',
+        toolsUsed: ['read_file'],
+        usage: { inputTokens: 5, outputTokens: 2 },
+      });
+    });
+
+    const spawn = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: {
+        task: 'Inspect once and stop.',
+        persona: 'coder',
+        parentWorkspaceId: workspace,
+      },
+    });
+    expect(spawn.statusCode, spawn.body).toBe(202);
+    const spawned = spawn.json() as { runId: string };
+    await runnerStarted;
+    const traceFinalize = vi.spyOn(server.traceStore, 'finalize')
+      .mockImplementation(() => { throw new Error('trace observer unavailable'); });
+    const danceRecord = vi.spyOn(server.signalBus!, 'record')
+      .mockImplementation(() => { throw new Error('dance observer unavailable'); });
+
+    try {
+      await expect(server.agentRunRegistry.control(spawned.runId, 'cancel')).resolves.toMatchObject({
+        status: 'cancelled',
+      });
+      expect(server.agentRunRegistry.get(spawned.runId)?.status).toBe('cancelled');
+    } finally {
+      traceFinalize.mockRestore();
+      danceRecord.mockRestore();
+    }
+  });
+
+  it('keeps a production Fleet result successful when cancellation arrives after its commit boundary', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Production Fleet late cancellation boundary',
+      group: 'Test',
+    }).id;
+    let announceRecorderStarted!: () => void;
+    let releaseRecorder!: () => void;
+    const recorderStarted = new Promise<void>(resolve => { announceRecorderStarted = resolve; });
+    const recorderRelease = new Promise<void>(resolve => { releaseRecorder = resolve; });
+    let memoryRecorded = false;
+    const originalRecorderDescriptor = Object.getOwnPropertyDescriptor(server, 'fleetResultRecorder');
+    Object.defineProperty(server, 'fleetResultRecorder', {
+      configurable: true,
+      writable: true,
+      value: async ({ run }: { run: { workspaceId: string } }) => {
+        announceRecorderStarted();
+        await recorderRelease;
+        memoryRecorded = true;
+        return {
+          status: 'complete',
+          personalFrameIds: [],
+          workspaceFrameIds: { [run.workspaceId]: [101] },
+        };
+      },
+    });
+    testState.runAgentLoop.mockImplementationOnce(async () => ({
+      content: 'Fleet result committed once.',
+      toolsUsed: ['read_file'],
+      usage: { inputTokens: 31, outputTokens: 12 },
+    }));
+
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Inspect the workspace and report once.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(202);
+      const spawned = spawn.json() as { runId: string; sessionId: string };
+      await recorderStarted;
+      const cancellation = server.agentRunRegistry.control(spawned.runId, 'cancel');
+      releaseRecorder();
+      const terminal = await cancellation;
+
+      expect(memoryRecorded).toBe(true);
+      expect(terminal).toMatchObject({
+        status: 'completed',
+        result: { summary: 'Fleet result committed once.' },
+        metrics: {
+          toolsUsed: ['read_file'],
+          inputTokens: 31,
+          outputTokens: 12,
+        },
+      });
+      const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+        .find(message => message.role === 'assistant');
+      expect(assistant?.content).toBe('Fleet result committed once.');
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"success"');
+      expect(traceProjection).not.toContain('"outcome":"abandoned"');
+
+      const signalResponse = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/waggle/signals?limit=200',
+      });
+      const matchingSignals = (signalResponse.json() as {
+        signals: Array<{ type: string; metadata?: Record<string, unknown> }>;
+      }).signals.filter(signal => signal.metadata?.runId === spawned.runId);
+      expect(matchingSignals.some(signal => signal.type === 'agent:completed')).toBe(true);
+      expect(matchingSignals.some(signal => signal.type === 'agent:cancelled')).toBe(false);
+    } finally {
+      releaseRecorder();
+      if (originalRecorderDescriptor) {
+        Object.defineProperty(server, 'fleetResultRecorder', originalRecorderDescriptor);
+      } else {
+        delete server.fleetResultRecorder;
+      }
+    }
+  });
+
+  it('reports a completed Fleet result with an explicit warning when memory recording fails', async () => {
+    const workspace = server.workspaceManager.create({
+      name: 'Production Fleet recorder failure',
+      group: 'Test',
+    }).id;
+    const originalRecorderDescriptor = Object.getOwnPropertyDescriptor(server, 'fleetResultRecorder');
+    Object.defineProperty(server, 'fleetResultRecorder', {
+      configurable: true,
+      writable: true,
+      value: async () => { throw new Error('memory recorder unavailable'); },
+    });
+    testState.runAgentLoop.mockImplementationOnce(async () => ({
+      content: 'Fleet work completed before recording failed.',
+      toolsUsed: ['read_file'],
+      usage: { inputTokens: 19, outputTokens: 7 },
+    }));
+
+    try {
+      const spawn = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Inspect the workspace once.',
+          persona: 'coder',
+          parentWorkspaceId: workspace,
+        },
+      });
+      expect(spawn.statusCode, spawn.body).toBe(202);
+      const spawned = spawn.json() as { runId: string; sessionId: string };
+      await vi.waitFor(() => {
+        expect(server.agentRunRegistry.get(spawned.runId)?.status).toBe('completed');
+      });
+
+      expect(server.agentRunRegistry.get(spawned.runId)).toMatchObject({
+        status: 'completed',
+        result: {
+          summary: 'Fleet work completed before recording failed.',
+          error: expect.stringContaining('Result memory could not be recorded'),
+        },
+        memoryRefs: { status: 'failed' },
+        metrics: { inputTokens: 19, outputTokens: 7 },
+      });
+      const assistant = loadSessionMessages(tmpDir, workspace, spawned.sessionId)
+        .find(message => message.role === 'assistant');
+      expect(assistant?.content).toBe('Fleet work completed before recording failed.');
+      const traceProjection = JSON.stringify(server.traceStore.queryParsed({
+        sessionId: spawned.sessionId,
+      }));
+      expect(traceProjection).toContain('"outcome":"success"');
+      expect(traceProjection).not.toContain('"outcome":"abandoned"');
+    } finally {
+      if (originalRecorderDescriptor) {
+        Object.defineProperty(server, 'fleetResultRecorder', originalRecorderDescriptor);
+      } else {
+        delete server.fleetResultRecorder;
+      }
     }
   });
 
@@ -2496,7 +3469,7 @@ describe('persona acceptance prompt budget', () => {
         method: 'POST',
         url: '/api/chat',
         payload: {
-          message: `Do not use saved memory. Use orchestrate_workflow to review current workspace files. Correlation: ${parentTask}.`,
+          message: `Do not use saved memory. Orchestrate a workflow to review current workspace files. Correlation: ${parentTask}.`,
           model: 'openrouter/anthropic/claude-sonnet-5',
           persona: 'general-purpose',
           session: 'memory-denied-workflow-persistence',

@@ -148,9 +148,9 @@ describe('durable memory return journey', () => {
       const firstEvents = parseSse(first.body);
       expect(firstEvents.filter(event => event.event === 'token').map(event => event.data.content).join(''))
         .toBe(`Confirmed the launch codename: ${SENTINEL}.`);
-      expect(firstEvents.some(
-        event => event.event === 'step' && /Auto-saved \d+ memor/i.test(String(event.data.content)),
-      )).toBe(true);
+      expect(firstEvents.filter(event => event.event === 'done')).toHaveLength(1);
+      expect(firstEvents.some(event => event.event === 'error')).toBe(false);
+      expect(firstEvents.at(-1)?.event).toBe('done');
 
       const beforeRestart = await injectWithAuth(server, {
         method: 'GET',
