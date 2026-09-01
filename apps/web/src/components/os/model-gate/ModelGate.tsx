@@ -28,6 +28,8 @@ import BeeLoader from '@/components/ui/BeeLoader';
 import BrandTile from '@/components/os/apps/connectors/BrandTile';
 import { getBrandIdentity } from '@/components/os/apps/connectors/brand-identity';
 
+const MODEL_READINESS_UI_TIMEOUT_MS = 16_000;
+
 interface ModelGateProps {
   /** Fires after a model becomes available (key saved or local pull ok), so a parent
    *  (onboarding gate / Settings banner) can re-read `useHasWorkingModel`. */
@@ -347,9 +349,11 @@ export function ModelGate({
       }
     })();
 
-    // Client-side guard on top of the server's 5s AbortSignal so a hung sidecar
-    // can't strand the banner on 'probing'.
-    const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 6000));
+    // Sit just beyond the bounded 15s Qwen server probe so a slow verified
+    // endpoint is not relabelled unavailable while that probe is in flight.
+    const timeout = new Promise<'timeout'>((resolve) => (
+      setTimeout(() => resolve('timeout'), MODEL_READINESS_UI_TIMEOUT_MS)
+    ));
     void Promise.race([run, timeout]).then((outcome) => {
       if (isStale()) return;
       if (outcome === 'timeout') {

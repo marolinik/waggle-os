@@ -749,9 +749,41 @@ describe('Workspace & Session API', () => {
     };
   }
 
+  function configureCompatibleProbeModel(model: string): () => void {
+    const configPath = path.join(dataDir, 'config.json');
+    const originalConfig = fs.readFileSync(configPath, 'utf-8');
+    const config = JSON.parse(originalConfig) as Record<string, unknown>;
+    const providers = config.providers && typeof config.providers === 'object'
+      ? config.providers as Record<string, unknown>
+      : {};
+    config.defaultModel = model;
+    config.providers = {
+      ...providers,
+      'openai-compatible': {
+        apiKey: '',
+        baseUrl: 'http://10.33.0.153:4000/v1',
+        models: [model],
+      },
+    };
+    fs.writeFileSync(configPath, JSON.stringify(config), 'utf-8');
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'openai-compatible endpoint verified',
+      checkedAt: new Date().toISOString(),
+    };
+    return () => {
+      server.agentState.llmProvider = priorProvider;
+      fs.writeFileSync(configPath, originalConfig, 'utf-8');
+    };
+  }
+
   it('probe-model reports verified when the model endpoint answers 200', async () => {
     const restoreModel = configureExactProbeModel();
-    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     try {
       const res = await injectWithAuth(server, {
@@ -776,6 +808,116 @@ describe('Workspace & Session API', () => {
     }
   });
 
+  it('uses a bounded non-thinking Qwen probe and requires a real assistant response', async () => {
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    const restoreModel = configureCompatibleProbeModel(model);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: '' } }],
+      }), { status: 200 }));
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        model,
+        configured: true,
+        verified: true,
+      });
+      expect(timeoutSpy.mock.calls.some(([, milliseconds]) => milliseconds === 15_000)).toBe(true);
+      const completionCall = fetchMock.mock.calls.find(([input]) => (
+        String(input).endsWith('/v1/chat/completions')
+      ));
+      expect(JSON.parse(String(completionCall?.[1]?.body))).toMatchObject({
+        model,
+        max_tokens: 32,
+        chat_template_kwargs: { enable_thinking: false },
+      });
+
+      for (const expected of ['malformed', 'empty']) {
+        const failed = await injectWithAuth(server, {
+          method: 'POST',
+          url: '/api/settings/probe-model',
+          payload: { model },
+        });
+        expect(failed.statusCode, expected).toBe(200);
+        expect(failed.json(), expected).toMatchObject({
+          model,
+          configured: true,
+          verified: false,
+        });
+      }
+    } finally {
+      timeoutSpy.mockRestore();
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps a compatible Qwen request alive before the deadline and aborts at the deadline', async () => {
+    vi.useFakeTimers();
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    const restoreModel = configureCompatibleProbeModel(model);
+    let observedSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => (
+      new Promise<Response>((_resolve, reject) => {
+        observedSignal = init?.signal as AbortSignal | undefined;
+        observedSignal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const pending = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model },
+      });
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(observedSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const res = await pending;
+      expect(observedSignal?.aborted).toBe(true);
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ model, configured: true, verified: false });
+    } finally {
+      vi.useRealTimers();
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not send the compatible-only thinking extension to external Qwen', async () => {
+    const restoreModel = configureExactProbeModel();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: 'openrouter/qwen/qwen3.8-flash-next' },
+      });
+      expect(res.json()).toMatchObject({ configured: true, verified: true });
+      const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+      expect(request).not.toHaveProperty('chat_template_kwargs');
+    } finally {
+      restoreModel();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('never sends the Waggle session bearer to an Ollama probe endpoint', async () => {
     const priorOllamaHost = process.env.OLLAMA_HOST;
     process.env.OLLAMA_HOST = 'http://ollama.example.test';
@@ -789,7 +931,9 @@ describe('Workspace & Session API', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response('{}', { status: 200 });
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'WAGGLE_OK' } }],
+      }), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -814,6 +958,7 @@ describe('Workspace & Session API', () => {
       );
       const completionHeaders = new Headers(completionCall?.[1]?.headers);
       expect(completionHeaders.has('authorization')).toBe(false);
+      expect(JSON.parse(String(completionCall?.[1]?.body))).not.toHaveProperty('chat_template_kwargs');
     } finally {
       if (priorOllamaHost === undefined) delete process.env.OLLAMA_HOST;
       else process.env.OLLAMA_HOST = priorOllamaHost;

@@ -477,9 +477,11 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
         ? (process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434') + '/v1/chat/completions'
         : `http://127.0.0.1:${port}/v1/chat/completions`;
       const sendModel = isOllama ? model.slice('ollama/'.length) : model;
+      const isQwenModel = /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(sendModel);
+      const supportsThinkingFlag = model.startsWith('openai-compatible/') && isQwenModel;
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), isQwenModel ? 15_000 : 5_000);
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -490,9 +492,22 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
               : {}),
           },
           signal: controller.signal,
-          body: JSON.stringify({ model: sendModel, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+          body: JSON.stringify({
+            model: sendModel,
+            max_tokens: isQwenModel ? 32 : 1,
+            messages: [{ role: 'user', content: 'Reply with exactly WAGGLE_OK.' }],
+            ...(supportsThinkingFlag ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+          }),
         });
-        if (res.ok) return { model, configured: true, verified: true };
+        if (res.ok) {
+          const payload = await res.json().catch(() => null) as {
+            choices?: Array<{ message?: { content?: unknown } }>;
+          } | null;
+          const content = payload?.choices?.[0]?.message?.content;
+          return typeof content === 'string' && content.trim().length > 0
+            ? { model, configured: true, verified: true }
+            : { model, configured: true, verified: false };
+        }
         // Hard rejection (bad/absent key or unknown model) → client maps to
         // 'failed'. Check status + body so a 401/403 or a model_not_found body
         // both classify as rejected.

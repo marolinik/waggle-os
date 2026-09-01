@@ -1150,6 +1150,35 @@ describe('ModelGate', () => {
     expect(screen.queryByRole('button', { name: /retry check/i })).toBeNull();
   });
 
+  it('does not discard a slow Qwen readiness success after six seconds', async () => {
+    vi.useFakeTimers();
+    const onModelReady = vi.fn();
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({
+      id: 'openai-compatible',
+      hasKey: false,
+      requiresKey: false,
+      baseUrl: 'http://10.33.0.153:4000/v1',
+      modelsSource: 'provider-api',
+      models: [{ id: model, name: 'Qwen 3.8 Flash Next' }],
+    }));
+    mocks.adapter.probeModel.mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ model, configured: true, verified: true }), 7_000);
+    }));
+
+    try {
+      render(<ModelGate variant="onboarding" onModelReady={onModelReady} />);
+      await act(async () => { await Promise.resolve(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(7_000); });
+
+      expect(screen.getByText((text) => text.includes('Model verified') && text.includes(model))).toBeInTheDocument();
+      expect(onModelReady).not.toHaveBeenCalled();
+      expect(screen.queryByText(/couldn.t confirm model access just now/i)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('makes a manual retry timeout terminal even if the old probe resolves later', async () => {
     const onModelReady = vi.fn();
     let resolveRetry!: (value: { configured: boolean; valid: boolean; verified: boolean }) => void;
@@ -1167,7 +1196,7 @@ describe('ModelGate', () => {
       fireEvent.click(screen.getByRole('button', { name: /retry check/i }));
       await act(async () => { await Promise.resolve(); });
       expect(mocks.adapter.probeProvider).toHaveBeenCalledTimes(2);
-      await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(16_000); });
       expect(screen.getByText(/couldn.t confirm model access just now/i)).toBeInTheDocument();
 
       await act(async () => {
