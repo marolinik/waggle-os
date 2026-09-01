@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
@@ -253,33 +254,141 @@ describe('Agent Service', () => {
     expect(server.localConfig.manageLiteLLM).toBe(false);
   });
 
-  it('recognizes a keyless OpenAI-compatible endpoint as configured at cold start', async () => {
+  it('live-verifies a persisted keyless OpenAI-compatible default model at cold start', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);
     const port = randomPort();
     const litellmPort = randomPort();
+    let upstreamRequest: Record<string, unknown> | null = null;
+    const gateway = createServer((request, response) => {
+      if (request.method === 'POST' && request.url === '/v1/chat/completions') {
+        let body = '';
+        request.setEncoding('utf8');
+        request.on('data', (chunk) => { body += chunk; });
+        request.on('end', () => {
+          upstreamRequest = JSON.parse(body) as Record<string, unknown>;
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'WAGGLE_OK' } }],
+          }));
+        });
+        return;
+      }
+      response.writeHead(404).end();
+    });
+    const gatewayPort = await occupyLoopbackPort(gateway);
+    cleanups.push(() => new Promise<void>((resolve) => gateway.close(() => resolve())));
+    const model = 'openai-compatible/qwen3.8-flash-next';
 
     clearProviderEnv();
     fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: model,
       providers: {
         'openai-compatible': {
-          baseUrl: '  http://10.33.0.153:4000/v1  ',
+          baseUrl: `  http://127.0.0.1:${gatewayPort}/v1  `,
           apiKey: '',
+          models: [model],
         },
       },
     }));
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 503 } as Response);
 
     const { server } = await startService({ dataDir, port, litellmPort, skipLiteLLM: true });
     cleanups.push(async () => { await server.close(); });
 
     expect(server.agentState.llmProvider).toMatchObject({
       provider: 'anthropic-proxy',
-      health: 'degraded',
+      health: 'healthy',
     });
     expect(server.agentState.llmProvider.detail).toContain('openai-compatible');
-    expect(server.agentState.llmProvider.detail).toContain('verification pending');
-    expect(server.agentState.llmProvider.detail).not.toContain('no API key');
+    expect(server.agentState.llmProvider.detail).toContain('endpoint verified');
+    expect(server.agentState.currentModel).toBe(model);
+    expect(upstreamRequest).toMatchObject({
+      model: 'qwen3.8-flash-next',
+      max_tokens: 32,
+      chat_template_kwargs: { enable_thinking: false },
+    });
+  });
+
+  it('keeps a persisted compatible model degraded when its cold-start probe fails', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const gateway = createServer((_request, response) => {
+      response.writeHead(503, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'temporarily unavailable' } }));
+    });
+    const gatewayPort = await occupyLoopbackPort(gateway);
+    cleanups.push(() => new Promise<void>((resolve) => gateway.close(() => resolve())));
+    const model = 'openai-compatible/qwen3.8-flash-next';
+
+    clearProviderEnv();
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: model,
+      providers: {
+        'openai-compatible': {
+          baseUrl: `http://127.0.0.1:${gatewayPort}/v1`,
+          apiKey: '',
+          models: [model],
+        },
+      },
+    }));
+
+    const { server } = await startService({
+      dataDir,
+      port: randomPort(),
+      litellmPort: randomPort(),
+      skipLiteLLM: true,
+    });
+    cleanups.push(async () => { await server.close(); });
+
+    expect(server.agentState.llmProvider).toMatchObject({
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+    });
+    expect(server.agentState.llmProvider.detail).toContain('verification failed');
+    const health = await server.inject({ method: 'GET', url: '/health' });
+    expect(health.json()).toMatchObject({
+      status: 'degraded',
+      llm: { provider: 'anthropic-proxy', health: 'degraded' },
+    });
+  });
+
+  it.each([
+    'localhost',
+    '127.0.0.2',
+    '[::ffff:127.0.0.1]',
+  ])('rejects a persisted compatible endpoint that points back through %s', async (hostname) => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const port = randomPort();
+    const model = 'openai-compatible/qwen3.8-flash-next';
+
+    clearProviderEnv();
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: model,
+      providers: {
+        'openai-compatible': {
+          baseUrl: `http://${hostname}:${port}/v1`,
+          apiKey: '',
+          models: [model],
+        },
+      },
+    }));
+
+    const startedAt = Date.now();
+    const { server } = await startService({
+      dataDir,
+      port,
+      litellmPort: randomPort(),
+      skipLiteLLM: true,
+    });
+    cleanups.push(async () => { await server.close(); });
+
+    expect(Date.now() - startedAt).toBeLessThan(3_000);
+    expect(server.agentState.llmProvider).toMatchObject({
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (openai-compatible verification failed)',
+    });
   });
 
   it('does not treat a whitespace-only OpenAI-compatible endpoint as configured', async () => {

@@ -869,6 +869,34 @@ function directProviderBaseUrl(server: FastifyInstance, providerId: string): str
   return PROVIDER_MODEL_CATALOGS[providerId].endpoint;
 }
 
+function pointsToCurrentWaggleService(server: FastifyInstance, baseUrl: string): boolean {
+  try {
+    const url = new URL(baseUrl);
+    const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+    const mappedIpv4 = hostname.match(
+      /^::(?:ffff:(?:0:)?)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i,
+    );
+    const isMappedIpv4Loopback = mappedIpv4
+      ? (Number.parseInt(mappedIpv4[1], 16) >>> 8) === 127
+      : false;
+    const isLoopback = hostname === 'localhost'
+      || hostname === '::1'
+      || hostname === '::'
+      || hostname === '0.0.0.0'
+      || /^127(?:\.\d{1,3}){3}$/.test(hostname)
+      || isMappedIpv4Loopback;
+    if (!isLoopback) return false;
+    const address = server.server.address();
+    if (!address || typeof address === 'string') return false;
+    const endpointPort = url.port
+      ? Number.parseInt(url.port, 10)
+      : url.protocol === 'https:' ? 443 : 80;
+    return endpointPort === address.port;
+  } catch {
+    return false;
+  }
+}
+
 async function sendCompatibleResponse(
   upstream: Response,
   stream: boolean | undefined,
@@ -985,6 +1013,11 @@ async function forwardCompatibleProvider(
       error: { message: `No ${route.providerId} endpoint configured. Add one in Settings.` },
     });
   }
+  if (pointsToCurrentWaggleService(server, baseUrl)) {
+    return reply.status(400).send({
+      error: { message: 'The configured model endpoint cannot point to the Waggle service itself.' },
+    });
+  }
   const requestAbort = createCloudProviderAbort(reply);
   const url = completionEndpoint(baseUrl);
   const outboundBody: Record<string, unknown> = { ...body, model: route.model };
@@ -1065,12 +1098,19 @@ async function forwardCompatibleProvider(
       credentialRejected = /please pass a valid api key|api key (?:is )?(?:invalid|not valid|expired)/i.test(detail);
     }
     if (!credentialRejected) {
-      if (apiKey) applyProviderKeyToEnv(route.providerId, apiKey, true);
-      if (server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+      if (upstream.ok && apiKey) applyProviderKeyToEnv(route.providerId, apiKey, true);
+      if (upstream.ok && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
         server.agentState.llmProvider = {
           provider: 'anthropic-proxy',
           health: 'healthy',
           detail: `Built-in provider proxy (${route.providerId} ${apiKey ? 'credential' : 'endpoint'} verified)`,
+          checkedAt: new Date().toISOString(),
+        };
+      } else if (!upstream.ok && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+        server.agentState.llmProvider = {
+          provider: 'anthropic-proxy',
+          health: 'degraded',
+          detail: `Built-in provider proxy (${route.providerId} returned HTTP ${upstream.status})`,
           checkedAt: new Date().toISOString(),
         };
       }

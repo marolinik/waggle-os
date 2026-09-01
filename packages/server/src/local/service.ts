@@ -24,6 +24,7 @@ import {
   PROVIDER_ENV_NAMES,
 } from './provider-env.js';
 import { prepareLiteLLMRuntimeConfig } from './litellm-runtime-config.js';
+import { probeConfiguredModel } from './routes/settings.js';
 
 const log = createLogger('service');
 
@@ -421,6 +422,37 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     detail: providerDetail,
     checkedAt: new Date().toISOString(),
   };
+
+  // A persisted provider is only ready when its exact saved default model
+  // answers. Probe after listen so the in-process proxy is routable, and keep
+  // the degraded state on rejection, timeout, or malformed responses.
+  const startupModel = server.agentState.currentModel.trim();
+  if (
+    providerName === 'anthropic-proxy'
+    && providerHealth === 'degraded'
+    && startupModel.startsWith('openai-compatible/')
+  ) {
+    const probe = await probeConfiguredModel(server, startupModel, true);
+    if (probe.verified && probe.model === startupModel) {
+      const providerId = probe.model.split('/')[0] ?? 'configured';
+      const verificationKind = providerId === 'openai-compatible' ? 'endpoint' : 'credential';
+      providerDetail = `Built-in provider proxy (${providerId} ${verificationKind} verified)`;
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        detail: providerDetail,
+        checkedAt: new Date().toISOString(),
+      };
+    } else {
+      providerDetail = 'Built-in provider proxy (openai-compatible verification failed)';
+      server.agentState.llmProvider = {
+        provider: 'anthropic-proxy',
+        health: 'degraded',
+        detail: providerDetail,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+  }
   server.offlineManager.start();
 
   emit({ phase: 'ready', message: `LLM: ${providerDetail}`, progress: 0.9 });

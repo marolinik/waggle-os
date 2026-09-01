@@ -81,7 +81,7 @@ type ModelProbeResult = {
   rejected?: boolean;
 };
 
-async function probeConfiguredModel(
+export async function probeConfiguredModel(
   server: FastifyInstance,
   preferred: string,
   exact: boolean,
