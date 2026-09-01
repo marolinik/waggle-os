@@ -746,7 +746,7 @@ describe('persona acceptance prompt budget', () => {
       attempts.push(config);
       if (attempts.length === 1) {
         throw Object.assign(new Error(
-          'Initial model activity timed out after 30 seconds. The provider may be unavailable; retry this turn.',
+          'Initial model activity timed out after 20 seconds. The provider may be unavailable; retry this turn.',
         ), {
           name: 'InitialModelActivityTimeoutError',
           code: 'INITIAL_MODEL_ACTIVITY_TIMEOUT',
@@ -782,7 +782,7 @@ describe('persona acceptance prompt budget', () => {
         modelOperationTimeoutMs: attempt.modelOperationTimeoutMs,
         initialModelActivityTimeoutMs: attempt.initialModelActivityTimeoutMs,
       }))).toEqual([
-        { modelOperationTimeoutMs: 100_000, initialModelActivityTimeoutMs: 30_000 },
+        { modelOperationTimeoutMs: 100_000, initialModelActivityTimeoutMs: 20_000 },
         { modelOperationTimeoutMs: 100_000, initialModelActivityTimeoutMs: undefined },
       ]);
       const events = parseSse(response.body);

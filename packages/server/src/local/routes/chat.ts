@@ -3800,7 +3800,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           messages: windowedMessages,
           stream: true,
           modelOperationTimeoutMs: 100_000,
-          ...(hasDistinctConfiguredFallback ? { initialModelActivityTimeoutMs: 30_000 } : {}),
+          ...(hasDistinctConfiguredFallback ? { initialModelActivityTimeoutMs: 20_000 } : {}),
           ...agentRunBudget,
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
           reasoning: reasoningForModelAttempt(resolvedModel),
