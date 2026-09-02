@@ -4100,6 +4100,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             reasoningActivitySent = true;
             sendEvent('step', { content: 'Thinking through your request…' });
           },
+          onRetry: (notice: string) => {
+            const content = notice.trim();
+            if (content) sendEvent('step', { content });
+          },
           onToken: (token: string) => {
             if (firstTokenAt === null) firstTokenAt = performance.now();
             bufferedAgentTokens.push(token);

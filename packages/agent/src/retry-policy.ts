@@ -37,7 +37,7 @@ export type RetryAction =
       kind: 'retry';
       /** Milliseconds to sleep before retrying */
       waitMs: number;
-      /** Human-readable notice (forwarded to onToken so users see the pause) */
+      /** Human-readable notice forwarded through onRetry, or onToken for legacy callers. */
       notice: string;
       /** New retry state with the counter incremented for the path taken */
       state: RetryState;
@@ -102,10 +102,11 @@ export async function handleNonOkResponse(
     }
     const retryAfterSec = parseRetryAfterSeconds(response.headers.get('retry-after'));
     const waitMs = Math.min(retryAfterSec * 1000, MAX_RATE_LIMIT_WAIT_MS);
+    const displayedWaitSec = waitMs / 1000;
     return {
       kind: 'retry',
       waitMs,
-      notice: `\n[Rate limited — waiting ${retryAfterSec}s (retry ${next}/${MAX_RETRIES})...]\n`,
+      notice: `\n[Rate limited — waiting ${displayedWaitSec}s (retry ${next}/${MAX_RETRIES})...]\n`,
       state: { ...state, rateLimitRetries: next },
     };
   }

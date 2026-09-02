@@ -764,6 +764,104 @@ describe('Chat Streaming API', () => {
     }
   });
 
+  it('streams retry status before backoff settles while answer tokens remain authoritative', async () => {
+    const retryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-retry-status-'));
+    const retryServer = await buildLocalServer({ dataDir: retryDir });
+    let releaseRetry!: () => void;
+    let markRunnerEntered!: () => void;
+    let runnerSettled = false;
+    const retryGate = new Promise<void>(resolve => { releaseRetry = resolve; });
+    const runnerEntered = new Promise<void>(resolve => { markRunnerEntered = resolve; });
+    const retryNotice = 'Connection to the model failed — retrying in 2s (retry 1/3)...';
+
+    retryServer.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      config.onRetry?.(`\n[${retryNotice}]\n`);
+      markRunnerEntered();
+      await retryGate;
+      config.onToken?.('Recovered answer');
+      runnerSettled = true;
+      return {
+        content: 'Recovered answer',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    let observedBody = '';
+    try {
+      const baseUrl = await retryServer.listen({ host: '127.0.0.1', port: 0 });
+      const responsePromise = fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${getAuthToken(retryServer)}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: 'Recover visibly from a transient provider outage',
+          session: `retry-status-${Date.now()}`,
+        }),
+      });
+
+      await runnerEntered;
+      const response = await Promise.race([
+        responsePromise,
+        new Promise<never>((_resolve, reject) => {
+          setTimeout(() => reject(new Error('Timed out waiting for retry status response headers')), 3_000);
+        }),
+      ]);
+      reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      const deadline = Date.now() + 3_000;
+      while (!observedBody.includes(retryNotice)) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) throw new Error('Timed out waiting for retry status SSE bytes');
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_resolve, reject) => {
+            setTimeout(() => reject(new Error('Timed out waiting for retry status SSE bytes')), remainingMs);
+          }),
+        ]);
+        if (chunk.done) break;
+        observedBody += decoder.decode(chunk.value, { stream: true });
+      }
+
+      expect(runnerSettled).toBe(false);
+      expect(observedBody).toContain('event: step');
+      expect(observedBody).toContain(retryNotice);
+      expect(observedBody).not.toContain('event: token');
+      expect(observedBody).not.toContain('event: done');
+
+      releaseRetry();
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        observedBody += decoder.decode(chunk.value, { stream: true });
+      }
+      observedBody += decoder.decode();
+      const events = parseSSE(observedBody);
+      const tokenContents = events
+        .filter(event => event.event === 'token')
+        .map(event => JSON.parse(event.data).content);
+      const doneEvents = events.filter(event => event.event === 'done');
+
+      expect(tokenContents).toEqual(['Recovered answer']);
+      expect(doneEvents).toHaveLength(1);
+      expect(JSON.parse(doneEvents[0].data).content).toBe('Recovered answer');
+      expect(tokenContents.join('')).not.toContain(retryNotice);
+    } finally {
+      releaseRetry();
+      await reader?.cancel().catch(() => undefined);
+      await retryServer.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        fs.rmSync(retryDir, { recursive: true, force: true });
+      } catch {
+        // Windows can retain SQLite handles briefly after Fastify closes.
+      }
+    }
+  }, 15_000);
+
   it('suppresses late reasoning and model output after a live client disconnect', async () => {
     const abortDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-abort-'));
     const abortServer = await buildLocalServer({ dataDir: abortDir });

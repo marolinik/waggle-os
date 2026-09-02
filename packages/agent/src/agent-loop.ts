@@ -68,6 +68,8 @@ export interface AgentLoopConfig {
   tools: ToolDefinition[];
   messages: Array<{ role: string; content: string }>;
   onToken?: (token: string) => void;
+  /** Reports a bounded, user-safe retry notice without mixing it into answer tokens. */
+  onRetry?: (notice: string) => void;
   /** Signals provider reasoning activity without exposing private reasoning text. */
   onReasoningActivity?: () => void;
   onToolUse?: (name: string, input: Record<string, unknown>) => void;
@@ -1065,7 +1067,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       if (modelOperationExpired(modelOperationSignal)) throw modelOperationTimeoutError();
       const action = handleNetworkError(netErr, retryState);
       if (action.kind === 'fatal') throw action.error;
-      if (onToken) onToken(action.notice);
+      if (config.onRetry) config.onRetry(action.notice);
+      else if (onToken) onToken(action.notice);
       await waitForRetry(action.waitMs);
       retryState = action.state;
       turn--; // retry this turn without consuming a turn
@@ -1111,7 +1114,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           spendReservation = undefined;
         }
         if (action.kind === 'fatal') throw action.error;
-        if (onToken) onToken(action.notice);
+        if (config.onRetry) config.onRetry(action.notice);
+        else if (onToken) onToken(action.notice);
         await waitForRetry(action.waitMs);
         retryState = action.state;
         turn--; // retry this turn without consuming a turn
