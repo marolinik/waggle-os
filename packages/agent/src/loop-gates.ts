@@ -77,6 +77,11 @@ type GateMessage = {
 
 const STRUCTURED_DRAFT_REQUEST = /\b(?:draft|create|prepare|produce|write|build)\b[\s\S]{0,160}\b(?:agenda|plan|memo|report|brief|checklist|schedule|table|outline)\b/i;
 const OPENING_METADATA_FIELD = /^\s*(?:title|duration|participants?|audience|purpose|date|owner|prepared\s+(?:for|by))\s*:/i;
+const MARKDOWN_HEADING = /^#{1,6}\s+\S/;
+
+function explicitlyScopesDraftToOpening(userRequest: string): boolean {
+  return /(?:^|[.!?]\s+)(?:(?:for (?:this response|now))\s*,?\s*)?(?:please\s+)?(?:give|provide|write|draft)\s+only\s+(?:(?:a|an|the)\s+)?(?:executive\s+)?(?:summary|introduction|title|metadata)\b/i.test(userRequest);
+}
 
 function hasMultipleTimeBlocks(content: string): boolean {
   const blocks = content.match(/(?:^|\n)\s*(?:[-*]\s*)?(?:\d{1,3}\s*[–—-]\s*)?\d{1,3}\s*(?:min(?:ute)?s?)\b/gim);
@@ -84,7 +89,7 @@ function hasMultipleTimeBlocks(content: string): boolean {
 }
 
 function missingStructuredDraftComponents(userRequest: string, content: string): string[] {
-  if (!STRUCTURED_DRAFT_REQUEST.test(userRequest)) return [];
+  if (!STRUCTURED_DRAFT_REQUEST.test(userRequest) || explicitlyScopesDraftToOpening(userRequest)) return [];
   const components: Array<{ label: string; requested: RegExp; present: (value: string) => boolean }> = [
     { label: 'time blocks', requested: /\btime blocks?\b/i, present: hasMultipleTimeBlocks },
     { label: 'desired decisions', requested: /\bdesired decisions?\b/i, present: value => /\bdesired decisions?\b|\bdecision\s*:/i.test(value) },
@@ -107,6 +112,24 @@ function endsAfterOpeningMetadataScaffold(content: string): boolean {
   return tail.length >= 2
     && OPENING_METADATA_FIELD.test(tail[tail.length - 1] ?? '')
     && tail.filter(line => OPENING_METADATA_FIELD.test(line)).length >= 2;
+}
+
+function endsAfterOpeningMarkdownFragment(content: string): boolean {
+  const lines = content.trim().split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (!MARKDOWN_HEADING.test(lines[0] ?? '')) return false;
+  const headings = lines.filter(line => MARKDOWN_HEADING.test(line));
+  const bodyLines = lines.filter(line => !MARKDOWN_HEADING.test(line));
+  const listItems = bodyLines.filter(line => /^\s*(?:[-*+]\s+|\d+[.)]\s+)/.test(line));
+  const hasTableOrChecklist = bodyLines.some(line => /^\s*\|.*\|\s*$|^\s*[-*+]\s+\[[ xX]\]/.test(line));
+  return headings.length <= 2
+    && bodyLines.length >= 1
+    && bodyLines.length <= 2
+    && listItems.length <= 1
+    && !hasTableOrChecklist;
+}
+
+function endsAfterOpeningScaffold(content: string): boolean {
+  return endsAfterOpeningMetadataScaffold(content) || endsAfterOpeningMarkdownFragment(content);
 }
 
 export interface MaybeFireCompletionGateArgs {
@@ -183,7 +206,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   const missingDraftComponents = finishReason === 'stop'
     ? missingStructuredDraftComponents(userRequest, content)
     : [];
-  if (missingDraftComponents.length >= 2 && endsAfterOpeningMetadataScaffold(content)) {
+  if (missingDraftComponents.length >= 2 && endsAfterOpeningScaffold(content)) {
     const reason = 'structured draft ended after its opening scaffold';
     if (state.completionIntegrityRepairUsed || !atomicRepairAvailable) {
       return { fired: false, state, rejectIncompleteReason: reason };

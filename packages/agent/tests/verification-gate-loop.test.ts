@@ -227,6 +227,32 @@ describe('structured-draft completion integrity gate', () => {
     '## Pre-read checklist',
     '- [ ] Product, Engineering, QA, and Support status.',
   ].join('\n');
+  const reportRequest = 'Draft a launch-readiness report with risks, exit criteria, a decision table, and a recommendation.';
+  const abandonedReportOpening = [
+    '# Launch-readiness report',
+    '',
+    '## Executive summary',
+    'The launch remains under review.',
+  ].join('\n');
+  const abandonedReportSection = [
+    '# Launch-readiness report',
+    '',
+    '## Risks',
+    '- Public signing is still pending.',
+  ].join('\n');
+  const completeReport = [
+    '# Launch-readiness report',
+    '## Risks',
+    '- Installer trust is still pending.',
+    '## Exit criteria',
+    '- All release gates are green.',
+    '## Decision table',
+    '| Decision | Evidence |',
+    '| --- | --- |',
+    '| Hold | Signing is pending |',
+    '## Recommendation',
+    'Hold the public release until signing closes.',
+  ].join('\n');
 
   it('atomically replaces the exact early-EOS agenda scaffold with one complete retry', async () => {
     const fetch = mockFetch([abandonedScaffold, completeAgenda]);
@@ -243,6 +269,31 @@ describe('structured-draft completion integrity gate', () => {
     expect(secondBody.tools).toBeUndefined();
     expect(JSON.stringify(secondBody.messages)).not.toContain(abandonedScaffold);
     expect(result.content).toBe(completeAgenda);
+  });
+
+  it('atomically replaces a heading-and-introduction report fragment with one complete retry', async () => {
+    const fetch = mockFetch([abandonedReportOpening, completeReport]);
+    const result = await runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{ role: 'user', content: reportRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const repairBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
+    expect(repairBody.tools).toBeUndefined();
+    expect(JSON.stringify(repairBody.messages)).not.toContain(abandonedReportOpening);
+    expect(result.content).toBe(completeReport);
+  });
+
+  it('atomically replaces a report that stops after one shallow requested section', async () => {
+    const fetch = mockFetch([abandonedReportSection, completeReport]);
+    const result = await runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{ role: 'user', content: reportRequest }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeReport);
   });
 
   it('runs a prior mutation once and cannot replay it during the repair', async () => {
@@ -287,6 +338,19 @@ describe('structured-draft completion integrity gate', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('rejects a repeated heading-and-introduction report fragment', async () => {
+    const fetch = mockFetch([abandonedReportOpening, abandonedReportOpening]);
+
+    await expect(runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{ role: 'user', content: reportRequest }],
+    }))).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      message: expect.stringMatching(/structured draft ended after its opening scaffold/i),
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('fails closed when the abandoned scaffold exhausts the hard token budget', async () => {
     const fetch = vi.fn(async () => ({
       ok: true,
@@ -322,6 +386,12 @@ describe('structured-draft completion integrity gate', () => {
       messages: [{ role: 'user', content: agendaRequest }],
     }))).resolves.toMatchObject({ content: completeAgenda });
     expect(agendaFetch).toHaveBeenCalledOnce();
+
+    const reportFetch = mockFetch([completeReport]);
+    await expect(runAgentLoop(cfg(reportFetch, {
+      messages: [{ role: 'user', content: reportRequest }],
+    }))).resolves.toMatchObject({ content: completeReport });
+    expect(reportFetch).toHaveBeenCalledOnce();
   });
 
   it('accepts requested title metadata without treating it as an abandoned multi-part draft', async () => {
@@ -333,6 +403,57 @@ describe('structured-draft completion integrity gate', () => {
 
     expect(fetch).toHaveBeenCalledOnce();
     expect(result.content).toBe(metadata);
+  });
+
+  it('accepts an explicitly scoped executive-summary-only response', async () => {
+    const fetch = mockFetch([abandonedReportOpening]);
+    const result = await runAgentLoop(cfg(fetch, {
+      messages: [{
+        role: 'user',
+        content: `${reportRequest} For this response, give only the executive summary; do not draft the remaining sections yet.`,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(abandonedReportOpening);
+  });
+
+  it('accepts an affirmatively scoped response using an executive summary', async () => {
+    const fetch = mockFetch([abandonedReportOpening]);
+    const result = await runAgentLoop(cfg(fetch, {
+      messages: [{
+        role: 'user',
+        content: `${reportRequest} For this response, provide only an executive summary.`,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(abandonedReportOpening);
+  });
+
+  it('does not treat a negated summary-only phrase as permission to omit requested sections', async () => {
+    const fetch = mockFetch([abandonedReportOpening, completeReport]);
+    const result = await runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: `${reportRequest} Do not give only the executive summary; include every section.`,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeReport);
+  });
+
+  it('does not apply the multipart gate to a two-facet brief', async () => {
+    const response = '# Brief\n- Risk: signing pending.\nRecommendation: wait.';
+    const fetch = mockFetch([response]);
+    const result = await runAgentLoop(cfg(fetch, {
+      messages: [{ role: 'user', content: 'Draft a brief with risks and a recommendation.' }],
+    }));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(result.content).toBe(response);
   });
 
   it('rejects an already-streamed scaffold without replaying or hiding emitted content', async () => {
