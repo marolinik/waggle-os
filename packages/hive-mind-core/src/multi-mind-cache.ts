@@ -25,15 +25,7 @@ export interface MultiMindCacheLease {
 interface CacheEntry {
   db: MindDB;
   lastAccessed: number;
-  /**
-   * Session-lifetime refcount. Incremented by `acquire()` when a workspace
-   * session borrows the handle, decremented by `release()` on session close.
-   * `evictLRU` never closes an entry with `pins > 0` — a pinned mind is in use
-   * by a live session that may write to it across an LLM await, and closing it
-   * mid-turn caused the swallowed "database connection is not open" flake.
-  */
-  pins: number;
-  /** Request-local leases bound to this exact entry generation. */
+  /** Leases bound to this exact entry generation. */
   leases: number;
 }
 
@@ -43,6 +35,7 @@ interface CacheEntry {
  */
 export class MultiMindCache {
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly legacyLeaseQueues = new Map<string, Array<() => void>>();
   private readonly maxOpen: number;
   private readonly getMindPath: (workspaceId: string) => string | null;
   private readonly allowedRoot: string | null;
@@ -55,17 +48,15 @@ export class MultiMindCache {
 
   getOrOpen(workspaceId: string): MindDB | null {
     const existing = this.cache.get(workspaceId);
-    let carriedPins = 0;
     if (existing) {
       // Reopen-guard: normally hand back the cached handle. But if it was closed
       // out-of-band (an explicit close() seam ran while a session still held a
-      // reference), drop the dead entry and reopen below — carrying the pin count
-      // forward so an in-use mind stays eviction-protected after the reopen.
+      // reference), drop the dead entry and reopen below. Leases remain bound to
+      // the retired entry so their cleanup cannot unpin the replacement.
       if (existing.db.isOpen()) {
         existing.lastAccessed = Date.now();
         return existing.db;
       }
-      carriedPins = existing.pins;
       this.cache.delete(workspaceId);
     }
 
@@ -80,7 +71,7 @@ export class MultiMindCache {
           return recheck.db;
         }
         const db = new MindDB(mindPath);
-        this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins, leases: 0 });
+        this.cache.set(workspaceId, { db, lastAccessed: Date.now(), leases: 0 });
         return db;
       }
 
@@ -123,7 +114,7 @@ export class MultiMindCache {
         }
       }
       const db = new MindDB(canonicalMind);
-      this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins, leases: 0 });
+      this.cache.set(workspaceId, { db, lastAccessed: Date.now(), leases: 0 });
       return db;
     } catch (err) {
       log.warn('failed to open MindDB', { workspaceId, error: err instanceof Error ? err.message : String(err) });
@@ -149,18 +140,18 @@ export class MultiMindCache {
    * unreachable-path guard, not a normal control-flow branch).
    */
   acquire(workspaceId: string): MindDB {
-    const db = this.getOrOpen(workspaceId);
-    if (!db) throw new Error(`MultiMindCache.acquire: cannot open mind for workspace '${workspaceId}'`);
-    const entry = this.cache.get(workspaceId);
-    if (entry) entry.pins += 1;
-    return db;
+    const lease = this.acquireLease(workspaceId);
+    const queue = this.legacyLeaseQueues.get(workspaceId) ?? [];
+    queue.push(lease.release);
+    this.legacyLeaseQueues.set(workspaceId, queue);
+    return lease.db;
   }
 
   /**
-   * Borrow one exact cache generation. Unlike `acquire()` + `release(id)`, the
-   * returned release closure retains the entry object it pinned. If a forced
-   * close removes that entry and the same workspace ID is reopened, stale
-   * cleanup can only decrement the retired entry, never the replacement.
+   * Borrow one exact cache generation. The returned release closure retains
+   * the entry object it pinned. If a forced close removes that entry and the
+   * same workspace ID is reopened, stale cleanup can only decrement the
+   * retired entry, never the replacement.
    */
   acquireLease(workspaceId: string): MultiMindCacheLease {
     const db = this.getOrOpen(workspaceId);
@@ -179,7 +170,6 @@ export class MultiMindCache {
         if (entry.leases > 0) entry.leases -= 1;
         if (
           this.cache.get(workspaceId) === entry
-          && entry.pins === 0
           && entry.leases === 0
           && this.cache.size > this.maxOpen
         ) {
@@ -190,18 +180,17 @@ export class MultiMindCache {
   }
 
   /**
-   * Release a session's pin on a workspace mind. Floors at 0 so a stray extra
-   * release (e.g. a failed session create that never actually pinned) can never
-   * drive the refcount negative and wrongly un-pin a still-live session.
+   * Release the oldest outstanding legacy borrow. FIFO ordering keeps a newer
+   * replacement generation pinned even when it finishes before work retained
+   * by a force-closed generation; every queued closure remains generation-bound.
    */
   release(workspaceId: string): void {
-    const entry = this.cache.get(workspaceId);
-    if (!entry || entry.pins === 0) return;
-
-    entry.pins -= 1;
-    if (entry.pins === 0 && this.cache.size > this.maxOpen) {
-      this.evictLRU();
-    }
+    const queue = this.legacyLeaseQueues.get(workspaceId);
+    if (!queue) return;
+    const release = queue.shift();
+    if (!release) return;
+    if (queue.length === 0) this.legacyLeaseQueues.delete(workspaceId);
+    release();
   }
 
   has(workspaceId: string): boolean {
@@ -221,6 +210,7 @@ export class MultiMindCache {
       try { entry.db.close(); } catch (err) { log.warn('close failed', { workspaceId: id, error: err instanceof Error ? err.message : String(err) }); }
     }
     this.cache.clear();
+    this.legacyLeaseQueues.clear();
   }
 
   get size(): number {
@@ -235,7 +225,7 @@ export class MultiMindCache {
     let oldestKey: string | null = null;
     let oldestTime = Infinity;
     for (const [key, entry] of this.cache) {
-      if (entry.pins > 0 || entry.leases > 0) continue; // never evict a mind held by live work
+      if (entry.leases > 0) continue; // never evict a mind held by live work
       if (entry.lastAccessed < oldestTime) {
         oldestTime = entry.lastAccessed;
         oldestKey = key;

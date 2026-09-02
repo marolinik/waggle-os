@@ -152,6 +152,29 @@ describe('MultiMindCache eviction / session-pinning', () => {
     cache.closeAll();
   });
 
+  it('binds legacy acquire/release calls to their cache generation', () => {
+    const cache = makeCache(2);
+    const retired = cache.acquire('A');
+
+    cache.close('A');
+    expect(retired.isOpen()).toBe(false);
+    const replacement = cache.acquire('A');
+    expect(replacement).not.toBe(retired);
+
+    cache.release('A');
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(true);
+    expect(replacement.isOpen()).toBe(true);
+    expect(cache.has('B')).toBe(false);
+
+    cache.release('A');
+    cache.getOrOpen('D');
+    expect(cache.has('A')).toBe(false);
+    cache.closeAll();
+  });
+
   it('REOPEN-GUARD: a handle closed out-of-band is transparently reopened', () => {
     const cache = makeCache(2);
     const dbA = cache.getOrOpen('A');
