@@ -861,6 +861,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     });
   };
 
+  // Prefix hygiene: how many leading messages the model has already seen this run.
+  // Sealing them keeps the request prefix byte-stable across tool rounds, but it also
+  // keeps older tool results at their fuller size, so a run reaches maxTokenBudget
+  // after fewer tool rounds. That is a product tradeoff (more tool rounds vs richer
+  // context per round), so it is OFF by default and opt-in per deployment.
+  const sealToolContext = process.env.WAGGLE_SEAL_TOOL_CONTEXT === '1';
+  let sealedMessageCount = 0;
   try {
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
@@ -873,7 +880,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       forceSynthesis('tool-round-limit');
     }
     const usedBeforeRequest = totalInputTokens + totalOutputTokens;
-    let requestMessages = compactToolContextForModel(messages, toolContextBudget);
+    let requestMessages = compactToolContextForModel(messages, toolContextBudget, sealToolContext ? sealedMessageCount : 0);
     const turnOpenAiTools = gateState.verificationCorrectionUsed
       ? openaiTools.filter(tool => tool.function.name !== 'save_memory')
       : openaiTools;
@@ -901,7 +908,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       && usedBeforeRequest + estimatedNextRequestTokens + futureSynthesisReserve >= maxTokenBudget
     ) {
       forceSynthesis('token-reserve');
-      requestMessages = compactToolContextForModel(messages, toolContextBudget);
+      requestMessages = compactToolContextForModel(messages, toolContextBudget, sealToolContext ? sealedMessageCount : 0);
       estimatedNextRequestTokens = estimateNextRequestTokens();
       futureSynthesisReserve = 0;
     }
@@ -1003,6 +1010,15 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           config.modelSpendTraceId ?? config.traceRecording?.handle.id,
         )
       : undefined;
+    // Everything in this request now belongs to the model's seen prefix. Keep
+    // the compacted bytes in the backing history: a later pass must not revive
+    // the original full tool result and silently invalidate that prefix.
+    if (sealToolContext) {
+      for (let index = 0; index < requestMessages.length; index++) {
+        messages[index] = requestMessages[index];
+      }
+      sealedMessageCount = requestMessages.length;
+    }
     try {
       response = await waitForRequestStage(
         () => fetchFn(`${litellmUrl}/chat/completions`, {

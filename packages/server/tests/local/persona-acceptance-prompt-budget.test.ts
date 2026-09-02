@@ -355,6 +355,10 @@ describe('persona acceptance prompt budget', () => {
       'named alternatives with memory denied',
       'Do not use saved memory. Compare Alpha and Beta with weighted scoring. Use criteria Cost, Speed, and Quality; weights are 5/3/5 and scores are Alpha 4/3/5, Beta 2/5/4. Recommend the winner with sensitivity analysis.',
     ],
+    [
+      'natural skill wording with presentation requirements',
+      'Use the decision-matrix skill to compare Option A and Option B. Criteria: cost weight 5, speed 3, privacy 5. Scores: A 4/3/5; B 2/5/4. Show checksums, totals, recommendation, weakest critical criterion, and speed sensitivity.',
+    ],
   ])('discovers and packages the decision-matrix skill from a natural weighted-decision request: %s', async (label, message) => {
     const session = `decision-matrix-sequence-budget-${label.replace(/\W+/g, '-')}`;
     expect(isDecisionMatrixSkillRequest(message)).toBe(true);

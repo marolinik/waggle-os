@@ -190,6 +190,73 @@ describe('model-facing tool context', () => {
 });
 
 describe('bounded agent loop synthesis', () => {
+  it('keeps an enabled sealed tool prefix byte-identical across tool rounds', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    let modelCall = 0;
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestBodies.push(body);
+      const current = modelCall++;
+      if (current < 2) {
+        return jsonResponse({
+          role: 'assistant',
+          content: '',
+          tool_calls: [{
+            id: `call_${current}`,
+            type: 'function',
+            function: { name: 'web_fetch', arguments: JSON.stringify({ id: current }) },
+          }],
+        }, 100);
+      }
+      return jsonResponse({ role: 'assistant', content: 'Sealed synthesis.' }, 100);
+    }) as unknown as typeof fetch;
+    const webFetch: ToolDefinition = {
+      name: 'web_fetch',
+      description: 'Fetch a source.',
+      parameters: { type: 'object', properties: { id: { type: 'number' } } },
+      execute: vi.fn(async args => `SOURCE_${String(args.id)}\n${'x'.repeat(5_000)}`),
+    };
+    const previous = process.env.WAGGLE_SEAL_TOOL_CONTEXT;
+    process.env.WAGGLE_SEAL_TOOL_CONTEXT = '1';
+
+    try {
+      await runAgentLoop({
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        model: 'test-model',
+        systemPrompt: 'Stable system prompt.',
+        messages: [{ role: 'user', content: 'Fetch two sources.' }],
+        tools: [webFetch],
+        fetch: fetchFn,
+        stream: false,
+        verificationGate: false,
+        skillDistillationGate: false,
+        maxTurns: 3,
+        maxToolRounds: 2,
+        maxTokenBudget: 100_000,
+        synthesisReserveTokens: 1_000,
+        maxOutputTokens: 512,
+        toolContextBudget: {
+          maxSingleResultChars: 500,
+          recentResultCount: 1,
+          historicalResultChars: 200,
+        },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.WAGGLE_SEAL_TOOL_CONTEXT;
+      else process.env.WAGGLE_SEAL_TOOL_CONTEXT = previous;
+    }
+
+    expect(requestBodies).toHaveLength(3);
+    const secondMessages = requestBodies[1]?.messages as Array<Record<string, unknown>>;
+    const thirdMessages = requestBodies[2]?.messages as Array<Record<string, unknown>>;
+    expect(thirdMessages.slice(0, secondMessages.length)).toEqual(secondMessages);
+    expect(String(secondMessages.find(message => message.role === 'tool')?.content).length)
+      .toBeGreaterThan(200);
+    expect(String(secondMessages.find(message => message.role === 'tool')?.content).length)
+      .toBeLessThanOrEqual(500);
+  });
+
   it('uses an atomic non-streaming request for forced synthesis after streamed evidence collection', async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {

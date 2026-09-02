@@ -1680,10 +1680,13 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
       }
     }
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    // Prefix hygiene: the stable system-prompt head keeps DAY resolution only.
+    // Minute resolution is appended after the cacheable prompt body below.
     const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
     let prompt = '';
+    // Per-turn content, appended after every session-stable section.
+    let volatileTail = '';
 
     // User's custom system prompt (highest priority — user overrides)
     if (userSystemPrompt) {
@@ -1745,11 +1748,8 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
 
 # Runtime Context
 - Date: ${dateStr}
-- Time: ${timeStr}
 - Platform: ${process.platform} (${process.arch})
 - Working directory: ${workspacePath ?? 'not set'}
-${sessionId ? `- Session: ${sessionId}` : ''}
-${historyLength && historyLength > 0 ? `- Continuing conversation: ${historyLength} previous messages are in context.` : '- New conversation.'}
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId}` : ''}
 ${includePersistedMemory ? '' : '- Persisted memory: disabled by the user for this turn.'}
 `;
@@ -1768,7 +1768,6 @@ ${includePersistedMemory
 
 ## Your Runtime (you already know this — do NOT call bash for date/time)
 - Date: ${dateStr}
-- Time: ${timeStr}
 - Platform: ${process.platform} (${process.arch})
 - Shell: ${process.platform === 'win32' ? 'cmd.exe (use /t flag for date, time)' : '/bin/sh'}
 - Working directory: ${workspacePath ?? os.homedir()}
@@ -1780,12 +1779,9 @@ ${workspacePath
     ? `- No workspace directory set. Use save_memory to store information instead of files.`
     : `- No workspace directory set. Persisted memory is disabled for this turn.`}
 ${process.platform === 'win32' ? '- Windows note: use `date /t` and `time /t` (not bare `date` which prompts for input). Use `dir` instead of `ls`.' : ''}
-${sessionId ? `- Session: ${sessionId}` : ''}
-${historyLength && historyLength > 0
-  ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.`
-  : includePersistedMemory
-    ? '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'
-    : '- This is a new conversation with persisted memory disabled for this turn.'}
+${includePersistedMemory
+  ? '- Conversation history, when present, is visible above. Session id and turn count arrive with the current turn.'
+  : '- Persisted memory is disabled for this turn.'}
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailor responses to this domain.` : ''}
 `;
     }
@@ -1825,9 +1821,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (nowBlock) {
           // Use structured state prompt when available (richer: open questions, blockers, stale threads)
           if (nowBlock.structuredState) {
-            prompt += '\n\n' + formatWorkspaceStatePrompt(nowBlock.structuredState, nowBlock.workspaceName);
+            volatileTail += '\n\n' + formatWorkspaceStatePrompt(nowBlock.structuredState, nowBlock.workspaceName);
           } else {
-            prompt += '\n\n' + formatWorkspaceNowPrompt(nowBlock);
+            volatileTail += '\n\n' + formatWorkspaceNowPrompt(nowBlock);
           }
         }
       } catch {
@@ -1842,9 +1838,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         if (signalStore) {
           const actionable = signalStore.getActionable();
           if (actionable.length > 0) {
-            prompt += '\n\n# User Corrections (from prior sessions — follow these)\n';
+            volatileTail += '\n\n# User Corrections (from prior sessions — follow these)\n';
             for (const signal of actionable) {
-              prompt += `- ${signal.detail} (observed ${signal.count}x)\n`;
+              volatileTail += `- ${signal.detail} (observed ${signal.count}x)\n`;
             }
           }
         }
@@ -1854,6 +1850,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // W1.3/W7.3: add persona only on the legacy path; assembler-owned persona
     // content stays singular. DOCX guidance always applies; persisted workspace
     // tone is withheld when the user disables memory reads for this turn.
+    if (volatileTail) {
+      prompt += volatileTail;
+    }
+
     const workspaceTone = includePersistedMemory ? wsConfig?.tone : undefined;
     const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
     prompt = composeChatPromptTail(prompt, {
@@ -1871,6 +1871,22 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     return prompt;
   }
 
+  /**
+   * Per-turn context appended to the END of the system prompt.
+   *
+   * Prefix hygiene: clock time, session id and turn count change on every request.
+   * These values used to appear above the rules and tool schemas, invalidating the
+   * useful cached prefix. Keeping them at the tail preserves that prefix without
+   * changing the user's message or its evidence boundary.
+   */
+  function buildTurnContextSuffix(turnSessionId: string | undefined, turnCount: number): string {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const lines = [`Current time: ${timeStr}.`];
+    if (turnSessionId) lines.push(`Session: ${turnSessionId}.`);
+    if (turnCount > 0) lines.push(`Continuing conversation (${turnCount} previous messages in context).`);
+    return `\n\n<turn-context>\n${lines.join('\n')}\n</turn-context>`;
+  }
   // POST /api/chat — SSE streaming chat endpoint
   server.post<{
     Body: {
@@ -3782,13 +3798,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
         }
         if (requiredToolSequence) {
-          const selectedNames = effectiveTools.map(tool => tool.name);
-          const sequenceIntact = selectedNames.length === requiredToolSequence.length
-            && requiredToolSequence.every((name, index) => selectedNames[index] === name);
-          if (!sequenceIntact) {
+          const selectedSequenceTools = requiredToolSequence.map(name => (
+            effectiveTools.filter(tool => tool.name === name)
+          ));
+          const sequenceIntact = effectiveTools.length === requiredToolSequence.length
+            && selectedSequenceTools.every(matches => matches.length === 1);
+          if (sequenceIntact) {
+            // Selection ranks by relevance. Restore the already-validated
+            // execution order without broadening the selected capability set.
+            effectiveTools = selectedSequenceTools.map(matches => matches[0]);
+          } else {
             requiredToolSequence = undefined;
             effectiveTools = [];
             toolSelectedCount = 0;
+            toolOmittedCount = toolEligibleCount;
             transmittedToolSchemaChars = 0;
           }
         }
@@ -3898,16 +3921,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               persistedMemoryReadAllowed,
               allowsConversationHistory(turnMutationPolicy),
             );
-            return turnMutationPolicy.contextScope !== 'default'
+            const hasSpecialEvidenceBoundary = turnMutationPolicy.contextScope !== 'default'
               || closedWorldRewrite
               || toolFreeAdvisory
-              || Boolean(explicitReadOnlyToolCandidate)
+              || Boolean(explicitReadOnlyToolCandidate);
+            const basePrompt = hasSpecialEvidenceBoundary
               ? packagedSystemPrompt
               : ambiguityPrefix
                 + packagedSystemPrompt
                 + templateContext
                 + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
                 + (assembledForModel ? '' : recalledContext);
+            return hasSpecialEvidenceBoundary
+              ? basePrompt
+              : basePrompt + buildTurnContextSuffix(
+                sessionId,
+                Math.max(0, windowedMessages.length - 1),
+              );
           };
           systemPrompt = await rebuildSystemPromptForModel(resolvedModel);
           throwIfTurnAborted();
