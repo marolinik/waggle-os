@@ -17,6 +17,11 @@ export interface MultiMindCacheConfig {
   allowedRoot?: string;
 }
 
+export interface MultiMindCacheLease {
+  readonly db: MindDB;
+  release(): void;
+}
+
 interface CacheEntry {
   db: MindDB;
   lastAccessed: number;
@@ -26,8 +31,10 @@ interface CacheEntry {
    * `evictLRU` never closes an entry with `pins > 0` — a pinned mind is in use
    * by a live session that may write to it across an LLM await, and closing it
    * mid-turn caused the swallowed "database connection is not open" flake.
-   */
+  */
   pins: number;
+  /** Request-local leases bound to this exact entry generation. */
+  leases: number;
 }
 
 /**
@@ -73,7 +80,7 @@ export class MultiMindCache {
           return recheck.db;
         }
         const db = new MindDB(mindPath);
-        this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins });
+        this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins, leases: 0 });
         return db;
       }
 
@@ -116,7 +123,7 @@ export class MultiMindCache {
         }
       }
       const db = new MindDB(canonicalMind);
-      this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins });
+      this.cache.set(workspaceId, { db, lastAccessed: Date.now(), pins: carriedPins, leases: 0 });
       return db;
     } catch (err) {
       log.warn('failed to open MindDB', { workspaceId, error: err instanceof Error ? err.message : String(err) });
@@ -147,6 +154,39 @@ export class MultiMindCache {
     const entry = this.cache.get(workspaceId);
     if (entry) entry.pins += 1;
     return db;
+  }
+
+  /**
+   * Borrow one exact cache generation. Unlike `acquire()` + `release(id)`, the
+   * returned release closure retains the entry object it pinned. If a forced
+   * close removes that entry and the same workspace ID is reopened, stale
+   * cleanup can only decrement the retired entry, never the replacement.
+   */
+  acquireLease(workspaceId: string): MultiMindCacheLease {
+    const db = this.getOrOpen(workspaceId);
+    const entry = this.cache.get(workspaceId);
+    if (!db || !entry) {
+      throw new Error(`MultiMindCache.acquireLease: cannot open mind for workspace '${workspaceId}'`);
+    }
+    entry.leases += 1;
+    let released = false;
+
+    return {
+      db,
+      release: () => {
+        if (released) return;
+        released = true;
+        if (entry.leases > 0) entry.leases -= 1;
+        if (
+          this.cache.get(workspaceId) === entry
+          && entry.pins === 0
+          && entry.leases === 0
+          && this.cache.size > this.maxOpen
+        ) {
+          this.evictLRU();
+        }
+      },
+    };
   }
 
   /**
@@ -195,7 +235,7 @@ export class MultiMindCache {
     let oldestKey: string | null = null;
     let oldestTime = Infinity;
     for (const [key, entry] of this.cache) {
-      if (entry.pins > 0) continue; // never evict a mind pinned by a live session
+      if (entry.pins > 0 || entry.leases > 0) continue; // never evict a mind held by live work
       if (entry.lastAccessed < oldestTime) {
         oldestTime = entry.lastAccessed;
         oldestKey = key;

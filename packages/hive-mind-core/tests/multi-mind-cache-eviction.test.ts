@@ -90,6 +90,68 @@ describe('MultiMindCache eviction / session-pinning', () => {
     cache.closeAll();
   });
 
+  it('binds a cache lease release to the exact generation it pinned', () => {
+    const cache = makeCache(2);
+    const retired = cache.acquireLease('A');
+
+    cache.close('A');
+    expect(retired.db.isOpen()).toBe(false);
+    const replacement = cache.acquireLease('A');
+    expect(replacement.db).not.toBe(retired.db);
+
+    retired.release();
+    retired.release();
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(true);
+    expect(replacement.db.isOpen()).toBe(true);
+    expect(cache.has('B')).toBe(false);
+
+    replacement.release();
+    cache.getOrOpen('D');
+    expect(cache.has('A')).toBe(false);
+    cache.closeAll();
+  });
+
+  it('does not carry an exact lease pin into an out-of-band reopened generation', () => {
+    const cache = makeCache(2);
+    const retired = cache.acquireLease('A');
+
+    retired.db.close();
+    const replacement = cache.acquireLease('A');
+    expect(replacement.db).not.toBe(retired.db);
+
+    retired.release();
+    replacement.release();
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(false);
+    expect(replacement.db.isOpen()).toBe(false);
+    cache.closeAll();
+  });
+
+  it('does not let a duplicate release consume another lease on the same generation', () => {
+    const cache = makeCache(2);
+    const first = cache.acquireLease('A');
+    const second = cache.acquireLease('A');
+
+    first.release();
+    first.release();
+    cache.getOrOpen('B');
+    cache.getOrOpen('C');
+
+    expect(cache.has('A')).toBe(true);
+    expect(second.db.isOpen()).toBe(true);
+    expect(cache.has('B')).toBe(false);
+
+    second.release();
+    cache.getOrOpen('D');
+    expect(cache.has('A')).toBe(false);
+    cache.closeAll();
+  });
+
   it('REOPEN-GUARD: a handle closed out-of-band is transparently reopened', () => {
     const cache = makeCache(2);
     const dbA = cache.getOrOpen('A');
