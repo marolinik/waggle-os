@@ -80,7 +80,11 @@ const OPENING_METADATA_FIELD = /^\s*(?:title|duration|participants?|audience|pur
 const MARKDOWN_HEADING = /^#{1,6}\s+\S/;
 
 function explicitlyScopesDraftToOpening(userRequest: string): boolean {
-  return /(?:^|[.!?]\s+)(?:(?:for (?:this response|now))\s*,?\s*)?(?:please\s+)?(?:give|provide|write|draft)\s+only\s+(?:(?:a|an|the)\s+)?(?:executive\s+)?(?:summary|introduction|title|metadata)\b/i.test(userRequest);
+  const match = /(?:^|[.!?]\s+)(?:(?:for (?:this response|now))\s*,?\s*)?(?:please\s+)?(?:give|provide|write|draft)\s+only\s+(?:(?:a|an|the)\s+)?(?:executive\s+)?(?:summary|introduction|title|metadata)\b/i.exec(userRequest);
+  if (!match) return false;
+  const tail = userRequest.slice((match.index ?? 0) + match[0].length).trim();
+  if (/^[.!?]*$/.test(tail)) return true;
+  return /^[,;:]\s*(?:(?:and\s+)?nothing\s+else|(?:do\s+not|don't)\s+(?:draft|include|write|provide|add)\s+(?:(?:any|the)\s+)?(?:remaining|other)\s+(?:requested\s+)?(?:sections?|content)\s*(?:yet|now|for now|in this response)?)[.!?]*$/i.test(tail);
 }
 
 function hasMultipleTimeBlocks(content: string): boolean {

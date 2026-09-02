@@ -445,6 +445,48 @@ describe('structured-draft completion integrity gate', () => {
     expect(result.content).toBe(completeReport);
   });
 
+  it('does not treat summary-only opening instructions as permission to omit later sections', async () => {
+    const fetch = mockFetch([abandonedReportOpening, completeReport]);
+    const result = await runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: `${reportRequest} Give only the executive summary as the opening, then include every requested section.`,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeReport);
+  });
+
+  it('does not ignore continuation instructions in the sentence after summary-only scope', async () => {
+    const fetch = mockFetch([abandonedReportOpening, completeReport]);
+    const result = await runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: `${reportRequest} Give only the executive summary. Then include every requested section.`,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeReport);
+  });
+
+  it('does not bypass completion when later sections use an unanticipated continuation verb', async () => {
+    const fetch = mockFetch([abandonedReportOpening, completeReport]);
+    const result = await runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{
+        role: 'user',
+        content: `${reportRequest} Give only the executive summary in prose; put the remaining requested sections in a table.`,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe(completeReport);
+  });
+
   it('does not apply the multipart gate to a two-facet brief', async () => {
     const response = '# Brief\n- Risk: signing pending.\nRecommendation: wait.';
     const fetch = mockFetch([response]);
