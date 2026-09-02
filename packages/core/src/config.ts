@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import type { EmbeddingProviderConfig, EmbeddingProviderType } from '@waggle/hive-mind-core';
 
 export interface ProviderEntry {
@@ -64,6 +65,125 @@ export interface McpToolRetrievalSettings {
 }
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const TRANSIENT_RENAME_ERRORS = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const TRANSIENT_READ_ERRORS = TRANSIENT_RENAME_ERRORS;
+
+class InvalidConfigError extends Error {}
+
+function waitForRetry(attempt: number): void {
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+}
+
+function renameWithRetry(source: string, destination: string): void {
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      fs.renameSync(source, destination);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!TRANSIENT_RENAME_ERRORS.has(code ?? '') || attempt === 4) throw error;
+      waitForRetry(attempt);
+    }
+  }
+}
+
+function readFileWithRetry(file: string): string {
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      return fs.readFileSync(file, 'utf-8');
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!TRANSIENT_READ_ERRORS.has(code ?? '') || attempt === 4) throw error;
+      waitForRetry(attempt);
+    }
+  }
+  throw new Error(`Unable to read config: ${file}`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readConfig(file: string): ConfigData {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileWithRetry(file));
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new InvalidConfigError(`Malformed config: ${file}`);
+    throw error;
+  }
+  if (!isRecord(parsed) || typeof parsed.defaultModel !== 'string' || !isRecord(parsed.providers)) {
+    throw new InvalidConfigError(`Invalid config structure: ${file}`);
+  }
+  for (const provider of Object.values(parsed.providers)) {
+    if (
+      !isRecord(provider)
+      || typeof provider.apiKey !== 'string'
+      || !Array.isArray(provider.models)
+      || !provider.models.every(model => typeof model === 'string')
+      || (provider.baseUrl !== undefined && typeof provider.baseUrl !== 'string')
+    ) {
+      throw new InvalidConfigError(`Invalid provider config structure: ${file}`);
+    }
+  }
+  return parsed as unknown as ConfigData;
+}
+
+function sanitizedBackup(config: ConfigData): ConfigData {
+  const sanitized: ConfigData = {
+    ...config,
+    providers: Object.fromEntries(
+      Object.entries(config.providers).map(([name, provider]) => [name, { ...provider, apiKey: '' }]),
+    ),
+  };
+  delete sanitized.teamServer;
+  return sanitized;
+}
+
+function writeJsonTemp(file: string, value: unknown): void {
+  fs.writeFileSync(file, JSON.stringify(value, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+    flag: 'wx',
+  });
+}
+
+function removeWithRetry(file: string): void {
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      fs.rmSync(file, { force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!TRANSIENT_RENAME_ERRORS.has(code ?? '') || attempt === 4) throw error;
+      waitForRetry(attempt);
+    }
+  }
+}
+
+function publishTemp(source: string, destination: string, recoveryPath?: string): void {
+  try {
+    renameWithRetry(source, destination);
+    return;
+  } catch (firstError) {
+    const code = (firstError as NodeJS.ErrnoException).code;
+    if (!TRANSIENT_RENAME_ERRORS.has(code ?? '') || !fs.existsSync(destination)) throw firstError;
+    removeWithRetry(destination);
+    try {
+      renameWithRetry(source, destination);
+    } catch (replacementError) {
+      try {
+        if (recoveryPath && !fs.existsSync(destination) && fs.existsSync(recoveryPath)) {
+          const restorePath = `${destination}.${process.pid}.${randomUUID()}.restore`;
+          fs.copyFileSync(recoveryPath, restorePath, fs.constants.COPYFILE_EXCL);
+          renameWithRetry(restorePath, destination);
+        }
+      } catch { /* load() can still recover directly from recoveryPath */ }
+      throw replacementError;
+    }
+  }
+}
 
 function getNonBlankEnv(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
@@ -93,10 +213,27 @@ export class WaggleConfig {
   }
 
   private load(): ConfigData {
+    let primaryError: unknown;
     if (fs.existsSync(this.configPath)) {
-      const raw = fs.readFileSync(this.configPath, 'utf-8');
-      return JSON.parse(raw) as ConfigData;
+      try {
+        return readConfig(this.configPath);
+      } catch (error) {
+        if (!(error instanceof InvalidConfigError)) throw error;
+        primaryError = error;
+      }
     }
+
+    const backupPath = `${this.configPath}.bak`;
+    if (fs.existsSync(backupPath)) {
+      try {
+        return readConfig(backupPath);
+      } catch (backupError) {
+        if (!(backupError instanceof InvalidConfigError)) throw backupError;
+        if (primaryError === undefined) throw backupError;
+      }
+    }
+
+    if (primaryError !== undefined) throw primaryError;
     return {
       defaultModel: DEFAULT_MODEL,
       providers: {},
@@ -104,7 +241,48 @@ export class WaggleConfig {
   }
 
   save(): void {
-    fs.writeFileSync(this.configPath, JSON.stringify(this.data, null, 2), 'utf-8');
+    const nonce = `${process.pid}.${randomUUID()}`;
+    const tempPath = `${this.configPath}.${nonce}.tmp`;
+    const backupPath = `${this.configPath}.bak`;
+    const backupTempPath = `${backupPath}.${nonce}.tmp`;
+    writeJsonTemp(tempPath, this.data);
+
+    try {
+      if (!fs.existsSync(this.configPath)) {
+        publishTemp(tempPath, this.configPath);
+        return;
+      }
+
+      let previousConfig: ConfigData | null = null;
+      try {
+        previousConfig = readConfig(this.configPath);
+      } catch (error) {
+        if (!(error instanceof InvalidConfigError)) throw error;
+      }
+
+      if (!previousConfig) {
+        const corruptPath = `${this.configPath}.corrupt-${Date.now()}-${randomUUID()}`;
+        renameWithRetry(this.configPath, corruptPath);
+        try {
+          renameWithRetry(tempPath, this.configPath);
+        } catch (error) {
+          try {
+            if (!fs.existsSync(this.configPath)) renameWithRetry(corruptPath, this.configPath);
+          } catch { /* the valid backup remains available */ }
+          throw error;
+        }
+        return;
+      }
+
+      // Publish a secret-scrubbed recovery copy before replacing the primary.
+      // The primary stays authoritative until this operation has fully committed.
+      writeJsonTemp(backupTempPath, sanitizedBackup(previousConfig));
+      publishTemp(backupTempPath, backupPath);
+      publishTemp(tempPath, this.configPath, backupPath);
+    } finally {
+      try { fs.rmSync(tempPath, { force: true }); } catch { /* best-effort cleanup */ }
+      try { fs.rmSync(backupTempPath, { force: true }); } catch { /* best-effort cleanup */ }
+    }
   }
 
   getDefaultModel(): string {
