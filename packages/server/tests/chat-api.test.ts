@@ -3480,7 +3480,8 @@ describe('Chat Streaming API', () => {
     const personalServer = await buildLocalServer({ dataDir: personalDir });
     const initiallyActiveWorkspace = personalServer.agentState.activeWorkspaceId;
     expect(initiallyActiveWorkspace).toBeTruthy();
-    personalServer.agentState.closeWorkspaceMind(initiallyActiveWorkspace!);
+    const retirement = await personalServer.agentState.closeWorkspaceMind(initiallyActiveWorkspace!);
+    retirement.release();
     expect(personalServer.agentState.activeWorkspaceId).toBeNull();
     personalServer.workspaceManager.ensure('default', {
       name: 'default',
@@ -3837,7 +3838,8 @@ describe('Chat Streaming API', () => {
     };
 
     try {
-      server.agentState.closeWorkspaceMind(previousActiveWorkspace!);
+      const retirement = await server.agentState.closeWorkspaceMind(previousActiveWorkspace!);
+      retirement.release();
       expect(server.agentState.activeWorkspaceId).toBeNull();
       const legacyResponse = await injectWithAuth(server, {
         method: 'POST',

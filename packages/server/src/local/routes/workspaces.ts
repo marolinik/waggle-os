@@ -1097,9 +1097,25 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (!existing) {
       return reply.status(404).send({ error: 'Workspace not found' });
     }
-    // A6: Close workspace mind DB before filesystem deletion to prevent EBUSY
-    server.agentState.closeWorkspaceMind(request.params.id);
-    server.workspaceManager.delete(request.params.id);
+    let retirement: { release(): void; rollback(): void } | undefined;
+    try {
+      retirement = await server.agentState.closeWorkspaceMind(request.params.id);
+    } catch (err) {
+      return reply.status(409).send({
+        error: 'workspace_busy',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    try {
+      server.workspaceManager.delete(request.params.id);
+    } catch (err) {
+      retirement?.rollback();
+      return reply.status(409).send({
+        error: 'workspace_busy',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    retirement?.release();
     emitAuditEvent(server, { workspaceId: request.params.id, eventType: 'workspace_delete' });
     return reply.status(204).send();
   });

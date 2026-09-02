@@ -197,6 +197,7 @@ import {
 } from './proactive-handlers.js';
 import { generateMonthlyAssessment, saveAssessmentToMind } from './monthly-assessment.js';
 import { WorkspaceSessionManager } from './workspace-sessions.js';
+import { resolveWorkspaceExecutionRoot } from './workspace-execution-root.js';
 import { maxWorkspaceSessionsForTier } from './tier-session-cap.js';
 import { EventEmitter } from 'node:events';
 import { LocalJobStore } from './job-store.js';
@@ -223,6 +224,8 @@ export interface LocalConfig {
   useBuiltInProxy?: boolean;
   /** False when a managed caller must resolve provider state before health probes start. */
   startOfflineManagerOnListen?: boolean;
+  /** Bounded wait for workspace cancellation and lease drain before DELETE fails closed. */
+  workspaceDeletionTimeoutMs?: number;
 }
 
 /** Pending approval request — resolved when user approves or denies. */
@@ -359,8 +362,8 @@ export interface AgentState {
   activateWorkspaceMind: (workspaceId: string) => boolean;
   /** Get a cached workspace MindDB (opens on demand). Returns null if workspace not found. */
   getWorkspaceMindDb: (workspaceId: string) => import('@waggle/core').MindDB | null;
-  /** Close and remove a workspace MindDB from cache. Used before workspace deletion to prevent EBUSY. */
-  closeWorkspaceMind: (workspaceId: string) => void;
+  /** Drain and retire a workspace MindDB before filesystem deletion. */
+  closeWorkspaceMind: (workspaceId: string) => Promise<{ release(): void; rollback(): void }>;
   /** List all workspaces (id + name). Used by global memory search. */
   listWorkspaces: () => Array<{ id: string; name: string }>;
   /** Currently active workspace ID (null = personal only) */
@@ -1651,22 +1654,142 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     return result;
   };
 
-  // Helper: get a cached workspace MindDB (opens on demand)
-  // A6: Close and remove workspace mind DB from cache before deletion
-  const closeWorkspaceMind = (workspaceId: string): void => {
-    // Pin-aware: close any live session first so it drops its cache pin (and
-    // stops referencing a handle we're about to force-close). Then force-close
-    // the cache entry — on deletion the workspace is authoritative, so we close
-    // regardless of remaining pins to release the file lock before FS deletion
-    // (A6 EBUSY). Ordering avoids the old double-close where both the session
-    // and this seam closed the same MindDB.
-    sessionManager.close(workspaceId);
-    mindCache.close(workspaceId);
-    teamSyncCache.delete(workspaceId);
-    if (activeWorkspaceId === workspaceId) {
-      orchestrator.setTeamSync(null);
-      orchestrator.clearWorkspaceMind();
-      setActiveWorkspaceId(null);
+  const configuredWorkspaceDeletionTimeoutMs = fullConfig.workspaceDeletionTimeoutMs;
+  const workspaceDeletionTimeoutMs = typeof configuredWorkspaceDeletionTimeoutMs === 'number'
+    && Number.isFinite(configuredWorkspaceDeletionTimeoutMs)
+    && configuredWorkspaceDeletionTimeoutMs > 0
+    ? Math.floor(configuredWorkspaceDeletionTimeoutMs)
+    : 10_000;
+  const awaitWorkspaceDeletionPhase = async <T>(
+    operation: Promise<T>,
+    phase: string,
+  ): Promise<T> => {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`Workspace deletion timed out while ${phase}`));
+        }, workspaceDeletionTimeoutMs);
+        timer.unref();
+        operation.then(resolve, reject);
+      });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
+  // A6: drain every generation-bound borrower before filesystem deletion.
+  const closeWorkspaceMind = async (workspaceId: string): Promise<{ release(): void; rollback(): void }> => {
+    const retirement = mindCache.beginRetirement(workspaceId);
+    const previousSession = sessionManager.get(workspaceId);
+    const previousActiveWorkspaceId = activeWorkspaceId;
+    const hadWorkspaceWeaver = workspaceWeavers.has(workspaceId);
+    const hadTeamSync = teamSyncCache.has(workspaceId);
+    let sessionClosed = false;
+
+    const stopStaleWorkspaceRuntime = (): void => {
+      const workspaceWeaver = workspaceWeavers.get(workspaceId);
+      if (workspaceWeaver) {
+        for (const timer of workspaceWeaver.timers) clearInterval(timer);
+        workspaceWeavers.delete(workspaceId);
+      }
+      delete workspaceWeaverStatus[workspaceId];
+      teamSyncCache.delete(workspaceId);
+      if (activeWorkspaceId === workspaceId) {
+        orchestrator.setTeamSync(null);
+        orchestrator.clearWorkspaceMind();
+        setActiveWorkspaceId(null);
+      }
+    };
+
+    const restoreSession = (): void => {
+      const workspaceConfig = wsManager.get(workspaceId);
+      if (!sessionClosed || !previousSession || sessionManager.has(workspaceId) || !workspaceConfig) return;
+
+      let replacementLease: ReturnType<MultiMindCache['acquireLease']> | undefined;
+      try {
+        replacementLease = mindCache.acquireLease(workspaceId);
+        const replacementOrchestrator = createSessionOrchestrator(replacementLease.db);
+        const workspacePath = resolveWorkspaceExecutionRoot(fullConfig.dataDir, workspaceConfig);
+        const replacement = sessionManager.create(
+          workspaceId,
+          replacementLease.db,
+          replacementOrchestrator,
+          server.agentState.buildToolsForSession(replacementOrchestrator, workspacePath, workspaceId),
+          previousSession.personaId ?? undefined,
+          replacementLease.release,
+        );
+        replacement.tokensUsed = previousSession.tokensUsed;
+        replacement.lastActivity = previousSession.lastActivity;
+        replacement.status = previousSession.status;
+        replacementLease = undefined;
+      } catch (restoreErr) {
+        replacementLease?.release();
+        log.warn('Could not restore workspace session after failed deletion', {
+          workspaceId,
+          error: restoreErr instanceof Error ? restoreErr.message : String(restoreErr),
+        });
+      }
+    };
+
+    const restoreDrainedRuntime = (): void => {
+      retirement.release();
+      if (!wsManager.get(workspaceId)) return;
+
+      if (previousActiveWorkspaceId === workspaceId || hadWorkspaceWeaver || hadTeamSync) {
+        stopStaleWorkspaceRuntime();
+        activateWorkspaceMindWithWeaver(workspaceId);
+        if (previousActiveWorkspaceId !== workspaceId) {
+          if (previousActiveWorkspaceId && wsManager.get(previousActiveWorkspaceId)) {
+            activateWorkspaceMindWithWeaver(previousActiveWorkspaceId);
+          } else {
+            orchestrator.setTeamSync(null);
+            orchestrator.clearWorkspaceMind();
+            setActiveWorkspaceId(null);
+          }
+        }
+      }
+      restoreSession();
+    };
+
+    try {
+      // Durable collaboration workers own independent workspace leases.
+      const activeRuns = agentRunRegistry.list({ workspaceId, limit: 1_000 })
+        .filter(run => run.kind === 'worker')
+        .filter(run => !['completed', 'failed', 'cancelled', 'interrupted'].includes(run.status));
+      const cancellations = await awaitWorkspaceDeletionPhase(
+        Promise.allSettled(activeRuns.map(run => agentRunRegistry.control(run.id, 'cancel'))),
+        'cancelling active work',
+      );
+      const failures = cancellations
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map(result => result.reason);
+      if (failures.length > 0) {
+        throw new AggregateError(failures, `Could not stop active work for workspace '${workspaceId}'`);
+      }
+
+      // Session-backed chat, command, and legacy Fleet work aborts now, but
+      // keeps its exact cache lease until every active request drains.
+      sessionClosed = sessionManager.close(workspaceId);
+      await awaitWorkspaceDeletionPhase(retirement.drained, 'draining active work');
+      let settled = false;
+      return {
+        release: () => {
+          if (settled) return;
+          settled = true;
+          stopStaleWorkspaceRuntime();
+          retirement.release();
+        },
+        rollback: () => {
+          if (settled) return;
+          settled = true;
+          restoreDrainedRuntime();
+        },
+      };
+    } catch (err) {
+      retirement.release();
+      restoreSession();
+      throw err;
     }
   };
 
