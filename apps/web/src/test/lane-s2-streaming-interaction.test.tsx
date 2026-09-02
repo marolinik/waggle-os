@@ -992,7 +992,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     await act(async () => {
       cancellation = result.current.stopStreaming({ discardQueued: true })
         .then((release) => {
-          releaseStoppedSession = release;
+          if (release) releaseStoppedSession = release;
           cancellationSettled = true;
         });
       await flush();
