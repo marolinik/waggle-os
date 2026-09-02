@@ -9,6 +9,7 @@ import { workspaceCounts } from '@/lib/workspace-counts';
 import {
   cancelWorkspaceSelectionChatDispatch,
   completeWorkspaceSelectionChatDispatch,
+  requestNewChatSession,
   stageWorkspaceSelectionChatDispatch,
 } from '@/hooks/useChatWidgetState';
 
@@ -27,7 +28,10 @@ const HomeRoute = () => {
           safety net for the onboarding model gate). */}
       <NoModelBanner onSetup={() => navigate(routeFor('settings'))} />
       <HomeCockpit
-        onContinue={(workspaceId, sessionId) => {
+        onContinue={(workspaceId, sessionId, initialMessage) => {
+          if (!sessionId && initialMessage) {
+            requestNewChatSession(workspaceId, initialMessage);
+          }
           selectWorkspace(workspaceId);
           navigate(`${routeFor('chat', { activeWorkspaceId: workspaceId })}${queryString({ session: sessionId })}`);
         }}

@@ -221,6 +221,7 @@ export function takeChatSeed(workspaceId: string): ChatSeed | undefined {
 
 export interface NewChatSessionIntent {
   id: string;
+  initialMessage?: string;
 }
 
 const pendingNewChatSessions = new Map<string, NewChatSessionIntent>();
@@ -239,7 +240,7 @@ function assertNewChatWorkspace(workspaceId: string): void {
 }
 
 /** Stage one coalesced new-session request until the workspace chat can consume it. */
-export function requestNewChatSession(workspaceId: string): NewChatSessionIntent {
+export function requestNewChatSession(workspaceId: string, initialMessage?: string): NewChatSessionIntent {
   assertNewChatWorkspace(workspaceId);
   const existing = pendingNewChatSessions.get(workspaceId)
     ?? inFlightNewChatSessions.get(workspaceId);
@@ -248,6 +249,9 @@ export function requestNewChatSession(workspaceId: string): NewChatSessionIntent
   const intent = {
     id: globalThis.crypto?.randomUUID?.()
       ?? `new-chat-session-${Date.now()}-${++newChatSessionSequence}`,
+    ...(initialMessage !== undefined
+      ? { initialMessage: normalizeChatDispatchContent(initialMessage) }
+      : {}),
   };
   pendingNewChatSessions.set(workspaceId, intent);
   notifyNewChatSessionListeners(workspaceId);
@@ -300,6 +304,7 @@ export function usePendingNewChatSessionIntent(workspaceId: string): NewChatSess
 export interface ChatDispatchRequest {
   id: string;
   content: string;
+  targetSessionId?: string;
 }
 
 const pendingDispatches = new Map<string, readonly ChatDispatchRequest[]>();
@@ -326,16 +331,21 @@ function normalizeChatDispatchContent(content: string): string {
   return trimmed;
 }
 
-function createChatDispatchRequest(content: string): ChatDispatchRequest {
+function createChatDispatchRequest(content: string, targetSessionId?: string): ChatDispatchRequest {
   return {
     id: globalThis.crypto?.randomUUID?.()
       ?? `chat-dispatch-${Date.now()}-${++dispatchSequence}`,
     content,
+    ...(targetSessionId ? { targetSessionId } : {}),
   };
 }
 
 /** Queue a transient prompt for the named workspace without persisting user content. */
-export function enqueueChatDispatch(workspaceId: string, content: string): ChatDispatchRequest {
+export function enqueueChatDispatch(
+  workspaceId: string,
+  content: string,
+  targetSessionId?: string,
+): ChatDispatchRequest {
   if (!workspaceId) throw new Error('workspaceId is required');
   const trimmed = normalizeChatDispatchContent(content);
   const workspaceQueue = pendingDispatches.get(workspaceId) ?? [];
@@ -345,7 +355,7 @@ export function enqueueChatDispatch(workspaceId: string, content: string): ChatD
   if (pendingDispatchCount >= MAX_CHAT_DISPATCHES_TOTAL) {
     throw new Error('Chat dispatch queue is full');
   }
-  const request = createChatDispatchRequest(trimmed);
+  const request = createChatDispatchRequest(trimmed, targetSessionId);
   pendingDispatches.set(workspaceId, [...workspaceQueue, request]);
   pendingDispatchCount += 1;
   notifyDispatchListeners(workspaceId);

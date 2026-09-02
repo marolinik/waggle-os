@@ -73,6 +73,7 @@ interface StartHereMove {
   primaryLabel: string;
   workspaceId: string;
   sessionId?: string;
+  initialMessage?: string;
   mode: 'continue' | 'open';
 }
 
@@ -198,6 +199,7 @@ function buildStartHereMove(briefing: HomeBriefing, wsById: Map<string, RecentWo
       primaryLabel: 'Resume',
       workspaceId: suggested.workspaceId,
       sessionId: suggested.sessionId,
+      ...(!suggested.sessionId ? { initialMessage: suggested.label } : {}),
       mode: 'continue',
     };
   }
@@ -358,7 +360,7 @@ function StartHereCard({
   move, onContinue, onOpenWorkspaceDesktop,
 }: {
   move: StartHereMove | null;
-  onContinue: (id: string, sessionId?: string) => void;
+  onContinue: (id: string, sessionId?: string, initialMessage?: string) => void;
   onOpenWorkspaceDesktop: (id: string) => void;
 }) {
   if (!move) return null;
@@ -367,7 +369,8 @@ function StartHereCard({
       onOpenWorkspaceDesktop(move.workspaceId);
       return;
     }
-    onContinue(move.workspaceId, move.sessionId);
+    if (move.initialMessage) onContinue(move.workspaceId, move.sessionId, move.initialMessage);
+    else onContinue(move.workspaceId, move.sessionId);
   };
 
   return (
@@ -435,7 +438,7 @@ function RecentWorkspacesPanel({
   cards, onContinue, onOpenDesktop, onWorkspaceChanged,
 }: {
   cards: RecentWorkspaceCard[];
-  onContinue: (id: string, sessionId?: string) => void;
+  onContinue: (id: string, sessionId?: string, initialMessage?: string) => void;
   onOpenDesktop: (id: string) => void;
   onWorkspaceChanged: () => void;
 }) {
@@ -805,7 +808,10 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
   }
 
   const recentWorkspaces = briefing.recentWorkspaces ?? [];
-  const onOpenFromAction = (a: SuggestedAction) => onContinue(a.workspaceId, a.sessionId);
+  const onOpenFromAction = (a: SuggestedAction) => {
+    if (a.sessionId) onContinue(a.workspaceId, a.sessionId);
+    else onContinue(a.workspaceId, undefined, a.label);
+  };
 
   // Suggestion sub-line, composed from the linked workspace (label-only server
   // payload has no sub — derive an honest one from the workspace + recency).
@@ -1002,7 +1008,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
 
 interface HomeCockpitProps {
   /** Continue a workspace → open its chat runtime (founder A-flow: continue→openChat). */
-  onContinue: (workspaceId: string, sessionId?: string) => void;
+  onContinue: (workspaceId: string, sessionId?: string, initialMessage?: string) => void;
   /** Open the full Workspace Desktop for a workspace (S02). */
   onOpenWorkspaceDesktop: (workspaceId: string) => void;
   /** Start the new-workspace flow (first-run + empty-state CTA). */

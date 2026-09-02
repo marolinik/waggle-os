@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import {
@@ -49,14 +49,24 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   getModels: vi.fn().mockResolvedValue([]),
   getModel: vi.fn().mockResolvedValue(''),
+  getProviders: vi.fn().mockResolvedValue({ providers: [], search: [], activeSearch: '' }),
   getSettings: vi.fn().mockResolvedValue({}),
   getTeamMembers: vi.fn().mockResolvedValue([]),
   patchWorkspace: vi.fn().mockResolvedValue(undefined),
+  getHomeBriefing: vi.fn(),
+  getHomeOvernight: vi.fn().mockResolvedValue(null),
   shell: {
+    activeWorkspaceId: 'ws-a' as string | null,
     workspaces: [
       { id: 'ws-a', name: 'Workspace A', group: 'Personal' },
       { id: 'ws-b', name: 'Workspace B', group: 'Personal' },
     ],
+    workspacesLoading: false,
+    selectWorkspace: vi.fn(),
+    overlays: {
+      setShowCreateWorkspace: vi.fn(),
+      setShowWorkspaceSwitcher: vi.fn(),
+    },
     defaultAutonomy: 'normal',
     setContextRailTarget: vi.fn(),
   },
@@ -105,6 +115,10 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mocks.toast }),
 }));
 vi.mock('@/providers/ShellContext', () => ({ useShell: () => mocks.shell }));
+vi.mock('@/providers/ServiceProvider', () => ({
+  useService: () => ({ connecting: false, connected: true }),
+}));
+vi.mock('@/hooks/useOfflineStatus', () => ({ useOfflineStatus: () => false }));
 vi.mock('./ChatApp', () => ({
   default: (props: Record<string, unknown>) => {
     mocks.chatAppProps.push(props);
@@ -154,14 +168,18 @@ beforeEach(() => {
   mocks.renameSession.mockReset();
   mocks.deleteSession.mockReset();
   mocks.toast.mockReset();
+  mocks.getHomeBriefing.mockReset();
+  mocks.getHomeOvernight.mockReset().mockResolvedValue(null);
+  mocks.getProviders.mockReset().mockResolvedValue({ providers: [], search: [], activeSearch: '' });
+  mocks.shell.selectWorkspace.mockReset();
 });
 
 afterEach(() => {
   cleanup();
-  for (const id of ['ws-ready', 'ws-transition', 'ws-late', 'ws-failure', 'ws-fifo-a', 'ws-fifo-b', 'ws-bound']) {
+  for (const id of ['ws-ready', 'ws-transition', 'ws-late', 'ws-failure', 'ws-fifo-a', 'ws-fifo-b', 'ws-bound', 'ws-memory-resume']) {
     drain(id);
   }
-  for (const id of ['ws-new-session', 'ws-new-session-other', 'ws-new-session-locked', 'ws-new-session-failure']) {
+  for (const id of ['ws-a', 'ws-new-session', 'ws-new-session-other', 'ws-new-session-locked', 'ws-new-session-failure', 'ws-memory-resume']) {
     clearNewChatSessionIntent(id);
   }
   for (let index = 0; index <= MAX_CHAT_DISPATCHES_TOTAL; index += 1) {
@@ -171,6 +189,46 @@ afterEach(() => {
 });
 
 describe('repeatable per-workspace chat dispatch', () => {
+  it('forwards an unbound Start Here memory suggestion into a fresh-session intent', async () => {
+    window.localStorage.clear();
+    mocks.getHomeBriefing.mockResolvedValue({
+      greeting: 'Welcome back',
+      date: '2026-09-02T08:00:00.000Z',
+      recentWorkspaces: [{
+        id: 'ws-a',
+        name: 'Workspace A',
+        group: 'Personal',
+        lastActive: '2026-09-02T07:00:00.000Z',
+        pendingCount: 1,
+      }],
+      suggestedActions: [{
+        label: 'Review the remembered launch decision',
+        workspaceId: 'ws-a',
+        kind: 'next-action',
+      }],
+      upNext: [],
+      isFirstRun: false,
+      needsReviewCount: 0,
+    });
+    const { default: HomeRoute } = await import('@/routes/HomeRoute');
+    const router = createMemoryRouter(
+      [
+        { path: '/home', element: <HomeRoute /> },
+        { path: '/workspaces/:workspaceId/chat', element: <div>chat</div> },
+      ],
+      { initialEntries: ['/home'] },
+    );
+    render(<RouterProvider router={router} />);
+
+    fireEvent.click(await screen.findByTestId('home-cockpit-start-primary'));
+
+    expect(mocks.shell.selectWorkspace).toHaveBeenCalledWith('ws-a');
+    expect(router.state.location.pathname).toBe('/workspaces/ws-a/chat');
+    expect(requestNewChatSession('ws-a')).toMatchObject({
+      initialMessage: 'Review the remembered launch decision',
+    });
+  });
+
   it('restores URL-selected sessions, records sidebar navigation, and isolates hidden workspaces', async () => {
     mocks.activeSessionId = 'session-return-a';
     mocks.sessions.push(
@@ -363,6 +421,69 @@ describe('repeatable per-workspace chat dispatch', () => {
     expect(retry.id).not.toBe(first.id);
     await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(2));
     await act(async () => { await Promise.resolve(); });
+  });
+
+  it('creates a fresh session before dispatching a remembered suggested action', async () => {
+    let resolveCreate!: (value: { id: string }) => void;
+    const pendingCreate = new Promise<{ id: string }>(resolve => { resolveCreate = resolve; });
+    mocks.activeSessionId = 'session-unrelated-old';
+    mocks.createSession.mockReturnValue(pendingCreate);
+    mocks.sendMessage.mockImplementation(async (_content: string, options?: SendOptions) => {
+      options?.onAccepted?.();
+      return true;
+    });
+
+    requestNewChatSession('ws-memory-resume', 'Review the remembered launch decision');
+
+    const view = render(
+      <StrictMode><ChatWindowInstance workspaceId="ws-memory-resume" /></StrictMode>,
+    );
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    mocks.activeSessionId = 'session-memory-new';
+    mocks.historyReady = false;
+    await act(async () => {
+      resolveCreate({ id: 'session-memory-new' });
+      await pendingCreate;
+    });
+    view.rerender(
+      <StrictMode><ChatWindowInstance workspaceId="ws-memory-resume" /></StrictMode>,
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    mocks.historyReady = true;
+    view.rerender(
+      <StrictMode><ChatWindowInstance workspaceId="ws-memory-resume" /></StrictMode>,
+    );
+
+    await waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
+    expect(mocks.sendMessage.mock.calls[0]?.[0]).toBe('Review the remembered launch decision');
+    expect(mocks.chatOptions.at(-1)).toMatchObject({
+      workspaceId: 'ws-memory-resume',
+      sessionId: 'session-memory-new',
+    });
+  });
+
+  it('never dispatches a remembered suggested action when fresh session creation fails', async () => {
+    mocks.activeSessionId = 'session-unrelated-old';
+    mocks.createSession.mockResolvedValueOnce(undefined);
+    requestNewChatSession('ws-memory-resume', 'Review the remembered launch decision');
+
+    const view = render(
+      <StrictMode><ChatWindowInstance workspaceId="ws-memory-resume" /></StrictMode>,
+    );
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledTimes(1));
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+    mocks.activeSessionId = 'session-other-later';
+    view.rerender(
+      <StrictMode><ChatWindowInstance workspaceId="ws-memory-resume" /></StrictMode>,
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
   });
 
   it('forwards loading, creating, and settled readiness to the chat surface', async () => {

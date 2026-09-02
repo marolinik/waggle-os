@@ -8,6 +8,7 @@ import {
   acknowledgeChatDispatch,
   claimNewChatSessionIntent,
   completeNewChatSessionIntent,
+  enqueueChatDispatch,
   usePendingChatDispatch,
   usePendingNewChatSessionIntent,
 } from '@/hooks/useChatWidgetState';
@@ -183,7 +184,10 @@ const ChatWindowInstance = ({
 
     void (async () => {
       try {
-        await handleCreateSession();
+        const session = await handleCreateSession();
+        if (session && pendingNewChatSession.initialMessage) {
+          enqueueChatDispatch(workspaceId, pendingNewChatSession.initialMessage, session.id);
+        }
       } catch {
         // useSessions owns the visible error state; still release the intent.
       } finally {
@@ -196,6 +200,7 @@ const ChatWindowInstance = ({
     if (
       !pendingDispatch
       || !activeSessionId
+      || (pendingDispatch.targetSessionId && pendingDispatch.targetSessionId !== activeSessionId)
       || sessionLoading
       || sessionCreating
       || !historyReady
