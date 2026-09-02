@@ -221,6 +221,8 @@ export interface AutonomyState {
   expiresAt: number | null;
 }
 
+const CHAT_TURN_CONFLICT_MAX_RETRIES = 6;
+
 /**
  * Tool-context metrics are live transport diagnostics, not conversation data.
  * Keep them on the active response, but never let the module cache replay them
@@ -389,6 +391,7 @@ export const useChat = ({
   // QUEUE behind the in-flight one — the optimistic user turn renders at once
   // with a truthful `queued` marker and dispatches when the current reply ends.
   const inFlightRef = useRef(false);
+  const sessionTransitionBlockRef = useRef<{ cacheKey: string } | null>(null);
   const queueRef = useRef<Array<{
     id: string;
     content: string;
@@ -397,6 +400,7 @@ export const useChat = ({
     model?: string;
     persona?: string;
     autonomy?: AutonomyState;
+    turnConflictAttempts?: number;
     workspaceId: string;
     sessionId: string;
   }>>([]);
@@ -409,6 +413,7 @@ export const useChat = ({
       turnModel?: string,
       turnPersona?: string,
       turnAutonomy?: AutonomyState,
+      turnConflictAttempts?: number,
     ) => Promise<boolean>
   >(async () => false);
 
@@ -434,6 +439,7 @@ export const useChat = ({
         next.model,
         next.persona,
         next.autonomy,
+        next.turnConflictAttempts,
       );
     }
   }, []);
@@ -485,6 +491,12 @@ export const useChat = ({
     const historyRecoveryLocalMessages = historyRecoveryLocalMessagesRef.current;
     const historyRecoveryRetryCounts = historyRecoveryRetryCountsRef.current;
     let effectPendingHistory: PendingHistoryLoad | null = null;
+    if (
+      sessionTransitionBlockRef.current
+      && sessionTransitionBlockRef.current.cacheKey !== currentThreadKey
+    ) {
+      sessionTransitionBlockRef.current = null;
+    }
     const activeDispatch = activeDispatchRef.current;
     if (
       activeDispatch
@@ -633,7 +645,7 @@ export const useChat = ({
       cancelled = true;
       effectPendingHistory?.release();
     };
-  }, [workspaceId, sessionId, historyReloadRevision, cancelActiveDispatch]);
+  }, [workspaceId, sessionId, currentThreadKey, historyReloadRevision, cancelActiveDispatch]);
 
   // Lane C: persist the SETTLED thread (never mid-stream partials or queued
   // turns) so a remount/return paints instantly from the cache above.
@@ -667,6 +679,7 @@ export const useChat = ({
     turnModel?: string,
     turnPersona?: string,
     turnAutonomy?: AutonomyState,
+    turnConflictAttempts = 0,
   ): Promise<boolean> => {
     if (!workspaceId || !sessionId || !content.trim()) return false;
     setHistoryLoaded(true);
@@ -803,6 +816,11 @@ export const useChat = ({
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
         if (terminalEventSeen) continue;
+        if (evt.type === 'error' && data?.code === 'SESSION_TURN_IN_PROGRESS') {
+          const conflict = new Error('The previous response is still stopping.');
+          conflict.name = 'ChatSessionTurnInProgressError';
+          throw conflict;
+        }
         if (evt.type === 'done') {
           const canonicalContent = typeof data?.content === 'string'
             ? data.content
@@ -1100,6 +1118,53 @@ export const useChat = ({
         // the partial answer and let finally release the composer/queue.
         return true;
       }
+      const isTurnConflict = e instanceof Error
+        && e.name === 'ChatSessionTurnInProgressError';
+      if (isTurnConflict && turnConflictAttempts < CHAT_TURN_CONFLICT_MAX_RETRIES) {
+        setMessages(prev => prev.map(message => message.id === assistantId
+          ? { ...message, retrying: true }
+          : message));
+        await new Promise(resolve => setTimeout(
+          resolve,
+          25 * (2 ** turnConflictAttempts),
+        ));
+        if (controller.signal.aborted) return true;
+        const queuedId = optimisticId ?? immediateUserId;
+        const currentThread = currentThreadRef.current;
+        if (
+          queuedId
+          && activeDispatchRef.current === activeDispatch
+          && currentThread.workspaceId === activeDispatch.workspaceId
+          && (currentThread.sessionId ?? '') === activeDispatch.sessionId
+        ) {
+          const pendingHistory = pendingHistoryRef.current;
+          if (pendingHistory?.cacheKey === chatThreadCacheKey(
+            activeDispatch.workspaceId,
+            activeDispatch.sessionId,
+          )) {
+            pendingHistory.localMessageIds.delete(assistantId);
+          }
+          setPendingApproval(null);
+          setMessages(prev => prev
+            .filter(message => message.id !== assistantId)
+            .map(message => message.id === queuedId
+              ? { ...message, queued: true }
+              : message));
+          queueRef.current.unshift({
+            id: queuedId,
+            content: trimmed,
+            retry: opts?.retry,
+            retryTarget: opts?.retryTarget,
+            model: turnModel,
+            persona: turnPersona,
+            autonomy: turnAutonomy ? { ...turnAutonomy } : undefined,
+            turnConflictAttempts: turnConflictAttempts + 1,
+            workspaceId: activeDispatch.workspaceId,
+            sessionId: activeDispatch.sessionId,
+          });
+          return true;
+        }
+      }
       failed = true;
       setPendingApproval(null);
       // P1b D3: sendMessage now THROWS AdapterHttpError on HTTP failure (it
@@ -1115,7 +1180,9 @@ export const useChat = ({
       const isTier403 = (httpErr?.body as { error?: string } | undefined)?.error === 'TIER_INSUFFICIENT';
       const isIncompleteStream = e instanceof Error && e.name === 'ChatStreamIncompleteError';
       const isUnexpectedAbort = e instanceof Error && e.name === 'AbortError';
-      const message = isIncompleteStream
+      const message = isTurnConflict
+        ? 'The previous response is still stopping. Please retry in a moment.'
+        : isIncompleteStream
         ? e.message
         : isUnexpectedAbort
         ? 'The response was interrupted before completion. Please retry.'
@@ -1170,6 +1237,7 @@ export const useChat = ({
     if (!workspaceId || !sessionId || !content.trim()) return false;
     const cacheKey = sessionId ? chatThreadCacheKey(workspaceId, sessionId) : null;
     if (messagesThreadKeyRef.current !== cacheKey) return false;
+    if (sessionTransitionBlockRef.current?.cacheKey === cacheKey) return false;
     if (cacheKey && (
       (clearingThreadCountsRef.current.get(cacheKey) ?? 0) > 0
       || recoveringHistoryThreadsRef.current.has(cacheKey)
@@ -1278,38 +1346,67 @@ export const useChat = ({
     void sendMessage(content, { retry: true, retryTarget });
   }, [messages, isLoading, workspaceId, sessionId, sendMessage]);
 
-  // Lane S2 (Pillar 3.1): user-initiated halt of the in-flight reply. Aborts THIS
-  // stream's controller (the for-await breaks before appending the next event),
-  // flips the composer back to send at once, and best-effort tells the server
-  // agent loop to stop. The partial answer already rendered stays untouched — no
-  // rollback. Idempotent: the stream's own `finally` also clears these.
-  const stopStreaming = useCallback(() => {
+  // Lane S2 (Pillar 3.1): user-initiated halt of the in-flight reply. The
+  // default Stop action preserves queued FIFO. A session transition instead
+  // discards queued work and revokes this dispatch's ownership before awaiting
+  // the exact server cancellation, so a late generator cannot flush into the
+  // old thread while the new session is being created.
+  const stopStreaming = useCallback(async (
+    options?: { discardQueued?: boolean },
+  ): Promise<void | (() => void)> => {
     const activeDispatch = activeDispatchRef.current;
     if (!inFlightRef.current || !activeDispatch) return;
+    const discardQueued = options?.discardQueued === true;
+    let transitionBlock: { cacheKey: string } | null = null;
+    if (discardQueued) {
+      transitionBlock = {
+        cacheKey: chatThreadCacheKey(
+          activeDispatch.workspaceId,
+          activeDispatch.sessionId,
+        ),
+      };
+      sessionTransitionBlockRef.current = transitionBlock;
+      activeDispatchRef.current = null;
+      queueRef.current = [];
+      inFlightRef.current = false;
+    }
     activeDispatch.controller.abort();
     setPendingApproval(null);
-    setMessages(prev => prev.map(message => {
-      if (message.id !== activeDispatch.assistantId || !message.draft) return message;
-      const failure = 'Stopped by user';
-      return {
-        ...message,
-        blocks: settleRunningBlocks(message.blocks || [], failure),
-        draft: { ...message.draft, status: 'stopped' as const },
-        ...(message.tools && { tools: settleRunningTools(message.tools, failure) }),
-      };
-    }));
-    inFlightRef.current = false;
+    setMessages(prev => prev
+      .filter(message => !discardQueued || !message.queued)
+      .map(message => {
+        if (message.id !== activeDispatch.assistantId || !message.draft) return message;
+        const failure = 'Stopped by user';
+        return {
+          ...message,
+          retrying: false,
+          blocks: settleRunningBlocks(message.blocks || [], failure),
+          draft: { ...message.draft, status: 'stopped' as const },
+          ...(message.tools && { tools: settleRunningTools(message.tools, failure) }),
+        };
+      }));
     setIsLoading(false);
+    let cancellation: Promise<unknown>;
     try {
-      void Promise.resolve(adapter.abortAgent(
+      cancellation = Promise.resolve(adapter.abortAgent(
         activeDispatch.workspaceId,
         activeDispatch.sessionId,
-      )).catch(() => { /* best-effort */ });
-    } catch { /* adapter unavailable */ }
-    // Preserve user-entered order: if a turn was already queued, promote it
-    // before a newly typed send can bypass the queue after Stop releases input.
-    flushNextQueuedFor(activeDispatch.workspaceId, activeDispatch.sessionId);
-  }, [flushNextQueuedFor]);
+      )).catch(() => undefined);
+    } catch {
+      cancellation = Promise.resolve();
+    }
+    // Manual Stop leaves internal ownership intact until runDispatch.finally.
+    // A new send can still be accepted into FIFO, but cannot overlap the old
+    // server transaction. The discard path has revoked ownership above.
+    await cancellation;
+    if (transitionBlock) {
+      return () => {
+        if (sessionTransitionBlockRef.current === transitionBlock) {
+          sessionTransitionBlockRef.current = null;
+        }
+      };
+    }
+  }, []);
 
   const clearHistory = useCallback(async () => {
     if (sessionId && workspaceId) {
@@ -1401,6 +1498,7 @@ export const useChat = ({
             message.id === activeDispatch.assistantId && message.draft
               ? {
                 ...message,
+                retrying: false,
                 blocks: settleRunningBlocks(message.blocks || [], 'Clear failed'),
                 draft: { ...message.draft, status: 'stopped' as const },
                 ...(message.tools && { tools: settleRunningTools(message.tools, 'Clear failed') }),

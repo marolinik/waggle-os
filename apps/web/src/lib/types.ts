@@ -449,6 +449,8 @@ export interface ChatMessage {
    * never errors, never drops. Cleared to `false`/absent once dispatched.
    */
   queued?: boolean;
+  /** A same-session server turn is still unwinding; this draft is waiting to retry. */
+  retrying?: boolean;
   /**
    * Non-authoritative streaming preview. Draft text is display-only: it must
    * never feed copy/pin/feedback, conversation context, or the settled cache.

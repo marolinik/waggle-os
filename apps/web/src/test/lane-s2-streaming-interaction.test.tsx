@@ -944,15 +944,106 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     // The adapter targets only this exact workspace/session stream.
     expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-1');
 
-    // Send is re-enabled: a fresh send dispatches a new stream (not queued).
+    // Send is re-enabled in the UI, but stays FIFO behind the server-owned turn.
     mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
       yield { type: 'done', data: { content: 'second' } };
     });
     await act(async () => { await result.current.sendMessage('again'); await flush(); });
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.messages.some(message => message.queued)).toBe(true);
 
     gate.resolve(); // let the abandoned first generator settle
     await act(async () => { await firstPromise?.catch(() => {}); });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('again');
+  });
+
+  it('awaits exact cancellation and discards queued work before starting a new session', async () => {
+    const streamGate = deferred<void>();
+    const abortGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield {
+          type: 'approval_required',
+          data: { requestId: 'approval-new-session', toolName: 'read_file', sourceWorkspaceId: 'ws-1' },
+        };
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await streamGate.promise;
+        yield { type: 'done', data: { content: 'late answer' } };
+      })
+      .mockImplementation(async function* () {
+        yield { type: 'done', data: { content: 'must stay blocked' } };
+      });
+    mocks.adapter.abortAgent.mockReturnValueOnce(abortGate.promise);
+
+    const { result } = await mountChat('sess-new-session');
+    let activeTurn!: Promise<boolean>;
+    await act(async () => {
+      activeTurn = result.current.sendMessage('first');
+      await flush();
+      await result.current.sendMessage('queued second');
+    });
+    expect(result.current.messages.some(message => message.queued)).toBe(true);
+    expect(result.current.pendingApproval?.requestId).toBe('approval-new-session');
+
+    let cancellationSettled = false;
+    let releaseStoppedSession: (() => void) | undefined;
+    let cancellation!: Promise<void>;
+    await act(async () => {
+      cancellation = result.current.stopStreaming({ discardQueued: true })
+        .then((release) => {
+          releaseStoppedSession = release;
+          cancellationSettled = true;
+        });
+      await flush();
+    });
+
+    expect(cancellationSettled).toBe(false);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.pendingApproval).toBeNull();
+    expect(result.current.messages.some(message => message.queued)).toBe(false);
+    expect(result.current.messages.some(message => message.content === 'queued second')).toBe(false);
+    expect(result.current.messages.find(message => message.role === 'assistant')?.draft)
+      .toMatchObject({ content: 'partial answer', status: 'stopped' });
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-new-session');
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    const onAccepted = vi.fn();
+    let blockedDuringCancel = true;
+    await act(async () => {
+      blockedDuringCancel = await result.current.sendMessage('external pending dispatch', { onAccepted });
+    });
+    expect(blockedDuringCancel).toBe(false);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      abortGate.resolve();
+      await cancellation;
+    });
+    expect(cancellationSettled).toBe(true);
+
+    let blockedBeforeSessionChanges = true;
+    await act(async () => {
+      blockedBeforeSessionChanges = await result.current.sendMessage(
+        'external dispatch after cancel',
+        { onAccepted },
+      );
+    });
+    expect(blockedBeforeSessionChanges).toBe(false);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    streamGate.resolve();
+    await act(async () => { await activeTurn; });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.messages.some(message => message.content === 'late answer')).toBe(false);
+
+    await act(async () => {
+      releaseStoppedSession?.();
+      await result.current.sendMessage('retry after create failure');
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('does not report a user-aborted stream as a backend outage', async () => {
@@ -1022,6 +1113,10 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
       timestamp: 'now',
     }]);
     await act(async () => { await pendingHistory.promise; await flush(); });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    firstGate.resolve();
+    await act(async () => { await firstPromise; });
     await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
 
     expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith(
@@ -1045,13 +1140,11 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
         ?.map(message => [message.role, message.content]),
     ).toEqual(canonicalReplacement);
 
-    firstGate.resolve();
-    await act(async () => { await firstPromise; });
     expect(result.current.messages.map(message => [message.role, message.content]))
       .toEqual(canonicalReplacement);
   });
 
-  it('preserves queued FIFO when a stopped stream is replaced and settles late', async () => {
+  it('waits for stopped stream ownership to settle before flushing queued FIFO', async () => {
     const firstGate = deferred<void>();
     const secondGate = deferred<void>();
     mocks.adapter.sendMessage
@@ -1081,22 +1174,164 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
       result.current.stopStreaming();
       await flush();
     });
-    expect(result.current.isLoading).toBe(true);
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
-    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('second');
+    expect(result.current.isLoading).toBe(false);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
 
     await act(async () => { await result.current.sendMessage('third'); await flush(); });
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
 
     firstGate.resolve();
     await act(async () => { await firstPromise; await flush(); });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
     expect(result.current.isLoading).toBe(true);
-    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('second');
 
     secondGate.resolve();
     await act(async () => { await flush(); });
     await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3));
     expect(mocks.adapter.sendMessage.mock.calls[2]?.[1]).toBe('third');
+  });
+
+  it('retries a transient same-session server lock without duplicating the turn', async () => {
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield {
+          type: 'error',
+          data: {
+            code: 'SESSION_TURN_IN_PROGRESS',
+            message: 'Another turn is already running for this session.',
+          },
+        };
+      })
+      .mockImplementationOnce(async function* () {
+        yield {
+          type: 'error',
+          data: {
+            code: 'SESSION_TURN_IN_PROGRESS',
+            message: 'Another turn is already running for this session.',
+          },
+        };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'recovered after stop' } };
+      });
+
+    const { result } = await mountChat('sess-conflict-retry');
+    const onAccepted = vi.fn();
+    await act(async () => {
+      await result.current.sendMessage('continue safely', { onAccepted });
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3);
+    expect(result.current.isLoading).toBe(false);
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    expect(result.current.messages.map(message => [
+      message.role,
+      message.content,
+      Boolean(message.queued),
+    ])).toEqual([
+      ['user', 'continue safely', false],
+      ['assistant', 'recovered after stop', false],
+    ]);
+    expect(result.current.messages.some(message =>
+      message.blocks?.some(block => block.type === 'error')
+    )).toBe(false);
+  });
+
+  it('does not resend a conflicted turn when Stop is clicked during retry backoff', async () => {
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield {
+        type: 'error',
+        data: {
+          code: 'SESSION_TURN_IN_PROGRESS',
+          message: 'Another turn is already running for this session.',
+        },
+      };
+    });
+
+    const { result } = await mountChat('sess-conflict-stop');
+    vi.useFakeTimers();
+    try {
+      let sendPromise: Promise<boolean> | undefined;
+      await act(async () => {
+        sendPromise = result.current.sendMessage('do not resend');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+      expect(result.current.messages.find(message => message.role === 'assistant')?.retrying)
+        .toBe(true);
+
+      await act(async () => {
+        await result.current.stopStreaming();
+        await vi.runAllTimersAsync();
+        await sendPromise;
+      });
+
+      expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+      expect(result.current.messages.some(message => message.queued)).toBe(false);
+      expect(result.current.messages.find(message => message.role === 'assistant')?.draft)
+        .toMatchObject({ status: 'stopped' });
+      expect(result.current.messages.find(message => message.role === 'assistant')?.retrying)
+        .toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds session-lock retries and keeps a queued follower FIFO after exhaustion', async () => {
+    mocks.adapter.sendMessage.mockImplementation(async function* (
+      _workspaceId: string,
+      message: string,
+    ) {
+      if (message === 'blocked turn') {
+        yield {
+          type: 'error',
+          data: {
+            code: 'SESSION_TURN_IN_PROGRESS',
+            message: 'Another turn is already running for this session.',
+          },
+        };
+        return;
+      }
+      yield { type: 'done', data: { content: 'follower completed' } };
+    });
+
+    const { result } = await mountChat('sess-conflict-exhausted');
+    vi.useFakeTimers();
+    try {
+      const firstAccepted = vi.fn();
+      const followerAccepted = vi.fn();
+      await act(async () => {
+        void result.current.sendMessage('blocked turn', { onAccepted: firstAccepted });
+        await Promise.resolve();
+        await result.current.sendMessage('queued follower', { onAccepted: followerAccepted });
+        await vi.runAllTimersAsync();
+      });
+
+      expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(8);
+      expect(mocks.adapter.sendMessage.mock.calls.slice(0, 7)
+        .every(call => call[1] === 'blocked turn')).toBe(true);
+      expect(mocks.adapter.sendMessage.mock.calls[7]?.[1]).toBe('queued follower');
+      expect(firstAccepted).toHaveBeenCalledTimes(1);
+      expect(followerAccepted).toHaveBeenCalledTimes(1);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.messages.some(message => message.queued)).toBe(false);
+      expect(result.current.messages.map(message => message.role)).toEqual([
+        'user',
+        'assistant',
+        'user',
+        'assistant',
+      ]);
+      expect(result.current.messages[1]?.content)
+        .toContain('previous response is still stopping');
+      expect(result.current.messages[3]?.content).toBe('follower completed');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops the originating session after the hook switches to another session', async () => {
@@ -1373,6 +1608,45 @@ describe('ChatApp — streaming interaction contract', () => {
     expect(container.querySelectorAll('.animate-bounce')).toHaveLength(0);
   });
 
+  it('shows a truthful retry wait instead of claiming the model is responding', async () => {
+    const retryingAssistant: ChatMessage = {
+      id: 'retrying-assistant',
+      role: 'assistant',
+      content: '',
+      timestamp: 'now',
+      retrying: true,
+      draft: {
+        turnId: 'retrying-turn',
+        revision: 0,
+        content: '',
+        status: 'streaming',
+      },
+    };
+
+    const { container } = await renderChat({
+      messages: [
+        { id: 'retrying-user', role: 'user', content: 'First turn', timestamp: 'now' },
+        retryingAssistant,
+        {
+          id: 'queued-follower',
+          role: 'user',
+          content: 'Follow-up',
+          timestamp: 'now',
+          queued: true,
+        },
+      ],
+      isLoading: true,
+      onStopStreaming: vi.fn(),
+    });
+
+    expect(screen.getByTestId('chat-retry-wait-indicator'))
+      .toHaveTextContent('Waiting to retry…');
+    expect(screen.getByTestId('chat-draft-status')).toHaveTextContent('Retry queued');
+    expect(screen.queryByTestId('chat-first-response-indicator')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Model response status' })).toBeNull();
+    expect(container.querySelectorAll('.animate-bounce')).toHaveLength(0);
+  });
+
   it('renders a stopped draft with one latest-turn recovery action and no canonical actions', async () => {
     const userMessage: ChatMessage = {
       id: 'draft-user', role: 'user', content: 'Draft this', timestamp: 'now',
@@ -1548,6 +1822,18 @@ describe('ChatApp — streaming interaction contract', () => {
     // Lane C: Send is NOT replaced — it stays for queueing a follow-up.
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
     fireEvent.click(stop);
+    expect(onStopStreaming).toHaveBeenCalledTimes(1);
+  });
+
+  it('contains a rejected async Stop callback without an unhandled UI failure', async () => {
+    const onStopStreaming = vi.fn().mockRejectedValue(new Error('cancel transport failed'));
+    await renderChat({ messages: [a1], isLoading: true, onStopStreaming });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('chat-stop-stream'));
+      await Promise.resolve();
+    });
+
     expect(onStopStreaming).toHaveBeenCalledTimes(1);
   });
 

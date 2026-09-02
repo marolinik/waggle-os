@@ -7,7 +7,7 @@
  *          empty→ready transition (fires once, never on mount / re-render).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render as rtlRender, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { ComponentProps } from 'react';
 
@@ -35,6 +35,12 @@ import ChatApp from '@/components/os/apps/ChatApp';
 import type { ChatMessage } from '@/lib/types';
 
 const noop = () => {};
+const deferred = () => {
+  let resolve!: () => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+};
 const baseProps = {
   messages: [] as ChatMessage[],
   isLoading: false,
@@ -63,8 +69,8 @@ const render = (props: ChatAppRenderProps) =>
 afterEach(() => cleanup());
 
 describe('Wave U Lane F fix 1 — message action row presence', () => {
-  it('keeps New session accessible before async session history loads', () => {
-    const onNewSession = vi.fn();
+  it('keeps New session accessible before async session history loads', async () => {
+    const onNewSession = vi.fn().mockResolvedValue(undefined);
 
     render({
       messages: [],
@@ -72,7 +78,10 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
       onNewSession,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'New session' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'New session' }));
+      await Promise.resolve();
+    });
     expect(onNewSession).toHaveBeenCalledOnce();
   });
 
@@ -165,8 +174,8 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(screen.queryByText('Recovered private plan')).toBeNull();
   });
 
-  it('opens session history when New session is requested from collapsed controls', () => {
-    const onNewSession = vi.fn();
+  it('opens session history when New session is requested from collapsed controls', async () => {
+    const onNewSession = vi.fn().mockResolvedValue(undefined);
 
     render({
       messages: [],
@@ -180,7 +189,10 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(sidebar.className).toContain('w-0');
 
     const newSessionButtons = screen.getAllByRole('button', { name: /new session/i });
-    fireEvent.click(newSessionButtons[newSessionButtons.length - 1]);
+    await act(async () => {
+      fireEvent.click(newSessionButtons[newSessionButtons.length - 1]);
+      await Promise.resolve();
+    });
 
     expect(onNewSession).toHaveBeenCalledOnce();
     expect(sidebar.className).toContain('w-32');
@@ -209,18 +221,24 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(button.className).toMatch(/\bh-8\b/);
   });
 
-  it('blocks new-session and session-switch actions while a response is in progress', () => {
-    const onNewSession = vi.fn();
+  it('stops one active response before one New session and keeps session switches locked', async () => {
+    const stopGate = deferred();
+    const onStopStreaming = vi.fn(() => stopGate.promise);
+    const onNewSession = vi.fn().mockResolvedValue(undefined);
     const onSelectSession = vi.fn();
+    const onSendMessage = vi.fn();
 
     render({
       messages: [assistantMsg],
       isLoading: true,
+      initialMessage: 'Do not send into the old session',
+      onSendMessage,
       sessions: [
         { id: 's1', title: 'Active session', messageCount: 1 },
         { id: 's2', title: 'Second session', messageCount: 2 },
       ],
       activeSessionId: 's1',
+      onStopStreaming,
       onNewSession,
       onSelectSession,
     });
@@ -228,24 +246,98 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     const newSessionButtons = screen.getAllByRole('button', { name: /new session/i });
     const activeSessionButton = screen.getByRole('button', { name: /active session/i });
     const secondSessionButton = screen.getByRole('button', { name: /second session/i });
-    newSessionButtons.forEach(button => fireEvent.click(button));
+    expect(newSessionButtons.every(button => !(button as HTMLButtonElement).disabled)).toBe(true);
+    const explanationVisibleBefore = Boolean(
+      screen.queryByText(/new session stops the current response/i),
+    );
+    fireEvent.click(newSessionButtons[0]);
+    fireEvent.click(newSessionButtons[newSessionButtons.length - 1]);
     fireEvent.click(activeSessionButton);
     fireEvent.click(secondSessionButton);
+    const sendButton = screen.getByRole('button', { name: 'Send' });
+    fireEvent.click(sendButton);
 
     expect({
-      newSessionControlsDisabled: newSessionButtons.every(button => (button as HTMLButtonElement).disabled),
+      stopCalls: onStopStreaming.mock.calls.length,
+      newSessionCallsBeforeStop: onNewSession.mock.calls.length,
+      transitionLocked: newSessionButtons.every(button => (button as HTMLButtonElement).disabled),
+      composerLocked: (sendButton as HTMLButtonElement).disabled,
+      sendCalls: onSendMessage.mock.calls.length,
       activeSessionDisabled: (activeSessionButton as HTMLButtonElement).disabled,
       sessionSwitchDisabled: (secondSessionButton as HTMLButtonElement).disabled,
-      newSessionCalls: onNewSession.mock.calls.length,
       selectSessionCalls: onSelectSession.mock.calls.length,
-      explanationVisible: Boolean(screen.queryByText(/stop or finish the current response before switching sessions/i)),
+      explanationVisibleBefore,
+      transitionStatusVisible: Boolean(screen.queryByText(/starting a new session/i)),
     }).toEqual({
-      newSessionControlsDisabled: true,
+      stopCalls: 1,
+      newSessionCallsBeforeStop: 0,
+      transitionLocked: true,
+      composerLocked: true,
+      sendCalls: 0,
       activeSessionDisabled: true,
       sessionSwitchDisabled: true,
-      newSessionCalls: 0,
       selectSessionCalls: 0,
-      explanationVisible: true,
+      explanationVisibleBefore: true,
+      transitionStatusVisible: true,
+    });
+
+    await act(async () => {
+      stopGate.resolve();
+      await stopGate.promise;
+      await Promise.resolve();
+    });
+    expect(onNewSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the New session transition after cancellation fails so an explicit retry works', async () => {
+    const releaseStoppedSession = vi.fn();
+    const onStopStreaming = vi.fn()
+      .mockRejectedValueOnce(new Error('cancel failed'))
+      .mockResolvedValueOnce(releaseStoppedSession);
+    const onNewSession = vi.fn().mockResolvedValue(undefined);
+
+    render({
+      messages: [assistantMsg],
+      isLoading: true,
+      sessions: [{ id: 's1', title: 'Active session', messageCount: 1 }],
+      activeSessionId: 's1',
+      onStopStreaming,
+      onNewSession,
+    });
+
+    const newSession = () => screen.getAllByRole('button', { name: /new session/i }).at(-1)!;
+    fireEvent.click(newSession());
+    await act(async () => { await Promise.resolve(); });
+    expect(onNewSession).not.toHaveBeenCalled();
+
+    fireEvent.click(newSession());
+    await act(async () => { await Promise.resolve(); });
+    expect(onStopStreaming).toHaveBeenCalledTimes(2);
+    expect(onNewSession).toHaveBeenCalledTimes(1);
+    expect(releaseStoppedSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('replaces a stale session error with truthful transition status while retrying', async () => {
+    const createGate = deferred();
+    const onNewSession = vi.fn(() => createGate.promise);
+
+    render({
+      messages: [],
+      sessions: [{ id: 's1', title: 'Active session', messageCount: 1 }],
+      activeSessionId: 's1',
+      sessionError: 'Previous create failed',
+      onNewSession,
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Previous create failed');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /new session/i }).at(-1)!);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Starting a new session');
+
+    await act(async () => {
+      createGate.resolve();
+      await createGate.promise;
+      await Promise.resolve();
     });
   });
 

@@ -50,7 +50,7 @@ interface ChatAppProps {
   sessions?: { id: string; title: string; messageCount?: number; lastActive?: string }[];
   activeSessionId?: string | null;
   onSelectSession?: (id: string) => void;
-  onNewSession?: () => void;
+  onNewSession?: () => void | Promise<unknown>;
   sessionCreating?: boolean;
   sessionLoading?: boolean;
   sessionReady?: boolean;
@@ -85,7 +85,9 @@ interface ChatAppProps {
   /** Lane S2 (Pillar 3.1): halt the in-flight reply mid-stream. Wired to the
    *  useChat abort/cancel path; the partial answer stays and send returns. When
    *  omitted, the Stop control is not rendered. */
-  onStopStreaming?: () => void;
+  onStopStreaming?: (
+    options?: { discardQueued?: boolean },
+  ) => void | Promise<void | (() => void)>;
 }
 
 const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
@@ -595,6 +597,8 @@ const ChatApp = ({
   const previousSessionCount = useRef(sessionCount);
   const sessionSidebarTouched = useRef(false);
   const sessionSidebarWorkspace = useRef(workspaceId);
+  const newSessionTransitionRef = useRef<Promise<void> | null>(null);
+  const [newSessionTransitioning, setNewSessionTransitioning] = useState(false);
   useEffect(() => {
     if (sessionSidebarWorkspace.current !== workspaceId) {
       sessionSidebarWorkspace.current = workspaceId;
@@ -611,23 +615,61 @@ const ChatApp = ({
     previousSessionCount.current = sessionCount;
   }, [sessionCount, workspaceId]);
   const sessionStatusId = useId();
-  const sessionInputLocked = sessionCreating || sessionLoading || !sessionReady;
+  const sessionInputLocked = sessionCreating
+    || sessionLoading
+    || !sessionReady
+    || newSessionTransitioning;
+  const newSessionLocked = sessionInputLocked || (isLoading && !onStopStreaming);
   const sessionControlsLocked = isLoading || sessionInputLocked;
-  const sessionStatus = sessionError
-    ? `Session error: ${sessionError}`
+  const sessionStatusIsError = Boolean(
+    sessionError && !newSessionTransitioning && !sessionCreating && !sessionLoading,
+  );
+  const sessionStatus = newSessionTransitioning
+    ? 'Starting a new session…'
     : sessionCreating
       ? 'Creating a new session…'
       : sessionLoading
         ? 'Loading sessions…'
-        : !sessionReady
-          ? 'No chat session is ready.'
-      : isLoading
-        ? 'Stop or finish the current response before switching sessions.'
-        : null;
+        : sessionError
+          ? `Session error: ${sessionError}`
+          : !sessionReady
+            ? 'No chat session is ready.'
+            : isLoading
+              ? 'New session stops the current response. Finish it before switching existing sessions.'
+              : null;
   const handleNewSession = () => {
+    if (!onNewSession || newSessionLocked || newSessionTransitionRef.current) return;
     sessionSidebarTouched.current = true;
     setShowSessions(true);
-    onNewSession?.();
+    setNewSessionTransitioning(true);
+    const transition = (async () => {
+      let releaseStoppedSession: (() => void) | undefined;
+      try {
+        if (isLoading) {
+          const release = await onStopStreaming?.({ discardQueued: true });
+          if (typeof release === 'function') releaseStoppedSession = release;
+        }
+        const created = await onNewSession();
+        if (created == null) releaseStoppedSession?.();
+      } catch {
+        releaseStoppedSession?.();
+      }
+    })().finally(() => {
+      if (newSessionTransitionRef.current === transition) {
+        newSessionTransitionRef.current = null;
+        setNewSessionTransitioning(false);
+      }
+    });
+    newSessionTransitionRef.current = transition;
+    void transition.catch(() => undefined);
+  };
+  const handleStopStreaming = () => {
+    if (!onStopStreaming) return;
+    try {
+      void Promise.resolve(onStopStreaming()).catch(() => undefined);
+    } catch {
+      // Local cancellation already owns visible recovery; transport stop is best-effort.
+    }
   };
   const handleToggleSessions = () => {
     sessionSidebarTouched.current = true;
@@ -1104,7 +1146,7 @@ const ChatApp = ({
           {showSessions ? <div className="p-2 space-y-1">
             <button
               onClick={handleNewSession}
-              disabled={sessionControlsLocked}
+              disabled={newSessionLocked}
               aria-describedby={sessionStatus ? sessionStatusId : undefined}
               className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -1321,13 +1363,17 @@ const ChatApp = ({
           {messages.map((msg, msgIdx) => {
             const messagePersona = msg.persona ? getPersonaById(msg.persona) : undefined;
             const persistedMessageIndex = persistedMessageIndices[msgIdx];
+            const isRetryingTurn = isLoading
+              && msg.role === 'assistant'
+              && msg.retrying === true;
             const isWaitingForModel = isLoading
               && msgIdx === messages.length - 1
               && msg.role === 'assistant'
               && !msg.content.trim()
               && !msg.draft?.content.trim()
               && (!msg.blocks || msg.blocks.length === 0)
-              && (!msg.tools || msg.tools.length === 0);
+              && (!msg.tools || msg.tools.length === 0)
+              && !isRetryingTurn;
             return (
             <div key={msg.id} className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
               onDoubleClick={() => {
@@ -1375,7 +1421,11 @@ const ChatApp = ({
                     {msg.model && <span>· {formatModelLabel(msg.model)}</span>}
                     {msg.draft && (
                       <span data-testid="chat-draft-status">
-                        · {msg.draft.status === 'stopped' ? 'Stopped draft' : 'Draft'} · not saved
+                        · {msg.draft.status === 'stopped'
+                          ? 'Stopped draft'
+                          : msg.retrying
+                          ? 'Retry queued'
+                          : 'Draft'} · not saved
                       </span>
                     )}
                   </div>
@@ -1413,7 +1463,16 @@ const ChatApp = ({
                     />
                   ) : msg.role === 'assistant' ? (
                     <div data-testid={isWaitingForModel ? 'chat-first-response-indicator' : undefined}>
-                      {isWaitingForModel && (
+                      {isRetryingTurn ? (
+                        <span
+                          role="status"
+                          aria-live="polite"
+                          data-testid="chat-retry-wait-indicator"
+                          className="text-xs text-muted-foreground"
+                        >
+                          Waiting to retry…
+                        </span>
+                      ) : isWaitingForModel && (
                         <span
                           role="status"
                           aria-live="polite"
@@ -1423,11 +1482,13 @@ const ChatApp = ({
                           Waiting for the model to respond.
                         </span>
                       )}
-                      <BlockRenderer blocks={[{
-                        type: 'text',
-                        blockId: `legacy-${msg.id}`,
-                        content: msg.content,
-                      }]} isStreaming={isWaitingForModel} />
+                      {!isRetryingTurn && (
+                        <BlockRenderer blocks={[{
+                          type: 'text',
+                          blockId: `legacy-${msg.id}`,
+                          content: msg.content,
+                        }]} isStreaming={isWaitingForModel} />
+                      )}
                     </div>
                   ) : (
                     <span className="whitespace-pre-wrap">
@@ -1673,11 +1734,15 @@ const ChatApp = ({
             )}
 
             {onNewSession && (
-              <HintTooltip content={sessionControlsLocked && sessionStatus ? sessionStatus : 'New session'}>
+              <HintTooltip content={newSessionLocked && sessionStatus
+                ? sessionStatus
+                : isLoading
+                  ? 'Stop response and start a new session'
+                  : 'New session'}>
                 <button
                   type="button"
                   onClick={handleNewSession}
-                  disabled={sessionControlsLocked}
+                  disabled={newSessionLocked}
                   aria-label="New session"
                   aria-describedby={sessionStatus ? sessionStatusId : undefined}
                   className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--surface-3)] hover:text-foreground active:bg-[var(--honey-wash)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -1692,13 +1757,17 @@ const ChatApp = ({
               <>
                 <span
                   id={sessionStatusId}
-                  role={sessionError ? 'alert' : 'status'}
+                  role={sessionStatusIsError ? 'alert' : 'status'}
                   title={sessionStatus}
-                  className={`max-w-64 truncate text-[11px] ${sessionError ? 'text-destructive' : 'text-muted-foreground'}`}
+                  className={`max-w-64 truncate text-[11px] ${sessionStatusIsError ? 'text-destructive' : 'text-muted-foreground'}`}
                 >
                   {sessionStatus}
                 </span>
-                {sessionError && sessionListFailed && onRetrySessions && (
+                {sessionError
+                  && !newSessionTransitioning
+                  && !sessionCreating
+                  && sessionListFailed
+                  && onRetrySessions && (
                   <button
                     type="button"
                     onClick={() => { void onRetrySessions(); }}
@@ -1973,7 +2042,7 @@ const ChatApp = ({
               {isLoading && onStopStreaming && (
                 <HintTooltip content="Stop generating">
                   <button
-                    onClick={onStopStreaming}
+                    onClick={handleStopStreaming}
                     aria-label="Stop generating"
                     data-testid="chat-stop-stream"
                     className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
