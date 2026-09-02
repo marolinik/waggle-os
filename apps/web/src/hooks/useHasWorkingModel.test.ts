@@ -284,6 +284,52 @@ describe('useHasWorkingModel', () => {
     expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false });
   });
 
+  it('accepts a just-verified compatible receipt without immediately probing the slow model again', async () => {
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getProviders
+      .mockResolvedValueOnce(providerRows())
+      .mockResolvedValueOnce(providerRows(compatibleRow()));
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.hasWorkingModel).toBe(false);
+
+    act(() => { result.current.refresh({ modelId: model, verified: true }); });
+
+    await waitFor(() => expect(result.current).toMatchObject({
+      loading: false,
+      hasWorkingModel: true,
+      cloudReady: true,
+    }));
+    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+  });
+
+  it('does not trust an unverified model receipt and runs the normal readiness probe', async () => {
+    const model = 'openai-compatible/qwen3.8-flash-next';
+    mocks.adapter.getProviders
+      .mockResolvedValueOnce(providerRows())
+      .mockResolvedValueOnce(providerRows(compatibleRow()));
+    mocks.adapter.probeModel.mockResolvedValue({
+      model,
+      configured: true,
+      verified: false,
+      rejected: true,
+    });
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => { result.current.refresh({ modelId: model, verified: false }); });
+
+    await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledWith());
+    await waitFor(() => expect(result.current).toMatchObject({
+      loading: false,
+      hasWorkingModel: false,
+      cloudReady: false,
+    }));
+  });
+
   it('a late old cloud success cannot overwrite a newer rejection', async () => {
     const oldProbe = deferred<{ model: string; configured: boolean; verified: boolean; rejected?: boolean }>();
     const newProbe = deferred<{ model: string; configured: boolean; verified: boolean; rejected?: boolean }>();

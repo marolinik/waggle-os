@@ -713,9 +713,9 @@ const SettingsApp = () => {
                 reflect a just-added key. */}
             <ModelGate
               variant="settings"
-              onModelReady={(modelId) => {
-                if (modelId) {
-                  setDefaultModel(modelId);
+              onModelReady={(receipt) => {
+                if (receipt.modelId) {
+                  setDefaultModel(receipt.modelId);
                 }
                 void refreshProviders();
               }}

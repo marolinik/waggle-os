@@ -27,13 +27,14 @@ import { Input } from '@/components/ui/input';
 import BeeLoader from '@/components/ui/BeeLoader';
 import BrandTile from '@/components/os/apps/connectors/BrandTile';
 import { getBrandIdentity } from '@/components/os/apps/connectors/brand-identity';
+import type { ModelReadinessReceipt } from '@/hooks/useHasWorkingModel';
 
 const MODEL_READINESS_UI_TIMEOUT_MS = 16_000;
 
 interface ModelGateProps {
-  /** Fires after a model becomes available (key saved or local pull ok), so a parent
-   *  (onboarding gate / Settings banner) can re-read `useHasWorkingModel`. */
-  onModelReady?: (modelId?: string) => void;
+  /** Fires after model setup changes. `verified` is true only after a live model/provider
+   *  probe, so onboarding can distinguish proof from a format-only save. */
+  onModelReady?: (receipt: ModelReadinessReceipt) => void;
   /** Styling only — 'onboarding' is full-bleed; 'settings' is an embedded card. */
   variant?: 'onboarding' | 'settings';
   /** Let a parent-owned ready state replace this component's duplicate banner. */
@@ -252,7 +253,7 @@ export function ModelGate({
         || manualReadinessRetryRevision.current !== manualRetryRevision
       ) return;
       manualReadinessRetryRevision.current = null;
-      if (verified) onModelReady?.(modelId);
+      if (verified) onModelReady?.({ modelId, verified: true });
     };
     const ids = activeProviders.map((p) => p.id);
     if (ids.length === 0) {
@@ -473,7 +474,12 @@ export function ModelGate({
         readinessFinalized = true;
       }
       setKeyValue('');
-      if (saved.router?.ready !== false || localReady) onModelReady?.(firstCloudModel);
+      if (saved.router?.ready !== false || localReady) {
+        onModelReady?.({
+          modelId: firstCloudModel,
+          verified: res.verified === true && Boolean(firstCloudModel) && !defaultModelSaveFailed,
+        });
+      }
     } catch {
       setValidate({ status: 'error', message: 'Could not save the key — check your connection and try again.' });
     } finally {
@@ -576,7 +582,7 @@ export function ModelGate({
       setCompatibleStatus('saved');
       setProbe({ status: 'verified', verifiedModel: model });
       setKeyValue('');
-      onModelReady?.(model);
+      onModelReady?.({ modelId: model, verified: true });
       saved = true;
     } catch (error) {
       if (generation !== compatibleRequestGeneration.current) return;
@@ -610,7 +616,10 @@ export function ModelGate({
       if (validate.verified) {
         setProbe({ status: 'verified', verifiedProvider: selectedProvider?.name });
       }
-      onModelReady?.(validate.defaultModel);
+      onModelReady?.({
+        modelId: validate.defaultModel,
+        verified: validate.verified && Boolean(validate.defaultModel) && !validate.defaultModelSaveFailed,
+      });
     } catch {
       setValidate((current) => current.status === 'saved'
         ? { ...current, routerWarning: 'Could not restart the model router.' }
@@ -642,7 +651,9 @@ export function ModelGate({
         });
         setPullName('');
         await refreshLocal();
-        if (selectedAsDefault) onModelReady?.(`ollama/${res.model}`);
+        if (selectedAsDefault) {
+          onModelReady?.({ modelId: `ollama/${res.model}`, verified: true });
+        }
       } else {
         setPullMsg({ kind: 'err', text: `Could not install and verify "${name}".` });
       }

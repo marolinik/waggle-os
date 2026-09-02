@@ -190,7 +190,7 @@ describe('ModelGate', () => {
         defaultModel: model,
       },
     ));
-    expect(onModelReady).toHaveBeenCalledWith(model);
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: model, verified: true });
     expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
   });
 
@@ -772,7 +772,7 @@ describe('ModelGate', () => {
       resolveSave({});
     });
 
-    expect(onModelReady).toHaveBeenCalledWith(model);
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: model, verified: true });
     expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
   });
 
@@ -951,7 +951,25 @@ describe('ModelGate', () => {
     fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
 
     await waitFor(() => expect(mocks.adapter.saveSettings).toHaveBeenCalledWith({ defaultModel: 'gpt-4o' }));
-    expect(onModelReady).toHaveBeenCalledWith('gpt-4o');
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: 'gpt-4o', verified: true });
+  });
+
+  it('does not emit a verified model receipt when selecting the default model fails', async () => {
+    const onModelReady = vi.fn();
+    mocks.adapter.getProviders.mockResolvedValue(
+      providersResp({
+        id: 'openai',
+        hasKey: false,
+        models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      }),
+    );
+    mocks.adapter.saveSettings.mockRejectedValueOnce(new Error('settings unavailable'));
+    render(<ModelGate onModelReady={onModelReady} />);
+    await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+
+    expect(await screen.findByText(/choose a model in settings/i)).toBeInTheDocument();
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: 'gpt-4o', verified: false });
   });
 
   it('saving the first cloud key also selects its model when a local model is available', async () => {
@@ -1027,15 +1045,17 @@ describe('ModelGate', () => {
     await waitFor(() => expect(mocks.adapter.setProviderKey).toHaveBeenCalledWith('openai', 'sk-xxxxxxxxxxxxxxxxxxxxxxxx'));
   });
 
-  it('a format-only valid key (not live-verified) saves but does NOT claim "verified"', async () => {
+  it('a format-only valid key saves without emitting a verified readiness receipt', async () => {
+    const onModelReady = vi.fn();
     mocks.adapter.testApiKey.mockResolvedValue({ valid: true, verified: false });
-    render(<ModelGate />);
+    render(<ModelGate onModelReady={onModelReady} />);
     await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
     fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
 
     await waitFor(() => expect(mocks.adapter.setProviderKey).toHaveBeenCalled());
     expect(await screen.findByText(/looks valid/i)).toBeInTheDocument();
     expect(screen.queryByText(/✓ verified/i)).not.toBeInTheDocument();
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: undefined, verified: false });
   });
 
   it('a rejected key shows the error and never writes to the vault', async () => {
@@ -1144,7 +1164,7 @@ describe('ModelGate', () => {
       mocks.adapter.probeModel.mock.calls.filter(([requested]) => requested === model),
     ).toHaveLength(exactCallsBeforeRetry + 1));
     expect(await screen.findByText((text) => text.includes('Model verified') && text.includes(model))).toBeInTheDocument();
-    expect(onModelReady).toHaveBeenCalledWith(model);
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: model, verified: true });
     expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
     expect(screen.queryByText(/couldn.t confirm model access just now/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /retry check/i })).toBeNull();
@@ -1362,7 +1382,7 @@ describe('ModelGate', () => {
     await waitFor(() => expect(mocks.adapter.pullLocalModel).toHaveBeenCalledWith('llama3.2'));
     expect(mocks.adapter.saveSettings).toHaveBeenCalledWith({ defaultModel: 'ollama/llama3.2:latest' });
     expect(await screen.findByText(/installed and verified "llama3\.2:latest"/i)).toBeInTheDocument();
-    expect(onModelReady).toHaveBeenCalledWith('ollama/llama3.2:latest');
+    expect(onModelReady).toHaveBeenCalledWith({ modelId: 'ollama/llama3.2:latest', verified: true });
   });
 
   it('does not report ready when the verified model cannot be selected as default', async () => {

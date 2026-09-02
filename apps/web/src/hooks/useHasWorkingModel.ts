@@ -11,7 +11,12 @@ export interface WorkingModelState {
   cloudReady: boolean;
   localReady: boolean;
   loading: boolean;
-  refresh: () => void;
+  refresh: (receipt?: ModelReadinessReceipt) => void;
+}
+
+export interface ModelReadinessReceipt {
+  modelId?: string;
+  verified: boolean;
 }
 
 export function useHasWorkingModel(): WorkingModelState {
@@ -137,8 +142,14 @@ export function useHasWorkingModel(): WorkingModelState {
     void refreshLocal();
   }, [refreshLocal]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((receipt?: ModelReadinessReceipt) => {
     const generation = ++cloudGeneration.current;
+    if (receipt?.verified && receipt.modelId) {
+      explicitCloudRefresh.current = null;
+      explicitProviders.current = null;
+      if (mounted.current) setCloud({ ready: true, loading: false });
+      return;
+    }
     explicitCloudRefresh.current = generation;
     if (mounted.current) setCloud({ ready: false, loading: true });
     void refreshLocal();
