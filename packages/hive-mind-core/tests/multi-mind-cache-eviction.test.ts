@@ -175,6 +175,48 @@ describe('MultiMindCache eviction / session-pinning', () => {
     cache.closeAll();
   });
 
+  it('retires a workspace only after its exact generation drains', async () => {
+    const cache = makeCache(2);
+    const lease = cache.acquireLease('A');
+    const retirement = cache.beginRetirement('A');
+    let drained = false;
+    void retirement.drained.then(() => { drained = true; });
+
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    expect(lease.db.isOpen()).toBe(true);
+    expect(cache.getOrOpen('A')).toBeNull();
+    expect(() => cache.acquireLease('A')).toThrow(/cannot open mind/i);
+
+    lease.release();
+    await retirement.drained;
+    expect(lease.db.isOpen()).toBe(false);
+    expect(cache.has('A')).toBe(false);
+    expect(cache.getOrOpen('A')).toBeNull();
+
+    retirement.release();
+    expect(cache.getOrOpen('A')?.isOpen()).toBe(true);
+    retirement.release();
+    cache.closeAll();
+  });
+
+  it('can cancel a pending retirement without later closing the live generation', async () => {
+    const cache = makeCache(2);
+    const lease = cache.acquireLease('A');
+    const retirement = cache.beginRetirement('A');
+
+    retirement.release();
+    await retirement.drained;
+    expect(cache.getOrOpen('A')).toBe(lease.db);
+    expect(lease.db.isOpen()).toBe(true);
+    expect(cache.has('A')).toBe(true);
+
+    lease.release();
+    expect(lease.db.isOpen()).toBe(true);
+    expect(cache.has('A')).toBe(true);
+    cache.closeAll();
+  });
+
   it('REOPEN-GUARD: a handle closed out-of-band is transparently reopened', () => {
     const cache = makeCache(2);
     const dbA = cache.getOrOpen('A');

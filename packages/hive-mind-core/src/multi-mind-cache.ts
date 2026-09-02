@@ -22,11 +22,17 @@ export interface MultiMindCacheLease {
   release(): void;
 }
 
+export interface MultiMindCacheRetirement {
+  readonly drained: Promise<void>;
+  release(): void;
+}
+
 interface CacheEntry {
   db: MindDB;
   lastAccessed: number;
   /** Leases bound to this exact entry generation. */
   leases: number;
+  idleWaiters: Set<() => void>;
 }
 
 /**
@@ -36,6 +42,7 @@ interface CacheEntry {
 export class MultiMindCache {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly legacyLeaseQueues = new Map<string, Array<() => void>>();
+  private readonly retirements = new Map<string, symbol>();
   private readonly maxOpen: number;
   private readonly getMindPath: (workspaceId: string) => string | null;
   private readonly allowedRoot: string | null;
@@ -47,6 +54,7 @@ export class MultiMindCache {
   }
 
   getOrOpen(workspaceId: string): MindDB | null {
+    if (this.retirements.has(workspaceId)) return null;
     const existing = this.cache.get(workspaceId);
     if (existing) {
       // Reopen-guard: normally hand back the cached handle. But if it was closed
@@ -71,7 +79,12 @@ export class MultiMindCache {
           return recheck.db;
         }
         const db = new MindDB(mindPath);
-        this.cache.set(workspaceId, { db, lastAccessed: Date.now(), leases: 0 });
+        this.cache.set(workspaceId, {
+          db,
+          lastAccessed: Date.now(),
+          leases: 0,
+          idleWaiters: new Set(),
+        });
         return db;
       }
 
@@ -114,7 +127,12 @@ export class MultiMindCache {
         }
       }
       const db = new MindDB(canonicalMind);
-      this.cache.set(workspaceId, { db, lastAccessed: Date.now(), leases: 0 });
+      this.cache.set(workspaceId, {
+        db,
+        lastAccessed: Date.now(),
+        leases: 0,
+        idleWaiters: new Set(),
+      });
       return db;
     } catch (err) {
       log.warn('failed to open MindDB', { workspaceId, error: err instanceof Error ? err.message : String(err) });
@@ -123,6 +141,7 @@ export class MultiMindCache {
   }
 
   getIfOpen(workspaceId: string): MindDB | null {
+    if (this.retirements.has(workspaceId)) return null;
     const entry = this.cache.get(workspaceId);
     if (entry) {
       entry.lastAccessed = Date.now();
@@ -168,6 +187,11 @@ export class MultiMindCache {
         if (released) return;
         released = true;
         if (entry.leases > 0) entry.leases -= 1;
+        if (entry.leases === 0 && entry.idleWaiters.size > 0) {
+          const waiters = [...entry.idleWaiters];
+          entry.idleWaiters.clear();
+          for (const resolve of waiters) resolve();
+        }
         if (
           this.cache.get(workspaceId) === entry
           && entry.leases === 0
@@ -195,6 +219,53 @@ export class MultiMindCache {
 
   has(workspaceId: string): boolean {
     return this.cache.has(workspaceId);
+  }
+
+  /**
+   * Tombstone a workspace, reject new borrows, and close its current cache
+   * generation only after every outstanding lease releases. The tombstone
+   * remains until the caller finishes filesystem deletion and calls release().
+   */
+  beginRetirement(workspaceId: string): MultiMindCacheRetirement {
+    if (this.retirements.has(workspaceId)) {
+      throw new Error(`MultiMindCache.beginRetirement: workspace '${workspaceId}' is already retiring`);
+    }
+
+    const token = Symbol(workspaceId);
+    this.retirements.set(workspaceId, token);
+    const entry = this.cache.get(workspaceId);
+    let released = false;
+    let idleWaiter: (() => void) | undefined;
+
+    const clearTombstone = (): void => {
+      if (this.retirements.get(workspaceId) === token) {
+        this.retirements.delete(workspaceId);
+      }
+    };
+    const drained = (async () => {
+      if (entry && entry.leases > 0) {
+        await new Promise<void>(resolve => {
+          const waiter = (): void => {
+            entry.idleWaiters.delete(waiter);
+            idleWaiter = undefined;
+            resolve();
+          };
+          idleWaiter = waiter;
+          entry.idleWaiters.add(waiter);
+        });
+      }
+      if (!released && this.cache.get(workspaceId) === entry) this.close(workspaceId);
+    })();
+
+    return {
+      drained,
+      release: () => {
+        if (released) return;
+        released = true;
+        idleWaiter?.();
+        clearTombstone();
+      },
+    };
   }
 
   close(workspaceId: string): void {
