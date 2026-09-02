@@ -87,6 +87,7 @@ import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
 import { runMemoryLaneExtraction } from './memory-lane-cron.js';
 import { VectorEnrichmentService } from './services/vector-enrichment-service.js';
+import { HarvestAutoSyncService } from './services/harvest-autosync-service.js';
 import { ingestRoutes, readFileRegistry } from './routes/ingest.js';
 import { mindRoutes } from './routes/mind.js';
 import { agentRoutes } from './routes/agent.js';
@@ -1564,7 +1565,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       log.debug('[harvest-auto-sync] skipped:', err);
     }
   };
-  weaverTimers.push(setInterval(runHarvestAutoSync, 30 * 60 * 1000)); // every 30 min
+  const harvestAutoSyncService = new HarvestAutoSyncService({
+    runSync: runHarvestAutoSync,
+    onError: error => log.debug('[harvest-auto-sync] lifecycle failed:', error),
+  });
+  harvestAutoSyncService.start();
 
   // Extend activateWorkspaceMind to also start a weaver for the workspace
   // and distill any undistilled sessions into durable memory frames.
@@ -3429,6 +3434,9 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
 
   // Cleanup on close
   server.addHook('onClose', async () => {
+    // Close timer admission first and drain any pass before its personal-mind
+    // stores can race the database teardown below.
+    await harvestAutoSyncService.stop();
     // Stop cron scheduler
     localJobStore.close();
     agentRunRegistry.close();
