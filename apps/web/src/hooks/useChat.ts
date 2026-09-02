@@ -351,6 +351,8 @@ export const useChat = ({
   const [messages, setMessages] = useState<ChatMessage[]>(() => (
     currentThreadKey ? (readChatThreadCache(currentThreadKey) ?? []) : []
   ));
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const messagesThreadKeyRef = useRef<string | null>(currentThreadKey);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
@@ -470,6 +472,7 @@ export const useChat = ({
   // Cancel any in-flight stream on unmount
   useEffect(() => {
     return () => {
+      sessionTransitionBlockRef.current = null;
       const activeDispatch = activeDispatchRef.current;
       if (!activeDispatch) return;
       activeDispatchRef.current = null;
@@ -1357,6 +1360,11 @@ export const useChat = ({
     const activeDispatch = activeDispatchRef.current;
     if (!inFlightRef.current || !activeDispatch) return;
     const discardQueued = options?.discardQueued === true;
+    const discardedQueue = discardQueued ? [...queueRef.current] : [];
+    const discardedIds = new Set(discardedQueue.map(entry => entry.id));
+    const discardedMessages = new Map(messagesRef.current
+      .filter(message => message.queued && discardedIds.has(message.id))
+      .map(message => [message.id, message]));
     let transitionBlock: { cacheKey: string } | null = null;
     if (discardQueued) {
       transitionBlock = {
@@ -1400,13 +1408,41 @@ export const useChat = ({
     // server transaction. The discard path has revoked ownership above.
     await cancellation;
     if (transitionBlock) {
+      let released = false;
       return () => {
-        if (sessionTransitionBlockRef.current === transitionBlock) {
-          sessionTransitionBlockRef.current = null;
-        }
+        if (released) return;
+        released = true;
+        if (sessionTransitionBlockRef.current !== transitionBlock) return;
+        sessionTransitionBlockRef.current = null;
+
+        const currentThread = currentThreadRef.current;
+        if (
+          currentThread.workspaceId !== activeDispatch.workspaceId
+          || (currentThread.sessionId ?? '') !== activeDispatch.sessionId
+        ) return;
+
+        const queuedIds = new Set(queueRef.current.map(entry => entry.id));
+        const restorable = discardedQueue.filter(entry => !queuedIds.has(entry.id));
+        if (restorable.length === 0) return;
+        queueRef.current.push(...restorable);
+        setMessages(prev => {
+          const visibleIds = new Set(prev.map(message => message.id));
+          const restored = restorable
+            .filter(entry => !visibleIds.has(entry.id))
+            .map(entry => discardedMessages.get(entry.id) ?? {
+              id: entry.id,
+              role: 'user' as const,
+              content: entry.content,
+              blocks: [{ type: 'text' as const, blockId: nextBlockId('text'), content: entry.content }],
+              timestamp: new Date().toISOString(),
+              queued: true,
+            });
+          return restored.length > 0 ? [...prev, ...restored] : prev;
+        });
+        flushNextQueuedFor(activeDispatch.workspaceId, activeDispatch.sessionId);
       };
     }
-  }, []);
+  }, [flushNextQueuedFor]);
 
   const clearHistory = useCallback(async () => {
     if (sessionId && workspaceId) {

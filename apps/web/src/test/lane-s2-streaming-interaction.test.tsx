@@ -958,9 +958,10 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('again');
   });
 
-  it('awaits exact cancellation and discards queued work before starting a new session', async () => {
+  it('awaits exact cancellation, isolates queued work, and restores it when session creation fails', async () => {
     const streamGate = deferred<void>();
     const abortGate = deferred<void>();
+    const secondQueuedGate = deferred<void>();
     mocks.adapter.sendMessage
       .mockImplementationOnce(async function* () {
         yield {
@@ -971,18 +972,28 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
         await streamGate.promise;
         yield { type: 'done', data: { content: 'late answer' } };
       })
-      .mockImplementation(async function* () {
-        yield { type: 'done', data: { content: 'must stay blocked' } };
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'second started' } };
+        await secondQueuedGate.promise;
+        yield { type: 'done', data: { content: 'second restored' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'third restored' } };
       });
     mocks.adapter.abortAgent.mockReturnValueOnce(abortGate.promise);
 
     const { result } = await mountChat('sess-new-session');
+    const secondAccepted = vi.fn();
+    const thirdAccepted = vi.fn();
     let activeTurn!: Promise<boolean>;
     await act(async () => {
       activeTurn = result.current.sendMessage('first');
       await flush();
-      await result.current.sendMessage('queued second');
+      await result.current.sendMessage('queued second', { onAccepted: secondAccepted });
+      await result.current.sendMessage('queued third', { onAccepted: thirdAccepted });
     });
+    expect(secondAccepted).toHaveBeenCalledOnce();
+    expect(thirdAccepted).toHaveBeenCalledOnce();
     expect(result.current.messages.some(message => message.queued)).toBe(true);
     expect(result.current.pendingApproval?.requestId).toBe('approval-new-session');
 
@@ -1041,9 +1052,125 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
 
     await act(async () => {
       releaseStoppedSession?.();
-      await result.current.sendMessage('retry after create failure');
+      await flush();
+    });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2));
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('queued second');
+    expect(result.current.messages.filter(message => message.content === 'queued second')).toHaveLength(1);
+    expect(result.current.messages.filter(message => message.content === 'queued third')).toHaveLength(1);
+
+    await act(async () => {
+      secondQueuedGate.resolve();
+      await flush();
+      await flush();
+    });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3));
+    expect(mocks.adapter.sendMessage.mock.calls[2]?.[1]).toBe('queued third');
+    await vi.waitFor(() => {
+      expect(result.current.messages.some(message => message.queued)).toBe(false);
+      expect(result.current.messages.some(message => message.content === 'second restored')).toBe(true);
+      expect(result.current.messages.some(message => message.content === 'third restored')).toBe(true);
+    });
+    expect(secondAccepted).toHaveBeenCalledOnce();
+    expect(thirdAccepted).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      releaseStoppedSession?.();
+      await flush();
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3);
+  });
+
+  it('never restores discarded queued work after the chat unmounts', async () => {
+    const streamGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await streamGate.promise;
+        yield { type: 'done', data: { content: 'late answer' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'must not dispatch' } };
+      });
+
+    const hook = await mountChat('sess-unmounted-transition');
+    let activeTurn!: Promise<boolean>;
+    await act(async () => {
+      activeTurn = hook.result.current.sendMessage('first');
+      await flush();
+      await hook.result.current.sendMessage('queued second');
+    });
+
+    let releaseStoppedSession: (() => void) | undefined;
+    await act(async () => {
+      const release = await hook.result.current.stopStreaming({ discardQueued: true });
+      if (release) releaseStoppedSession = release;
+    });
+
+    hook.unmount();
+    releaseStoppedSession?.();
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    streamGate.resolve();
+    await activeTurn;
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates discarded queue restoration after leaving and returning to the session', async () => {
+    const streamGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'partial answer' } };
+        await streamGate.promise;
+        yield { type: 'done', data: { content: 'late answer' } };
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'fresh answer' } };
+      });
+
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ activeSession }: { activeSession: string }) => (
+        useChat({ workspaceId: 'ws-1', sessionId: activeSession })
+      ),
+      { initialProps: { activeSession: 'sess-a' } },
+    );
+    await act(async () => { await flush(); });
+
+    let activeTurn!: Promise<boolean>;
+    await act(async () => {
+      activeTurn = hook.result.current.sendMessage('first');
+      await flush();
+      await hook.result.current.sendMessage('queued second');
+    });
+
+    let releaseStoppedSession: (() => void) | undefined;
+    await act(async () => {
+      const release = await hook.result.current.stopStreaming({ discardQueued: true });
+      if (release) releaseStoppedSession = release;
+      streamGate.resolve();
+      await activeTurn;
+    });
+
+    await act(async () => {
+      hook.rerender({ activeSession: 'sess-b' });
+      await flush();
+    });
+    await act(async () => {
+      hook.rerender({ activeSession: 'sess-a' });
+      await flush();
+    });
+    await act(async () => {
+      releaseStoppedSession?.();
+      await flush();
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await hook.result.current.sendMessage('fresh A turn');
     });
     expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('fresh A turn');
   });
 
   it('does not report a user-aborted stream as a backend outage', async () => {
