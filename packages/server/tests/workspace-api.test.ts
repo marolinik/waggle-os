@@ -1040,6 +1040,54 @@ describe('Workspace & Session API', () => {
     }
   });
 
+  it('does not let a routable fallback make a broken saved default look verified', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const originalConfig = fs.readFileSync(configPath, 'utf-8');
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorAnthropicKey = process.env.ANTHROPIC_API_KEY;
+    const priorAnthropicVault = server.vault.get('anthropic');
+    const brokenDefault = 'anthropic/claude-default-unavailable';
+    const restoreProbe = configureExactProbeModel();
+    delete process.env.ANTHROPIC_API_KEY;
+    server.vault.delete('anthropic');
+    server.agentState.currentModel = exactProbeModel;
+    const config = JSON.parse(originalConfig) as Record<string, unknown>;
+    config.defaultModel = brokenDefault;
+    fs.writeFileSync(configPath, JSON.stringify(config), 'utf-8');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: 'WAGGLE_OK' } }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        model: brokenDefault,
+        configured: true,
+        verified: false,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      fs.writeFileSync(configPath, originalConfig, 'utf-8');
+      server.agentState.currentModel = priorCurrentModel;
+      restoreProbe();
+      if (priorAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = priorAnthropicKey;
+      if (priorAnthropicVault) {
+        server.vault.set('anthropic', priorAnthropicVault.value, priorAnthropicVault.metadata);
+      } else {
+        server.vault.delete('anthropic');
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('fails closed on an explicitly blank Primary without touching config', async () => {
     const configPath = path.join(dataDir, 'config.json');
     const before = fs.readFileSync(configPath, 'utf-8');
@@ -1296,6 +1344,105 @@ describe('Workspace & Session API', () => {
       expect(server.vault.get('openai-compatible')).toEqual(priorVault);
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+
+  it('rolls back earlier Vault writes when a later provider write fails', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const priorOpenAi = server.vault.get('openai');
+    const priorAnthropic = server.vault.get('anthropic');
+    server.vault.set('openai', 'old-openai-key', {
+      models: ['old-openai-model'],
+      baseUrl: 'https://old-openai.example.test/v1',
+    });
+    server.vault.set('anthropic', 'old-anthropic-key', {
+      models: ['old-anthropic-model'],
+      baseUrl: 'https://old-anthropic.example.test/v1',
+    });
+    const set = server.vault.set.bind(server.vault);
+    const setSpy = vi.spyOn(server.vault, 'set').mockImplementation((name, value, metadata) => {
+      if (name === 'anthropic' && value === 'new-anthropic-key') {
+        throw new Error('simulated later Vault failure');
+      }
+      return set(name, value, metadata);
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          providers: {
+            openai: { apiKey: 'new-openai-key', models: ['new-openai-model'] },
+            anthropic: { apiKey: 'new-anthropic-key', models: ['new-anthropic-model'] },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.vault.get('openai')).toMatchObject({
+        value: 'old-openai-key',
+        metadata: {
+          models: ['old-openai-model'],
+          baseUrl: 'https://old-openai.example.test/v1',
+        },
+      });
+      expect(server.vault.get('anthropic')).toMatchObject({
+        value: 'old-anthropic-key',
+        metadata: {
+          models: ['old-anthropic-model'],
+          baseUrl: 'https://old-anthropic.example.test/v1',
+        },
+      });
+    } finally {
+      setSpy.mockRestore();
+      fs.writeFileSync(configPath, before, 'utf-8');
+      if (priorOpenAi) server.vault.set('openai', priorOpenAi.value, priorOpenAi.metadata);
+      else server.vault.delete('openai');
+      if (priorAnthropic) server.vault.set('anthropic', priorAnthropic.value, priorAnthropic.metadata);
+      else server.vault.delete('anthropic');
+    }
+  });
+
+  it('restores Vault state when the final atomic config commit fails', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const before = fs.readFileSync(configPath, 'utf-8');
+    const provider = 'transaction-new-provider';
+    const priorProvider = server.vault.get(provider);
+    server.vault.delete(provider);
+    const setSpy = vi.spyOn(server.vault, 'set');
+    const deleteSpy = vi.spyOn(server.vault, 'delete');
+    const { WaggleConfig } = await import('@waggle/core');
+    const saveSpy = vi.spyOn(WaggleConfig.prototype, 'save').mockImplementation(() => {
+      throw new Error('simulated config publication failure');
+    });
+
+    try {
+      const response = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings',
+        payload: {
+          providers: {
+            [provider]: { apiKey: 'new-provider-key', models: ['new-provider-model'] },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(fs.readFileSync(configPath, 'utf-8')).toBe(before);
+      expect(server.vault.get(provider)).toBeNull();
+      expect(setSpy.mock.calls.map(([name, value]) => [name, value])).toEqual([
+        [provider, 'new-provider-key'],
+      ]);
+      expect(deleteSpy).toHaveBeenCalledWith(provider);
+    } finally {
+      saveSpy.mockRestore();
+      setSpy.mockRestore();
+      deleteSpy.mockRestore();
+      if (priorProvider) server.vault.set(provider, priorProvider.value, priorProvider.metadata);
+      else server.vault.delete(provider);
     }
   });
 

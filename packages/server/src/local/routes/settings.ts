@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { WaggleConfig } from '@waggle/core';
+import { WaggleConfig, type VaultEntry } from '@waggle/core';
 import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities, getEffectiveTier, trialDaysRemaining } from '@waggle/shared';
 import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
@@ -544,6 +544,12 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     if (providers && typeof providers === 'object') {
       for (const [name, entry] of Object.entries(providers)) {
         const { apiKey, models, baseUrl } = entry as { apiKey?: string; models?: string[]; baseUrl?: string };
+        if (apiKey && !server.vault) {
+          return reply.code(503).send({
+            code: 'VAULT_UNAVAILABLE',
+            error: 'Secure credential storage is unavailable. Provider settings were not saved.',
+          });
+        }
         const existingConfig = config.getProviders()[name];
         const existingVault = server.vault?.get(name);
         const providerModels = Array.isArray(models)
@@ -585,9 +591,35 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       }
     }
 
-    config.save();
-    for (const pending of pendingVaultWrites) {
-      server.vault?.set(pending.name, pending.value, pending.metadata);
+    const vaultSnapshots = new Map<string, VaultEntry | null>();
+    const attemptedVaultWrites: string[] = [];
+    try {
+      for (const pending of pendingVaultWrites) {
+        if (!vaultSnapshots.has(pending.name)) {
+          vaultSnapshots.set(pending.name, server.vault?.get(pending.name));
+        }
+        attemptedVaultWrites.push(pending.name);
+        server.vault!.set(pending.name, pending.value, pending.metadata);
+      }
+      config.save();
+    } catch (error) {
+      const rollbackErrors: unknown[] = [];
+      for (const name of [...attemptedVaultWrites].reverse()) {
+        try {
+          const previous = vaultSnapshots.get(name);
+          if (previous) server.vault!.set(name, previous.value, previous.metadata);
+          else server.vault!.delete(name);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+      }
+      if (rollbackErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          'Settings persistence failed and Vault rollback was incomplete.',
+        );
+      }
+      throw error;
     }
     for (const pending of pendingVaultWrites) {
       if (pending.applyToEnvironment) {
@@ -821,7 +853,15 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
         new WaggleConfig(server.localConfig.dataDir).getDefaultModel() ??
         ''
       ).trim();
-      return probeConfiguredModel(server, preferred, request.body.model !== undefined);
+      const result = await probeConfiguredModel(server, preferred, true);
+      if (request.body.model === undefined && preferred && !result.configured) {
+        return {
+          ...result,
+          model: canonicalizeModelReference(preferred),
+          configured: true,
+        };
+      }
+      return result;
     },
   );
 
