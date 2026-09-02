@@ -821,6 +821,8 @@ describe('OpenAI-compatible cold restart', () => {
   it('restores the endpoint, model lanes, Vault binding, catalog, and completion route', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-compatible-restart-'));
     const upstreamRequests: Array<{ url: string; authorization?: string; body?: unknown }> = [];
+    let activeCompletions = 0;
+    let maxActiveCompletions = 0;
     const upstream = http.createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -842,10 +844,15 @@ describe('OpenAI-compatible cold restart', () => {
           }));
           return;
         }
-        response.end(JSON.stringify({
-          choices: [{ message: { role: 'assistant', content: 'Restarted Qwen answered.' } }],
-          usage: { prompt_tokens: 4, completion_tokens: 3 },
-        }));
+        activeCompletions += 1;
+        maxActiveCompletions = Math.max(maxActiveCompletions, activeCompletions);
+        setTimeout(() => {
+          activeCompletions -= 1;
+          response.end(JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'Restarted Qwen answered.' } }],
+            usage: { prompt_tokens: 4, completion_tokens: 3 },
+          }));
+        }, 20);
       });
     });
     let firstServer: FastifyInstance | undefined;
@@ -879,6 +886,7 @@ describe('OpenAI-compatible cold restart', () => {
         },
       });
       expect(save.statusCode, save.body).toBe(200);
+      expect(maxActiveCompletions).toBe(3);
 
       await firstServer.close();
       firstServer = undefined;

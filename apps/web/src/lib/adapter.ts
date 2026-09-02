@@ -2697,6 +2697,15 @@ class LocalAdapter {
       error?: string;
     };
   }> {
+    const compatibleModels = [config.defaultModel, ...(config.models ?? [])]
+      .filter((model): model is string => Boolean(model));
+    const compatibleTimeoutMs = compatibleModels.length === 0
+      || compatibleModels.some((model) => /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(model))
+      ? COMPATIBLE_QWEN_PROVIDER_TEST_TIMEOUT_MS
+      : COMPATIBLE_PROVIDER_TEST_TIMEOUT_MS;
+    const timeoutMs = providerId === 'openai-compatible'
+      ? compatibleTimeoutMs
+      : MODEL_ROUTER_REQUEST_TIMEOUT_MS;
     const res = await this.fetch('/api/settings', {
       method: 'PUT',
       body: JSON.stringify({
@@ -2709,7 +2718,7 @@ class LocalAdapter {
           },
         },
       }),
-    }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
     return res.json();
   }
 

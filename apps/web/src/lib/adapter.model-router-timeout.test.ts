@@ -105,8 +105,36 @@ describe('model router request deadlines', () => {
           },
         }),
       },
-      45_000,
+      105_000,
     );
+  });
+
+  it('allows a non-Qwen compatible provider save to finish its server verification', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderConfig('openai-compatible', {
+      baseUrl: 'http://127.0.0.1:4000/v1',
+      models: ['openai-compatible/local-model'],
+      defaultModel: 'openai-compatible/local-model',
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[2]).toBe(60_000);
+  });
+
+  it('uses the safe Qwen deadline when a compatible metadata update omits its stored model', async () => {
+    const fetchSpy = vi.spyOn(client, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await client.setProviderConfig('openai-compatible', {
+      baseUrl: 'http://127.0.0.1:4000/v1',
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[2]).toBe(105_000);
   });
 
   it('preserves the existing keyed-provider settings payload through setProviderKey', async () => {

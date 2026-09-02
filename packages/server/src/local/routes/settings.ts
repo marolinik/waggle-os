@@ -399,22 +399,24 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
           });
         }
         finishVerifiedMutation = beginVerifiedSettingsMutation();
-        for (const model of compatibleModels) {
-          const result = await probeCompatibleCandidate(candidateBaseUrl, candidateKey, model);
-          if (
-            !result.configured
-            || !result.verified
-            || result.model !== canonicalizeModelReference(model)
-          ) {
-            finishVerifiedMutation();
-            return reply.code(result.rejected ? 422 : 503).send({
-              code: 'MODEL_VERIFICATION_FAILED',
-              model,
-              error: result.rejected
-                ? 'The selected compatible model rejected the verification request.'
-                : 'The selected compatible model did not respond to verification.',
-            });
-          }
+        const compatibleResults = await Promise.all(compatibleModels.map(async (model) => ({
+          model,
+          result: await probeCompatibleCandidate(candidateBaseUrl, candidateKey, model),
+        })));
+        const failedCompatible = compatibleResults.find(({ model, result }) => (
+          !result.configured
+          || !result.verified
+          || result.model !== canonicalizeModelReference(model)
+        ));
+        if (failedCompatible) {
+          finishVerifiedMutation();
+          return reply.code(failedCompatible.result.rejected ? 422 : 503).send({
+            code: 'MODEL_VERIFICATION_FAILED',
+            model: failedCompatible.model,
+            error: failedCompatible.result.rejected
+              ? 'The selected compatible model rejected the verification request.'
+              : 'The selected compatible model did not respond to verification.',
+          });
         }
         for (const model of exactModels.filter((value) => !value.startsWith('openai-compatible/'))) {
           const result = await probeConfiguredModel(server, model, true);
