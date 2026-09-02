@@ -558,6 +558,103 @@ describe('Agent Service', () => {
     expect(fs.existsSync(readyFile)).toBe(false);
   });
 
+  it('accepts desktop shutdown only for the exact managed launch credentials', async () => {
+    const base = makeTmpDir();
+    tmpDirs.push(base);
+    const dataDir = path.join(base, 'data');
+    const readyFile = path.join(base, 'desktop-ready.json');
+    const bootstrapToken = 'desktop-shutdown-bootstrap-token-1234567890';
+
+    vi.stubEnv('WAGGLE_DESKTOP_PORT_FALLBACK', '1');
+    vi.stubEnv('WAGGLE_INSTANCE_ID', 'desktop-shutdown-test');
+    vi.stubEnv('WAGGLE_READY_FILE', readyFile);
+    vi.stubEnv('WAGGLE_DESKTOP_BOOTSTRAP_TOKEN', bootstrapToken);
+    clearProviderEnv();
+
+    const { server } = await startService({ dataDir, port: randomPort(), skipLiteLLM: true });
+    cleanups.push(async () => {
+      if (server.server.listening) await server.close();
+    });
+
+    const tokenResponse = await server.inject({
+      method: 'GET',
+      url: '/api/auth/session-token',
+      headers: { 'x-waggle-desktop-bootstrap': bootstrapToken },
+    });
+    expect(tokenResponse.statusCode).toBe(200);
+    const sessionToken = tokenResponse.json<{ token: string }>().token;
+    const address = server.server.address();
+    expect(address && typeof address === 'object').toBe(true);
+    const actualPort = address && typeof address === 'object' ? address.port : 0;
+    const host = `127.0.0.1:${actualPort}`;
+
+    const missingBearer = await server.inject({
+      method: 'POST',
+      url: '/api/auth/desktop-shutdown',
+      headers: { host, 'x-waggle-desktop-bootstrap': bootstrapToken },
+    });
+    expect(missingBearer.statusCode).toBe(401);
+
+    const wrongBearer = await server.inject({
+      method: 'POST',
+      url: '/api/auth/desktop-shutdown',
+      headers: {
+        host,
+        authorization: 'Bearer wrong-session-token-with-enough-entropy-12345',
+        'x-waggle-desktop-bootstrap': bootstrapToken,
+      },
+    });
+    expect(wrongBearer.statusCode).toBe(401);
+    expect(server.server.listening).toBe(true);
+
+    const wrongBootstrap = await server.inject({
+      method: 'POST',
+      url: '/api/auth/desktop-shutdown',
+      headers: {
+        host,
+        authorization: `Bearer ${sessionToken}`,
+        'x-waggle-desktop-bootstrap': `${bootstrapToken}-wrong`,
+      },
+    });
+    expect(wrongBootstrap.statusCode).toBe(403);
+    expect(server.server.listening).toBe(true);
+
+    const accepted = await fetch(`http://127.0.0.1:${actualPort}/api/auth/desktop-shutdown`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        'x-waggle-desktop-bootstrap': bootstrapToken,
+      },
+    });
+    expect(accepted.status).toBe(202);
+
+    const deadline = Date.now() + 10_000;
+    while ((server.server.listening || fs.existsSync(readyFile)) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    expect(server.server.listening).toBe(false);
+    expect(fs.existsSync(readyFile)).toBe(false);
+  });
+
+  it('does not expose desktop shutdown outside a managed desktop launch', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const { server } = await startService({ dataDir, port: randomPort(), skipLiteLLM: true });
+    cleanups.push(async () => { await server.close(); });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/auth/desktop-shutdown',
+      headers: {
+        authorization: `Bearer ${server.agentState.wsSessionToken}`,
+        'x-waggle-desktop-bootstrap': 'fabricated-bootstrap-token-1234567890',
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(server.server.listening).toBe(true);
+  });
+
   it('server gracefully shuts down on close', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);

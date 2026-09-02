@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
@@ -67,6 +67,20 @@ function errorCode(error: unknown): string | undefined {
   return typeof error === 'object' && error !== null && 'code' in error
     ? String((error as { code?: unknown }).code)
     : undefined;
+}
+
+function secretMatches(raw: unknown, expected: string): boolean {
+  if (typeof raw !== 'string') return false;
+  const actualBytes = Buffer.from(raw);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length
+    && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+function bearerMatches(raw: unknown, expected: string): boolean {
+  if (typeof raw !== 'string') return false;
+  const match = raw.match(/^Bearer\s+(.+)$/i);
+  return secretMatches(match?.[1]?.trim(), expected);
 }
 
 function publishDesktopReadyFile(filePath: string, record: DesktopReadyRecord): void {
@@ -195,6 +209,12 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   const allowDesktopPortFallback = process.env.WAGGLE_DESKTOP_PORT_FALLBACK === '1';
   const desktopInstanceId = process.env.WAGGLE_INSTANCE_ID?.trim();
   const desktopReadyFile = process.env.WAGGLE_READY_FILE?.trim();
+  const rawDesktopBootstrapToken = process.env.WAGGLE_DESKTOP_BOOTSTRAP_TOKEN?.trim();
+  const desktopBootstrapToken = rawDesktopBootstrapToken
+    && rawDesktopBootstrapToken.length >= 32
+    && rawDesktopBootstrapToken.length <= 200
+    ? rawDesktopBootstrapToken
+    : null;
   const desktopStartedAt = new Date().toISOString();
 
   if (allowDesktopPortFallback && (!desktopInstanceId || !desktopReadyFile || !path.isAbsolute(desktopReadyFile))) {
@@ -305,14 +325,55 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   });
 
   // 7. Register self-removing shutdown handlers (must add hook before listen)
-  const shutdown = async (): Promise<void> => {
-    process.off('SIGTERM', shutdown);
-    process.off('SIGINT', shutdown);
-    await server.close();
-    if (!skipLiteLLM) {
-      await stopLiteLLM();
-    }
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = (): Promise<void> => {
+    shutdownPromise ??= (async () => {
+      process.off('SIGTERM', shutdown);
+      process.off('SIGINT', shutdown);
+      await server.close();
+      if (!skipLiteLLM) {
+        await stopLiteLLM();
+      }
+    })();
+    return shutdownPromise;
   };
+
+  if (allowDesktopPortFallback && desktopInstanceId && desktopBootstrapToken) {
+    server.post('/api/auth/desktop-shutdown', async (request, reply) => {
+      const host = request.headers.host?.toLowerCase();
+      const expectedHost = `127.0.0.1:${server.localConfig.port}`;
+      const isLoopback = request.ip === '127.0.0.1'
+        || request.ip === '::1'
+        || request.ip === '::ffff:127.0.0.1';
+      if (!isLoopback || host !== expectedHost) {
+        return reply.code(403).send({
+          error: 'Desktop shutdown is available only to the owned loopback launch.',
+          code: 'DESKTOP_SHUTDOWN_LOOPBACK_ONLY',
+        });
+      }
+      if (!bearerMatches(request.headers.authorization, server.agentState.wsSessionToken)) {
+        return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
+      }
+      if (!secretMatches(
+        request.headers['x-waggle-desktop-bootstrap'],
+        desktopBootstrapToken,
+      )) {
+        return reply.code(403).send({
+          error: 'Desktop shutdown requires the owned launch credential.',
+          code: 'DESKTOP_BOOTSTRAP_REQUIRED',
+        });
+      }
+
+      reply.raw.once('finish', () => {
+        setImmediate(() => {
+          void shutdown().catch(error => {
+            log.error('Managed desktop shutdown failed', error);
+          });
+        });
+      });
+      return reply.code(202).send({ accepted: true });
+    });
+  }
 
   // Deregister signal handlers when server closes normally (e.g. in tests)
   server.addHook('onClose', async () => {

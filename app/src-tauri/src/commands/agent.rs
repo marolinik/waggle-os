@@ -70,21 +70,23 @@ pub async fn run_agent_query(
     Ok(request_id)
 }
 
-fn with_desktop_bootstrap(
+pub(crate) fn with_desktop_bootstrap(
     request: reqwest::RequestBuilder,
     bootstrap_token: &str,
 ) -> reqwest::RequestBuilder {
     request.header("x-waggle-desktop-bootstrap", bootstrap_token)
 }
 
-fn with_session_bearer(
+pub(crate) fn with_session_bearer(
     request: reqwest::RequestBuilder,
     session_token: &str,
 ) -> reqwest::RequestBuilder {
     request.bearer_auth(session_token)
 }
 
-fn build_loopback_client(builder: reqwest::ClientBuilder) -> Result<reqwest::Client, String> {
+pub(crate) fn build_loopback_client(
+    builder: reqwest::ClientBuilder,
+) -> Result<reqwest::Client, String> {
     builder
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -93,7 +95,7 @@ fn build_loopback_client(builder: reqwest::ClientBuilder) -> Result<reqwest::Cli
         .map_err(|error| error.to_string())
 }
 
-async fn bootstrap_session_token(
+pub(crate) async fn bootstrap_session_token(
     client: &reqwest::Client,
     endpoint: &ServiceEndpoint,
 ) -> Result<String, String> {
