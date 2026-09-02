@@ -23,6 +23,13 @@ import {
   type WorkspaceCollaborationBinding,
 } from '../../src/local/index.js';
 import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
+import { WorkspaceSessionManager } from '../../src/local/workspace-sessions.js';
+
+const runAgentLoopMock = vi.hoisted(() => vi.fn());
+vi.mock('@waggle/agent', async () => ({
+  ...(await vi.importActual<typeof import('@waggle/agent')>('@waggle/agent')),
+  runAgentLoop: runAgentLoopMock,
+}));
 
 const tempDirs: string[] = [];
 
@@ -42,6 +49,7 @@ async function waitFor(predicate: () => boolean, message: string): Promise<void>
 
 afterEach(() => {
   vi.restoreAllMocks();
+  runAgentLoopMock.mockReset();
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -887,6 +895,468 @@ describe('isolated Fleet execution', () => {
         'nested Fleet run did not settle',
       );
       await server.close();
+    }
+  });
+
+  it('cancels and drains durable Fleet work before downstream close without touching detached external runs', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-shutdown-durable-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const runnerStarted = deferred<void>();
+    const runnerMayFinish = deferred<void>();
+    let runnerAborted = false;
+    let activeRunnerCalls = 0;
+    let mindReleaseCount = 0;
+    let cleanupHookRan = false;
+    let activeRunnersAtCleanup = -1;
+    let mindReleasedAtCleanup = false;
+    let closeSettled = false;
+    let closing: Promise<void> | undefined;
+    const resultRecorder = vi.fn(async () => ({
+      status: 'complete' as const,
+      personalFrameIds: [],
+      workspaceFrameIds: { 'workspace-1': [] },
+    }));
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('vault', {
+      get: (provider: string) => provider === 'anthropic' ? { value: 'test-key' } : undefined,
+    } as never);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? {
+            id, name: 'Project', group: 'test', created: new Date().toISOString(),
+            directory: workspaceDir, model: 'anthropic/test-shutdown',
+          }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', {
+      getMaxSessions: () => 10, size: 0, getActive: () => [],
+    } as never);
+    server.decorate('mindCache', {
+      acquire: () => ({}),
+      release: () => { mindReleaseCount += 1; },
+    } as never);
+    server.decorate('agentState', {
+      currentModel: 'anthropic/test-shutdown',
+      litellmApiKey: 'test-key',
+      llmProvider: { provider: 'anthropic-proxy', health: 'ready' },
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+      }),
+      buildToolsForSession: () => [],
+    } as never);
+    server.decorate('agentRunner', (config: AgentLoopConfig) => {
+      activeRunnerCalls += 1;
+      runnerStarted.resolve(undefined);
+      return new Promise<AgentResponse>((resolve) => {
+        config.signal?.addEventListener('abort', () => {
+          runnerAborted = true;
+          void runnerMayFinish.promise.then(() => {
+            activeRunnerCalls -= 1;
+            resolve({
+              content: 'Stopped for shutdown',
+              toolsUsed: [],
+              usage: { inputTokens: 0, outputTokens: 0 },
+            });
+          });
+        }, { once: true });
+      });
+    });
+    server.decorate('fleetResultRecorder', resultRecorder);
+    await server.register(fleetRoutes);
+    server.addHook('onClose', async () => {
+      cleanupHookRan = true;
+      activeRunnersAtCleanup = activeRunnerCalls;
+      mindReleasedAtCleanup = mindReleaseCount === 1;
+    });
+
+    const externalRoom = registry.createRoom({
+      workspaceIds: ['workspace-1'],
+      source: 'external_tool',
+      title: 'Detached Codex',
+      task: 'Keep the user-owned process alive',
+      status: 'running',
+      capabilities: { cancel: true },
+    });
+    const externalWorker = registry.createWorker({
+      parentRunId: externalRoom.id,
+      workspaceId: 'workspace-1',
+      source: 'external_tool',
+      executor: { kind: 'external_tool', toolId: 'codex', pid: 4242 },
+      title: 'Codex',
+      task: externalRoom.task,
+      status: 'running',
+      capabilities: { cancel: true },
+    });
+    const externalCancel = vi.fn(async () => {});
+    const unregisterExternal = registry.registerControls(externalWorker.id, {
+      cancel: externalCancel,
+    });
+    let runId = '';
+
+    try {
+      const spawned = await server.inject({
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: { task: 'Stay active until shutdown', parentWorkspaceId: 'workspace-1' },
+      });
+      expect(spawned.statusCode).toBe(202);
+      runId = (spawned.json() as { runId: string }).runId;
+      await runnerStarted.promise;
+      await waitFor(() => registry.get(runId)?.status === 'running', 'durable Fleet run did not start');
+
+      closing = server.close().then(() => { closeSettled = true; });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runnerAborted).toBe(true);
+      expect(closeSettled).toBe(false);
+      expect(cleanupHookRan).toBe(false);
+      expect(mindReleaseCount).toBe(0);
+      expect(externalCancel).not.toHaveBeenCalled();
+      expect(registry.get(externalWorker.id)?.status).toBe('running');
+
+      runnerMayFinish.resolve(undefined);
+      await closing;
+      expect(registry.get(runId)?.status).toBe('cancelled');
+      expect(activeRunnerCalls).toBe(0);
+      expect(mindReleaseCount).toBe(1);
+      expect(resultRecorder).not.toHaveBeenCalled();
+      expect(cleanupHookRan).toBe(true);
+      expect(activeRunnersAtCleanup).toBe(0);
+      expect(mindReleasedAtCleanup).toBe(true);
+      expect(externalCancel).not.toHaveBeenCalled();
+      expect(registry.get(externalWorker.id)?.status).toBe('running');
+    } finally {
+      runnerMayFinish.resolve(undefined);
+      const current = runId ? registry.get(runId) : undefined;
+      if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
+        await registry.control(runId, 'cancel').catch(() => undefined);
+      }
+      if (closing) await closing.catch(() => undefined);
+      unregisterExternal();
+      registry.close();
+    }
+  });
+
+  it('cancels and drains a legacy Fleet execution before close settles', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-shutdown-legacy-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const sessionManager = new WorkspaceSessionManager(2);
+    const runnerStarted = deferred<void>();
+    const runnerMayFinish = deferred<void>();
+    const fakeMind = {};
+    let runnerAborted = false;
+    let activeRunnerCalls = 0;
+    let mindReleaseCount = 0;
+    let cleanupHookRan = false;
+    let activeRunnersAtCleanup = -1;
+    let mindReleasedAtCleanup = false;
+    let closeSettled = false;
+    let closing: Promise<void> | undefined;
+    runAgentLoopMock.mockImplementation((config: AgentLoopConfig) => {
+      activeRunnerCalls += 1;
+      runnerStarted.resolve(undefined);
+      return new Promise<AgentResponse>((resolve) => {
+        config.signal?.addEventListener('abort', () => {
+          runnerAborted = true;
+          void runnerMayFinish.promise.then(() => {
+            activeRunnerCalls -= 1;
+            resolve({
+              content: 'Stopped for shutdown',
+              toolsUsed: [],
+              usage: { inputTokens: 0, outputTokens: 0 },
+            });
+          });
+        }, { once: true });
+      });
+    });
+
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('vault', {
+      get: (provider: string) => provider === 'anthropic' ? { value: 'test-key' } : undefined,
+    } as never);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? {
+            id, name: 'Project', group: 'test', created: new Date().toISOString(),
+            directory: workspaceDir, model: 'anthropic/test-legacy-shutdown',
+          }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', sessionManager);
+    server.decorate('mindCache', {
+      acquire: () => fakeMind,
+      release: () => { mindReleaseCount += 1; },
+    } as never);
+    server.decorate('agentState', {
+      currentModel: 'anthropic/test-legacy-shutdown',
+      litellmApiKey: 'test-key',
+      llmProvider: { provider: 'anthropic-proxy', health: 'ready' },
+      getWorkspaceMindDb: () => fakeMind,
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+      }),
+      buildToolsForSession: () => [],
+    } as never);
+    await server.register(fleetRoutes);
+    server.addHook('onClose', async () => {
+      cleanupHookRan = true;
+      activeRunnersAtCleanup = activeRunnerCalls;
+      mindReleasedAtCleanup = mindReleaseCount === 1;
+    });
+
+    try {
+      const spawned = await server.inject({
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: { task: 'Keep legacy work active', parentWorkspaceId: 'workspace-1' },
+      });
+      expect(spawned.statusCode).toBe(200);
+      await runnerStarted.promise;
+
+      closing = server.close().then(() => { closeSettled = true; });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(runnerAborted).toBe(true);
+      expect(closeSettled).toBe(false);
+      expect(cleanupHookRan).toBe(false);
+      expect(mindReleaseCount).toBe(0);
+
+      runnerMayFinish.resolve(undefined);
+      await closing;
+      expect(activeRunnerCalls).toBe(0);
+      expect(mindReleaseCount).toBe(1);
+      expect(cleanupHookRan).toBe(true);
+      expect(activeRunnersAtCleanup).toBe(0);
+      expect(mindReleasedAtCleanup).toBe(true);
+    } finally {
+      runnerMayFinish.resolve(undefined);
+      sessionManager.close('workspace-1');
+      if (closing) await closing.catch(() => undefined);
+      if (activeRunnerCalls > 0) {
+        await waitFor(() => activeRunnerCalls === 0, 'legacy Fleet runner did not unwind');
+      }
+      if (mindReleaseCount === 0) {
+        await waitFor(() => mindReleaseCount === 1, 'legacy Fleet mind was not released');
+      }
+    }
+  });
+
+  it('rejects a durable spawn whose explicit model resolution resumes after shutdown starts', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-shutdown-admission-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const modelLookupStarted = deferred<void>();
+    const modelLookupMayFinish = deferred<void>();
+    let modelLookupAborted = false;
+    const mindAcquire = vi.fn(() => ({}));
+    const mindRelease = vi.fn();
+    const runner = vi.fn(async (): Promise<AgentResponse> => ({
+      content: 'Must not run after shutdown',
+      toolsUsed: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+    }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      modelLookupStarted.resolve(undefined);
+      await Promise.race([
+        modelLookupMayFinish.promise,
+        new Promise<never>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            modelLookupAborted = true;
+            reject(new DOMException('Fleet shutdown', 'AbortError'));
+          }, { once: true });
+        }),
+      ]);
+      return new Response(JSON.stringify({ data: [{ id: 'anthropic/race-model' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('vault', {
+      get: (provider: string) => provider === 'anthropic' ? { value: 'test-key' } : undefined,
+    } as never);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? {
+            id, name: 'Project', group: 'test', created: new Date().toISOString(),
+            directory: workspaceDir, model: 'anthropic/default-model',
+          }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', {
+      getMaxSessions: () => 10, size: 0, getActive: () => [],
+    } as never);
+    server.decorate('mindCache', { acquire: mindAcquire, release: mindRelease } as never);
+    server.decorate('agentState', {
+      currentModel: 'anthropic/default-model',
+      litellmApiKey: 'test-key',
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+      }),
+      buildToolsForSession: () => [],
+    } as never);
+    server.decorate('agentRunner', runner);
+    server.decorate('fleetResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [], workspaceFrameIds: { [run.workspaceId]: [] },
+    }));
+    await server.register(fleetRoutes);
+    let pending: ReturnType<typeof server.inject> | undefined;
+    let closing: Promise<void> | undefined;
+
+    try {
+      pending = server.inject({
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Must not start after shutdown',
+          model: 'anthropic/race-model',
+          parentWorkspaceId: 'workspace-1',
+        },
+      });
+      await modelLookupStarted.promise;
+      closing = server.close();
+      await waitFor(() => modelLookupAborted, 'shutdown did not abort explicit model lookup');
+      await closing;
+
+      const response = await pending;
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'server_shutting_down' });
+      expect(registry.snapshot().runs).toHaveLength(0);
+      expect(runner).not.toHaveBeenCalled();
+      expect(mindAcquire).not.toHaveBeenCalled();
+      expect(mindRelease).not.toHaveBeenCalled();
+    } finally {
+      modelLookupMayFinish.resolve(undefined);
+      if (pending) await pending.catch(() => undefined);
+      if (closing) await closing.catch(() => undefined);
+      const activeFleetRuns = registry.list({ source: 'fleet', limit: 1_000 })
+        .filter((run) => run.kind === 'worker'
+          && !['completed', 'failed', 'cancelled', 'interrupted'].includes(run.status));
+      for (const run of activeFleetRuns) {
+        await registry.control(run.id, 'cancel').catch(() => undefined);
+      }
+      registry.close();
+    }
+  });
+
+  it('rejects a legacy spawn whose model resolution resumes after shutdown starts', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-legacy-shutdown-admission-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    const modelLookupStarted = deferred<void>();
+    const modelLookupMayFinish = deferred<void>();
+    const getWorkspaceMindDb = vi.fn(() => ({}));
+    const getOrCreate = vi.fn();
+    const acquireActivity = vi.fn();
+    const mindAcquire = vi.fn(() => ({}));
+    const mindRelease = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      modelLookupStarted.resolve(undefined);
+      await modelLookupMayFinish.promise;
+      return new Response(JSON.stringify({
+        models: [{ name: 'shutdown-test:latest' }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? {
+            id, name: 'Project', group: 'test', created: new Date().toISOString(),
+            directory: workspaceDir, model: 'ollama/shutdown-test:latest',
+          }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', {
+      getOrCreate,
+      acquireActivity,
+      getActive: () => [],
+      getMaxSessions: () => 10,
+      size: 0,
+    } as never);
+    server.decorate('mindCache', { acquire: mindAcquire, release: mindRelease } as never);
+    server.decorate('agentState', {
+      currentModel: 'ollama/shutdown-test:latest',
+      litellmApiKey: 'test-key',
+      getWorkspaceMindDb,
+      createSessionOrchestrator: () => ({
+        setGoalAncestry: () => {},
+        buildSystemPrompt: () => 'system',
+      }),
+      buildToolsForSession: () => [],
+    } as never);
+    await server.register(fleetRoutes);
+    let pending: ReturnType<typeof server.inject> | undefined;
+    let closing: Promise<void> | undefined;
+
+    try {
+      pending = server.inject({
+        method: 'POST',
+        url: '/api/fleet/spawn',
+        payload: {
+          task: 'Must not start after legacy model resolution',
+          parentWorkspaceId: 'workspace-1',
+        },
+      });
+      await modelLookupStarted.promise;
+      closing = server.close();
+      await closing;
+
+      modelLookupMayFinish.resolve(undefined);
+      const response = await pending;
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'server_shutting_down' });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/api/tags');
+      expect(getWorkspaceMindDb).toHaveBeenCalledTimes(1);
+      expect(getOrCreate).not.toHaveBeenCalled();
+      expect(acquireActivity).not.toHaveBeenCalled();
+      expect(mindAcquire).not.toHaveBeenCalled();
+      expect(mindRelease).not.toHaveBeenCalled();
+      expect(runAgentLoopMock).not.toHaveBeenCalled();
+    } finally {
+      modelLookupMayFinish.resolve(undefined);
+      if (pending) await pending.catch(() => undefined);
+      if (closing) await closing.catch(() => undefined);
+      await server.close().catch(() => undefined);
     }
   });
 

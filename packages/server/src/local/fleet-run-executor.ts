@@ -41,13 +41,14 @@ const ACTIVE = new Set(['queued', 'starting', 'running', 'waiting_for_approval',
 async function resolveExplicitFleetModel(
   server: FastifyInstance,
   selectedModel: string,
+  shutdownSignal: AbortSignal,
 ): Promise<string | null> {
   const model = selectedModel.trim();
   const separator = model.indexOf('/');
   if (separator <= 0) return null;
   const provider = model.slice(0, separator).toLowerCase();
   if (provider === 'ollama') {
-    return (await listOllamaChatModelIds()).includes(model) ? model : null;
+    return (await listOllamaChatModelIds(shutdownSignal)).includes(model) ? model : null;
   }
   if (provider === 'openai-compatible') {
     const configured = new WaggleConfig(server.localConfig.dataDir).getProviders()[provider];
@@ -62,6 +63,7 @@ async function resolveExplicitFleetModel(
   if (!baseUrl) return null;
   const response = await fetch(`${baseUrl}/models`, {
     headers: { Authorization: `Bearer ${server.agentState.litellmApiKey}` },
+    signal: AbortSignal.any([shutdownSignal, AbortSignal.timeout(5_000)]),
   });
   if (!response.ok) return null;
   const payload = await response.json() as { data?: Array<{ id?: string }> };
@@ -80,6 +82,12 @@ export interface FleetSpawnInput {
 export interface FleetSpawnResult {
   statusCode: number;
   body: Record<string, unknown>;
+}
+
+export interface FleetExecutionLifecycle {
+  shutdownSignal: AbortSignal;
+  isShuttingDown(): boolean;
+  trackExecution(runId: string, execution: Promise<void>, abort: () => void): void;
 }
 
 type FleetResultRecorder = (input: {
@@ -109,7 +117,14 @@ export function buildFleetAncestry(
 export async function spawnIsolatedFleetRun(
   server: FastifyInstance,
   input: FleetSpawnInput,
+  lifecycle: FleetExecutionLifecycle,
 ): Promise<FleetSpawnResult> {
+  const shuttingDown = (): FleetSpawnResult => ({
+    statusCode: 503,
+    body: { error: 'server_shutting_down' },
+  });
+  if (lifecycle.isShuttingDown()) return shuttingDown();
+
   const task = input.task?.trim();
   if (!task) return { statusCode: 400, body: { error: 'task is required' } };
   const workspaceId = input.parentWorkspaceId
@@ -146,7 +161,12 @@ export async function spawnIsolatedFleetRun(
   let model: string;
   if (explicitModel) {
     try {
-      const routable = await resolveExplicitFleetModel(server, explicitModel);
+      const routable = await resolveExplicitFleetModel(
+        server,
+        explicitModel,
+        lifecycle.shutdownSignal,
+      );
+      if (lifecycle.isShuttingDown()) return shuttingDown();
       if (!routable) {
         return {
           statusCode: 409,
@@ -158,6 +178,7 @@ export async function spawnIsolatedFleetRun(
       }
       model = routable;
     } catch (err) {
+      if (lifecycle.isShuttingDown()) return shuttingDown();
       return {
         statusCode: 503,
         body: {
@@ -169,7 +190,9 @@ export async function spawnIsolatedFleetRun(
   } else {
     try {
       model = await resolveUsableModel(server, selectedModel);
+      if (lifecycle.isShuttingDown()) return shuttingDown();
     } catch (err) {
+      if (lifecycle.isShuttingDown()) return shuttingDown();
       const currentModel = server.agentState.currentModel?.trim();
       const canRetryCurrentLocal = err instanceof OllamaModelNotLocalError
         && selectedModel === implicitWorkspaceModel
@@ -178,8 +201,10 @@ export async function spawnIsolatedFleetRun(
         && isOfflineOllamaModelReference(currentModel);
       if (!canRetryCurrentLocal) throw err;
       model = await resolveUsableModel(server, currentModel);
+      if (lifecycle.isShuttingDown()) return shuttingDown();
     }
   }
+  if (lifecycle.isShuttingDown()) return shuttingDown();
   const persona = input.persona ?? workspace.personaId ?? 'general-purpose';
   const room = server.agentRunRegistry.createRoom({
     workspaceIds: [workspaceId],
@@ -202,7 +227,20 @@ export async function spawnIsolatedFleetRun(
   const assignmentId = publishFleetDance(server, run, 'request', 'task_delegation', {
     task, phase: 'queued', model, persona,
   })?.id;
-  void executeFleetRun(server, run, sessionId, cwd, model, persona, task, input.goal, assignmentId);
+  const controller = new AbortController();
+  const execution = executeFleetRun(
+    server,
+    run,
+    sessionId,
+    cwd,
+    model,
+    persona,
+    task,
+    input.goal,
+    assignmentId,
+    controller,
+  );
+  lifecycle.trackExecution(run.id, execution, () => controller.abort());
 
   return {
     statusCode: 202,
@@ -232,8 +270,8 @@ async function executeFleetRun(
   task: string,
   goal: string | undefined,
   assignmentId: string | undefined,
+  controller: AbortController,
 ): Promise<void> {
-  const controller = new AbortController();
   let settleExecution!: () => void;
   const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
   let completionCommitted = false;

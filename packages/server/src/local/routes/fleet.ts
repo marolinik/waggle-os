@@ -18,7 +18,10 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { persistMessage } from './chat-persistence.js';
 import { createLogger } from '../logger.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
-import { spawnIsolatedFleetRun } from '../fleet-run-executor.js';
+import {
+  spawnIsolatedFleetRun,
+  type FleetExecutionLifecycle,
+} from '../fleet-run-executor.js';
 import { resolveUsableModel } from '../model-availability.js';
 import type { WorkspaceSessionActivityLease } from '../workspace-sessions.js';
 
@@ -38,8 +41,111 @@ export function buildSpawnAncestry(
 }
 
 const log = createLogger('fleet');
+const ACTIVE_FLEET_RUN_STATUSES = new Set([
+  'queued',
+  'starting',
+  'running',
+  'waiting_for_approval',
+  'paused',
+  'cancelling',
+]);
+
+interface TrackedFleetExecution {
+  execution: Promise<void>;
+  abort: () => void;
+  cancel: () => Promise<void>;
+}
 
 export async function fleetRoutes(fastify: FastifyInstance) {
+  let shuttingDown = false;
+  let legacyExecutionSequence = 0;
+  const shutdownController = new AbortController();
+  const activeExecutions = new Map<string, TrackedFleetExecution>();
+
+  const trackExecution = (
+    executionId: string,
+    execution: Promise<void>,
+    abort: () => void,
+    cancel: () => Promise<void>,
+  ): void => {
+    const tracked = { execution, abort, cancel };
+    activeExecutions.set(executionId, tracked);
+    void execution.then(
+      () => {
+        if (activeExecutions.get(executionId) === tracked) activeExecutions.delete(executionId);
+      },
+      (error: unknown) => {
+        if (activeExecutions.get(executionId) === tracked) activeExecutions.delete(executionId);
+        log.error(`[fleet/shutdown] execution ${executionId} failed: ${error instanceof Error ? error.message : String(error)}`);
+      },
+    );
+  };
+
+  const durableLifecycle: FleetExecutionLifecycle = {
+    shutdownSignal: shutdownController.signal,
+    isShuttingDown: () => shuttingDown,
+    trackExecution: (runId, execution, abort) => {
+      trackExecution(
+        `durable:${runId}`,
+        execution,
+        abort,
+        async () => {
+          const current = fastify.agentRunRegistry?.get(runId);
+          if (
+            !current
+            || current.kind !== 'worker'
+            || current.source !== 'fleet'
+            || !ACTIVE_FLEET_RUN_STATUSES.has(current.status)
+          ) return;
+          try {
+            await fastify.agentRunRegistry.control(runId, 'cancel');
+          } catch (error) {
+            const after = fastify.agentRunRegistry.get(runId);
+            if (!after || !ACTIVE_FLEET_RUN_STATUSES.has(after.status)) return;
+            throw error;
+          }
+        },
+      );
+    },
+  };
+
+  fastify.addHook('preClose', async () => {
+    shuttingDown = true;
+    shutdownController.abort();
+    const executions = [...activeExecutions.entries()];
+    if (executions.length === 0) return;
+
+    const diagnosticTimer = setTimeout(() => {
+      log.warn(`[fleet/shutdown] still draining ${executions.length} Fleet execution(s)`);
+    }, 10_000);
+    diagnosticTimer.unref();
+    // Never time out into onClose: closing a mind DB while its Fleet run is
+    // still unwinding is unsafe. The desktop supervisor owns the hard-kill bound.
+    const failures: unknown[] = [];
+    try {
+      for (const [, tracked] of executions) {
+        try { tracked.abort(); } catch (error) { failures.push(error); }
+      }
+      const cancellationResults = await Promise.allSettled(
+        executions.map(([, tracked]) => tracked.cancel()),
+      );
+      for (const result of cancellationResults) {
+        if (result.status === 'rejected') failures.push(result.reason);
+      }
+      const executionResults = await Promise.allSettled(
+        executions.map(([, tracked]) => tracked.execution),
+      );
+      for (const result of executionResults) {
+        if (result.status === 'rejected') failures.push(result.reason);
+      }
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'Fleet execution cleanup failed during shutdown');
+      }
+    } finally {
+      clearTimeout(diagnosticTimer);
+    }
+  });
+
   // GET /api/fleet — list all active workspace sessions
   fastify.get('/api/fleet', async () => {
     const sessionManager = fastify.sessionManager;
@@ -91,6 +197,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string; agentId?: string };
   }>('/api/fleet/spawn', async (request, reply) => {
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
     const { task, persona, model, parentWorkspaceId, goal, agentId } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
 
@@ -100,7 +207,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     if (fastify.agentRunRegistry) {
       const spawned = await spawnIsolatedFleetRun(fastify, {
         task, persona, model, parentWorkspaceId, goal, agentId,
-      });
+      }, durableLifecycle);
       return reply.code(spawned.statusCode).send(spawned.body);
     }
 
@@ -130,6 +237,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       ?? fastify.agentState?.currentModel
       ?? 'default';
     const resolvedModel = await resolveUsableModel(fastify, selectedModel);
+    if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
 
     let session;
     let sessionActivity: WorkspaceSessionActivityLease;
@@ -206,7 +314,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         fastify.sessionManager.addTokens(wsId, totalTokens);
       }
     };
-    void (async () => {
+    const execution = (async () => {
       let traceRecorder: TraceRecorder | undefined;
       let traceHandle: TraceHandle | undefined;
       const observedTools = new Set<string>();
@@ -268,7 +376,8 @@ export async function fleetRoutes(fastify: FastifyInstance) {
             tags: ['fleet:legacy'],
           });
         }
-        const result = await runAgentLoop({
+        const runner = fastify.agentRunner ?? runAgentLoop;
+        const result = await runner({
           litellmUrl: fastify.localConfig.litellmUrl,
           litellmApiKey: fastify.agentState.litellmApiKey,
           model: resolvedModel,
@@ -436,6 +545,16 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         sessionActivity.release();
       }
     })();
+    const executionId = `legacy:${spawnSessionId}:${++legacyExecutionSequence}`;
+    trackExecution(
+      executionId,
+      execution,
+      () => {
+        if (sessionManager.get(wsId) === session) sessionManager.close(wsId);
+        else session.abortController.abort();
+      },
+      async () => {},
+    );
 
     return {
       id: session.workspaceId,
