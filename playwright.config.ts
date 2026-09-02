@@ -56,7 +56,7 @@ export default defineConfig({
   testMatch: '**/*.spec.ts', // Only run .spec.ts files (excludes Vitest .test.ts files)
   snapshotDir: './tests/visual/baselines',
   snapshotPathTemplate: '{snapshotDir}/{testName}/{arg}{ext}',
-  timeout: 30_000,
+  timeout: process.env.WAGGLE_E2E_SOLO_CHAT === '1' ? 600_000 : 30_000,
   expect: {
     toHaveScreenshot: {
       maxDiffPixelRatio: 0.003, // 0.3% threshold

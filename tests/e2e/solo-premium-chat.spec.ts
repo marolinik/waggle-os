@@ -785,7 +785,10 @@ test.describe('Windows Solo premium chat journey', () => {
         const body = await memoryResponse.json() as {
           results?: Array<{ content?: string; importance?: string; scope?: string; source?: string }>;
         };
-        savedMemory = body.results?.find(memory => memory.content?.includes(memorySecret));
+        savedMemory = body.results?.find(memory => (
+          memory.content?.includes(memorySecret)
+          && /Decision:/i.test(memory.content)
+        ));
         return Boolean(savedMemory);
       }, { timeout: 20_000 }).toBe(true);
       expect(savedMemory?.content).toContain(memorySecret);
