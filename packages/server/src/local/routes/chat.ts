@@ -1072,6 +1072,11 @@ function extractBoundedExactWorkspaceMemoryValue(
     String.raw`\b(?:choose|chose|selected|pick|picked|use|using|go\s+with|went\s+with)\s+(?:the\s+)?(${scalar})\s+(?:as|for)\s+(?:the\s+|our\s+)?[^.\r\n]{0,100}\b${field}\b`,
     'i',
   );
+  const decidedField = new RegExp(
+    String.raw`^User asked:\s*(?:We|I)\s+decided\s+that\s+["'“”]?(?!(?:if|maybe|perhaps|possibly|could|might|would|should)\b)(${scalar})["'“”]?\s+(?:is|was)\s+(?:the|our)\s+[^.\r\n]{0,100}\b${field}\b`,
+    'i',
+  );
+  const nonAuthoritativeDecision = /\b(?:not|never|rejected|discarded)\b/i;
   const afterField = new RegExp(
     String.raw`\b${field}\b[^.\r\n]{0,40}?\b(?:is|was|equals?|set\s+to)\b\s*["'“”]?(${scalar})`,
     'i',
@@ -1087,7 +1092,10 @@ function extractBoundedExactWorkspaceMemoryValue(
       const normalized = line.toLowerCase();
       const relevance = request.topicTerms.filter(term => normalized.includes(term)).length;
       if (relevance === 0) continue;
-      const match = beforeField.exec(line) ?? labelledField.exec(line) ?? afterField.exec(line);
+      const match = beforeField.exec(line)
+        ?? (nonAuthoritativeDecision.test(line) ? null : decidedField.exec(line))
+        ?? labelledField.exec(line)
+        ?? afterField.exec(line);
       const value = match?.[1]
         ?.trim()
         .replace(/^["'“”]+|["'“”,;:.]+$/g, '');

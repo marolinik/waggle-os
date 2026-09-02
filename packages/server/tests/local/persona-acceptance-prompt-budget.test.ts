@@ -615,6 +615,55 @@ describe('persona acceptance prompt budget', () => {
     expect(JSON.stringify(bound.parameters)).not.toContain('limit');
   });
 
+  it('extracts an exact codename from auto-saved first-person decision wording', async () => {
+    const original: ToolDefinition = {
+      name: 'search_memory',
+      description: 'synthetic memory search',
+      parameters: { type: 'object' },
+      execute: async () => [
+        '## Workspace Memory',
+        '[1] (score: 0.990, type: fact, importance: temporary)',
+        'User asked: We decided that ORCHID-AUTO-7 is the pilot-MTK3IOXT launch codename for the internal pilot.',
+      ].join('\n'),
+    };
+    const [bound] = bindExactWorkspaceMemorySearchTool(
+      [original],
+      'Search my saved memory for our pilot-MTK3IOXT launch codename decision. What exact codename did we choose? Reply with only the codename.',
+    );
+
+    expect(await bound.execute({})).toBe('ORCHID-AUTO-7');
+  });
+
+  it.each([
+    'User asked: We decided that ORCHID-OLD is not the pilot-MTK3IOXT launch codename; use ORCHID-NEW.',
+    'User asked: We decided that ORCHID-OLD was rejected as our pilot-MTK3IOXT launch codename.',
+    'User asked: If we decided that ORCHID-MAYBE is the pilot-MTK3IOXT launch codename, confirm it.',
+    'User asked: We decided that if ORCHID-MAYBE is the pilot-MTK3IOXT launch codename, confirm it.',
+    'User asked: We decided that maybe ORCHID-MAYBE is the pilot-MTK3IOXT launch codename.',
+    'User asked: We decided that ORCHID-OLD is the rejected pilot-MTK3IOXT launch codename.',
+    'User asked: We decided that ORCHID-OLD is our discarded pilot-MTK3IOXT launch codename.',
+    'User asked: We decided that ORCHID-OLD is the pilot-MTK3IOXT launch codename we later rejected.',
+  ])('fails closed for non-authoritative auto-saved decision wording: %s', async (memoryLine) => {
+    const original: ToolDefinition = {
+      name: 'search_memory',
+      description: 'synthetic memory search',
+      parameters: { type: 'object' },
+      execute: async () => [
+        '## Workspace Memory',
+        '[1] (score: 0.990, type: fact, importance: temporary)',
+        memoryLine,
+      ].join('\n'),
+    };
+    const [bound] = bindExactWorkspaceMemorySearchTool(
+      [original],
+      'Search my saved memory for our pilot-MTK3IOXT launch codename decision. What exact codename did we choose? Reply with only the codename.',
+    );
+
+    expect(await bound.execute({})).toBe(
+      'Error: the requested exact workspace memory value could not be isolated safely.',
+    );
+  });
+
   it('packages an exact saved-memory scalar lookup as one truthful compact search', async () => {
     const message = 'Search my saved memory for our pilot launch codename decision. What exact codename did we choose? Reply with only the codename. Do not write files or execute code.';
     const codename = 'ORCHID-1D053226-72D';
