@@ -326,6 +326,26 @@ describe('repeatable per-workspace chat dispatch', () => {
       .toBe('/workspaces/ws-b/chat?session=session-b-only');
   });
 
+  it('canonicalizes a bare active chat route to its resolved session', async () => {
+    mocks.activeSessionId = 'session-onboarding';
+    mocks.sessions.push({
+      id: 'session-onboarding',
+      workspaceId: 'ws-a',
+      title: 'First task',
+      messageCount: 2,
+      lastActive: '2026-09-02T12:00:00.000Z',
+    });
+    const router = createMemoryRouter(
+      [{ path: '*', element: <ChatHost /> }],
+      { initialEntries: ['/workspaces/ws-a/chat'] },
+    );
+
+    render(<RouterProvider router={router} />);
+
+    await waitFor(() => expect(router.state.location.search).toBe('?session=session-onboarding'));
+    expect(mocks.sessionHookCalls).toContainEqual({ workspaceId: 'ws-a', preferredSessionId: null });
+  });
+
   it('replaces an invalid session query with the safe workspace fallback', async () => {
     mocks.activeSessionId = 'session-newer-b';
     mocks.sessions.push({

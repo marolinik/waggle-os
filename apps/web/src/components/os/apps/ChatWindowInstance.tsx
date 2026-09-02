@@ -105,10 +105,11 @@ const ChatWindowInstance = ({
 
   useEffect(() => {
     if (
-      typeof preferredSessionId !== 'string'
+      preferredSessionId === undefined
       || sessionLoading
       || !activeSessionId
-      || sessions.some(session => session.id === preferredSessionId)
+      || (typeof preferredSessionId === 'string'
+        && sessions.some(session => session.id === preferredSessionId))
     ) return;
     onSessionNavigateRef.current?.(activeSessionId, { replace: true });
   }, [activeSessionId, preferredSessionId, sessionLoading, sessions]);
