@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import type { FastifyPluginAsync, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { WaggleConfig } from '@waggle/core';
 import { validateOrigin } from '../cors-config.js';
@@ -650,6 +651,136 @@ const OLLAMA_READINESS_MAX_CONCURRENCY = 4;
 const OLLAMA_READINESS_CALL_TIMEOUT_MS = 2_000;
 const OLLAMA_READINESS_OVERALL_TIMEOUT_MS = 2_750;
 const CLOUD_PROVIDER_REQUEST_TIMEOUT_MS = 120_000;
+const PROVIDER_COOLDOWN_DEFAULT_MS = 5_000;
+const PROVIDER_COOLDOWN_MAX_MS = 60_000;
+const TRANSIENT_PROVIDER_STATUSES = new Set([429, 502, 503, 504]);
+
+interface ProviderReadinessCooldowns {
+  capture: (providerId: string) => string;
+  isCurrent: (providerId: string, fingerprint: string) => boolean;
+  markHttpFailure: (providerId: string, response: Response, fingerprint: string) => void;
+  markTransportFailure: (providerId: string, fingerprint: string) => void;
+  clear: (providerId: string, fingerprint: string) => void;
+  remainingMs: (providerId: string) => number;
+}
+
+interface ProviderReadinessCooldown {
+  configurationFingerprint: string;
+  unavailableUntil: number;
+}
+
+function retryAfterMilliseconds(value: string | null, now: number): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  const requested = Number.isFinite(seconds) && seconds >= 0
+    ? seconds * 1_000
+    : Date.parse(value) - now;
+  if (!Number.isFinite(requested) || requested <= 0) return null;
+  return Math.min(PROVIDER_COOLDOWN_MAX_MS, Math.max(1_000, requested));
+}
+
+function providerConfigurationFingerprint(server: FastifyInstance, providerId: string): string {
+  const normalizedProviderId = providerId.toLowerCase();
+  let configuredModels: string[] = [];
+  try {
+    const configEntry = new WaggleConfig(server.localConfig.dataDir)
+      .getProviders()[normalizedProviderId];
+    configuredModels = configEntry?.models ?? [];
+  } catch {
+    // A missing or temporarily unreadable config is itself a distinct state.
+  }
+  let vaultModels: string[] = [];
+  try {
+    const metadataModels = server.vault?.get(normalizedProviderId)?.metadata?.models;
+    if (Array.isArray(metadataModels)) {
+      vaultModels = metadataModels.filter((model): model is string => typeof model === 'string');
+    }
+  } catch {
+    // Never expose or depend on vault errors while calculating readiness state.
+  }
+  let credentials: string[] = [];
+  try {
+    credentials = normalizedProviderId === 'anthropic'
+      ? [getAnthropicKey(server) ?? '']
+      : getProviderApiKeys(normalizedProviderId, server.vault);
+  } catch {
+    credentials = ['unavailable'];
+  }
+  return createHash('sha256').update(JSON.stringify({
+    providerId: normalizedProviderId,
+    baseUrl: configuredProviderBaseUrl(server, normalizedProviderId),
+    models: [...new Set([...configuredModels, ...vaultModels])].sort(),
+    credentials: [...credentials].sort(),
+  })).digest('hex');
+}
+
+function createProviderReadinessCooldowns(server: FastifyInstance): ProviderReadinessCooldowns {
+  const cooldowns = new Map<string, ProviderReadinessCooldown>();
+  const capture = (providerId: string) => providerConfigurationFingerprint(server, providerId);
+  const isCurrent = (providerId: string, fingerprint: string) => {
+    return capture(providerId) === fingerprint;
+  };
+  const mark = (providerId: string, durationMs: number, fingerprint: string) => {
+    const key = providerId.toLowerCase();
+    if (!isCurrent(key, fingerprint)) return;
+    cooldowns.set(key, {
+      configurationFingerprint: fingerprint,
+      unavailableUntil: Date.now() + durationMs,
+    });
+  };
+  const remainingMs = (providerId: string): number => {
+    const key = providerId.toLowerCase();
+    const cooldown = cooldowns.get(key);
+    if (!cooldown) return 0;
+    if (cooldown.configurationFingerprint !== providerConfigurationFingerprint(server, key)) {
+      cooldowns.delete(key);
+      return 0;
+    }
+    const remaining = cooldown.unavailableUntil - Date.now();
+    if (remaining <= 0) cooldowns.delete(key);
+    return Math.max(0, remaining);
+  };
+  return {
+    capture,
+    isCurrent,
+    markHttpFailure: (providerId, response, fingerprint) => {
+      if (!TRANSIENT_PROVIDER_STATUSES.has(response.status)) return;
+      mark(
+        providerId,
+        retryAfterMilliseconds(response.headers.get('retry-after'), Date.now())
+          ?? PROVIDER_COOLDOWN_DEFAULT_MS,
+        fingerprint,
+      );
+    },
+    markTransportFailure: (providerId, fingerprint) => {
+      mark(providerId, PROVIDER_COOLDOWN_DEFAULT_MS, fingerprint);
+    },
+    clear: (providerId, fingerprint) => {
+      const key = providerId.toLowerCase();
+      if (!isCurrent(key, fingerprint)) return;
+      const cooldown = cooldowns.get(key);
+      if (!cooldown || cooldown.configurationFingerprint === fingerprint) cooldowns.delete(key);
+    },
+    remainingMs,
+  };
+}
+
+function markProxyProviderDegraded(
+  server: FastifyInstance,
+  providerId: string,
+  detail: string,
+  providerCooldowns: ProviderReadinessCooldowns,
+  providerFingerprint: string,
+): void {
+  if (!providerCooldowns.isCurrent(providerId, providerFingerprint)) return;
+  if (server.agentState?.llmProvider?.provider !== 'anthropic-proxy') return;
+  server.agentState.llmProvider = {
+    provider: 'anthropic-proxy',
+    health: 'degraded',
+    detail: `Built-in provider proxy (${providerId} ${detail})`,
+    checkedAt: new Date().toISOString(),
+  };
+}
 
 interface CloudProviderAbort {
   signal: AbortSignal;
@@ -849,7 +980,12 @@ function translateAnthropicStopReason(
 }
 
 function configuredProviderBaseUrl(server: FastifyInstance, providerId: string): string {
-  const entry = server.vault?.get(providerId);
+  let entry: { metadata?: Record<string, unknown> } | null | undefined;
+  try {
+    entry = server.vault?.get(providerId);
+  } catch {
+    entry = null;
+  }
   const customBaseUrl = typeof entry?.metadata?.baseUrl === 'string'
     ? entry.metadata.baseUrl.trim()
     : '';
@@ -902,9 +1038,16 @@ async function sendCompatibleResponse(
   stream: boolean | undefined,
   origin: string | undefined,
   reply: FastifyReply,
+  onStreamFailure?: () => void,
 ): Promise<unknown> {
   const contentType = upstream.headers.get('content-type')
     ?? (stream ? 'text/event-stream' : 'application/json');
+  if (stream && upstream.ok && !upstream.body) {
+    onStreamFailure?.();
+    return reply.status(502).send({
+      error: { message: 'Model provider returned an empty streaming response.' },
+    });
+  }
   if (stream && upstream.body) {
     reply.code(upstream.status);
     await reply.hijack();
@@ -915,18 +1058,30 @@ async function sendCompatibleResponse(
       'Access-Control-Allow-Origin': validateOrigin(origin),
     });
     const reader = upstream.body.getReader();
-    let completed = false;
+    const decoder = new TextDecoder();
+    let readCompleted = false;
+    let terminalSeen = false;
+    let terminalTail = '';
+    const observeTerminal = (text: string) => {
+      const candidate = terminalTail + text;
+      if (/(?:^|\r?\n)data:\s*\[DONE\](?=\r?\n|$)/.test(candidate)) terminalSeen = true;
+      terminalTail = candidate.slice(-64);
+    };
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        observeTerminal(decoder.decode(value, { stream: true }));
         reply.raw.write(Buffer.from(value));
+        if (terminalSeen) break;
       }
-      completed = true;
+      observeTerminal(decoder.decode());
+      readCompleted = true;
     } catch {
       // Upstream or client closed the stream; the finally block terminates it.
     } finally {
-      if (!completed) await reader.cancel().catch(() => undefined);
+      if (onStreamFailure && (!readCompleted || !terminalSeen)) onStreamFailure();
+      if (terminalSeen || !readCompleted) await reader.cancel().catch(() => undefined);
       reader.releaseLock();
       if (!reply.raw.destroyed && !reply.raw.writableEnded) reply.raw.end();
     }
@@ -994,6 +1149,7 @@ async function forwardCompatibleProvider(
   body: ChatCompletionBody,
   origin: string | undefined,
   reply: FastifyReply,
+  providerCooldowns: ProviderReadinessCooldowns,
 ): Promise<unknown> {
   const apiKeys = getProviderApiKeys(route.providerId, server.vault);
   const keylessCompatible = route.providerId === 'openai-compatible'
@@ -1018,6 +1174,7 @@ async function forwardCompatibleProvider(
       error: { message: 'The configured model endpoint cannot point to the Waggle service itself.' },
     });
   }
+  const providerFingerprint = providerCooldowns.capture(route.providerId);
   const requestAbort = createCloudProviderAbort(reply);
   const url = completionEndpoint(baseUrl);
   const outboundBody: Record<string, unknown> = { ...body, model: route.model };
@@ -1081,6 +1238,16 @@ async function forwardCompatibleProvider(
         body: JSON.stringify(outboundBody),
       });
     } catch (error) {
+      if (!requestAbort.clientDisconnected()) {
+        providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
+        markProxyProviderDegraded(
+          server,
+          route.providerId,
+          requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
       return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
     }
 
@@ -1098,15 +1265,25 @@ async function forwardCompatibleProvider(
       credentialRejected = /please pass a valid api key|api key (?:is )?(?:invalid|not valid|expired)/i.test(detail);
     }
     if (!credentialRejected) {
-      if (upstream.ok && apiKey) applyProviderKeyToEnv(route.providerId, apiKey, true);
-      if (upstream.ok && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+      if (upstream.ok) providerCooldowns.clear(route.providerId, providerFingerprint);
+      else providerCooldowns.markHttpFailure(route.providerId, upstream, providerFingerprint);
+      if (upstream.ok
+        && apiKey
+        && providerCooldowns.isCurrent(route.providerId, providerFingerprint)) {
+        applyProviderKeyToEnv(route.providerId, apiKey, true);
+      }
+      if (upstream.ok
+        && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
+        && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
         server.agentState.llmProvider = {
           provider: 'anthropic-proxy',
           health: 'healthy',
           detail: `Built-in provider proxy (${route.providerId} ${apiKey ? 'credential' : 'endpoint'} verified)`,
           checkedAt: new Date().toISOString(),
         };
-      } else if (!upstream.ok && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+      } else if (!upstream.ok
+        && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
+        && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
         server.agentState.llmProvider = {
           provider: 'anthropic-proxy',
           health: 'degraded',
@@ -1127,7 +1304,9 @@ async function forwardCompatibleProvider(
       error: { message: `${route.providerId} rejected every configured API key.` },
     });
   }
-  if (credentialRejected && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+  if (credentialRejected
+    && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
+    && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
     server.agentState.llmProvider = {
       provider: 'anthropic-proxy',
       health: 'degraded',
@@ -1137,8 +1316,34 @@ async function forwardCompatibleProvider(
   }
 
   try {
-    return await sendCompatibleResponse(upstream, body.stream, origin, reply);
+    return await sendCompatibleResponse(
+      upstream,
+      body.stream,
+      origin,
+      reply,
+      upstream.ok ? () => {
+        if (requestAbort.clientDisconnected()) return;
+        providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
+        markProxyProviderDegraded(
+          server,
+          route.providerId,
+          'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      } : undefined,
+    );
   } catch (error) {
+    if (!requestAbort.clientDisconnected()) {
+      providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
+      markProxyProviderDegraded(
+        server,
+        route.providerId,
+        requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+        providerCooldowns,
+        providerFingerprint,
+      );
+    }
     return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
   }
 }
@@ -1171,6 +1376,7 @@ function mapModel(model: string): string {
 
 export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   const hasReadyOllamaModel = createOllamaReadinessChecker();
+  const providerCooldowns = createProviderReadinessCooldowns(server);
   let registeredSpendTarget: string | undefined;
   let registeredSpendBudget: ProxyModelSpendBudget | undefined;
 
@@ -1201,19 +1407,36 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
   // separate from liveness so a clean Solo install remains operational while
   // chat can truthfully ask the user to configure a model.
   server.get('/v1/health/readiness', async (_request, reply) => {
-    let hasConfiguredProvider = Boolean(getAnthropicKey(server))
-      || Object.keys(PROVIDER_MODEL_CATALOGS)
-        .some((providerId) => providerId !== 'openai-compatible'
-          && getProviderApiKeys(providerId, server.vault).length > 0)
-      || Boolean(configuredProviderBaseUrl(server, 'openai-compatible'));
-    if (!hasConfiguredProvider) hasConfiguredProvider = await hasReadyOllamaModel();
-    if (!hasConfiguredProvider) {
+    const configuredProviderIds = new Set<string>();
+    if (getAnthropicKey(server)) configuredProviderIds.add('anthropic');
+    for (const providerId of Object.keys(PROVIDER_MODEL_CATALOGS)) {
+      if (providerId !== 'openai-compatible'
+        && getProviderApiKeys(providerId, server.vault).length > 0) {
+        configuredProviderIds.add(providerId);
+      }
+    }
+    if (configuredProviderBaseUrl(server, 'openai-compatible')) {
+      configuredProviderIds.add('openai-compatible');
+    }
+    const remainingCooldowns = [...configuredProviderIds]
+      .map((providerId) => providerCooldowns.remainingMs(providerId));
+    if (remainingCooldowns.some((remaining) => remaining === 0)) {
+      return { status: 'ready' };
+    }
+    if (await hasReadyOllamaModel()) return { status: 'ready' };
+    if (configuredProviderIds.size === 0) {
       return reply.status(503).send({
         status: 'unavailable',
         detail: 'No provider credential configured',
       });
     }
-    return { status: 'ready' };
+    const retryAfterMs = Math.min(...remainingCooldowns);
+    reply.header('Retry-After', String(Math.max(1, Math.ceil(retryAfterMs / 1_000))));
+    return reply.status(503).send({
+      status: 'unavailable',
+      detail: 'Configured model provider is temporarily unavailable',
+      retryAfterMs,
+    });
   });
 
   // POST /v1/chat/completions — translate to Anthropic Messages API
@@ -1302,6 +1525,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         body,
         request.headers.origin as string | undefined,
         reply,
+        providerCooldowns,
       );
       if (DEFINITE_PRE_INFERENCE_REJECTION_STATUSES.has(reply.statusCode)) {
         releaseProxySpend(server, spend);
@@ -1311,6 +1535,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     }
 
     const apiKey = getAnthropicKey(server)!;
+    const providerFingerprint = providerCooldowns.capture('anthropic');
 
     const mappedModel = mapModel(route.model);
 
@@ -1420,7 +1645,32 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     } catch (error) {
       settleProxySpend(server, spend);
+      if (!requestAbort.clientDisconnected()) {
+        providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+        markProxyProviderDegraded(
+          server,
+          'anthropic',
+          requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
       return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
+    }
+
+    if (anthropicRes.ok) {
+      providerCooldowns.clear('anthropic', providerFingerprint);
+    } else {
+      providerCooldowns.markHttpFailure('anthropic', anthropicRes, providerFingerprint);
+      if (TRANSIENT_PROVIDER_STATUSES.has(anthropicRes.status)) {
+        markProxyProviderDegraded(
+          server,
+          'anthropic',
+          `returned HTTP ${anthropicRes.status}`,
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
     }
 
     if (!anthropicRes.ok) {
@@ -1429,6 +1679,16 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         errText = await anthropicRes.text();
       } catch (error) {
         settleProxySpend(server, spend);
+        if (!requestAbort.clientDisconnected()) {
+          providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+          markProxyProviderDegraded(
+            server,
+            'anthropic',
+            'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
         return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
       }
       if (DEFINITE_PRE_INFERENCE_REJECTION_STATUSES.has(anthropicRes.status)) {
@@ -1438,6 +1698,21 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       }
       return reply.status(anthropicRes.status).send({
         error: { message: `Anthropic API error: ${errText}` },
+      });
+    }
+
+    if (body.stream && !anthropicRes.body) {
+      settleProxySpend(server, spend);
+      providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+      markProxyProviderDegraded(
+        server,
+        'anthropic',
+        'returned an empty streaming response',
+        providerCooldowns,
+        providerFingerprint,
+      );
+      return reply.status(502).send({
+        error: { message: 'Anthropic API returned an empty streaming response.' },
       });
     }
 
@@ -1550,6 +1825,16 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         // A read failure is not a protocol terminal event. End without [DONE]
         // so the downstream completion-integrity check rejects partial output.
       }
+      if (!messageStopObserved && !requestAbort.clientDisconnected()) {
+        providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+        markProxyProviderDegraded(
+          server,
+          'anthropic',
+          'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
 
       await reader.cancel().catch(() => undefined);
       reader.releaseLock();
@@ -1566,6 +1851,16 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         data = await anthropicRes.json() as AnthropicMessageResponse;
       } catch (error) {
         settleProxySpend(server, spend);
+        if (!requestAbort.clientDisconnected()) {
+          providerCooldowns.markTransportFailure('anthropic', providerFingerprint);
+          markProxyProviderDegraded(
+            server,
+            'anthropic',
+            'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
         return sendCloudProviderFailure(reply, 'Anthropic', requestAbort, error);
       }
 
