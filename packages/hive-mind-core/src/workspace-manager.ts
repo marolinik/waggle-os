@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { WorkspaceType } from '@waggle/shared';
 type AIActRiskLevel = 'minimal' | 'limited' | 'high-risk' | 'unacceptable';
 
@@ -124,6 +125,8 @@ interface WorkspacesMeta {
 }
 
 const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
+const DELETION_TOMBSTONE_PREFIX = '.waggle-deleting-';
+const DELETION_TOMBSTONE = /^\.waggle-deleting-[A-Za-z0-9][A-Za-z0-9_-]{0,199}-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function isContained(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
@@ -161,6 +164,7 @@ export class WorkspaceManager {
       throw new Error('Workspace root must be a regular directory inside the data directory');
     }
     this.canonicalWorkspacesDir = canonicalRoot;
+    this.cleanupDeletionTombstones();
   }
 
   /**
@@ -341,7 +345,42 @@ export class WorkspaceManager {
     if (!this.get(id)) return;
     const workspaceDir = this.resolveWorkspaceDir(id);
     if (!workspaceDir) return;
-    fs.rmSync(workspaceDir, { recursive: true, force: true });
+    const tombstone = path.join(
+      this.resolveWorkspaceRoot(),
+      `${DELETION_TOMBSTONE_PREFIX}${id}-${randomUUID()}`,
+    );
+
+    // The same-volume rename is the commit boundary. If it fails, the active
+    // workspace is untouched and the caller can roll runtime state back. Once
+    // it succeeds, recursive cleanup is best-effort: a Windows AV/indexer lock
+    // may leave a hidden tombstone, but can never half-delete an active workspace.
+    fs.renameSync(workspaceDir, tombstone);
+    try {
+      fs.rmSync(tombstone, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // Retried at next WorkspaceManager startup.
+    }
+  }
+
+  private cleanupDeletionTombstones(): void {
+    for (const entry of fs.readdirSync(this.canonicalWorkspacesDir, { withFileTypes: true })) {
+      if (!DELETION_TOMBSTONE.test(entry.name)) continue;
+      try {
+        const tombstonePath = path.join(this.canonicalWorkspacesDir, entry.name);
+        const tombstoneStat = fs.lstatSync(tombstonePath, { throwIfNoEntry: false });
+        if (!tombstoneStat?.isDirectory() || tombstoneStat.isSymbolicLink()) continue;
+        const canonicalTombstone = fs.realpathSync.native(tombstonePath);
+        if (!isContained(this.canonicalWorkspacesDir, canonicalTombstone)) continue;
+        fs.rmSync(canonicalTombstone, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+          retryDelay: 100,
+        });
+      } catch {
+        // A still-locked tombstone remains hidden and will be retried later.
+      }
+    }
   }
 
   /**
