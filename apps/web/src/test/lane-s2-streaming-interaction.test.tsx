@@ -652,7 +652,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
       content: message.content,
     }));
 
-    let clearPromise: Promise<void> | undefined;
+    let clearPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearPromise = result.current.clearHistory();
       await flush();
@@ -675,7 +675,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     mocks.adapter.clearHistory.mockReturnValueOnce(clearGate.promise);
 
     const { result } = await mountChat('sess-clear-pending');
-    let clearPromise: Promise<void> | undefined;
+    let clearPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearPromise = result.current.clearHistory();
       await flush();
@@ -705,8 +705,8 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
 
     const { result } = await mountChat('sess-overlapping-clear');
-    let firstPromise: Promise<void> | undefined;
-    let secondPromise: Promise<void> | undefined;
+    let firstPromise: Promise<boolean> | undefined;
+    let secondPromise: Promise<boolean> | undefined;
     await act(async () => {
       firstPromise = result.current.clearHistory();
       await flush();
@@ -748,7 +748,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     );
     await act(async () => { await Promise.resolve(); });
 
-    let clearAPromise: Promise<void> | undefined;
+    let clearAPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearAPromise = hook.result.current.clearHistory();
       await flush();
@@ -759,7 +759,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     });
     await act(async () => { await hook.result.current.sendMessage('allowed in B'); });
 
-    let clearBPromise: Promise<void> | undefined;
+    let clearBPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearBPromise = hook.result.current.clearHistory();
       await flush();

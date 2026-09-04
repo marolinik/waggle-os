@@ -1174,7 +1174,7 @@ describe('useChat — thread session cache (2.6-chat)', () => {
     );
     await act(async () => { await Promise.resolve(); });
 
-    let clearPromise: Promise<void> | undefined;
+    let clearPromise: Promise<boolean> | undefined;
     await act(async () => {
       clearPromise = hook.result.current.clearHistory();
       await Promise.resolve();
