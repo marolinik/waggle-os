@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type SyntheticEvent } from 'react';
 import { motion, AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion';
 import beeMascot from '@/assets/personas/general-purpose.png';
 import { adapter } from '@/lib/adapter';
@@ -24,8 +24,8 @@ interface OnboardingWizardProps {
   serverBaseUrl: string;
   state: OnboardingState;
   onUpdate: (updates: Partial<OnboardingState>) => void;
-  onComplete: (serverBaseUrl: string) => void;
-  onDismiss: () => void;
+  onComplete: (serverBaseUrl: string) => Promise<boolean>;
+  onDismiss: () => Promise<boolean>;
   onFinish: (workspaceId: string, workspaceName: string, firstMessage: string, personaId?: string) => void;
 }
 
@@ -105,6 +105,7 @@ const FIRST_NAV_INDEX = stepIndex('who-are-you');
 const LAST_NAV_INDEX = stepIndex('first-task');
 
 const DEFAULT_FIRST_MESSAGE = 'Hello! What can you help me with?';
+const COMPLETION_ERROR = 'Waggle couldn’t finish setup. Wait a moment and try again. If this keeps happening, restart Waggle.';
 
 /* ─── Main Component (shell) ─── */
 const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismiss, onFinish }: OnboardingWizardProps) => {
@@ -146,6 +147,10 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [firstMessage, setFirstMessage] = useState(DEFAULT_FIRST_MESSAGE);
+  const [completionPending, setCompletionPending] = useState(false);
+  const completionPendingRef = useRef(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const completionAlertRef = useRef<HTMLDivElement>(null);
 
   /* ── Connect on mount + track start; hydrate any existing profile ── */
   useEffect(() => {
@@ -175,19 +180,57 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const runCompletion = useCallback(async (completeAction: () => Promise<boolean>): Promise<boolean> => {
+    if (completionPendingRef.current) return false;
+    completionPendingRef.current = true;
+    setCompletionPending(true);
+    setCompletionError(null);
+    try {
+      const completed = await completeAction();
+      if (!completed) {
+        setCompletionError(COMPLETION_ERROR);
+        return false;
+      }
+      return true;
+    } catch {
+      setCompletionError(COMPLETION_ERROR);
+      return false;
+    } finally {
+      completionPendingRef.current = false;
+      setCompletionPending(false);
+    }
+  }, []);
+
+  const requestDismiss = useCallback(async (via: string): Promise<void> => {
+    if (completionPendingRef.current) return;
+    clearTimeout(autoTimer.current);
+    const completed = await runCompletion(onDismiss);
+    if (completed) {
+      trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via });
+    }
+  }, [onDismiss, runCompletion, serverBaseUrl, step]);
+
+  useEffect(() => {
+    if (completionError) completionAlertRef.current?.focus();
+  }, [completionError]);
+
+  const blockInteractionDuringCompletion = useCallback((event: SyntheticEvent) => {
+    if (!completionPendingRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
   /* ── A11y (WCAG 2.1.1): Escape maps to Skip. Clears any pending timer. ── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (savingProfileRef.current || importingRef.current || creatingWorkspace || verifyingWorkspaceRef.current) return;
-        clearTimeout(autoTimer.current);
-        trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'escape' });
-        onDismiss();
+        if (savingProfileRef.current || importingRef.current || creatingWorkspace || verifyingWorkspaceRef.current || completionPendingRef.current) return;
+        void requestDismiss('escape');
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [creatingWorkspace, step, onDismiss, serverBaseUrl]);
+  }, [creatingWorkspace, requestDismiss]);
 
   const goToStep = useCallback((n: number) => {
     setStep(n);
@@ -427,7 +470,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
 
   const handleLetsGo = useCallback(async () => {
     clearTimeout(autoTimer.current);
-    if (verifyingWorkspaceRef.current) return;
+    if (verifyingWorkspaceRef.current || completionPendingRef.current) return;
     const workspaceId = state.workspaceId;
     if (!workspaceId || workspaceId.startsWith('local-')) {
       setCreateError('Could not create workspace. Check that Waggle is running, then try again.');
@@ -455,11 +498,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       goToName('template');
       return;
     }
-    onComplete(serverBaseUrl);
+    const completed = await runCompletion(() => onComplete(serverBaseUrl));
+    if (!completed) return;
     const wsName = workspaceName.trim() || 'My Workspace';
     const personaId = state.personaId || 'general-purpose';
     onFinish(workspaceId, wsName, firstMessage.trim() || DEFAULT_FIRST_MESSAGE, personaId);
-  }, [serverBaseUrl, onComplete, onFinish, onUpdate, state.workspaceId, state.personaId, workspaceName, firstMessage, goToName]);
+  }, [serverBaseUrl, onComplete, onFinish, onUpdate, runCompletion, state.workspaceId, state.personaId, workspaceName, firstMessage, goToName]);
 
   if (state.completed) return null;
 
@@ -471,7 +515,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const navTotal = LAST_NAV_INDEX - FIRST_NAV_INDEX + 1;
   const navCurrent = step - FIRST_NAV_INDEX + 1;
   const recommendedId = recommendTemplateId(profile.workType, profile.role);
-  const workspaceTransitionPending = savingProfile || importing || creatingWorkspace || verifyingWorkspace;
+  const workspaceTransitionPending = savingProfile || importing || creatingWorkspace || verifyingWorkspace || completionPending;
 
   return (
     // Wave V Lane F item 3 (motion-safe): reducedMotion="user" makes the shared
@@ -579,10 +623,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           )}
         </div>
         <button
-          onClick={() => {
-            trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step });
-            onDismiss();
-          }}
+          onClick={() => { void requestDismiss('skip-button'); }}
           disabled={workspaceTransitionPending}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors font-display px-3 py-2 rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
@@ -590,9 +631,35 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         </button>
       </div>
 
+      {(completionPending || completionError) && (
+        <div
+          ref={completionAlertRef}
+          role={completionError ? 'alert' : 'status'}
+          tabIndex={completionError ? -1 : undefined}
+          aria-live="polite"
+          aria-atomic="true"
+          className={`mx-auto mb-2 w-[min(92vw,36rem)] rounded-lg border px-4 py-3 text-center text-sm ${
+            completionError
+              ? 'border-destructive/40 bg-destructive/10 text-destructive'
+              : 'border-border/60 bg-card/80 text-muted-foreground'
+          }`}
+        >
+          {completionError ?? 'Finishing setup…'}
+        </div>
+      )}
+
       {/* Content area — renders current step by NAME */}
       <div className="flex-1 flex items-start justify-center overflow-y-auto px-4 py-3 sm:items-center sm:px-6 sm:py-0">
-        <div className="w-full max-w-2xl">
+        <div
+          role="group"
+          aria-label="Current onboarding step"
+          aria-busy={completionPending}
+          inert={completionPending ? true : undefined}
+          onClickCapture={blockInteractionDuringCompletion}
+          onKeyDownCapture={blockInteractionDuringCompletion}
+          onSubmitCapture={blockInteractionDuringCompletion}
+          className={`w-full max-w-2xl ${completionPending ? 'pointer-events-none select-none opacity-60' : ''}`}
+        >
           <AnimatePresence mode="wait">
             {step === stepIndex('first-launch') && (
               <WelcomeStep
@@ -614,9 +681,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               <ModelGateStep
                 onContinue={() => goToName('memory-import')}
                 onLater={() => {
-                  clearTimeout(autoTimer.current);
-                  trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'model-gate-later' });
-                  onDismiss();
+                  void requestDismiss('model-gate-later');
                 }}
               />
             )}
@@ -647,8 +712,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
             )}
           {step === stepIndex('first-task') && (
             <fieldset
-              disabled={verifyingWorkspace}
-              aria-busy={verifyingWorkspace}
+              disabled={verifyingWorkspace || completionPending}
+              aria-busy={verifyingWorkspace || completionPending}
               className="m-0 min-w-0 border-0 p-0"
             >
               <FirstTaskStep

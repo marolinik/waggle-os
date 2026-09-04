@@ -77,6 +77,22 @@ const deferredShellElement = (element: ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
 );
 
+// Exported as the executable boundary between durable onboarding completion
+// and trial mutation. Keeping it pure lets the rejection path prove that no
+// irreversible billing state changes before the active profile is confirmed.
+// eslint-disable-next-line react-refresh/only-export-components
+export async function finalizeOnboarding(
+  complete: () => Promise<boolean>,
+  startTrial: () => Promise<unknown>,
+  refreshTier: () => void | Promise<void>,
+): Promise<boolean> {
+  const completed = await complete();
+  if (!completed) return false;
+
+  void startTrial().then(refreshTier).catch(refreshTier);
+  return true;
+}
+
 export const OnboardingRecoveryNotice = ({
   retrying,
   onRetry,
@@ -596,12 +612,13 @@ const ShellLayout = () => {
   }, [effectiveActiveWorkspaceId, selectWorkspace, navigate, ov]);
 
   // Onboarding completion handlers (relocated from Desktop.tsx:290-313).
-  const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => {
-    completeOnboarding();
-    // Atomic start. 409 (trial already started) is fine — refresh state
-    // either way so the StatusBar countdown picks up the existing timestamp.
-    adapter.startTrial().then(refreshTier).catch(refreshTier);
-  }, [completeOnboarding, refreshTier]);
+  const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => (
+    finalizeOnboarding(
+      completeOnboarding,
+      () => adapter.startTrial(),
+      refreshTier,
+    )
+  ), [completeOnboarding, refreshTier]);
 
   const handleOnboardingFinish = useCallback((workspaceId: string, workspaceName: string, firstMessage?: string, personaId?: string) => {
     selectWorkspace(workspaceId);

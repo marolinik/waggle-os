@@ -69,7 +69,18 @@ vi.mock('./onboarding', () => ({
       )}
     </section>
   ),
-  ModelGateStep: () => <section aria-label="Model gate step" />,
+  ModelGateStep: ({
+    onContinue,
+    onLater,
+  }: {
+    onContinue: () => void;
+    onLater: () => void;
+  }) => (
+    <section aria-label="Model gate step">
+      <button type="button" onClick={onContinue}>Continue with model</button>
+      <button type="button" onClick={onLater}>Set up model later</button>
+    </section>
+  ),
   ImportStep: ({
     importSource,
     importDone,
@@ -653,9 +664,11 @@ describe('OnboardingWizard workspace creation', () => {
   it('finishes with the exact workspace id only after server verification', async () => {
     let resolveVerification!: (workspaces: Array<{ id: string }>) => void;
     const verification = new Promise<Array<{ id: string }>>((resolve) => { resolveVerification = resolve; });
+    let resolveCompletion!: (completed: boolean) => void;
+    const completion = new Promise<boolean>((resolve) => { resolveCompletion = resolve; });
     mocks.getWorkspaces.mockReturnValueOnce(verification);
-    const onComplete = vi.fn();
-    const onDismiss = vi.fn();
+    const onComplete = vi.fn(() => completion);
+    const onDismiss = vi.fn().mockResolvedValue(true);
     const onFinish = vi.fn();
 
     render(
@@ -683,6 +696,12 @@ describe('OnboardingWizard workspace creation', () => {
     await act(async () => { resolveVerification([{ id: 'workspace-real' }]); });
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledWith('http://127.0.0.1:3333'));
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: "Let's go" })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: "Let's go" }));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    await act(async () => { resolveCompletion(true); });
     expect(onFinish).toHaveBeenCalledWith(
       'workspace-real',
       'My Workspace',
@@ -691,5 +710,147 @@ describe('OnboardingWizard workspace creation', () => {
     );
     expect(onFinish).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps completion rejection visible and retryable without finishing', async () => {
+    mocks.getWorkspaces.mockResolvedValue([{ id: 'workspace-real' }]);
+    const onComplete = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const onFinish = vi.fn();
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 5, workspaceId: 'workspace-real', personaId: 'coder' }}
+        onUpdate={vi.fn()}
+        onComplete={onComplete}
+        onDismiss={vi.fn().mockResolvedValue(true)}
+        onFinish={onFinish}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: "Let's go" }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/wait a moment and try again/i);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: "Let's go" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: "Let's go" }));
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onFinish).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps a rejected Skip in the wizard with an actionable retry message', async () => {
+    const onDismiss = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 0 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn().mockResolvedValue(true)}
+        onDismiss={onDismiss}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip setup' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/wait a moment and try again/i);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Skip setup' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip setup' }));
+    await waitFor(() => expect(onDismiss).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('locks the model step while Later is pending, focuses recovery, and records only a confirmed skip', async () => {
+    let resolveDismissal!: (completed: boolean) => void;
+    const dismissal = new Promise<boolean>((resolve) => { resolveDismissal = resolve; });
+    const onDismiss = vi.fn()
+      .mockReturnValueOnce(dismissal)
+      .mockResolvedValueOnce(true);
+
+    render(
+      <OnboardingWizard
+        serverBaseUrl="http://127.0.0.1:3333"
+        state={{ completed: false, step: 2 }}
+        onUpdate={vi.fn()}
+        onComplete={vi.fn().mockResolvedValue(true)}
+        onDismiss={onDismiss}
+        onFinish={vi.fn()}
+      />,
+    );
+
+    const stepContent = screen.getByRole('group', { name: 'Current onboarding step' });
+    const continueButton = screen.getByRole('button', { name: 'Continue with model' });
+    const laterButton = screen.getByRole('button', { name: 'Set up model later' });
+    laterButton.focus();
+    expect(laterButton).toHaveFocus();
+    fireEvent.click(laterButton);
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Skip setup' })).toBeDisabled();
+    expect(stepContent).toHaveAttribute('aria-busy', 'true');
+    expect(stepContent).toHaveAttribute('inert');
+    expect(screen.getByRole('status')).toHaveTextContent('Finishing setup…');
+
+    fireEvent.click(continueButton);
+    fireEvent.click(laterButton);
+    expect(stepContent).toContainElement(screen.getByRole('region', { name: 'Model gate step', hidden: true }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(mocks.trackTelemetry).not.toHaveBeenCalledWith(
+      'onboarding_skip',
+      expect.anything(),
+    );
+
+    await act(async () => { resolveDismissal(false); });
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/wait a moment and try again/i);
+    expect(alert).toHaveFocus();
+    expect(stepContent).toHaveAttribute('aria-busy', 'false');
+    expect(stepContent).not.toHaveAttribute('inert');
+    expect(mocks.trackTelemetry).not.toHaveBeenCalledWith(
+      'onboarding_skip',
+      expect.anything(),
+    );
+
+    fireEvent.click(laterButton);
+    await waitFor(() => expect(onDismiss).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(mocks.trackTelemetry).toHaveBeenCalledTimes(2);
+    expect(mocks.trackTelemetry).toHaveBeenLastCalledWith(
+      'onboarding_skip',
+      { atStep: 2, via: 'model-gate-later' },
+    );
+  });
+
+  it('starts the trial only after durable onboarding confirmation', async () => {
+    const { finalizeOnboarding } = await import('../AppShell');
+    const refreshTier = vi.fn();
+    const startTrial = vi.fn().mockResolvedValue(undefined);
+
+    await expect(finalizeOnboarding(
+      vi.fn().mockResolvedValue(false),
+      startTrial,
+      refreshTier,
+    )).resolves.toBe(false);
+    expect(startTrial).not.toHaveBeenCalled();
+    expect(refreshTier).not.toHaveBeenCalled();
+
+    await expect(finalizeOnboarding(
+      vi.fn().mockResolvedValue(true),
+      startTrial,
+      refreshTier,
+    )).resolves.toBe(true);
+    expect(startTrial).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(refreshTier).toHaveBeenCalledTimes(1));
   });
 });
