@@ -4002,7 +4002,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               historicalResultChars: 900,
             },
           };
-          maxOutputTokens = 768;
+          maxOutputTokens = 1_536;
         } else if (explicitReadOnlyToolChoice && packageMode === 'compact') {
           agentRunBudget = {
             ...agentRunBudget,

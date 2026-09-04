@@ -1196,8 +1196,10 @@ const ChatApp = ({
             {sessions.map(s => (
               <button
                 key={s.id}
+                data-session-id={s.id}
                 onClick={() => onSelectSession?.(s.id)}
                 disabled={sessionControlsLocked}
+                aria-current={activeSessionId === s.id ? 'true' : undefined}
                 aria-describedby={sessionStatus ? sessionStatusId : undefined}
                 className={`w-full text-left px-2 py-1.5 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   activeSessionId === s.id ? 'bg-primary/20' : 'hover:bg-muted/50'
@@ -1416,7 +1418,11 @@ const ChatApp = ({
               && (!msg.tools || msg.tools.length === 0)
               && !isRetryingTurn;
             return (
-            <div key={msg.id} className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
+            <div
+              key={msg.id}
+              data-testid="chat-message"
+              data-message-role={msg.role}
+              className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
               onDoubleClick={() => {
                 if (onContextRail && msg.content) {
                   onContextRail({ type: 'message', id: msg.id, label: msg.content.slice(0, 60) });
@@ -1471,7 +1477,7 @@ const ChatApp = ({
                     )}
                   </div>
                 )}
-                <div className={`relative select-text cursor-text group/msg text-sm ${
+                <div data-testid="chat-message-content" className={`relative select-text cursor-text group/msg text-sm ${
                   msg.role === 'user'
                     // Round-6 fix 3: honey-tinted user bubble (theme-aware tokens)
                     // so it reads against the canvas in BOTH themes — the old

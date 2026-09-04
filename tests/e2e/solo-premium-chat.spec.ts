@@ -240,6 +240,10 @@ async function captureChatTurn(page: Page, trigger: () => Promise<void>): Promis
   }
   const parsed = parseSse(body);
   expect(parsed.errors).toEqual([]);
+  const errorEvents = parsed.events.filter(event => event.event === 'error');
+  if (errorEvents.length > 0) {
+    throw new Error(`Chat SSE error: ${JSON.stringify(errorEvents[0]?.data ?? null)}`);
+  }
   const doneEvents = parsed.events.filter(event => event.event === 'done');
   expect(doneEvents).toHaveLength(1);
   const done = doneEvents[0].data as Record<string, unknown>;
@@ -285,6 +289,43 @@ async function readHistory(page: Page, workspaceId: string, sessionId: string, t
   };
   expect(body.sessionId).toBe(sessionId);
   return body.messages;
+}
+
+function expectExactSessionLocation(page: Page, workspaceId: string, sessionId: string): void {
+  const location = new URL(page.url());
+  expect(location.pathname).toBe(`/workspaces/${workspaceId}/chat`);
+  expect([...location.searchParams.entries()]).toEqual([['session', sessionId]]);
+}
+
+async function readVisibleHistory(page: Page): Promise<HistoryMessage[]> {
+  await page.context().grantPermissions(
+    ['clipboard-read', 'clipboard-write'],
+    { origin: new URL(page.url()).origin },
+  );
+  const turns = page.getByTestId('chat-message');
+  const messages: HistoryMessage[] = [];
+  for (let index = 0; index < await turns.count(); index++) {
+    const turn = turns.nth(index);
+    const role = await turn.getAttribute('data-message-role') ?? '';
+    let content: string;
+    if (role === 'assistant') {
+      await page.evaluate(() => navigator.clipboard.writeText(''));
+      await turn.hover();
+      const copyButton = turn.getByTestId('chat-msg-copy');
+      await expect(copyButton).toBeVisible();
+      await copyButton.click();
+      content = '';
+      for (let attempt = 0; attempt < 20 && !content; attempt++) {
+        content = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+        if (!content) await page.waitForTimeout(100);
+      }
+      if (!content) throw new Error(`Message ${index} did not copy its assistant content.`);
+    } else {
+      content = await turn.getByTestId('chat-message-content').innerText();
+    }
+    messages.push({ role, content: normalizeText(content) });
+  }
+  return messages;
 }
 
 async function readAssistantFromUi(page: Page): Promise<string> {
@@ -800,6 +841,11 @@ test.describe('Windows Solo premium chat journey', () => {
       expect(savedMemory?.content).not.toMatch(/<\/?think>/i);
       expect((savedMemory?.content ?? '').split(memorySecret)).toHaveLength(2);
 
+      const originalSessionHistory = await readHistory(page, workspaceId, session.id, sessionToken);
+      expect(originalSessionHistory).toHaveLength(8);
+      expect(originalSessionHistory.filter(message => message.role === 'user').map(message => message.content))
+        .toEqual([prompt, toolPrompt, skillPrompt, decisionPrompt]);
+
       const recallSessionResponsePromise = page.waitForResponse(response => (
         response.request().method() === 'POST'
         && pathOf(response.url()) === `/api/workspaces/${workspaceId}/sessions`
@@ -811,6 +857,7 @@ test.describe('Windows Solo premium chat journey', () => {
       expect(recallSessionResponse.status(), await recallSessionResponse.text().catch(() => '')).toBe(201);
       const recallSession = await recallSessionResponse.json() as { id: string };
       await expect(page).toHaveURL(new RegExp(`session=${encodeURIComponent(recallSession.id)}(?:&|$)`));
+      expectExactSessionLocation(page, workspaceId, recallSession.id);
       expect(await readHistory(page, workspaceId, recallSession.id, sessionToken)).toHaveLength(0);
       const recallSessionUrl = page.url();
       await page.reload({ waitUntil: 'domcontentloaded' });
@@ -868,6 +915,52 @@ test.describe('Windows Solo premium chat journey', () => {
       const persistedRecall = normalizeText(recallHistory[1]?.content ?? '').replace(/[.`]/g, '');
       expect(persistedRecall).toBe(memorySecret);
       expect(recallHistory[1]?.content).not.toMatch(/<\/?think>/i);
+
+      const sessionSidebar = activeChatSlot.getByTestId('chat-session-sidebar');
+      const originalSessionButton = sessionSidebar.locator(
+        `button[data-session-id="${session.id}"]`,
+      );
+      const recallSessionButton = sessionSidebar.locator(
+        `button[data-session-id="${recallSession.id}"]`,
+      );
+      await expect(recallSessionButton).toHaveAttribute('aria-current', 'true');
+      await expect(originalSessionButton).not.toHaveAttribute('aria-current');
+
+      let sessionSwitchChatRequests = 0;
+      const countSessionSwitchChatRequest = (request: Request) => {
+        if (request.method() === 'POST' && pathOf(request.url()) === '/api/chat') {
+          sessionSwitchChatRequests += 1;
+        }
+      };
+      page.on('request', countSessionSwitchChatRequest);
+      try {
+        await originalSessionButton.click();
+        await expect(page).toHaveURL(new RegExp(`session=${encodeURIComponent(session.id)}(?:&|$)`));
+        expectExactSessionLocation(page, workspaceId, session.id);
+        await expect(originalSessionButton).toHaveAttribute('aria-current', 'true');
+        await expect(recallSessionButton).not.toHaveAttribute('aria-current');
+        await expect.poll(() => page.getByTestId('chat-message').count(), { timeout: 30_000 })
+          .toBe(originalSessionHistory.length);
+        expect(await readVisibleHistory(page)).toEqual(originalSessionHistory.map(message => ({
+          role: message.role,
+          content: normalizeText(message.content),
+        })));
+
+        await recallSessionButton.click();
+        await expect(page).toHaveURL(new RegExp(`session=${encodeURIComponent(recallSession.id)}(?:&|$)`));
+        expectExactSessionLocation(page, workspaceId, recallSession.id);
+        await expect(recallSessionButton).toHaveAttribute('aria-current', 'true');
+        await expect(originalSessionButton).not.toHaveAttribute('aria-current');
+        await expect.poll(() => page.getByTestId('chat-message').count(), { timeout: 30_000 })
+          .toBe(recallHistory.length);
+        expect(await readVisibleHistory(page)).toEqual(recallHistory.map(message => ({
+          role: message.role,
+          content: normalizeText(message.content),
+        })));
+      } finally {
+        page.off('request', countSessionSwitchChatRequest);
+      }
+      expect(sessionSwitchChatRequests).toBe(0);
 
       expect(pageErrors).toEqual([]);
       expect(criticalRequestFailures).toEqual([]);

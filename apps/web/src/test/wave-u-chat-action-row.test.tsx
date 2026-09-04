@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render as rtlRender, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { ComponentProps } from 'react';
+import { useState, type ComponentProps } from 'react';
 
 // jsdom lacks ResizeObserver (ChatApp's agent strip observes its own width).
 class ResizeObserverStub {
@@ -69,6 +69,64 @@ const render = (props: ChatAppRenderProps) =>
 afterEach(() => cleanup());
 
 describe('Wave U Lane F fix 1 — message action row presence', () => {
+  it('labels the complete visible message sequence by role', () => {
+    render({
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'First question',
+          timestamp: new Date().toISOString(),
+        },
+        assistantMsg,
+      ],
+    });
+
+    const turns = screen.getAllByTestId('chat-message');
+    expect(turns).toHaveLength(2);
+    expect(turns.map(turn => turn.getAttribute('data-message-role'))).toEqual(['user', 'assistant']);
+    expect(within(turns[0]).getByTestId('chat-message-content')).toHaveTextContent('First question');
+    expect(within(turns[1]).getByTestId('chat-message-content')).toHaveTextContent('Here is your answer.');
+  });
+
+  it('exposes the exact active session while switching B to A and back to B', () => {
+    const SessionHarness = () => {
+      const [activeSessionId, setActiveSessionId] = useState('session-b');
+
+      return (
+        <TooltipProvider>
+          <ChatApp
+            {...baseProps}
+            messages={[]}
+            sessions={[
+              { id: 'session-a', title: 'Plan A', messageCount: 2 },
+              { id: 'session-b', title: 'Plan B', messageCount: 1 },
+            ]}
+            activeSessionId={activeSessionId}
+            onSelectSession={setActiveSessionId}
+          />
+        </TooltipProvider>
+      );
+    };
+
+    rtlRender(<SessionHarness />);
+    const sessionA = screen.getByRole('button', { name: /plan a/i });
+    const sessionB = screen.getByRole('button', { name: /plan b/i });
+
+    expect(sessionA).toHaveAttribute('data-session-id', 'session-a');
+    expect(sessionB).toHaveAttribute('data-session-id', 'session-b');
+    expect(sessionB).toHaveAttribute('aria-current', 'true');
+    expect(sessionA).not.toHaveAttribute('aria-current');
+
+    fireEvent.click(sessionA);
+    expect(sessionA).toHaveAttribute('aria-current', 'true');
+    expect(sessionB).not.toHaveAttribute('aria-current');
+
+    fireEvent.click(sessionB);
+    expect(sessionB).toHaveAttribute('aria-current', 'true');
+    expect(sessionA).not.toHaveAttribute('aria-current');
+  });
+
   it('keeps New session accessible before async session history loads', async () => {
     const onNewSession = vi.fn().mockResolvedValue(undefined);
 

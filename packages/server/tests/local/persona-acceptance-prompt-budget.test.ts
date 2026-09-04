@@ -439,7 +439,7 @@ describe('persona acceptance prompt budget', () => {
       expect(capturedConfig!.maxToolRounds).toBe(2);
       expect(capturedConfig!.maxTokenBudget).toBe(18_000);
       expect(capturedConfig!.synthesisReserveTokens).toBe(2_500);
-      expect(capturedConfig!.maxOutputTokens).toBe(768);
+      expect(capturedConfig!.maxOutputTokens).toBe(1_536);
       expect(capturedConfig!.modelOperationTimeoutMs).toBe(100_000);
       expect(capturedConfig!.initialModelActivityTimeoutMs).toBeUndefined();
       expect(capturedConfig!.toolContextBudget).toEqual({
@@ -4135,7 +4135,7 @@ describe('persona acceptance prompt budget', () => {
     });
     expect(deniedRetry.statusCode).toBe(200);
     expect(capturedConfig).not.toBeNull();
-    expect(JSON.stringify(capturedConfig)).not.toContain(failedMarker);
+    expect(JSON.stringify(capturedConfig!.messages)).not.toContain(failedMarker);
 
     capturedConfig = null;
     const followUp = await injectWithAuth(server, {
@@ -4151,7 +4151,7 @@ describe('persona acceptance prompt budget', () => {
     });
     expect(followUp.statusCode).toBe(200);
     expect(capturedConfig).not.toBeNull();
-    expect(JSON.stringify(capturedConfig)).toContain(failedMarker);
+    expect(JSON.stringify(capturedConfig!.messages)).toContain(failedMarker);
   });
 
   it('does not retain a terminal command response for a saved-history-denied turn', async () => {
@@ -4359,6 +4359,7 @@ describe('persona acceptance prompt budget', () => {
         headers: { 'Content-Type': 'application/json' },
       }),
     );
+    fetchSpy.mockClear();
     try {
       const response = await injectWithAuth(server, {
         method: 'POST',
