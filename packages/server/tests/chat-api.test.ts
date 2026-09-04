@@ -76,6 +76,27 @@ function openAiJsonResponse(content: string): Response {
   });
 }
 
+function openAiToolJsonResponse(name: string, args: Record<string, unknown> = {}): Response {
+  return new Response(JSON.stringify({
+    choices: [{
+      message: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: `call-${name}`,
+          type: 'function',
+          function: { name, arguments: JSON.stringify(args) },
+        }],
+      },
+      finish_reason: 'tool_calls',
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 2 },
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 function openAiToolSseResponse(name: string): Response {
   return new Response(
     `data: ${JSON.stringify({
@@ -86,29 +107,6 @@ function openAiToolSseResponse(name: string): Response {
             id: `call-${name}`,
             type: 'function',
             function: { name, arguments: '{}' },
-          }],
-        },
-        finish_reason: null,
-      }],
-    })}\n\n`
-      + `data: ${JSON.stringify({
-        choices: [{ delta: {}, finish_reason: 'tool_calls' }],
-        usage: { prompt_tokens: 10, completion_tokens: 2 },
-      })}\n\ndata: [DONE]\n\n`,
-    { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
-  );
-}
-
-function openAiToolSseResponseWithArgs(name: string, args: Record<string, unknown>): Response {
-  return new Response(
-    `data: ${JSON.stringify({
-      choices: [{
-        delta: {
-          tool_calls: [{
-            index: 0,
-            id: `call-${name}`,
-            type: 'function',
-            function: { name, arguments: JSON.stringify(args) },
           }],
         },
         finish_reason: null,
@@ -1298,6 +1296,8 @@ describe('Chat Streaming API', () => {
         systemPrompt: string;
         nonSystemMessages: Array<{ role: string; content: string }>;
         maxTokens?: number;
+        stream?: unknown;
+        streamOptions?: unknown;
       }> = [];
       const config = new WaggleConfig(dataDir);
       config.setFallbackModel('ollama/fallback-test-model');
@@ -1336,16 +1336,20 @@ describe('Chat Streaming API', () => {
             .filter(item => item.role !== 'system')
             .map(item => ({ role: String(item.role ?? ''), content: String(item.content ?? '') })),
           ...(typeof body.max_tokens === 'number' ? { maxTokens: body.max_tokens } : {}),
+          ...(body.stream !== undefined ? { stream: body.stream } : {}),
+          ...(body.stream_options !== undefined ? { streamOptions: body.stream_options } : {}),
         });
 
         if (model === 'fallback-test-model') {
-          if (body.tool_choice) return openAiToolSseResponse('list_skills');
+          if (body.tool_choice) return openAiToolJsonResponse('list_skills');
           const hasCompletedToolEvidence = requestMessages.some(message => (
             message.role === 'tool'
             || String(message.content ?? '').includes('# STRICT READ-ONLY TOOL CONTINUATION')
           ));
           return hasCompletedToolEvidence
-            ? openAiSseResponse('fallback completed')
+            ? body.stream === true
+              ? openAiSseResponse('fallback completed')
+              : openAiJsonResponse('fallback completed')
             : new Response(JSON.stringify({ error: { message: 'missing completed tool evidence' } }), {
                 status: 422,
                 headers: { 'Content-Type': 'application/json' },
@@ -1354,7 +1358,7 @@ describe('Chat Streaming API', () => {
         if (authorization === 'Bearer sk-primary-tool-choice' && firstCredentialUsesTool) {
           const messages = body.messages as Array<{ role?: string }> | undefined;
           if (!messages?.some(message => message.role === 'tool')) {
-            return openAiToolSseResponse('list_skills');
+            return openAiToolJsonResponse('list_skills');
           }
         }
         return new Response(JSON.stringify({ error: { message: '401 test credential rejection' } }), {
@@ -1393,6 +1397,10 @@ describe('Chat Streaming API', () => {
     expect(afterToolUse.toolEvents.filter(name => name === 'list_skills')).toHaveLength(1);
     expect(afterToolUse.toolEvents).not.toContain('auto_recall');
     expect(afterToolUse.toolResults).toHaveLength(1);
+    for (const request of afterToolUse.requests.filter(request => request.toolChoice)) {
+      expect(request.stream).toBeUndefined();
+      expect(request.streamOptions).toBeUndefined();
+    }
     for (const request of afterToolUse.requests) {
       expect(request.systemPrompt).not.toContain('CUSTOM_PERSONA_PRIVATE_SENTINEL');
       expect(JSON.stringify(request.nonSystemMessages)).not.toContain('PRIOR_USER_HISTORY_SENTINEL');
@@ -1498,7 +1506,7 @@ describe('Chat Streaming API', () => {
         : [];
       return messages.some(message => message.role === 'tool')
         ? openAiJsonResponse('MODEL_MISINTERPRETED_MARKERS')
-        : openAiToolSseResponseWithArgs('read_file', { path: 'sentinel.txt' });
+        : openAiToolJsonResponse('read_file', { path: 'sentinel.txt' });
     });
 
     try {
@@ -1627,7 +1635,7 @@ describe('Chat Streaming API', () => {
         : [];
       return messages.some(message => message.role === 'tool')
         ? openAiJsonResponse('PATH_GUARD_HANDLED')
-        : openAiToolSseResponseWithArgs('read_file', { path: selectedPath });
+        : openAiToolJsonResponse('read_file', { path: selectedPath });
     });
 
     try {
@@ -1724,7 +1732,7 @@ describe('Chat Streaming API', () => {
         : [];
       return messages.some(message => message.role === 'tool')
         ? openAiJsonResponse('FABRICATED_GUARD_SUCCESS')
-        : openAiToolSseResponseWithArgs('read_file', toolArgs);
+        : openAiToolJsonResponse('read_file', toolArgs);
     });
 
     try {
@@ -1934,7 +1942,7 @@ describe('Chat Streaming API', () => {
     };
     globalThis.fetch = vi.fn(async (_input, init) => {
       outboundBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
-      return openAiSseResponse('FABRICATED_UNVERIFIED_TOOL_RESULT');
+      return openAiJsonResponse('FABRICATED_UNVERIFIED_TOOL_RESULT');
     });
 
     try {

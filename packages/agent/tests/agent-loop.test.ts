@@ -313,6 +313,222 @@ describe('runAgentLoop', () => {
     expect(listSkills.execute).toHaveBeenCalledOnce();
   });
 
+  it('executes one strict zero-argument forced tool when the provider ignores tool_choice', async () => {
+    const atomicFetch = mockFetch([
+      { content: 'I can answer without the requested tool.' },
+      { content: 'ORCHID-7' },
+    ]);
+    const leakedStreamFetch = mockStreamFetch(['I can answer without the requested tool.']);
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { stream?: boolean };
+      return body.stream === true
+        ? leakedStreamFetch(url, init)
+        : atomicFetch(url, init);
+    });
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+    }));
+
+    const firstBody = JSON.parse(fetch.mock.calls[0][1].body);
+    const synthesisBody = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(firstBody.tool_choice.function.name).toBe('search_memory');
+    expect(firstBody.stream).toBeUndefined();
+    expect(firstBody.stream_options).toBeUndefined();
+    expect(synthesisBody.tool_choice).toBeUndefined();
+    expect(JSON.stringify(synthesisBody.messages)).toContain('ORCHID-7');
+    expect(JSON.stringify(synthesisBody.messages)).not.toContain('I can answer without the requested tool.');
+    expect(searchMemory.execute).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ content: 'ORCHID-7', toolsUsed: ['search_memory'] });
+    expect(onToken.mock.calls.flat().join('')).toBe('ORCHID-7');
+    expect(onToken.mock.calls.flat().join('')).not.toContain('I can answer without the requested tool.');
+  });
+
+  it('fails closed when an ignored forced tool is not strictly zero-argument', async () => {
+    const fetch = mockFetch([{ content: 'FABRICATED_UNVERIFIED_TOOL_RESULT' }]);
+    const listSkills: ToolDefinition = {
+      name: 'list_skills',
+      description: 'List installed skills',
+      parameters: {
+        type: 'object',
+        properties: { verbose: { type: 'boolean' } },
+      },
+      execute: vi.fn(async () => '18 skills'),
+    };
+    const onToken = vi.fn();
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [listSkills],
+      toolChoice: 'list_skills',
+      onToken,
+    }))).rejects.toThrow('Forced tool choice list_skills was not called');
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(listSkills.execute).not.toHaveBeenCalled();
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ambiguous forced tool before a colliding plugin can replace it', async () => {
+    const fetch = mockFetch([{ content: 'should not be reached' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'base'),
+    };
+    const pluginExecute = vi.fn(async () => 'plugin');
+    const pluginTools: PluginToolProvider = {
+      getAllTools: () => [{ ...searchMemory, execute: pluginExecute }],
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      pluginTools,
+      toolChoice: 'search_memory',
+    }))).rejects.toThrow('Forced tool choice search_memory is ambiguous');
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+    expect(pluginExecute).not.toHaveBeenCalled();
+  });
+
+  it('rejects a different tool returned for a forced tool choice before execution', async () => {
+    const fetch = mockFetch([{
+      content: null,
+      tool_calls: [{ id: 'wrong-call', function: { name: 'read_file', arguments: '{"path":"secret.txt"}' } }],
+    }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read a file',
+      parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+      execute: vi.fn(async () => 'PRIVATE_FILE_CONTENT'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory, readFile],
+      toolChoice: 'search_memory',
+    }))).rejects.toThrow('Forced tool choice search_memory returned a different tool call');
+
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+    expect(readFile.execute).not.toHaveBeenCalled();
+  });
+
+  it('does not expose ignored forced-tool prose when the provider exhausts the budget', async () => {
+    const fetch = mockFetch([{
+      content: 'FABRICATED_UNVERIFIED_TOOL_RESULT',
+      usage: { prompt_tokens: 4_000, completion_tokens: 2_000 },
+    }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+    const onToken = vi.fn();
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      maxTokenBudget: 6_000,
+      onToken,
+    }))).rejects.toThrow('Required tool search_memory could not complete within the token budget');
+
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch a forced tool when it cannot start within the budget', async () => {
+    const fetch = mockFetch([{ content: 'should not be reached' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      maxTokenBudget: 1,
+    }))).rejects.toThrow('Required tool search_memory could not start within the token budget');
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass a forced tool when synthesis reserve exhausts the token budget', async () => {
+    const fetch = mockFetch([{ content: 'FABRICATED_WITHOUT_MEMORY' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      systemPrompt: 'x'.repeat(8_000),
+      maxTokenBudget: 3_000,
+      synthesisReserveTokens: 500,
+    }))).rejects.toThrow('Required tool search_memory could not start within the token budget');
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['maxTurns', { maxTurns: 1 }],
+    ['maxToolRounds', { maxToolRounds: 0 }],
+  ])('does not bypass a forced tool when it cannot fit within %s', async (limit, config) => {
+    const fetch = mockFetch([{ content: 'FABRICATED_WITHOUT_MEMORY' }]);
+    const searchMemory: ToolDefinition = {
+      name: 'search_memory',
+      description: 'Return one exact saved value',
+      parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      execute: vi.fn(async () => 'ORCHID-7'),
+    };
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      tools: [searchMemory],
+      toolChoice: 'search_memory',
+      ...config,
+    }))).rejects.toThrow(`Forced tool choice does not fit within ${limit}`);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(searchMemory.execute).not.toHaveBeenCalled();
+  });
+
   it('rejects multiple forced tool calls before executing any of them', async () => {
     const fetch = mockFetch([
       {

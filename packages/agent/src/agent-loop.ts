@@ -485,11 +485,30 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     toolMap.set(t.name, t);
   }
 
+  if (config.toolChoice) {
+    if (config.toolChoice.trim() !== config.toolChoice || config.toolChoice.length === 0) {
+      throw new Error('Forced tool choice contains an invalid tool name');
+    }
+    const matchingForcedTools = tools.filter(tool => tool.name === config.toolChoice);
+    if (matchingForcedTools.length === 0) {
+      throw new Error(`Forced tool choice ${config.toolChoice} is unavailable`);
+    }
+    if (matchingForcedTools.length > 1) {
+      throw new Error(`Forced tool choice ${config.toolChoice} is ambiguous`);
+    }
+  }
+
   const requiredToolSequence = config.requiredToolSequence
     ? [...config.requiredToolSequence]
     : [];
   if (requiredToolSequence.length > 0 && config.toolChoice) {
     throw new Error('toolChoice and requiredToolSequence cannot be used together');
+  }
+  if (config.toolChoice && maxTurns < 2) {
+    throw new Error('Forced tool choice does not fit within maxTurns');
+  }
+  if (config.toolChoice && maxToolRounds !== undefined && maxToolRounds < 1) {
+    throw new Error('Forced tool choice does not fit within maxToolRounds');
   }
   for (const requiredToolName of requiredToolSequence) {
     if (
@@ -909,6 +928,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       && synthesisReserveTokens
       && usedBeforeRequest + estimatedNextRequestTokens + futureSynthesisReserve >= maxTokenBudget
     ) {
+      const requiredTool = pendingRequiredTool ?? (turn === 0 ? config.toolChoice : undefined);
+      if (requiredTool) {
+        throw new Error(`Required tool ${requiredTool} could not start within the token budget`);
+      }
       forceSynthesis('token-reserve');
       requestMessages = compactToolContextForModel(messages, toolContextBudget, sealToolContext ? sealedMessageCount : 0);
       estimatedNextRequestTokens = estimateNextRequestTokens();
@@ -922,8 +945,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           Math.floor(maxTokenBudget - usedBeforeRequest - estimatedNextRequestTokens - futureSynthesisReserve),
         );
     if (outputTokenLimit < 1) {
-      if (pendingRequiredTool) {
-        throw new Error(`Required tool ${pendingRequiredTool} could not start within the token budget`);
+      const requiredTool = pendingRequiredTool ?? (turn === 0 ? config.toolChoice : undefined);
+      if (requiredTool) {
+        throw new Error(`Required tool ${requiredTool} could not start within the token budget`);
       }
       return budgetStopResponse();
     }
@@ -970,7 +994,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     // A forced synthesis is the only request in the turn that cannot execute
     // tools. Make it atomic so an upstream SSE truncation cannot discard an
     // otherwise complete evidence-backed answer after all tool work finished.
-    const requestUsesStream = stream && !synthesisForced;
+    const requestUsesStream = stream && !synthesisForced && !forcedToolChoiceActive;
     if (requestUsesStream) {
       body.stream = true;
       body.stream_options = { include_usage: true };
@@ -1389,8 +1413,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     // second request. Still reject a structurally incomplete candidate before
     // the budget-stop path can expose it.
     if (maxTokenBudget !== undefined && (totalInputTokens + totalOutputTokens) >= maxTokenBudget) {
-      if (pendingRequiredTool) {
-        throw new Error(`Required tool ${pendingRequiredTool} could not complete within the token budget`);
+      const requiredTool = pendingRequiredTool ?? (legacyForcedToolChoiceActive ? config.toolChoice : undefined);
+      if (requiredTool) {
+        throw new Error(`Required tool ${requiredTool} could not complete within the token budget`);
       }
       const usableContent = assistantMessage.tool_calls?.length && !synthesisForced
         ? undefined
@@ -1423,6 +1448,36 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         Boolean(requestUsesStream && usableContent),
       );
       return result;
+    }
+
+    if ((!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0)
+      && legacyForcedToolChoiceActive) {
+      const forcedTool = turnOpenAiTools.find(tool => tool.function.name === forcedToolName);
+      const parameters = forcedTool?.function.parameters as {
+        type?: unknown;
+        properties?: unknown;
+        required?: unknown;
+        additionalProperties?: unknown;
+      } | undefined;
+      const strictZeroArgumentTool = parameters?.type === 'object'
+        && parameters.properties !== null
+        && typeof parameters.properties === 'object'
+        && Object.keys(parameters.properties).length === 0
+        && Array.isArray(parameters.required)
+        && parameters.required.length === 0
+        && parameters.additionalProperties === false;
+      if (!strictZeroArgumentTool || !forcedToolName) {
+        throw new Error(`Forced tool choice ${config.toolChoice} was not called`);
+      }
+      allStreamedContent = '';
+      assistantMessage = {
+        content: '',
+        tool_calls: [{
+          id: `waggle-forced-${turn + 1}`,
+          type: 'function',
+          function: { name: forcedToolName, arguments: '{}' },
+        }],
+      };
     }
 
     // No tool calls — return the final response
@@ -1550,6 +1605,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       && assistantMessage.tool_calls[0]?.function.name !== pendingRequiredTool
     ) {
       throw new Error(`Required tool ${pendingRequiredTool} was not called in sequence`);
+    }
+    if (forcedToolChoiceActive
+      && assistantMessage.tool_calls[0]?.function.name !== forcedToolName) {
+      throw new Error(`Forced tool choice ${forcedToolName} returned a different tool call`);
     }
 
     toolRoundCount++;
