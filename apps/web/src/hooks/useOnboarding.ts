@@ -1,11 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { UserTier } from '@/lib/dock-tiers';
 import { adapter } from '@/lib/adapter';
 import { ONBOARDED_THIS_SESSION_KEY, COACH_MARKS_FORCE_KEY } from '@/lib/coach-marks-gate';
-import {
-  isTauri,
-  isFirstLaunch as tauriIsFirstLaunch,
-} from '@/lib/tauri-bindings';
 
 export interface OnboardingState {
   completed: boolean;
@@ -99,19 +95,29 @@ function loadState(): OnboardingState {
       // The modern record is authoritative. A leftover legacy flag must never
       // erase richer tier/workspace/persona choices from a newer client.
       localStorage.removeItem('waggle_onboarding_complete');
-      // Existing completed users without a tier default to 'simple'
-      if (parsed.completed && !parsed.tier) {
+      const profileBound = typeof state.profileId === 'string'
+        && PROFILE_ID_PATTERN.test(state.profileId);
+      const forcedWalkthrough = forceWizardParamAllowed()
+        && params.get('forceWizard') === 'true';
+      if (state.completed && !profileBound && !forcedWalkthrough) {
+        // Pre-profile clients could persist a modern-looking completion record
+        // without identifying the dataDir that earned it. Keep benign choices
+        // provisional, but never let that record open the shell by itself.
+        state.completed = false;
+        state.step = 0;
+        delete state.completedAt;
+      }
+      // Existing profile-bound completed users without a tier default to 'simple'
+      if (state.completed && !parsed.tier) {
         state.tier = 'simple';
       }
       return state;
     }
-    // Migrate from the old key only when no modern record exists.
-    if (localStorage.getItem('waggle_onboarding_complete') === 'true') {
-      localStorage.removeItem('waggle_onboarding_complete');
-      const done: OnboardingState = { ...defaultState, completed: true, step: 7 };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(done));
-      return done;
-    }
+    // The legacy flag is not bound to a server-issued profile identity. Retire
+    // it instead of letting it complete onboarding for a replacement dataDir.
+    // The profile-bound server status below remains the returning-user source
+    // of truth and will restore completion when it belongs to this profile.
+    localStorage.removeItem('waggle_onboarding_complete');
   } catch { /* ignore */ }
   return defaultState;
 }
@@ -148,7 +154,9 @@ export function isOnboardingStatusKnownSync(): boolean {
  * explicit server incompletion resets stale WebView state for a fresh dataDir.
  * Never throws or erases a completed cache when the sidecar is unreachable.
  */
-export async function resolveReturningUserOnboarding(): Promise<OnboardingReconciliation> {
+export async function resolveReturningUserOnboarding(
+  confirmedCompletion?: OnboardingState,
+): Promise<OnboardingReconciliation> {
   if (isOnboardingStatusKnownSync()) return 'confirmed';
   if (serverReconciliation === 'confirmed') return 'confirmed';
   if (reconciliationInFlight) return reconciliationInFlight;
@@ -195,8 +203,24 @@ export async function resolveReturningUserOnboarding(): Promise<OnboardingReconc
       }
       localStorage.removeItem('waggle_onboarding_complete');
       if (status?.completed) {
-        const next: OnboardingState = sameProfile && currentState.completed
-          ? { ...currentState, completed: true, step: 7, profileId }
+        if (confirmedCompletion?.profileId && confirmedCompletion.profileId !== profileId) {
+          // A completion attempt belongs to one immutable service profile. If
+          // the desktop generation switched while it was in flight, bind the
+          // fresh wizard to the replacement profile without inheriting either
+          // profile's completion through the stale attempt. Normal boot-time
+          // reconciliation (without confirmedCompletion) still restores a
+          // genuinely returning user.
+          saveState({ ...defaultState, profileId });
+          return setServerReconciliation('confirmed');
+        }
+        const preserveConfirmedCompletion = confirmedCompletion?.profileId === profileId;
+        const next: OnboardingState = sameProfile && (currentState.completed || preserveConfirmedCompletion)
+          ? {
+              ...(preserveConfirmedCompletion ? confirmedCompletion : currentState),
+              completed: true,
+              step: 7,
+              profileId,
+            }
           : {
               ...defaultState,
               completed: true,
@@ -240,6 +264,7 @@ export async function resolveReturningUserOnboarding(): Promise<OnboardingReconc
 
 export async function revalidateReturningUserOnboarding(
   replaceInFlight = false,
+  confirmedCompletion?: OnboardingState,
 ): Promise<OnboardingReconciliation> {
   if (generationRevalidationInFlight && !replaceInFlight) return generationRevalidationInFlight;
   if (replaceInFlight) generationRevalidationInFlight = null;
@@ -250,7 +275,7 @@ export async function revalidateReturningUserOnboarding(
     // Detach it: its generation guard prevents stale writes, while the equality
     // check in its finally block prevents it from clearing this new request.
     reconciliationInFlight = null;
-    return resolveReturningUserOnboarding();
+    return resolveReturningUserOnboarding(confirmedCompletion);
   })();
   generationRevalidationInFlight = revalidate;
   try {
@@ -262,6 +287,7 @@ export async function revalidateReturningUserOnboarding(
 
 export const useOnboarding = () => {
   const [state, setState] = useState<OnboardingState>(loadState);
+  const completionInFlightRef = useRef<Promise<boolean> | null>(null);
   const [reconciliationUnavailable, setReconciliationUnavailable] = useState(
     () => serverReconciliation === 'unavailable',
   );
@@ -301,47 +327,6 @@ export const useOnboarding = () => {
     };
   }, [onboardingOverrideActive, reconciliationUnavailable]);
 
-  // CC Sesija A §2.3 A11: Tauri filesystem-flag fast-path for returning users.
-  // Runs in Tauri mode only; if ~/.waggle/first-launch.flag exists the user
-  // has completed onboarding before (even if this WebView profile is fresh).
-  // Auto-completes the wizard in that case. Complementary to the workspaces-
-  // check below — flag is faster + doesn't need sidecar; either trigger is
-  // sufficient.
-  useEffect(() => {
-    if (state.completed) return;
-    if (!isTauri()) return;
-    let cancelled = false;
-    tauriIsFirstLaunch()
-      .then(async (firstLaunch) => {
-        if (cancelled || firstLaunch) return;
-        while (reconciliationInFlight) await reconciliationInFlight;
-        if (cancelled || serverReconciliation !== 'unavailable') return;
-        const current = loadState();
-        if (current.completed || current.step > 0) return;
-        console.info(
-          '[useOnboarding] Tauri filesystem flag indicates returning user — auto-completing wizard',
-        );
-        const next: OnboardingState = {
-          ...defaultState,
-          completed: true,
-          step: 7,
-          tier: state.tier || 'power',
-          tooltipsDismissed: true,
-          apiKeySet: true,
-        };
-        saveState(next);
-        setState(next);
-      })
-      .catch(() => {
-        /* command unavailable — fall through to existing returning-user check */
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Bug #2: auto-complete onboarding for returning users.
   // The localStorage flag is per-webview, so a fresh Tauri webview (or a
   // browser switch) always looks "new" even when the sidecar has existing
@@ -377,9 +362,15 @@ export const useOnboarding = () => {
       const next = { ...prev, ...updates };
       // F1/F5: stamp the completion time on the transition ONLY (immutable copy)
       // so the trial-modal gate + coach-marks gate can quiet themselves right
-      // after the wizard. The two returning-user auto-complete effects use
-      // saveState() directly and deliberately leave completedAt unset.
+      // after the wizard. Server-authoritative returning-user completion calls
+      // saveState() directly and deliberately leaves completedAt unset.
       const justCompleted = next.completed && !prev.completed;
+      const forcedWalkthrough = forceWizardParamAllowed()
+        && new URLSearchParams(window.location.search).get('forceWizard') === 'true';
+      if (justCompleted && !forcedWalkthrough) {
+        console.warn('[useOnboarding] completion must be confirmed by the active profile');
+        return prev;
+      }
       const stamped = justCompleted ? { ...next, completedAt: Date.now() } : next;
       saveState(stamped);
       if (justCompleted) {
@@ -388,24 +379,67 @@ export const useOnboarding = () => {
         try {
           sessionStorage.setItem(ONBOARDED_THIS_SESSION_KEY, '1');
         } catch { /* storage disabled — the completedAt window still covers first-run */ }
-        // P4: stamp the durable server flag only when this browser state is
-        // bound to a server-issued profile. The server enforces the same id
-        // atomically; the identity-free Rust marker must not bypass it.
-        if (typeof stamped.profileId === 'string' && PROFILE_ID_PATTERN.test(stamped.profileId)) {
-          adapter.markOnboardingComplete(stamped.profileId).catch((err) => {
-            console.warn('[useOnboarding] profile-bound completion failed:', err);
-          });
-        } else {
-          console.warn('[useOnboarding] completion is not bound to an active profile');
-        }
       }
       return stamped;
     });
   }, []);
 
-  const complete = useCallback(() => {
-    update({ completed: true, step: 7 });
-  }, [update]);
+  const complete = useCallback((): Promise<boolean> => {
+    const forcedWalkthrough = forceWizardParamAllowed()
+      && new URLSearchParams(window.location.search).get('forceWizard') === 'true';
+    if (forcedWalkthrough) {
+      update({ completed: true, step: 7 });
+      return Promise.resolve(true);
+    }
+
+    const profileId = state.profileId;
+    if (typeof profileId !== 'string' || !PROFILE_ID_PATTERN.test(profileId)) {
+      console.warn('[useOnboarding] completion is not bound to an active profile');
+      return Promise.resolve(false);
+    }
+    if (completionInFlightRef.current) return completionInFlightRef.current;
+
+    const attempt = (async () => {
+      try {
+        // The server compares the expected profile atomically before writing.
+        // Do not expose local completion until the durable stamp succeeds.
+        await adapter.markOnboardingComplete(profileId);
+      } catch (err) {
+        console.warn('[useOnboarding] profile-bound completion failed:', err);
+        // The server may have committed before the transport failed. The
+        // profile-bound status read below is the durable authority: exact
+        // same-profile completion recovers, while missing/mismatched state
+        // remains incomplete.
+      }
+
+      const reconciliation = await revalidateReturningUserOnboarding(true, state);
+      const confirmed = loadState();
+      if (reconciliation !== 'confirmed'
+        || !confirmed.completed
+        || confirmed.profileId !== profileId) {
+        return false;
+      }
+
+      const finalized: OnboardingState = {
+        ...state,
+        ...confirmed,
+        completed: true,
+        step: 7,
+        profileId,
+        completedAt: Date.now(),
+      };
+      saveState(finalized);
+      try {
+        sessionStorage.setItem(ONBOARDED_THIS_SESSION_KEY, '1');
+      } catch { /* storage disabled — completedAt still protects first-run UX */ }
+      return true;
+    })();
+    completionInFlightRef.current = attempt;
+    void attempt.finally(() => {
+      if (completionInFlightRef.current === attempt) completionInFlightRef.current = null;
+    });
+    return attempt;
+  }, [state, update]);
 
   const reset = useCallback(() => {
     setState((previous) => {

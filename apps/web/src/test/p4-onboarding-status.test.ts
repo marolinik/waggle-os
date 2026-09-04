@@ -32,6 +32,7 @@ describe('useOnboarding clean-install gate (P4)', () => {
   beforeEach(() => {
     vi.resetModules();
     localStorage.clear();
+    sessionStorage.clear();
     mocks.adapter.getOnboardingStatus.mockReset();
     mocks.adapter.markOnboardingComplete.mockReset().mockResolvedValue(undefined);
     mocks.isTauri.mockReset().mockReturnValue(false);
@@ -711,13 +712,59 @@ describe('useOnboarding clean-install gate (P4)', () => {
     expect(mocks.adapter.getOnboardingStatus).toHaveBeenCalledTimes(2);
   });
 
+  it('LEGACY BROWSER MARKER: missing profile identity cannot complete onboarding', async () => {
+    localStorage.setItem('waggle_onboarding_complete', 'true');
+    mocks.adapter.getOnboardingStatus.mockResolvedValue({ completed: true, source: 'flag' });
+    const { resolveReturningUserOnboarding, useOnboarding } = await import('@/hooks/useOnboarding');
+
+    await expect(resolveReturningUserOnboarding()).resolves.toBe('unavailable');
+    const { result } = renderHook(() => useOnboarding());
+    await act(async () => { await Promise.resolve(); });
+
+    expect(result.current.state.completed).toBe(false);
+    expect(result.current.state.profileId).toBeUndefined();
+  });
+
+  it('LEGACY MODERN CACHE: profile-less completion remains provisional', async () => {
+    localStorage.setItem('waggle:onboarding', JSON.stringify({
+      completed: true,
+      step: 7,
+      tier: 'simple',
+    }));
+    mocks.adapter.getOnboardingStatus.mockResolvedValue({ completed: true, source: 'flag' });
+    const { resolveReturningUserOnboarding, useOnboarding } = await import('@/hooks/useOnboarding');
+
+    await expect(resolveReturningUserOnboarding()).resolves.toBe('unavailable');
+    const { result } = renderHook(() => useOnboarding());
+
+    expect(result.current.state.completed).toBe(false);
+    expect(result.current.state.profileId).toBeUndefined();
+  });
+
+  it('LEGACY TAURI MARKER: missing profile identity cannot complete onboarding', async () => {
+    mocks.isTauri.mockReturnValue(true);
+    mocks.tauriIsFirstLaunch.mockResolvedValue(false);
+    mocks.adapter.getOnboardingStatus.mockResolvedValue({ completed: true, source: 'flag' });
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(mocks.adapter.getOnboardingStatus).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+
+    expect(result.current.state.completed).toBe(false);
+    expect(result.current.state.profileId).toBeUndefined();
+    expect(mocks.tauriIsFirstLaunch).not.toHaveBeenCalled();
+  });
+
   it('completing the wizard stamps the server-side flag', async () => {
-    mocks.adapter.getOnboardingStatus.mockResolvedValue({ completed: false, source: 'none', profileId: PROFILE_A });
+    mocks.adapter.getOnboardingStatus
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A })
+      .mockResolvedValueOnce({ completed: true, source: 'flag', profileId: PROFILE_A });
     const { useOnboarding } = await import('@/hooks/useOnboarding');
     const { result } = renderHook(() => useOnboarding());
 
     await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
-    act(() => { result.current.complete(); });
+    await act(async () => { await result.current.complete(); });
 
     expect(result.current.state.completed).toBe(true);
     expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
@@ -725,12 +772,14 @@ describe('useOnboarding clean-install gate (P4)', () => {
 
   it('TAURI COMPLETION: uses the profile-bound server stamp and never writes the identity-free Rust marker', async () => {
     mocks.isTauri.mockReturnValue(true);
-    mocks.adapter.getOnboardingStatus.mockResolvedValue({ completed: false, source: 'none', profileId: PROFILE_A });
+    mocks.adapter.getOnboardingStatus
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A })
+      .mockResolvedValueOnce({ completed: true, source: 'flag', profileId: PROFILE_A });
     const { useOnboarding } = await import('@/hooks/useOnboarding');
     const { result } = renderHook(() => useOnboarding());
 
     await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
-    act(() => { result.current.complete(); });
+    await act(async () => { await result.current.complete(); });
 
     expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
     expect(mocks.tauriMarkFirstLaunchComplete).not.toHaveBeenCalled();
@@ -743,10 +792,163 @@ describe('useOnboarding clean-install gate (P4)', () => {
     const { result } = renderHook(() => useOnboarding());
 
     await waitFor(() => expect(mocks.adapter.getOnboardingStatus).toHaveBeenCalled());
-    act(() => { result.current.complete(); });
+    let completed: boolean | undefined;
+    await act(async () => { completed = await result.current.complete(); });
 
+    expect(completed).toBe(false);
+    expect(result.current.state.completed).toBe(false);
     expect(mocks.adapter.markOnboardingComplete).not.toHaveBeenCalled();
     expect(mocks.tauriMarkFirstLaunchComplete).not.toHaveBeenCalled();
+  });
+
+  it('ATOMIC COMPLETION: a rejected profile stamp keeps the wizard and cache incomplete', async () => {
+    mocks.adapter.getOnboardingStatus
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A })
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A });
+    mocks.adapter.markOnboardingComplete.mockRejectedValueOnce(new Error('409 profile changed'));
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
+    let completed: boolean | undefined;
+    await act(async () => { completed = await result.current.complete(); });
+
+    expect(completed).toBe(false);
+    expect(result.current.state.completed).toBe(false);
+    expect(JSON.parse(localStorage.getItem('waggle:onboarding') ?? '{}').completed).toBe(false);
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
+    expect(mocks.adapter.getOnboardingStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('ATOMIC COMPLETION: a lost POST response recovers from the same-profile durable flag', async () => {
+    mocks.adapter.getOnboardingStatus
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A })
+      .mockResolvedValueOnce({ completed: true, source: 'flag', profileId: PROFILE_A });
+    mocks.adapter.markOnboardingComplete.mockRejectedValueOnce(new Error('ECONNRESET after write'));
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
+    act(() => {
+      result.current.update({
+        workspaceId: 'workspace-a',
+        personaId: 'researcher',
+        templateId: 'research',
+        profileSeeded: true,
+        toolsUsed: ['claude-code'],
+        apiKeySet: true,
+      });
+    });
+    let completed: boolean | undefined;
+    await act(async () => { completed = await result.current.complete(); });
+
+    expect(completed).toBe(true);
+    expect(result.current.state).toMatchObject({
+      completed: true,
+      step: 7,
+      profileId: PROFILE_A,
+      workspaceId: 'workspace-a',
+      personaId: 'researcher',
+      templateId: 'research',
+      profileSeeded: true,
+      toolsUsed: ['claude-code'],
+      apiKeySet: true,
+    });
+    expect(result.current.state.completedAt).toEqual(expect.any(Number));
+    expect(sessionStorage.getItem('waggle:onboarded_this_session')).toBe('1');
+  });
+
+  it('ATOMIC COMPLETION: concurrent calls share one stamp and one confirmed result', async () => {
+    let resolveStamp!: () => void;
+    const stamp = new Promise<void>((resolve) => { resolveStamp = resolve; });
+    mocks.adapter.getOnboardingStatus
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A })
+      .mockResolvedValueOnce({ completed: true, source: 'flag', profileId: PROFILE_A });
+    mocks.adapter.markOnboardingComplete.mockReturnValueOnce(stamp);
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.complete();
+      second = result.current.complete();
+    });
+
+    expect(first).toBe(second);
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveStamp();
+      await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
+    });
+    expect(mocks.adapter.getOnboardingStatus).toHaveBeenCalledTimes(2);
+    expect(result.current.state.completed).toBe(true);
+  });
+
+  it('ATOMIC COMPLETION: a post-stamp profile switch never finalizes the old wizard', async () => {
+    mocks.adapter.getOnboardingStatus
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A })
+      .mockResolvedValueOnce({ completed: true, source: 'flag', profileId: PROFILE_B });
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
+    act(() => {
+      result.current.update({ workspaceId: 'workspace-a', personaId: 'researcher' });
+    });
+    let completed: boolean | undefined;
+    await act(async () => { completed = await result.current.complete(); });
+
+    expect(completed).toBe(false);
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
+    expect(result.current.state).toMatchObject({
+      completed: false,
+      step: 0,
+      profileId: PROFILE_B,
+    });
+    expect(result.current.state.workspaceId).toBeUndefined();
+    expect(sessionStorage.getItem('waggle:onboarded_this_session')).toBeNull();
+  });
+
+  it('ATOMIC COMPLETION: server confirmation is revalidated before the wizard completes', async () => {
+    mocks.adapter.getOnboardingStatus
+      .mockResolvedValueOnce({ completed: false, source: 'none', profileId: PROFILE_A })
+      .mockResolvedValueOnce({ completed: true, source: 'flag', profileId: PROFILE_A });
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
+    act(() => {
+      result.current.update({
+        workspaceId: 'workspace-a',
+        personaId: 'researcher',
+        templateId: 'research',
+        profileSeeded: true,
+        toolsUsed: ['claude-code'],
+        apiKeySet: true,
+      });
+    });
+    let completed: boolean | undefined;
+    await act(async () => { completed = await result.current.complete(); });
+
+    expect(completed).toBe(true);
+    expect(result.current.state).toMatchObject({
+      completed: true,
+      step: 7,
+      profileId: PROFILE_A,
+      workspaceId: 'workspace-a',
+      personaId: 'researcher',
+      templateId: 'research',
+      profileSeeded: true,
+      toolsUsed: ['claude-code'],
+      apiKeySet: true,
+    });
+    expect(result.current.state.completedAt).toEqual(expect.any(Number));
+    expect(sessionStorage.getItem('waggle:onboarded_this_session')).toBe('1');
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
+    expect(mocks.adapter.getOnboardingStatus).toHaveBeenCalledTimes(2);
   });
 
   it('ADAPTER COMPLETION: serializes the bound profile and rejects non-success responses', async () => {
