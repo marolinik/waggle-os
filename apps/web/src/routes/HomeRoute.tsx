@@ -21,13 +21,17 @@ const HomeRoute = () => {
     overlays,
     workspaces,
     workspacesLoading,
+    onboardingState,
   } = useShell();
+  const profileId = onboardingState?.profileId ?? 'unbound';
   return (
     <SurfaceBoundary appName="Home">
       {/* PR5 D2 — persists on Home until a working model exists (the soft-escape
           safety net for the onboarding model gate). */}
       <NoModelBanner onSetup={() => navigate(routeFor('settings'))} />
       <HomeCockpit
+        key={profileId}
+        profileId={profileId}
         onContinue={(workspaceId, sessionId, initialMessage) => {
           if (!sessionId && initialMessage) {
             requestNewChatSession(workspaceId, initialMessage);

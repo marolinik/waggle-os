@@ -39,7 +39,7 @@ import {
 } from '../warm';
 import { RecallCard } from '../overlays/RecallCard';
 import DreamDiaryCard from '../home/DreamDiaryCard';
-import { readHomeCache, writeHomeCache } from '@/lib/home-cache';
+import { clearHomeCache, readHomeCache, writeHomeCache } from '@/lib/home-cache';
 import { takeBriefingData, type MemoryHighlight } from '@/lib/briefing-source';
 import { timeAgo } from '@/lib/login-briefing-brag';
 import type {
@@ -619,11 +619,11 @@ function buildRunChips(o: OvernightSummary): RunChipProps[] {
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────
-const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, onAskChat, userName, totalWorkspaceCount }: HomeCockpitProps) => {
+const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, onAskChat, userName, totalWorkspaceCount, profileId }: HomeCockpitProps) => {
   // Cache-first paint (Pillar 2.1): seed from the disk-persisted last-good Home
   // payload so a returning / cold-start launch paints real content BEFORE the
   // sidecar answers, then refreshes silently. Day-0 (no cache) keeps the skeleton.
-  const [cached] = useState(() => readHomeCache());
+  const [cached] = useState(() => readHomeCache(profileId));
   const [briefing, setBriefing] = useState<HomeBriefing | null>(cached?.briefing ?? null);
   const [overnight, setOvernight] = useState<OvernightSummary | null>(cached?.overnight ?? null);
   const [highlights, setHighlights] = useState<MemoryHighlight[]>(cached?.highlights ?? []);
@@ -637,18 +637,22 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
   // and yields malformed data. Defer load() until the attempt has settled.
   const { connecting } = useService();
   const cancelled = useRef(false);
+  const loadIdRef = useRef(0);
   // Paintable content already onscreen ⇒ a refresh must NOT re-skeleton, and a
   // refresh FAILURE must NOT blow good content away (keep last-good, retry silently).
   const hasContentRef = useRef(!!cached);
   // Latest recall highlights for the cache write — avoids a stale closure when
   // the recall fetch fails and we still want to persist the ones we already have.
   const highlightsRef = useRef<MemoryHighlight[]>(cached?.highlights ?? []);
+  const overnightRef = useRef<OvernightSummary | null>(cached?.overnight ?? null);
   const applyHighlights = useCallback((h: MemoryHighlight[]) => {
     highlightsRef.current = h;
     setHighlights(h);
   }, []);
 
   const load = useCallback(async () => {
+    const loadId = ++loadIdRef.current;
+    const isCurrent = () => !cancelled.current && loadIdRef.current === loadId;
     // Silent refresh over a cache-first paint keeps content up; only a cold miss
     // (nothing to show) shows the skeleton.
     if (!hasContentRef.current) setLoading(true);
@@ -656,39 +660,53 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
     setPermissionDenied(false);
     try {
       const b = await adapter.getHomeBriefing();
-      if (cancelled.current) return;
+      if (!isCurrent()) return;
       setBriefing(b);
-      // First-run has no real payload to keep/cache; any other briefing is
-      // paintable content the next refresh/error must preserve.
-      hasContentRef.current = !b.isFirstRun;
+      // A successful live first-run response is authoritative: the last
+      // workspace may just have been deleted. Evict only this profile's cache
+      // so its old workspace and memories cannot ghost back on the next mount.
+      if (b.isFirstRun) {
+        clearHomeCache(profileId);
+        hasContentRef.current = false;
+        overnightRef.current = null;
+        setOvernight(null);
+        applyHighlights([]);
+        return;
+      }
+      hasContentRef.current = true;
 
       // Overnight is a secondary, best-effort tile — its failure must never
       // blank the whole cockpit (offline/local-only degrades it gracefully).
-      let o: OvernightSummary | null = null;
+      let o = overnightRef.current;
       try {
         o = await adapter.getHomeOvernight();
-        if (!cancelled.current) setOvernight(o);
+        if (!isCurrent()) return;
+        overnightRef.current = o;
+        setOvernight(o);
       } catch {
-        if (!cancelled.current) setOvernight(null);
+        if (!isCurrent()) return;
+        // Keep the last-good secondary story. A transient overnight failure
+        // must not erase or persist over a still-valid cached summary.
       }
 
       // Recall highlights for the hero strip (Pillar 2.4) — shared with the
       // ≥7-day modal via briefing-source, best-effort: a failure just keeps the
       // highlights we already have.
       try {
-        const data = await takeBriefingData();
-        if (!cancelled.current) applyHighlights(data.highlights);
+        const data = await takeBriefingData(profileId);
+        if (!isCurrent()) return;
+        applyHighlights(data.highlights);
       } catch {
         /* keep prior highlights */
       }
 
       // Persist the last-good payload for the next cache-first paint (never a
       // first-run payload — nothing real to show).
-      if (!cancelled.current && !b.isFirstRun) {
-        writeHomeCache({ briefing: b, overnight: o, highlights: highlightsRef.current });
+      if (isCurrent() && !b.isFirstRun) {
+        writeHomeCache({ briefing: b, overnight: o, highlights: highlightsRef.current }, profileId);
       }
     } catch (err: unknown) {
-      if (cancelled.current) return;
+      if (!isCurrent()) return;
       // Silent-refresh failure over a cache-first paint: keep the last-good
       // content (wrong-then-corrected / blank is worse than slightly stale).
       // Only surface the error / permission state on a COLD miss.
@@ -703,18 +721,20 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
         setLoadError(true);
       }
     } finally {
-      if (!cancelled.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [applyHighlights]);
+  }, [applyHighlights, profileId]);
 
   useEffect(() => {
     // Defer until the adapter's initial connect attempt has settled. Gates on
     // `connecting` (settled), NOT `connected`, so a failed connect still runs
     // load() → the existing offline/retry UI rather than a permanent skeleton.
-    if (connecting) return;
     cancelled.current = false;
-    void load();
-    return () => { cancelled.current = true; };
+    if (!connecting) void load();
+    return () => {
+      cancelled.current = true;
+      loadIdRef.current += 1;
+    };
   }, [load, connecting]);
 
   // Ask bar "+" with no typed text → open the command palette (⌘K) rather than
@@ -1007,6 +1027,8 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
 };
 
 interface HomeCockpitProps {
+  /** Server-issued logical profile used to isolate disk and prefetch state. */
+  profileId?: string;
   /** Continue a workspace → open its chat runtime (founder A-flow: continue→openChat). */
   onContinue: (workspaceId: string, sessionId?: string, initialMessage?: string) => void;
   /** Open the full Workspace Desktop for a workspace (S02). */

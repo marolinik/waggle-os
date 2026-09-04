@@ -29,6 +29,8 @@ const MAX_RECENT_WORKSPACES = 6;
 const MAX_HIGHLIGHTS = 3;
 
 export interface HomeCachePayload {
+  /** Server-issued logical profile that owns this payload. */
+  profileId?: string;
   briefing: HomeBriefing;
   overnight: OvernightSummary | null;
   highlights: MemoryHighlight[];
@@ -55,7 +57,7 @@ function isBriefingShape(v: unknown): v is HomeBriefing {
 }
 
 /** Read the last cached Home payload, or null if absent / malformed / stale-version. */
-export function readHomeCache(): HomeCachePayload | null {
+export function readHomeCache(expectedProfileId?: string): HomeCachePayload | null {
   try {
     const raw = window.localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
@@ -63,6 +65,8 @@ export function readHomeCache(): HomeCachePayload | null {
     if (!isObject(parsed)) return null;
     if (parsed.version !== CACHE_VERSION) return null;
     const { briefing, overnight, highlights, savedAt } = parsed as Record<string, unknown>;
+    const profileId = typeof parsed.profileId === 'string' ? parsed.profileId : undefined;
+    if (expectedProfileId && profileId !== expectedProfileId) return null;
     if (!isBriefingShape(briefing)) return null;
     if (!Array.isArray(highlights)) return null;
     if (typeof savedAt !== 'number') return null;
@@ -70,6 +74,7 @@ export function readHomeCache(): HomeCachePayload | null {
     // as a miss so the caller takes the day-0 skeleton path.
     if (briefing.isFirstRun) return null;
     return {
+      profileId,
       briefing,
       overnight: (overnight ?? null) as OvernightSummary | null,
       highlights: highlights as MemoryHighlight[],
@@ -85,7 +90,7 @@ export function writeHomeCache(payload: {
   briefing: HomeBriefing;
   overnight: OvernightSummary | null;
   highlights: MemoryHighlight[];
-}): void {
+}, profileId?: string): void {
   try {
     if (payload.briefing.isFirstRun) return;
     const trimmedBriefing: HomeBriefing = {
@@ -94,6 +99,7 @@ export function writeHomeCache(payload: {
     };
     const blob = JSON.stringify({
       version: CACHE_VERSION,
+      profileId,
       savedAt: Date.now(),
       briefing: trimmedBriefing,
       overnight: payload.overnight,
@@ -107,13 +113,23 @@ export function writeHomeCache(payload: {
 }
 
 /** True when a paintable Home payload is cached — drives the warm-boot floor. */
-export function homeCacheExists(): boolean {
-  return readHomeCache() !== null;
+export function homeCacheExists(profileId?: string): boolean {
+  return readHomeCache(profileId) !== null;
 }
 
-/** Test-only / sign-out: drop the cached payload. */
-export function clearHomeCache(): void {
+/** Drop the cached payload. With an owner, never clear another profile's data. */
+export function clearHomeCache(expectedProfileId?: string): void {
   try {
+    if (expectedProfileId) {
+      const raw = window.localStorage.getItem(CACHE_KEY);
+      if (!raw) return;
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (isObject(parsed) && parsed.profileId !== expectedProfileId) return;
+      } catch {
+        // Invalid cache data has no valid owner and is safe to discard.
+      }
+    }
     window.localStorage.removeItem(CACHE_KEY);
   } catch {
     // no-op

@@ -165,19 +165,37 @@ export async function fetchBriefingData(): Promise<BriefingData> {
 // dropped so the consumer's own load fetches fresh. Consume-once (not a shared
 // promise) keeps every consumer independent, so no cross-consumer/cross-test
 // state can leak.
-let prefetchedBriefing: Promise<BriefingData> | null = null;
-
-export function prefetchBriefing(): void {
-  if (prefetchedBriefing) return;
-  prefetchedBriefing = fetchBriefingData();
-  prefetchedBriefing.catch(() => { prefetchedBriefing = null; });
+interface PrefetchedBriefing {
+  profileId?: string;
+  promise: Promise<BriefingData>;
 }
 
-export function takeBriefingData(): Promise<BriefingData> {
-  if (prefetchedBriefing) {
-    const pending = prefetchedBriefing;
+let prefetchedBriefing: PrefetchedBriefing | null = null;
+
+export function prefetchBriefing(profileId?: string): void {
+  // An unbound prefetch cannot be proven to belong to the profile that later
+  // consumes it. Fail closed until the caller can supply the server identity.
+  if (!profileId) return;
+  if (prefetchedBriefing && prefetchedBriefing.profileId === profileId) return;
+  const entry: PrefetchedBriefing = {
+    profileId,
+    promise: fetchBriefingData(),
+  };
+  prefetchedBriefing = entry;
+  entry.promise.catch(() => {
+    if (prefetchedBriefing === entry) prefetchedBriefing = null;
+  });
+}
+
+export function takeBriefingData(profileId?: string): Promise<BriefingData> {
+  if (!profileId) {
     prefetchedBriefing = null;
-    return pending;
+    return fetchBriefingData();
+  }
+  if (prefetchedBriefing) {
+    const entry = prefetchedBriefing;
+    prefetchedBriefing = null;
+    if (entry.profileId === profileId) return entry.promise;
   }
   return fetchBriefingData();
 }
