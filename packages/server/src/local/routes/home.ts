@@ -365,13 +365,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
    * from the cross-workspace fan-out — Home is the personal landing surface.
    */
   function rankPersonalWorkspaces(): RankableWorkspace[] {
-    let workspaces: ReturnType<typeof server.workspaceManager.list>;
-    try {
-      workspaces = server.workspaceManager.list();
-    } catch (err) {
-      log.warn('briefing: workspace list failed', (err as Error).message);
-      return [];
-    }
+    const workspaces = server.workspaceManager.list();
 
     return workspaces
       .filter((ws) => !ws.teamId && ws.status !== 'archived')
@@ -389,7 +383,7 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
   }
 
   // GET /api/home/briefing — cross-workspace ranked daily briefing (PRD §12.1)
-  server.get('/api/home/briefing', async () => {
+  server.get('/api/home/briefing', async (_request, reply) => {
     const now = new Date();
 
     // ── Greeting + identity name (B8) ─────────────────────────────
@@ -404,7 +398,16 @@ export const homeRoutes: FastifyPluginAsync = async (server) => {
       log.warn('briefing: identity read failed', (err as Error).message);
     }
 
-    const ranked = rankPersonalWorkspaces();
+    let ranked: RankableWorkspace[];
+    try {
+      ranked = rankPersonalWorkspaces();
+    } catch (err) {
+      log.warn('briefing: workspace list failed', (err as Error).message);
+      return reply.code(503).send({
+        error: 'HOME_WORKSPACES_UNAVAILABLE',
+        message: 'Waggle could not load your workspaces. Try again.',
+      });
+    }
 
     // ── Per-workspace state for the top-ranked workspaces ─────────
     // Cards are collected with their recency timestamp and re-ranked after the

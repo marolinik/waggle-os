@@ -306,6 +306,22 @@ describe('GET /api/home/briefing (P2 — J08 needsReviewCount + greeting)', () =
     expect(briefing.needsReviewCount).toBe(0);
   });
 
+  it('returns a structured 503 when the workspace catalog cannot be read', async () => {
+    boot([{ id: 'w1', name: 'Alpha', group: 'Personal', created: new Date().toISOString() }]);
+    vi.spyOn(server.workspaceManager, 'list').mockImplementation(() => {
+      throw new Error('workspace catalog unavailable');
+    });
+
+    const res = await server.inject({ method: 'GET', url: '/api/home/briefing' });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({
+      error: 'HOME_WORKSPACES_UNAVAILABLE',
+      message: 'Waggle could not load your workspaces. Try again.',
+    });
+    expect(res.json()).not.toHaveProperty('isFirstRun');
+  });
+
   it('counts only personal-mind memories with status unreviewed', async () => {
     boot();
     // Seed via the same routes the product uses: create (status active) then
