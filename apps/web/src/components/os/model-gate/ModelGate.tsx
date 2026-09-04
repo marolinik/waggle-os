@@ -107,6 +107,7 @@ export function ModelGate({
   const [endpointValue, setEndpointValue] = useState('');
   const [compatibleModels, setCompatibleModels] = useState<ProviderModel[]>([]);
   const [compatibleModel, setCompatibleModel] = useState('');
+  const [compatibleModelHydrating, setCompatibleModelHydrating] = useState(false);
   const [compatibleStatus, setCompatibleStatus] = useState<
     'idle' | 'discovering' | 'discovered' | 'verifying' | 'saving' | 'saved' | 'error'
   >('idle');
@@ -130,7 +131,7 @@ export function ModelGate({
   const selectProvider = (id: string, focusField = true) => {
     if (compatibleStatus === 'saving') return;
     if (explicitCompatibleOperationRef.current !== null) cancelCompatibleVerification();
-    compatibleRequestGeneration.current += 1;
+    const generation = ++compatibleRequestGeneration.current;
     const provider = providers.find((candidate) => candidate.id === id);
     const isCompatible = id === 'openai-compatible';
     setSelected(id);
@@ -142,11 +143,40 @@ export function ModelGate({
       const models = provider?.models ?? [];
       setEndpointValue(provider?.baseUrl ?? '');
       setCompatibleModels(models);
-      setCompatibleModel(models[0]?.id ?? '');
+      setCompatibleModel('');
+      setCompatibleModelHydrating(models.length > 0);
+      // The provider catalog has no ordering contract. Restore the actual
+      // persisted primary instead of silently replacing it with model zero
+      // when Settings is reopened.
+      if (models.length > 0) {
+        void adapter.getSettings().then((settings) => {
+          if (generation !== compatibleRequestGeneration.current) return;
+          const persisted = settings.defaultModel;
+          setCompatibleModel(
+            models.some((model) => model.id === persisted)
+              ? persisted
+              : models[0]?.id ?? '',
+          );
+        }).catch(() => {
+          if (generation !== compatibleRequestGeneration.current) return;
+          // Fail closed: catalog order is not a safe substitute for the
+          // persisted primary. Require a fresh endpoint discovery before a
+          // model can be saved.
+          setCompatibleModels([]);
+          setCompatibleModel('');
+          setCompatibleStatus('error');
+          setCompatibleError('Could not load the saved model. Discover models to choose it again.');
+        }).finally(() => {
+          if (generation === compatibleRequestGeneration.current) {
+            setCompatibleModelHydrating(false);
+          }
+        });
+      }
     } else {
       setEndpointValue('');
       setCompatibleModels([]);
       setCompatibleModel('');
+      setCompatibleModelHydrating(false);
     }
     if (focusField) {
       window.setTimeout(() => {
@@ -508,6 +538,7 @@ export function ModelGate({
     setCompatibleError(null);
     setCompatibleModels([]);
     setCompatibleModel('');
+    setCompatibleModelHydrating(false);
     const apiKey = keyValue.trim() || undefined;
     const generation = ++compatibleRequestGeneration.current;
     try {
@@ -521,6 +552,7 @@ export function ModelGate({
       setEndpointValue(result.baseUrl);
       setCompatibleModels(result.models);
       setCompatibleModel(result.models[0]?.id ?? '');
+      setCompatibleModelHydrating(false);
       setCompatibleStatus('discovered');
     } catch (error) {
       if (generation !== compatibleRequestGeneration.current) return;
@@ -533,7 +565,7 @@ export function ModelGate({
     const endpoint = endpointValue.trim();
     const model = compatibleModel;
     const apiKey = keyValue.trim() || undefined;
-    if (!endpoint || !model) return;
+    if (!endpoint || !model || compatibleModelHydrating) return;
     if (
       selectedProvider?.hasKey
       && !apiKey
@@ -547,38 +579,26 @@ export function ModelGate({
     explicitCompatibleOperationRef.current = generation;
     manualReadinessRetryRevision.current = null;
     readinessProbeGeneration.current += 1;
-    setCompatibleStatus('verifying');
+    setCompatibleStatus('saving');
     setCompatibleError(null);
     let saved = false;
     try {
-      const result = await adapter.testCompatibleProvider(
-        endpoint,
-        apiKey,
-        model,
-      );
-      if (generation !== compatibleRequestGeneration.current) return;
-      if (
-        !result.valid
-        || !result.verified
-        || !result.models.some((candidate) => candidate.id === model)
-      ) {
+      if (!compatibleModels.some((candidate) => candidate.id === model)) {
         setCompatibleStatus('error');
-        setCompatibleError(result.error || 'The selected model did not return a usable response.');
+        setCompatibleError('Discover the endpoint again before saving this model.');
         return;
       }
-      setCompatibleStatus('saving');
-      const models = result.models.map((model) => model.id);
+      const models = compatibleModels.map((candidate) => candidate.id);
       await adapter.setProviderConfig('openai-compatible', {
         ...(apiKey ? { apiKey } : {}),
-        baseUrl: result.baseUrl,
+        baseUrl: endpoint,
         models,
         defaultModel: model,
       });
       if (generation !== compatibleRequestGeneration.current) return;
       await refreshProviders();
       if (generation !== compatibleRequestGeneration.current) return;
-      setEndpointValue(result.baseUrl);
-      setCompatibleModels(result.models);
+      setEndpointValue(endpoint);
       setCompatibleStatus('saved');
       setProbe({ status: 'verified', verifiedModel: model });
       setKeyValue('');
@@ -757,7 +777,10 @@ export function ModelGate({
             {/* A keyed-but-failing provider shows the risk glyph — the honey check
                 must never contradict the "not responding" state. */}
             {failing ? (
-              <AlertTriangle className="size-3.5 shrink-0 text-[var(--risk)]" aria-label="key not responding" />
+              <AlertTriangle
+                className="size-3.5 shrink-0 text-[var(--risk)]"
+                aria-label={compatible ? 'endpoint or model not responding' : 'key not responding'}
+              />
             ) : configured ? (
               <Check className="size-3.5 shrink-0 text-honey" aria-label={compatible ? 'endpoint configured' : 'key configured'} />
             ) : null}
@@ -803,7 +826,11 @@ export function ModelGate({
         // banner announcing that state must too (two tones for one truth reads as a bug).
         <div role="status" className="flex items-center gap-2 rounded-lg border border-[var(--risk)]/30 bg-[var(--risk-wash)] px-3 py-2.5 text-sm text-foreground">
           <AlertTriangle className="size-4 shrink-0 text-[var(--risk)]" aria-hidden />
-          <span className="flex-1">Key found but not responding.</span>
+          <span className="flex-1">
+            {probe.failedProvider === 'openai-compatible'
+              ? 'Endpoint or model not responding.'
+              : 'Key found but not responding.'}
+          </span>
           <button
                 type="button"
                 onClick={focusFailingKey}
@@ -963,6 +990,7 @@ export function ModelGate({
                     setEndpointValue(event.target.value);
                     setCompatibleModels([]);
                     setCompatibleModel('');
+                    setCompatibleModelHydrating(false);
                     setCompatibleStatus('idle');
                     setCompatibleError(null);
                   }}
@@ -985,6 +1013,7 @@ export function ModelGate({
                     setKeyValue(event.target.value);
                     setCompatibleModels([]);
                     setCompatibleModel('');
+                    setCompatibleModelHydrating(false);
                     setCompatibleStatus('idle');
                     setCompatibleError(null);
                   }}
@@ -1013,7 +1042,13 @@ export function ModelGate({
                   {compatibleStatus === 'discovering' ? 'Discovering…' : 'Discover models'}
                 </button>
               </div>
-              {compatibleModels.length > 0 && (
+              {compatibleModelHydrating && compatibleModels.length > 0 && (
+                <p role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+                  Loading saved model…
+                </p>
+              )}
+              {compatibleModels.length > 0 && !compatibleModelHydrating && (
                 <div className="space-y-2">
                   <label htmlFor="model-gate-compatible-model" className="block text-sm font-medium text-foreground">
                     Model
