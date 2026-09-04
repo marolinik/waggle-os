@@ -379,15 +379,19 @@ test.describe('Windows Solo premium chat journey', () => {
 
       await page.getByTestId('nav-chat').click();
       await page.waitForURL(new RegExp(`/workspaces/${workspaceId}/chat(?:\\?|$)`));
-      await expect(page.locator(
+      const activeChatSlot = page.locator(
         `[data-testid="chat-widget-slot"][data-workspace-id="${workspaceId}"]`,
-      )).toBeVisible();
+      );
+      await expect(activeChatSlot).toBeVisible();
       await expect(page.getByRole('textbox', { name: 'Message composer' })).toBeVisible();
 
-      await expect(page.locator('button[title^="Waggle picked the model"]')).toContainText(
-        /Qwen3\.8/i,
-        { timeout: 20_000 },
-      );
+      const selectedModelTrigger = activeChatSlot.getByRole('button', {
+        name: /^Qwen3\.8 Flash Next, ready(?:, model list (?:checking|no models|unavailable))?$/,
+      });
+      await expect(selectedModelTrigger).toBeVisible({ timeout: 60_000 });
+      const selectedModelDot = selectedModelTrigger.locator('span[data-tone]');
+      await expect(selectedModelDot).toHaveCount(1);
+      await expect(selectedModelDot).toHaveAttribute('data-tone', 'healthy');
 
       const sessionResponsePromise = page.waitForResponse(response => (
         response.request().method() === 'POST'
