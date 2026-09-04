@@ -476,6 +476,85 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(screen.queryByText('· Current Model')).not.toBeInTheDocument();
   });
 
+  it('shows a truthful unavailable model catalog with an actionable retry and no stale option', () => {
+    const onRetryModels = vi.fn();
+    render({
+      messages: [],
+      currentModel: 'openai/stale-model',
+      availableModels: [],
+      modelCatalogStatus: 'unavailable',
+      modelHealthStatus: 'unavailable',
+      onRetryModels,
+    });
+
+    const trigger = screen.getByRole('button', { name: /stale model.*unavailable/i });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-controls');
+    expect(trigger.querySelector('span[aria-hidden="true"]')).toHaveAttribute('data-tone', 'risk');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const picker = screen.getByRole('region', { name: 'Available models' });
+    expect(within(picker).getByRole('status')).toHaveTextContent(
+      "Waggle couldn't refresh available models. Your saved selection is unchanged.",
+    );
+    expect(within(picker).queryByRole('button', { name: /stale model/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(picker).getByRole('button', { name: 'Retry available models' }));
+    expect(onRetryModels).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a rejected selected model visibly unavailable when other catalog models are ready', () => {
+    const onRetryModels = vi.fn();
+    render({
+      messages: [],
+      currentModel: 'openai/stale-model',
+      availableModels: ['openai/other-model'],
+      modelCatalogStatus: 'ready',
+      modelHealthStatus: 'unavailable',
+      onRetryModels,
+    });
+
+    const trigger = screen.getByRole('button', { name: /stale model.*unavailable/i });
+    expect(trigger.querySelector('span[aria-hidden="true"]')).toHaveAttribute('data-tone', 'risk');
+    fireEvent.click(trigger);
+    const picker = screen.getByRole('region', { name: 'Available models' });
+    expect(within(picker).getByRole('status')).toHaveTextContent(
+      "Your saved model isn't responding. Choose another model or retry.",
+    );
+    expect(within(picker).getByRole('button', { name: 'Other Model' }))
+      .toHaveAttribute('aria-pressed', 'false');
+    expect(within(picker).queryByRole('button', { name: /stale model/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(picker).getByRole('button', { name: 'Retry selected model' }));
+    expect(onRetryModels).toHaveBeenCalledOnce();
+  });
+
+  it('distinguishes an empty catalog from transport failure without promoting the saved model', () => {
+    const onRetryModels = vi.fn();
+    render({
+      messages: [],
+      currentModel: 'openai/saved-model',
+      availableModels: [],
+      modelCatalogStatus: 'empty',
+      modelHealthStatus: 'ready',
+      onRetryModels,
+    });
+
+    const trigger = screen.getByRole('button', { name: /saved model.*ready.*model list no models/i });
+    expect(trigger.querySelector('span[aria-hidden="true"]')).toHaveAttribute('data-tone', 'healthy');
+    fireEvent.click(trigger);
+    const picker = screen.getByRole('region', { name: 'Available models' });
+    expect(within(picker).getByRole('status')).toHaveTextContent(
+      'No other models are available to switch to. Your verified model remains selected.',
+    );
+    expect(within(picker).getByRole('status')).not.toHaveTextContent('No models configured');
+    expect(within(picker).queryByRole('button', { name: /saved model/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(picker).getByRole('button', { name: 'Retry available models' }));
+    expect(onRetryModels).toHaveBeenCalledOnce();
+  });
+
   it('keeps the empty-state mascot intrinsically sized before image decode', () => {
     render({ messages: [] });
     const emptyState = screen.getByText("Pick a workspace and Waggle's ready").closest('div');

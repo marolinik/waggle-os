@@ -30,6 +30,9 @@ export interface TeamMember {
   avatar?: string;
 }
 
+export type ModelCatalogStatus = 'loading' | 'ready' | 'empty' | 'unavailable';
+export type ModelHealthStatus = 'checking' | 'ready' | 'unavailable' | 'unconfigured';
+
 type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
 
 interface ChatAppProps {
@@ -46,6 +49,12 @@ interface ChatAppProps {
   currentModel?: string;
   onModelChange?: (model: string) => void;
   availableModels?: string[];
+  /** Truthful state of the provider-backed model catalog refresh. */
+  modelCatalogStatus?: ModelCatalogStatus;
+  /** Truthful live-probe state of the exact selected model. */
+  modelHealthStatus?: ModelHealthStatus;
+  /** Retry the provider-backed model catalog refresh. */
+  onRetryModels?: () => void;
   teamPresence?: TeamMember[];
   sessions?: { id: string; title: string; messageCount?: number; lastActive?: string }[];
   activeSessionId?: string | null;
@@ -568,6 +577,8 @@ const ChatApp = ({
   messages, isLoading, onSendMessage, onClearHistory,
   pendingApproval, onApprove, currentPersona,
   onPersonaChange, currentModel, onModelChange, availableModels,
+  modelCatalogStatus: modelCatalogStatusProp, modelHealthStatus: modelHealthStatusProp,
+  onRetryModels,
   teamPresence,
   sessions, activeSessionId, onSelectSession, onNewSession,
   sessionCreating = false, sessionLoading = false, sessionReady = true, sessionError = null,
@@ -615,6 +626,36 @@ const ChatApp = ({
     previousSessionCount.current = sessionCount;
   }, [sessionCount, workspaceId]);
   const sessionStatusId = useId();
+  const modelPickerId = useId();
+  const modelCatalogStatus = modelCatalogStatusProp
+    ?? (availableModels?.length ? 'ready' : 'empty');
+  const modelCatalogLabel = modelCatalogStatus === 'ready'
+    ? 'available'
+    : modelCatalogStatus === 'loading'
+      ? 'checking'
+      : modelCatalogStatus === 'empty'
+        ? 'no models'
+        : 'unavailable';
+  const modelHealthStatus = modelHealthStatusProp
+    ?? (currentModel ? 'checking' : 'unconfigured');
+  const modelHealthLabel = modelHealthStatus === 'ready'
+    ? 'ready'
+    : modelHealthStatus === 'checking'
+      ? 'checking'
+      : modelHealthStatus === 'unavailable'
+        ? 'unavailable'
+        : 'no model';
+  const modelHealthTone = modelHealthStatus === 'ready'
+    ? 'healthy'
+    : modelHealthStatus === 'checking'
+      ? 'attention'
+      : modelHealthStatus === 'unconfigured'
+        ? 'neutral'
+        : 'risk';
+  const modelCatalogWarning = modelCatalogStatus === 'ready'
+    ? ''
+    : `, model list ${modelCatalogLabel}`;
+  const modelTriggerLabel = `${currentModel ? formatModelLabel(currentModel) : 'Auto'}, ${modelHealthLabel}${modelCatalogWarning}`;
   const sessionInputLocked = sessionCreating
     || sessionLoading
     || !sessionReady
@@ -1961,32 +2002,124 @@ const ChatApp = ({
               {/* Model picker */}
               <div className="relative" ref={modelPickerRef}>
                 <button
+                  type="button"
                   onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
-                  title="Waggle picked the model — click to override"
-                  className={STRIP_PILL}
+                  aria-label={modelTriggerLabel}
+                  aria-expanded={showModelPicker}
+                  aria-controls={modelPickerId}
+                  title={modelHealthStatus === 'unavailable'
+                    ? 'Selected model is not responding — click to retry or switch'
+                    : modelHealthStatus === 'checking'
+                      ? 'Checking the selected model…'
+                      : modelHealthStatus === 'unconfigured'
+                        ? 'No model selected — click for details'
+                        : modelCatalogStatus === 'unavailable'
+                          ? 'Selected model responds; model list is unavailable'
+                          : 'Selected model responds — click to switch'}
+                  className={`${STRIP_PILL} focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]`}
                 >
-                  <DotLive tone="healthy" size={7} />
+                  <DotLive
+                    tone={modelHealthTone}
+                    live={modelHealthStatus === 'checking'}
+                    size={7}
+                  />
                   <span className="max-w-[82px] truncate font-mono text-[var(--text-2)] sm:max-w-[140px]">
                     {currentModel ? formatModelLabel(currentModel) : 'auto'}
                   </span>
-                  <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
+                  <span className="max-w-[82px] truncate text-[10px] text-[var(--text-dim)]">
+                    · {modelHealthLabel}{modelHealthStatus === 'checking' ? '…' : ''}
+                  </span>
+                  <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" aria-hidden="true" />
                 </button>
+                <span className="sr-only" aria-live="polite">
+                  Selected model {modelHealthLabel}; model catalog {modelCatalogLabel}
+                </span>
                 {showModelPicker && (
-                  <div className="absolute bottom-full right-0 mb-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
-                    {(availableModels && availableModels.length > 0 ? availableModels : (currentModel ? [currentModel] : [])).map(m => (
-                      <button
-                        key={m}
-                        onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
-                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                          currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
-                        }`}
-                      >
-                        <Cpu className="w-3 h-3 text-honey shrink-0" />
-                        <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
-                      </button>
-                    ))}
-                    {(!availableModels || availableModels.length === 0) && !currentModel && (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">No models available</div>
+                  <div
+                    id={modelPickerId}
+                    role="region"
+                    aria-label="Available models"
+                    className="absolute bottom-full right-0 mb-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto"
+                  >
+                    {modelHealthStatus === 'unavailable' && modelCatalogStatus === 'ready' && (
+                      <div role="status" aria-live="polite" className="space-y-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
+                        <p>Your saved model isn't responding. Choose another model or retry.</p>
+                        {onRetryModels && (
+                          <button
+                            type="button"
+                            aria-label="Retry selected model"
+                            onClick={onRetryModels}
+                            className="rounded-md border border-[var(--line)] px-2 py-1 text-foreground transition-colors hover:border-[var(--honey-line)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                          >
+                            Retry Model
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {modelHealthStatus === 'checking' && modelCatalogStatus === 'ready' && (
+                      <div role="status" aria-live="polite" className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+                        Checking the selected model…
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'ready' && (
+                      <div aria-label="Available models list">
+                        {availableModels?.map(m => (
+                          <button
+                            type="button"
+                            key={m}
+                            aria-pressed={currentModel === m}
+                            onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)] ${
+                              currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                            }`}
+                          >
+                            <Cpu className="w-3 h-3 text-honey shrink-0" aria-hidden="true" />
+                            <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'loading' && (
+                      <div role="status" aria-live="polite" className="px-3 py-2 text-xs text-muted-foreground">
+                        Refreshing available models…
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'unavailable' && (
+                      <div role="status" aria-live="polite" className="space-y-2 px-3 py-2 text-xs text-muted-foreground">
+                        <p>Waggle couldn't refresh available models. Your saved selection is unchanged.</p>
+                        <p>Retry now or check Models in Settings.</p>
+                        {onRetryModels && (
+                          <button
+                            type="button"
+                            aria-label="Retry available models"
+                            onClick={onRetryModels}
+                            className="rounded-md border border-[var(--line)] px-2 py-1 text-foreground transition-colors hover:border-[var(--honey-line)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                          >
+                            Retry Models
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {modelCatalogStatus === 'empty' && (
+                      <div role="status" aria-live="polite" className="space-y-2 px-3 py-2 text-xs text-muted-foreground">
+                        <p>
+                          {modelHealthStatus === 'unconfigured'
+                            ? 'No model configured. Add a model in Settings, then retry.'
+                            : modelHealthStatus === 'ready'
+                              ? 'No other models are available to switch to. Your verified model remains selected.'
+                              : 'No models were discovered to switch to. Your saved selection is unchanged.'}
+                        </p>
+                        {onRetryModels && (
+                          <button
+                            type="button"
+                            aria-label="Retry available models"
+                            onClick={onRetryModels}
+                            className="rounded-md border border-[var(--line)] px-2 py-1 text-foreground transition-colors hover:border-[var(--honey-line)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                          >
+                            Retry Models
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

@@ -13,7 +13,7 @@ import {
   usePendingNewChatSessionIntent,
 } from '@/hooks/useChatWidgetState';
 import ChatApp from './ChatApp';
-import type { TeamMember } from './ChatApp';
+import type { ModelCatalogStatus, ModelHealthStatus, TeamMember } from './ChatApp';
 
 type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
 
@@ -91,6 +91,10 @@ const ChatWindowInstance = ({
   } = useSessions(workspaceId, preferredSessionId);
   const onSessionNavigateRef = useRef(onSessionNavigate);
   onSessionNavigateRef.current = onSessionNavigate;
+  const isActiveChat = preferredSessionId !== undefined;
+  const isActiveChatRef = useRef(isActiveChat);
+  const wasActiveChatRef = useRef(isActiveChat);
+  isActiveChatRef.current = isActiveChat;
 
   const handleSelectSession = useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
@@ -115,12 +119,16 @@ const ChatWindowInstance = ({
   }, [activeSessionId, preferredSessionId, sessionLoading, sessions]);
 
   const [currentModel, setCurrentModel] = useState<string>(initialModel ?? '');
+  const [modelHealthStatus, setModelHealthStatus] = useState<ModelHealthStatus>(
+    initialModel ? 'checking' : 'unconfigured',
+  );
   const currentModelRef = useRef(initialModel ?? '');
   const confirmedModelRef = useRef(initialModel ?? '');
   const initialModelRef = useRef(initialModel);
   const modelRevisionRef = useRef(0);
   const userSelectedModelRef = useRef(false);
   const modelPersistenceRef = useRef<Promise<void>>(Promise.resolve());
+  const refreshModelHealthRef = useRef<(announceChecking?: boolean) => Promise<void>>(async () => {});
 
   // The shell may finish loading the workspace after this kept-alive chat
   // mounts. Accept that workspace-scoped model until the user makes an
@@ -239,6 +247,8 @@ const ChatWindowInstance = ({
   }, [activeSessionId, historyReady, pendingDispatch, sendMessage, sessionCreating, sessionLoading, workspaceId]);
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelCatalogStatus, setModelCatalogStatus] = useState<ModelCatalogStatus>('loading');
+  const refreshModelsRef = useRef<(announceLoading?: boolean) => Promise<void>>(async () => {});
   const [teamPresence, setTeamPresence] = useState<TeamMember[]>([]);
 
   const { toast } = useToast();
@@ -262,25 +272,34 @@ const ChatWindowInstance = ({
     let cancelled = false;
     let modelsLanded = false;
     let currentLanded = false;
+    let modelRequest = 0;
 
     // The sidecar merges LiteLLM, provider API catalogs, and local runtime models.
     // Keep an empty list on outage rather than presenting model IDs that may no
     // longer exist at the provider.
-    const fetchModels = async () => {
+    const fetchModels = async (announceLoading = false) => {
+      const request = ++modelRequest;
+      if (announceLoading) setModelCatalogStatus('loading');
       try {
         const models = await adapter.getModels();
-        if (cancelled) return;
+        if (cancelled || request !== modelRequest) return;
         if (models && models.length > 0) {
           setAvailableModels(models);
+          setModelCatalogStatus('ready');
           modelsLanded = true;
         } else {
           setAvailableModels([]);
+          setModelCatalogStatus('empty');
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch models failed:', err);
-        if (!cancelled) setAvailableModels([]);
+        if (!cancelled && request === modelRequest) {
+          setAvailableModels([]);
+          setModelCatalogStatus('unavailable');
+        }
       }
     };
+    refreshModelsRef.current = fetchModels;
 
     // Try fetching the current active model from the sidecar. Also retries on
     // transient failure — the initial render may race the sidecar spawning.
@@ -350,14 +369,70 @@ const ChatWindowInstance = ({
     };
     fetchTeam();
     const teamInterval = setInterval(fetchTeam, 10000);
-    const refreshModelsOnFocus = () => { void fetchModels(); };
+    const refreshModelsOnFocus = () => {
+      if (!isActiveChatRef.current) return;
+      void fetchModels();
+      void refreshModelHealthRef.current(true);
+    };
     window.addEventListener('focus', refreshModelsOnFocus);
     return () => {
       cancelled = true;
+      refreshModelsRef.current = async () => {};
       window.removeEventListener('focus', refreshModelsOnFocus);
       clearInterval(teamInterval);
       clearInterval(retryInterval);
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let request = 0;
+
+    const probeSelectedModel = async (announceChecking = true) => {
+      const model = currentModelRef.current.trim();
+      const probeRequest = ++request;
+      if (!model) {
+        setModelHealthStatus('unconfigured');
+        return;
+      }
+      if (announceChecking) setModelHealthStatus('checking');
+      try {
+        const result = await adapter.probeModel(model);
+        if (
+          cancelled
+          || probeRequest !== request
+          || currentModelRef.current.trim() !== model
+        ) return;
+        setModelHealthStatus(result.configured && result.verified ? 'ready' : 'unavailable');
+      } catch (err) {
+        console.error('[ChatWindowInstance] probe selected model failed:', err);
+        if (
+          !cancelled
+          && probeRequest === request
+          && currentModelRef.current.trim() === model
+        ) setModelHealthStatus('unavailable');
+      }
+    };
+
+    refreshModelHealthRef.current = probeSelectedModel;
+    void probeSelectedModel();
+    return () => {
+      cancelled = true;
+      refreshModelHealthRef.current = async () => {};
+    };
+  }, [currentModel]);
+
+  useEffect(() => {
+    const wasActive = wasActiveChatRef.current;
+    wasActiveChatRef.current = isActiveChat;
+    if (wasActive || !isActiveChat) return;
+    void refreshModelsRef.current(true);
+    void refreshModelHealthRef.current(true);
+  }, [isActiveChat]);
+
+  const handleRetryModels = useCallback(() => {
+    void refreshModelsRef.current(true);
+    void refreshModelHealthRef.current(true);
   }, []);
 
   const handleModelChange = (model: string) => {
@@ -408,6 +483,9 @@ const ChatWindowInstance = ({
       currentModel={currentModel}
       onModelChange={handleModelChange}
       availableModels={availableModels}
+      modelCatalogStatus={modelCatalogStatus}
+      modelHealthStatus={modelHealthStatus}
+      onRetryModels={handleRetryModels}
       teamPresence={teamPresence}
       sessions={displaySessions}
       activeSessionId={activeSessionId}
