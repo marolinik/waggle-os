@@ -1447,7 +1447,7 @@ export const useChat = ({
   const clearHistory = useCallback(async () => {
     if (sessionId && workspaceId) {
       const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
-      if (messagesThreadKeyRef.current !== cacheKey) return;
+      if (messagesThreadKeyRef.current !== cacheKey) return false;
       const clearCounts = clearingThreadCountsRef.current;
       const previousClearCount = clearCounts.get(cacheKey) ?? 0;
       if (previousClearCount === 0) {
@@ -1501,12 +1501,19 @@ export const useChat = ({
         historyRecoveryLocalMessagesRef.current.set(cacheKey, recoveryLocalMessages);
         historyRecoveryRetryCountsRef.current.set(cacheKey, 0);
       }
+      const clearGeneration = historyGenerationRef.current;
       const cancellation = cancelActiveDispatch();
       setHistoryLoaded(true);
       await cancellation;
       try {
         await clearHistoryAfterAbort(workspaceId, sessionId);
         clearSucceededThreadsRef.current.add(cacheKey);
+        const clearOwner = currentThreadRef.current;
+        const remainsCurrent = (
+          clearOwner.workspaceId === workspaceId
+          && clearOwner.sessionId === sessionId
+          && historyGenerationRef.current === clearGeneration
+        );
         // The user may have switched A -> B -> A while DELETE A was pending,
         // starting a fresh GET A after the invalidation above. Invalidate that
         // exact thread's newer snapshot without disturbing an active B fetch.
@@ -1527,6 +1534,7 @@ export const useChat = ({
           setHistoryState({ threadKey: cacheKey, status: 'ready', error: null });
         }
         writeChatThreadCache(cacheKey, []);
+        return remainsCurrent;
       } catch (err) {
         console.error('[useChat] clear history failed:', err);
         if (activeDispatch) {
@@ -1555,6 +1563,7 @@ export const useChat = ({
             historyRecoveryLocalMessagesRef.current.set(cacheKey, nextRecoveryLocalMessages);
           }
         }
+        return false;
       } finally {
         const remaining = (clearCounts.get(cacheKey) ?? 1) - 1;
         if (remaining <= 0) {
@@ -1596,6 +1605,7 @@ export const useChat = ({
         }
       }
     }
+    return false;
   }, [sessionId, workspaceId, messages, cancelActiveDispatch]);
 
   const retryHistory = useCallback(() => {

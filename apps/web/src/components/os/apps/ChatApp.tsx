@@ -22,6 +22,15 @@ import { shouldAutoSendFirstTask } from '@/lib/auto-send-first-task';
 import { findNewestMemoryRecallNotice } from '@/lib/memory-recall-toast';
 import { useToast } from '@/hooks/use-toast';
 import { DUR } from '@/lib/motion/tokens';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export interface TeamMember {
   id: string;
@@ -41,7 +50,7 @@ interface ChatAppProps {
   /** F2: widened to observe send success for the wizard auto-send. Existing
    *  callers ignore the return value — non-breaking. */
   onSendMessage: (content: string) => void | Promise<boolean | void>;
-  onClearHistory: () => void;
+  onClearHistory: () => boolean | void | Promise<boolean | void>;
   pendingApproval: ApprovalRequest | null;
   onApprove: (id: string, approved: boolean, opts?: { always?: boolean }) => void;
   currentPersona?: string;
@@ -599,6 +608,8 @@ const ChatApp = ({
   const [showSlash, setShowSlash] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [slashIndex, setSlashIndex] = useState(0);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
   // Default the session sidebar open when the user already has chats — the
   // collapsed state hides "New Session" + history (w-0 container), which made
   // P2/P3/P5 unable to start a fresh chat without finding the unlabelled
@@ -1011,21 +1022,174 @@ const ChatApp = ({
     blockId: string; prompt: string; proposal: RouteProposalPayload;
   }>>([]);
   const [bestFitBusy, setBestFitBusy] = useState(false);
+  const routeProposalEpochRef = useRef(0);
+  const routeReProposalRevisionRef = useRef(new Map<string, number>());
+  const routeProposalsRef = useRef(routeProposals);
+  routeProposalsRef.current = routeProposals;
+  const [dispatchingRouteProposalIds, setDispatchingRouteProposalIds] = useState<Set<string>>(new Set());
+  const dispatchingRouteProposalIdsRef = useRef(dispatchingRouteProposalIds);
+  dispatchingRouteProposalIdsRef.current = dispatchingRouteProposalIds;
+  const dispatchingRouteDecisionIdsRef = useRef(new Map<string, string>());
+  const settledRouteProposalIdsRef = useRef(new Set<string>());
+  const routeProposalRejectionRequestsRef = useRef(new Map<string, {
+    routeDecisionId: string;
+    request: Promise<void>;
+  }>());
+  const rejectRouteProposal = useCallback((blockId: string, routeDecisionId: string) => {
+    const existing = routeProposalRejectionRequestsRef.current.get(blockId);
+    if (existing?.routeDecisionId === routeDecisionId) return existing.request;
+    const tracked = {
+      routeDecisionId,
+      request: adapter.routeProposals.reject(routeDecisionId),
+    };
+    routeProposalRejectionRequestsRef.current.set(blockId, tracked);
+    void tracked.request.finally(() => {
+      if (routeProposalRejectionRequestsRef.current.get(blockId) === tracked) {
+        routeProposalRejectionRequestsRef.current.delete(blockId);
+      }
+    }).catch(() => undefined);
+    return tracked.request;
+  }, []);
+  const activeThreadKey = `${workspaceId ?? ''}:${activeSessionId ?? ''}`;
+  const activeThreadKeyRef = useRef(activeThreadKey);
+  activeThreadKeyRef.current = activeThreadKey;
   useEffect(() => {
+    const dispatching = dispatchingRouteProposalIdsRef.current;
+    const abandoned = routeProposalsRef.current.filter(
+      ({ blockId }) => (
+        !settledRouteProposalIdsRef.current.has(blockId)
+        && !dispatching.has(blockId)
+        && !routeProposalRejectionRequestsRef.current.has(blockId)
+      ),
+    );
+    void Promise.allSettled(
+      abandoned.map(({ blockId, proposal }) => rejectRouteProposal(blockId, proposal.routeDecisionId)),
+    );
+    routeProposalEpochRef.current += 1;
+    routeReProposalRevisionRef.current.clear();
+    routeProposalsRef.current = [];
+    dispatchingRouteProposalIdsRef.current = new Set();
+    settledRouteProposalIdsRef.current.clear();
     setRouteProposals([]);
-  }, [activeSessionId, workspaceId]);
+    setDispatchingRouteProposalIds(new Set());
+    setBestFitBusy(false);
+    setClearDialogOpen(false);
+    setClearingHistory(false);
+  }, [activeSessionId, workspaceId, rejectRouteProposal]);
+
+  const handleConfirmedClear = async () => {
+    if (clearingHistory) return;
+    const targetThreadKey = activeThreadKeyRef.current;
+    const targetProposalEpoch = routeProposalEpochRef.current;
+    if (dispatchingRouteProposalIdsRef.current.size > 0) {
+      toast({
+        title: 'Route handoff in progress',
+        description: 'Wait for the handoff to finish before clearing this conversation.',
+      });
+      return;
+    }
+    setClearingHistory(true);
+    try {
+      const cleared = await onClearHistory();
+      if (cleared === false) {
+        if (
+          activeThreadKeyRef.current === targetThreadKey
+          && routeProposalEpochRef.current === targetProposalEpoch
+        ) {
+          toast({
+            variant: 'destructive',
+            title: "Couldn't clear this conversation",
+            description: 'Your messages and pending route suggestions are still here.',
+          });
+        }
+        return;
+      }
+      if (
+        activeThreadKeyRef.current !== targetThreadKey
+        || routeProposalEpochRef.current !== targetProposalEpoch
+      ) return;
+      routeProposalEpochRef.current += 1;
+      routeReProposalRevisionRef.current.clear();
+      setBestFitBusy(false);
+      const pendingProposals = routeProposalsRef.current.filter(
+        ({ blockId }) => !settledRouteProposalIdsRef.current.has(blockId),
+      );
+      routeProposalsRef.current = [];
+      dispatchingRouteProposalIdsRef.current = new Set();
+      settledRouteProposalIdsRef.current.clear();
+      setRouteProposals([]);
+      setDispatchingRouteProposalIds(new Set());
+      setInput('');
+      setShowSlash(false);
+      setClearDialogOpen(false);
+      const cancellationResults = await Promise.allSettled(
+        pendingProposals.map(({ blockId, proposal }) => (
+          rejectRouteProposal(blockId, proposal.routeDecisionId)
+        )),
+      );
+      if (
+        activeThreadKeyRef.current !== targetThreadKey
+        || routeProposalEpochRef.current !== targetProposalEpoch + 1
+      ) return;
+      if (cancellationResults.some(result => result.status === 'rejected')) {
+        toast({
+          variant: 'destructive',
+          title: 'Conversation cleared, route cancellation incomplete',
+          description: 'Old route cards were disabled, but the service could not record every cancellation.',
+        });
+      }
+    } catch (err) {
+      console.error('[ChatApp] clear history failed:', err);
+      if (
+        activeThreadKeyRef.current === targetThreadKey
+        && routeProposalEpochRef.current === targetProposalEpoch
+      ) {
+        toast({
+          variant: 'destructive',
+          title: "Couldn't clear this conversation",
+          description: 'Your messages and pending route suggestions are still here.',
+        });
+      }
+    } finally {
+      const currentProposalEpoch = routeProposalEpochRef.current;
+      if (
+        activeThreadKeyRef.current === targetThreadKey
+        && (
+          currentProposalEpoch === targetProposalEpoch
+          || currentProposalEpoch === targetProposalEpoch + 1
+        )
+      ) setClearingHistory(false);
+    }
+  };
 
   const handleBestFit = async () => {
     const text = input.trim();
     if (!text || !workspaceId || bestFitBusy) return;
+    const proposalEpoch = routeProposalEpochRef.current;
+    const proposalThreadKey = activeThreadKeyRef.current;
     setBestFitBusy(true);
     try {
       const proposal = await adapter.routeProposals.propose({ workspaceId, prompt: text });
-      setRouteProposals(prev => [
-        ...prev,
-        { blockId: `route-${proposal.routeDecisionId}`, prompt: text, proposal },
-      ]);
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+      ) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        return;
+      }
+      setRouteProposals(prev => {
+        const next = [
+          ...prev,
+          { blockId: `route-${proposal.routeDecisionId}`, prompt: text, proposal },
+        ];
+        routeProposalsRef.current = next;
+        return next;
+      });
     } catch (err) {
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+      ) return;
       console.error('[ChatApp] route propose failed:', err);
       toast({
         variant: 'destructive',
@@ -1033,28 +1197,99 @@ const ChatApp = ({
         description: 'Please try again.',
       });
     } finally {
-      setBestFitBusy(false);
+      if (
+        routeProposalEpochRef.current === proposalEpoch
+        && activeThreadKeyRef.current === proposalThreadKey
+      ) setBestFitBusy(false);
     }
   };
 
   const handleRouteProposalDispatched = (blockId: string) => {
-    const entry = routeProposals.find(p => p.blockId === blockId);
+    settledRouteProposalIdsRef.current.add(blockId);
+    const entry = routeProposalsRef.current.find(p => p.blockId === blockId);
+    if (!entry) return;
     // Consume the composer text on confirm — but only if the user hasn't
     // edited it since the proposal was made.
-    if (entry && input.trim() === entry.prompt) setInput('');
+    if (inputRef.current?.value.trim() === entry.prompt) setInput('');
+  };
+
+  const handleRouteProposalDispatchingChange = (blockId: string, dispatching: boolean) => {
+    const next = new Set(dispatchingRouteProposalIdsRef.current);
+    if (dispatching) {
+      next.add(blockId);
+      const entry = routeProposalsRef.current.find(proposal => proposal.blockId === blockId);
+      if (entry) {
+        dispatchingRouteDecisionIdsRef.current.set(blockId, entry.proposal.routeDecisionId);
+      }
+    } else {
+      next.delete(blockId);
+      const routeDecisionId = dispatchingRouteDecisionIdsRef.current.get(blockId);
+      dispatchingRouteDecisionIdsRef.current.delete(blockId);
+      const stillVisible = routeProposalsRef.current.some(proposal => proposal.blockId === blockId);
+      if (
+        routeDecisionId
+        && !stillVisible
+        && !settledRouteProposalIdsRef.current.has(blockId)
+      ) {
+        void rejectRouteProposal(blockId, routeDecisionId).catch(() => undefined);
+      }
+      if (!stillVisible) settledRouteProposalIdsRef.current.delete(blockId);
+    }
+    dispatchingRouteProposalIdsRef.current = next;
+    setDispatchingRouteProposalIds(next);
+  };
+
+  const handleRouteProposalRejected = (blockId: string) => {
+    settledRouteProposalIdsRef.current.add(blockId);
   };
 
   const handleRouteProposalRePropose = async (blockId: string, preferredExecutorId?: string) => {
     const entry = routeProposals.find(p => p.blockId === blockId);
     if (!entry || !workspaceId) return;
+    const proposalEpoch = routeProposalEpochRef.current;
+    const proposalThreadKey = activeThreadKeyRef.current;
+    const proposalRevision = (routeReProposalRevisionRef.current.get(blockId) ?? 0) + 1;
+    routeReProposalRevisionRef.current.set(blockId, proposalRevision);
+    const supersededRouteDecisionId = entry.proposal.routeDecisionId;
     try {
       const proposal = await adapter.routeProposals.propose({
         workspaceId,
         prompt: entry.prompt,
         ...(preferredExecutorId ? { preferredExecutorId } : {}),
       });
-      setRouteProposals(prev => prev.map(p => (p.blockId === blockId ? { ...p, proposal } : p)));
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+        || routeReProposalRevisionRef.current.get(blockId) !== proposalRevision
+      ) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        return;
+      }
+      try {
+        await rejectRouteProposal(blockId, supersededRouteDecisionId);
+      } catch (err) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        throw err;
+      }
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+        || routeReProposalRevisionRef.current.get(blockId) !== proposalRevision
+      ) {
+        await adapter.routeProposals.reject(proposal.routeDecisionId).catch(() => undefined);
+        return;
+      }
+      setRouteProposals(prev => {
+        const next = prev.map(p => (p.blockId === blockId ? { ...p, proposal } : p));
+        routeProposalsRef.current = next;
+        return next;
+      });
     } catch (err) {
+      if (
+        routeProposalEpochRef.current !== proposalEpoch
+        || activeThreadKeyRef.current !== proposalThreadKey
+        || routeReProposalRevisionRef.current.get(blockId) !== proposalRevision
+      ) return;
       console.error('[ChatApp] route re-propose failed:', err);
       toast({
         variant: 'destructive',
@@ -1070,8 +1305,8 @@ const ChatApp = ({
 
     // Client-only commands — handled locally, not sent to server
     if (text === '/clear') {
-      onClearHistory();
-      setInput('');
+      setShowSlash(false);
+      setClearDialogOpen(true);
       return;
     }
     if (text.startsWith('/model ') && onModelChange) {
@@ -1661,6 +1896,9 @@ const ChatApp = ({
                 <BlockRenderer
                   blocks={[{ type: 'route_proposal', blockId: rp.blockId, proposal: rp.proposal }]}
                   onRouteProposalDispatched={handleRouteProposalDispatched}
+                  onRouteProposalRejected={handleRouteProposalRejected}
+                  onRouteProposalReject={rejectRouteProposal}
+                  onRouteProposalDispatchingChange={handleRouteProposalDispatchingChange}
                   onRouteProposalRePropose={(blockId, preferredExecutorId) => void handleRouteProposalRePropose(blockId, preferredExecutorId)}
                 />
               </div>
@@ -2242,6 +2480,38 @@ const ChatApp = ({
           onClose={() => setCanvasOpen(false)}
         />
       )}
+
+      <AlertDialog
+        open={clearDialogOpen}
+        onOpenChange={(open) => {
+          if (!clearingHistory) setClearDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear this conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the conversation history shown here and cancels its pending route suggestions.
+              Pinned items, saved memories, and other conversations are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button" disabled={clearingHistory}>Cancel</AlertDialogCancel>
+            <button
+              type="button"
+              disabled={clearingHistory || dispatchingRouteProposalIds.size > 0}
+              onClick={() => void handleConfirmedClear()}
+              className="inline-flex h-10 items-center justify-center rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:pointer-events-none disabled:opacity-50"
+            >
+              {clearingHistory
+                ? 'Clearing…'
+                : dispatchingRouteProposalIds.size > 0
+                  ? 'Route handoff in progress'
+                  : 'Clear conversation'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

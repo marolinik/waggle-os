@@ -26,6 +26,12 @@ interface BlockRendererProps {
   onRetry?: () => void;
   /** Router arc B2: a route_proposal dispatch landed (ChatApp consumes the composer text). */
   onRouteProposalDispatched?: (blockId: string, result: RouteProposalConfirmResponse) => void;
+  /** The service accepted the user's route rejection. */
+  onRouteProposalRejected?: (blockId: string) => void;
+  /** Deduplicate route rejection across the card and parent cleanup. */
+  onRouteProposalReject?: (blockId: string, routeDecisionId: string) => Promise<void>;
+  /** Prevent destructive thread actions while a route handoff is in flight. */
+  onRouteProposalDispatchingChange?: (blockId: string, dispatching: boolean) => void;
   /** Router arc B2: re-run propose after a revalidation_failed confirm. */
   onRouteProposalRePropose?: (blockId: string, preferredExecutorId?: string) => void;
 }
@@ -363,7 +369,8 @@ function renderActivityGroup(blocks: ContentBlock[], key: string, isStreaming: b
 
 const BlockRenderer = ({
   blocks, isStreaming, workspaceId, sessionId, onRetry,
-  onRouteProposalDispatched, onRouteProposalRePropose,
+  onRouteProposalDispatched, onRouteProposalRejected, onRouteProposalReject,
+  onRouteProposalDispatchingChange, onRouteProposalRePropose,
 }: BlockRendererProps) => {
   const out: ReactNode[] = [];
   const capabilityProposals = trustedCapabilityProposals(blocks);
@@ -437,6 +444,15 @@ const BlockRenderer = ({
             proposal={block.proposal}
             onDispatched={onRouteProposalDispatched
               ? result => onRouteProposalDispatched(block.blockId, result)
+              : undefined}
+            onRejected={onRouteProposalRejected
+              ? () => onRouteProposalRejected(block.blockId)
+              : undefined}
+            onReject={onRouteProposalReject
+              ? () => onRouteProposalReject(block.blockId, block.proposal.routeDecisionId)
+              : undefined}
+            onDispatchingChange={onRouteProposalDispatchingChange
+              ? dispatching => onRouteProposalDispatchingChange(block.blockId, dispatching)
               : undefined}
             onRePropose={onRouteProposalRePropose
               ? (preferredExecutorId?: string) => onRouteProposalRePropose(block.blockId, preferredExecutorId)

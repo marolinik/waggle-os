@@ -7,7 +7,7 @@
  *          empty→ready transition (fires once, never on mount / re-render).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render as rtlRender, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
+import { render as rtlRender, renderHook, screen, fireEvent, cleanup, within, act, waitFor } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useState, type ComponentProps } from 'react';
 
@@ -21,24 +21,41 @@ class ResizeObserverStub {
 
 const mocks = vi.hoisted(() => ({
   adapter: {
+    getHistory: vi.fn().mockResolvedValue([]),
+    clearHistory: vi.fn().mockResolvedValue(undefined),
+    abortAgent: vi.fn().mockResolvedValue(undefined),
+    respondApproval: vi.fn().mockResolvedValue(undefined),
+    sendMessage: vi.fn(),
     getPins: vi.fn().mockResolvedValue([]),
     searchMemory: vi.fn().mockResolvedValue([]),
     submitFeedback: vi.fn(),
     ingestFile: vi.fn(),
     addPin: vi.fn(),
     removePin: vi.fn(),
+    routeProposals: {
+      propose: vi.fn(),
+      confirm: vi.fn(),
+      reject: vi.fn().mockResolvedValue(undefined),
+    },
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: {} }));
 
 import ChatApp from '@/components/os/apps/ChatApp';
 import type { ChatMessage } from '@/lib/types';
+import type { RouteProposalPayload } from '@/lib/route-proposals';
 
 const noop = () => {};
 const deferred = () => {
   let resolve!: () => void;
   let reject!: (reason?: unknown) => void;
   const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+};
+const deferredValue = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
   return { promise, resolve, reject };
 };
 const baseProps = {
@@ -56,6 +73,19 @@ const assistantMsg: ChatMessage = {
   content: 'Here is your answer.',
   timestamp: new Date().toISOString(),
 };
+const routeProposal = (routeDecisionId: string, displayName = 'Waggle'): RouteProposalPayload => ({
+  routeDecisionId,
+  selected: {
+    id: 'persona:general-purpose',
+    displayName,
+    reason: 'Best available fit',
+  },
+  alternatives: [],
+  rejected: [],
+  scores: [],
+  egress: null,
+  costLine: 'Runs locally',
+});
 
 type ChatAppRenderProps = Partial<ComponentProps<typeof ChatApp>> & { messages: ChatMessage[] };
 
@@ -66,7 +96,526 @@ const render = (props: ChatAppRenderProps) =>
     </TooltipProvider>,
   );
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe('premium conversation clearing', () => {
+  it('requires explicit confirmation and Cancel preserves the conversation', () => {
+    const onClearHistory = vi.fn().mockResolvedValue(true);
+    render({ messages: [assistantMsg], onClearHistory });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message composer' }), {
+      target: { value: '/clear' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(onClearHistory).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('alertdialog', { name: /clear this conversation/i });
+    expect(dialog).toHaveTextContent(/pinned items, saved memories, and other conversations are not affected/i);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(onClearHistory).not.toHaveBeenCalled();
+    expect(screen.getByTestId('chat-message-content')).toHaveTextContent('Here is your answer.');
+    expect(screen.getByRole('textbox', { name: 'Message composer' })).toHaveValue('/clear');
+  });
+
+  it('cancels pending route suggestions only after confirmed history deletion succeeds', async () => {
+    const onClearHistory = vi.fn().mockResolvedValue(true);
+    mocks.adapter.routeProposals.propose.mockResolvedValueOnce({
+      routeDecisionId: 'route-clear-1',
+      selected: {
+        id: 'persona:general-purpose',
+        displayName: 'Waggle',
+        reason: 'Best available fit',
+      },
+      alternatives: [],
+      rejected: [],
+      scores: [],
+      egress: null,
+      costLine: 'Runs locally',
+    });
+    render({ messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear' });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Prepare the launch brief' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toBeInTheDocument();
+
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const dialog = screen.getByRole('alertdialog', { name: /clear this conversation/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear conversation' }));
+
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-clear-1'));
+    expect(screen.queryByTestId('chat-route-proposal')).toBeNull();
+    expect(composer).toHaveValue('');
+  });
+
+  it('keeps the dialog, command, and route suggestion when history deletion fails', async () => {
+    const onClearHistory = vi.fn().mockResolvedValue(false);
+    mocks.adapter.routeProposals.propose.mockResolvedValueOnce({
+      routeDecisionId: 'route-clear-failed',
+      selected: {
+        id: 'persona:general-purpose',
+        displayName: 'Waggle',
+        reason: 'Best available fit',
+      },
+      alternatives: [],
+      rejected: [],
+      scores: [],
+      egress: null,
+      costLine: 'Runs locally',
+    });
+    render({ messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear' });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Prepare the launch brief' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toBeInTheDocument();
+
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const dialog = screen.getByRole('alertdialog', { name: /clear this conversation/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear conversation' }));
+
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+    expect(mocks.adapter.routeProposals.reject).not.toHaveBeenCalled();
+    expect(screen.getByTestId('chat-route-proposal')).toBeInTheDocument();
+    expect(screen.getByRole('alertdialog', { name: /clear this conversation/i })).toBeInTheDocument();
+    expect(composer).toHaveValue('/clear');
+  });
+
+  it('rejects a Best fit proposal that resolves after the conversation was cleared', async () => {
+    const onClearHistory = vi.fn().mockResolvedValue(true);
+    const lateProposal = deferredValue<{
+      routeDecisionId: string;
+      selected: { id: string; displayName: string; reason: string };
+      alternatives: never[];
+      rejected: never[];
+      scores: never[];
+      egress: null;
+      costLine: string;
+    }>();
+    mocks.adapter.routeProposals.propose.mockReturnValueOnce(lateProposal.promise);
+    render({ messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear' });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Route this later' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(mocks.adapter.routeProposals.propose).toHaveBeenCalledOnce();
+
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const dialog = screen.getByRole('alertdialog', { name: /clear this conversation/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+
+    lateProposal.resolve({
+      routeDecisionId: 'route-clear-late',
+      selected: {
+        id: 'persona:general-purpose',
+        displayName: 'Waggle',
+        reason: 'Best available fit',
+      },
+      alternatives: [],
+      rejected: [],
+      scores: [],
+      egress: null,
+      costLine: 'Runs locally',
+    });
+
+    await waitFor(() => expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-clear-late'));
+    expect(screen.queryByTestId('chat-route-proposal')).toBeNull();
+  });
+
+  it('cancels a proposal that resolves while the confirmed clear is still pending', async () => {
+    const clearResult = deferredValue<boolean>();
+    const lateProposal = deferredValue<RouteProposalPayload>();
+    const onClearHistory = vi.fn().mockReturnValue(clearResult.promise);
+    mocks.adapter.routeProposals.propose.mockReturnValueOnce(lateProposal.promise);
+    render({ messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear', activeSessionId: 'session-a' });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Route during clear' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+
+    await act(async () => { lateProposal.resolve(routeProposal('route-during-clear')); });
+    expect(await screen.findByTestId('chat-route-proposal')).toHaveTextContent('Waggle');
+    await act(async () => { clearResult.resolve(true); });
+
+    await waitFor(() => expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-during-clear'));
+    expect(screen.queryByTestId('chat-route-proposal')).toBeNull();
+  });
+
+  it('never lets a delayed clear from session A cancel a session B proposal', async () => {
+    const clearResult = deferredValue<boolean>();
+    const onClearHistory = vi.fn().mockReturnValue(clearResult.promise);
+    mocks.adapter.routeProposals.propose
+      .mockResolvedValueOnce(routeProposal('route-a', 'Session A route'))
+      .mockResolvedValueOnce(routeProposal('route-b', 'Session B route'));
+    const view = render({
+      messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear', activeSessionId: 'session-a',
+    });
+    let composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Route A' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toHaveTextContent('Session A route');
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp {...baseProps} messages={[assistantMsg]} onClearHistory={onClearHistory} workspaceId="workspace-clear" activeSessionId="session-b" />
+      </TooltipProvider>,
+    );
+    composer = screen.getByRole('textbox', { name: 'Message composer' });
+    fireEvent.change(composer, { target: { value: 'Route B' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toHaveTextContent('Session B route');
+
+    await act(async () => { clearResult.resolve(true); });
+    await waitFor(() => expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-a'));
+    expect(mocks.adapter.routeProposals.reject).not.toHaveBeenCalledWith('route-b');
+    expect(screen.getByTestId('chat-route-proposal')).toHaveTextContent('Session B route');
+  });
+
+  it('never lets an old A clear unlock a newer A clear after A to B to A navigation', async () => {
+    const oldClear = deferredValue<boolean>();
+    const currentClear = deferredValue<boolean>();
+    const onClearHistory = vi.fn()
+      .mockReturnValueOnce(oldClear.promise)
+      .mockReturnValueOnce(currentClear.promise);
+    const view = render({
+      messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear', activeSessionId: 'session-a',
+    });
+    let composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp {...baseProps} messages={[assistantMsg]} onClearHistory={onClearHistory} workspaceId="workspace-clear" activeSessionId="session-b" />
+      </TooltipProvider>,
+    );
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp {...baseProps} messages={[assistantMsg]} onClearHistory={onClearHistory} workspaceId="workspace-clear" activeSessionId="session-a" />
+      </TooltipProvider>,
+    );
+    composer = screen.getByRole('textbox', { name: 'Message composer' });
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const currentDialog = screen.getByRole('alertdialog');
+    fireEvent.click(within(currentDialog).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledTimes(2));
+
+    await act(async () => { oldClear.resolve(true); });
+    expect(within(currentDialog).getByRole('button', { name: 'Clearing…' })).toBeDisabled();
+
+    await act(async () => { currentClear.resolve(true); });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  });
+
+  it('rejects a re-proposal that resolves after the conversation was cleared', async () => {
+    const lateReProposal = deferredValue<RouteProposalPayload>();
+    const onClearHistory = vi.fn().mockResolvedValue(true);
+    mocks.adapter.routeProposals.propose
+      .mockResolvedValueOnce(routeProposal('route-original'))
+      .mockReturnValueOnce(lateReProposal.promise);
+    mocks.adapter.routeProposals.confirm.mockRejectedValueOnce(new Error('route needs revalidation'));
+    render({ messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear', activeSessionId: 'session-a' });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Route then retry' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('route-proposal-confirm'));
+    fireEvent.click(await screen.findByTestId('route-proposal-re-propose'));
+
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+    await act(async () => { lateReProposal.resolve(routeProposal('route-late-re-proposal')); });
+
+    await waitFor(() => expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-late-re-proposal'));
+    expect(screen.queryByTestId('chat-route-proposal')).toBeNull();
+  });
+
+  it('rejects the superseded route decision after a successful re-proposal', async () => {
+    mocks.adapter.routeProposals.propose
+      .mockResolvedValueOnce(routeProposal('route-original', 'Original route'))
+      .mockResolvedValueOnce(routeProposal('route-replacement', 'Replacement route'));
+    mocks.adapter.routeProposals.confirm.mockRejectedValueOnce(Object.assign(
+      new Error('route needs revalidation'),
+      {
+        status: 409,
+        body: {
+          error: 'revalidation_failed',
+          reason: 'The executor changed.',
+        },
+      },
+    ));
+
+    render({
+      messages: [assistantMsg],
+      workspaceId: 'workspace-clear',
+      activeSessionId: 'session-a',
+    });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Route then replace' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toHaveTextContent('Original route');
+
+    fireEvent.click(screen.getByTestId('route-proposal-confirm'));
+    fireEvent.click(await screen.findByTestId('route-proposal-re-propose'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-route-proposal')).toHaveTextContent('Replacement route');
+    });
+    expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-original');
+    expect(mocks.adapter.routeProposals.reject).not.toHaveBeenCalledWith('route-replacement');
+  });
+
+  it('keeps the newest concurrent re-proposal and rejects an older response that lands last', async () => {
+    const older = deferredValue<RouteProposalPayload>();
+    const newer = deferredValue<RouteProposalPayload>();
+    mocks.adapter.routeProposals.propose
+      .mockResolvedValueOnce(routeProposal('route-original'))
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    mocks.adapter.routeProposals.confirm.mockRejectedValueOnce(new Error('route needs revalidation'));
+    render({ messages: [assistantMsg], workspaceId: 'workspace-clear', activeSessionId: 'session-a' });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Route twice' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('route-proposal-confirm'));
+    const rePropose = await screen.findByTestId('route-proposal-re-propose');
+    fireEvent.click(rePropose);
+    fireEvent.click(rePropose);
+
+    await act(async () => { newer.resolve(routeProposal('route-newer', 'Newest route')); });
+    await waitFor(() => expect(screen.getByTestId('chat-route-proposal')).toHaveTextContent('Newest route'));
+    await act(async () => { older.resolve(routeProposal('route-older', 'Older route')); });
+
+    await waitFor(() => expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-older'));
+    expect(screen.getByTestId('chat-route-proposal')).toHaveTextContent('Newest route');
+  });
+
+  it('blocks clear while a route dispatch is still in flight', async () => {
+    const dispatchResult = deferredValue<{ status: 'dispatched'; mode: 'internal'; resultText: string }>();
+    const onClearHistory = vi.fn().mockResolvedValue(true);
+    mocks.adapter.routeProposals.propose.mockResolvedValueOnce(routeProposal('route-dispatching'));
+    mocks.adapter.routeProposals.confirm.mockReturnValueOnce(dispatchResult.promise);
+    render({ messages: [assistantMsg], onClearHistory, workspaceId: 'workspace-clear', activeSessionId: 'session-a' });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Dispatch this' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('route-proposal-confirm'));
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getByRole('button', { name: 'Route handoff in progress' })).toBeDisabled();
+    expect(onClearHistory).not.toHaveBeenCalled();
+
+    await act(async () => {
+      dispatchResult.resolve({ status: 'dispatched', mode: 'internal', resultText: 'Done' });
+    });
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Clear conversation' })).toBeEnabled());
+  });
+
+  it('does not reject a dispatching proposal when switching from session A to B', async () => {
+    const dispatch = deferredValue<{
+      status: 'dispatched';
+      mode: 'internal';
+      resultText: string;
+    }>();
+    mocks.adapter.routeProposals.propose.mockResolvedValueOnce(
+      routeProposal('route-dispatch-a', 'Session A route'),
+    );
+    mocks.adapter.routeProposals.confirm.mockReturnValueOnce(dispatch.promise);
+
+    const view = render({
+      messages: [assistantMsg],
+      workspaceId: 'workspace-clear',
+      activeSessionId: 'session-a',
+    });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Dispatch from A' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toHaveTextContent('Session A route');
+    fireEvent.click(screen.getByTestId('route-proposal-confirm'));
+    await waitFor(() => {
+      expect(mocks.adapter.routeProposals.confirm).toHaveBeenCalledWith('route-dispatch-a', {});
+    });
+
+    view.rerender(
+      <TooltipProvider>
+        <ChatApp
+          {...baseProps}
+          messages={[assistantMsg]}
+          workspaceId="workspace-clear"
+          activeSessionId="session-b"
+        />
+      </TooltipProvider>,
+    );
+    await act(async () => { await Promise.resolve(); });
+
+    expect(mocks.adapter.routeProposals.reject).not.toHaveBeenCalledWith('route-dispatch-a');
+    await act(async () => {
+      dispatch.resolve({ status: 'dispatched', mode: 'internal', resultText: 'Done' });
+    });
+    expect(mocks.adapter.routeProposals.reject).not.toHaveBeenCalledWith('route-dispatch-a');
+  });
+
+  it('does not reject an already cancelled proposal again when clearing', async () => {
+    const onClearHistory = vi.fn().mockResolvedValue(true);
+    mocks.adapter.routeProposals.propose.mockResolvedValueOnce(routeProposal('route-cancelled'));
+    render({
+      messages: [assistantMsg],
+      onClearHistory,
+      workspaceId: 'workspace-clear',
+      activeSessionId: 'session-a',
+    });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Cancel this route' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('route-proposal-cancel'));
+    await waitFor(() => {
+      expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+
+    expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledWith('route-cancelled');
+  });
+
+  it('reuses an in-flight route cancellation when clear starts immediately', async () => {
+    const rejection = deferredValue<void>();
+    const onClearHistory = vi.fn().mockResolvedValue(true);
+    mocks.adapter.routeProposals.propose.mockResolvedValueOnce(routeProposal('route-cancelling'));
+    mocks.adapter.routeProposals.reject.mockReturnValueOnce(rejection.promise);
+    render({
+      messages: [assistantMsg],
+      onClearHistory,
+      workspaceId: 'workspace-clear',
+      activeSessionId: 'session-a',
+    });
+    const composer = screen.getByRole('textbox', { name: 'Message composer' });
+
+    fireEvent.change(composer, { target: { value: 'Cancel while clearing' } });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+    expect(await screen.findByTestId('chat-route-proposal')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('route-proposal-cancel'));
+    await waitFor(() => expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(composer, { target: { value: '/clear' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Clear conversation' }));
+    await waitFor(() => expect(onClearHistory).toHaveBeenCalledOnce());
+    expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledTimes(1);
+
+    await act(async () => { rejection.resolve(); });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(mocks.adapter.routeProposals.reject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useChat clear result contract', () => {
+  it('returns true only after authoritative deletion succeeds', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-result',
+      sessionId: 'session-result',
+    }));
+    await waitFor(() => expect(result.current.historyReady).toBe(true));
+
+    let cleared: boolean | undefined;
+    await act(async () => {
+      cleared = await result.current.clearHistory();
+    });
+
+    expect(cleared).toBe(true);
+    expect(mocks.adapter.clearHistory).toHaveBeenCalledWith('ws-result', 'session-result');
+  });
+
+  it('returns false when authoritative deletion fails', async () => {
+    mocks.adapter.clearHistory.mockRejectedValueOnce(new Error('offline'));
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({
+      workspaceId: 'ws-failed',
+      sessionId: 'session-failed',
+    }));
+    await waitFor(() => expect(result.current.historyReady).toBe(true));
+
+    let cleared: boolean | undefined;
+    await act(async () => {
+      cleared = await result.current.clearHistory();
+    });
+
+    expect(cleared).toBe(false);
+  });
+
+  it('returns false without an identified thread', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({ workspaceId: 'ws-none', sessionId: null }));
+
+    expect(await result.current.clearHistory()).toBe(false);
+    expect(mocks.adapter.clearHistory).not.toHaveBeenCalled();
+  });
+
+  it('returns false when navigation makes an in-flight clear stale', async () => {
+    const clearResult = deferredValue<void>();
+    mocks.adapter.clearHistory.mockReturnValueOnce(clearResult.promise);
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ sessionId }: { sessionId: string }) => useChat({ workspaceId: 'ws-stale', sessionId }),
+      { initialProps: { sessionId: 'session-a' } },
+    );
+    await waitFor(() => expect(hook.result.current.historyReady).toBe(true));
+
+    let clearPromise!: Promise<boolean>;
+    act(() => {
+      clearPromise = hook.result.current.clearHistory();
+    });
+    hook.rerender({ sessionId: 'session-b' });
+    await waitFor(() => expect(mocks.adapter.getHistory).toHaveBeenCalledTimes(2));
+
+    clearResult.resolve();
+    let cleared: boolean | undefined;
+    await act(async () => {
+      cleared = await clearPromise;
+    });
+
+    expect(cleared).toBe(false);
+  });
+});
 
 describe('Wave U Lane F fix 1 — message action row presence', () => {
   it('labels the complete visible message sequence by role', () => {
