@@ -1137,14 +1137,18 @@ export function isExplicitToolFreeAdvisoryRequest(
   const actionable = withoutQuotedText(message).trim();
   if (!actionable) return false;
 
-  const explicitlyNonExecuting = policy.denyAllMutations
+  const explicitToolDenial = /\b(?:do not|don['\u2019]t|never)\s+(?:use|call|invoke|run)\s+(?:any\s+|the\s+)?tools?\b|\bwithout\s+(?:using\s+)?(?:any\s+)?tools?\b/i.test(actionable);
+  const explicitlyNonExecuting = explicitToolDenial
+    || policy.denyAllMutations
     || (policy.denyFileWrites && (policy.denyCodeExecution || policy.denyAgentLaunch));
   if (!explicitlyNonExecuting) return false;
   const affirmative = actionable.replace(
     /\b(?:do not|don['\u2019]t|never|without)\b[^.?!;:\r\n]*?(?=\s*(?:,\s*(?=(?:but|however|yet|then|using|from|via|inspect|search|browse|read|open|list|scan|query|retrieve|recall|look up|find)\b)|[;:]|\bbut\b|\bhowever\b|\byet\b|\bbased on\b|[.?!]|$))/gi,
     ' ',
   );
-  if (!/\b(?:turn|design|decompose|outline|explain|compare|describe|discuss|teach|summari[sz]e|draft|prepare|propose|recommend|map|write|provide|produce|generate|implement)\b/i.test(affirmative)) {
+  const responseArtifactCreation = /(?:^|[.?!]\s*)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?create\s+(?:(?:a|an|the)\s+)?(?:(?:concise|brief|short|simple|numbered|bulleted|(?:one|two|three|four|five|\d+)-step)\s+){0,3}(?:checklist|outline|summary|plan|agenda|list|table|answer|response|reply)\b/i.test(affirmative);
+  if (!responseArtifactCreation
+    && !/\b(?:turn|design|decompose|outline|explain|compare|describe|discuss|teach|summari[sz]e|draft|prepare|propose|recommend|map|write|provide|produce|generate|implement)\b/i.test(affirmative)) {
     return false;
   }
 
@@ -1161,6 +1165,10 @@ export function isExplicitToolFreeAdvisoryRequest(
     || /(?:^|[\s"'`])(?:Dockerfile|Makefile|Jenkinsfile|Procfile|README(?:\.[A-Za-z0-9_-]+)?|\.gitignore|\.gitattributes|\.npmrc|\.nvmrc|\.env(?:\.[A-Za-z0-9_-]+)?)(?=$|[\s"'`,;:.!?])/i.test(message);
   const methodExplanation = /\b(?:explain|describe|outline)\s+how\s+to\b/i.test(affirmative);
   const inlineDefinedCurrentObject = /\b(?:turn|convert|transform)\s+this\s+(?:release\s+)?(?:goal|brief|objective|plan|request)\s+into\b[^:\r\n]{0,200}:\s*\S/i.test(affirmative);
+  const createActionCount = affirmative.match(/\bcreate\b/gi)?.length ?? 0;
+  const persistentResponseArtifact = /\b(?:checklist|outline|summary|plan|agenda|list|table|answer|response|reply)\b[^.?!\r\n]{0,48}\b(?:(?:as|in|to)\s+)?(?:(?:a|an|the)\s+)?(?:(?:downloadable|markdown|excel|word|powerpoint)\s+){0,2}(?:file|document|spreadsheet|workbook|presentation|slides?|deck|pdf|docx|xlsx|pptx)(?:\s+format)?\b/i.test(affirmative);
+  const unsafeCreateAction = createActionCount > 0
+    && !(responseArtifactCreation && !persistentResponseArtifact && createActionCount === 1);
   const explicitLookup = /https?:\/\//i.test(affirmative)
     || /\b(?:search|browse|inspect|read|open|list|scan|query|retrieve|recall|look up|find)\b[^.?!\r\n]{0,100}\b(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|web|internet|online|sources?|documents?|documentation)\b/i.test(affirmative)
     || /\b(?:current|existing|this|our|my|saved|previous|prior|attached|uploaded)\s+(?:workspace|repo(?:sitory)?|codebase|files?|folders?|director(?:y|ies)|memor(?:y|ies)|history|notes?|documents?|pdfs?|emails?|messages?|spreadsheets?|tickets?|records?|inbox|calendar|tasks?)\b/i.test(affirmative)
@@ -1177,7 +1185,8 @@ export function isExplicitToolFreeAdvisoryRequest(
     || /\b(?:use|call|invoke)\b[^.?!\r\n]{0,80}\b(?:tool|plugin|mcp|connector|calculator)\b/i.test(affirmative)
     || /\b(?:web_search|web_fetch|search_memory|read_file|search_files|search_content|bash|run_code|spawn_agent)\b/i.test(affirmative)
     || /\bgit\s+(?:status|diff|log|show|branch)\b/i.test(affirmative)
-    || /(?:^|[.?!]\s*|[,;:\u2014]\s*|\b(?:and|then|also|but|however)\s+)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge(?!\s+criteria\b)|deploy)\b/i.test(affirmative)
+    || /(?:^|[.?!]\s*|[,;:\u2014]\s*|\b(?:and|then|also|but|however)\s+)(?:(?:please\s+)?(?:could|would|can|will)\s+you\s+(?:please\s+)?|please\s+)?(?:send|email|message|schedule|post|publish|upload|share|submit|book|delete|remove|update|launch|start|install|export|download|commit|push|merge(?!\s+criteria\b)|deploy)\b/i.test(affirmative)
+    || unsafeCreateAction
     || /\b(?:once\s+(?:done|complete)|after(?:wards|\s+that)?)\b[^.?!\r\n]{0,40}\b(?:send|email|message|schedule|post|publish|upload|share|submit|book|create|delete|remove|update|launch|start|install|export|download|commit|push|merge|deploy)\b/i.test(affirmative)
     || /\b(?:that|it|them|these|those|same|rest|remaining|former|latter|above|earlier|previously|continue|continuing)\b/i.test(affirmative)
     || (!inlineDefinedCurrentObject && /\bthis\b/i.test(affirmative))

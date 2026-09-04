@@ -107,6 +107,7 @@ const PERSISTED_PROFILE_SENTINEL = 'Persisted Profile Sentinel';
 const PERSISTED_MEMORY_SENTINEL = 'Persisted Memory Sentinel launch decision';
 const PERSISTED_SKILL_SENTINEL = 'persisted-skill-sentinel';
 const LIVE_PREMIUM_WORKSPACE_PROMPT = 'Do not use tools. Give a complete answer and include both boundary markers. Start with WAGGLE_E2E_START. Then write exactly five numbered, useful sentences explaining how a premium AI workspace should preserve a model endpoint, a session, context, a full answer, and concurrent work. Finish with WAGGLE_E2E_END. Do not stop before the final marker.';
+const ONBOARDING_FIRST_TASK_PROMPT = 'Create a concise three-step checklist for starting a Solo product launch. Use three numbered or bulleted lines and end with WAGGLE_READY_95f43366. Do not use tools.';
 
 /**
  * Test-only static bound: two prompt characters per synthetic token plus a
@@ -2941,6 +2942,49 @@ describe('persona acceptance prompt budget', () => {
 
     const metrics = events.find(event => event.event === 'done')?.data.contextMetrics as Record<string, unknown>;
     expect(metrics).toMatchObject({ packageMode: 'compact', toolSelectedCount: 0 });
+  });
+
+  it('keeps the exact onboarding first task tool-free, recall-free, compact, and single-turn', async () => {
+    capturedConfig = null;
+    capturedSyntheticInputUpperBound = 0;
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: ONBOARDING_FIRST_TASK_PROMPT,
+        model: 'openai-compatible/qwen3.8-flash-next',
+        persona: 'general-purpose',
+        session: 'onboarding-first-task-tool-free-budget',
+        workspace: 'default',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    const config = capturedConfig!;
+    expect(config.messages).toEqual([{ role: 'user', content: ONBOARDING_FIRST_TASK_PROMPT }]);
+    expect(config.tools).toEqual([]);
+    expect(config.toolChoice).toBeUndefined();
+    expect(config.maxTurns).toBe(1);
+    expect(config.maxToolRounds).toBe(1);
+    expect(config.maxTokenBudget).toBe(18_000);
+    expect(config.systemPrompt.length).toBeLessThan(13_000);
+    expect(config.systemPrompt).toContain('# SELF-CONTAINED ADVISORY TURN');
+    expect(config.systemPrompt).not.toContain('# Context From Your Memory');
+    expect(config.systemPrompt).not.toContain('# Recalled Memories');
+    expect(capturedSyntheticInputUpperBound).toBeLessThan(10_000);
+
+    const events = parseSse(response.body);
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(false);
+    const done = events.find(event => event.event === 'done')?.data;
+    expect(done?.memoryContext).toEqual({ included: false, count: 0 });
+    expect(done?.contextMetrics).toMatchObject({
+      packageMode: 'compact',
+      toolSelectedCount: 0,
+      transmittedToolSchemaChars: 0,
+      estimatedToolSchemaTokens: 0,
+    });
   });
 
   it('keeps the exact 348-character live premium workspace turn compact and intact', async () => {

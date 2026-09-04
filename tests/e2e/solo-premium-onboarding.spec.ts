@@ -446,12 +446,20 @@ test.describe('Windows Solo premium first-run onboarding', () => {
       expect(parsed.errors).toEqual([]);
       const doneEvents = parsed.events.filter(event => event.event === 'done');
       expect(doneEvents).toHaveLength(1);
+      expect(parsed.events.some(event => event.data?.name === 'auto_recall')).toBe(false);
       const done = doneEvents[0]?.data ?? {};
       const tokenText = parsed.events.filter(event => event.event === 'token')
         .map(event => String(event.data?.content ?? '')).join('');
       expect(tokenText.length).toBeGreaterThan(0);
       expect(normalizeText(tokenText)).toBe(normalizeText(String(done.content ?? '')));
       expect(done.toolsUsed).toEqual([]);
+      expect(done.memoryContext).toEqual({ included: false, count: 0 });
+      expect(done.contextMetrics).toMatchObject({
+        packageMode: 'compact',
+        toolSelectedCount: 0,
+        transmittedToolSchemaChars: 0,
+        estimatedToolSchemaTokens: 0,
+      });
       const payload = JSON.parse(chatRequest.postData() ?? '{}') as Record<string, unknown>;
       expect(payload).toMatchObject({ workspaceId, message: firstTask, model: MODEL });
       expect(typeof payload.sessionId).toBe('string');

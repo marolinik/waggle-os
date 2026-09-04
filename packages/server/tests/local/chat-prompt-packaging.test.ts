@@ -31,6 +31,7 @@ import { PERSONA_CASES } from '../../../../tests/vision/persona-cases.js';
 
 const directReply = 'Reply exactly with WAGGLE_CHAT_OK and nothing else';
 const livePremiumWorkspacePrompt = 'Do not use tools. Give a complete answer and include both boundary markers. Start with WAGGLE_E2E_START. Then write exactly five numbered, useful sentences explaining how a premium AI workspace should preserve a model endpoint, a session, context, a full answer, and concurrent work. Finish with WAGGLE_E2E_END. Do not stop before the final marker.';
+const onboardingFirstTaskPrompt = 'Create a concise three-step checklist for starting a Solo product launch. Use three numbered or bulleted lines and end with WAGGLE_READY_95f43366. Do not use tools.';
 
 function withinRaisedWindow(message: string): string {
   return message.padEnd(300, 'x');
@@ -106,6 +107,51 @@ describe('chat prompt packaging', () => {
       ...baseModeInput,
       message: livePremiumWorkspacePrompt,
     })).toBe('compact');
+  });
+
+  it('recognizes the explicit no-tools onboarding first task before tool selection', () => {
+    const policy = classifyExplicitTurnMutationPolicy(onboardingFirstTaskPrompt);
+    const explicitToolFreeAdvisory = isExplicitToolFreeAdvisoryRequest(
+      onboardingFirstTaskPrompt,
+      policy,
+    );
+    const taskShape = detectTaskShape(onboardingFirstTaskPrompt);
+
+    expect(explicitToolFreeAdvisory).toBe(true);
+    expect(taskShape.complexity).toBe('simple');
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message: onboardingFirstTaskPrompt,
+      explicitToolFreeAdvisory,
+      taskComplexity: taskShape.complexity,
+    })).toBe('compact');
+
+    const evidenceRequest = 'Do not use tools. Summarize the current repository.';
+    expect(isExplicitToolFreeAdvisoryRequest(
+      evidenceRequest,
+      classifyExplicitTurnMutationPolicy(evidenceRequest),
+    )).toBe(false);
+    for (const actionRequest of [
+      'Create a Jira ticket. Do not use tools.',
+      'Create a workspace file. Do not use tools.',
+      'Create a concise checklist and create a Jira ticket. Do not use tools.',
+      'Create a checklist file. Do not use tools.',
+      'Create a concise checklist document. Do not use tools.',
+      'Create a short plan file. Do not use tools.',
+      'Create a table spreadsheet. Do not use tools.',
+      'Create a concise checklist as a PDF. Do not use tools.',
+      'Create a short plan in a workbook. Do not use tools.',
+      'Create a checklist as PDF. Do not use tools.',
+      'Create a checklist in PDF format. Do not use tools.',
+      'Create a checklist as a Markdown file. Do not use tools.',
+      'Create a checklist in a Word document. Do not use tools.',
+      'Create a checklist as a downloadable PDF. Do not use tools.',
+    ]) {
+      expect(isExplicitToolFreeAdvisoryRequest(
+        actionRequest,
+        classifyExplicitTurnMutationPolicy(actionRequest),
+      ), actionRequest).toBe(false);
+    }
   });
 
   it('keeps the canonical self-contained release plan compact without external research', () => {
