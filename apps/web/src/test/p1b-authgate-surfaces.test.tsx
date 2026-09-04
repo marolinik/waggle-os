@@ -1607,7 +1607,21 @@ describe('useChat error surfacing (P1b)', () => {
     const users = result.current.messages.filter(m => m.role === 'user');
     expect(users).toHaveLength(1);
     expect(users[0].content).toBe('hello');
-    // retryLastFailed threads { retry: true } so the server strips the persisted failed pair.
-    expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith('ws-1', 'hello', 'sess-1', undefined, undefined, true);
+    // retryLastFailed identifies the exact persisted pair so the server cannot
+    // delete a newer or merely identical-looking exchange.
+    expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith(
+      'ws-1',
+      'hello',
+      'sess-1',
+      undefined,
+      undefined,
+      true,
+      undefined,
+      {
+        kind: 'assistant-pair',
+        expectedMessageCount: 2,
+        expectedAssistantContent: 'Generation failed: Chat request failed (500): boom',
+      },
+    );
   });
 });
