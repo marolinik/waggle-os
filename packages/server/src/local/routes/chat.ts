@@ -73,7 +73,7 @@ function parseRetryTailExpectation(value: unknown): RetryTailExpectation | null 
 function resolvePersona(id: string) {
   return listPersonas().find(p => p.id === id) ?? null;
 }
-import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
+import { FrameStore, SessionStore, TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
 import { allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
@@ -5273,8 +5273,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // 'user_stated' frame would bypass the happy-path memory boundary.
       if (activeSessionOrch && allowMemoryPersistence && message.trim().length >= 8) {
         try {
-          const frames = activeSessionOrch.getFrames();
-          const sessions = activeSessionOrch.getSessions();
+          const workspaceMind = usesNamedWorkspace
+            ? server.agentState.getWorkspaceMindDb(historyWorkspaceId)
+            : null;
+          if (usesNamedWorkspace && !workspaceMind) {
+            throw new Error('Authorized workspace memory is unavailable');
+          }
+          const frames = workspaceMind
+            ? new FrameStore(workspaceMind)
+            : activeSessionOrch.getFrames();
+          const sessions = workspaceMind
+            ? new SessionStore(workspaceMind)
+            : activeSessionOrch.getSessions();
           const active = sessions.getActive();
           const gopId = active.length > 0 ? active[0].gop_id : sessions.create().gop_id;
           const latestI = frames.getLatestIFrame(gopId);

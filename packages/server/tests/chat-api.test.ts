@@ -2578,31 +2578,197 @@ describe('Chat Streaming API', () => {
   // #3 launch-blocker: memory capture must NOT depend on generation success.
   // When the model call throws, the happy-path write-back never runs — so the
   // route persists the raw user turn directly, else "remembers everything" breaks.
-  it('persists the raw user turn to memory even when generation fails (#3)', async () => {
+  it('persists a failed raw turn in the authorized active workspace, never personal memory (#3)', async () => {
     resetRateLimiter(server);
     const originalRunner = server.agentRunner;
+    const activeWorkspaceId = server.agentState.activeWorkspaceId;
+    expect(activeWorkspaceId).toBeTruthy();
     server.agentRunner = async () => {
       throw new Error('LiteLLM is not available');
     };
 
-    const seed = 'Launch-blocker seed: my horse is named Comet and I live in Belgrade.';
-    const res = await injectWithAuth(server, {
-      method: 'POST',
-      url: '/api/chat',
-      payload: { message: seed },
+    const seed = `Launch-blocker seed ${Date.now()}: my horse is named Comet and I live in Belgrade.`;
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: seed },
+      });
+
+      expect(parseSSE(res.body).filter(e => e.event === 'error')).toHaveLength(1);
+      const activeMind = server.agentState.getWorkspaceMindDb(activeWorkspaceId!);
+      expect(activeMind).not.toBeNull();
+      const persisted = new FrameStore(activeMind!).findDuplicate(seed);
+      expect(persisted).not.toBeNull();
+      expect(persisted!.content).toContain('my horse is named Comet');
+      expect(server.agentState.orchestrator.getFrames().findDuplicate(seed)).toBeNull();
+    } finally {
+      server.agentRunner = originalRunner;
+    }
+  });
+
+  it('persists a failed raw turn in personal memory when no workspace is active', async () => {
+    const personalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-chat-failed-personal-'));
+    const personalServer = await buildLocalServer({ dataDir: personalDir });
+    const initiallyActiveWorkspace = personalServer.agentState.activeWorkspaceId;
+    expect(initiallyActiveWorkspace).toBeTruthy();
+    const retirement = await personalServer.agentState.closeWorkspaceMind(initiallyActiveWorkspace!);
+    retirement.release();
+    expect(personalServer.agentState.activeWorkspaceId).toBeNull();
+    personalServer.agentRunner = async () => {
+      throw new Error('LiteLLM is not available');
+    };
+    const seed = `Personal failed-turn marker ${Date.now()}`;
+
+    try {
+      const response = await injectWithAuth(personalServer, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: seed },
+      });
+
+      expect(parseSSE(response.body).filter(event => event.event === 'error')).toHaveLength(1);
+      expect(personalServer.agentState.orchestrator.getFrames().findDuplicate(seed)).not.toBeNull();
+    } finally {
+      await personalServer.close();
+      fs.rmSync(personalDir, { recursive: true, force: true });
+    }
+  });
+
+  it('binds failed-turn memory to the authorized workspace instead of mutable active state', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const originalWorkspaceId = server.agentState.activeWorkspaceId;
+    const nonce = Date.now();
+    const workspaceA = server.workspaceManager.create({
+      name: `Failed-turn memory A ${nonce}`,
+      group: 'test',
     });
+    const workspaceB = server.workspaceManager.create({
+      name: `Failed-turn memory B ${nonce}`,
+      group: 'test',
+    });
+    const seed = `Workspace B private failed-turn marker ${nonce}`;
+    server.agentRunner = async () => {
+      throw new Error('LiteLLM is not available');
+    };
 
-    // The turn failed — an error event was surfaced to the client.
-    const errorEvents = parseSSE(res.body).filter(e => e.event === 'error');
-    expect(errorEvents.length).toBe(1);
+    try {
+      expect(server.agentState.activateWorkspaceMind(workspaceA.id)).toBe(true);
+      const workspaceAMind = server.agentState.getWorkspaceMindDb(workspaceA.id);
+      const workspaceBMind = server.agentState.getWorkspaceMindDb(workspaceB.id);
+      expect(workspaceAMind).not.toBeNull();
+      expect(workspaceBMind).not.toBeNull();
+      const personalSessionsBefore = server.agentState.orchestrator.getSessions()
+        .getActive().map(item => item.gop_id);
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: seed,
+          workspace: workspaceB.id,
+          session: `failed-turn-memory-${nonce}`,
+        },
+      });
 
-    server.agentRunner = originalRunner;
+      expect(parseSSE(response.body).filter(event => event.event === 'error')).toHaveLength(1);
+      expect(server.agentState.orchestrator.getFrames().findDuplicate(seed)).toBeNull();
+      expect(new FrameStore(workspaceAMind!).findDuplicate(seed)).toBeNull();
+      const workspaceBFrame = new FrameStore(workspaceBMind!).findDuplicate(seed);
+      expect(workspaceBFrame).not.toBeNull();
+      expect(new SessionStore(workspaceAMind!).getActive()).toHaveLength(0);
+      const workspaceBSessions = new SessionStore(workspaceBMind!);
+      expect(workspaceBSessions.getActive()).toHaveLength(1);
+      expect(workspaceBSessions.getByGopId(workspaceBFrame!.gop_id)).toBeDefined();
+      expect(server.agentState.orchestrator.getSessions()
+        .getActive().map(item => item.gop_id)).toEqual(personalSessionsBefore);
+    } finally {
+      server.agentRunner = originalRunner;
+      const restored = originalWorkspaceId
+        ? server.agentState.activateWorkspaceMind(originalWorkspaceId)
+        : false;
+      server.sessionManager.close(workspaceA.id);
+      server.sessionManager.close(workspaceB.id);
+      server.mindCache.close(workspaceA.id);
+      server.mindCache.close(workspaceB.id);
+      if (server.workspaceManager.get(workspaceA.id)) server.workspaceManager.delete(workspaceA.id);
+      if (server.workspaceManager.get(workspaceB.id)) server.workspaceManager.delete(workspaceB.id);
+      if (originalWorkspaceId) expect(restored).toBe(true);
+    }
+  });
 
-    // ...but the raw user turn was still persisted to memory (write decoupled
-    // from generation success), so it is recallable on the next turn.
-    const persisted = server.agentState.orchestrator.getFrames().findDuplicate(seed);
-    expect(persisted).not.toBeNull();
-    expect(persisted!.content).toContain('my horse is named Comet');
+  it('keeps an implicit failed turn bound when the global active workspace changes mid-request', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const originalWorkspaceId = server.agentState.activeWorkspaceId;
+    const nonce = Date.now();
+    const workspaceA = server.workspaceManager.create({
+      name: `Implicit failed-turn A ${nonce}`,
+      group: 'test',
+    });
+    const workspaceB = server.workspaceManager.create({
+      name: `Implicit failed-turn B ${nonce}`,
+      group: 'test',
+    });
+    const seed = `Implicit workspace A failed-turn marker ${nonce}`;
+    let releaseRunner!: () => void;
+    let markRunnerEntered!: () => void;
+    const runnerGate = new Promise<void>(resolve => { releaseRunner = resolve; });
+    const runnerEntered = new Promise<void>(resolve => { markRunnerEntered = resolve; });
+    let responsePromise: ReturnType<typeof injectWithAuth> | undefined;
+    server.agentRunner = async () => {
+      markRunnerEntered();
+      await runnerGate;
+      throw new Error('LiteLLM is not available');
+    };
+
+    try {
+      expect(server.agentState.activateWorkspaceMind(workspaceA.id)).toBe(true);
+      const workspaceAMind = server.agentState.getWorkspaceMindDb(workspaceA.id);
+      const workspaceBMind = server.agentState.getWorkspaceMindDb(workspaceB.id);
+      expect(workspaceAMind).not.toBeNull();
+      expect(workspaceBMind).not.toBeNull();
+      const personalSessionsBefore = server.agentState.orchestrator.getSessions()
+        .getActive().map(item => item.gop_id);
+
+      responsePromise = injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: seed,
+          session: `implicit-failed-turn-${nonce}`,
+        },
+      });
+      await runnerEntered;
+      expect(server.agentState.activateWorkspaceMind(workspaceB.id)).toBe(true);
+      releaseRunner();
+      const response = await responsePromise;
+
+      expect(parseSSE(response.body).filter(event => event.event === 'error')).toHaveLength(1);
+      expect(server.agentState.orchestrator.getFrames().findDuplicate(seed)).toBeNull();
+      const workspaceAFrame = new FrameStore(workspaceAMind!).findDuplicate(seed);
+      expect(workspaceAFrame).not.toBeNull();
+      expect(new FrameStore(workspaceBMind!).findDuplicate(seed)).toBeNull();
+      const workspaceASessions = new SessionStore(workspaceAMind!);
+      expect(workspaceASessions.getByGopId(workspaceAFrame!.gop_id)).toBeDefined();
+      expect(new SessionStore(workspaceBMind!).getActive()).toHaveLength(0);
+      expect(server.agentState.orchestrator.getSessions()
+        .getActive().map(item => item.gop_id)).toEqual(personalSessionsBefore);
+    } finally {
+      releaseRunner();
+      await responsePromise?.catch(() => undefined);
+      server.agentRunner = originalRunner;
+      const restored = originalWorkspaceId
+        ? server.agentState.activateWorkspaceMind(originalWorkspaceId)
+        : false;
+      server.sessionManager.close(workspaceA.id);
+      server.sessionManager.close(workspaceB.id);
+      server.mindCache.close(workspaceA.id);
+      server.mindCache.close(workspaceB.id);
+      if (server.workspaceManager.get(workspaceA.id)) server.workspaceManager.delete(workspaceA.id);
+      if (server.workspaceManager.get(workspaceB.id)) server.workspaceManager.delete(workspaceB.id);
+      if (originalWorkspaceId) expect(restored).toBe(true);
+    }
   });
 
   it('keeps a failed broad no-change request in chat history without writing it to memory', async () => {
