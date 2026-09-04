@@ -1,9 +1,10 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getModels: vi.fn(),
   getModel: vi.fn(),
+  getAgentStatus: vi.fn(),
   probeModel: vi.fn(),
   getSettings: vi.fn(),
   getTeamMembers: vi.fn(),
@@ -12,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
 }));
 
-vi.mock('@/lib/adapter', () => ({ adapter: mocks }));
+vi.mock('@/lib/adapter', () => ({
+  adapter: mocks,
+  MODEL_SETTINGS_CHANGED_EVENT: 'waggle:model-settings-changed',
+}));
 vi.mock('@/hooks/useSessions', () => ({
   useSessions: () => ({
     sessions: [],
@@ -66,21 +70,23 @@ const chatState = {
 };
 
 import ChatWindowInstance from './ChatWindowInstance';
+import { useAgentStatus } from '@/hooks/useAgentStatus';
 
 beforeEach(() => {
   mocks.getModels
+    .mockReset()
     .mockResolvedValueOnce(['openai/existing-model'])
     .mockResolvedValueOnce(['openai/model-released-while-open']);
-  mocks.getModel.mockResolvedValue('openai/existing-model');
-  mocks.probeModel.mockResolvedValue({
+  mocks.getModel.mockReset().mockResolvedValue('openai/existing-model');
+  mocks.probeModel.mockReset().mockResolvedValue({
     model: 'openai/existing-model',
     configured: true,
     verified: true,
   });
-  mocks.getSettings.mockResolvedValue({});
-  mocks.getTeamMembers.mockResolvedValue([]);
-  mocks.patchWorkspace.mockResolvedValue(undefined);
-  mocks.useChat.mockReturnValue(chatState);
+  mocks.getSettings.mockReset().mockResolvedValue({});
+  mocks.getTeamMembers.mockReset().mockResolvedValue([]);
+  mocks.patchWorkspace.mockReset().mockResolvedValue(undefined);
+  mocks.useChat.mockReset().mockReturnValue(chatState);
 });
 
 afterEach(() => {
@@ -90,8 +96,13 @@ afterEach(() => {
 
 describe('ChatWindowInstance model catalog refresh', () => {
   it('reloads the provider-backed model list when Waggle regains focus', async () => {
+    mocks.getModel
+      .mockResolvedValueOnce('openai/existing-model')
+      .mockResolvedValueOnce('openai/default-after-focus');
     render(<ChatWindowInstance workspaceId="workspace-1" preferredSessionId={null} />);
     await waitFor(() => expect(screen.getByTestId('models'))
+      .toHaveTextContent('openai/existing-model'));
+    await waitFor(() => expect(screen.getByTestId('current-model'))
       .toHaveTextContent('openai/existing-model'));
 
     await act(async () => {
@@ -99,7 +110,52 @@ describe('ChatWindowInstance model catalog refresh', () => {
     });
     await waitFor(() => expect(screen.getByTestId('models'))
       .toHaveTextContent('openai/model-released-while-open'));
+    await waitFor(() => expect(screen.getByTestId('current-model'))
+      .toHaveTextContent('openai/default-after-focus'));
     expect(mocks.getModels).toHaveBeenCalledTimes(2);
+    expect(mocks.useChat.mock.calls.at(-1)?.[0])
+      .toMatchObject({ model: 'openai/default-after-focus' });
+  });
+
+  it('keeps a refreshed inherited model when the stale startup request resolves last', async () => {
+    let resolveStartup!: (model: string) => void;
+    mocks.getModel.mockReset()
+      .mockReturnValueOnce(new Promise<string>((resolve) => { resolveStartup = resolve; }))
+      .mockResolvedValueOnce('openai/new-default');
+    render(<ChatWindowInstance workspaceId="workspace-1" preferredSessionId={null} />);
+    await waitFor(() => expect(mocks.getModel).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('waggle:model-settings-changed', {
+        detail: { model: 'openai/new-default' },
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('current-model'))
+      .toHaveTextContent('openai/new-default'));
+    expect(mocks.useChat.mock.calls.at(-1)?.[0])
+      .toMatchObject({ model: 'openai/new-default' });
+
+    await act(async () => { resolveStartup('anthropic/claude-sonnet-4-6'); });
+    expect(screen.getByTestId('current-model')).toHaveTextContent('openai/new-default');
+    expect(mocks.useChat.mock.calls.at(-1)?.[0])
+      .toMatchObject({ model: 'openai/new-default' });
+  });
+
+  it('preserves an explicit workspace model across global default changes', async () => {
+    render(<ChatWindowInstance workspaceId="workspace-1" initialModel="openai/workspace-model" />);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('waggle:model-settings-changed', {
+        detail: { model: 'openai/new-default' },
+      }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('current-model')).toHaveTextContent('openai/workspace-model');
+    expect(mocks.useChat.mock.calls.at(-1)?.[0])
+      .toMatchObject({ model: 'openai/workspace-model' });
+    expect(mocks.getModel).not.toHaveBeenCalled();
   });
 
   it('does not fan out model refreshes from a kept-alive hidden workspace', async () => {
@@ -296,5 +352,45 @@ describe('ChatWindowInstance model catalog refresh', () => {
       ['workspace-1', { model: 'openai/model-c' }],
     ]);
     await waitFor(() => expect(screen.getByTestId('current-model')).toHaveTextContent('openai/model-b'));
+  });
+});
+
+describe('shared model status refresh', () => {
+  it('keeps the newest model when a stale startup poll finishes after the save event', async () => {
+    let resolveStartup!: (value: {
+      model: string;
+      tokensUsed: number;
+      costUsd: number;
+      isActive: boolean;
+    }) => void;
+    mocks.getAgentStatus.mockReset()
+      .mockReturnValueOnce(new Promise((resolve) => { resolveStartup = resolve; }))
+      .mockResolvedValueOnce({
+        model: 'openai-compatible/qwen3.8-flash-next',
+        tokensUsed: 0,
+        costUsd: 0,
+        isActive: false,
+      });
+
+    const hook = renderHook(() => useAgentStatus());
+    await waitFor(() => expect(mocks.getAgentStatus).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('waggle:model-settings-changed', {
+        detail: { model: 'openai-compatible/qwen3.8-flash-next' },
+      }));
+    });
+    await waitFor(() => expect(hook.result.current.model)
+      .toBe('openai-compatible/qwen3.8-flash-next'));
+
+    await act(async () => {
+      resolveStartup({
+        model: 'anthropic/claude-sonnet-4-6',
+        tokensUsed: 0,
+        costUsd: 0,
+        isActive: false,
+      });
+    });
+    expect(hook.result.current.model).toBe('openai-compatible/qwen3.8-flash-next');
   });
 });

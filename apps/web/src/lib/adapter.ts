@@ -111,6 +111,12 @@ const IMPORTANCE_NUM_TO_STRING: Record<number, FrameImportance> = {
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
 const LOCAL_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+export const MODEL_SETTINGS_CHANGED_EVENT = 'waggle:model-settings-changed';
+
+function announceModelSettingsChanged(model: string): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(MODEL_SETTINGS_CHANGED_EVENT, { detail: { model } }));
+}
 
 export type ChannelPlatform = 'telegram' | 'discord' | 'slack' | 'whatsapp';
 
@@ -1723,6 +1729,7 @@ class LocalAdapter {
       { method: 'PUT', body: JSON.stringify({ model }) },
       MODEL_ROUTER_REQUEST_TIMEOUT_MS,
     );
+    announceModelSettingsChanged(model);
   }
 
   async getModel(): Promise<string> {
@@ -2488,6 +2495,7 @@ class LocalAdapter {
 
   async saveSettings(settings: Partial<Settings>): Promise<void> {
     await this.fetch('/api/settings', { method: 'PUT', body: JSON.stringify(settings) });
+    if (settings.defaultModel) announceModelSettingsChanged(settings.defaultModel);
   }
 
   async getChannels(): Promise<ChannelStatus[]> {
@@ -2723,7 +2731,9 @@ class LocalAdapter {
         },
       }),
     }, timeoutMs);
-    return res.json();
+    const result = await res.json();
+    if (config.defaultModel) announceModelSettingsChanged(config.defaultModel);
+    return result;
   }
 
   async restartModelRouter(): Promise<{

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
 import { toast as showToast, useToast } from '@/hooks/use-toast';
-import { adapter } from '@/lib/adapter';
+import { adapter, MODEL_SETTINGS_CHANGED_EVENT } from '@/lib/adapter';
 import { formatModelLabel } from '@/lib/model-label';
 import {
   acknowledgeChatDispatch,
@@ -128,6 +128,7 @@ const ChatWindowInstance = ({
   const modelRevisionRef = useRef(0);
   const userSelectedModelRef = useRef(false);
   const modelPersistenceRef = useRef<Promise<void>>(Promise.resolve());
+  const refreshCurrentModelRef = useRef<() => Promise<void>>(async () => {});
   const refreshModelHealthRef = useRef<(announceChecking?: boolean) => Promise<void>>(async () => {});
 
   // The shell may finish loading the workspace after this kept-alive chat
@@ -273,6 +274,7 @@ const ChatWindowInstance = ({
     let modelsLanded = false;
     let currentLanded = false;
     let modelRequest = 0;
+    let currentModelRequest = 0;
 
     // The sidecar merges LiteLLM, provider API catalogs, and local runtime models.
     // Keep an empty list on outage rather than presenting model IDs that may no
@@ -308,10 +310,16 @@ const ChatWindowInstance = ({
         currentLanded = true;
         return;
       }
+      const request = ++currentModelRequest;
       const loadRevision = modelRevisionRef.current;
       try {
         const model = await adapter.getModel();
-        if (cancelled || userSelectedModelRef.current || loadRevision !== modelRevisionRef.current) {
+        if (
+          cancelled
+          || request !== currentModelRequest
+          || userSelectedModelRef.current
+          || loadRevision !== modelRevisionRef.current
+        ) {
           currentLanded = true;
           return;
         }
@@ -323,7 +331,12 @@ const ChatWindowInstance = ({
           return;
         }
         const settings = await adapter.getSettings();
-        if (cancelled || userSelectedModelRef.current || loadRevision !== modelRevisionRef.current) {
+        if (
+          cancelled
+          || request !== currentModelRequest
+          || userSelectedModelRef.current
+          || loadRevision !== modelRevisionRef.current
+        ) {
           currentLanded = true;
           return;
         }
@@ -339,6 +352,7 @@ const ChatWindowInstance = ({
         console.error('[ChatWindowInstance] fetch current model failed:', err);
       }
     };
+    refreshCurrentModelRef.current = fetchCurrentModel;
 
     fetchModels();
     fetchCurrentModel();
@@ -372,13 +386,22 @@ const ChatWindowInstance = ({
     const refreshModelsOnFocus = () => {
       if (!isActiveChatRef.current) return;
       void fetchModels();
+      void fetchCurrentModel();
       void refreshModelHealthRef.current(true);
     };
+    const refreshInheritedModel = () => {
+      if (!isActiveChatRef.current) return;
+      void fetchCurrentModel();
+    };
     window.addEventListener('focus', refreshModelsOnFocus);
+    window.addEventListener(MODEL_SETTINGS_CHANGED_EVENT, refreshInheritedModel);
     return () => {
       cancelled = true;
+      currentModelRequest += 1;
       refreshModelsRef.current = async () => {};
+      refreshCurrentModelRef.current = async () => {};
       window.removeEventListener('focus', refreshModelsOnFocus);
+      window.removeEventListener(MODEL_SETTINGS_CHANGED_EVENT, refreshInheritedModel);
       clearInterval(teamInterval);
       clearInterval(retryInterval);
     };
@@ -427,6 +450,7 @@ const ChatWindowInstance = ({
     wasActiveChatRef.current = isActiveChat;
     if (wasActive || !isActiveChat) return;
     void refreshModelsRef.current(true);
+    void refreshCurrentModelRef.current();
     void refreshModelHealthRef.current(true);
   }, [isActiveChat]);
 

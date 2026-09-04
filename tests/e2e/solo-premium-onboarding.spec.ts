@@ -433,6 +433,11 @@ test.describe('Windows Solo premium first-run onboarding', () => {
       await armFirstFeedbackObserver(page);
       await armChatBodyCapture(page);
       await onboarding.getByRole('button', { name: /let's go/i }).click();
+      await expect(page).toHaveURL(new RegExp(`/workspaces/${workspaceId}/chat`));
+      const statusBarModel = page.getByTestId('statusbar-model');
+      await expect(statusBarModel).toContainText(/qwen/i, { timeout: 5_000 });
+      await expect(statusBarModel).not.toContainText(/claude/i);
+      await expect(page.getByRole('button', { name: /qwen.*(?:ready|checking)/i })).toBeVisible({ timeout: 5_000 });
       const [chatRequest, chatResponse, chatBody] = await Promise.all([
         chatRequestPromise,
         chatResponsePromise,
@@ -465,7 +470,6 @@ test.describe('Windows Solo premium first-run onboarding', () => {
       expect(typeof payload.sessionId).toBe('string');
       const sessionId = String(payload.sessionId);
 
-      await expect(page).toHaveURL(new RegExp(`/workspaces/${workspaceId}/chat`));
       const assistant = normalizeText(await readAssistantFromUi(page));
       expect(assistant).toBe(normalizeText(String(done.content ?? '')));
       expect(assistant).toContain(marker);
