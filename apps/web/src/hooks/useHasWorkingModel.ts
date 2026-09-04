@@ -11,6 +11,8 @@ export interface WorkingModelState {
   cloudReady: boolean;
   localReady: boolean;
   loading: boolean;
+  availability: 'checking' | 'ready' | 'unconfigured' | 'unavailable' | 'unknown';
+  selectedModelId: string | null;
   refresh: (receipt?: ModelReadinessReceipt) => void;
 }
 
@@ -20,10 +22,23 @@ export interface ModelReadinessReceipt {
 }
 
 export function useHasWorkingModel(): WorkingModelState {
-  const { providers, activeProviders, loading: providersLoading, refresh: refreshProviders } = useProviders();
+  const {
+    providers,
+    activeProviders,
+    loading: providersLoading,
+    error: providersError,
+    refresh: refreshProviders,
+  } = useProviders();
   const [localModelCount, setLocalModelCount] = useState(0);
   const [localLoading, setLocalLoading] = useState(true);
-  const [cloud, setCloud] = useState({ ready: false, loading: true });
+  const [localFailed, setLocalFailed] = useState(false);
+  const [cloud, setCloud] = useState<{
+    ready: boolean;
+    loading: boolean;
+    checked: boolean;
+    selectedModelId: string | null;
+    probeFailed: boolean;
+  }>({ ready: false, loading: true, checked: false, selectedModelId: null, probeFailed: false });
   const mounted = useRef(true);
   const localGeneration = useRef(0);
   const cloudGeneration = useRef(0);
@@ -40,51 +55,95 @@ export function useHasWorkingModel(): WorkingModelState {
     }
     try {
       const status = await adapter.getLocalInferenceStatus();
-      if (mounted.current && generation === localGeneration.current) setLocalModelCount(status?.totalLocalModels ?? 0);
+      if (mounted.current && generation === localGeneration.current) {
+        setLocalModelCount(status?.totalLocalModels ?? 0);
+        setLocalFailed(false);
+      }
     } catch {
-      if (mounted.current && generation === localGeneration.current) setLocalModelCount(0);
+      if (mounted.current && generation === localGeneration.current) {
+        setLocalModelCount(0);
+        setLocalFailed(true);
+      }
     } finally {
       if (mounted.current && generation === localGeneration.current) setLocalLoading(false);
     }
   }, []);
 
   const probeCloud = useCallback(async (providerRows: Provider[], generation: number) => {
-    const setCloudForGeneration = (next: { ready: boolean; loading: boolean }) => {
+    const setCloudForGeneration = (next: {
+      ready: boolean;
+      loading: boolean;
+      checked: boolean;
+      selectedModelId: string | null;
+      probeFailed: boolean;
+    }) => {
       if (mounted.current && generation === cloudGeneration.current) setCloud(next);
     };
     if (!mounted.current || generation !== cloudGeneration.current) return;
-    setCloudForGeneration({ ready: false, loading: true });
-
-    if (providerRows.length === 0) {
-      setCloudForGeneration({ ready: false, loading: false });
-      return;
-    }
+    setCloud(current => ({ ...current, ready: false, loading: true }));
 
     let defaultProbe: Awaited<ReturnType<typeof adapter.probeModel>> | null = null;
+    let defaultProbeFailed = false;
     try {
       defaultProbe = await adapter.probeModel();
     } catch {
       // An unavailable default-model probe falls back to the keyed providers.
+      defaultProbeFailed = true;
     }
     if (!mounted.current || generation !== cloudGeneration.current) return;
 
     if (defaultProbe?.configured) {
       if (defaultProbe.verified) {
-        setCloudForGeneration({ ready: true, loading: false });
+        setCloudForGeneration({
+          ready: true,
+          loading: false,
+          checked: true,
+          selectedModelId: defaultProbe.model,
+          probeFailed: false,
+        });
         return;
       }
       if (defaultProbe.rejected) {
-        setCloudForGeneration({ ready: false, loading: false });
+        setCloudForGeneration({
+          ready: false,
+          loading: false,
+          checked: true,
+          selectedModelId: defaultProbe.model,
+          probeFailed: false,
+        });
         return;
       }
       // A custom endpoint is user-supplied and may point at a transient or
       // stale service. Unlike a previously accepted keyed cloud provider, it
       // must answer the exact-model probe before onboarding can continue.
       if (defaultProbe.model?.startsWith('openai-compatible/')) {
-        setCloudForGeneration({ ready: false, loading: false });
+        setCloudForGeneration({
+          ready: false,
+          loading: false,
+          checked: true,
+          selectedModelId: defaultProbe.model,
+          probeFailed: false,
+        });
         return;
       }
-      setCloudForGeneration({ ready: true, loading: false });
+      setCloudForGeneration({
+        ready: true,
+        loading: false,
+        checked: true,
+        selectedModelId: defaultProbe.model,
+        probeFailed: false,
+      });
+      return;
+    }
+
+    if (providerRows.length === 0) {
+      setCloudForGeneration({
+        ready: false,
+        loading: false,
+        checked: true,
+        selectedModelId: defaultProbe?.model ?? null,
+        probeFailed: defaultProbeFailed,
+      });
       return;
     }
 
@@ -111,7 +170,13 @@ export function useHasWorkingModel(): WorkingModelState {
       || probes.some((probe) => probe.configured && probe.valid === false);
     const transient = outcomes.some((outcome) => outcome.status === 'rejected')
       || probes.some((probe) => probe.configured && probe.valid !== false);
-    setCloudForGeneration({ ready: verified || (!rejected && transient), loading: false });
+    setCloudForGeneration({
+      ready: verified || (!rejected && transient),
+      loading: false,
+      checked: true,
+      selectedModelId: compatibleOutcome?.model ?? defaultProbe?.model ?? null,
+      probeFailed: false,
+    });
   }, []);
 
   useEffect(() => {
@@ -147,11 +212,21 @@ export function useHasWorkingModel(): WorkingModelState {
     if (receipt?.verified && receipt.modelId) {
       explicitCloudRefresh.current = null;
       explicitProviders.current = null;
-      if (mounted.current) setCloud({ ready: true, loading: false });
+      if (mounted.current) {
+        setCloud({
+          ready: true,
+          loading: false,
+          checked: true,
+          selectedModelId: receipt.modelId,
+          probeFailed: false,
+        });
+      }
       return;
     }
     explicitCloudRefresh.current = generation;
-    if (mounted.current) setCloud({ ready: false, loading: true });
+    if (mounted.current) {
+      setCloud(current => ({ ...current, ready: false, loading: true }));
+    }
     void refreshLocal();
     void (async () => {
       const data = await refreshProviders();
@@ -167,12 +242,31 @@ export function useHasWorkingModel(): WorkingModelState {
 
   const cloudReady = cloud.ready;
   const localReady = localModelCount > 0;
+  const hasWorkingModel = cloudReady || localReady;
+  const loading = providersLoading || cloud.loading || localLoading;
+  const hasConfiguredProvider = providers.some((provider) => (
+    (provider.requiresKey && provider.hasKey)
+    || (provider.id === 'openai-compatible' && Boolean(provider.baseUrl?.trim()))
+  ));
+  const availability: WorkingModelState['availability'] = hasWorkingModel
+    ? 'ready'
+    : loading && !cloud.checked
+      ? 'checking'
+      : cloud.selectedModelId || hasConfiguredProvider
+        ? 'unavailable'
+        : providersError || localFailed || cloud.probeFailed
+          ? 'unknown'
+          : loading
+            ? 'checking'
+            : 'unconfigured';
 
   return {
-    hasWorkingModel: cloudReady || localReady,
+    hasWorkingModel,
     cloudReady,
     localReady,
-    loading: providersLoading || cloud.loading || localLoading,
+    loading,
+    availability,
+    selectedModelId: cloud.selectedModelId,
     refresh,
   };
 }

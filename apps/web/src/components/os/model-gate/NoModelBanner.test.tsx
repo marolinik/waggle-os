@@ -11,7 +11,14 @@ vi.mock('@/hooks/useHasWorkingModel', () => ({ useHasWorkingModel: mocks.useHasW
 import { NoModelBanner } from './NoModelBanner';
 
 const state = (over: Record<string, unknown> = {}) => ({
-  hasWorkingModel: false, cloudReady: false, localReady: false, loading: false, refresh: vi.fn(), ...over,
+  hasWorkingModel: false,
+  cloudReady: false,
+  localReady: false,
+  loading: false,
+  availability: 'unconfigured',
+  selectedModelId: null,
+  refresh: vi.fn(),
+  ...over,
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -32,8 +39,61 @@ describe('NoModelBanner (PR5 D2)', () => {
   });
 
   it('renders nothing while readiness is loading (no flash)', () => {
-    mocks.useHasWorkingModel.mockReturnValue(state({ loading: true }));
+    mocks.useHasWorkingModel.mockReturnValue(state({ loading: true, availability: 'checking' }));
     const { container } = render(<NoModelBanner onSetup={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('distinguishes a saved unavailable model and offers retry plus settings', () => {
+    const refresh = vi.fn();
+    const onSetup = vi.fn();
+    mocks.useHasWorkingModel.mockReturnValue(state({
+      availability: 'unavailable',
+      selectedModelId: 'openai-compatible/qwen3.8-flash-next',
+      refresh,
+    }));
+
+    render(<NoModelBanner onSetup={onSetup} />);
+
+    expect(screen.getByText(/qwen3\.8 flash next isn’t responding/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no model yet/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^retry$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /review model settings/i }));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(onSetup).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps unavailable recovery visible and disables duplicate retry while checking', () => {
+    mocks.useHasWorkingModel.mockReturnValue(state({
+      availability: 'unavailable',
+      selectedModelId: 'openai-compatible/qwen3.8-flash-next',
+      loading: true,
+    }));
+
+    render(<NoModelBanner onSetup={vi.fn()} />);
+
+    expect(screen.getByText(/qwen3\.8 flash next isn’t responding/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /checking/i })).toBeDisabled();
+  });
+
+  it('reports an unknown readiness check without claiming the user has no model', () => {
+    mocks.useHasWorkingModel.mockReturnValue(state({ availability: 'unknown' }));
+
+    render(<NoModelBanner onSetup={vi.fn()} />);
+
+    expect(screen.getByText(/couldn’t check your model/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no model yet/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps unknown recovery visible and prevents duplicate Retry while checking', () => {
+    mocks.useHasWorkingModel.mockReturnValue(state({
+      availability: 'unknown',
+      loading: true,
+    }));
+
+    render(<NoModelBanner onSetup={vi.fn()} />);
+
+    expect(screen.getByText(/couldn’t check your model/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /checking/i })).toBeDisabled();
   });
 });

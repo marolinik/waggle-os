@@ -66,8 +66,15 @@ describe('useHasWorkingModel', () => {
   it('no key and no local model → not ready', async () => {
     const { result } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false, localReady: false });
-    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
+    expect(result.current).toMatchObject({
+      hasWorkingModel: false,
+      cloudReady: false,
+      localReady: false,
+      availability: 'unconfigured',
+      selectedModelId: null,
+    });
+    expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.probeModel).toHaveBeenCalledWith();
   });
 
   it('a verified default model is ready without provider fallback', async () => {
@@ -132,10 +139,15 @@ describe('useHasWorkingModel', () => {
 
     const { result } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false });
+    expect(result.current).toMatchObject({
+      hasWorkingModel: false,
+      cloudReady: false,
+      availability: 'unavailable',
+      selectedModelId: 'openai-compatible/qwen3.8-flash-next',
+    });
   });
 
-  it('does not probe or trust a compatible provider backed only by a stale catalog', async () => {
+  it('uses the saved default probe to report an unavailable compatible model despite a stale catalog', async () => {
     mocks.adapter.getProviders.mockResolvedValue(providerRows({
       ...compatibleRow(),
       modelsSource: 'stale-provider-api',
@@ -143,13 +155,108 @@ describe('useHasWorkingModel', () => {
     mocks.adapter.probeModel.mockResolvedValue({
       model: 'openai-compatible/qwen3.8-flash-next',
       configured: true,
-      verified: true,
+      verified: false,
     });
 
     const { result } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current).toMatchObject({ hasWorkingModel: false, cloudReady: false });
-    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
+    expect(result.current).toMatchObject({
+      hasWorkingModel: false,
+      cloudReady: false,
+      availability: 'unavailable',
+      selectedModelId: 'openai-compatible/qwen3.8-flash-next',
+    });
+    expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.probeModel).toHaveBeenCalledWith();
+  });
+
+  it('reports unknown rather than no model when provider inventory fails', async () => {
+    mocks.adapter.getProviders.mockRejectedValue(new Error('providers offline'));
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current).toMatchObject({
+      hasWorkingModel: false,
+      availability: 'unknown',
+      selectedModelId: null,
+    });
+  });
+
+  it('reports unknown rather than no model when local inventory fails', async () => {
+    mocks.adapter.getLocalInferenceStatus.mockRejectedValue(new Error('local status offline'));
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current).toMatchObject({
+      hasWorkingModel: false,
+      availability: 'unknown',
+      selectedModelId: null,
+    });
+  });
+
+  it('reports unknown rather than no model when the default-model probe fails', async () => {
+    mocks.adapter.probeModel.mockRejectedValue(new Error('probe offline'));
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current).toMatchObject({
+      hasWorkingModel: false,
+      availability: 'unknown',
+      selectedModelId: null,
+    });
+  });
+
+  it('keeps a failed default-model check visible while Retry is pending', async () => {
+    const retryProbe = deferred<{ model: null; configured: false; verified: false }>();
+    mocks.adapter.probeModel
+      .mockRejectedValueOnce(new Error('probe offline'))
+      .mockReturnValueOnce(retryProbe.promise);
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current).toMatchObject({
+      loading: false,
+      availability: 'unknown',
+    }));
+
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(2));
+    expect(result.current).toMatchObject({ loading: true, availability: 'unknown' });
+
+    await act(async () => {
+      retryProbe.resolve({ model: null, configured: false, verified: false });
+    });
+    await waitFor(() => expect(result.current).toMatchObject({
+      loading: false,
+      availability: 'unconfigured',
+    }));
+  });
+
+  it('keeps a failed local inventory check visible while Retry is pending', async () => {
+    const retryLocal = deferred<{ servers: never[]; ollamaInstalled: false; totalLocalModels: 0 }>();
+    mocks.adapter.getLocalInferenceStatus
+      .mockRejectedValueOnce(new Error('local status offline'))
+      .mockReturnValueOnce(retryLocal.promise);
+
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current).toMatchObject({
+      loading: false,
+      availability: 'unknown',
+    }));
+
+    act(() => { result.current.refresh(); });
+    await waitFor(() => expect(mocks.adapter.getLocalInferenceStatus).toHaveBeenCalledTimes(2));
+    expect(result.current).toMatchObject({ loading: true, availability: 'unknown' });
+
+    await act(async () => {
+      retryLocal.resolve({ servers: [], ollamaInstalled: false, totalLocalModels: 0 });
+    });
+    await waitFor(() => expect(result.current).toMatchObject({
+      loading: false,
+      availability: 'unconfigured',
+    }));
   });
 
   it('a rejected default model blocks a keyed provider', async () => {
@@ -238,7 +345,8 @@ describe('useHasWorkingModel', () => {
     const { result } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current).toMatchObject({ cloudReady: false, localReady: true, hasWorkingModel: true });
-    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
+    expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.probeModel).toHaveBeenCalledWith();
   });
 
   it('a local-inference probe failure degrades to no local model', async () => {
@@ -293,6 +401,7 @@ describe('useHasWorkingModel', () => {
     const { result } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.hasWorkingModel).toBe(false);
+    const probesBeforeReceipt = mocks.adapter.probeModel.mock.calls.length;
 
     act(() => { result.current.refresh({ modelId: model, verified: true }); });
 
@@ -301,7 +410,7 @@ describe('useHasWorkingModel', () => {
       hasWorkingModel: true,
       cloudReady: true,
     }));
-    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
+    expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(probesBeforeReceipt);
     expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
   });
 
@@ -411,9 +520,10 @@ describe('useHasWorkingModel', () => {
       .mockReturnValueOnce(refreshProviders.promise);
     const { result, unmount } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.loading).toBe(false));
+    const probesBeforeRefresh = mocks.adapter.probeModel.mock.calls.length;
     act(() => { result.current.refresh(); });
     unmount();
     await act(async () => { refreshProviders.resolve(providerRows({ id: 'p0', hasKey: true, requiresKey: true })); });
-    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
+    expect(mocks.adapter.probeModel).toHaveBeenCalledTimes(probesBeforeRefresh);
   });
 });
