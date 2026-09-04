@@ -29,7 +29,12 @@ import { stashDeepLink } from '@/lib/app-deeplink';
 import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt, readLoginBriefingDismissed, readSkipBriefingParam } from '@/lib/login-briefing';
 import { prefetchBriefing, computeAwayDays, BRIEFING_ABSENCE_DAYS } from '@/lib/briefing-source';
 import { homeCacheExists } from '@/lib/home-cache';
-import { resolveReturningUserOnboarding, isOnboardingStatusKnownSync } from '@/hooks/useOnboarding';
+import {
+  resolveReturningUserOnboarding,
+  revalidateReturningUserOnboarding,
+  isOnboardingStatusKnownSync,
+} from '@/hooks/useOnboarding';
+import { isTauri, listenDesktopServiceLifecycle } from '@/lib/tauri-bindings';
 import { shouldShowCoachMarks, readOnboardedThisSession, readForceTour, clearForceTour } from '@/lib/coach-marks-gate';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
@@ -71,6 +76,220 @@ const TrialExpiredModal = lazy(() => import('./overlays/TrialExpiredModal'));
 const deferredShellElement = (element: ReactNode) => (
   <Suspense fallback={null}>{element}</Suspense>
 );
+
+export const OnboardingRecoveryNotice = ({
+  retrying,
+  onRetry,
+}: {
+  retrying: boolean;
+  onRetry: () => void;
+}) => (
+  <section
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+    aria-busy={retrying}
+    className="fixed bottom-8 left-1/2 z-[10000] w-[min(92vw,30rem)] -translate-x-1/2 rounded-2xl border border-border/80 bg-background/95 p-5 text-center shadow-2xl backdrop-blur"
+    onClick={(event) => event.stopPropagation()}
+  >
+    <h2 className="text-sm font-semibold text-foreground">Waiting for your local Waggle service</h2>
+    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+      Your workspace stays protected until Waggle confirms the active profile.
+    </p>
+    <button
+      type="button"
+      disabled={retrying}
+      onClick={onRetry}
+      className="mt-4 min-h-10 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait disabled:opacity-60"
+    >
+      {retrying ? 'Retrying…' : 'Retry Connection'}
+    </button>
+  </section>
+);
+
+type OnboardingProfileGateResolution = 'checking' | 'confirmed' | 'unavailable';
+
+/**
+ * Keeps provisional browser state behind the neutral boot surface until the
+ * active service generation confirms its logical profile. This gate lives
+ * above ShellProvider so it can recover even while the workspace UI is hidden.
+ */
+// Exported solely as the executable AppShell gate seam; production has one owner.
+// eslint-disable-next-line react-refresh/only-export-components
+export const useOnboardingProfileGate = () => {
+  const [tauriMode] = useState(isTauri);
+  const [knownSynchronously] = useState(isOnboardingStatusKnownSync);
+  const [resolution, setResolution] = useState<OnboardingProfileGateResolution>(
+    knownSynchronously && !tauriMode ? 'confirmed' : 'checking',
+  );
+  const [recoveryVisible, setRecoveryVisible] = useState(false);
+  const mountedRef = useRef(false);
+  const resolutionRef = useRef<OnboardingProfileGateResolution>(resolution);
+  const runIdRef = useRef(0);
+  const timeoutRef = useRef<number | null>(null);
+  const successfulConnectSeenRef = useRef(false);
+  const tauriRestartPendingRef = useRef(false);
+  const lifecycleReadyRef = useRef(!tauriMode);
+  const lifecycleRegistrationPendingRef = useRef(false);
+  const lifecycleRegistrationIdRef = useRef(0);
+  const lifecycleDisposeRef = useRef<(() => void) | null>(null);
+
+  const clearGateTimeout = useCallback(() => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  const publishResolution = useCallback((next: OnboardingProfileGateResolution) => {
+    resolutionRef.current = next;
+    setResolution(next);
+    if (next === 'unavailable') setRecoveryVisible(true);
+    if (next === 'confirmed') setRecoveryVisible(false);
+  }, []);
+
+  const beginProtectedHold = useCallback(() => {
+    const runId = ++runIdRef.current;
+    clearGateTimeout();
+    publishResolution('checking');
+    timeoutRef.current = window.setTimeout(() => {
+      if (mountedRef.current && runIdRef.current === runId) publishResolution('unavailable');
+    }, 3000);
+    return runId;
+  }, [clearGateTimeout, publishResolution]);
+
+  const runProfileCheck = useCallback((forceGeneration = false, replaceInFlight = false) => {
+    const runId = beginProtectedHold();
+    const request = forceGeneration
+      ? revalidateReturningUserOnboarding(replaceInFlight)
+      : resolveReturningUserOnboarding();
+    void request.then((result) => {
+      if (!mountedRef.current || runIdRef.current !== runId) return;
+      clearGateTimeout();
+      publishResolution(result === 'confirmed' ? 'confirmed' : 'unavailable');
+    });
+  }, [beginProtectedHold, clearGateTimeout, publishResolution]);
+
+  const registerTauriLifecycle = useCallback((replaceInFlight = false) => {
+    if (!tauriMode || lifecycleReadyRef.current) return;
+    if (lifecycleRegistrationPendingRef.current && !replaceInFlight) return;
+    const registrationId = ++lifecycleRegistrationIdRef.current;
+    lifecycleRegistrationPendingRef.current = true;
+    beginProtectedHold();
+    void listenDesktopServiceLifecycle((event) => {
+      if (!mountedRef.current || lifecycleRegistrationIdRef.current !== registrationId) return;
+      if (event.status === 'restarting') {
+        tauriRestartPendingRef.current = true;
+        beginProtectedHold();
+      } else if (event.status === 'ready' && tauriRestartPendingRef.current) {
+        tauriRestartPendingRef.current = false;
+        successfulConnectSeenRef.current = true;
+        runProfileCheck(true, true);
+      } else if (event.status === 'failed') {
+        tauriRestartPendingRef.current = false;
+        runIdRef.current += 1;
+        clearGateTimeout();
+        publishResolution('unavailable');
+      }
+    }).then((unlisten) => {
+      if (!mountedRef.current || lifecycleRegistrationIdRef.current !== registrationId) {
+        unlisten();
+        return;
+      }
+      lifecycleRegistrationPendingRef.current = false;
+      lifecycleReadyRef.current = true;
+      lifecycleDisposeRef.current?.();
+      lifecycleDisposeRef.current = unlisten;
+      runProfileCheck(true, true);
+    }).catch(() => {
+      if (!mountedRef.current || lifecycleRegistrationIdRef.current !== registrationId) return;
+      lifecycleRegistrationPendingRef.current = false;
+      lifecycleReadyRef.current = false;
+      runIdRef.current += 1;
+      clearGateTimeout();
+      publishResolution('unavailable');
+    });
+  }, [
+    beginProtectedHold,
+    clearGateTimeout,
+    publishResolution,
+    runProfileCheck,
+    tauriMode,
+  ]);
+
+  const retryGate = useCallback(() => {
+    if (tauriMode && !lifecycleReadyRef.current) {
+      registerTauriLifecycle(resolutionRef.current === 'unavailable');
+      return;
+    }
+    runProfileCheck(true, resolutionRef.current === 'unavailable');
+  }, [registerTauriLifecycle, runProfileCheck, tauriMode]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    if (tauriMode) registerTauriLifecycle();
+    else if (!knownSynchronously) runProfileCheck(true, true);
+    return () => {
+      mountedRef.current = false;
+      runIdRef.current += 1;
+      lifecycleRegistrationIdRef.current += 1;
+      lifecycleRegistrationPendingRef.current = false;
+      lifecycleReadyRef.current = !tauriMode;
+      lifecycleDisposeRef.current?.();
+      lifecycleDisposeRef.current = null;
+      clearGateTimeout();
+    };
+  }, [clearGateTimeout, knownSynchronously, registerTauriLifecycle, runProfileCheck, tauriMode]);
+
+  // ServiceProvider emits one initial success after boot. It confirms transport,
+  // not a new profile generation, so ignore it when the initial profile probe
+  // already succeeded. Later successes (or the first success after an offline
+  // boot) trigger exactly one profile check here—not in useOnboarding.
+  useEffect(() => {
+    const onConnectSettled = (event: Event) => {
+      const connected = (event as CustomEvent<{ connected?: boolean }>).detail?.connected === true;
+      if (!connected) return;
+      // In Tauri, the managed lifecycle listener is the sole generation owner.
+      // A queued transport-success event may belong to the endpoint being
+      // replaced, so it must never reopen or re-probe the protected shell.
+      if (tauriMode) return;
+      const seenBefore = successfulConnectSeenRef.current;
+      successfulConnectSeenRef.current = true;
+      if (!seenBefore && resolutionRef.current === 'confirmed') return;
+      runProfileCheck(true, resolutionRef.current === 'unavailable');
+    };
+    window.addEventListener('waggle:connect-settled', onConnectSettled);
+    return () => window.removeEventListener('waggle:connect-settled', onConnectSettled);
+  }, [runProfileCheck, tauriMode]);
+
+  // Recovery must not depend on ShellProvider because the shell is deliberately
+  // unmounted while profile identity is unknown. Keep manual Retry as a fast
+  // fallback, but also recover when the browser returns online/focused or after
+  // a bounded quiet interval.
+  useEffect(() => {
+    if (resolution !== 'unavailable' || knownSynchronously) return undefined;
+    const retry = () => retryGate();
+    const retryWhenVisible = () => {
+      if (document.visibilityState === 'visible') retry();
+    };
+    const timer = window.setTimeout(retry, 5000);
+    window.addEventListener('online', retry);
+    window.addEventListener('focus', retry);
+    document.addEventListener('visibilitychange', retryWhenVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('online', retry);
+      window.removeEventListener('focus', retry);
+      document.removeEventListener('visibilitychange', retryWhenVisible);
+    };
+  }, [knownSynchronously, resolution, retryGate]);
+
+  return {
+    resolution,
+    recoveryVisible,
+    retry: retryGate,
+  };
+};
 
 /**
  * F32: workspace sub-tab → breadcrumb label. Mirrors WorkspaceRoute.WS_TABS +
@@ -800,21 +1019,16 @@ const AppShell = () => {
   // server-onboarded user whose webview localStorage is fresh — the P4
   // /api/onboarding/status probe only resolves AFTER the shell mounts, so the
   // wizard paints before the auto-complete lands. Hold boot until the decision
-  // is KNOWN: sync when localStorage already settles it, else probe the server
-  // (capped so a dead endpoint can't brick boot — 3s, inside the boot screen's
-  // own 3-4s runtime, because a 1.5s cap still let the wizard flash on a cold
-  // dev server where the status roundtrip runs long). resolveReturningUser-
-  // Onboarding persists the completed flag so useOnboarding reads it
-  // synchronously and never renders the wizard for an onboarded user.
-  const [onboardingResolved, setOnboardingResolved] = useState(isOnboardingStatusKnownSync);
-  useEffect(() => {
-    if (onboardingResolved) return;
-    let settled = false;
-    const finish = () => { if (!settled) { settled = true; setOnboardingResolved(true); } };
-    void resolveReturningUserOnboarding().finally(finish);
-    const cap = window.setTimeout(finish, 3000);
-    return () => window.clearTimeout(cap);
-  }, [onboardingResolved]);
+  // is KNOWN: sync only for explicit test overrides; all ordinary cached
+  // progress is provisional and reconciled with the current server profile
+  // After 3s, expose a clear recovery action while keeping provisional cache
+  // behind the neutral boot surface. A timeout is not profile confirmation.
+  const {
+    resolution: onboardingResolution,
+    recoveryVisible: onboardingRecoveryVisible,
+    retry: retryOnboardingResolution,
+  } = useOnboardingProfileGate();
+  const onboardingResolved = onboardingResolution === 'confirmed';
 
   const [booted, setBooted] = useState(initialBooted);
   const [showShell, setShowShell] = useState(() => initialBooted && isOnboardingStatusKnownSync());
@@ -823,11 +1037,12 @@ const AppShell = () => {
   // day-0 launch (nothing cached to paint) keeps the full brand moment.
   const [warmBoot] = useState(() => initialBooted && homeCacheExists());
 
-  // Fast path with no BootScreen to animate out (already booted this session):
-  // reveal the shell once onboarding resolves, since onExitComplete never fires.
+  // A service-generation change must revoke the old shell immediately. Once
+  // the replacement profile is confirmed, AnimatePresence restores the shell
+  // only after the neutral boot surface has completed its exit.
   useEffect(() => {
-    if (initialBooted && onboardingResolved) setShowShell(true);
-  }, [initialBooted, onboardingResolved]);
+    if (!onboardingResolved) setShowShell(false);
+  }, [onboardingResolved]);
 
   const handleBootComplete = () => {
     localStorage.setItem(BOOT_KEY, 'true');
@@ -850,7 +1065,13 @@ const AppShell = () => {
       <AnimatePresence onExitComplete={() => setShowShell(true)}>
         {!bootComplete && <BootScreen onComplete={handleBootComplete} ready={onboardingResolved} warm={warmBoot} />}
       </AnimatePresence>
-      {showShell && (
+      {!onboardingResolved && onboardingRecoveryVisible && (
+        <OnboardingRecoveryNotice
+          retrying={onboardingResolution === 'checking'}
+          onRetry={retryOnboardingResolution}
+        />
+      )}
+      {showShell && onboardingResolved && (
         <ShellProvider>
           <ShellLayout />
         </ShellProvider>

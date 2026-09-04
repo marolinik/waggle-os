@@ -204,6 +204,9 @@ async function readAssistantFromUi(page: Page): Promise<string> {
 test.describe('Windows Solo premium first-run onboarding', () => {
   test.skip(!RUN_LIVE_SOLO_CHAT, 'Set WAGGLE_E2E_SOLO_CHAT=1 to run the real local-model journey.');
   test.setTimeout(600_000);
+  // A retry would reuse the same already-onboarded server process/data dir and
+  // no longer exercise a first-run journey. This gate owns one clean lifetime.
+  test.describe.configure({ retries: 0 });
 
   test.beforeAll(async () => {
     if (!USE_LOCAL_STUB) return;
@@ -265,18 +268,27 @@ test.describe('Windows Solo premium first-run onboarding', () => {
     localStub = null;
   });
 
-  test('takes a brand-new user from welcome to a complete Qwen answer', async ({ page }) => {
+  test('takes a fresh data dir past stale browser state to a complete Qwen answer', async ({ page }) => {
     const marker = `WAGGLE_READY_${randomUUID().slice(0, 8)}`;
     const firstTask = `Create a concise three-step checklist for starting a Solo product launch. Use three numbered or bulleted lines and end with ${marker}. Do not use tools.`;
     const consoleErrors: string[] = [];
+    const expectedRecoveryConsoleErrors: string[] = [];
     const pageErrors: string[] = [];
     const requestFailures: string[] = [];
     let workspaceId: string | null = null;
     let sessionToken: string | null = null;
+    let onboardingStatusAttempts = 0;
+    let injectedOnboardingFailures = 0;
+    let releaseOnboardingStatus = false;
     const startedAt = Date.now();
 
     page.on('console', message => {
-      if (message.type() === 'error') consoleErrors.push(message.text());
+      if (message.type() !== 'error') return;
+      if (message.text() === 'Failed to load resource: net::ERR_CONNECTION_REFUSED') {
+        expectedRecoveryConsoleErrors.push(message.text());
+        return;
+      }
+      consoleErrors.push(message.text());
     });
     page.on('pageerror', error => pageErrors.push(error.message));
     page.on('requestfailed', request => {
@@ -289,22 +301,77 @@ test.describe('Windows Solo premium first-run onboarding', () => {
         requestFailures.push(`${request.method()} ${pathname}: ${failure}`);
       }
     });
+    page.on('request', request => {
+      if (request.method() === 'GET' && pathOf(request.url()) === '/api/onboarding/status') {
+        onboardingStatusAttempts += 1;
+      }
+    });
 
     try {
       await page.addInitScript(() => {
         localStorage.clear();
+        localStorage.setItem('waggle:onboarding', JSON.stringify({
+          completed: true,
+          step: 7,
+          tier: 'simple',
+          workspaceId: 'stale-workspace',
+        }));
+        localStorage.setItem('waggle:tooltips_done', 'true');
         sessionStorage.clear();
       });
+      await page.route('**/api/onboarding/status', async route => {
+        if (releaseOnboardingStatus) {
+          await route.continue();
+          return;
+        }
+        injectedOnboardingFailures += 1;
+        await route.abort('connectionrefused');
+      });
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      const recovery = page.getByRole('status').filter({
+        hasText: 'Waiting for your local Waggle service',
+      });
+      await expect(recovery).toBeVisible({ timeout: 30_000 });
+      await expect(recovery).toContainText(
+        'Your workspace stays protected until Waggle confirms the active profile.',
+      );
+      await expect(page.getByRole('region', { name: 'Waggle onboarding' })).toHaveCount(0);
+      expect(JSON.parse(await page.evaluate(() => (
+        localStorage.getItem('waggle:onboarding') ?? '{}'
+      )))).toMatchObject({
+        completed: true,
+        step: 7,
+        workspaceId: 'stale-workspace',
+      });
+      expect(onboardingStatusAttempts).toBeGreaterThanOrEqual(1);
+
       const firstStatusResponsePromise = page.waitForResponse(response => (
         response.request().method() === 'GET' && pathOf(response.url()) === '/api/onboarding/status'
       ));
-      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      const retryConnection = recovery.getByRole('button', { name: 'Retry Connection' });
+      await expect(retryConnection).toBeEnabled();
+      releaseOnboardingStatus = true;
+      await retryConnection.click();
       const firstStatusResponse = await firstStatusResponsePromise;
       expect(firstStatusResponse.ok(), await firstStatusResponse.text().catch(() => '')).toBe(true);
-      expect(await firstStatusResponse.json()).toMatchObject({ completed: false, source: 'none' });
+      const firstStatus = await firstStatusResponse.json() as {
+        completed: boolean;
+        source: string;
+        profileId?: string;
+      };
+      expect(firstStatus).toMatchObject({ completed: false, source: 'none' });
+      expect(firstStatus.profileId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      await expect(recovery).toHaveCount(0);
+      expect(onboardingStatusAttempts).toBeGreaterThanOrEqual(2);
 
       const onboarding = page.getByRole('region', { name: 'Waggle onboarding' });
       await expect(onboarding).toBeVisible({ timeout: 30_000 });
+      expect(JSON.parse(await page.evaluate(() => (
+        localStorage.getItem('waggle:onboarding') ?? '{}'
+      )))).toEqual({ completed: false, step: 0, profileId: firstStatus.profileId });
+      expect(await page.evaluate(() => localStorage.getItem('waggle:tooltips_done'))).toBeNull();
       sessionToken = await readBrowserSessionToken(page);
       const auth = { Authorization: `Bearer ${sessionToken}` };
 
@@ -426,8 +493,14 @@ test.describe('Windows Solo premium first-run onboarding', () => {
 
       const completedStatus = await page.request.get('/api/onboarding/status', { headers: auth });
       expect(completedStatus.ok(), await completedStatus.text().catch(() => '')).toBe(true);
-      expect(await completedStatus.json()).toMatchObject({ completed: true, source: 'flag' });
+      expect(await completedStatus.json()).toMatchObject({
+        completed: true,
+        source: 'flag',
+        profileId: firstStatus.profileId,
+      });
       expect(Date.now() - startedAt).toBeLessThan(180_000);
+      expect(injectedOnboardingFailures).toBeGreaterThanOrEqual(1);
+      expect(expectedRecoveryConsoleErrors).toHaveLength(injectedOnboardingFailures);
       expect(pageErrors).toEqual([]);
       expect(requestFailures).toEqual([]);
       expect(consoleErrors).toEqual([]);
