@@ -14,9 +14,8 @@ import { FrameStore, type MindDB } from '@waggle/core';
  * confirmed in P4). The workspace count can't distinguish "returning user"
  * from "boot-seeded stub"; this surface can:
  *
- *  - the completion FLAG (`<dataDir>/first-launch.flag` — the SAME file the
- *    Tauri `mark_first_launch_complete` command writes for default installs)
- *    is stamped by POST /api/onboarding/complete when any client finishes the
+ *  - the completion FLAG (`<dataDir>/first-launch.flag`) is stamped by the
+ *    profile-bound POST /api/onboarding/complete when a client finishes the
  *    wizard, and
  *  - LEGACY EVIDENCE covers installs that predate the flag: real usage in the
  *    personal mind (any frame) or user-created workspaces beyond the seeded
@@ -145,9 +144,34 @@ export const onboardingRoutes: FastifyPluginAsync = async (server) => {
     return status(false, 'none');
   });
 
-  // Idempotent completion stamp. The wizard's complete() fires this alongside
-  // the Tauri filesystem flag (which only covers default ~/.waggle installs).
-  server.post('/api/onboarding/complete', async () => {
+  // Idempotent completion stamp. The profile precondition is checked by the
+  // server that will write the flag, so an in-flight desktop endpoint switch
+  // can never stamp a replacement dataDir complete.
+  server.post('/api/onboarding/complete', async (request, reply) => {
+    const expectedProfileId = (
+      request.body as { expectedProfileId?: unknown } | undefined
+    )?.expectedProfileId;
+    if (typeof expectedProfileId !== 'string' || !PROFILE_ID_PATTERN.test(expectedProfileId)) {
+      return reply.code(400).send({
+        error: 'ONBOARDING_PROFILE_REQUIRED',
+        message: 'A valid onboarding profile is required.',
+      });
+    }
+
+    const activeProfileId = readOrCreateProfileId(server.multiMind.personal);
+    if (!activeProfileId) {
+      return reply.code(503).send({
+        error: 'ONBOARDING_PROFILE_UNAVAILABLE',
+        message: 'The active onboarding profile is unavailable.',
+      });
+    }
+    if (activeProfileId !== expectedProfileId) {
+      return reply.code(409).send({
+        error: 'ONBOARDING_PROFILE_CHANGED',
+        message: 'The active onboarding profile changed. Retry onboarding status.',
+      });
+    }
+
     fs.mkdirSync(server.localConfig.dataDir, { recursive: true });
     fs.writeFileSync(flagPath(), new Date().toISOString());
     try { fs.unlinkSync(pendingPath()); } catch { /* never stamped — fine */ }

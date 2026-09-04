@@ -860,9 +860,13 @@ class LocalAdapter {
     return res.json();
   }
 
-  /** Idempotent completion stamp (`<dataDir>/first-launch.flag`). */
-  async markOnboardingComplete(): Promise<void> {
-    await this.fetch('/api/onboarding/complete', { method: 'POST' });
+  /** Idempotent completion stamp, bound to the server-issued logical profile. */
+  async markOnboardingComplete(expectedProfileId: string): Promise<void> {
+    const res = await this.fetch('/api/onboarding/complete', {
+      method: 'POST',
+      body: JSON.stringify({ expectedProfileId }),
+    });
+    if (!res.ok) throw new Error(`markOnboardingComplete failed: ${res.status}`);
   }
 
   // --- Workspaces ---

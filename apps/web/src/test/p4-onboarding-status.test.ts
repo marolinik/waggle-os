@@ -16,12 +16,13 @@ const mocks = vi.hoisted(() => ({
   },
   isTauri: vi.fn(() => false),
   tauriIsFirstLaunch: vi.fn().mockResolvedValue(true),
+  tauriMarkFirstLaunchComplete: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 vi.mock('@/lib/tauri-bindings', () => ({
   isTauri: mocks.isTauri,
   isFirstLaunch: mocks.tauriIsFirstLaunch,
-  markFirstLaunchComplete: vi.fn().mockResolvedValue(undefined),
+  markFirstLaunchComplete: mocks.tauriMarkFirstLaunchComplete,
 }));
 
 const PROFILE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -35,6 +36,7 @@ describe('useOnboarding clean-install gate (P4)', () => {
     mocks.adapter.markOnboardingComplete.mockReset().mockResolvedValue(undefined);
     mocks.isTauri.mockReset().mockReturnValue(false);
     mocks.tauriIsFirstLaunch.mockReset().mockResolvedValue(true);
+    mocks.tauriMarkFirstLaunchComplete.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -351,7 +353,7 @@ describe('useOnboarding clean-install gate (P4)', () => {
     expect(result.current.state).toEqual({ completed: false, step: 0, profileId: PROFILE_A });
   });
 
-  it('SAME PROFILE COMPLETION: a missing server flag preserves choices without an unbound repair write', async () => {
+  it('SAME PROFILE COMPLETION: a missing server flag repairs only the bound logical profile', async () => {
     const cached = {
       completed: true,
       step: 7,
@@ -371,7 +373,7 @@ describe('useOnboarding clean-install gate (P4)', () => {
     await resolveReturningUserOnboarding();
 
     expect(JSON.parse(localStorage.getItem('waggle:onboarding') ?? '{}')).toEqual(cached);
-    expect(mocks.adapter.markOnboardingComplete).not.toHaveBeenCalled();
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
   });
 
   it('SAME PROFILE FLAG: authoritative completion advances a stale mid-wizard cache', async () => {
@@ -718,6 +720,50 @@ describe('useOnboarding clean-install gate (P4)', () => {
     act(() => { result.current.complete(); });
 
     expect(result.current.state.completed).toBe(true);
-    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledTimes(1);
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
+  });
+
+  it('TAURI COMPLETION: uses the profile-bound server stamp and never writes the identity-free Rust marker', async () => {
+    mocks.isTauri.mockReturnValue(true);
+    mocks.adapter.getOnboardingStatus.mockResolvedValue({ completed: false, source: 'none', profileId: PROFILE_A });
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(result.current.state.profileId).toBe(PROFILE_A));
+    act(() => { result.current.complete(); });
+
+    expect(mocks.adapter.markOnboardingComplete).toHaveBeenCalledWith(PROFILE_A);
+    expect(mocks.tauriMarkFirstLaunchComplete).not.toHaveBeenCalled();
+  });
+
+  it('TAURI UNBOUND COMPLETION: writes neither completion surface without an active profile', async () => {
+    mocks.isTauri.mockReturnValue(true);
+    mocks.adapter.getOnboardingStatus.mockResolvedValue({ completed: false, source: 'none' });
+    const { useOnboarding } = await import('@/hooks/useOnboarding');
+    const { result } = renderHook(() => useOnboarding());
+
+    await waitFor(() => expect(mocks.adapter.getOnboardingStatus).toHaveBeenCalled());
+    act(() => { result.current.complete(); });
+
+    expect(mocks.adapter.markOnboardingComplete).not.toHaveBeenCalled();
+    expect(mocks.tauriMarkFirstLaunchComplete).not.toHaveBeenCalled();
+  });
+
+  it('ADAPTER COMPLETION: serializes the bound profile and rejects non-success responses', async () => {
+    const { default: LocalAdapter } = await vi.importActual<typeof import('@/lib/adapter')>(
+      '@/lib/adapter',
+    );
+    const localAdapter = new LocalAdapter('http://example.invalid');
+    const fetchSpy = vi.spyOn(localAdapter, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 409 }));
+
+    await expect(localAdapter.markOnboardingComplete(PROFILE_A)).resolves.toBeUndefined();
+    expect(fetchSpy).toHaveBeenNthCalledWith(1, '/api/onboarding/complete', {
+      method: 'POST',
+      body: JSON.stringify({ expectedProfileId: PROFILE_A }),
+    });
+    await expect(localAdapter.markOnboardingComplete(PROFILE_A))
+      .rejects.toThrow('markOnboardingComplete failed: 409');
   });
 });

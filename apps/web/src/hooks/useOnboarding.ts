@@ -5,7 +5,6 @@ import { ONBOARDED_THIS_SESSION_KEY, COACH_MARKS_FORCE_KEY } from '@/lib/coach-m
 import {
   isTauri,
   isFirstLaunch as tauriIsFirstLaunch,
-  markFirstLaunchComplete as tauriMarkFirstLaunchComplete,
 } from '@/lib/tauri-bindings';
 
 export interface OnboardingState {
@@ -210,11 +209,13 @@ export async function resolveReturningUserOnboarding(): Promise<OnboardingReconc
       } else if (status?.completed === false) {
         if (sameProfile && currentState.completed) {
           // Preserve browser choices only when they belong to this exact
-          // logical profile. Do not issue an unbound repair write here: a
-          // desktop generation switch could otherwise stamp a replacement
-          // profile complete. The profile-bound completion phase repairs this
-          // durably through an atomic server precondition.
+          // logical profile, then repair the missing durable flag. The server
+          // compares this profile id immediately before writing, so a desktop
+          // generation switch fails with 409 instead of stamping a replacement.
           saveState({ ...currentState, profileId });
+          void adapter.markOnboardingComplete(profileId).catch((err) => {
+            console.warn('[useOnboarding] profile-bound completion repair failed:', err);
+          });
         } else {
           localStorage.removeItem('waggle:tooltips_done');
           saveState({ ...defaultState, profileId });
@@ -387,19 +388,15 @@ export const useOnboarding = () => {
         try {
           sessionStorage.setItem(ONBOARDED_THIS_SESSION_KEY, '1');
         } catch { /* storage disabled — the completedAt window still covers first-run */ }
-        // P4: stamp the server-side completion flag — the durable signal the
-        // auto-complete effect above keys on. Fire-and-forget; failure is
-        // non-fatal (localStorage still says completed for this webview).
-        adapter.markOnboardingComplete().catch((err) => {
-          console.warn('[useOnboarding] markOnboardingComplete failed:', err);
-        });
-        // CC Sesija A §2.3 A11: Tauri filesystem flag too (default ~/.waggle
-        // installs share the same file; the IPC path works even when the
-        // sidecar is mid-restart).
-        if (isTauri()) {
-          tauriMarkFirstLaunchComplete().catch((err) => {
-            console.warn('[useOnboarding] markFirstLaunchComplete failed:', err);
+        // P4: stamp the durable server flag only when this browser state is
+        // bound to a server-issued profile. The server enforces the same id
+        // atomically; the identity-free Rust marker must not bypass it.
+        if (typeof stamped.profileId === 'string' && PROFILE_ID_PATTERN.test(stamped.profileId)) {
+          adapter.markOnboardingComplete(stamped.profileId).catch((err) => {
+            console.warn('[useOnboarding] profile-bound completion failed:', err);
           });
+        } else {
+          console.warn('[useOnboarding] completion is not bound to an active profile');
         }
       }
       return stamped;
