@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
 const RUN_LIVE_SOLO_AGENT = process.env.WAGGLE_E2E_SOLO_AGENT === '1';
+const OWNS_ISOLATED_SERVER = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER === '0';
+const ENDPOINT = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_BASE_URL
+  ?? 'http://10.33.0.153:4000/v1';
 const MODEL = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_MODEL
   ?? 'openai-compatible/qwen3.8-flash-next';
 const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&skipBriefing=true&tier=simple';
@@ -29,7 +32,10 @@ function normalizeText(value: string): string {
 }
 
 test.describe('Windows Solo premium saved-agent journey', () => {
-  test.skip(!RUN_LIVE_SOLO_AGENT, 'Set WAGGLE_E2E_SOLO_AGENT=1 to run the real local-model agent journey.');
+  test.skip(
+    !RUN_LIVE_SOLO_AGENT || !OWNS_ISOLATED_SERVER,
+    'Set WAGGLE_E2E_SOLO_AGENT=1 and WAGGLE_E2E_REUSE_EXISTING_SERVER=0; this journey must own its disposable Waggle data dir.',
+  );
   test.setTimeout(600_000);
 
   test('creates a Qwen agent, follows live progress, and opens its complete chat result', async ({ page }) => {
@@ -56,15 +62,48 @@ test.describe('Windows Solo premium saved-agent journey', () => {
     page.on('pageerror', error => pageErrors.push(error.message));
 
     try {
-      await page.goto(`/agents?${SKIP_PARAMS}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`/settings?${SKIP_PARAMS}`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
       token = await readBrowserSessionToken(page);
+
+      const onboardingStatusResponse = await page.request.get('/api/onboarding/status', {
+        headers: authHeaders(token),
+      });
+      expect(onboardingStatusResponse.ok(), await onboardingStatusResponse.text().catch(() => '')).toBe(true);
+      const onboardingStatus = await onboardingStatusResponse.json() as { profileId?: string };
+      expect(onboardingStatus.profileId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      const onboardingCompleteResponse = await page.request.post('/api/onboarding/complete', {
+        data: { expectedProfileId: onboardingStatus.profileId },
+        headers: authHeaders(token),
+      });
+      expect(onboardingCompleteResponse.ok(), await onboardingCompleteResponse.text().catch(() => '')).toBe(true);
+
+      await page.getByRole('button', { name: /openai-compatible/i }).click();
+      await page.getByLabel('Endpoint URL').fill(ENDPOINT);
+      await page.getByRole('button', { name: 'Discover models' }).click();
+      const discoveredModel = page.getByRole('combobox', { name: 'Model', exact: true });
+      await expect(discoveredModel).toBeVisible({ timeout: 60_000 });
+      await discoveredModel.selectOption(MODEL);
+      await page.getByRole('button', { name: 'Verify & save' }).click();
+      await expect(page.getByRole('status').filter({
+        hasText: 'Verified and saved. This model is now your primary model.',
+      })).toBeVisible({ timeout: 90_000 });
 
       const settingsResponse = await page.request.get('/api/settings', { headers: authHeaders(token) });
       expect(settingsResponse.ok(), await settingsResponse.text().catch(() => '')).toBe(true);
-      const settings = await settingsResponse.json() as { defaultModel?: string };
+      const settings = await settingsResponse.json() as {
+        defaultModel?: string;
+        providers?: Record<string, { baseUrl?: string; models?: string[] }>;
+      };
       expect(settings.defaultModel).toBe(MODEL);
+      expect(settings.providers?.['openai-compatible']?.baseUrl).toBe(ENDPOINT);
+      expect(settings.providers?.['openai-compatible']?.models).toContain(MODEL);
+
+      await page.getByTestId('nav-agents').click();
+      await expect(page).toHaveURL(/\/agents$/);
+      await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
 
       const workspacesResponse = await page.request.get('/api/workspaces', { headers: authHeaders(token) });
       expect(workspacesResponse.ok(), await workspacesResponse.text().catch(() => '')).toBe(true);
