@@ -95,6 +95,8 @@ export interface ShellContextValue {
   refreshWorkspaces: WorkspacesBundle['refresh'];
   /** P1b D3: load-failure surface — an errored empty list must not render as "no workspaces". */
   workspacesError: WorkspacesBundle['error'];
+  /** Structured revocation state; never infer access loss from human-facing copy. */
+  workspacesAccessDenied: WorkspacesBundle['accessDenied'];
   /** R15-V3 s03 fix: existed in useWorkspaces but was never forwarded, so the
    *  shelf stood in a time heuristic for it (Wave U Lane A) and a slow cold
    *  fetch could still flash the empty state between skeleton and grid. */
@@ -143,14 +145,14 @@ export const useShell = () => {
 };
 
 export const ShellProvider = ({ children }: { children: ReactNode }) => {
+  const { state: onboardingState, update: updateOnboarding, complete: completeOnboarding } = useOnboarding();
   const {
     workspaces, activeWorkspace, activeWorkspaceId,
     selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refresh: refreshWorkspaces,
-    error: workspacesError, loading: workspacesLoading,
-  } = useWorkspaces();
+    error: workspacesError, accessDenied: workspacesAccessDenied, loading: workspacesLoading,
+  } = useWorkspaces(onboardingState.profileId ?? null);
   const agentStatus = useAgentStatus();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
-  const { state: onboardingState, update: updateOnboarding, complete: completeOnboarding } = useOnboarding();
   const offline = useOfflineStatus();
   const currentTier: UserTier = onboardingState.tier || 'simple';
 
@@ -258,7 +260,8 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ShellContext.Provider value={{
       workspaces, activeWorkspace, activeWorkspaceId,
-      selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refreshWorkspaces, workspacesError, workspacesLoading,
+      selectWorkspace, createWorkspace, patchWorkspace, deleteWorkspace, refreshWorkspaces,
+      workspacesError, workspacesAccessDenied, workspacesLoading,
       currentTier, billingTier, tierResolved, tierError, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
       defaultAutonomy: defaultAutonomyState.level,
       defaultAutonomySource: defaultAutonomyState.source,

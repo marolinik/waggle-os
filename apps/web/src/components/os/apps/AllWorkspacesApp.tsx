@@ -54,7 +54,8 @@ const STAGGER_LIST_MS = STAGGER.list * 1000;
 // a cold fetch outran it — the judges' "single most trust-damaging frame") is
 // replaced by the flag itself.
 let shelfSessionCache: Workspace[] | null = null;
-let shelfSessionResolved = false;
+let shelfSessionCacheOwner: string | null = null;
+let shelfSessionResolvedOwner: string | null = null;
 
 /** Test-only: reset the module-scoped shelf cache so state can't leak across tests.
  *  (memory-list-cache keeps this in its own module; the lane is scoped to this
@@ -62,7 +63,8 @@ let shelfSessionResolved = false;
 // eslint-disable-next-line react-refresh/only-export-components
 export function resetWorkspaceShelfCache(): void {
   shelfSessionCache = null;
-  shelfSessionResolved = false;
+  shelfSessionCacheOwner = null;
+  shelfSessionResolvedOwner = null;
 }
 
 interface AllWorkspacesAppProps {
@@ -436,25 +438,48 @@ function ShelfLoading() {
 // ── Root ──────────────────────────────────────────────────────────────────
 const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   const {
-    workspaces: liveWorkspaces, workspacesError,
+    workspaces: liveWorkspaces, workspacesError, workspacesAccessDenied,
     selectWorkspace, createWorkspace, refreshWorkspaces, workspacesLoading,
+    onboardingState,
   } = useShell();
+  const profileId = onboardingState.profileId ?? null;
+  const workspaceAccessDenied = workspacesAccessDenied;
+  const hasOwnedCache = !workspaceAccessDenied
+    && profileId !== null
+    && shelfSessionCacheOwner === profileId;
 
   // Wave U (Lane A) item 1: seed the shelf from the session cache so a revisit
-  // paints last-known cards instantly; the live list wins the moment it
-  // (re)arrives non-empty. Every downstream derivation reads this effective list.
-  const workspaces = liveWorkspaces.length > 0 ? liveWorkspaces : (shelfSessionCache ?? liveWorkspaces);
+  // paints last-known cards instantly while revalidation is in flight. Once
+  // the request settles, the live response is authoritative even when empty;
+  // otherwise deleted or inaccessible workspaces remain visible indefinitely.
+  const workspaces = (workspacesLoading || workspacesError != null)
+    && hasOwnedCache
+    && shelfSessionCache !== null
+    ? shelfSessionCache
+    : liveWorkspaces;
 
   // Three distinct states (loading · empty · error): never flash the empty
   // "Create your first workspace" CTA before the query resolves. The empty
   // state may render ONLY once the real fetch has settled (loading false) —
   // a session-recorded resolution short-circuits for instant revisits.
   const resolved =
-    workspaces.length > 0 || workspacesError != null || shelfSessionResolved || !workspacesLoading;
+    workspaces.length > 0
+    || workspacesError != null
+    || (profileId !== null && shelfSessionResolvedOwner === profileId)
+    || !workspacesLoading;
   useEffect(() => {
-    if (liveWorkspaces.length > 0) shelfSessionCache = liveWorkspaces;
-    if (resolved) shelfSessionResolved = true;
-  }, [liveWorkspaces, resolved]);
+    if (workspaceAccessDenied && shelfSessionCacheOwner === profileId) {
+      shelfSessionCache = null;
+      shelfSessionCacheOwner = null;
+      shelfSessionResolvedOwner = null;
+      return;
+    }
+    if (!workspacesLoading && workspacesError == null && profileId !== null) {
+      shelfSessionCache = liveWorkspaces;
+      shelfSessionCacheOwner = profileId;
+      shelfSessionResolvedOwner = profileId;
+    }
+  }, [liveWorkspaces, profileId, workspaceAccessDenied, workspacesError, workspacesLoading]);
 
   const [query, setQuery] = useState('');
   const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
@@ -538,6 +563,27 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
     onOpenWorkspace?.(id);
   };
 
+  const loadErrorNotice = workspacesError ? (
+    <div className="mb-6 flex items-center gap-2.5 rounded-[14px] border border-[var(--risk-line,var(--line-soft))] bg-[var(--risk-wash)] px-4 py-3" role="alert">
+      <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--risk)]" />
+      <p className="flex-1 text-[13.5px] text-[var(--text-2)]">
+        {workspaceAccessDenied
+          ? 'Your workspace access changed. Retry after signing in again.'
+          : workspaces.length > 0
+          ? "Couldn't refresh your workspaces. Showing the last verified list."
+          : "Couldn't load your workspaces — they may exist but didn't load."}
+      </p>
+      <button
+        type="button"
+        onClick={() => void refreshWorkspaces()}
+        className="shrink-0 text-[13px] font-medium text-[var(--honey-text)] transition-opacity hover:opacity-80"
+        data-testid="all-workspaces-retry"
+      >
+        Retry
+      </button>
+    </div>
+  ) : null;
+
   // Loading is the distinct third state — 3 skeleton cards in the shelf
   // geometry, never the empty CTA, until the query resolves (Wave U Lane A).
   if (!resolved) {
@@ -551,20 +597,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
         <h1 className="mb-1.5 text-[28px] font-semibold tracking-[-0.02em] text-[var(--text)]">Workspaces</h1>
         <p className="mb-6 text-[14px] text-[var(--text-muted)]">Home greets you with the day. This is the full shelf.</p>
 
-        {workspacesError && (
-          <div className="mb-6 flex items-center gap-2.5 rounded-[14px] border border-[var(--risk-line,var(--line-soft))] bg-[var(--risk-wash)] px-4 py-3" role="alert">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--risk)]" />
-            <p className="flex-1 text-[13.5px] text-[var(--text-2)]">Couldn't load your workspaces — they may exist but didn't load.</p>
-            <button
-              type="button"
-              onClick={() => void refreshWorkspaces()}
-              className="shrink-0 text-[13px] font-medium text-[var(--honey-text)] transition-opacity hover:opacity-80"
-              data-testid="all-workspaces-retry"
-            >
-              Retry
-            </button>
-          </div>
-        )}
+        {loadErrorNotice}
 
         <div className="relative overflow-hidden rounded-[26px] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-10 text-center shadow-[var(--shadow)]">
           <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(circle,var(--honey-glow),transparent_70%)]" />
@@ -612,6 +645,8 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
         Home greets you with the day. This is the full shelf — every workspace, where it
         lives, and what's happening in it.
       </p>
+
+      {loadErrorNotice}
 
       {/* Toolbar: search + storage filter pills */}
       <div className="mb-5 flex flex-wrap items-center gap-3">

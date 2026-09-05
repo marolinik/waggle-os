@@ -96,9 +96,9 @@ describe('useWorkspaces (P1b)', () => {
     const { result } = renderHook(() => useWorkspaces());
     await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
 
-    mocks.adapter.getWorkspaces.mockRejectedValueOnce(httpError(401, { code: 'INVALID_TOKEN' }, 'Unauthorized'));
+    mocks.adapter.getWorkspaces.mockRejectedValueOnce(new Error('Network unavailable'));
     await act(async () => { await result.current.refresh(); });
-    expect(result.current.error).toBe('Unauthorized');
+    expect(result.current.error).toBe('Network unavailable');
     expect(result.current.workspaces).toHaveLength(1); // previous list preserved
 
     mocks.adapter.getWorkspaces.mockResolvedValueOnce([{ id: 'w1', name: 'Alpha' }, { id: 'w2', name: 'Beta' }]);
@@ -106,6 +106,362 @@ describe('useWorkspaces (P1b)', () => {
     await waitFor(() => expect(result.current.workspaces).toHaveLength(2));
     expect(result.current.error).toBeNull();
   });
+
+  it('never exposes the prior profile while the next profile request is pending', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveProfileB!: (workspaces: Array<{ id: string; name: string }>) => void;
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'profile-a-private', name: 'Profile A private' }])
+      .mockReturnValueOnce(new Promise(resolve => {
+        resolveProfileB = resolve;
+      }));
+
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-a-private'));
+    act(() => result.current.selectWorkspace('profile-a-private'));
+
+    rerender({ profileId: 'profile-b' });
+    expect(result.current.workspaces).toEqual([]);
+    expect(result.current.activeWorkspace).toBeNull();
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      resolveProfileB([{ id: 'profile-b', name: 'Profile B' }]);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-b'));
+  });
+
+  it.each([
+    [401, 'Session expired'],
+    [403, 'Forbidden'],
+  ] as const)('authorization denial (%s) clears retained workspaces and selection', async (status, message) => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+      { id: 'private-a', name: 'Private A', group: 'Personal' },
+    ]);
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+    act(() => result.current.selectWorkspace('private-a'));
+
+    mocks.adapter.getWorkspaces.mockRejectedValueOnce(
+      httpError(status, { code: 'AUTH_DENIED' }, message),
+    );
+    await act(async () => { await result.current.refresh(); });
+
+    expect(result.current.workspaces).toEqual([]);
+    expect(result.current.activeWorkspace).toBeNull();
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(readPersistedWorkspaceId()).toBeNull();
+    expect(result.current.error).toBe(message);
+    expect(result.current.accessDenied).toBe(true);
+  });
+
+  it('does not expose a profile A error while profile B is hydrating', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveProfileB!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockRejectedValueOnce(new Error('Profile A offline'))
+      .mockReturnValueOnce(new Promise(resolve => {
+        resolveProfileB = resolve;
+      }));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+
+    try {
+      await waitFor(() => expect(result.current.error).toBe('Profile A offline'));
+      rerender({ profileId: 'profile-b' });
+
+      expect(result.current.error).toBeNull();
+      expect(result.current.workspaces).toEqual([]);
+      expect(result.current.loading).toBe(true);
+
+      await act(async () => {
+        resolveProfileB([{ id: 'profile-b', name: 'Profile B', group: 'Personal' }]);
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-b'));
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it.each(['create', 'delete', 'patch'] as const)(
+    'authorization denial during %s revokes retained workspaces and selection',
+    async (operation) => {
+      window.localStorage.clear();
+      const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+      const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+      mocks.adapter.getWorkspaces.mockReset();
+      mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+        { id: 'private-a', name: 'Private A', group: 'Personal' },
+      ]);
+      const denial = httpError(401, { code: 'AUTH_DENIED' }, 'Session expired');
+      if (operation === 'create') mocks.adapter.createWorkspace.mockRejectedValueOnce(denial);
+      if (operation === 'delete') mocks.adapter.deleteWorkspace.mockRejectedValueOnce(denial);
+      if (operation === 'patch') mocks.adapter.patchWorkspace.mockRejectedValueOnce(denial);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+      try {
+        await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+        act(() => result.current.selectWorkspace('private-a'));
+
+        await act(async () => {
+          if (operation === 'create') {
+            await result.current.createWorkspace({ name: 'Denied', group: 'Personal' });
+          } else if (operation === 'delete') {
+            await result.current.deleteWorkspace('private-a');
+          } else {
+            await result.current.patchWorkspace('private-a', { name: 'Denied' });
+          }
+        });
+
+        expect(result.current.workspaces).toEqual([]);
+        expect(result.current.activeWorkspaceId).toBeNull();
+        expect(readPersistedWorkspaceId()).toBeNull();
+        expect(result.current.error).toBe('Session expired');
+        expect(result.current.accessDenied).toBe(true);
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    ['create', httpError(403, { tier: 'FREE', limit: 3, current: 3 }, 'Workspace limit reached')],
+    ['patch', httpError(403, { code: 'VIEWER_READ_ONLY' }, 'Viewers cannot modify team workspaces')],
+    ['create', httpError(500, { code: 'UPSTREAM_FAILURE' }, 'Permission denied by storage provider')],
+  ] as const)('non-revoking failure during %s preserves readable workspaces', async (operation, denial) => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+      { id: 'readable', name: 'Readable', group: 'Personal' },
+    ]);
+    if (operation === 'create') mocks.adapter.createWorkspace.mockRejectedValueOnce(denial);
+    else mocks.adapter.patchWorkspace.mockRejectedValueOnce(denial);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+    try {
+      await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+      await act(async () => {
+        if (operation === 'create') {
+          await result.current.createWorkspace({ name: 'Denied', group: 'Personal' });
+        } else {
+          await result.current.patchWorkspace('readable', { name: 'Denied' });
+        }
+      });
+      expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['readable']);
+      expect(result.current.accessDenied).toBe(false);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it.each(['create', 'delete', 'patch'] as const)(
+    'does not let a profile A %s invalidate profile B hydration',
+    async (operation) => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    let resolveMutation!: () => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'profile-a', name: 'Profile A', group: 'Personal' }])
+      .mockResolvedValueOnce([{ id: 'profile-b', name: 'Profile B', group: 'Personal' }]);
+    if (operation === 'create') {
+      mocks.adapter.createWorkspace.mockReturnValueOnce(new Promise(resolve => {
+        resolveMutation = () => resolve({ id: 'created-a', name: 'Created A', group: 'Personal' });
+      }));
+    } else {
+      mocks.adapter[operation === 'delete' ? 'deleteWorkspace' : 'patchWorkspace']
+        .mockReturnValueOnce(new Promise<void>(resolve => {
+          resolveMutation = () => resolve();
+        }));
+    }
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-a'));
+
+    let pendingMutation!: Promise<unknown>;
+    act(() => {
+      pendingMutation = operation === 'create'
+        ? result.current.createWorkspace({ name: 'Created A', group: 'Personal' })
+        : operation === 'delete'
+          ? result.current.deleteWorkspace('profile-a')
+          : result.current.patchWorkspace('profile-a', { name: 'Profile A updated' });
+    });
+    rerender({ profileId: 'profile-b' });
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-b'));
+    act(() => result.current.selectWorkspace('profile-b'));
+
+    await act(async () => {
+      resolveMutation();
+      expect(await pendingMutation).toBe(operation === 'create' ? null : false);
+    });
+
+    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['profile-b']);
+    expect(result.current.activeWorkspaceId).toBe('profile-b');
+    expect(readPersistedWorkspaceId()).toBe('profile-b');
+    expect(result.current.loading).toBe(false);
+    },
+  );
+
+  it.each(['create', 'delete', 'patch'] as const)(
+    'never relabels profile A data when profile B %s settles before hydration',
+    async (operation) => {
+      const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+      let resolveOldProfileB!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+      mocks.adapter.getWorkspaces.mockReset();
+      mocks.adapter.getWorkspaces
+        .mockResolvedValueOnce([{ id: 'profile-a-private', name: 'Profile A private', group: 'Personal' }])
+        .mockReturnValueOnce(new Promise(resolve => {
+          resolveOldProfileB = resolve;
+        }));
+      if (operation === 'create') {
+        mocks.adapter.createWorkspace.mockResolvedValueOnce({ id: 'created-b', name: 'Created B', group: 'Personal' });
+        mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+          { id: 'existing-b', name: 'Existing B', group: 'Personal' },
+          { id: 'created-b', name: 'Created B', group: 'Personal' },
+        ]);
+      } else if (operation === 'delete') {
+        mocks.adapter.deleteWorkspace.mockResolvedValueOnce(undefined);
+        mocks.adapter.getWorkspaces.mockResolvedValueOnce([]);
+      } else {
+        mocks.adapter.patchWorkspace.mockResolvedValueOnce(undefined);
+        mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+          { id: 'profile-b', name: 'Profile B updated', group: 'Personal' },
+        ]);
+      }
+      const { result, rerender } = renderHook(
+        ({ profileId }) => useWorkspaces(profileId),
+        { initialProps: { profileId: 'profile-a' } },
+      );
+      await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-a-private'));
+
+      rerender({ profileId: 'profile-b' });
+      expect(result.current.workspaces).toEqual([]);
+      await act(async () => {
+        if (operation === 'create') {
+          await result.current.createWorkspace({ name: 'Created B', group: 'Personal' });
+        } else if (operation === 'delete') {
+          await result.current.deleteWorkspace('profile-b');
+        } else {
+          await result.current.patchWorkspace('profile-b', { name: 'Profile B updated' });
+        }
+      });
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.workspaces.map(workspace => workspace.id)).not.toContain('profile-a-private');
+      expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(
+        operation === 'create' ? ['existing-b', 'created-b'] : operation === 'patch' ? ['profile-b'] : [],
+      );
+
+      await act(async () => {
+        resolveOldProfileB([{ id: 'stale-b', name: 'Stale B', group: 'Personal' }]);
+        await Promise.resolve();
+      });
+      expect(result.current.workspaces.map(workspace => workspace.id)).not.toContain('profile-a-private');
+    },
+  );
+
+  it('does not let a pending list undo authorization denial from a mutation', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveRefresh!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'private-a', name: 'Private A', group: 'Personal' }])
+      .mockReturnValueOnce(new Promise(resolve => {
+        resolveRefresh = resolve;
+      }));
+    mocks.adapter.createWorkspace.mockRejectedValueOnce(
+      httpError(401, { code: 'AUTH_DENIED' }, 'Session expired'),
+    );
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+    try {
+      await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+      act(() => result.current.selectWorkspace('private-a'));
+      let pendingRefresh!: Promise<void>;
+      act(() => { pendingRefresh = result.current.refresh(); });
+      await act(async () => {
+        await result.current.createWorkspace({ name: 'Denied', group: 'Personal' });
+      });
+      expect(result.current.workspaces).toEqual([]);
+      expect(result.current.accessDenied).toBe(true);
+
+      await act(async () => {
+        resolveRefresh([{ id: 'private-a', name: 'Private A', group: 'Personal' }]);
+        await pendingRefresh;
+      });
+      expect(result.current.workspaces).toEqual([]);
+      expect(result.current.accessDenied).toBe(true);
+      expect(result.current.loading).toBe(false);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it.each(['create', 'delete', 'patch'] as const)(
+    'does not let a pre-denial %s success restore revoked workspace access',
+    async (operation) => {
+      const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+      let resolveMutation!: () => void;
+      mocks.adapter.getWorkspaces.mockReset();
+      mocks.adapter.getWorkspaces
+        .mockResolvedValueOnce([{ id: 'private-a', name: 'Private A', group: 'Personal' }])
+        .mockRejectedValueOnce(httpError(401, { code: 'AUTH_DENIED' }, 'Session expired'));
+      if (operation === 'create') {
+        mocks.adapter.createWorkspace.mockReturnValueOnce(new Promise(resolve => {
+          resolveMutation = () => resolve({ id: 'created-a', name: 'Created A', group: 'Personal' });
+        }));
+      } else {
+        mocks.adapter[operation === 'delete' ? 'deleteWorkspace' : 'patchWorkspace']
+          .mockReturnValueOnce(new Promise<void>(resolve => {
+            resolveMutation = () => resolve();
+          }));
+      }
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+      try {
+        await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+        let pendingMutation!: Promise<unknown>;
+        act(() => {
+          pendingMutation = operation === 'create'
+            ? result.current.createWorkspace({ name: 'Created A', group: 'Personal' })
+            : operation === 'delete'
+              ? result.current.deleteWorkspace('private-a')
+              : result.current.patchWorkspace('private-a', { name: 'Updated A' });
+        });
+        await act(async () => { await result.current.refresh(); });
+        expect(result.current.accessDenied).toBe(true);
+
+        await act(async () => {
+          resolveMutation();
+          expect(await pendingMutation).toBe(operation === 'create' ? null : false);
+        });
+        expect(result.current.workspaces).toEqual([]);
+        expect(result.current.accessDenied).toBe(true);
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    },
+  );
 
   it('failed create does not invent or activate a phantom workspace', async () => {
     window.localStorage.clear();
