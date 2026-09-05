@@ -40,24 +40,36 @@ export const useOfflineStatus = () => {
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let checkInFlight: Promise<void> | undefined;
 
-    const check = async () => {
-      try {
-        await adapter.getSystemHealth();
-        if (cancelled) return;
-        setOffline(false);
-        failCount.current = 0;
-      } catch (err) {
-        if (cancelled) return;
-        console.error('[useOfflineStatus] health check failed:', err);
-        failCount.current++;
-        if (failCount.current >= FAILURE_TOLERANCE) {
-          setOffline(true);
+    const check = (): Promise<void> => {
+      if (checkInFlight) return checkInFlight;
+      const probe = (async () => {
+        try {
+          await adapter.getSystemHealth();
+          if (cancelled) return;
+          setOffline(false);
+          failCount.current = 0;
+        } catch (err) {
+          if (cancelled) return;
+          failCount.current++;
+          if (failCount.current >= FAILURE_TOLERANCE) {
+            if (failCount.current === FAILURE_TOLERANCE) {
+              console.warn('[useOfflineStatus] backend is offline:', err);
+            }
+            setOffline(true);
+          }
         }
-      }
+      })();
+      checkInFlight = probe;
+      void probe.finally(() => {
+        if (checkInFlight === probe) checkInFlight = undefined;
+      });
+      return probe;
     };
 
     const schedule = () => {
+      if (timer) clearTimeout(timer);
       // Once flipped offline, poll fast for recovery (15s). Pre-flip we still
       // ramp exponentially so a single bad blip doesn't pummel the server.
       const interval = failCount.current >= FAILURE_TOLERANCE

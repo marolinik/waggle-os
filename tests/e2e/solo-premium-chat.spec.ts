@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Page, type Request, type Response } from '@playwright/test';
 
 const RUN_LIVE_SOLO_CHAT = process.env.WAGGLE_E2E_SOLO_CHAT === '1';
+const OWNS_ISOLATED_SERVER = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER === '0';
 const ENDPOINT = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_BASE_URL
   ?? 'http://10.33.0.153:4000/v1';
 const MODEL = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_MODEL
@@ -346,7 +347,10 @@ async function readAssistantFromUi(page: Page): Promise<string> {
 }
 
 test.describe('Windows Solo premium chat journey', () => {
-  test.skip(!RUN_LIVE_SOLO_CHAT, 'Set WAGGLE_E2E_SOLO_CHAT=1 to run the real local-model journey.');
+  test.skip(
+    !RUN_LIVE_SOLO_CHAT || !OWNS_ISOLATED_SERVER,
+    'Set WAGGLE_E2E_SOLO_CHAT=1 and WAGGLE_E2E_REUSE_EXISTING_SERVER=0; this journey must own its disposable Waggle data dir.',
+  );
   test.setTimeout(600_000);
 
   test('saves Qwen, chats, retries, discloses a tool and skill, and recalls memory in a new session', async ({ page }) => {
@@ -375,6 +379,19 @@ test.describe('Windows Solo premium chat journey', () => {
       await page.goto(`/settings?${SKIP_PARAMS}`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
       sessionToken = await readBrowserSessionToken(page);
+      const onboardingStatusResponse = await page.request.get('/api/onboarding/status', {
+        headers: authHeaders(sessionToken),
+      });
+      expect(onboardingStatusResponse.ok(), await onboardingStatusResponse.text().catch(() => '')).toBe(true);
+      const onboardingStatus = await onboardingStatusResponse.json() as { profileId?: string };
+      expect(onboardingStatus.profileId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      const onboardingCompleteResponse = await page.request.post('/api/onboarding/complete', {
+        data: { expectedProfileId: onboardingStatus.profileId },
+        headers: authHeaders(sessionToken),
+      });
+      expect(onboardingCompleteResponse.ok(), await onboardingCompleteResponse.text().catch(() => '')).toBe(true);
 
       await page.getByRole('button', { name: /openai-compatible/i }).click();
       await page.getByLabel('Endpoint URL').fill(ENDPOINT);
