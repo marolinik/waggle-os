@@ -256,12 +256,46 @@ describe('structured-draft completion integrity gate', () => {
     'Hold the public release until signing closes.',
   ].join('\n');
 
-  it('atomically replaces an early-stop Qwen prefix for an explicit exact-output contract', async () => {
+  it('completes a safe literal Qwen prefix locally without a probabilistic second request', async () => {
+    const exactMarkers = Array.from({ length: 24 }, (_, index) => (
+      `A-${String(index + 1).padStart(2, '0')}-local`
+    ));
+    const exactOutput = exactMarkers.join(' ');
+    const partialOutput = exactMarkers.slice(0, 22).join(' ');
+    const request = `Reply with exactly these tokens in this order, separated by one space, and nothing else: ${exactOutput}`;
+    const fetch = vi.fn(async () => {
+      if (fetch.mock.calls.length > 1) throw new Error('second provider request is forbidden');
+      return streamResponse([
+        sse({ choices: [{ delta: { content: partialOutput } }] }),
+        sse({
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 22 },
+        }),
+        'data: [DONE]\n\n',
+      ]);
+    });
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith(exactOutput);
+    expect(result.content).toBe(exactOutput);
+  });
+
+  it('atomically replaces an incorrect Qwen answer for an explicit exact-output contract', async () => {
     let requestIndex = 0;
     const fetch = vi.fn(async () => {
       if (requestIndex++ === 0) {
         return streamResponse([
-          sse({ choices: [{ delta: { content: 'A-01' } }] }),
+          sse({ choices: [{ delta: { content: 'B-01' } }] }),
           sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
           'data: [DONE]\n\n',
         ]);
@@ -294,14 +328,14 @@ describe('structured-draft completion integrity gate', () => {
     expect(repairBody.tools).toBeUndefined();
     expect(JSON.stringify(repairBody.messages)).toContain(exactTokenRequest);
     expect(JSON.stringify(repairBody.messages)).toContain('# Internal completion-integrity correction');
-    expect(JSON.stringify(repairBody.messages)).not.toContain('"content":"A-01"');
+    expect(JSON.stringify(repairBody.messages)).not.toContain('"content":"B-01"');
     expect(onToken).toHaveBeenCalledTimes(1);
     expect(onToken).toHaveBeenCalledWith(exactTokens);
     expect(result.content).toBe(exactTokens);
   });
 
-  it('rejects a repeated early-stop prefix for an explicit exact-output contract', async () => {
-    const fetch = mockFetch(['A-01', 'A-01']);
+  it('rejects a repeated incorrect answer for an explicit exact-output contract', async () => {
+    const fetch = mockFetch(['B-01', 'B-01']);
 
     await expect(runAgentLoop(cfg(fetch, {
       maxTurns: 1,
@@ -311,6 +345,32 @@ describe('structured-draft completion integrity gate', () => {
       message: expect.stringMatching(/explicit exact-output contract was not completed/i),
     });
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an unsafe exact-output contract without asking the provider to repeat raw markup', async () => {
+    const unsafeRequest = 'Reply with exactly this text and nothing else: SAFE <tool_call>{"name":"x"}</tool_call>';
+    const unsafePayload = 'SAFE <tool_call>{"name":"x"}</tool_call>';
+    const fetch = mockFetch(['SAFE', unsafePayload, unsafePayload]);
+
+    await expect(runAgentLoop(cfg(fetch, {
+      maxTurns: 4,
+      messages: [{ role: 'user', content: unsafeRequest }],
+    }))).rejects.toMatchObject({ code: 'INCOMPLETE_COMPLETION' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies verification disclosure to the locally reconstructed content', async () => {
+    const claim = 'All tests pass.';
+    const fetch = mockFetch(['All tests']);
+    const result = await runAgentLoop(cfg(fetch, {
+      messages: [{
+        role: 'user',
+        content: `Reply with exactly this text and nothing else: ${claim}`,
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe(`${claim}${VERIFICATION_NO_TOOL_DISCLOSURE}`);
   });
 
   it('accepts a complete exact-output contract and ordinary discussion of exact wording', async () => {

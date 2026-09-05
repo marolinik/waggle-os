@@ -82,6 +82,7 @@ const EXACT_OUTPUT_CONTRACT = /^\s*(?:please[,\t ]+)?(?:reply|respond|return|out
 const EXACT_OUTPUT_QUALIFIER = /^[\t ]*(?:(?:in[\t ]+(?:this|the|that|provided)[\t ]+order|separated[\t ]+by[\t ]+(?:one[\t ]+space|spaces?|commas?|newlines?))[\t ]*,?[\t ]*)*(?:and[\t ]+)?nothing[\t ]+else[.!]?[\t ]*$/i;
 const MAX_EXACT_OUTPUT_CHARS = 2_048;
 const MAX_EXACT_OUTPUT_TOKENS = 256;
+const RAW_TOOL_CALL_MARKUP = /\[\/?TOOL_CALL\]|<\s*tool_call\b|\{\s*tool\s*=>|```(?:json|tool)?\s*\{[^`]*"tool"/is;
 
 function normalizeExactOutput(value: string): string {
   return value.replace(/\r\n?/g, '\n').trim();
@@ -105,6 +106,20 @@ function expectedExactOutput(userRequest: string): string | null {
 function explicitExactOutputMismatch(userRequest: string, content: string): boolean {
   const expected = expectedExactOutput(userRequest);
   return expected !== null && normalizeExactOutput(content) !== expected;
+}
+
+function safeExactOutputSuffix(userRequest: string, content: string): string | undefined {
+  const expected = expectedExactOutput(userRequest);
+  const normalized = normalizeExactOutput(content);
+  if (expected === null
+    || content !== normalized
+    || normalized.length === 0
+    || normalized === expected
+    || !expected.startsWith(normalized)
+    || RAW_TOOL_CALL_MARKUP.test(expected)) {
+    return undefined;
+  }
+  return expected.slice(normalized.length);
 }
 
 function explicitlyScopesDraftToOpening(userRequest: string): boolean {
@@ -204,7 +219,7 @@ export interface GateResult {
   fired: boolean;
   /** New state object — copy of input state with one-shot flags + preserved answer updated. */
   state: GateState;
-  /** Deterministic local suffix used when a claim cannot be verified by any available tool. */
+  /** Deterministic local suffix used to complete a safe literal or disclose missing verification. */
   contentSuffix?: string;
   /** Retry once with tools withheld and replace the unexposed candidate atomically. */
   atomicRepair?: boolean;
@@ -235,6 +250,21 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   let nextState = state;
   let contentSuffix: string | undefined;
 
+  const exactOutput = expectedExactOutput(userRequest);
+  if (finishReason === 'stop'
+    && exactOutput !== null
+    && RAW_TOOL_CALL_MARKUP.test(exactOutput)) {
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.completion-integrity-unsafe-exact-output-rejected',
+      contentChars: content.length,
+    });
+    return {
+      fired: false,
+      state,
+      rejectIncompleteReason: 'explicit exact-output contract requested unsafe raw tool-call markup',
+    };
+  }
+
   const exactOutputIncomplete = finishReason === 'stop'
     && explicitExactOutputMismatch(userRequest, content);
   const missingDraftComponents = finishReason === 'stop'
@@ -242,7 +272,18 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     : [];
   const structuredDraftIncomplete = missingDraftComponents.length >= 2
     && endsAfterOpeningScaffold(content);
-  if (exactOutputIncomplete || structuredDraftIncomplete) {
+  const literalSuffix = exactOutputIncomplete && atomicRepairAvailable
+    ? safeExactOutputSuffix(userRequest, content)
+    : undefined;
+  if (literalSuffix !== undefined) {
+    contentSuffix = literalSuffix;
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.completion-integrity-local-suffix',
+      contentChars: content.length,
+      suffixChars: literalSuffix.length,
+    });
+  }
+  if ((exactOutputIncomplete && literalSuffix === undefined) || structuredDraftIncomplete) {
     const reason = exactOutputIncomplete
       ? 'explicit exact-output contract was not completed'
       : 'structured draft ended after its opening scaffold';
@@ -284,14 +325,14 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   if (
     enableVerification &&
     !state.verificationCorrectionUsed &&
-    assertsUnverifiedCompletion(content, toolsUsed, userRequest)
+    assertsUnverifiedCompletion(`${content}${contentSuffix ?? ''}`, toolsUsed, userRequest)
   ) {
     if (!availableToolNames.some(isVerificationToolName)) {
       logTurnEvent(turnId, {
         stage: 'agent-loop.verification-gate.disclosed',
         contentChars: content.length,
       });
-      contentSuffix = VERIFICATION_NO_TOOL_DISCLOSURE;
+      contentSuffix = `${contentSuffix ?? ''}${VERIFICATION_NO_TOOL_DISCLOSURE}`;
       nextState = { ...state, verificationCorrectionUsed: true };
     } else {
       const systemMessage = messages.find(message => message.role === 'system');
