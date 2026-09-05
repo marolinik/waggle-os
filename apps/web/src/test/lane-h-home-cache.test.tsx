@@ -539,6 +539,95 @@ describe('HomeCockpit cache-first paint + reconciliation (Lane H items 1-2)', ()
     expect(screen.getByTestId('home-cockpit-facts').textContent).toContain('1 workspace');
   });
 
+  it.each([401, 403])('an auth denial (%s) invalidates warm content instead of presenting it as live', async (status) => {
+    const HomeCockpit = await importHome();
+    writeHomeCache({
+      briefing: makeBriefing({ recentWorkspaces: [wsCard('private-a', 'Private A')] }),
+      overnight: overnight(3),
+      highlights: [],
+    }, PROFILE_A);
+    mocks.adapter.getHomeBriefing.mockRejectedValue(
+      Object.assign(new Error(status === 401 ? 'Unauthorized' : 'Forbidden'), { status }),
+    );
+
+    render(
+      <HomeCockpit
+        profileId={PROFILE_A}
+        onContinue={vi.fn()}
+        onOpenWorkspaceDesktop={vi.fn()}
+        onCreateWorkspace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Private A')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-cockpit-permission-denied')).toBeInTheDocument();
+    expect(screen.queryByText('Private A')).not.toBeInTheDocument();
+    expect(readHomeCache(PROFILE_A)).toBeNull();
+  });
+
+  it('an overnight authorization denial invalidates all warm Home content', async () => {
+    const HomeCockpit = await importHome();
+    writeHomeCache({
+      briefing: makeBriefing({ recentWorkspaces: [wsCard('private-a', 'Private A')] }),
+      overnight: overnight(3),
+      highlights: [{ content: 'Private remembered detail', timestamp: '2026-07-06T09:00:00.000Z' }],
+    }, PROFILE_A);
+    mocks.adapter.getHomeBriefing.mockResolvedValue(
+      makeBriefing({ recentWorkspaces: [wsCard('private-a', 'Private A')] }),
+    );
+    mocks.adapter.getHomeOvernight.mockRejectedValue(
+      Object.assign(new Error('Unauthorized'), { status: 401 }),
+    );
+
+    render(
+      <HomeCockpit
+        profileId={PROFILE_A}
+        onContinue={vi.fn()}
+        onOpenWorkspaceDesktop={vi.fn()}
+        onCreateWorkspace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Private A')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-cockpit-permission-denied')).toBeInTheDocument();
+    expect(screen.queryByText('Private A')).not.toBeInTheDocument();
+    expect(screen.queryByText('Private remembered detail')).not.toBeInTheDocument();
+    expect(readHomeCache(PROFILE_A)).toBeNull();
+  });
+
+  it('a briefing-source authorization denial invalidates all warm Home content', async () => {
+    const HomeCockpit = await importHome();
+    writeHomeCache({
+      briefing: makeBriefing({ recentWorkspaces: [wsCard('private-a', 'Private A')] }),
+      overnight: overnight(3),
+      highlights: [{ content: 'Private remembered detail', timestamp: '2026-07-06T09:00:00.000Z' }],
+    }, PROFILE_A);
+    mocks.adapter.getHomeBriefing.mockResolvedValue(
+      makeBriefing({ recentWorkspaces: [wsCard('private-a', 'Private A')] }),
+    );
+    mocks.adapter.getHomeOvernight.mockResolvedValue(overnight(4));
+    mocks.adapter.getWorkspaces.mockRejectedValue(
+      Object.assign(new Error('Forbidden'), { status: 403 }),
+    );
+    mocks.adapter.searchMemory.mockResolvedValue([]);
+    mocks.adapter.getMemoryStats.mockResolvedValue(null);
+
+    render(
+      <HomeCockpit
+        profileId={PROFILE_A}
+        onContinue={vi.fn()}
+        onOpenWorkspaceDesktop={vi.fn()}
+        onCreateWorkspace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Private A')).toBeInTheDocument();
+    expect(await screen.findByTestId('home-cockpit-permission-denied')).toBeInTheDocument();
+    expect(screen.queryByText('Private A')).not.toBeInTheDocument();
+    expect(screen.queryByText('Private remembered detail')).not.toBeInTheDocument();
+    expect(readHomeCache(PROFILE_A)).toBeNull();
+  });
+
   it('cold (no cache): shows the skeleton first, then content', async () => {
     const HomeCockpit = await importHome();
     mocks.adapter.getHomeBriefing.mockResolvedValue(makeBriefing({ recentWorkspaces: [wsCard('w1', 'Alpha')] }));

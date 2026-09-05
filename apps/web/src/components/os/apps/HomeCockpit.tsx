@@ -60,6 +60,17 @@ import type {
 const SHOW_STREAK = false;
 const STREAK_DAYS = 0;
 
+function isAuthorizationDenial(err: unknown): boolean {
+  const status = typeof err === 'object' && err !== null && 'status' in err
+    ? Number((err as { status?: unknown }).status)
+    : undefined;
+  const message = err instanceof Error ? err.message.toLowerCase() : '';
+  return status === 401 || status === 403
+    || message.includes('401') || message.includes('403')
+    || message.includes('unauthor') || message.includes('forbid')
+    || message.includes('denied');
+}
+
 const UP_NEXT_ICON: Record<UpNextItem['kind'], typeof Calendar> = {
   event: Calendar,
   task: ListTodo,
@@ -683,8 +694,9 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
         if (!isCurrent()) return;
         overnightRef.current = o;
         setOvernight(o);
-      } catch {
+      } catch (err: unknown) {
         if (!isCurrent()) return;
+        if (isAuthorizationDenial(err)) throw err;
         // Keep the last-good secondary story. A transient overnight failure
         // must not erase or persist over a still-valid cached summary.
       }
@@ -696,7 +708,9 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
         const data = await takeBriefingData(profileId);
         if (!isCurrent()) return;
         applyHighlights(data.highlights);
-      } catch {
+      } catch (err: unknown) {
+        if (!isCurrent()) return;
+        if (isAuthorizationDenial(err)) throw err;
         /* keep prior highlights */
       }
 
@@ -707,19 +721,25 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, on
       }
     } catch (err: unknown) {
       if (!isCurrent()) return;
+      // Authentication/authorization failures revoke the right to paint the
+      // last-good payload. Keeping it visible would present another identity's
+      // workspace and memory metadata as current after a token/profile change.
+      if (isAuthorizationDenial(err)) {
+        clearHomeCache(profileId);
+        hasContentRef.current = false;
+        setBriefing(null);
+        overnightRef.current = null;
+        setOvernight(null);
+        applyHighlights([]);
+        setPermissionDenied(true);
+        return;
+      }
       // Silent-refresh failure over a cache-first paint: keep the last-good
       // content (wrong-then-corrected / blank is worse than slightly stale).
       // Only surface the error / permission state on a COLD miss.
       if (hasContentRef.current) return;
       setBriefing(null);
-      // PERMISSION-DENIED (PRD §12.1): a 403 gets a dedicated message rather
-      // than the generic "couldn't load" / offline framing.
-      const msg = err instanceof Error ? err.message.toLowerCase() : '';
-      if (msg.includes('403') || msg.includes('forbid') || msg.includes('denied')) {
-        setPermissionDenied(true);
-      } else {
-        setLoadError(true);
-      }
+      setLoadError(true);
     } finally {
       if (isCurrent()) setLoading(false);
     }
