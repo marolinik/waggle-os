@@ -86,7 +86,7 @@ function WorkspaceSwitcherHarness() {
 describe('Shell overlay contracts', () => {
   beforeEach(() => {
     mocks.useWorkspaces.mockReturnValue({ workspaces: [] });
-    mocks.useShell.mockReturnValue({ billingTier: 'FREE' });
+    mocks.useShell.mockReturnValue({ billingTier: 'FREE', workspaces: [] });
     mocks.adapter.getWorkspaceTemplates.mockResolvedValue({ templates: [] });
     mocks.adapter.getConnectors.mockResolvedValue([]);
     mocks.adapter.getPersonas.mockResolvedValue([]);
@@ -147,6 +147,46 @@ describe('Shell overlay contracts', () => {
 
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Create Workspace reuses the profile-owned shell list without starting a parallel workspace hook', async () => {
+    mocks.useWorkspaces.mockReturnValue({
+      workspaces: [{ id: 'profile-a-workspace', name: 'Profile A Workspace', group: 'Personal' }],
+    });
+    mocks.useShell.mockReturnValue({
+      billingTier: 'FREE',
+      workspaces: [{ id: 'profile-a-workspace', name: 'Profile A Workspace', group: 'Personal' }],
+    });
+
+    const props = { open: true, onClose: vi.fn(), onCreate: vi.fn() };
+    const { rerender } = renderWithProviders(<CreateWorkspaceDialog {...props} />);
+    await waitFor(() => expect(mocks.adapter.getWorkspaceTemplates).toHaveBeenCalled());
+
+    const dialog = screen.getByRole('dialog', { name: /create workspace/i });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /what project or area/i }), {
+      target: { value: 'Profile A Workspace' },
+    });
+    expect(within(dialog).getByTestId('create-workspace-dupe-warning')).toHaveTextContent('Profile A Workspace');
+
+    mocks.useShell.mockReturnValue({
+      billingTier: 'FREE',
+      workspaces: [{ id: 'profile-b-workspace', name: 'Profile B Workspace', group: 'Personal' }],
+    });
+    rerender(
+      <MemoryRouter>
+        <TooltipProvider>
+          <CreateWorkspaceDialog {...props} />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+    expect(within(dialog).queryByTestId('create-workspace-dupe-warning')).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /what project or area/i }), {
+      target: { value: 'Profile B Workspace' },
+    });
+
+    expect(within(dialog).getByTestId('create-workspace-dupe-warning')).toHaveTextContent('Profile B Workspace');
+    expect(mocks.useWorkspaces).not.toHaveBeenCalled();
   });
 
   it('Create Workspace asks in-app before deleting a custom template', async () => {

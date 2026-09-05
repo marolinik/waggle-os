@@ -12,7 +12,6 @@ import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
-import { useWorkspaces } from '@/hooks/useWorkspaces';
 import { useShell } from '@/providers/ShellContext';
 import { canCreateWorkspaceAtTier } from '@/lib/workspace-limit';
 import LockedFeature from '@/components/os/LockedFeature';
@@ -728,8 +727,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
 /* ── Main Dialog ──────────────────────────────────────────────────── */
 
 const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
-  const { workspaces } = useWorkspaces();
-  const { billingTier } = useShell();
+  const { billingTier, workspaces } = useShell();
   // Gate off the SAME canonical rule the server enforces (tiers.ts
   // workspaceLimit), not the retired onboarding-complexity flag that blocked
   // Solo at workspace #2 while the backend would have allowed unlimited. Client

@@ -13,6 +13,7 @@
  *    tier-403 copy defers to the UpgradeModal; empty-messages race guarded.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
 import { CONNECT_SETTLED_EVENT } from '@/hooks/useRevalidateOnError';
 
@@ -107,20 +108,177 @@ describe('useWorkspaces (P1b)', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('adopts an initial deep-link selection after hydration proves membership', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    let resolveInitial!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces.mockReturnValueOnce(new Promise(resolve => { resolveInitial = resolve; }));
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+    act(() => result.current.selectWorkspace('deep-link'));
+    expect(result.current.activeWorkspaceId).toBeNull();
+    await act(async () => {
+      resolveInitial([{ id: 'deep-link', name: 'Deep link', group: 'Personal' }]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.activeWorkspaceId).toBe('deep-link');
+    expect(readPersistedWorkspaceId('profile-a')).toBe('deep-link');
+    expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(1);
+  });
+
+  it('adopts an externally created workspace only after the authoritative list confirms it', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'existing', name: 'Existing', group: 'Personal' }])
+      .mockResolvedValueOnce([
+        { id: 'existing', name: 'Existing', group: 'Personal' },
+        { id: 'spawned', name: 'Spawned workspace', group: 'Personal' },
+      ]);
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+
+    act(() => result.current.selectWorkspace('spawned'));
+
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(readPersistedWorkspaceId('profile-a')).toBeNull();
+    await waitFor(() => expect(result.current.activeWorkspaceId).toBe('spawned'));
+    expect(readPersistedWorkspaceId('profile-a')).toBe('spawned');
+  });
+
+  it('retries external-candidate verification after a transient failure', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'existing', name: 'Existing', group: 'Personal' }])
+      .mockRejectedValueOnce(new Error('Temporary network failure'))
+      .mockResolvedValueOnce([
+        { id: 'existing', name: 'Existing', group: 'Personal' },
+        { id: 'spawned', name: 'Spawned workspace', group: 'Personal' },
+      ]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+    try {
+      await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+      act(() => result.current.selectWorkspace('spawned'));
+      await waitFor(() => expect(result.current.error).toBe('Temporary network failure'));
+      expect(result.current.activeWorkspaceId).toBeNull();
+
+      act(() => result.current.selectWorkspace('spawned'));
+      await waitFor(() => expect(result.current.activeWorkspaceId).toBe('spawned'));
+      expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(3);
+      expect(readPersistedWorkspaceId('profile-a')).toBe('spawned');
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it('keeps the latest verified selection when an older external-candidate refresh finishes', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    let resolveRefresh!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'existing', name: 'Existing', group: 'Personal' }])
+      .mockReturnValueOnce(new Promise(resolve => { resolveRefresh = resolve; }));
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+
+    act(() => result.current.selectWorkspace('spawned'));
+    act(() => result.current.selectWorkspace('existing'));
+    await act(async () => {
+      resolveRefresh([
+        { id: 'existing', name: 'Existing', group: 'Personal' },
+        { id: 'spawned', name: 'Spawned workspace', group: 'Personal' },
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.activeWorkspaceId).toBe('existing');
+    expect(readPersistedWorkspaceId('profile-a')).toBe('existing');
+  });
+
+  it('bounds revalidation for a retained route whose workspace does not exist', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'existing', name: 'Existing', group: 'Personal' }])
+      .mockResolvedValueOnce([{ id: 'existing', name: 'Existing', group: 'Personal' }]);
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+
+    act(() => result.current.selectWorkspace('missing-route'));
+    await waitFor(() => expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.selectWorkspace('missing-route'));
+
+    expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(2);
+    expect(result.current.activeWorkspaceId).toBeNull();
+  });
+
+  it('drops a pending profile-A selection across an A-to-B-to-A round trip', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveOldProfileA!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'existing-a', name: 'Existing A', group: 'Personal' }])
+      .mockReturnValueOnce(new Promise(resolve => { resolveOldProfileA = resolve; }))
+      .mockResolvedValueOnce([{ id: 'workspace-b', name: 'Workspace B', group: 'Personal' }])
+      .mockResolvedValueOnce([
+        { id: 'existing-a', name: 'Existing A', group: 'Personal' },
+        { id: 'spawned-a', name: 'Spawned A', group: 'Personal' },
+      ]);
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('existing-a'));
+    act(() => result.current.selectWorkspace('spawned-a'));
+
+    rerender({ profileId: 'profile-b' });
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('workspace-b'));
+    rerender({ profileId: 'profile-a' });
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(2));
+
+    expect(result.current.activeWorkspaceId).toBeNull();
+    await act(async () => {
+      resolveOldProfileA([
+        { id: 'existing-a', name: 'Existing A', group: 'Personal' },
+        { id: 'spawned-a', name: 'Spawned A', group: 'Personal' },
+      ]);
+      await Promise.resolve();
+    });
+    expect(result.current.activeWorkspaceId).toBeNull();
+  });
+
   it('never exposes the prior profile while the next profile request is pending', async () => {
     const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
     let resolveProfileB!: (workspaces: Array<{ id: string; name: string }>) => void;
     mocks.adapter.getWorkspaces
       .mockResolvedValueOnce([{ id: 'profile-a-private', name: 'Profile A private' }])
       .mockReturnValueOnce(new Promise(resolve => {
         resolveProfileB = resolve;
-      }));
+      }))
+      .mockReturnValueOnce(new Promise(() => {}));
 
     const { result, rerender } = renderHook(
       ({ profileId }) => useWorkspaces(profileId),
       { initialProps: { profileId: 'profile-a' } },
     );
     await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-a-private'));
+    const staleProfileASelect = result.current.selectWorkspace;
     act(() => result.current.selectWorkspace('profile-a-private'));
 
     rerender({ profileId: 'profile-b' });
@@ -128,12 +286,279 @@ describe('useWorkspaces (P1b)', () => {
     expect(result.current.activeWorkspace).toBeNull();
     expect(result.current.activeWorkspaceId).toBeNull();
     expect(result.current.loading).toBe(true);
+    act(() => staleProfileASelect('profile-a-unverified'));
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(readPersistedWorkspaceId('profile-b')).toBeNull();
+    expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       resolveProfileB([{ id: 'profile-b', name: 'Profile B' }]);
       await Promise.resolve();
     });
     await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-b'));
+  });
+
+  it('ignores a captured profile-A refresh without invalidating profile-B hydration', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveProfileB!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'profile-a', name: 'Profile A', group: 'Personal' }])
+      .mockReturnValueOnce(new Promise(resolve => { resolveProfileB = resolve; }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-a'));
+    const staleProfileARefresh = result.current.refresh;
+
+    rerender({ profileId: 'profile-b' });
+    act(() => { void staleProfileARefresh(); });
+    expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      resolveProfileB([{ id: 'profile-b', name: 'Profile B', group: 'Personal' }]);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('profile-b'));
+    expect(result.current.loading).toBe(false);
+  });
+
+  it.each(['create', 'delete', 'patch'] as const)(
+    'does not invoke the adapter from a captured profile-A %s callback after switching to B',
+    async (operation) => {
+      const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+      mocks.adapter.getWorkspaces.mockReset();
+      mocks.adapter.getWorkspaces
+        .mockResolvedValueOnce([{ id: 'shared-id', name: 'Profile A', group: 'Personal' }])
+        .mockResolvedValueOnce([{ id: 'shared-id', name: 'Profile B', group: 'Personal' }]);
+      mocks.adapter.createWorkspace.mockResolvedValue({ id: 'created-a', name: 'Created A', group: 'Personal' });
+      mocks.adapter.deleteWorkspace.mockResolvedValue(undefined);
+      mocks.adapter.patchWorkspace.mockResolvedValue(undefined);
+      const { result, rerender } = renderHook(
+        ({ profileId }) => useWorkspaces(profileId),
+        { initialProps: { profileId: 'profile-a' } },
+      );
+      await waitFor(() => expect(result.current.workspaces[0]?.name).toBe('Profile A'));
+      const staleCreate = result.current.createWorkspace;
+      const staleDelete = result.current.deleteWorkspace;
+      const stalePatch = result.current.patchWorkspace;
+
+      rerender({ profileId: 'profile-b' });
+      await waitFor(() => expect(result.current.workspaces[0]?.name).toBe('Profile B'));
+      mocks.adapter.createWorkspace.mockClear();
+      mocks.adapter.deleteWorkspace.mockClear();
+      mocks.adapter.patchWorkspace.mockClear();
+
+      await act(async () => {
+        if (operation === 'create') await staleCreate({ name: 'Wrong owner', group: 'Personal' });
+        else if (operation === 'delete') await staleDelete('shared-id');
+        else await stalePatch('shared-id', { name: 'Wrong owner' });
+      });
+
+      const adapterMutation = operation === 'create'
+        ? mocks.adapter.createWorkspace
+        : operation === 'delete'
+          ? mocks.adapter.deleteWorkspace
+          : mocks.adapter.patchWorkspace;
+      expect(adapterMutation).not.toHaveBeenCalled();
+      expect(result.current.workspaces[0]?.name).toBe('Profile B');
+    },
+  );
+
+  it('ignores an in-flight profile-A create after an A-to-B-to-A round trip', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveOldCreate!: (workspace: { id: string; name: string; group: string }) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'current-a', name: 'Current A', group: 'Personal' }])
+      .mockResolvedValueOnce([{ id: 'current-b', name: 'Current B', group: 'Personal' }])
+      .mockResolvedValueOnce([{ id: 'new-a', name: 'New A state', group: 'Personal' }]);
+    mocks.adapter.createWorkspace.mockReturnValueOnce(new Promise(resolve => { resolveOldCreate = resolve; }));
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('current-a'));
+    let oldCreate!: Promise<unknown>;
+    act(() => { oldCreate = result.current.createWorkspace({ name: 'Old A create', group: 'Personal' }); });
+
+    rerender({ profileId: 'profile-b' });
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('current-b'));
+    rerender({ profileId: 'profile-a' });
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('new-a'));
+
+    await act(async () => {
+      resolveOldCreate({ id: 'stale-created-a', name: 'Stale created A', group: 'Personal' });
+      await oldCreate;
+    });
+    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['new-a']);
+    expect(result.current.activeWorkspaceId).toBeNull();
+  });
+
+  it('does not carry a same-id workspace selection into another profile', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'default-workspace', name: 'Profile A default', group: 'Personal' }])
+      .mockResolvedValueOnce([{ id: 'default-workspace', name: 'Profile B default', group: 'Personal' }]);
+
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+    await waitFor(() => expect(result.current.workspaces[0]?.name).toBe('Profile A default'));
+    act(() => result.current.selectWorkspace('default-workspace'));
+    expect(result.current.activeWorkspace?.name).toBe('Profile A default');
+    expect(readPersistedWorkspaceId('profile-a')).toBe('default-workspace');
+    expect(readPersistedWorkspaceId('profile-b')).toBeNull();
+
+    rerender({ profileId: 'profile-b' });
+    await waitFor(() => expect(result.current.workspaces[0]?.name).toBe('Profile B default'));
+
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(result.current.activeWorkspace).toBeNull();
+    expect(readPersistedWorkspaceId('profile-a')).toBe('default-workspace');
+  });
+
+  it('does not carry an offline local workspace selection into another profile', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { persistWorkspaceId } = await import('@/lib/workspace-selection');
+    persistWorkspaceId('local-profile-a', 'profile-a');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.activeWorkspaceId).toBe('local-profile-a');
+
+    rerender({ profileId: 'profile-b' });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.activeWorkspaceId).toBeNull();
+  });
+
+  it('migrates a valid legacy selection only after the resolved profile list proves ownership', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem('waggle:active-workspace-v1', 'legacy-workspace');
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+      { id: 'legacy-workspace', name: 'Legacy Workspace', group: 'Personal' },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+    await waitFor(() => expect(result.current.activeWorkspaceId).toBe('legacy-workspace'));
+
+    expect(readPersistedWorkspaceId('profile-a')).toBe('legacy-workspace');
+    expect(window.localStorage.getItem('waggle:active-workspace-v1')).toBeNull();
+  });
+
+  it('retires an unverified legacy local selection instead of assigning it to a profile', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem('waggle:active-workspace-v1', 'local-unknown-owner');
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces.mockResolvedValueOnce([
+      { id: 'profile-a-workspace', name: 'Profile A Workspace', group: 'Personal' },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(readPersistedWorkspaceId('profile-a')).toBeNull();
+    expect(window.localStorage.getItem('waggle:active-workspace-v1')).toBeNull();
+  });
+
+  it('preserves legacy migration across an unresolved null-to-profile bootstrap', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem('waggle:active-workspace-v1', 'legacy-workspace');
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    let resolveUnbound!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockReturnValueOnce(new Promise(resolve => { resolveUnbound = resolve; }))
+      .mockResolvedValueOnce([{ id: 'legacy-workspace', name: 'Legacy Workspace', group: 'Personal' }]);
+
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: null as string | null } },
+    );
+    rerender({ profileId: 'profile-a' });
+    await waitFor(() => expect(result.current.activeWorkspaceId).toBe('legacy-workspace'));
+    expect(readPersistedWorkspaceId('profile-a')).toBe('legacy-workspace');
+
+    await act(async () => {
+      resolveUnbound([]);
+      await Promise.resolve();
+    });
+    expect(result.current.activeWorkspaceId).toBe('legacy-workspace');
+    expect(window.localStorage.getItem('waggle:active-workspace-v1')).toBeNull();
+  });
+
+  it('migrates the legacy key exactly once under React StrictMode', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem('waggle:active-workspace-v1', 'legacy-workspace');
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces.mockResolvedValue([
+      { id: 'legacy-workspace', name: 'Legacy Workspace', group: 'Personal' },
+    ]);
+
+    const { result } = renderHook(() => useWorkspaces('profile-a'), { wrapper: StrictMode });
+    await waitFor(() => expect(result.current.activeWorkspaceId).toBe('legacy-workspace'));
+
+    expect(readPersistedWorkspaceId('profile-a')).toBe('legacy-workspace');
+    expect(window.localStorage.getItem('waggle:active-workspace-v1')).toBeNull();
+  });
+
+  it('restores each profile selection and a profile-B denial does not erase profile A', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'workspace-a', name: 'Workspace A', group: 'Personal' }])
+      .mockResolvedValueOnce([{ id: 'workspace-b', name: 'Workspace B', group: 'Personal' }])
+      .mockRejectedValueOnce(httpError(401, { code: 'AUTH_DENIED' }, 'Session expired'))
+      .mockResolvedValueOnce([{ id: 'workspace-a', name: 'Workspace A', group: 'Personal' }]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+
+    try {
+      await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('workspace-a'));
+      act(() => result.current.selectWorkspace('workspace-a'));
+      rerender({ profileId: 'profile-b' });
+      await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('workspace-b'));
+      act(() => result.current.selectWorkspace('workspace-b'));
+      await act(async () => { await result.current.refresh(); });
+      expect(result.current.accessDenied).toBe(true);
+      expect(readPersistedWorkspaceId('profile-b')).toBeNull();
+      expect(readPersistedWorkspaceId('profile-a')).toBe('workspace-a');
+
+      rerender({ profileId: 'profile-a' });
+      await waitFor(() => expect(result.current.activeWorkspaceId).toBe('workspace-a'));
+      expect(result.current.activeWorkspace?.name).toBe('Workspace A');
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 
   it.each([
@@ -150,6 +575,7 @@ describe('useWorkspaces (P1b)', () => {
     const { result } = renderHook(() => useWorkspaces('profile-a'));
     await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
     act(() => result.current.selectWorkspace('private-a'));
+    const preDenialSelect = result.current.selectWorkspace;
 
     mocks.adapter.getWorkspaces.mockRejectedValueOnce(
       httpError(status, { code: 'AUTH_DENIED' }, message),
@@ -159,9 +585,139 @@ describe('useWorkspaces (P1b)', () => {
     expect(result.current.workspaces).toEqual([]);
     expect(result.current.activeWorkspace).toBeNull();
     expect(result.current.activeWorkspaceId).toBeNull();
-    expect(readPersistedWorkspaceId()).toBeNull();
+    expect(readPersistedWorkspaceId('profile-a')).toBeNull();
     expect(result.current.error).toBe(message);
     expect(result.current.accessDenied).toBe(true);
+    act(() => {
+      preDenialSelect('private-a');
+      result.current.selectWorkspace('private-a');
+      result.current.selectWorkspace('local-private-a');
+    });
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(readPersistedWorkspaceId('profile-a')).toBeNull();
+  });
+
+  it('retires an unknown-owner legacy selection when a resolved profile is denied', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem('waggle:active-workspace-v1', 'same-id');
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockRejectedValueOnce(httpError(401, { code: 'AUTH_DENIED' }, 'Session expired'))
+      .mockResolvedValueOnce([{ id: 'same-id', name: 'Profile B same id', group: 'Personal' }]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+
+    try {
+      await waitFor(() => expect(result.current.accessDenied).toBe(true));
+      expect(window.localStorage.getItem('waggle:active-workspace-v1')).toBeNull();
+
+      rerender({ profileId: 'profile-b' });
+      await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('same-id'));
+      expect(result.current.activeWorkspaceId).toBeNull();
+      expect(readPersistedWorkspaceId('profile-b')).toBeNull();
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it('retires unknown-owner legacy selection when a mutation denies access before hydration', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem('waggle:active-workspace-v1', 'same-id');
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    let resolveProfileA!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockReturnValueOnce(new Promise(resolve => { resolveProfileA = resolve; }))
+      .mockResolvedValueOnce([{ id: 'same-id', name: 'Profile B same id', group: 'Personal' }]);
+    mocks.adapter.createWorkspace.mockRejectedValueOnce(
+      httpError(401, { code: 'AUTH_DENIED' }, 'Session expired'),
+    );
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+
+    try {
+      await act(async () => {
+        await result.current.createWorkspace({ name: 'Denied', group: 'Personal' });
+      });
+      expect(result.current.accessDenied).toBe(true);
+      expect(window.localStorage.getItem('waggle:active-workspace-v1')).toBeNull();
+
+      rerender({ profileId: 'profile-b' });
+      await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('same-id'));
+      expect(result.current.activeWorkspaceId).toBeNull();
+      expect(readPersistedWorkspaceId('profile-b')).toBeNull();
+
+      await act(async () => {
+        resolveProfileA([{ id: 'same-id', name: 'Profile A same id', group: 'Personal' }]);
+        await Promise.resolve();
+      });
+      expect(result.current.activeWorkspaceId).toBeNull();
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it('keeps access revoked when a later create failure is not an authorization decision', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'private-a', name: 'Private A', group: 'Personal' }])
+      .mockRejectedValueOnce(httpError(401, { code: 'AUTH_DENIED' }, 'Session expired'));
+    mocks.adapter.createWorkspace.mockRejectedValueOnce(
+      httpError(500, { code: 'UPSTREAM_FAILURE' }, 'Storage temporarily unavailable'),
+    );
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+    try {
+      await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+      await act(async () => { await result.current.refresh(); });
+      expect(result.current.accessDenied).toBe(true);
+
+      await act(async () => {
+        await result.current.createWorkspace({ name: 'Still denied', group: 'Personal' });
+      });
+
+      expect(result.current.accessDenied).toBe(true);
+      expect(result.current.workspaces).toEqual([]);
+      expect(result.current.activeWorkspaceId).toBeNull();
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it('keeps access revoked when revalidation later fails transiently', async () => {
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'private-a', name: 'Private A', group: 'Personal' }])
+      .mockRejectedValueOnce(httpError(401, { code: 'AUTH_DENIED' }, 'Session expired'))
+      .mockRejectedValueOnce(new Error('Network unavailable'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+
+    try {
+      await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+      await act(async () => { await result.current.refresh(); });
+      expect(result.current.accessDenied).toBe(true);
+
+      await act(async () => { await result.current.refresh(); });
+      expect(result.current.accessDenied).toBe(true);
+      expect(result.current.error).toBe('Network unavailable');
+      expect(result.current.workspaces).toEqual([]);
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 
   it('does not expose a profile A error while profile B is hydrating', async () => {
@@ -230,7 +786,7 @@ describe('useWorkspaces (P1b)', () => {
 
         expect(result.current.workspaces).toEqual([]);
         expect(result.current.activeWorkspaceId).toBeNull();
-        expect(readPersistedWorkspaceId()).toBeNull();
+        expect(readPersistedWorkspaceId('profile-a')).toBeNull();
         expect(result.current.error).toBe('Session expired');
         expect(result.current.accessDenied).toBe(true);
       } finally {
@@ -315,7 +871,7 @@ describe('useWorkspaces (P1b)', () => {
 
     expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['profile-b']);
     expect(result.current.activeWorkspaceId).toBe('profile-b');
-    expect(readPersistedWorkspaceId()).toBe('profile-b');
+    expect(readPersistedWorkspaceId('profile-b')).toBe('profile-b');
     expect(result.current.loading).toBe(false);
     },
   );
@@ -501,30 +1057,64 @@ describe('useWorkspaces (P1b)', () => {
       consoleSpy.mockRestore();
     }
   });
-  it('keeps a newly created workspace when an older initial list resolves late', async () => {
+  it('refetches the authoritative list when create outruns initial hydration', async () => {
     window.localStorage.clear();
     const { useWorkspaces } = await import('@/hooks/useWorkspaces');
     const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
     let resolveInitialList!: (workspaces: Array<{ id: string; name: string }>) => void;
-    mocks.adapter.getWorkspaces.mockReturnValueOnce(new Promise(resolve => {
-      resolveInitialList = resolve;
-    }));
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockReturnValueOnce(new Promise(resolve => {
+        resolveInitialList = resolve;
+      }))
+      .mockResolvedValueOnce([
+        { id: 'w-old', name: 'Existing workspace' },
+        { id: 'w-new', name: 'New workspace' },
+      ]);
     mocks.adapter.createWorkspace.mockResolvedValueOnce({ id: 'w-new', name: 'New workspace' });
     const { result } = renderHook(() => useWorkspaces());
 
     await act(async () => {
       await result.current.createWorkspace({ name: 'New workspace', group: 'Personal' });
     });
-    expect(result.current.activeWorkspaceId).toBe('w-new');
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(2));
 
     await act(async () => {
       resolveInitialList([{ id: 'w-old', name: 'Older snapshot' }]);
       await Promise.resolve();
     });
 
-    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w-new']);
+    expect(result.current.workspaces.map(workspace => workspace.id)).toEqual(['w-old', 'w-new']);
     expect(result.current.activeWorkspaceId).toBe('w-new');
     expect(readPersistedWorkspaceId()).toBe('w-new');
+    expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(2);
+  });
+
+  it('retires the legacy selection when create succeeds before initial hydration', async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem('waggle:active-workspace-v1', 'same-id');
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    const { readPersistedWorkspaceId } = await import('@/lib/workspace-selection');
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce([{ id: 'same-id', name: 'Profile B same id', group: 'Personal' }]);
+    mocks.adapter.createWorkspace.mockResolvedValueOnce({ id: 'created-a', name: 'Created A', group: 'Personal' });
+    const { result, rerender } = renderHook(
+      ({ profileId }) => useWorkspaces(profileId),
+      { initialProps: { profileId: 'profile-a' } },
+    );
+
+    await act(async () => {
+      await result.current.createWorkspace({ name: 'Created A', group: 'Personal' });
+    });
+    expect(window.localStorage.getItem('waggle:active-workspace-v1')).toBeNull();
+
+    rerender({ profileId: 'profile-b' });
+    await waitFor(() => expect(result.current.workspaces[0]?.id).toBe('same-id'));
+    expect(result.current.activeWorkspaceId).toBeNull();
+    expect(readPersistedWorkspaceId('profile-b')).toBeNull();
   });
 
   it('keeps a successful workspace patch when an older list resolves late', async () => {
@@ -559,6 +1149,40 @@ describe('useWorkspaces (P1b)', () => {
 
     expect(result.current.workspaces[0]?.name).toBe('After');
     expect(result.current.loading).toBe(false);
+  });
+
+  it('retries pending external verification after a successful patch invalidates its fetch', async () => {
+    window.localStorage.clear();
+    const { useWorkspaces } = await import('@/hooks/useWorkspaces');
+    let resolveOldVerification!: (workspaces: Array<{ id: string; name: string; group: string }>) => void;
+    mocks.adapter.getWorkspaces.mockReset();
+    mocks.adapter.getWorkspaces
+      .mockResolvedValueOnce([{ id: 'existing', name: 'Existing', group: 'Personal' }])
+      .mockReturnValueOnce(new Promise(resolve => { resolveOldVerification = resolve; }))
+      .mockResolvedValueOnce([
+        { id: 'existing', name: 'Renamed', group: 'Personal' },
+        { id: 'spawned', name: 'Spawned workspace', group: 'Personal' },
+      ]);
+    mocks.adapter.patchWorkspace.mockResolvedValueOnce(undefined);
+    const { result } = renderHook(() => useWorkspaces('profile-a'));
+    await waitFor(() => expect(result.current.workspaces).toHaveLength(1));
+    act(() => result.current.selectWorkspace('spawned'));
+
+    await act(async () => {
+      await result.current.patchWorkspace('existing', { name: 'Renamed' });
+    });
+    act(() => result.current.selectWorkspace('spawned'));
+    await waitFor(() => expect(result.current.activeWorkspaceId).toBe('spawned'));
+    expect(mocks.adapter.getWorkspaces).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      resolveOldVerification([
+        { id: 'existing', name: 'Existing', group: 'Personal' },
+        { id: 'spawned', name: 'Spawned workspace', group: 'Personal' },
+      ]);
+      await Promise.resolve();
+    });
+    expect(result.current.activeWorkspaceId).toBe('spawned');
   });
 
   it('deduplicates a workspace observed by the list before its create response settles', async () => {
