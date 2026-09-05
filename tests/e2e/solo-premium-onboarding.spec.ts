@@ -3,6 +3,9 @@ import { createServer, type Server } from 'node:http';
 import { expect, test, type Page } from '@playwright/test';
 
 const RUN_LIVE_SOLO_CHAT = process.env.WAGGLE_E2E_SOLO_CHAT === '1';
+const RUN_LIVE_SOLO_ONBOARDING = process.env.WAGGLE_E2E_SOLO_ONBOARDING === '1';
+const OWNS_ISOLATED_SERVER = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER === '0';
+const USES_GENERATED_DATA_DIR = process.env.WAGGLE_E2E_DATA_DIR === undefined;
 const CONFIGURED_ENDPOINT = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_BASE_URL
   ?? 'http://10.33.0.153:4000/v1';
 const MODEL = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_MODEL
@@ -202,7 +205,10 @@ async function readAssistantFromUi(page: Page): Promise<string> {
 }
 
 test.describe('Windows Solo premium first-run onboarding', () => {
-  test.skip(!RUN_LIVE_SOLO_CHAT, 'Set WAGGLE_E2E_SOLO_CHAT=1 to run the real local-model journey.');
+  test.skip(
+    !RUN_LIVE_SOLO_CHAT || !RUN_LIVE_SOLO_ONBOARDING || !OWNS_ISOLATED_SERVER || !USES_GENERATED_DATA_DIR,
+    'Set WAGGLE_E2E_SOLO_CHAT=1, WAGGLE_E2E_SOLO_ONBOARDING=1, and WAGGLE_E2E_REUSE_EXISTING_SERVER=0. Leave WAGGLE_E2E_DATA_DIR unset; this journey must own its disposable Waggle data dir.',
+  );
   test.setTimeout(600_000);
   // A retry would reuse the same already-onboarded server process/data dir and
   // no longer exercise a first-run journey. This gate owns one clean lifetime.

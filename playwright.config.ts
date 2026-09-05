@@ -18,6 +18,7 @@
  */
 
 import { defineConfig, devices } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveE2EBaseUrl } from './tests/vision/_helpers.js';
@@ -27,8 +28,25 @@ import { resolveE2EBaseUrl } from './tests/vision/_helpers.js';
 delete process.env.FORCE_COLOR;
 delete process.env.NO_COLOR;
 
-const e2eDataDir = process.env.WAGGLE_E2E_DATA_DIR
-  ?? path.join(os.tmpdir(), `waggle-os-playwright-${process.pid}`);
+export function resolveE2EDataDir(
+  env: NodeJS.ProcessEnv,
+  runId: string,
+  pid = process.pid,
+): string {
+  if (env.WAGGLE_E2E_SOLO_ONBOARDING === '1') {
+    if (env.WAGGLE_E2E_REUSE_EXISTING_SERVER !== '0') {
+      throw new Error('Solo onboarding E2E requires WAGGLE_E2E_REUSE_EXISTING_SERVER=0.');
+    }
+    if (env.WAGGLE_E2E_DATA_DIR !== undefined) {
+      throw new Error('Solo onboarding E2E requires WAGGLE_E2E_DATA_DIR to be unset.');
+    }
+    return path.join(os.tmpdir(), `waggle-os-playwright-onboarding-${pid}-${runId}`);
+  }
+  return env.WAGGLE_E2E_DATA_DIR
+    ?? path.join(os.tmpdir(), `waggle-os-playwright-${pid}`);
+}
+
+const e2eDataDir = resolveE2EDataDir(process.env, randomUUID());
 const e2eBaseURL = resolveE2EBaseUrl(process.env);
 const e2eURL = new URL(e2eBaseURL);
 const e2ePort = Number.parseInt(
