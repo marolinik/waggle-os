@@ -5,6 +5,8 @@ import { discoverProviderModels, PROVIDER_MODEL_CATALOGS } from '../provider-mod
 import { refreshManagedLiteLLM } from '../litellm-runtime-config.js';
 import { getProviderApiKey } from '../provider-env.js';
 
+const MODEL_CATALOG_TIMEOUT_MS = 3_000;
+
 export const litellmRoutes: FastifyPluginAsync = async (server) => {
   server.get('/api/litellm/status', async () => {
     const status = await getLiteLLMStatus(server.localConfig.managedLiteLLMPort);
@@ -39,7 +41,9 @@ export const litellmRoutes: FastifyPluginAsync = async (server) => {
     }));
     const [localModels, providerModels] = await Promise.all([localModelsPromise, providerModelsPromise]);
     try {
-      const response = await fetch(`${server.localConfig.litellmUrl}/models`);
+      const response = await fetch(`${server.localConfig.litellmUrl}/models`, {
+        signal: AbortSignal.timeout(MODEL_CATALOG_TIMEOUT_MS),
+      });
       if (!response.ok) {
         return { models: [...new Set([...providerModels.flat(), ...localModels])] };
       }

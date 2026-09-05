@@ -315,6 +315,58 @@ describe('LiteLLM Management API', () => {
     expect(body.models).toEqual(['ollama/llama3.2:latest']);
   });
 
+  it('GET /api/litellm/models bounds a stalled LiteLLM body and returns local fallbacks', async () => {
+    const timeoutController = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutController.signal);
+    let modelsSignal: AbortSignal | null | undefined;
+    let markBodyStarted: (() => void) | undefined;
+    let releaseSlowBody: (() => void) | undefined;
+    const bodyStarted = new Promise<void>((resolve) => {
+      markBodyStarted = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
+          status: 200,
+        });
+      }
+      if (url.endsWith('/models')) {
+        modelsSignal = init?.signal;
+        return {
+          ok: true,
+          json: () => new Promise((resolve, reject) => {
+            markBodyStarted?.();
+            modelsSignal?.addEventListener('abort', () => {
+              reject(modelsSignal?.reason ?? new Error('request aborted'));
+            }, { once: true });
+            releaseSlowBody = () => {
+              if (!modelsSignal) {
+                resolve({ data: [{ id: 'router/responded-too-late' }] });
+              }
+            };
+          }),
+        } as Response;
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    const response = injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/litellm/models',
+    });
+    await bodyStarted;
+    timeoutController.abort();
+    releaseSlowBody?.();
+    const res = await response;
+
+    expect(timeoutSpy).toHaveBeenCalledWith(3_000);
+    expect(modelsSignal).toBe(timeoutController.signal);
+    expect(modelsSignal?.aborted).toBe(true);
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).models).toEqual(['ollama/llama3.2:latest']);
+  });
+
   it('local inference status separates remote aliases from installed models', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -582,7 +634,13 @@ describe('LiteLLM Management API', () => {
       if (url.includes('/v1/chat/completions')) {
         const body = JSON.parse(String(init?.body)) as { model: string };
         probedModels.push(body.model);
-        return new Response('{}', { status: 200 });
+        return new Response(JSON.stringify({
+          choices: [{
+            message: { role: 'assistant', content: 'probe ok' },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        }), { status: 200 });
       }
       if (url.startsWith('https://generativelanguage.googleapis.com/')) {
         return new Response(JSON.stringify({
