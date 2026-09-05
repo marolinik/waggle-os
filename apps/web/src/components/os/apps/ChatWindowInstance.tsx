@@ -275,20 +275,24 @@ const ChatWindowInstance = ({
     let currentLanded = false;
     let modelRequest = 0;
     let currentModelRequest = 0;
+    let modelFetchInFlight = false;
+    let currentModelFetchInFlight = false;
 
     // The sidecar merges LiteLLM, provider API catalogs, and local runtime models.
     // Keep an empty list on outage rather than presenting model IDs that may no
     // longer exist at the provider.
     const fetchModels = async (announceLoading = false) => {
-      const request = ++modelRequest;
       if (announceLoading) setModelCatalogStatus('loading');
+      if (modelFetchInFlight) return;
+      modelFetchInFlight = true;
+      const request = ++modelRequest;
       try {
         const models = await adapter.getModels();
         if (cancelled || request !== modelRequest) return;
+        modelsLanded = true;
         if (models && models.length > 0) {
           setAvailableModels(models);
           setModelCatalogStatus('ready');
-          modelsLanded = true;
         } else {
           setAvailableModels([]);
           setModelCatalogStatus('empty');
@@ -299,17 +303,21 @@ const ChatWindowInstance = ({
           setAvailableModels([]);
           setModelCatalogStatus('unavailable');
         }
+      } finally {
+        modelFetchInFlight = false;
       }
     };
     refreshModelsRef.current = fetchModels;
 
     // Try fetching the current active model from the sidecar. Also retries on
     // transient failure — the initial render may race the sidecar spawning.
-    const fetchCurrentModel = async () => {
+    const fetchCurrentModel = async (supersede = false) => {
       if (initialModelRef.current || userSelectedModelRef.current) {
         currentLanded = true;
         return;
       }
+      if (currentModelFetchInFlight && !supersede) return;
+      currentModelFetchInFlight = true;
       const request = ++currentModelRequest;
       const loadRevision = modelRevisionRef.current;
       try {
@@ -320,7 +328,6 @@ const ChatWindowInstance = ({
           || userSelectedModelRef.current
           || loadRevision !== modelRevisionRef.current
         ) {
-          currentLanded = true;
           return;
         }
         if (typeof model === 'string' && model) {
@@ -337,7 +344,6 @@ const ChatWindowInstance = ({
           || userSelectedModelRef.current
           || loadRevision !== modelRevisionRef.current
         ) {
-          currentLanded = true;
           return;
         }
         const fromSettings = (settings as { defaultModel?: string; model?: string }).defaultModel
@@ -350,6 +356,8 @@ const ChatWindowInstance = ({
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch current model failed:', err);
+      } finally {
+        if (request === currentModelRequest) currentModelFetchInFlight = false;
       }
     };
     refreshCurrentModelRef.current = fetchCurrentModel;
@@ -370,19 +378,6 @@ const ChatWindowInstance = ({
       if (!currentLanded) fetchCurrentModel();
     }, 2000);
 
-    // Fetch team members for presence display
-    const fetchTeam = async () => {
-      try {
-        const members = await adapter.getTeamMembers();
-        if (cancelled) return;
-        setTeamPresence(members.filter(m => m.status === 'online'));
-      } catch (err) {
-        console.error('[ChatWindowInstance] fetch team failed:', err);
-        if (!cancelled) setTeamPresence([]);
-      }
-    };
-    fetchTeam();
-    const teamInterval = setInterval(fetchTeam, 10000);
     const refreshModelsOnFocus = () => {
       if (!isActiveChatRef.current) return;
       void fetchModels();
@@ -391,7 +386,7 @@ const ChatWindowInstance = ({
     };
     const refreshInheritedModel = () => {
       if (!isActiveChatRef.current) return;
-      void fetchCurrentModel();
+      void fetchCurrentModel(true);
     };
     window.addEventListener('focus', refreshModelsOnFocus);
     window.addEventListener(MODEL_SETTINGS_CHANGED_EVENT, refreshInheritedModel);
@@ -402,10 +397,38 @@ const ChatWindowInstance = ({
       refreshCurrentModelRef.current = async () => {};
       window.removeEventListener('focus', refreshModelsOnFocus);
       window.removeEventListener(MODEL_SETTINGS_CHANGED_EVENT, refreshInheritedModel);
-      clearInterval(teamInterval);
       clearInterval(retryInterval);
     };
   }, []);
+
+  useEffect(() => {
+    if (storageType !== 'team') {
+      setTeamPresence([]);
+      return;
+    }
+
+    let cancelled = false;
+    let fetchInFlight = false;
+    const fetchTeam = async () => {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
+      try {
+        const members = await adapter.getTeamMembers();
+        if (!cancelled) setTeamPresence(members.filter(m => m.status === 'online'));
+      } catch (err) {
+        console.error('[ChatWindowInstance] fetch team failed:', err);
+        if (!cancelled) setTeamPresence([]);
+      } finally {
+        fetchInFlight = false;
+      }
+    };
+    void fetchTeam();
+    const teamInterval = setInterval(fetchTeam, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(teamInterval);
+    };
+  }, [storageType]);
 
   useEffect(() => {
     let cancelled = false;

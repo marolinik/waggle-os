@@ -91,10 +91,135 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
 describe('ChatWindowInstance model catalog refresh', () => {
+  it('keeps slow model, current-model, and team polls single-flight', async () => {
+    vi.useFakeTimers();
+    let resolveModels!: (models: string[]) => void;
+    let resolveModel!: (model: string) => void;
+    let resolveMembers!: (members: []) => void;
+    mocks.getModels.mockReset().mockReturnValue(
+      new Promise<string[]>((resolve) => { resolveModels = resolve; }),
+    );
+    mocks.getModel.mockReset().mockReturnValue(
+      new Promise<string>((resolve) => { resolveModel = resolve; }),
+    );
+    mocks.getTeamMembers.mockReset().mockReturnValue(
+      new Promise<[]>((resolve) => { resolveMembers = resolve; }),
+    );
+
+    render(
+      <ChatWindowInstance
+        workspaceId="workspace-1"
+        preferredSessionId={null}
+        storageType="team"
+      />,
+    );
+    expect(mocks.getModels).toHaveBeenCalledTimes(1);
+    expect(mocks.getModel).toHaveBeenCalledTimes(1);
+    expect(mocks.getTeamMembers).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+
+    expect(mocks.getModels).toHaveBeenCalledTimes(1);
+    expect(mocks.getModel).toHaveBeenCalledTimes(1);
+    expect(mocks.getTeamMembers).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      resolveModels(['openai/saved-model']);
+      resolveModel('openai/saved-model');
+      resolveMembers([]);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+    expect(mocks.getModels).toHaveBeenCalledTimes(2);
+    expect(mocks.getModel).toHaveBeenCalledTimes(2);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(mocks.getTeamMembers).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats an empty model catalog as a completed successful fetch', async () => {
+    vi.useFakeTimers();
+    mocks.getModels.mockReset().mockResolvedValue([]);
+
+    render(<ChatWindowInstance workspaceId="workspace-1" initialModel="openai/saved-model" />);
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(12_000);
+    });
+
+    expect(mocks.getModels).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not poll team presence for a Solo workspace', async () => {
+    vi.useFakeTimers();
+
+    render(
+      <ChatWindowInstance
+        workspaceId="workspace-1"
+        initialModel="openai/saved-model"
+        storageType="local"
+      />,
+    );
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+
+    expect(mocks.getTeamMembers).not.toHaveBeenCalled();
+  });
+
+  it('retries after a superseding current-model refresh fails and the startup request lands late', async () => {
+    vi.useFakeTimers();
+    let resolveStartup!: (model: string) => void;
+    mocks.getModel.mockReset()
+      .mockReturnValueOnce(new Promise<string>((resolve) => { resolveStartup = resolve; }))
+      .mockRejectedValueOnce(new Error('temporary current-model outage'))
+      .mockResolvedValueOnce('openai/recovered-model');
+
+    render(<ChatWindowInstance workspaceId="workspace-1" preferredSessionId={null} />);
+    expect(mocks.getModel).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('waggle:model-settings-changed'));
+      await Promise.resolve();
+    });
+    expect(mocks.getModel).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveStartup('openai/stale-model');
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(mocks.getModel).toHaveBeenCalledTimes(3);
+    expect(screen.getByTestId('current-model')).toHaveTextContent('openai/recovered-model');
+  });
+
+  it('retries team presence after a failed poll settles', async () => {
+    vi.useFakeTimers();
+    mocks.getTeamMembers.mockReset()
+      .mockRejectedValueOnce(new Error('temporary team outage'))
+      .mockResolvedValueOnce([]);
+
+    render(
+      <ChatWindowInstance
+        workspaceId="workspace-1"
+        initialModel="openai/saved-model"
+        storageType="team"
+      />,
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.getTeamMembers).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(mocks.getTeamMembers).toHaveBeenCalledTimes(2);
+  });
+
   it('reloads the provider-backed model list when Waggle regains focus', async () => {
     mocks.getModel
       .mockResolvedValueOnce('openai/existing-model')

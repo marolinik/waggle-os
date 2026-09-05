@@ -62,6 +62,24 @@ import {
 
 const logger = createCoreLogger('orchestrator');
 
+const sharedRerankerLoads = new Map<string, Promise<Reranker | undefined>>();
+
+function getSharedInProcessReranker(cacheDir?: string): Promise<Reranker | undefined> {
+  const key = cacheDir ?? '<default>';
+  const existing = sharedRerankerLoads.get(key);
+  if (existing) return existing;
+
+  const config = cacheDir ? { cacheDir } : undefined;
+  const pending = createInProcessReranker(config).catch((e: unknown) => {
+    logger.warn('reranker unavailable — falling back to RRF ordering', {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return undefined;
+  });
+  sharedRerankerLoads.set(key, pending);
+  return pending;
+}
+
 // Content-length constants now live in `./content-constants.ts` (single
 // source of truth shared with the pattern-write-back extractor). Imports
 // below pull only the ones this file still references.
@@ -478,7 +496,7 @@ export class Orchestrator {
    * pre-PromptAssembler implementation (profile='balanced', no score floor).
    */
   /**
-   * W4.2/W4.5: lazy cross-encoder reranker — DEFAULT ON since the W4.5 live
+   * W4.2/W4.5: lazy process-shared cross-encoder reranker — DEFAULT ON since the W4.5 live
    * smoke (real ONNX load + 58-83ms warm recalls verified through the real
    * server). Kill switch: WAGGLE_RERANKER=0. First use downloads the ~22MB
    * model (cached at the configured managed path, or ~/.hive-mind/models for
@@ -491,15 +509,7 @@ export class Orchestrator {
       this.rerankerPromise = Promise.resolve(undefined);
       return this.rerankerPromise;
     }
-    const rerankerConfig = this.rerankerCacheDir
-      ? { cacheDir: this.rerankerCacheDir }
-      : undefined;
-    this.rerankerPromise = createInProcessReranker(rerankerConfig).catch((e: unknown) => {
-      logger.warn('reranker unavailable — falling back to RRF ordering', {
-        error: e instanceof Error ? e.message : String(e),
-      });
-      return undefined;
-    });
+    this.rerankerPromise = getSharedInProcessReranker(this.rerankerCacheDir);
     return this.rerankerPromise;
   }
 

@@ -449,6 +449,12 @@ test.describe('Windows Solo same-workspace concurrency', () => {
         page.reload({ waitUntil: 'domcontentloaded' }),
         secondPage.reload({ waitUntil: 'domcontentloaded' }),
       ]);
+      await Promise.all([
+        expect(page.getByRole('textbox', { name: 'Message composer' }))
+          .toBeVisible({ timeout: 30_000 }),
+        expect(secondPage.getByRole('textbox', { name: 'Message composer' }))
+          .toBeVisible({ timeout: 30_000 }),
+      ]);
       await expect(page.locator(`button[data-session-id="${sessionA}"]`))
         .toHaveAttribute('aria-current', 'true');
       await expect(secondPage.locator(`button[data-session-id="${sessionB}"]`))
