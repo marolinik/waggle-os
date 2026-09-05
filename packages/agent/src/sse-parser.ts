@@ -41,18 +41,30 @@ export interface SseParseOptions {
   onActivity?: () => void;
 }
 
+const MAX_PENDING_SSE_EVENT_CHARS = 1_048_576;
+const MAX_PENDING_SSE_EVENT_LINES = 4_096;
+const MAX_TOTAL_SSE_CHARS = 2_097_152;
+const MAX_STREAMED_TOOL_CALLS = 256;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 function incompleteStreamError(
   inputTokens: number,
   outputTokens: number,
   partialToolCalls: StreamedToolCall[] | undefined,
+  message = 'LLM stream ended unexpectedly before data: [DONE]; partial content was not accepted.',
 ): Error & {
   code: 'INCOMPLETE_COMPLETION';
   usage: { inputTokens: number; outputTokens: number };
   partialToolCalls?: StreamedToolCall[];
 } {
-  const error = new Error(
-    'LLM stream ended unexpectedly before data: [DONE]; partial content was not accepted.',
-  ) as Error & {
+  const error = new Error(message) as Error & {
     code: 'INCOMPLETE_COMPLETION';
     usage: { inputTokens: number; outputTokens: number };
     partialToolCalls?: StreamedToolCall[];
@@ -85,14 +97,296 @@ export async function parseChatCompletionStream(
   // tool-call deltas: each distinct `tc.id` gets its own stable slot so their
   // argument fragments don't all collapse into index 0 and corrupt each other.
   const idToSyntheticIndex = new Map<string, number>();
-  let nextSyntheticIndex = 0;
+  // Provider-supplied indexes are validated as non-negative. Keep synthetic
+  // slots negative so arrival order can never collide with a later explicit index.
+  let nextSyntheticIndex = -1;
   let lastSlot = 0;
 
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let lineBuffer = '';
+  let pendingCarriageReturn = false;
+  let eventDataLines: string[] = [];
+  let eventDataChars = 0;
+  let totalDecodedChars = 0;
+  let stopReading = false;
 
-  streamRead: for (;;) {
+  const partialToolCalls = () => (
+    toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined
+  );
+
+  const failClosed = (message: string): never => {
+    if (typeof reader.cancel === 'function') {
+      void reader.cancel().catch(() => undefined);
+    }
+    throw incompleteStreamError(inputTokens, outputTokens, partialToolCalls(), message);
+  };
+
+  const processPayload = (payload: string): void => {
+    if (payload === '[DONE]') {
+      doneObserved = true;
+      stopReading = true;
+      if (typeof reader.cancel === 'function') {
+        void reader.cancel().catch(() => undefined);
+      }
+      return;
+    }
+
+    let chunk: unknown;
+    try {
+      chunk = JSON.parse(payload);
+    } catch {
+      failClosed('LLM stream contained malformed SSE data; partial content was not accepted.');
+    }
+
+    if (!isRecord(chunk)) {
+      failClosed('LLM stream contained a non-object completion event; partial content was not accepted.');
+    }
+    const event = chunk as Record<string, unknown>;
+    if (event.error != null) {
+      failClosed('LLM stream contained a provider error event; partial content was not accepted.');
+    }
+
+    let nextInputTokens = inputTokens;
+    let nextOutputTokens = outputTokens;
+    const rawUsage = event.usage;
+    if (rawUsage != null) {
+      if (!isRecord(rawUsage)) {
+        failClosed('LLM stream contained invalid usage data; partial content was not accepted.');
+      }
+      const usage = rawUsage as Record<string, unknown>;
+      if ((usage.prompt_tokens != null && !isTokenCount(usage.prompt_tokens))
+        || (usage.completion_tokens != null && !isTokenCount(usage.completion_tokens))) {
+        failClosed('LLM stream contained invalid usage data; partial content was not accepted.');
+      }
+      nextInputTokens = typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : inputTokens;
+      nextOutputTokens = typeof usage.completion_tokens === 'number' ? usage.completion_tokens : outputTokens;
+    }
+
+    if (event.choices != null && !Array.isArray(event.choices)) {
+      failClosed('LLM stream contained invalid choices data; partial content was not accepted.');
+    }
+    const choices = Array.isArray(event.choices) ? event.choices : [];
+    const rawChoice = choices[0];
+    if (choices.length > 0 && !isRecord(rawChoice)) {
+      failClosed('LLM stream contained an invalid choice; partial content was not accepted.');
+    }
+    const choice = isRecord(rawChoice) ? rawChoice : undefined;
+    if (choice?.finish_reason != null && typeof choice.finish_reason !== 'string') {
+      failClosed('LLM stream contained an invalid finish reason; partial content was not accepted.');
+    }
+    const nextFinishReason = typeof choice?.finish_reason === 'string'
+      ? choice.finish_reason
+      : null;
+
+    const rawDeltaValue = choice?.delta;
+    if (rawDeltaValue != null && !isRecord(rawDeltaValue)) {
+      failClosed('LLM stream contained an invalid delta; partial content was not accepted.');
+    }
+    const rawDelta = isRecord(rawDeltaValue) ? rawDeltaValue : undefined;
+    for (const field of ['content', 'reasoning_content', 'reasoning'] as const) {
+      if (rawDelta?.[field] != null && typeof rawDelta[field] !== 'string') {
+        failClosed('LLM stream contained invalid text data; partial content was not accepted.');
+      }
+    }
+    if (rawDelta?.tool_calls != null && !Array.isArray(rawDelta.tool_calls)) {
+      failClosed('LLM stream contained invalid tool-call data; partial content was not accepted.');
+    }
+    const deltaToolCalls = Array.isArray(rawDelta?.tool_calls) ? rawDelta.tool_calls : undefined;
+    for (const rawToolCall of deltaToolCalls ?? []) {
+      if (!isRecord(rawToolCall)
+        || (rawToolCall.index != null && (!isTokenCount(rawToolCall.index)))
+        || (rawToolCall.id != null && typeof rawToolCall.id !== 'string')
+        || (rawToolCall.function != null && !isRecord(rawToolCall.function))
+        || (isRecord(rawToolCall.function)
+          && rawToolCall.function.name != null
+          && typeof rawToolCall.function.name !== 'string')
+        || (isRecord(rawToolCall.function)
+          && rawToolCall.function.arguments != null
+          && typeof rawToolCall.function.arguments !== 'string')) {
+        failClosed('LLM stream contained an invalid tool call; partial content was not accepted.');
+      }
+    }
+
+    const contentDelta = typeof rawDelta?.content === 'string' ? rawDelta.content : undefined;
+    const reasoning = typeof rawDelta?.reasoning_content === 'string'
+      ? rawDelta.reasoning_content
+      : (typeof rawDelta?.reasoning === 'string' ? rawDelta.reasoning : undefined);
+    const hasSemanticDelta = Boolean(reasoning || contentDelta || deltaToolCalls?.length);
+
+    if (finishReason !== null) {
+      if (nextFinishReason !== null && nextFinishReason !== finishReason) {
+        failClosed('LLM stream reported contradictory finish reasons; partial content was not accepted.');
+      }
+      if (hasSemanticDelta) {
+        failClosed('LLM stream emitted semantic data after finish_reason; partial content was not accepted.');
+      }
+    }
+
+    let stagedToolCalls: Map<number, StreamedToolCall> | undefined;
+    let stagedIdToSyntheticIndex: Map<string, number> | undefined;
+    let stagedNextSyntheticIndex = nextSyntheticIndex;
+    let stagedLastSlot = lastSlot;
+    if (deltaToolCalls) {
+      stagedToolCalls = new Map(Array.from(toolCalls, ([index, call]) => [
+        index,
+        { ...call, function: { ...call.function } },
+      ]));
+      stagedIdToSyntheticIndex = new Map(idToSyntheticIndex);
+      for (const rawToolCall of deltaToolCalls) {
+        const tc = rawToolCall as {
+          index?: number;
+          id?: string;
+          function?: { name?: string; arguments?: string };
+        };
+        const explicitIndex = typeof tc.index === 'number' ? tc.index : undefined;
+        const knownIndex = tc.id ? stagedIdToSyntheticIndex.get(tc.id) : undefined;
+        let idx = stagedLastSlot;
+        if (knownIndex !== undefined) {
+          if (explicitIndex === undefined || explicitIndex === knownIndex) {
+            idx = knownIndex;
+          } else if (knownIndex < 0 && !stagedToolCalls.has(explicitIndex)) {
+            // Some compatible providers add an explicit index only after first
+            // identifying the call by ID. Move the synthetic slot without
+            // changing its insertion order or losing already assembled data.
+            stagedToolCalls = new Map(Array.from(stagedToolCalls, ([slot, call]) => (
+              slot === knownIndex ? [explicitIndex, call] : [slot, call]
+            )));
+            for (const [id, slot] of stagedIdToSyntheticIndex) {
+              if (slot === knownIndex) stagedIdToSyntheticIndex.set(id, explicitIndex);
+            }
+            if (stagedLastSlot === knownIndex) stagedLastSlot = explicitIndex;
+            idx = explicitIndex;
+          } else {
+            failClosed('LLM stream contained conflicting tool-call identity; partial content was not accepted.');
+          }
+        } else if (explicitIndex !== undefined) {
+          idx = explicitIndex;
+          const existing = stagedToolCalls.get(idx);
+          if (tc.id && existing?.id && existing.id !== tc.id) {
+            failClosed('LLM stream contained conflicting tool-call identity; partial content was not accepted.');
+          }
+          if (tc.id) stagedIdToSyntheticIndex.set(tc.id, idx);
+        } else if (tc.id) {
+          if (stagedToolCalls.size >= MAX_STREAMED_TOOL_CALLS) {
+            failClosed('LLM stream exceeded the tool-call limit; partial content was not accepted.');
+          }
+          while (stagedToolCalls.has(stagedNextSyntheticIndex)) stagedNextSyntheticIndex -= 1;
+          idx = stagedNextSyntheticIndex--;
+          stagedIdToSyntheticIndex.set(tc.id, idx);
+        } else {
+          idx = stagedLastSlot;
+        }
+        stagedLastSlot = idx;
+        if (!stagedToolCalls.has(idx)) {
+          if (stagedToolCalls.size >= MAX_STREAMED_TOOL_CALLS) {
+            failClosed('LLM stream exceeded the tool-call limit; partial content was not accepted.');
+          }
+          stagedToolCalls.set(idx, {
+            id: tc.id ?? '',
+            type: 'function' as const,
+            function: { name: tc.function?.name ?? '', arguments: '' },
+          });
+        }
+        const existing = stagedToolCalls.get(idx)!;
+        if (tc.id && existing.id && existing.id !== tc.id) {
+          failClosed('LLM stream contained conflicting tool-call identity; partial content was not accepted.');
+        }
+        if (tc.function?.name
+          && existing.function.name
+          && existing.function.name !== tc.function.name) {
+          failClosed('LLM stream contained conflicting tool-call identity; partial content was not accepted.');
+        }
+        if (tc.id) existing.id = tc.id;
+        if (tc.function?.name) existing.function.name = tc.function.name;
+        if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+      }
+    }
+
+    inputTokens = nextInputTokens;
+    outputTokens = nextOutputTokens;
+
+    if (reasoning || contentDelta || deltaToolCalls?.length) onActivity?.();
+    if (reasoning) onReasoningActivity?.();
+
+    if (contentDelta) {
+      content += contentDelta;
+      onToken?.(contentDelta);
+    }
+
+    if (stagedToolCalls && stagedIdToSyntheticIndex) {
+      toolCalls.clear();
+      for (const [index, call] of stagedToolCalls) toolCalls.set(index, call);
+      idToSyntheticIndex.clear();
+      for (const [id, index] of stagedIdToSyntheticIndex) idToSyntheticIndex.set(id, index);
+      nextSyntheticIndex = stagedNextSyntheticIndex;
+      lastSlot = stagedLastSlot;
+    }
+
+    if (finishReason === null && nextFinishReason !== null) {
+      finishReason = nextFinishReason;
+    }
+  };
+
+  const processLine = (line: string): void => {
+    if (line === '') {
+      if (eventDataLines.length > 0) {
+        const payload = eventDataLines.join('\n');
+        eventDataLines = [];
+        eventDataChars = 0;
+        processPayload(payload);
+      }
+      return;
+    }
+    if (line.startsWith(':')) return;
+
+    const colon = line.indexOf(':');
+    const field = colon === -1 ? line : line.slice(0, colon);
+    let value = colon === -1 ? '' : line.slice(colon + 1);
+    if (value.startsWith(' ')) value = value.slice(1);
+    if (field === 'data') {
+      const nextLength = eventDataChars + value.length + (eventDataLines.length > 0 ? 1 : 0);
+      if (nextLength > MAX_PENDING_SSE_EVENT_CHARS
+        || eventDataLines.length >= MAX_PENDING_SSE_EVENT_LINES) {
+        failClosed('LLM stream exceeded the pending SSE event limit; partial content was not accepted.');
+      }
+      eventDataLines.push(value);
+      eventDataChars = nextLength;
+    }
+  };
+
+  const feedText = (text: string): void => {
+    for (const character of text) {
+      if (stopReading) return;
+      if (pendingCarriageReturn) {
+        pendingCarriageReturn = false;
+        processLine(lineBuffer);
+        lineBuffer = '';
+        if (character === '\n') continue;
+      }
+      if (character === '\r') {
+        pendingCarriageReturn = true;
+      } else if (character === '\n') {
+        processLine(lineBuffer);
+        lineBuffer = '';
+      } else {
+        lineBuffer += character;
+        if (lineBuffer.length > MAX_PENDING_SSE_EVENT_CHARS) {
+          failClosed('LLM stream exceeded the pending SSE line limit; partial content was not accepted.');
+        }
+      }
+    }
+  };
+
+  const feedDecodedText = (text: string): void => {
+    totalDecodedChars += text.length;
+    if (totalDecodedChars > MAX_TOTAL_SSE_CHARS) {
+      failClosed('LLM stream exceeded the total SSE size limit; partial content was not accepted.');
+    }
+    feedText(text);
+  };
+
+  for (;;) {
     let readResult: ReadableStreamReadResult<Uint8Array>;
     try {
       readResult = await reader.read();
@@ -104,107 +398,18 @@ export async function parseChatCompletionStream(
       );
     }
     const { done, value } = readResult;
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-
-    // Process complete SSE events (separated by double newlines).
-    // Last part may be incomplete — keep it in the buffer.
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop() ?? '';
-
-    for (const part of parts) {
-      for (const line of part.split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(6).trim();
-        if (payload === '[DONE]') {
-          doneObserved = true;
-          if (typeof reader.cancel === 'function') {
-            void reader.cancel().catch(() => undefined);
-          }
-          break streamRead;
-        }
-
-        let chunk: unknown;
-        try {
-          chunk = JSON.parse(payload);
-        } catch {
-          continue;
-        }
-
-        const c = chunk as {
-          usage?: { prompt_tokens?: number; completion_tokens?: number };
-          choices?: Array<{
-            finish_reason?: string | null;
-            delta?: {
-              content?: string;
-              reasoning_content?: string;
-              reasoning?: string;
-              tool_calls?: Array<{
-                index?: number;
-                id?: string;
-                function?: { name?: string; arguments?: string };
-              }>;
-            };
-          }>;
-        };
-
-        if (c.usage) {
-          inputTokens = c.usage.prompt_tokens ?? inputTokens;
-          outputTokens = c.usage.completion_tokens ?? outputTokens;
-        }
-
-        const choice = c.choices?.[0];
-        if (choice?.finish_reason != null) finishReason = choice.finish_reason;
-
-        const delta = choice?.delta;
-        if (!delta) continue;
-
-        const reasoning = delta.reasoning_content ?? delta.reasoning;
-        if (reasoning || delta.content || delta.tool_calls?.length) onActivity?.();
-        if (reasoning) onReasoningActivity?.();
-
-        if (delta.content) {
-          content += delta.content;
-          if (onToken) onToken(delta.content);
-        }
-
-        if (delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            let idx: number;
-            if (tc.index !== undefined) {
-              idx = tc.index;
-            } else if (tc.id) {
-              // No index but a distinct id — assign (or reuse) a synthetic slot keyed by id.
-              const known = idToSyntheticIndex.get(tc.id);
-              if (known !== undefined) {
-                idx = known;
-              } else {
-                idx = nextSyntheticIndex++;
-                idToSyntheticIndex.set(tc.id, idx);
-              }
-            } else {
-              // No index and no id — argument-only continuation of the most-recent slot.
-              idx = lastSlot;
-            }
-            lastSlot = idx;
-            if (!toolCalls.has(idx)) {
-              toolCalls.set(idx, {
-                id: tc.id ?? '',
-                type: 'function' as const,
-                function: { name: tc.function?.name ?? '', arguments: '' },
-              });
-            }
-            const existing = toolCalls.get(idx)!;
-            if (tc.id) existing.id = tc.id;
-            if (tc.function?.name) existing.function.name = tc.function.name;
-            if (tc.function?.arguments) {
-              existing.function.arguments += tc.function.arguments;
-            }
-          }
-        }
+    if (done) {
+      feedDecodedText(decoder.decode());
+      if (pendingCarriageReturn) {
+        pendingCarriageReturn = false;
+        processLine(lineBuffer);
+        lineBuffer = '';
       }
+      break;
     }
+
+    feedDecodedText(decoder.decode(value, { stream: true }));
+    if (stopReading) break;
   }
 
   const toolCallsArray = toolCalls.size > 0 ? Array.from(toolCalls.values()) : undefined;
