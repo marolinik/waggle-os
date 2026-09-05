@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     probeModel: vi.fn(),
     probeProvider: vi.fn(),
     saveSettings: vi.fn(),
+    savePermissions: vi.fn(),
     toggleTelemetry: vi.fn(),
     clearTelemetry: vi.fn(),
     fetchRaw: vi.fn(),
@@ -47,6 +48,12 @@ async function openBackupTab() {
   await screen.findByRole('heading', { name: /encrypted backup/i });
 }
 
+async function openPermissionsTab() {
+  await exposeEverything();
+  fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+  await screen.findByRole('heading', { name: /^permissions$/i, level: 3 });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
@@ -61,6 +68,11 @@ beforeEach(() => {
   mocks.adapter.probeModel.mockResolvedValue({ configured: false });
   mocks.adapter.probeProvider.mockResolvedValue({ configured: false, valid: false, verified: false });
   mocks.adapter.saveSettings.mockResolvedValue(undefined);
+  mocks.adapter.savePermissions.mockResolvedValue({
+    defaultAutonomy: 'normal',
+    externalGates: [],
+    workspaceOverrides: {},
+  });
   mocks.adapter.toggleTelemetry.mockResolvedValue({ enabled: false });
   mocks.adapter.clearTelemetry.mockResolvedValue({ ok: true });
   mocks.adapter.fetchRaw.mockResolvedValue(new Response(null, { status: 200 }));
@@ -91,6 +103,119 @@ describe('Settings trust flows', () => {
       { id: alternateFallbackModel, name: 'Qwen 3.8 27B Uncensored', cost: '$', speed: 'fast' },
     ],
   };
+
+  it('fails closed when permissions cannot load and retries the authoritative read', async () => {
+    mocks.adapter.getPermissions
+      .mockRejectedValueOnce(new Error('permission store unavailable'))
+      .mockResolvedValueOnce({
+        defaultAutonomy: 'trusted',
+        externalGates: ['git push'],
+        workspaceOverrides: {},
+      });
+
+    renderSettings();
+    await openPermissionsTab();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/permissions could not be loaded/i);
+    for (const level of ['normal', 'trusted', 'yolo']) {
+      const control = screen.getByTestId(`default-autonomy-${level}`);
+      expect(control).toBeDisabled();
+      expect(control).toHaveAttribute('aria-checked', 'false');
+      fireEvent.click(control);
+    }
+    expect(mocks.adapter.savePermissions).not.toHaveBeenCalled();
+
+    fireEvent.click(within(alert).getByRole('button', { name: /retry/i }));
+
+    await waitFor(() => expect(mocks.adapter.getPermissions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-trusted')).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.getByTestId('default-autonomy-trusted')).toBeEnabled();
+  });
+
+  it('saves only the selected autonomy after success and hides unenforced mutation gates', async () => {
+    let resolveSave!: (value: { defaultAutonomy: 'trusted'; externalGates: string[]; workspaceOverrides: object }) => void;
+    const save = new Promise<{ defaultAutonomy: 'trusted'; externalGates: string[]; workspaceOverrides: object }>((resolve) => {
+      resolveSave = resolve;
+    });
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: ['git push'],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions.mockReturnValue(save);
+
+    renderSettings();
+    await openPermissionsTab();
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.queryByText(/always require approval/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/git push.*rm -rf/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^add$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^remove$/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+
+    await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledWith({ defaultAutonomy: 'trusted' }));
+    expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('default-autonomy-trusted')).toBeDisabled();
+
+    await act(async () => {
+      resolveSave({ defaultAutonomy: 'trusted', externalGates: ['git push'], workspaceOverrides: {} });
+      await save;
+    });
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-trusted')).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.queryByText(/mutation gates|always require approval/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/git push.*rm -rf/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(add|remove)$/i })).not.toBeInTheDocument();
+  });
+
+  it('saves a confirmed Never ask transition without stale gate data', async () => {
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: ['git push'],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions.mockResolvedValue({
+      defaultAutonomy: 'yolo',
+      externalGates: ['git push'],
+      workspaceOverrides: {},
+    });
+
+    renderSettings();
+    await openPermissionsTab();
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByTestId('default-autonomy-yolo'));
+    fireEvent.click(await screen.findByTestId('yolo-confirm-accept'));
+
+    await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledWith({ defaultAutonomy: 'yolo' }));
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-yolo')).toHaveAttribute('aria-checked', 'true'));
+  });
+
+  it('keeps the confirmed autonomy selected when a permission save fails', async () => {
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: ['git push'],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions
+      .mockRejectedValueOnce(new Error('write failed'))
+      .mockResolvedValueOnce(undefined);
+
+    renderSettings();
+    await openPermissionsTab();
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+
+    fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/permissions were not saved/i);
+    expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('default-autonomy-trusted')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByTestId('default-autonomy-trusted')).toBeEnabled();
+
+    fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+    await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-trusted')).toHaveAttribute('aria-checked', 'true'));
+  });
 
   async function chooseFallback(modelName: RegExp) {
     fireEvent.click(await screen.findByRole('button', { name: /change fallback model/i }));
@@ -456,7 +581,7 @@ describe('Settings trust flows', () => {
   it('downloads a successful authenticated export with a trustworthy filename', async () => {
     mocks.adapter.fetchRaw.mockResolvedValue(new Response('export-bytes', { status: 200 }));
     const directFetch = vi.spyOn(globalThis, 'fetch');
-    const createObjectURL = vi.fn(() => 'blob:waggle-export');
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:waggle-export');
     const revokeObjectURL = vi.fn();
     const originalCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
     const originalRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');

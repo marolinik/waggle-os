@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
@@ -186,9 +186,9 @@ const SettingsApp = () => {
   // binary — it's the inherited level new chat windows start at. Per-window
   // overrides in Chat's AutonomyPicker always beat this.
   type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
-  const [defaultAutonomy, setDefaultAutonomy] = useState<AutonomyLevel>('normal');
-  const [externalGates, setExternalGates] = useState<string[]>([]);
-  const [newGate, setNewGate] = useState('');
+  const [defaultAutonomy, setDefaultAutonomy] = useState<AutonomyLevel | null>(null);
+  const [permissionsLoadState, setPermissionsLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [permissionsSaving, setPermissionsSaving] = useState(false);
   // F18: pending in-app confirmation for the transition into `yolo` ("Never
   // ask"). Keeps the risky transition inside the app's visual language with a
   // focus-visible, testable confirm row.
@@ -230,6 +230,19 @@ const SettingsApp = () => {
   const [pendingApproval, setPendingApproval] = useState<SettingsApproval | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
 
+  const loadPermissions = useCallback(async () => {
+    setPermissionsLoadState('loading');
+    setDefaultAutonomy(null);
+    setPendingYolo(false);
+    try {
+      const permissions = await adapter.getPermissions();
+      setDefaultAutonomy(permissions.defaultAutonomy);
+      setPermissionsLoadState('ready');
+    } catch {
+      setPermissionsLoadState('error');
+    }
+  }, []);
+
   // Load settings
   useEffect(() => {
     adapter.getSettings().then((s) => {
@@ -240,12 +253,10 @@ const SettingsApp = () => {
       setDailyBudget(s.dailyBudget != null ? String(s.dailyBudget) : '');
     }).catch(() => {});
 
-    // P4: permissions now live on /api/settings/permissions (separate from
-    // /api/settings). Load defaultAutonomy + externalGates here.
-    adapter.getPermissions().then(p => {
-      setDefaultAutonomy(p.defaultAutonomy);
-      setExternalGates(p.externalGates);
-    }).catch(() => {});
+    // Permission state is security-sensitive. Until its authoritative read
+    // succeeds, the controls stay unselected and disabled rather than showing
+    // a fabricated default that a later click could persist.
+    void loadPermissions();
 
     adapter.getTeamStatus().then(s => setTeamConnected(s.connected)).catch(() => {});
 
@@ -256,7 +267,7 @@ const SettingsApp = () => {
       setTelemetryEnabled(s.enabled);
       setTelemetryCount(s.totalEvents);
     }).catch(() => {});
-  }, []);
+  }, [loadPermissions]);
 
   const modelPilotLabel = (fields: ModelPilotUpdate): string => {
     const labels = [
@@ -391,14 +402,20 @@ const SettingsApp = () => {
     }
   };
 
-  const handleSavePermissions = async (next?: { defaultAutonomy?: AutonomyLevel; externalGates?: string[] }) => {
-    setSaving(true);
+  const handleSavePermissions = async (nextAutonomy: AutonomyLevel) => {
+    if (permissionsLoadState !== 'ready' || permissionsSaving) return;
+    setPermissionsSaving(true);
     try {
-      await adapter.savePermissions(next ?? { defaultAutonomy, externalGates });
+      // Autonomy is a partial update. Never echo stale unrelated policy data.
+      await adapter.savePermissions({ defaultAutonomy: nextAutonomy });
+      setDefaultAutonomy(nextAutonomy);
       setSaveMsg('Permissions saved');
       setTimeout(() => setSaveMsg(''), 2000);
-    } catch { setSaveMsg('Failed to save'); }
-    finally { setSaving(false); }
+    } catch {
+      setSaveMsg('Permissions were not saved. Try again.');
+    } finally {
+      setPermissionsSaving(false);
+    }
   };
 
   const approvalRequest: ApprovalRequest | null = pendingApproval
@@ -1061,6 +1078,24 @@ const SettingsApp = () => {
                 Inherited by <em>new</em> chat windows. Each window has its own per-session override in
                 the chat header — change one window without affecting the rest.
               </p>
+              {permissionsLoadState === 'loading' && (
+                <div role="status" className="mb-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading permission settings…
+                </div>
+              )}
+              {permissionsLoadState === 'error' && (
+                <div role="alert" className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 p-2.5 text-[11px] text-foreground">
+                  <p>Permissions could not be loaded. Existing settings were left unchanged.</p>
+                  <button
+                    type="button"
+                    onClick={() => { void loadPermissions(); }}
+                    className="mt-2 rounded-lg border border-border/50 bg-muted/40 px-2.5 py-1 text-foreground hover:bg-muted"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               <div className="space-y-1.5" role="radiogroup" aria-label="Default approval level">
                 {([
                   { value: 'normal',  label: 'Ask every time',      copy: 'Approve every write, edit, and mutating tool call' },
@@ -1078,7 +1113,9 @@ const SettingsApp = () => {
                       type="button"
                       role="radio"
                       aria-checked={active}
+                      disabled={permissionsLoadState !== 'ready' || permissionsSaving}
                       onClick={() => {
+                        if (defaultAutonomy === null) return;
                         // F18: route the into-yolo transition through the inline
                         // confirm-row below instead of applying immediately.
                         if (requiresYoloConfirm(defaultAutonomy, opt.value)) {
@@ -1086,11 +1123,10 @@ const SettingsApp = () => {
                           return;
                         }
                         setPendingYolo(false); // a safe selection cancels a pending Never-ask confirm
-                        setDefaultAutonomy(opt.value);
-                        handleSavePermissions({ defaultAutonomy: opt.value, externalGates });
+                        void handleSavePermissions(opt.value);
                       }}
                       data-testid={`default-autonomy-${opt.value}`}
-                      className={`w-full text-left flex items-start gap-2 px-2.5 py-2 rounded-lg border transition-colors ${
+                      className={`w-full text-left flex items-start gap-2 px-2.5 py-2 rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                         active
                           ? (isDanger ? 'bg-amber-500/15 border-amber-500/60' : 'bg-primary/15 border-primary/50')
                           : 'bg-muted/20 border-border/20 hover:border-border/40'
@@ -1133,11 +1169,11 @@ const SettingsApp = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        setDefaultAutonomy('yolo');
-                        handleSavePermissions({ defaultAutonomy: 'yolo', externalGates });
+                        void handleSavePermissions('yolo');
                         setPendingYolo(false);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/60 text-amber-200 text-[11px] font-display font-semibold hover:bg-amber-500/30 transition-colors"
+                      disabled={permissionsSaving}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/60 text-amber-200 text-[11px] font-display font-semibold hover:bg-amber-500/30 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                       data-testid="yolo-confirm-accept"
                     >
                       Turn on Never ask
@@ -1147,27 +1183,6 @@ const SettingsApp = () => {
               )}
             </div>
 
-            {/* External gates */}
-            <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-              <p className="text-xs font-display font-medium text-foreground mb-2">Mutation Gates</p>
-              <p className="text-[11px] text-muted-foreground mb-2">Operations that always require approval, regardless of the default level above</p>
-              <div className="space-y-1 mb-2">
-                {externalGates.map((gate, i) => (
-                  <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-muted/30">
-                    <span className="text-[11px] text-foreground font-mono">{gate}</span>
-                    <button onClick={() => setExternalGates(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-[11px] text-destructive hover:text-destructive/80">Remove</button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-1.5">
-                <Input id="settings-mutation-gate" name="mutationGate" autoComplete="off" spellCheck={false} value={newGate} onChange={e => setNewGate(e.target.value)} placeholder="e.g., git push, rm -rf"
-                  className="flex-1 bg-muted/50 text-xs h-auto py-1"
-                  onKeyDown={e => { if (e.key === 'Enter' && newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }} />
-                <button onClick={() => { if (newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }}
-                  className="px-2 py-1 text-[11px] rounded-lg bg-secondary text-foreground hover:bg-secondary/70">Add</button>
-              </div>
-            </div>
           </div>
         )}
 

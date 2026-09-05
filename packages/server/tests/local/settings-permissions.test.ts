@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -148,7 +148,172 @@ describe('Permission settings API', () => {
     });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body);
-    expect(body.error).toContain('defaultAutonomy must be one of');
+    expect(body.error).toBeTruthy();
+  });
+
+  it.each([
+    { externalGates: ['git push', 7] },
+    { workspaceOverrides: { 'ws-1': ['deploy'], 'ws-2': 'delete' } },
+    { yoloMode: 'yes' },
+    { unexpectedPermission: true },
+  ])('PUT rejects malformed or unknown permission updates without changing stored policy: %j', async (payload) => {
+    const permPath = path.join(tmpDir, 'permissions.json');
+    const before = fs.readFileSync(permPath, 'utf-8');
+    const res = await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/settings/permissions',
+      payload,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(fs.readFileSync(permPath, 'utf-8')).toBe(before);
+    const healthy = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/settings/permissions',
+    });
+    expect(healthy.statusCode).toBe(200);
+  });
+
+  it('commits permission updates with a same-directory atomic rename', async () => {
+    const permPath = path.join(tmpDir, 'permissions.json');
+    const realRename = fs.renameSync.bind(fs);
+    let renameAttempts = 0;
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
+      renameAttempts += 1;
+      if (renameAttempts === 1) {
+        const error = new Error('temporarily locked') as NodeJS.ErrnoException;
+        error.code = 'EPERM';
+        throw error;
+      }
+      return realRename(source, destination);
+    });
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings/permissions',
+        payload: { defaultAutonomy: 'trusted' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(rename).toHaveBeenCalledTimes(2);
+      expect(rename).toHaveBeenCalledWith(
+        expect.stringMatching(/permissions\.json\..+\.tmp$/),
+        permPath,
+      );
+      expect(path.dirname(String(rename.mock.calls[0]?.[0]))).toBe(path.dirname(permPath));
+      expect(JSON.parse(fs.readFileSync(permPath, 'utf-8')).defaultAutonomy).toBe('trusted');
+      expect(fs.readdirSync(tmpDir).filter((name) => name.startsWith('permissions.json.'))).toEqual([]);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
+  it('fails closed on a corrupt policy and preserves it during partial updates', async () => {
+    const permPath = path.join(tmpDir, 'permissions.json');
+    const before = fs.readFileSync(permPath, 'utf-8');
+    const corrupt = '{"defaultAutonomy":"yolo","externalGates":[';
+    fs.writeFileSync(permPath, corrupt, 'utf-8');
+    try {
+      const getRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/settings/permissions',
+      });
+      expect(getRes.statusCode).toBe(503);
+      expect(JSON.parse(getRes.body).error).toMatch(/could not be read/i);
+
+      const putRes = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings/permissions',
+        payload: { defaultAutonomy: 'normal' },
+      });
+      expect(putRes.statusCode).toBe(409);
+      expect(fs.readFileSync(permPath, 'utf-8')).toBe(corrupt);
+    } finally {
+      fs.writeFileSync(permPath, before, 'utf-8');
+    }
+  });
+
+  it.each([
+    JSON.stringify({
+      defaultAutonomy: 'trusted',
+      externalGates: ['git push', 7],
+      workspaceOverrides: {},
+    }),
+    JSON.stringify({
+      defaultAutonomy: 'trusted',
+      externalGates: [],
+      workspaceOverrides: {},
+      futurePolicyField: true,
+    }),
+  ])('fails closed when persisted JSON has an invalid permission shape: %s', async (invalid) => {
+    const permPath = path.join(tmpDir, 'permissions.json');
+    const before = fs.readFileSync(permPath, 'utf-8');
+    fs.writeFileSync(permPath, invalid, 'utf-8');
+    try {
+      const getRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/settings/permissions',
+      });
+      expect(getRes.statusCode).toBe(503);
+
+      const putRes = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings/permissions',
+        payload: { defaultAutonomy: 'normal' },
+      });
+      expect(putRes.statusCode).toBe(409);
+      expect(fs.readFileSync(permPath, 'utf-8')).toBe(invalid);
+    } finally {
+      fs.writeFileSync(permPath, before, 'utf-8');
+    }
+  });
+
+  it('does not mistake an unreadable existing policy path for a missing file', async () => {
+    const permPath = path.join(tmpDir, 'permissions.json');
+    const before = fs.readFileSync(permPath, 'utf-8');
+    fs.rmSync(permPath);
+    fs.mkdirSync(permPath);
+    try {
+      const getRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/settings/permissions',
+      });
+      expect(getRes.statusCode).toBe(503);
+
+      const putRes = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings/permissions',
+        payload: { defaultAutonomy: 'normal' },
+      });
+      expect(putRes.statusCode).toBe(409);
+      expect(fs.statSync(permPath).isDirectory()).toBe(true);
+    } finally {
+      fs.rmSync(permPath, { recursive: true, force: true });
+      fs.writeFileSync(permPath, before, 'utf-8');
+    }
+  });
+
+  it('preserves the existing policy and removes temp files when atomic publication fails', async () => {
+    const permPath = path.join(tmpDir, 'permissions.json');
+    const before = fs.readFileSync(permPath, 'utf-8');
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      const error = new Error('file locked') as NodeJS.ErrnoException;
+      error.code = 'EPERM';
+      throw error;
+    });
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'PUT',
+        url: '/api/settings/permissions',
+        payload: { defaultAutonomy: 'normal' },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(fs.readFileSync(permPath, 'utf-8')).toBe(before);
+      expect(fs.readdirSync(tmpDir).filter((name) => name.startsWith('permissions.json.'))).toEqual([]);
+    } finally {
+      rename.mockRestore();
+    }
   });
 
   it('GET migrates legacy permissions.json with yoloMode=true to defaultAutonomy="yolo"', async () => {

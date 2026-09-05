@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { WaggleConfig, type VaultEntry } from '@waggle/core';
@@ -18,7 +19,25 @@ import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 import { applyProviderKeyToEnv } from '../provider-env.js';
 import { refreshManagedLiteLLM, type LiteLLMRefreshResult } from '../litellm-runtime-config.js';
 
-const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
+const VALID_AUTONOMY = ['normal', 'trusted', 'yolo'] as const satisfies readonly AutonomyLevel[];
+const autonomyLevelSchema = z.enum(VALID_AUTONOMY);
+const permissionGateListSchema = z.array(z.string().min(1).max(256)).max(100);
+const workspaceOverridesSchema = z.record(permissionGateListSchema).refine(
+  (value) => Object.keys(value).length <= 100,
+  'Too many workspace overrides',
+);
+const permissionsStoredSchema = z.object({
+  defaultAutonomy: autonomyLevelSchema.optional(),
+  yoloMode: z.boolean().optional(),
+  externalGates: permissionGateListSchema.optional(),
+  workspaceOverrides: workspaceOverridesSchema.optional(),
+}).strict();
+const permissionsUpdateSchema = z.object({
+  defaultAutonomy: autonomyLevelSchema.optional(),
+  yoloMode: z.boolean().optional(),
+  externalGates: permissionGateListSchema.optional(),
+  workspaceOverrides: workspaceOverridesSchema.optional(),
+}).strict();
 
 /** PUT /api/settings body — config write. All fields optional (partial update);
  *  unknown keys are stripped. `providers` is a free-form map (per-provider
@@ -879,32 +898,57 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
   function readPermissions(): PermissionsData {
     const filePath = getPermissionsPath();
+    let raw: string;
     try {
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, 'utf-8');
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        return {
-          defaultAutonomy: coerceDefaultAutonomy(parsed),
-          externalGates: (parsed.externalGates as string[] | undefined) ?? DEFAULTS.externalGates,
-          workspaceOverrides:
-            (parsed.workspaceOverrides as Record<string, string[]> | undefined) ??
-            DEFAULTS.workspaceOverrides,
-        };
+      raw = fs.readFileSync(filePath, 'utf-8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { defaultAutonomy: 'normal', externalGates: [], workspaceOverrides: {} };
       }
-    } catch {
-      // Corrupted file — return defaults
+      throw error;
     }
-    return { ...DEFAULTS };
+    const parsed = permissionsStoredSchema.parse(JSON.parse(raw));
+    return {
+      defaultAutonomy: coerceDefaultAutonomy(parsed),
+      externalGates: parsed.externalGates ?? DEFAULTS.externalGates,
+      workspaceOverrides: parsed.workspaceOverrides ?? DEFAULTS.workspaceOverrides,
+    };
   }
 
   function writePermissions(data: PermissionsData): void {
     const filePath = getPermissionsPath();
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+    const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+    try {
+      fs.writeFileSync(temporaryPath, JSON.stringify(data, null, 2), 'utf-8');
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        try {
+          fs.renameSync(temporaryPath, filePath);
+          return;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          const transient = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY';
+          if (!transient || attempt === 4) throw error;
+          Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+        }
+      }
+    } finally {
+      try { fs.rmSync(temporaryPath, { force: true }); } catch { /* best-effort cleanup */ }
+    }
   }
 
   // GET /api/settings/permissions — read permission settings
-  server.get('/api/settings/permissions', async () => {
-    return readPermissions();
+  server.get('/api/settings/permissions', async (_request, reply) => {
+    try {
+      return readPermissions();
+    } catch {
+      server.log.warn('Permissions state could not be read');
+      return reply.status(503).send({
+        error: 'Permissions could not be read',
+        code: 'PERMISSIONS_STATE_INVALID',
+      });
+    }
   });
 
   // PUT /api/settings/permissions — save permission settings.
@@ -912,23 +956,22 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   // so older clients don't 400 during a deploy. Legacy values migrate via
   // coerceDefaultAutonomy() on the way in.
   server.put<{
-    Body: {
-      defaultAutonomy?: AutonomyLevel;
-      yoloMode?: boolean;
-      externalGates?: string[];
-      workspaceOverrides?: Record<string, string[]>;
-    };
-  }>('/api/settings/permissions', async (request, reply) => {
+    Body: z.infer<typeof permissionsUpdateSchema>;
+  }>('/api/settings/permissions', { preHandler: validateBody(permissionsUpdateSchema) }, async (request, reply) => {
     const { defaultAutonomy, yoloMode, externalGates, workspaceOverrides } = request.body ?? {};
-    const current = readPermissions();
+    let current: PermissionsData;
+    try {
+      current = readPermissions();
+    } catch {
+      server.log.warn('Permissions update refused because existing state could not be read');
+      return reply.status(409).send({
+        error: 'Permissions could not be read; existing settings were left unchanged',
+        code: 'PERMISSIONS_STATE_CONFLICT',
+      });
+    }
 
     let nextAutonomy: AutonomyLevel = current.defaultAutonomy;
     if (defaultAutonomy !== undefined) {
-      if (!(VALID_AUTONOMY as readonly string[]).includes(defaultAutonomy)) {
-        return reply.status(400).send({
-          error: `defaultAutonomy must be one of ${VALID_AUTONOMY.join(', ')}`,
-        });
-      }
       nextAutonomy = defaultAutonomy;
     } else if (yoloMode !== undefined) {
       nextAutonomy = yoloMode ? 'yolo' : 'normal';
@@ -940,8 +983,16 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       workspaceOverrides: workspaceOverrides ?? current.workspaceOverrides,
     };
 
-    writePermissions(updated);
-    return updated;
+    try {
+      writePermissions(updated);
+      return updated;
+    } catch {
+      server.log.error('Permissions update could not be written');
+      return reply.status(503).send({
+        error: 'Permissions could not be written; existing settings were left unchanged',
+        code: 'PERMISSIONS_WRITE_FAILED',
+      });
+    }
   });
 
   // ── Tier detection ───────────────────────────────────────────────────
