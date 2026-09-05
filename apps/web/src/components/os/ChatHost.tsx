@@ -22,16 +22,22 @@
  * from useChatWidgetState + ShellContext (§4.2); the window's stamped
  * workspaceName/templateLabel resolve live from the workspaces list instead.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import ChatWindowInstance from './apps/ChatWindowInstance';
-import { useShell } from '@/providers/ShellContext';
+import { useShell, type DefaultAutonomySource } from '@/providers/ShellContext';
 import { queryString, routeFor } from '@/lib/routes';
 import {
+  getChatAutonomyDefaultChangePending,
+  hasChatAutonomySnapshot,
+  persistChatAutonomySnapshot,
   rekeyLocalDefaultChatState,
+  subscribeChatAutonomySnapshot,
+  subscribeChatAutonomyDefaultChange,
   takeChatSeed,
   useChatWidgetState,
+  type AutonomyLevel,
   type ChatSeed,
 } from '@/hooks/useChatWidgetState';
 
@@ -103,14 +109,51 @@ interface ChatHostInstanceProps {
   ) => void;
 }
 
+/**
+ * Capture the global default once per chat instance. A pending startup read
+ * may hydrate that instance; a later Settings change is only for future chats.
+ */
+export function useInheritedDefaultAutonomy(
+  defaultAutonomy: AutonomyLevel,
+  source: DefaultAutonomySource,
+): AutonomyLevel | undefined {
+  const [captured, setCaptured] = useState<AutonomyLevel | undefined>(() =>
+    source === 'pending' ? undefined : defaultAutonomy);
+
+  useEffect(() => {
+    if (source === 'pending') return;
+    setCaptured(current => current ?? (source === 'initial' ? defaultAutonomy : 'normal'));
+  }, [defaultAutonomy, source]);
+
+  return captured;
+}
+
+/** Make an active chat's current autonomy durable before a global default save. */
+export function useChatAutonomySnapshotGuard(
+  workspaceId: string,
+  inheritedDefaultAutonomy: AutonomyLevel | undefined,
+): void {
+  useLayoutEffect(() => subscribeChatAutonomySnapshot(workspaceId, () => {
+    const level = inheritedDefaultAutonomy ?? 'normal';
+    if (!persistChatAutonomySnapshot(workspaceId, level)) {
+      throw new Error('Could not persist the active chat autonomy snapshot');
+    }
+  }), [workspaceId, inheritedDefaultAutonomy]);
+}
+
 const ChatHostInstance = ({
   workspaceId,
   preferredSessionId,
   onSessionNavigate,
 }: ChatHostInstanceProps) => {
-  const { workspaces, defaultAutonomy, setContextRailTarget } = useShell();
+  const { workspaces, defaultAutonomy, defaultAutonomySource, setContextRailTarget } = useShell();
   const ws = workspaces.find(w => w.id === workspaceId);
-  const { entry, setPersona, setAutonomy } = useChatWidgetState(workspaceId, { defaultAutonomy });
+  const inheritedDefaultAutonomy = useInheritedDefaultAutonomy(defaultAutonomy, defaultAutonomySource);
+  useChatAutonomySnapshotGuard(workspaceId, inheritedDefaultAutonomy);
+  const { entry, setPersona, setAutonomy } = useChatWidgetState(workspaceId, {
+    defaultAutonomy: inheritedDefaultAutonomy ?? 'normal',
+    persistNormalDefault: inheritedDefaultAutonomy !== undefined,
+  });
 
   // §4.2 one-shot seed: taken exactly once on this widget's first mount.
   // Lazy ref init survives StrictMode double-render, and the instance never
@@ -169,6 +212,11 @@ const ChatHost = () => {
   const navigate = useNavigate();
   const { workspaces } = useShell();
   const [visited, setVisited] = useState<string[]>([]);
+  const autonomyDefaultChangePending = useSyncExternalStore(
+    subscribeChatAutonomyDefaultChange,
+    getChatAutonomyDefaultChangePending,
+    getChatAutonomyDefaultChangePending,
+  );
   const activeChatMatch = matchPath('/workspaces/:workspaceId/chat', location.pathname);
   const activeChatWorkspaceId = activeChatMatch?.params.workspaceId;
   const routedSessionId = activeChatWorkspaceId
@@ -204,13 +252,15 @@ const ChatHost = () => {
   useEffect(() => {
     const match = matchPath('/workspaces/:workspaceId/chat', location.pathname);
     const wsId = match?.params.workspaceId;
-    if (!wsId || wsId === 'local-default') return;
+    if (!wsId || wsId === 'local-default' || autonomyDefaultChangePending) return;
     setVisited(prev => (prev.includes(wsId) ? prev : [...prev, wsId]));
-  }, [location.pathname]);
+  }, [autonomyDefaultChangePending, location.pathname]);
 
   return (
     <>
-      {visited.map(wsId => (
+      {visited.filter(wsId => (
+        !autonomyDefaultChangePending || hasChatAutonomySnapshot(wsId)
+      )).map(wsId => (
         <ChatHostInstance
           key={wsId}
           workspaceId={wsId}

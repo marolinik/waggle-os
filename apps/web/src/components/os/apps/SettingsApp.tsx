@@ -28,6 +28,8 @@ import {
   resolveActiveSettingsTab,
 } from '@/lib/settings-tier-filter';
 import { requiresYoloConfirm } from '@/lib/autonomy-confirm';
+import { beginChatAutonomyDefaultChange } from '@/hooks/useChatWidgetState';
+import { publishSavedDefaultAutonomy } from '@/providers/ShellContext';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
 import EmbeddingRoutingCard from '@/components/os/EmbeddingRoutingCard';
@@ -189,6 +191,7 @@ const SettingsApp = () => {
   const [defaultAutonomy, setDefaultAutonomy] = useState<AutonomyLevel | null>(null);
   const [permissionsLoadState, setPermissionsLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [permissionsSaving, setPermissionsSaving] = useState(false);
+  const permissionsRequestRef = useRef(0);
   // F18: pending in-app confirmation for the transition into `yolo` ("Never
   // ask"). Keeps the risky transition inside the app's visual language with a
   // focus-visible, testable confirm row.
@@ -231,14 +234,17 @@ const SettingsApp = () => {
   const [approvalBusy, setApprovalBusy] = useState(false);
 
   const loadPermissions = useCallback(async () => {
+    const request = ++permissionsRequestRef.current;
     setPermissionsLoadState('loading');
     setDefaultAutonomy(null);
     setPendingYolo(false);
     try {
       const permissions = await adapter.getPermissions();
+      if (request !== permissionsRequestRef.current) return;
       setDefaultAutonomy(permissions.defaultAutonomy);
       setPermissionsLoadState('ready');
     } catch {
+      if (request !== permissionsRequestRef.current) return;
       setPermissionsLoadState('error');
     }
   }, []);
@@ -405,15 +411,25 @@ const SettingsApp = () => {
   const handleSavePermissions = async (nextAutonomy: AutonomyLevel) => {
     if (permissionsLoadState !== 'ready' || permissionsSaving) return;
     setPermissionsSaving(true);
+    let releaseAutonomyChange: (() => void) | undefined;
     try {
+      // Existing mounted chats must be durable before the global default can
+      // change, and first-time chats stay deferred until the save settles.
+      if (nextAutonomy !== 'normal') {
+        releaseAutonomyChange = beginChatAutonomyDefaultChange();
+      }
       // Autonomy is a partial update. Never echo stale unrelated policy data.
       await adapter.savePermissions({ defaultAutonomy: nextAutonomy });
+      // A pre-save read is now stale even if it resolves after this write.
+      permissionsRequestRef.current += 1;
       setDefaultAutonomy(nextAutonomy);
+      publishSavedDefaultAutonomy(nextAutonomy);
       setSaveMsg('Permissions saved');
       setTimeout(() => setSaveMsg(''), 2000);
     } catch {
       setSaveMsg('Permissions were not saved. Try again.');
     } finally {
+      releaseAutonomyChange?.();
       setPermissionsSaving(false);
     }
   };

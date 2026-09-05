@@ -137,10 +137,68 @@ let cacheRaw: string | null = null;
 let cache: Record<string, ChatWidgetEntry> | null = null;
 
 const listeners = new Set<() => void>();
+const autonomySnapshotters = new Map<string, () => void>();
+const autonomyDefaultChangeListeners = new Set<() => void>();
+let autonomyDefaultChangePending = false;
 
 function subscribeChatState(listener: () => void): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
+}
+
+/** Register a mounted chat that must be snapshotted before a global default changes. */
+export function subscribeChatAutonomySnapshot(workspaceId: string, snapshot: () => void): () => void {
+  autonomySnapshotters.set(workspaceId, snapshot);
+  return () => {
+    if (autonomySnapshotters.get(workspaceId) === snapshot) {
+      autonomySnapshotters.delete(workspaceId);
+    }
+  };
+}
+
+/** Synchronously flush all mounted chat snapshots before the settings write starts. */
+export function prepareChatAutonomyDefaultChange(): void {
+  autonomySnapshotters.forEach(snapshot => snapshot());
+}
+
+export function subscribeChatAutonomyDefaultChange(listener: () => void): () => void {
+  autonomyDefaultChangeListeners.add(listener);
+  return () => { autonomyDefaultChangeListeners.delete(listener); };
+}
+
+export function getChatAutonomyDefaultChangePending(): boolean {
+  return autonomyDefaultChangePending;
+}
+
+export function hasChatAutonomySnapshot(workspaceId: string): boolean {
+  return autonomySnapshotters.has(workspaceId);
+}
+
+/**
+ * Freeze first-time chat creation while an elevated default is being saved.
+ * Existing chats are snapshotted synchronously before the server request.
+ */
+export function beginChatAutonomyDefaultChange(): () => void {
+  if (autonomyDefaultChangePending) {
+    throw new Error('An autonomy default change is already pending');
+  }
+  autonomyDefaultChangePending = true;
+  autonomyDefaultChangeListeners.forEach(listener => listener());
+  try {
+    prepareChatAutonomyDefaultChange();
+  } catch (error) {
+    autonomyDefaultChangePending = false;
+    autonomyDefaultChangeListeners.forEach(listener => listener());
+    throw error;
+  }
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    autonomyDefaultChangePending = false;
+    autonomyDefaultChangeListeners.forEach(listener => listener());
+  };
 }
 
 export function loadChatEntries(): Record<string, ChatWidgetEntry> {
@@ -170,6 +228,31 @@ function persistChatEntries(chats: Record<string, ChatWidgetEntry>): void {
 export function writeChatEntry(workspaceId: string, patch: Partial<ChatWidgetEntry>): void {
   const chats = loadChatEntries();
   persistChatEntries({ ...chats, [workspaceId]: { ...chats[workspaceId], ...patch } });
+}
+
+/** Persist and verify an autonomy marker that must survive an immediate process exit. */
+export function persistChatAutonomySnapshot(workspaceId: string, level: AutonomyLevel): boolean {
+  try {
+    const active = loadChatEntries()[workspaceId];
+    const snapshotLevel = active?.autonomyLevel ?? level;
+    const snapshotExpiresAt = active?.autonomyLevel === undefined
+      ? null
+      : (active.autonomyExpiresAt ?? null);
+    const durableBefore = parseChatState(window.localStorage.getItem(CHAT_STATE_KEY));
+    if (
+      durableBefore[workspaceId]?.autonomyLevel === snapshotLevel
+      && (durableBefore[workspaceId]?.autonomyExpiresAt ?? null) === snapshotExpiresAt
+    ) return true;
+    writeChatEntry(workspaceId, {
+      autonomyLevel: snapshotLevel,
+      autonomyExpiresAt: snapshotExpiresAt,
+    });
+    const durableAfter = parseChatState(window.localStorage.getItem(CHAT_STATE_KEY));
+    return durableAfter[workspaceId]?.autonomyLevel === snapshotLevel
+      && (durableAfter[workspaceId]?.autonomyExpiresAt ?? null) === snapshotExpiresAt;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -492,12 +575,18 @@ export interface UseChatWidgetStateOptions {
    * explicit autonomyLevel:'normal' marker so they never retro-inherit).
    */
   defaultAutonomy?: AutonomyLevel;
+  /**
+   * The caller has resolved the authoritative default. When true, even a
+   * normal default is persisted as the workspace's one-time inheritance
+   * snapshot so a later global change cannot elevate an existing chat.
+   */
+  persistNormalDefault?: boolean;
 }
 
 const EMPTY_ENTRY: ChatWidgetEntry = {};
 
 export function useChatWidgetState(workspaceId: string, opts: UseChatWidgetStateOptions = {}) {
-  const { defaultAutonomy = 'normal' } = opts;
+  const { defaultAutonomy = 'normal', persistNormalDefault = false } = opts;
   const chats = useSyncExternalStore(subscribeChatState, loadChatEntries);
   const entry = chats[workspaceId] ?? EMPTY_ENTRY;
 
@@ -512,10 +601,10 @@ export function useChatWidgetState(workspaceId: string, opts: UseChatWidgetState
   // arrives; the autonomy-exists guard keeps that late stamp from overriding
   // migrated or user-set state.
   useEffect(() => {
-    if (defaultAutonomy === 'normal') return;
+    if (defaultAutonomy === 'normal' && !persistNormalDefault) return;
     if (loadChatEntries()[workspaceId]?.autonomyLevel !== undefined) return;
     writeChatEntry(workspaceId, { autonomyLevel: defaultAutonomy, autonomyExpiresAt: null });
-  }, [workspaceId, defaultAutonomy]);
+  }, [workspaceId, defaultAutonomy, persistNormalDefault]);
 
   /**
    * Phase A.2 (relocated verbatim from setWindowPersona,

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
     deleteWorkspace: vi.fn(),
     patchWorkspace: vi.fn(),
     getPermissions: vi.fn().mockResolvedValue({ defaultAutonomy: 'normal', externalGates: {} }),
+    savePermissions: vi.fn(),
     getAgentStatus: vi.fn().mockResolvedValue({ active: 0, agents: [] }),
     getNotificationHistory: vi.fn().mockResolvedValue([]),
     subscribeNotifications: vi.fn().mockReturnValue(() => {}),
@@ -64,6 +65,11 @@ vi.mock('@/lib/adapter', () => ({
 vi.mock('@/hooks/use-toast', () => ({
   toast: mocks.toast,
   useToast: () => ({ toast: mocks.toast, toasts: [], dismiss: vi.fn() }),
+}));
+vi.mock('@/components/os/apps/ChatWindowInstance', () => ({
+  default: ({ workspaceId }: { workspaceId: string }) => (
+    <div data-testid={`chat-instance-${workspaceId}`} />
+  ),
 }));
 
 /** AdapterHttpError stand-in — the real class is mocked away with the module,
@@ -1201,6 +1207,20 @@ describe('ShellContext tier (P1b D3-4)', () => {
     return renderHook(() => useShell(), { wrapper });
   }
 
+  async function renderShellWithInheritedAutonomy() {
+    const { ShellProvider, useShell } = await import('@/providers/ShellContext');
+    const { useInheritedDefaultAutonomy } = await import('@/components/os/ChatHost');
+    const wrapper = ({ children }: { children: React.ReactNode }) => <ShellProvider>{children}</ShellProvider>;
+    return renderHook(() => {
+      const shell = useShell();
+      const inheritedAutonomy = useInheritedDefaultAutonomy(
+        shell.defaultAutonomy,
+        shell.defaultAutonomySource,
+      );
+      return { ...shell, inheritedAutonomy };
+    }, { wrapper });
+  }
+
   /** Seed a completed-wizard onboarding blob so the trial gate's
    *  onboardingCompleted precondition is met. `completedAt` past the 10-min
    *  quiet window by default. */
@@ -1214,6 +1234,145 @@ describe('ShellContext tier (P1b D3-4)', () => {
     // a dismissed briefing (as a returning user who closed it would have).
     window.localStorage.setItem('waggle:login-briefing-dismissed', 'true');
   }
+
+  it('updates the inherited autonomy after a successful Settings change without reloading', async () => {
+    const { publishSavedDefaultAutonomy } = await import('@/providers/ShellContext');
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockResolvedValueOnce({
+      defaultAutonomy: 'yolo',
+      externalGates: [],
+      workspaceOverrides: {},
+    });
+    const { result } = await renderShell();
+    await waitFor(() => expect(result.current.defaultAutonomy).toBe('yolo'));
+
+    act(() => {
+      expect(publishSavedDefaultAutonomy('invalid')).toBe(false);
+    });
+    expect(result.current.defaultAutonomy).toBe('yolo');
+
+    act(() => {
+      expect(publishSavedDefaultAutonomy('normal')).toBe(true);
+    });
+    expect(result.current.defaultAutonomy).toBe('normal');
+
+    act(() => {
+      publishSavedDefaultAutonomy('trusted');
+      publishSavedDefaultAutonomy('yolo');
+    });
+    expect(result.current.defaultAutonomy).toBe('yolo');
+  });
+
+  it('keeps the saved-default channel private from forged DOM events and supports cleanup', async () => {
+    const {
+      publishSavedDefaultAutonomy,
+      subscribeSavedDefaultAutonomy,
+    } = await import('@/providers/ShellContext');
+    const listener = vi.fn();
+    const unsubscribe = subscribeSavedDefaultAutonomy(listener);
+
+    window.dispatchEvent(new CustomEvent('waggle:permissions-changed', {
+      detail: { defaultAutonomy: 'yolo' },
+    }));
+    expect(listener).not.toHaveBeenCalled();
+
+    publishSavedDefaultAutonomy('trusted');
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenLastCalledWith('trusted');
+
+    unsubscribe();
+    publishSavedDefaultAutonomy('yolo');
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('does not let an older mount read overwrite a newer Settings change', async () => {
+    const { publishSavedDefaultAutonomy } = await import('@/providers/ShellContext');
+    let resolvePermissions!: (value: {
+      defaultAutonomy: 'yolo';
+      externalGates: string[];
+      workspaceOverrides: Record<string, string[]>;
+    }) => void;
+    const permissions = new Promise<{
+      defaultAutonomy: 'yolo';
+      externalGates: string[];
+      workspaceOverrides: Record<string, string[]>;
+    }>((resolve) => { resolvePermissions = resolve; });
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockReturnValueOnce(permissions);
+    const { result } = await renderShellWithInheritedAutonomy();
+
+    act(() => {
+      publishSavedDefaultAutonomy('trusted');
+    });
+    expect(result.current.defaultAutonomy).toBe('trusted');
+    expect(result.current.inheritedAutonomy).toBe('normal');
+
+    await act(async () => {
+      resolvePermissions({ defaultAutonomy: 'yolo', externalGates: [], workspaceOverrides: {} });
+      await permissions;
+    });
+    expect(result.current.defaultAutonomy).toBe('trusted');
+    expect(result.current.inheritedAutonomy).toBe('normal');
+  });
+
+  it('hydrates a pending chat only from startup state and keeps Settings changes for future chats', async () => {
+    const { useInheritedDefaultAutonomy } = await import('@/components/os/ChatHost');
+    type Props = {
+      level: 'normal' | 'trusted' | 'yolo';
+      source: 'pending' | 'initial' | 'settings';
+    };
+    const existing = renderHook(
+      ({ level, source }: Props) => useInheritedDefaultAutonomy(level, source),
+      { initialProps: { level: 'normal', source: 'pending' } as Props },
+    );
+    expect(existing.result.current).toBeUndefined();
+    existing.rerender({ level: 'yolo', source: 'settings' });
+    expect(existing.result.current).toBe('normal');
+
+    const hydrated = renderHook(
+      ({ level, source }: Props) => useInheritedDefaultAutonomy(level, source),
+      { initialProps: { level: 'normal', source: 'pending' } as Props },
+    );
+    hydrated.rerender({ level: 'trusted', source: 'initial' });
+    expect(hydrated.result.current).toBe('trusted');
+
+    const future = renderHook(
+      ({ level, source }: Props) => useInheritedDefaultAutonomy(level, source),
+      { initialProps: { level: 'yolo', source: 'settings' } as Props },
+    );
+    expect(future.result.current).toBe('yolo');
+  });
+
+  it('persists the safe normal snapshot so an existing chat cannot elevate after reload', async () => {
+    const { useInheritedDefaultAutonomy } = await import('@/components/os/ChatHost');
+    const { useChatWidgetState } = await import('@/hooks/useChatWidgetState');
+    type Props = {
+      level: 'normal' | 'trusted' | 'yolo';
+      source: 'pending' | 'initial' | 'settings';
+    };
+    const existing = renderHook(
+      ({ level, source }: Props) => {
+        const inherited = useInheritedDefaultAutonomy(level, source);
+        return useChatWidgetState('ws-reload-safe', {
+          defaultAutonomy: inherited,
+          persistNormalDefault: inherited !== undefined,
+        });
+      },
+      { initialProps: { level: 'normal', source: 'pending' } as Props },
+    );
+
+    existing.rerender({ level: 'yolo', source: 'settings' });
+    await waitFor(() => expect(existing.result.current.entry.autonomyLevel).toBe('normal'));
+    existing.unmount();
+
+    const reloaded = renderHook(() => {
+      const inherited = useInheritedDefaultAutonomy('yolo', 'initial');
+      return useChatWidgetState('ws-reload-safe', { defaultAutonomy: inherited });
+    });
+    expect(reloaded.result.current.entry.autonomyLevel).toBe('normal');
+  });
 
   it('failed getTier touches neither billingTier nor trialInfo; tierResolved stays false', async () => {
     mocks.adapter.getWorkspaces.mockResolvedValue([]);
@@ -1409,7 +1568,7 @@ describe('BackupApp (P1b)', () => {
 // ── SettingsApp tier-as-fact pins ──────────────────────────────────────────
 
 describe('SettingsApp tier badges (P1b D3-4)', () => {
-  async function renderSettings() {
+  async function renderSettings(strict = false) {
     mocks.adapter.getSettings.mockResolvedValue({});
     mocks.adapter.getTelemetryStatus.mockResolvedValue({ enabled: false });
     mocks.adapter.getTeamStatus.mockResolvedValue({ connected: false });
@@ -1419,9 +1578,11 @@ describe('SettingsApp tier badges (P1b D3-4)', () => {
     const { default: SettingsApp } = await import('@/components/os/apps/SettingsApp');
     const { TooltipProvider } = await import('@/components/ui/tooltip');
     const { MemoryRouter } = await import('react-router-dom');
+    const { StrictMode } = await import('react');
     const { render, screen, fireEvent } = await import('@testing-library/react');
     // SettingsApp reads `?tab=` via useSearchParams (PR7a/D12) — needs a Router.
-    render(<MemoryRouter><TooltipProvider><SettingsApp /></TooltipProvider></MemoryRouter>);
+    const tree = <MemoryRouter><TooltipProvider><SettingsApp /></TooltipProvider></MemoryRouter>;
+    render(strict ? <StrictMode>{tree}</StrictMode> : tree);
     // PR5 §11: Settings now opens on Models ("Models leads"). The tier card lives
     // in General — navigate there for these tier-as-fact assertions.
     fireEvent.click(await screen.findByRole('tab', { name: /general/i }));
@@ -1441,6 +1602,281 @@ describe('SettingsApp tier badges (P1b D3-4)', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/Team plan/i).some((el) => el.textContent?.trim() === 'Team plan')).toBe(true);
     });
+  }, 15000);
+
+  it('publishes a new chat default only after the permission save succeeds', async () => {
+    const { subscribeSavedDefaultAutonomy } = await import('@/providers/ShellContext');
+    const { fireEvent } = await import('@testing-library/react');
+    const updates: string[] = [];
+    const unsubscribe = subscribeSavedDefaultAutonomy(level => updates.push(level));
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: [],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions
+      .mockRejectedValueOnce(new Error('write failed'))
+      .mockResolvedValueOnce(undefined);
+
+    try {
+      const screen = await renderSettings();
+      fireEvent.click(screen.getByRole('button', { name: /everything/i }));
+      fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+      await screen.findByRole('heading', { name: /^permissions$/i, level: 3 });
+      await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+
+      fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/permissions were not saved/i);
+      expect(updates).toEqual([]);
+
+      fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+      await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(updates).toEqual(['trusted']));
+    } finally {
+      unsubscribe();
+    }
+  }, 15000);
+
+  it('snapshots a mounted implicit chat before saving a new global default', async () => {
+    const { useChatAutonomySnapshotGuard } = await import('@/components/os/ChatHost');
+    const { loadChatEntries } = await import('@/hooks/useChatWidgetState');
+    const { fireEvent } = await import('@testing-library/react');
+    const guard = renderHook(() => useChatAutonomySnapshotGuard('ws-save-order', undefined));
+    let resolveSave!: () => void;
+    const save = new Promise<void>(resolve => { resolveSave = resolve; });
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: [],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions.mockReturnValueOnce(save);
+
+    const screen = await renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: /everything/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+
+    expect(mocks.adapter.savePermissions).toHaveBeenCalledWith({ defaultAutonomy: 'trusted' });
+    expect(loadChatEntries()['ws-save-order']?.autonomyLevel).toBe('normal');
+    guard.unmount();
+
+    await act(async () => {
+      resolveSave();
+      await save;
+    });
+  }, 15000);
+
+  it('refuses the global save when an active chat snapshot is not durable', async () => {
+    const { useChatAutonomySnapshotGuard } = await import('@/components/os/ChatHost');
+    const { CHAT_STATE_KEY } = await import('@/hooks/useChatWidgetState');
+    const { fireEvent } = await import('@testing-library/react');
+    const guard = renderHook(() => useChatAutonomySnapshotGuard('ws-storage-fail', undefined));
+    const originalSetItem = Storage.prototype.setItem;
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
+      if (key === CHAT_STATE_KEY) throw new DOMException('Storage unavailable', 'QuotaExceededError');
+      return originalSetItem.call(this, key, value);
+    });
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: [],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions.mockResolvedValueOnce(undefined);
+
+    try {
+      const screen = await renderSettings();
+      fireEvent.click(screen.getByRole('button', { name: /everything/i }));
+      fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+      await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+      fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/permissions were not saved/i);
+      expect(mocks.adapter.savePermissions).not.toHaveBeenCalled();
+    } finally {
+      setItemSpy.mockRestore();
+      guard.unmount();
+    }
+  }, 15000);
+
+  it('repairs a stale durable autonomy marker before an elevated default save', async () => {
+    const { useChatAutonomySnapshotGuard } = await import('@/components/os/ChatHost');
+    const {
+      CHAT_STATE_KEY,
+      loadChatEntries,
+      writeChatEntry,
+    } = await import('@/hooks/useChatWidgetState');
+    const { fireEvent } = await import('@testing-library/react');
+    const workspaceId = 'ws-stale-autonomy';
+    window.localStorage.clear();
+    loadChatEntries();
+    window.localStorage.setItem(CHAT_STATE_KEY, JSON.stringify({
+      version: 1,
+      chats: { [workspaceId]: { autonomyLevel: 'yolo', autonomyExpiresAt: null } },
+    }));
+    expect(loadChatEntries()[workspaceId]?.autonomyLevel).toBe('yolo');
+
+    const originalSetItem = Storage.prototype.setItem;
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
+      if (key === CHAT_STATE_KEY) throw new DOMException('Storage unavailable', 'QuotaExceededError');
+      return originalSetItem.call(this, key, value);
+    });
+    writeChatEntry(workspaceId, { autonomyLevel: 'normal', autonomyExpiresAt: null });
+    expect(loadChatEntries()[workspaceId]?.autonomyLevel).toBe('normal');
+    expect(JSON.parse(window.localStorage.getItem(CHAT_STATE_KEY) as string)
+      .chats[workspaceId].autonomyLevel).toBe('yolo');
+    setItemSpy.mockRestore();
+
+    const guard = renderHook(() => useChatAutonomySnapshotGuard(workspaceId, 'yolo'));
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: [],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions.mockReset();
+    let durableAtSave: { autonomyLevel?: string; autonomyExpiresAt?: number | null } | undefined;
+    mocks.adapter.savePermissions.mockImplementationOnce(async () => {
+      durableAtSave = JSON.parse(window.localStorage.getItem(CHAT_STATE_KEY) as string)
+        .chats[workspaceId];
+    });
+
+    try {
+      const screen = await renderSettings();
+      fireEvent.click(screen.getByRole('button', { name: /everything/i }));
+      fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+      await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+      fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+      await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledWith({ defaultAutonomy: 'trusted' }));
+      expect(durableAtSave).toMatchObject({ autonomyLevel: 'normal', autonomyExpiresAt: null });
+    } finally {
+      guard.unmount();
+    }
+  }, 15000);
+
+  it('allows a safe downgrade to normal when chat storage is unavailable', async () => {
+    const { useChatAutonomySnapshotGuard } = await import('@/components/os/ChatHost');
+    const { CHAT_STATE_KEY } = await import('@/hooks/useChatWidgetState');
+    const { fireEvent } = await import('@testing-library/react');
+    window.localStorage.clear();
+    const guard = renderHook(() => useChatAutonomySnapshotGuard('ws-safe-downgrade', 'trusted'));
+    const originalSetItem = Storage.prototype.setItem;
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (key, value) {
+      if (key === CHAT_STATE_KEY) throw new DOMException('Storage unavailable', 'QuotaExceededError');
+      return originalSetItem.call(this, key, value);
+    });
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockResolvedValue({
+      defaultAutonomy: 'trusted',
+      externalGates: [],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions.mockReset();
+    mocks.adapter.savePermissions.mockResolvedValueOnce(undefined);
+
+    try {
+      const screen = await renderSettings();
+      fireEvent.click(screen.getByRole('button', { name: /everything/i }));
+      fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+      await waitFor(() => expect(screen.getByTestId('default-autonomy-trusted')).toHaveAttribute('aria-checked', 'true'));
+      fireEvent.click(screen.getByTestId('default-autonomy-normal'));
+      await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledWith({ defaultAutonomy: 'normal' }));
+    } finally {
+      setItemSpy.mockRestore();
+      guard.unmount();
+    }
+  }, 15000);
+
+  it('defers a first chat opened while an elevated default save is pending', async () => {
+    const { ShellProvider } = await import('@/providers/ShellContext');
+    const { default: ChatHost } = await import('@/components/os/ChatHost');
+    const { default: SettingsApp } = await import('@/components/os/apps/SettingsApp');
+    const { TooltipProvider } = await import('@/components/ui/tooltip');
+    const { createMemoryRouter, RouterProvider } = await import('react-router-dom');
+    const { render, screen, fireEvent } = await import('@testing-library/react');
+    let resolveSave!: () => void;
+    const save = new Promise<void>(resolve => { resolveSave = resolve; });
+    mocks.adapter.getWorkspaces.mockReset().mockResolvedValue([{ id: 'ws-late', name: 'Late chat' }]);
+    mocks.adapter.getTier.mockReset().mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.getPermissions.mockReset().mockResolvedValue({
+      defaultAutonomy: 'normal',
+      externalGates: [],
+      workspaceOverrides: {},
+    });
+    mocks.adapter.savePermissions.mockReset().mockReturnValueOnce(save);
+    mocks.adapter.getSettings.mockResolvedValue({});
+    mocks.adapter.getTelemetryStatus.mockResolvedValue({ enabled: false });
+    mocks.adapter.getTeamStatus.mockResolvedValue({ connected: false });
+    mocks.adapter.getServerUrl.mockReturnValue('http://127.0.0.1:3333');
+    mocks.adapter.getProviders.mockResolvedValue({ providers: [], search: [], activeSearch: 'duckduckgo' });
+    mocks.adapter.getLocalInferenceStatus.mockResolvedValue({ servers: [], ollamaInstalled: false, totalLocalModels: 0 });
+    const router = createMemoryRouter([{
+      path: '*',
+      element: (
+        <ShellProvider>
+          <TooltipProvider>
+            <SettingsApp />
+            <ChatHost />
+          </TooltipProvider>
+        </ShellProvider>
+      ),
+    }], { initialEntries: ['/home'] });
+    render(<RouterProvider router={router} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /everything/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+    await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledWith({ defaultAutonomy: 'trusted' }));
+
+    await act(async () => { await router.navigate('/workspaces/ws-late/chat'); });
+    expect(screen.queryByTestId('chat-instance-ws-late')).toBeNull();
+
+    await act(async () => {
+      resolveSave();
+      await save;
+    });
+    expect(await screen.findByTestId('chat-instance-ws-late')).toBeInTheDocument();
+  }, 15000);
+
+  it('does not let a late StrictMode permission read overwrite a successful save', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    let resolveFirst!: (value: { defaultAutonomy: 'normal'; externalGates: string[]; workspaceOverrides: Record<string, string[]> }) => void;
+    let resolveSecond!: (value: { defaultAutonomy: 'normal'; externalGates: string[]; workspaceOverrides: Record<string, string[]> }) => void;
+    const first = new Promise<{ defaultAutonomy: 'normal'; externalGates: string[]; workspaceOverrides: Record<string, string[]> }>(
+      resolve => { resolveFirst = resolve; },
+    );
+    const second = new Promise<{ defaultAutonomy: 'normal'; externalGates: string[]; workspaceOverrides: Record<string, string[]> }>(
+      resolve => { resolveSecond = resolve; },
+    );
+    mocks.adapter.getPermissions.mockReset()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    mocks.adapter.getTier.mockReset().mockResolvedValue({ tier: 'FREE', capabilities: {}, usage: {} });
+    mocks.adapter.savePermissions.mockResolvedValueOnce(undefined);
+
+    const screen = await renderSettings(true);
+    await waitFor(() => expect(mocks.adapter.getPermissions).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      resolveSecond({ defaultAutonomy: 'normal', externalGates: [], workspaceOverrides: {} });
+      await second;
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /everything/i }));
+    fireEvent.click(await screen.findByRole('tab', { name: /^permissions$/i }));
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-normal')).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByTestId('default-autonomy-trusted'));
+    await waitFor(() => expect(mocks.adapter.savePermissions).toHaveBeenCalledWith({ defaultAutonomy: 'trusted' }));
+    await waitFor(() => expect(screen.getByTestId('default-autonomy-trusted')).toHaveAttribute('aria-checked', 'true'));
+
+    await act(async () => {
+      resolveFirst({ defaultAutonomy: 'normal', externalGates: [], workspaceOverrides: {} });
+      await first;
+    });
+    expect(screen.getByTestId('default-autonomy-trusted')).toHaveAttribute('aria-checked', 'true');
   }, 15000);
 });
 
