@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { FastifyInstance } from 'fastify';
+import { WaggleConfig } from '@waggle/core';
 
 // Mock the lifecycle module before importing anything that uses it
 vi.mock('../src/local/lifecycle.js', () => ({
@@ -256,6 +257,82 @@ describe('LiteLLM Management API', () => {
       expect(JSON.parse(res.body).models).toContain('openai/new-model-v9');
     } finally {
       server.vault!.delete('openai');
+    }
+  });
+
+  it('GET /api/litellm/models merges a persisted OpenAI-compatible model with router results', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const priorConfig = fs.readFileSync(configPath, 'utf8');
+    const config = new WaggleConfig(dataDir);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      models: ['qwen3.8-flash-next', 'openai-compatible/qwen3.8-flash-next'],
+      baseUrl: 'http://127.0.0.1:4000/v1',
+    });
+    config.save();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      if (url.endsWith('/models')) {
+        return new Response(JSON.stringify({ data: [{ id: 'openrouter/unrelated-model' }] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/litellm/models',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).models).toEqual([
+        'openrouter/unrelated-model',
+        'openai-compatible/qwen3.8-flash-next',
+      ]);
+    } finally {
+      fs.writeFileSync(configPath, priorConfig, 'utf8');
+    }
+  });
+
+  it('GET /api/litellm/models prefers current Vault metadata over stale compatible config', async () => {
+    const configPath = path.join(dataDir, 'config.json');
+    const priorConfig = fs.readFileSync(configPath, 'utf8');
+    const config = new WaggleConfig(dataDir);
+    config.setProvider('openai-compatible', {
+      apiKey: '',
+      models: ['stale-qwen'],
+      baseUrl: 'http://127.0.0.1:4777/v1',
+    });
+    config.save();
+    server.vault!.set('openai-compatible', 'compatible-catalog-key', {
+      models: ['vault-qwen', 'openai-compatible/vault-qwen'],
+      baseUrl: 'http://127.0.0.1:4778/v1',
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      if (url.endsWith('/models')) return new Response('', { status: 503 });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/litellm/models',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).models).toEqual(['openai-compatible/vault-qwen']);
+    } finally {
+      server.vault!.delete('openai-compatible');
+      fs.writeFileSync(configPath, priorConfig, 'utf8');
     }
   });
 
