@@ -1557,6 +1557,102 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
   // Auto skill capture: track tool sequences per session and dismissed suggestions
   const sessionToolSequences = new Map<string, string[][]>();
   const dismissedCaptureSuggestions = new Set<string>();
+  const MAX_RETAINED_CHAT_SESSION_STATES = 64;
+  const MAX_RETAINED_HISTORY_CHARS_PER_SESSION = 2_000_000;
+  const MAX_RETAINED_HISTORY_CHARS_TOTAL = 8_000_000;
+  const retainedSessionStateLru = new Map<string, true>();
+
+  const retainedHistoryChars = (stateKey: string): number => (
+    sessionHistories.get(stateKey)?.reduce(
+      (total, message) => total + JSON.stringify(message).length,
+      0,
+    ) ?? 0
+  );
+
+  const evictStateKey = (stateKey: string): void => {
+    sessionHistories.delete(stateKey);
+    systemPromptCache.delete(stateKey);
+    compressionSummaries.delete(stateKey);
+    compactionFrameIds.delete(stateKey);
+    sessionToolSequences.delete(stateKey);
+    retainedSessionStateLru.delete(stateKey);
+  };
+
+  const pruneRetainedSessionState = (): void => {
+    for (const stateKey of [...retainedSessionStateLru.keys()]) {
+      if (
+        !activeChatTurns.has(stateKey)
+        && retainedHistoryChars(stateKey) > MAX_RETAINED_HISTORY_CHARS_PER_SESSION
+      ) {
+        evictStateKey(stateKey);
+      }
+    }
+    const totalHistoryChars = (): number => [...retainedSessionStateLru.keys()]
+      .reduce((total, stateKey) => total + retainedHistoryChars(stateKey), 0);
+    while (
+      retainedSessionStateLru.size > MAX_RETAINED_CHAT_SESSION_STATES
+      || totalHistoryChars() > MAX_RETAINED_HISTORY_CHARS_TOTAL
+    ) {
+      const idleStateKey = [...retainedSessionStateLru.keys()]
+        .find((stateKey) => !activeChatTurns.has(stateKey));
+      if (!idleStateKey) return;
+      evictStateKey(idleStateKey);
+    }
+  };
+
+  const touchSessionState = (stateKey: string): void => {
+    retainedSessionStateLru.delete(stateKey);
+    retainedSessionStateLru.set(stateKey, true);
+    pruneRetainedSessionState();
+  };
+
+  const evictWorkspaceKeys = <T>(state: Map<string, T>, workspaceStateId: string): void => {
+    for (const stateKey of [...state.keys()]) {
+      if (isChatSessionStateKeyForWorkspace(stateKey, workspaceStateId)) {
+        state.delete(stateKey);
+      }
+    }
+  };
+
+  const managedSessionStateKey = (workspaceId: string, sessionId: string): string => {
+    const target = resolveChatHistoryTarget(
+      server.localConfig.dataDir,
+      workspaceId,
+      true,
+    );
+    return chatSessionStateKey(target.stateWorkspaceId, sessionId);
+  };
+
+  server.agentState.chatStateController = {
+    isSessionActive: (workspaceId, sessionId) => (
+      activeChatTurns.has(managedSessionStateKey(workspaceId, sessionId))
+    ),
+    touchSession: touchSessionState,
+    evictSession: (workspaceId, sessionId) => {
+      evictStateKey(managedSessionStateKey(workspaceId, sessionId));
+      const workspaceSession = server.sessionManager.get(workspaceId);
+      if (workspaceSession) chatRuntimes.get(workspaceSession)?.delete(sessionId);
+    },
+    evictWorkspace: (workspaceId) => {
+      const target = resolveChatHistoryTarget(
+        server.localConfig.dataDir,
+        workspaceId,
+        true,
+      );
+      for (const stateKey of [...retainedSessionStateLru.keys()]) {
+        if (isChatSessionStateKeyForWorkspace(stateKey, target.stateWorkspaceId)) {
+          evictStateKey(stateKey);
+        }
+      }
+      evictWorkspaceKeys(sessionHistories, target.stateWorkspaceId);
+      evictWorkspaceKeys(systemPromptCache, target.stateWorkspaceId);
+      evictWorkspaceKeys(compressionSummaries, target.stateWorkspaceId);
+      evictWorkspaceKeys(compactionFrameIds, target.stateWorkspaceId);
+      evictWorkspaceKeys(sessionToolSequences, target.stateWorkspaceId);
+      const workspaceSession = server.sessionManager.get(workspaceId);
+      if (workspaceSession) chatRuntimes.delete(workspaceSession);
+    },
+  };
   const unregisterRestoreParticipant = registerChatHistoryRestoreParticipant(
     server.localConfig.dataDir,
     {
@@ -1567,6 +1663,7 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
         compressionSummaries.clear();
         compactionFrameIds.clear();
         sessionToolSequences.clear();
+        retainedSessionStateLru.clear();
         chatHistoryLayout = isolateLegacyDefaultChatSessions(
           server.localConfig.dataDir,
         );
@@ -2441,6 +2538,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       return;
     }
     activeChatTurns.add(activeSessionStateKey);
+    touchSessionState(activeSessionStateKey);
     const hasCustomRunner = !!server.agentRunner;
     const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
 
@@ -2616,6 +2714,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           sessionPersistenceDataDir, activeWorkspaceId, sessionId
         );
         sessionHistories.set(sessionStateKey, saved);
+        touchSessionState(sessionStateKey);
       }
       const history = turnMutationPolicy.denyConversationHistory
         ? []
@@ -5350,6 +5449,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         } catch { /* best-effort */ }
       }
       activeChatTurns.delete(activeSessionStateKey);
+      pruneRetainedSessionState();
       // End the SSE stream before releasing the exact workspace generation.
       // This lives inside the outer finally so post-commit early returns and
       // observer failures cannot leak the activity lease.
@@ -5402,11 +5502,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       });
     }
 
-    const evictSessionState = <T>(state: Map<string, T>): void => {
-      state.delete(scopedStateKey);
-      if (!workspaceId) state.delete(sessionId);
-    };
-
     fs.rmSync(
       path.join(
         historyTarget.dataDir,
@@ -5418,11 +5513,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       { force: true },
     );
 
-    evictSessionState(sessionHistories);
-    evictSessionState(systemPromptCache);
-    evictSessionState(compressionSummaries);
-    evictSessionState(compactionFrameIds); // #12: next compaction starts a fresh frame
-    evictSessionState(sessionToolSequences);
+    evictStateKey(scopedStateKey);
+    if (!workspaceId) evictStateKey(sessionId);
 
     if (
       historyTarget.isManagedWorkspace

@@ -3,6 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { buildLocalServer } from '../src/local/index.js';
+import {
+  chatSessionStateKey,
+  isChatSessionStateKeyForWorkspace,
+} from '../src/local/routes/chat-persistence.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from './test-utils.js';
 
@@ -519,6 +523,12 @@ describe('Workspace & Session API', () => {
   });
 
   it('deletes a session', async () => {
+    const stateKey = chatSessionStateKey(workspaceId, sessionId);
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'deleted-session-memory-sentinel',
+    }]);
+
     const res = await injectWithAuth(server, {
       method: 'DELETE',
       url: `/api/sessions/${sessionId}?workspace=${workspaceId}`,
@@ -535,14 +545,303 @@ describe('Workspace & Session API', () => {
     const sessions = JSON.parse(listRes.body);
     const deleted = sessions.find((s: { id: string }) => s.id === sessionId);
     expect(deleted).toBeUndefined();
+
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+    const historyRes = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${workspaceId}&session=${sessionId}`,
+    });
+    expect(historyRes.statusCode).toBe(200);
+    expect(JSON.parse(historyRes.body)).toMatchObject({
+      sessionId,
+      messages: [],
+      count: 0,
+    });
+  });
+
+  it('does not retain histories loaded only for browsing', async () => {
+    const sessionsDir = path.join(dataDir, 'workspaces', workspaceId, 'sessions');
+    const browsedSessionIds = Array.from(
+      { length: 65 },
+      (_, index) => `browsed-history-${index}`,
+    );
+
+    try {
+      for (const browsedSessionId of browsedSessionIds) {
+        fs.writeFileSync(
+          path.join(sessionsDir, `${browsedSessionId}.jsonl`),
+          `${JSON.stringify({ type: 'meta', title: browsedSessionId })}\n${JSON.stringify({
+            role: 'user',
+            content: `history-${browsedSessionId}`,
+          })}\n`,
+          'utf-8',
+        );
+        const historyRes = await injectWithAuth(server, {
+          method: 'GET',
+          url: `/api/history?workspace=${workspaceId}&session=${browsedSessionId}`,
+        });
+        expect(historyRes.statusCode).toBe(200);
+        expect(JSON.parse(historyRes.body).count).toBe(1);
+      }
+
+      const retainedWorkspaceKeys = [...server.agentState.sessionHistories.keys()]
+        .filter((stateKey) => isChatSessionStateKeyForWorkspace(stateKey, workspaceId));
+      expect(retainedWorkspaceKeys).toEqual([]);
+    } finally {
+      for (const browsedSessionId of browsedSessionIds) {
+        fs.rmSync(path.join(sessionsDir, `${browsedSessionId}.jsonl`), { force: true });
+        server.agentState.chatStateController?.evictSession(workspaceId, browsedSessionId);
+      }
+    }
+  });
+
+  it('evicts an oversized idle chat history from RAM without deleting its file', async () => {
+    const oversizedSessionId = 'oversized-retained-history';
+    const stateKey = chatSessionStateKey(workspaceId, oversizedSessionId);
+    const sessionPath = path.join(
+      dataDir,
+      'workspaces',
+      workspaceId,
+      'sessions',
+      `${oversizedSessionId}.jsonl`,
+    );
+    fs.writeFileSync(sessionPath, `${JSON.stringify({ type: 'meta' })}\n`, 'utf-8');
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'x'.repeat(2_000_001),
+    }]);
+
+    server.agentState.chatStateController?.touchSession(stateKey);
+
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+    expect(fs.existsSync(sessionPath)).toBe(true);
+    fs.rmSync(sessionPath, { force: true });
+  });
+
+  it('bounds aggregate idle chat-history content retained in RAM', () => {
+    const aggregateSessionIds = Array.from(
+      { length: 9 },
+      (_, index) => `aggregate-history-${index}`,
+    );
+    try {
+      for (const aggregateSessionId of aggregateSessionIds) {
+        const stateKey = chatSessionStateKey(workspaceId, aggregateSessionId);
+        server.agentState.sessionHistories.set(stateKey, [{
+          role: 'user',
+          content: 'x'.repeat(1_000_000),
+        }]);
+        server.agentState.chatStateController?.touchSession(stateKey);
+      }
+
+      const retained = [...server.agentState.sessionHistories.entries()]
+        .filter(([stateKey]) => isChatSessionStateKeyForWorkspace(stateKey, workspaceId));
+      const retainedChars = retained.reduce(
+        (total, [, history]) => total + history.reduce(
+          (historyTotal, message) => historyTotal + message.content.length,
+          0,
+        ),
+        0,
+      );
+      expect(retainedChars).toBeLessThanOrEqual(8_000_000);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, aggregateSessionIds[0]!),
+      )).toBe(false);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, aggregateSessionIds.at(-1)!),
+      )).toBe(true);
+    } finally {
+      for (const aggregateSessionId of aggregateSessionIds) {
+        server.agentState.chatStateController?.evictSession(workspaceId, aggregateSessionId);
+      }
+    }
+  });
+
+  it('bounds the complete retained history payload including tool receipts', () => {
+    const receiptSessionId = 'oversized-tool-receipts';
+    const stateKey = chatSessionStateKey(workspaceId, receiptSessionId);
+    server.agentState.sessionHistories.set(
+      stateKey,
+      Array.from({ length: 63 }, (_, index) => ({
+        role: 'assistant',
+        content: 'ok',
+        tools: [{
+          id: `capability-${index}`,
+          name: 'acquire_capability' as const,
+          status: 'done' as const,
+          input: { need: 'one capability' },
+          output: 'x'.repeat(32_000),
+        }],
+      })),
+    );
+
+    server.agentState.chatStateController?.touchSession(stateKey);
+
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+  });
+
+  it('limits the number of small idle chat session states', () => {
+    const boundedSessionIds = Array.from(
+      { length: 65 },
+      (_, index) => `bounded-state-${index}`,
+    );
+    try {
+      for (const boundedSessionId of boundedSessionIds) {
+        const stateKey = chatSessionStateKey(workspaceId, boundedSessionId);
+        server.agentState.sessionHistories.set(stateKey, [{
+          role: 'user',
+          content: boundedSessionId,
+        }]);
+        server.agentState.chatStateController?.touchSession(stateKey);
+      }
+
+      const retainedWorkspaceKeys = [...server.agentState.sessionHistories.keys()]
+        .filter((stateKey) => isChatSessionStateKeyForWorkspace(stateKey, workspaceId));
+      expect(retainedWorkspaceKeys).toHaveLength(64);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, boundedSessionIds[0]!),
+      )).toBe(false);
+      expect(server.agentState.sessionHistories.has(
+        chatSessionStateKey(workspaceId, boundedSessionIds.at(-1)!),
+      )).toBe(true);
+    } finally {
+      for (const boundedSessionId of boundedSessionIds) {
+        server.agentState.chatStateController?.evictSession(workspaceId, boundedSessionId);
+      }
+    }
+  });
+
+  it('evicts retained chat history after a workspace is deleted', async () => {
+    const createRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: 'Delete Cached Workspace', group: 'Test' },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const deletedWorkspace = JSON.parse(createRes.body) as { id: string };
+    const deletedSessionId = 'cached-before-workspace-delete';
+    const stateKey = chatSessionStateKey(deletedWorkspace.id, deletedSessionId);
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'deleted-workspace-memory-sentinel',
+    }]);
+
+    const deleteRes = await injectWithAuth(server, {
+      method: 'DELETE',
+      url: `/api/workspaces/${deletedWorkspace.id}`,
+    });
+    expect(deleteRes.statusCode).toBe(204);
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+
+    const historyRes = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${deletedWorkspace.id}&session=${deletedSessionId}`,
+    });
+    expect(historyRes.statusCode).toBe(200);
+    expect(JSON.parse(historyRes.body).messages).toEqual([]);
+  });
+
+  it('rejects deletion as active before consulting the session file', async () => {
+    const activeSessionId = 'active-before-first-persist';
+    const chatState = server.agentState.chatStateController;
+    expect(chatState).toBeDefined();
+    const originalIsSessionActive = chatState!.isSessionActive;
+    chatState!.isSessionActive = (candidateWorkspaceId, candidateSessionId) => (
+      candidateWorkspaceId === workspaceId && candidateSessionId === activeSessionId
+        ? true
+        : originalIsSessionActive(candidateWorkspaceId, candidateSessionId)
+    );
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/sessions/${activeSessionId}?workspace=${workspaceId}`,
+      });
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+    } finally {
+      chatState!.isSessionActive = originalIsSessionActive;
+    }
+  });
+
+  it('rejects session deletion while a real chat turn is active', async () => {
+    const createRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: `/api/workspaces/${workspaceId}/sessions`,
+      payload: { title: 'Active deletion guard' },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const activeSessionId = JSON.parse(createRes.body).id as string;
+    const originalRunner = server.agentRunner;
+    let markEntered!: () => void;
+    let releaseTurn!: () => void;
+    const entered = new Promise<void>((resolve) => { markEntered = resolve; });
+    const released = new Promise<void>((resolve) => { releaseTurn = resolve; });
+    server.agentRunner = async (config) => {
+      markEntered();
+      await released;
+      config.onToken?.('completed');
+      return {
+        content: 'completed',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+    const turn = injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Hold this turn open.',
+        workspace: workspaceId,
+        session: activeSessionId,
+      },
+    });
+
+    try {
+      await entered;
+      const activeDelete = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/sessions/${activeSessionId}?workspace=${workspaceId}`,
+      });
+      expect(activeDelete.statusCode).toBe(409);
+      expect(JSON.parse(activeDelete.body)).toMatchObject({
+        code: 'SESSION_TURN_IN_PROGRESS',
+      });
+
+      releaseTurn();
+      expect((await turn).statusCode).toBe(200);
+      const completedDelete = await injectWithAuth(server, {
+        method: 'DELETE',
+        url: `/api/sessions/${activeSessionId}?workspace=${workspaceId}`,
+      });
+      expect(completedDelete.statusCode).toBe(200);
+    } finally {
+      releaseTurn();
+      await turn.catch(() => undefined);
+      server.agentRunner = originalRunner;
+    }
   });
 
   it('returns 404 when deleting non-existent session', async () => {
+    const staleSessionId = 'nonexistent-session';
+    const stateKey = chatSessionStateKey(workspaceId, staleSessionId);
+    server.agentState.sessionHistories.set(stateKey, [{
+      role: 'user',
+      content: 'stale-missing-file-sentinel',
+    }]);
     const res = await injectWithAuth(server, {
       method: 'DELETE',
-      url: `/api/sessions/nonexistent-session?workspace=${workspaceId}`,
+      url: `/api/sessions/${staleSessionId}?workspace=${workspaceId}`,
     });
     expect(res.statusCode).toBe(404);
+    expect(server.agentState.sessionHistories.has(stateKey)).toBe(false);
+
+    const historyRes = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${workspaceId}&session=${staleSessionId}`,
+    });
+    expect(JSON.parse(historyRes.body).messages).toEqual([]);
   });
 
   it('returns empty array for sessions of non-existent workspace (graceful degradation)', async () => {

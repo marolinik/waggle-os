@@ -156,13 +156,6 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
             }
           } catch { /* skip */ }
         }
-        // Cache in RAM for subsequent requests
-        server.agentState.sessionHistories.set(sessionStateKey, messages.map(m => ({
-          role: m.role,
-          content: m.content,
-          ...(m.model ? { model: m.model } : {}),
-          ...(m.tools ? { tools: m.tools } : {}),
-        })));
         return {
           sessionId,
           messages: messages.map((m, i) => ({
@@ -177,6 +170,10 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
         };
       }
       history = [];
+    }
+
+    if (history.length > 0 && server.agentState.sessionHistories.has(sessionStateKey)) {
+      server.agentState.chatStateController?.touchSession(sessionStateKey);
     }
 
     return {

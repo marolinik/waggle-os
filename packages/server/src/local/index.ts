@@ -322,6 +322,13 @@ export interface AgentState {
   skills: LoadedSkill[];
   userSystemPrompt: string | null;
   sessionHistories: Map<string, import('./routes/chat-persistence.js').ChatHistoryMessage[]>;
+  /** Bounded process-local chat state; installed by chatRoutes before requests are served. */
+  chatStateController?: {
+    isSessionActive(workspaceId: string, sessionId: string): boolean;
+    touchSession(stateKey: string): void;
+    evictSession(workspaceId: string, sessionId: string): void;
+    evictWorkspace(workspaceId: string): void;
+  };
   currentModel: string;
   litellmApiKey: string;
   pendingApprovals: Map<string, PendingApproval>;
@@ -1782,6 +1789,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
         release: () => {
           if (settled) return;
           settled = true;
+          server.agentState.chatStateController?.evictWorkspace(workspaceId);
           stopStaleWorkspaceRuntime();
           retirement.release();
         },
