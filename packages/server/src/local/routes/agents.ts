@@ -396,8 +396,21 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
           message: 'Agent has multiple workspaces — pass workspaceId',
           workspaceIds: agent.workspaceIds,
         });
+      } else if ((agent.workspaceIds?.length ?? 0) === 0) {
+        // The Builder promises "None selected = you pick a workspace at run
+        // time". Returning the same stable ambiguity shape opens that picker;
+        // silently falling back to the global default violated the saved
+        // agent's declared execution boundary.
+        const workspaceIds = server.workspaceManager?.list?.().map((workspace) => workspace.id) ?? [];
+        if (workspaceIds.length === 0) {
+          return reply.status(404).send({ error: 'workspace_not_found' });
+        }
+        return reply.status(400).send({
+          error: 'workspace_ambiguous',
+          message: 'Choose a workspace for this agent run.',
+          workspaceIds,
+        });
       }
-      // No workspaceIds at all → fleet spawn falls back to the default workspace.
 
       // Clamp the only free-form field on this surface (matches the goal cap —
       // task flows into fleet spawn, sessions jsonl, signals and trace input).
@@ -411,6 +424,9 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
           ...(agent.personaId ? { persona: agent.personaId } : {}),
           model: agent.model,
           ...(workspaceId ? { parentWorkspaceId: workspaceId } : {}),
+          savedAgentId: agent.id,
+          // Preserve the durable-run correlation contract for lightweight
+          // embedders that have not adopted savedAgentId yet.
           agentId: agent.id,
           // #6 fast-follow — carry the agent's durable goal as the ancestry "why".
           ...(agent.goal ? { goal: agent.goal } : {}),

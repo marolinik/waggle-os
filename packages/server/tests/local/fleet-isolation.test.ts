@@ -3,10 +3,11 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { MultiMindCache } from '@waggle/core';
+import { FrameStore, MindDB, MultiMindCache } from '@waggle/core';
 import {
   createSubAgentTools,
   createWorkflowTools,
+  setPersonaDataDir,
   type AgentLoopConfig,
   type AgentResponse,
   type ToolDefinition,
@@ -24,6 +25,7 @@ import {
 } from '../../src/local/index.js';
 import { WorkspaceTurnCoordinator } from '../../src/local/workspace-turn-coordinator.js';
 import { WorkspaceSessionManager } from '../../src/local/workspace-sessions.js';
+import { addAgent } from '../../src/local/agents-store.js';
 
 const runAgentLoopMock = vi.hoisted(() => vi.fn());
 vi.mock('@waggle/agent', async () => ({
@@ -47,6 +49,94 @@ async function waitFor(predicate: () => boolean, message: string): Promise<void>
   throw new Error(message);
 }
 
+async function createSavedAgentHarness(
+  dataDir: string,
+  options: {
+    skills?: Array<{ name: string; content: string }>;
+    connectedConnectorIds?: string[];
+    mcpServers?: Record<string, { healthy: boolean; workspaceId?: string }>;
+    mcpTools?: ToolDefinition[];
+    tools?: ToolDefinition[];
+    onWorkspaceGet?: () => void;
+    personalMind?: MindDB;
+    workspaceMind?: MindDB;
+    useRealResultRecorder?: boolean;
+  } = {},
+) {
+  const workspaceDir = path.join(dataDir, 'project');
+  fs.mkdirSync(workspaceDir, { recursive: true });
+  const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+  const runnerConfigs: AgentLoopConfig[] = [];
+  const ancestries: Array<Record<string, unknown>> = [];
+  const recorderInputs: Array<{ workspaceMind: unknown; memoryScopes: readonly string[] }> = [];
+  const server = Fastify({ logger: false });
+  server.decorate('localConfig', {
+    dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+  });
+  server.decorate('agentRunRegistry', registry);
+  if (options.personalMind) server.decorate('multiMind', { personal: options.personalMind } as never);
+  server.decorate('workspaceManager', {
+    getDefault: () => 'workspace-1',
+    list: () => [{ id: 'workspace-1' }, { id: 'workspace-2' }],
+    get: (id: string) => {
+      options.onWorkspaceGet?.();
+      return id === 'workspace-1' || id === 'workspace-2'
+        ? { id, name: id, group: 'test', created: new Date().toISOString(), directory: workspaceDir }
+        : undefined;
+    },
+  } as never);
+  server.decorate('sessionManager', { getMaxSessions: () => 10, size: 0, getActive: () => [] } as never);
+  server.decorate('mindCache', {
+    acquire: () => options.workspaceMind ?? {},
+    release: () => {},
+  } as never);
+  server.decorate('connectorRegistry', {
+    getConnected: () => (options.connectedConnectorIds ?? []).map((id) => ({ id })),
+  } as never);
+  const mcpServers = options.mcpServers ?? {};
+  server.decorate('agentState', {
+    currentModel: 'test-model',
+    litellmApiKey: 'test-key',
+    skills: options.skills ?? [],
+    mcpRuntime: {
+      getServerStates: () => Object.fromEntries(Object.entries(mcpServers).map(([id, value]) => [id, value.healthy ? 'ready' : 'failed'])),
+      getServer: (id: string) => mcpServers[id]
+        ? { config: { name: id, ...(mcpServers[id].workspaceId ? { workspaceId: mcpServers[id].workspaceId } : {}) } }
+        : undefined,
+      isServerHealthy: (id: string) => mcpServers[id]?.healthy ?? false,
+      getToolsForWorkspace: () => options.mcpTools ?? [],
+    },
+    createSessionOrchestrator: () => ({
+      setGoalAncestry: (ancestry: Record<string, unknown>) => { ancestries.push(ancestry); },
+      buildSystemPrompt: () => 'system',
+      buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+    }),
+    buildToolsForSession: () => options.tools ?? [],
+  } as never);
+  server.decorate('agentRunner', async (config: AgentLoopConfig) => {
+    runnerConfigs.push(config);
+    return { content: 'Done', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+  });
+  if (!options.useRealResultRecorder) {
+    server.decorate('fleetResultRecorder', async ({ workspaceMind, memoryScopes }) => {
+      recorderInputs.push({ workspaceMind, memoryScopes });
+      return { status: 'complete', personalFrameIds: [1], workspaceFrameIds: {} };
+    });
+  }
+  await server.register(fleetRoutes);
+  return { server, registry, runnerConfigs, ancestries, recorderInputs };
+}
+
+function policyTool(name: string, riskLevel: 'low' | 'medium' = 'low'): ToolDefinition {
+  return {
+    name,
+    description: `Test tool ${name}`,
+    parameters: { type: 'object', properties: { name: { type: 'string' } } },
+    riskLevel,
+    execute: async () => `ok:${name}`,
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   runAgentLoopMock.mockReset();
@@ -54,6 +144,508 @@ afterEach(() => {
 });
 
 describe('isolated Fleet execution', () => {
+  it.each([
+    ['permissions', 'permissions', { permissions: { arbitraryGrant: true } }],
+    ['manual autonomy', 'autonomyLevel', { autonomyLevel: 'manual' }],
+    ['medium autonomy', 'autonomyLevel', { autonomyLevel: 'medium' }],
+    ['high autonomy', 'autonomyLevel', { autonomyLevel: 'high' }],
+    ['workspace-only memory', 'memoryScopes', { memoryScopes: ['workspace'] }],
+    ['team memory', 'memoryScopes', { memoryScopes: ['personal', 'team'] }],
+    ['organization memory', 'memoryScopes', { memoryScopes: ['personal', 'organization'] }],
+    ['team identity', 'teamId', { type: 'team', teamId: 'team-1' }],
+  ] as const)('rejects unsupported saved-agent %s before creating a durable run', async (_label, field, overrides) => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-policy-'));
+    tempDirs.push(dataDir);
+    const { server, registry, runnerConfigs } = await createSavedAgentHarness(dataDir);
+    const agent = addAgent(dataDir, {
+      name: 'Bounded agent',
+      goal: 'Inspect the project safely',
+      type: 'workspace',
+      model: 'auto',
+      autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'],
+      memoryScopes: ['personal'],
+      status: 'idle',
+      ...overrides,
+    });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: {
+        task: 'Inspect the project safely',
+        savedAgentId: agent.id,
+        parentWorkspaceId: 'workspace-1',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: 'agent_policy_not_supported',
+      fields: [field],
+    });
+    expect(registry.snapshot().runs).toHaveLength(0);
+    expect(runnerConfigs).toHaveLength(0);
+    await server.close();
+  });
+
+  it.each([
+    ['missing skill', { skillIds: ['missing-skill'] }, { skills: ['missing-skill'] }],
+    ['disconnected connector', { connectorIds: ['slack'] }, { connectors: ['slack'] }],
+    ['missing MCP', { mcpIds: ['missing'] }, { mcps: ['missing'] }],
+    ['unhealthy MCP', { mcpIds: ['unhealthy'] }, { mcps: ['unhealthy'] }],
+    ['wrong-workspace MCP', { mcpIds: ['wrong-scope'] }, { mcps: ['wrong-scope'] }],
+  ] as const)('rejects %s before creating a durable run', async (_label, capability, missing) => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-capability-'));
+    tempDirs.push(dataDir);
+    const { server, registry, runnerConfigs } = await createSavedAgentHarness(dataDir, {
+      skills: [{ name: 'available-skill', content: 'available' }],
+      connectedConnectorIds: ['github'],
+      mcpServers: {
+        healthy: { healthy: true },
+        unhealthy: { healthy: false },
+        'wrong-scope': { healthy: true, workspaceId: 'workspace-2' },
+      },
+    });
+    const agent = addAgent(dataDir, {
+      name: 'Capability-bounded agent', goal: 'Use only declared capabilities',
+      type: 'workspace', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'], memoryScopes: ['personal'], status: 'idle',
+      ...capability,
+    });
+
+    const response = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: agent.goal, savedAgentId: agent.id, parentWorkspaceId: 'workspace-1' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: 'agent_capability_unavailable', missing });
+    expect(registry.snapshot().runs).toHaveLength(0);
+    expect(runnerConfigs).toHaveLength(0);
+    await server.close();
+  });
+
+  it('treats empty capability lists as deny-all while preserving unrelated legacy Fleet metadata', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-empty-policy-'));
+    tempDirs.push(dataDir);
+    const { server, registry, runnerConfigs } = await createSavedAgentHarness(dataDir, {
+      connectedConnectorIds: ['github'],
+      mcpServers: { docs: { healthy: true } },
+      mcpTools: [policyTool('mcp_docs_search')],
+      tools: [
+        policyTool('read_file'), policyTool('write_file', 'medium'), policyTool('read_skill'),
+        policyTool('connector_github_list_issues'),
+      ],
+    });
+    const agent = addAgent(dataDir, {
+      name: 'Read-only bounded agent', goal: 'Read the assigned workspace',
+      type: 'workspace', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'], memoryScopes: ['personal'],
+      skillIds: [], connectorIds: [], mcpIds: [], status: 'idle',
+    });
+
+    const saved = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: agent.goal, savedAgentId: agent.id, parentWorkspaceId: 'workspace-1' },
+    });
+    expect(saved.statusCode).toBe(202);
+    await waitFor(() => runnerConfigs.length === 1, 'deny-all saved run did not start');
+    expect(runnerConfigs[0].tools.map((tool) => tool.name)).toEqual(['read_file']);
+
+    const legacy = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: 'Legacy correlated run', agentId: 'legacy-correlation', parentWorkspaceId: 'workspace-1' },
+    });
+    expect(legacy.statusCode).toBe(202);
+    await waitFor(() => runnerConfigs.length === 2, 'legacy correlated run did not start');
+    const legacyRun = registry.get(String(legacy.json().runId));
+    expect(legacyRun?.executor.agentId).toBe('legacy-correlation');
+    await server.close();
+  });
+
+  it('requires an explicit assigned workspace and rejects saved-identity spoofing before room creation', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-workspace-policy-'));
+    tempDirs.push(dataDir);
+    const { server, registry, runnerConfigs } = await createSavedAgentHarness(dataDir);
+    const assigned = addAgent(dataDir, {
+      name: 'Workspace-bound agent', goal: 'Stay in workspace one',
+      type: 'workspace', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'], memoryScopes: ['personal'], status: 'idle',
+    });
+    const unassigned = addAgent(dataDir, {
+      name: 'Runtime-choice agent', goal: 'Ask where to run',
+      type: 'workspace', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: [], memoryScopes: ['personal'], status: 'idle',
+    });
+
+    const wrong = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: assigned.goal, savedAgentId: assigned.id, parentWorkspaceId: 'workspace-2' },
+    });
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json()).toMatchObject({ error: 'workspace_not_assigned' });
+
+    const implicit = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: assigned.goal, savedAgentId: assigned.id },
+    });
+    expect(implicit.statusCode).toBe(400);
+    expect(implicit.json()).toMatchObject({ error: 'workspace_ambiguous', workspaceIds: ['workspace-1'] });
+
+    const picker = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: unassigned.goal, savedAgentId: unassigned.id },
+    });
+    expect(picker.statusCode).toBe(400);
+    expect(picker.json()).toMatchObject({
+      error: 'workspace_ambiguous', workspaceIds: ['workspace-1', 'workspace-2'],
+    });
+
+    const spoofed = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: assigned.goal, agentId: assigned.id, parentWorkspaceId: 'workspace-1' },
+    });
+    expect(spoofed.statusCode).toBe(409);
+    expect(spoofed.json()).toMatchObject({ error: 'saved_agent_policy_required' });
+
+    const mismatched = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: {
+        task: assigned.goal,
+        savedAgentId: assigned.id,
+        agentId: unassigned.id,
+        parentWorkspaceId: 'workspace-1',
+      },
+    });
+    expect(mismatched.statusCode).toBe(400);
+    expect(mismatched.json()).toMatchObject({ error: 'agent_identity_mismatch' });
+    expect(registry.snapshot().runs).toHaveLength(0);
+    expect(runnerConfigs).toHaveLength(0);
+    await server.close();
+  });
+
+  it('fails closed for saved identities when only the legacy Fleet executor is available', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-legacy-guard-'));
+    tempDirs.push(dataDir);
+    const agent = addAgent(dataDir, {
+      name: 'Durable-only agent', goal: 'Never bypass saved policy',
+      type: 'workspace', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'], memoryScopes: ['personal'], status: 'idle',
+    });
+    const getWorkspaceMindDb = vi.fn(() => ({}));
+    const sessionManager = new WorkspaceSessionManager(2);
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1', list: () => [{ id: 'workspace-1' }],
+      get: () => ({ id: 'workspace-1', name: 'Workspace', directory: dataDir }),
+    } as never);
+    server.decorate('sessionManager', sessionManager);
+    server.decorate('agentState', {
+      currentModel: 'test-model', litellmApiKey: 'test-key', getWorkspaceMindDb,
+    } as never);
+    await server.register(fleetRoutes);
+
+    try {
+      const saved = await server.inject({
+        method: 'POST', url: '/api/fleet/spawn',
+        payload: { task: agent.goal, savedAgentId: agent.id, parentWorkspaceId: 'workspace-1' },
+      });
+      const spoofed = await server.inject({
+        method: 'POST', url: '/api/fleet/spawn',
+        payload: { task: agent.goal, agentId: agent.id, parentWorkspaceId: 'workspace-1' },
+      });
+      expect(saved.statusCode).toBe(503);
+      expect(saved.json()).toMatchObject({ error: 'saved_agent_runtime_unavailable' });
+      expect(spoofed.statusCode).toBe(503);
+      expect(spoofed.json()).toMatchObject({ error: 'saved_agent_runtime_unavailable' });
+      expect(getWorkspaceMindDb).not.toHaveBeenCalled();
+      expect(runAgentLoopMock).not.toHaveBeenCalled();
+      expect(sessionManager.size).toBe(0);
+    } finally {
+      await server.close();
+      sessionManager.close('workspace-1');
+    }
+  });
+
+  it('drops connector and MCP tools whose flattened names have ambiguous owners', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-owner-collision-'));
+    tempDirs.push(dataDir);
+    const { server, runnerConfigs } = await createSavedAgentHarness(dataDir, {
+      connectedConnectorIds: ['docs', 'docs_admin'],
+      mcpServers: { docs: { healthy: true }, docs_admin: { healthy: true } },
+      mcpTools: [policyTool('mcp_docs_admin_read')],
+      tools: [policyTool('read_file'), policyTool('connector_docs_admin_read')],
+    });
+    const agent = addAgent(dataDir, {
+      name: 'Collision-safe agent', goal: 'Use only unambiguous tools',
+      type: 'workspace', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'], memoryScopes: ['personal'],
+      connectorIds: ['docs'], mcpIds: ['docs'], status: 'idle',
+    });
+
+    const response = await server.inject({
+      method: 'POST', url: '/api/fleet/spawn',
+      payload: { task: agent.goal, savedAgentId: agent.id, parentWorkspaceId: 'workspace-1' },
+    });
+    expect(response.statusCode).toBe(202);
+    await waitFor(() => runnerConfigs.length === 1, 'collision-safe saved run did not start');
+    expect(runnerConfigs[0].tools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining([
+      'connector_docs_admin_read', 'mcp_docs_admin_read',
+    ]));
+    await server.close();
+  });
+
+  it('keeps the validated custom-persona snapshot if its file disappears before execution', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-persona-snapshot-'));
+    tempDirs.push(dataDir);
+    const personaDir = path.join(dataDir, 'personas');
+    const personaFile = path.join(personaDir, 'custom-bounded.json');
+    fs.mkdirSync(personaDir, { recursive: true });
+    fs.writeFileSync(personaFile, JSON.stringify({
+      id: 'custom-bounded', name: 'Custom bounded', description: 'Test persona', icon: 'test',
+      systemPrompt: 'CUSTOM_POLICY_SENTINEL', modelPreference: 'auto',
+      tools: ['read_file', 'write_file'], workspaceAffinity: [], suggestedCommands: [], defaultWorkflow: null,
+    }), 'utf8');
+    setPersonaDataDir(dataDir);
+    let removed = false;
+    const { server, runnerConfigs } = await createSavedAgentHarness(dataDir, {
+      tools: [policyTool('read_file'), policyTool('write_file', 'medium')],
+      onWorkspaceGet: () => {
+        if (!removed) {
+          removed = true;
+          fs.unlinkSync(personaFile);
+        }
+      },
+    });
+    const agent = addAgent(dataDir, {
+      name: 'Custom persona agent', goal: 'Read the workspace with the snapshotted persona',
+      type: 'workspace', personaId: 'custom-bounded', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'], memoryScopes: ['personal'], status: 'idle',
+    });
+
+    try {
+      const response = await server.inject({
+        method: 'POST', url: '/api/fleet/spawn',
+        payload: { task: agent.goal, savedAgentId: agent.id, parentWorkspaceId: 'workspace-1' },
+      });
+      expect(response.statusCode).toBe(202);
+      await waitFor(() => runnerConfigs.length === 1, 'custom-persona run did not start');
+      expect(runnerConfigs[0].systemPrompt).toContain('CUSTOM_POLICY_SENTINEL');
+      expect(runnerConfigs[0].tools.map((tool) => tool.name)).toEqual(['read_file']);
+    } finally {
+      await server.close();
+      setPersonaDataDir(path.join(dataDir, 'personas-reset'));
+    }
+  });
+
+  it('persists a personal-only saved-agent result without writing workspace memory', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-memory-policy-'));
+    tempDirs.push(dataDir);
+    const personalMind = new MindDB(path.join(dataDir, 'personal.mind'));
+    const workspaceMind = new MindDB(path.join(dataDir, 'workspace.mind'));
+    const { server, registry } = await createSavedAgentHarness(dataDir, {
+      personalMind, workspaceMind, useRealResultRecorder: true,
+    });
+    const agent = addAgent(dataDir, {
+      name: 'Personal-memory agent', goal: 'Remember only personally',
+      type: 'workspace', model: 'auto', autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'], memoryScopes: ['personal'], status: 'idle',
+    });
+
+    try {
+      const response = await server.inject({
+        method: 'POST', url: '/api/fleet/spawn',
+        payload: { task: agent.goal, savedAgentId: agent.id, parentWorkspaceId: 'workspace-1' },
+      });
+      expect(response.statusCode).toBe(202);
+      const runId = String(response.json().runId);
+      await waitFor(() => registry.get(runId)?.status === 'completed', 'personal-only run did not complete');
+      const refs = registry.get(runId)?.memoryRefs;
+      expect(refs?.personalFrameIds).toHaveLength(1);
+      expect(refs?.workspaceFrameIds).toEqual({});
+      const personalFrame = new FrameStore(personalMind).getById(refs!.personalFrameIds![0]);
+      expect(personalFrame?.content).toContain('[Agent run]');
+      const workspaceFramesTable = workspaceMind.getDatabase()
+        .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'frames'")
+        .get() as { count: number };
+      expect(workspaceFramesTable.count).toBe(0);
+    } finally {
+      await server.close();
+      workspaceMind.close();
+      personalMind.close();
+    }
+  });
+
+  it('enforces a saved guided agent policy across model, persona, tools, skills, MCP, and memory scope', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-agent-policy-enforced-'));
+    tempDirs.push(dataDir);
+    const workspaceDir = path.join(dataDir, 'project');
+    fs.mkdirSync(workspaceDir);
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: 'openai-compatible/saved-model',
+      providers: {
+        'openai-compatible': {
+          apiKey: '', baseUrl: 'http://model.test/v1', models: ['saved-model'],
+        },
+      },
+    }), 'utf8');
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const agent = addAgent(dataDir, {
+      name: 'Bounded researcher',
+      goal: 'Inspect only the declared sources',
+      type: 'workspace',
+      personaId: 'general-purpose',
+      model: 'openai-compatible/saved-model',
+      autonomyLevel: 'guided',
+      workspaceIds: ['workspace-1'],
+      memoryScopes: ['personal'],
+      skillIds: ['approved-skill'],
+      connectorIds: ['github'],
+      mcpIds: ['docs'],
+      status: 'idle',
+    });
+    const invokedSkills: string[] = [];
+    const makeTool = (name: string, riskLevel: 'low' | 'medium' = 'low'): ToolDefinition => ({
+      name,
+      description: `Use ${name} to inspect the requested evidence`,
+      parameters: { type: 'object', properties: { name: { type: 'string' } } },
+      riskLevel,
+      execute: async (args) => {
+        if (name === 'read_skill') invokedSkills.push(String(args.name));
+        return `ok:${name}`;
+      },
+    });
+    let capturedConfig: AgentLoopConfig | null = null;
+    let childWorkerToolNames: string[] = [];
+    let acquiredWorkspaceMinds = 0;
+    let recordedScopes: readonly string[] = [];
+    let recordedWorkspaceMind: unknown = 'not-recorded';
+    let capturedAncestry: Record<string, unknown> | null = null;
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', {
+      dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
+    });
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('workspaceManager', {
+      getDefault: () => 'workspace-1',
+      list: () => [{ id: 'workspace-1' }],
+      get: (id: string) => id === 'workspace-1'
+        ? { id, name: 'Project', group: 'test', created: new Date().toISOString(), directory: workspaceDir }
+        : undefined,
+    } as never);
+    server.decorate('sessionManager', { getMaxSessions: () => 10, size: 0, getActive: () => [] } as never);
+    server.decorate('mindCache', {
+      acquire: () => { acquiredWorkspaceMinds++; return {}; },
+      release: () => {},
+    } as never);
+    server.decorate('connectorRegistry', {
+      getConnected: () => [{ id: 'github' }],
+    } as never);
+    server.decorate('agentState', {
+      currentModel: 'test-model',
+      litellmApiKey: 'test-key',
+      skills: [
+        { name: 'approved-skill', content: 'Approved workflow instructions.' },
+        { name: 'hidden-skill', content: 'Must not enter this run.' },
+      ],
+      mcpRuntime: {
+        getServerStates: () => ({ docs: 'ready', hidden: 'ready' }),
+        getServer: (name: string) => name === 'docs'
+          ? { config: { name: 'docs', workspaceId: 'workspace-1' } }
+          : { config: { name: 'hidden' } },
+        isServerHealthy: () => true,
+        getToolsForWorkspace: () => [makeTool('mcp_docs_search'), makeTool('mcp_hidden_search')],
+      },
+      createSessionOrchestrator: (...args: unknown[]) => ({
+        mountedWorkspaceMind: args[0],
+        setGoalAncestry: (ancestry: Record<string, unknown>) => { capturedAncestry = ancestry; },
+        buildSystemPrompt: () => 'system',
+        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+      }),
+      buildToolsForSession: () => [
+        makeTool('read_file'),
+        makeTool('write_file', 'medium'),
+        makeTool('read_skill'),
+        makeTool('create_skill', 'medium'),
+        makeTool('connector_github_list_issues'),
+        makeTool('connector_slack_list_messages'),
+      ],
+      workspaceTurnCoordinator: {
+        createScope: () => ({
+          wrapTools: (tools: ToolDefinition[]) => tools,
+          classify: () => 'none',
+          acquire: async () => {},
+          runChildTransaction: async (_tools: ToolDefinition[], operation: () => Promise<unknown>) => operation(),
+          release: async () => {},
+        }),
+      },
+      bindWorkspaceCollaborationTools: ({ visibleTools, workerTools }: WorkspaceCollaborationBinding) => {
+        childWorkerToolNames = workerTools.map((tool) => tool.name);
+        return visibleTools;
+      },
+    } as never);
+    server.decorate('agentRunner', async (config: AgentLoopConfig) => {
+      capturedConfig = config;
+      return { content: 'Done', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    });
+    server.decorate('fleetResultRecorder', async ({ memoryScopes, workspaceMind }) => {
+      recordedScopes = memoryScopes;
+      recordedWorkspaceMind = workspaceMind;
+      return { status: 'complete', personalFrameIds: [1], workspaceFrameIds: {} };
+    });
+    await server.register(fleetRoutes);
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/fleet/spawn',
+      payload: {
+        task: 'Read project evidence with the approved skill, GitHub connector, and docs MCP',
+        savedAgentId: agent.id,
+        parentWorkspaceId: 'workspace-1',
+        persona: 'coder',
+        model: 'forged/model',
+        goal: 'Forged goal',
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(202);
+    expect(response.json()).toMatchObject({
+      persona: 'general-purpose',
+      model: 'openai-compatible/saved-model',
+    });
+    await waitFor(() => capturedConfig !== null, 'saved agent run did not start');
+    const config = capturedConfig as AgentLoopConfig;
+    const toolNames = config.tools.map((tool) => tool.name);
+    expect(toolNames).toEqual(expect.arrayContaining([
+      'read_file', 'read_skill', 'connector_github_list_issues', 'mcp_docs_search',
+    ]));
+    expect(toolNames).not.toEqual(expect.arrayContaining([
+      'write_file', 'create_skill', 'connector_slack_list_messages', 'mcp_hidden_search',
+    ]));
+    expect(childWorkerToolNames).toEqual(expect.arrayContaining([
+      'read_file', 'read_skill', 'connector_github_list_issues', 'mcp_docs_search',
+    ]));
+    expect(childWorkerToolNames).not.toEqual(expect.arrayContaining([
+      'write_file', 'create_skill', 'connector_slack_list_messages', 'mcp_hidden_search',
+    ]));
+    expect(config.systemPrompt).toContain('approved-skill');
+    expect(config.systemPrompt).not.toContain('hidden-skill');
+    const readSkill = config.tools.find((tool) => tool.name === 'read_skill');
+    expect(await readSkill?.execute({ name: 'hidden-skill' })).toContain('not assigned');
+    expect(await readSkill?.execute({ name: 'approved-skill' })).toBe('ok:read_skill');
+    expect(invokedSkills).toEqual(['approved-skill']);
+    await waitFor(() => recordedScopes.length > 0, 'saved agent result was not recorded');
+    expect(recordedScopes).toEqual(['personal']);
+    expect(recordedWorkspaceMind).toBeUndefined();
+    expect(acquiredWorkspaceMinds).toBe(0);
+    expect(capturedAncestry).toMatchObject({ goal: 'Inspect only the declared sources' });
+    await server.close();
+  });
+
   it('rejects an unavailable explicit model without creating a run and uses an available explicit model exactly', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-fleet-explicit-model-'));
     tempDirs.push(dataDir);

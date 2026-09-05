@@ -3,13 +3,16 @@ import type { FastifyInstance } from 'fastify';
 import { FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import {
   TraceRecorder,
+  READONLY_TOOLS,
   detectTaskShape,
   filterAvailableTools,
   isEnabled,
   listPersonas,
   runAgentLoop,
   selectAgentRunBudget,
+  type AgentPersona,
   type AgentResponse,
+  type ToolDefinition,
 } from '@waggle/agent';
 import type {
   CollaborationRunMemoryRefs,
@@ -17,8 +20,14 @@ import type {
   GoalAncestry,
   WaggleMessage,
 } from '@waggle/shared';
-import { applyPersonaToolFilter, selectToolsForTurn } from './persona-tool-filter.js';
+import {
+  applyPersonaToolFilter,
+  filterMcpToolsForPersona,
+  selectToolsForTurn,
+} from './persona-tool-filter.js';
 import { resolveWorkspaceExecutionRoot } from './workspace-execution-root.js';
+import { getAgent } from './agents-store.js';
+import { buildSkillPromptSection } from './routes/chat-context.js';
 import { persistMessage } from './routes/chat-persistence.js';
 import { emitWaggleSignal } from './routes/waggle-signals.js';
 import type { AgentRunner } from './routes/chat.js';
@@ -37,6 +46,246 @@ import {
 } from './model-spend-meter.js';
 
 const ACTIVE = new Set(['queued', 'starting', 'running', 'waiting_for_approval', 'paused', 'cancelling']);
+const SAVED_AGENT_SKILL_TOOLS = new Set([
+  'list_skills', 'create_skill', 'delete_skill', 'read_skill', 'search_skills',
+  'suggest_skill', 'acquire_capability', 'install_capability', 'promote_skill',
+  'auto_extract_skills', 'retire_skills',
+]);
+const CROSS_WORKSPACE_MEMORY_TOOLS = new Set([
+  'read_other_workspace', 'read_other_workspace_file', 'list_workspaces',
+  'list_workspace_files',
+]);
+const GUIDED_AGENT_READ_TOOLS = new Set([...READONLY_TOOLS, 'read_skill']);
+
+interface SavedAgentExecutionPolicy {
+  agentName: string;
+  goal: string;
+  model: string;
+  personaId: string;
+  persona: AgentPersona;
+  workspaceId: string;
+  autonomyLevel: 'guided';
+  memoryScopes: ReadonlyArray<'personal' | 'workspace'>;
+  skills: ReadonlyArray<{ name: string; content: string }>;
+  connectorIds: ReadonlySet<string>;
+  mcpIds: ReadonlySet<string>;
+}
+
+type SavedAgentPolicyResolution =
+  | { policy: SavedAgentExecutionPolicy }
+  | { error: FleetSpawnResult };
+
+function resolveSavedAgentPolicy(
+  server: FastifyInstance,
+  input: FleetSpawnInput,
+): SavedAgentPolicyResolution | null {
+  if (!input.savedAgentId) return null;
+  const agent = getAgent(server.localConfig.dataDir, input.savedAgentId);
+  if (!agent) {
+    return { error: { statusCode: 404, body: { error: 'agent_not_found' } } };
+  }
+  if (agent.status === 'archived') {
+    return {
+      error: {
+        statusCode: 409,
+        body: { error: 'agent_archived', message: 'Archived agents cannot be run' },
+      },
+    };
+  }
+
+  const unsupportedFields: string[] = [];
+  if (agent.permissions && (Array.isArray(agent.permissions) || Object.keys(agent.permissions).length > 0)) {
+    unsupportedFields.push('permissions');
+  }
+  if (agent.type === 'team' || agent.teamId) unsupportedFields.push('teamId');
+  const scopes = [...new Set(agent.memoryScopes ?? [])];
+  if (
+    scopes.length === 0
+    || !scopes.includes('personal')
+    || scopes.some((scope) => scope === 'team' || scope === 'organization')
+  ) unsupportedFields.push('memoryScopes');
+  // Fleet currently has no human approval transport. Accepting `manual`
+  // would falsely promise that every action waits for approval, while
+  // accepting medium/high would silently invent authorization semantics.
+  if (agent.autonomyLevel !== 'guided') {
+    unsupportedFields.push('autonomyLevel');
+  }
+  if (unsupportedFields.length > 0) {
+    return {
+      error: {
+        statusCode: 409,
+        body: {
+          error: 'agent_policy_not_supported',
+          fields: [...new Set(unsupportedFields)],
+          message: 'This saved agent policy cannot yet be enforced safely by background Fleet runs.',
+        },
+      },
+    };
+  }
+
+  const personaId = agent.personaId?.trim() || 'general-purpose';
+  const resolvedPersona = listPersonas().find((persona) => persona.id === personaId);
+  if (!resolvedPersona) {
+    return {
+      error: {
+        statusCode: 409,
+        body: {
+          error: 'agent_persona_unavailable',
+          message: `Saved persona "${personaId}" is not available.`,
+        },
+      },
+    };
+  }
+
+  const assignedWorkspaceIds = [...new Set(agent.workspaceIds ?? [])];
+  const workspaceId = input.parentWorkspaceId?.trim();
+  if (workspaceId && assignedWorkspaceIds.length > 0 && !assignedWorkspaceIds.includes(workspaceId)) {
+    return {
+      error: {
+        statusCode: 400,
+        body: {
+          error: 'workspace_not_assigned',
+          message: `Agent is not assigned to workspace "${workspaceId}"`,
+        },
+      },
+    };
+  }
+  if (!workspaceId) {
+    const candidates = assignedWorkspaceIds.length > 0
+      ? assignedWorkspaceIds
+      : server.workspaceManager.list().map((workspace) => workspace.id);
+    if (candidates.length === 0) {
+      return { error: { statusCode: 404, body: { error: 'workspace_not_found' } } };
+    }
+    return {
+      error: {
+        statusCode: 400,
+        body: {
+          error: 'workspace_ambiguous',
+          message: 'Choose the workspace for this agent run.',
+          workspaceIds: candidates,
+        },
+      },
+    };
+  }
+
+  const requestedSkillIds = [...new Set(agent.skillIds ?? [])];
+  const skillByName = new Map((server.agentState.skills ?? []).map((skill) => [skill.name, skill]));
+  const missingSkills = requestedSkillIds.filter((name) => !skillByName.has(name));
+  const requestedConnectorIds = new Set(agent.connectorIds ?? []);
+  const connectedConnectorIds = new Set(
+    (server.connectorRegistry?.getConnected?.() ?? []).map((connector) => connector.id),
+  );
+  const missingConnectors = [...requestedConnectorIds].filter((id) => !connectedConnectorIds.has(id));
+  const requestedMcpIds = new Set(agent.mcpIds ?? []);
+  const missingMcps = [...requestedMcpIds].filter((id) => {
+    const instance = server.agentState.mcpRuntime?.getServer?.(id);
+    return !instance
+      || !server.agentState.mcpRuntime.isServerHealthy(id)
+      || Boolean(instance.config.workspaceId && instance.config.workspaceId !== workspaceId);
+  });
+  if (missingSkills.length > 0 || missingConnectors.length > 0 || missingMcps.length > 0) {
+    return {
+      error: {
+        statusCode: 409,
+        body: {
+          error: 'agent_capability_unavailable',
+          missing: {
+            ...(missingSkills.length > 0 ? { skills: missingSkills } : {}),
+            ...(missingConnectors.length > 0 ? { connectors: missingConnectors } : {}),
+            ...(missingMcps.length > 0 ? { mcps: missingMcps } : {}),
+          },
+          message: 'One or more capabilities assigned to this agent are not currently available.',
+        },
+      },
+    };
+  }
+
+  return {
+    policy: {
+      agentName: agent.name,
+      goal: agent.goal,
+      model: agent.model,
+      personaId,
+      persona: {
+        ...resolvedPersona,
+        tools: [...resolvedPersona.tools],
+        workspaceAffinity: [...resolvedPersona.workspaceAffinity],
+        suggestedCommands: [...resolvedPersona.suggestedCommands],
+        ...(resolvedPersona.disallowedTools ? { disallowedTools: [...resolvedPersona.disallowedTools] } : {}),
+      },
+      workspaceId,
+      autonomyLevel: 'guided',
+      memoryScopes: scopes as Array<'personal' | 'workspace'>,
+      skills: requestedSkillIds.map((name) => ({ ...skillByName.get(name)! })),
+      connectorIds: requestedConnectorIds,
+      mcpIds: requestedMcpIds,
+    },
+  };
+}
+
+function namespacedToolOwner(
+  toolName: string,
+  namespace: 'connector' | 'mcp',
+  ownerNames: readonly string[],
+): string | null {
+  const matches = ownerNames.filter((name) => toolName.startsWith(`${namespace}_${name}_`));
+  // Flattened tool names carry no explicit provenance. If `docs` and
+  // `docs_admin` both match `mcp_docs_admin_read`, guessing would cross an
+  // allowlist boundary, so reject the ambiguous tool.
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function applySavedAgentPolicyToTools(
+  server: FastifyInstance,
+  tools: ToolDefinition[],
+  policy: SavedAgentExecutionPolicy,
+  persona: ReturnType<typeof listPersonas>[number],
+): ToolDefinition[] {
+  const allConnectorIds = (server.connectorRegistry?.getConnected?.() ?? [])
+    .map((connector) => connector.id);
+  let scoped = tools.filter((tool) => {
+    if (CROSS_WORKSPACE_MEMORY_TOOLS.has(tool.name)) return false;
+    if (tool.name.startsWith('connector_')) {
+      const connectorId = namespacedToolOwner(tool.name, 'connector', allConnectorIds);
+      return connectorId !== null && policy.connectorIds.has(connectorId);
+    }
+    if (tool.name.startsWith('mcp_')) return false;
+    if (!SAVED_AGENT_SKILL_TOOLS.has(tool.name)) return true;
+    return tool.name === 'read_skill' && policy.skills.length > 0;
+  });
+
+  if (policy.skills.length > 0) {
+    const allowedSkillNames = new Set(policy.skills.map((skill) => skill.name));
+    scoped = scoped.map((tool) => tool.name !== 'read_skill' ? tool : {
+      ...tool,
+      execute: async (args) => {
+        const requested = typeof args.name === 'string' ? args.name.trim() : '';
+        if (!allowedSkillNames.has(requested)) {
+          return `Error: Skill "${requested}" is not assigned to this saved agent.`;
+        }
+        return tool.execute(args);
+      },
+    });
+  }
+
+  if (policy.mcpIds.size > 0) {
+    const allServerNames = Object.keys(server.agentState.mcpRuntime.getServerStates());
+    const selectedMcpTools = server.agentState.mcpRuntime
+      .getToolsForWorkspace(policy.workspaceId)
+      .filter((tool) => {
+        const serverName = namespacedToolOwner(tool.name, 'mcp', allServerNames);
+        return serverName !== null && policy.mcpIds.has(serverName);
+      });
+    scoped.push(...filterMcpToolsForPersona(selectedMcpTools, persona));
+  }
+
+  return scoped.filter((tool) => {
+    if (GUIDED_AGENT_READ_TOOLS.has(tool.name)) return true;
+    const explicitlySelectedExternal = tool.name.startsWith('connector_') || tool.name.startsWith('mcp_');
+    return explicitlySelectedExternal && tool.riskLevel === 'low';
+  });
+}
 
 async function resolveExplicitFleetModel(
   server: FastifyInstance,
@@ -76,6 +325,9 @@ export interface FleetSpawnInput {
   model?: string;
   parentWorkspaceId?: string;
   goal?: string;
+  /** Stable persisted Agent Builder identity. Unlike agentId, this enables saved-policy enforcement. */
+  savedAgentId?: string;
+  /** Legacy executor metadata; intentionally does not opt into saved-policy enforcement. */
   agentId?: string;
 }
 
@@ -94,7 +346,8 @@ type FleetResultRecorder = (input: {
   run: CollaborationWorkerRun;
   prompt: string;
   result: AgentResponse;
-  workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0];
+  workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0] | undefined;
+  memoryScopes: ReadonlyArray<'personal' | 'workspace'>;
 }) => Promise<CollaborationRunMemoryRefs>;
 
 declare module 'fastify' {
@@ -127,7 +380,24 @@ export async function spawnIsolatedFleetRun(
 
   const task = input.task?.trim();
   if (!task) return { statusCode: 400, body: { error: 'task is required' } };
-  const workspaceId = input.parentWorkspaceId
+  if (input.savedAgentId && input.agentId && input.savedAgentId !== input.agentId) {
+    return { statusCode: 400, body: { error: 'agent_identity_mismatch' } };
+  }
+  if (!input.savedAgentId && input.agentId && getAgent(server.localConfig.dataDir, input.agentId)) {
+    return {
+      statusCode: 409,
+      body: {
+        error: 'saved_agent_policy_required',
+        message: 'A persisted Agent Builder identity must be launched with savedAgentId.',
+      },
+    };
+  }
+  const savedAgentResolution = resolveSavedAgentPolicy(server, input);
+  if (savedAgentResolution && 'error' in savedAgentResolution) return savedAgentResolution.error;
+  const savedAgentPolicy = savedAgentResolution?.policy;
+  const executionAgentId = savedAgentPolicy ? input.savedAgentId : input.agentId;
+  const workspaceId = savedAgentPolicy?.workspaceId
+    || input.parentWorkspaceId
     || server.workspaceManager.getDefault()
     || server.workspaceManager.list()[0]?.id;
   if (!workspaceId) return { statusCode: 404, body: { error: 'workspace_not_found' } };
@@ -149,7 +419,8 @@ export async function spawnIsolatedFleetRun(
   }
 
   const sentinel = (model?: string | null) => !model || model.trim() === 'auto' || model.trim() === 'default';
-  const explicitModel = !sentinel(input.model) ? input.model!.trim() : undefined;
+  const requestedModel = savedAgentPolicy?.model ?? input.model;
+  const explicitModel = !sentinel(requestedModel) ? requestedModel!.trim() : undefined;
   const workspaceModel = workspace.model;
   const implicitWorkspaceModel = !sentinel(workspaceModel) ? workspaceModel : undefined;
   const selectedModel = explicitModel
@@ -205,12 +476,12 @@ export async function spawnIsolatedFleetRun(
     }
   }
   if (lifecycle.isShuttingDown()) return shuttingDown();
-  const persona = input.persona ?? workspace.personaId ?? 'general-purpose';
+  const persona = savedAgentPolicy?.personaId ?? input.persona ?? workspace.personaId ?? 'general-purpose';
   const room = server.agentRunRegistry.createRoom({
     workspaceIds: [workspaceId],
     source: 'fleet',
-    executor: { kind: 'coordinator', agentId: input.agentId },
-    title: input.agentId ? `Agent ${input.agentId}` : 'Spawned agent',
+    executor: { kind: 'coordinator', agentId: executionAgentId },
+    title: savedAgentPolicy?.agentName ?? (executionAgentId ? `Agent ${executionAgentId}` : 'Spawned agent'),
     task,
     capabilities: { cancel: true },
   });
@@ -218,7 +489,7 @@ export async function spawnIsolatedFleetRun(
     parentRunId: room.id,
     workspaceId,
     source: 'fleet',
-    executor: { kind: 'waggle_agent', agentId: input.agentId, personaId: persona, model },
+    executor: { kind: 'waggle_agent', agentId: executionAgentId, personaId: persona, model },
     title: `${listPersonas().find((item) => item.id === persona)?.name ?? persona} · ${workspace.name}`,
     task,
     capabilities: { cancel: true },
@@ -236,9 +507,10 @@ export async function spawnIsolatedFleetRun(
     model,
     persona,
     task,
-    input.goal,
+    savedAgentPolicy?.goal ?? input.goal,
     assignmentId,
     controller,
+    savedAgentPolicy,
   );
   lifecycle.trackExecution(run.id, execution, () => controller.abort());
 
@@ -271,6 +543,7 @@ async function executeFleetRun(
   goal: string | undefined,
   assignmentId: string | undefined,
   controller: AbortController,
+  savedAgentPolicy?: SavedAgentExecutionPolicy,
 ): Promise<void> {
   let settleExecution!: () => void;
   const executionSettled = new Promise<void>((resolve) => { settleExecution = resolve; });
@@ -294,10 +567,18 @@ async function executeFleetRun(
   let traceId: number | undefined;
   let fleetSpendMeter: ModelSpendMeter | undefined;
   try {
-    const mind = server.mindCache.acquire(run.workspaceId);
-    acquired = true;
-    const orchestrator = server.agentState.createSessionOrchestrator(mind);
-    const persona = listPersonas().find((item) => item.id === personaId) ?? null;
+    const mountsWorkspaceMemory = !savedAgentPolicy
+      || savedAgentPolicy.memoryScopes.includes('workspace');
+    const mind = mountsWorkspaceMemory
+      ? server.mindCache.acquire(run.workspaceId)
+      : undefined;
+    acquired = Boolean(mind);
+    const orchestrator = mind
+      ? server.agentState.createSessionOrchestrator(mind)
+      : server.agentState.createSessionOrchestrator();
+    const persona = savedAgentPolicy?.persona
+      ?? listPersonas().find((item) => item.id === personaId)
+      ?? null;
     fleetSpendMeter = server.agentState.costTracker
       ? createModelSpendMeter(server.agentState.costTracker, (costUsd) => {
           if (traceId === undefined) return;
@@ -317,6 +598,9 @@ async function executeFleetRun(
       : underlyingRunner;
     let workerTools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
     if (persona) workerTools = applyPersonaToolFilter(workerTools, persona);
+    if (savedAgentPolicy && persona) {
+      workerTools = applySavedAgentPolicyToTools(server, workerTools, savedAgentPolicy, persona);
+    }
     workerTools = filterAvailableTools(workerTools);
     const workspaceTurnCoordinator = server.agentState.workspaceTurnCoordinator;
     if (workspaceTurnCoordinator) {
@@ -356,6 +640,9 @@ async function executeFleetRun(
     } else {
       systemPrompt = orchestrator.buildSystemPrompt();
       if (persona?.systemPrompt) systemPrompt += `\n\n## Active persona\n${persona.systemPrompt}`;
+    }
+    if (savedAgentPolicy?.skills.length) {
+      systemPrompt += buildSkillPromptSection([...savedAgentPolicy.skills]);
     }
 
     persistMessage(server.localConfig.dataDir, run.workspaceId, sessionId, { role: 'user', content: task });
@@ -426,10 +713,11 @@ async function executeFleetRun(
       postCommitWarnings.push(`Assistant history could not be persisted: ${error instanceof Error ? error.message : String(error)}`);
     }
     let memoryRefs: CollaborationRunMemoryRefs;
+    const memoryScopes = savedAgentPolicy?.memoryScopes ?? ['personal', 'workspace'] as const;
     try {
       memoryRefs = server.fleetResultRecorder
-        ? await server.fleetResultRecorder({ run, prompt: task, result, workspaceMind: mind })
-        : await recordFleetResult(server, run, task, result, mind);
+        ? await server.fleetResultRecorder({ run, prompt: task, result, workspaceMind: mind, memoryScopes })
+        : await recordFleetResult(server, run, task, result, mind, memoryScopes);
     } catch (error) {
       postCommitWarnings.push(`Result memory could not be recorded: ${error instanceof Error ? error.message : String(error)}`);
       memoryRefs = { status: 'failed', personalFrameIds: [], workspaceFrameIds: {} };
@@ -614,38 +902,46 @@ async function recordFleetResult(
   run: CollaborationWorkerRun,
   prompt: string,
   result: AgentResponse,
-  workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0],
+  workspaceMind: Parameters<FastifyInstance['agentState']['createSessionOrchestrator']>[0] | undefined,
+  memoryScopes: ReadonlyArray<'personal' | 'workspace'>,
 ): Promise<CollaborationRunMemoryRefs> {
   const personalFrameIds: number[] = [];
   const workspaceFrameIds: Record<string, number[]> = {};
   const meta = JSON.stringify({ runId: run.id, roomId: run.roomId, workspaceId: run.workspaceId, source: 'fleet' });
-  try {
-    const personal = server.multiMind.personal;
-    new SessionStore(personal).ensure('agent-runs', 'agent-runs', 'Agent collaboration index');
-    const frames = new FrameStore(personal);
-    const frame = frames.createIFrame(
-      'agent-runs',
-      `[Agent run]\nRun: ${run.id}\nWorkspace: ${run.workspaceId}\nPersona: ${run.executor.personaId}\nSummary: ${result.content.slice(0, 1_000)}`,
-      'normal', 'agent_inferred',
-    );
-    frames.setMetadata(frame.id, meta);
-    personalFrameIds.push(frame.id);
-  } catch { /* workspace result remains authoritative */ }
-  try {
-    new SessionStore(workspaceMind).ensure('agent-runs', 'agent-runs', 'Agent collaboration results');
-    const frames = new FrameStore(workspaceMind);
-    const frame = frames.createIFrame(
-      'agent-runs',
-      `[Agent run result]\nRun: ${run.id}\nTask:\n${prompt}\n\nResult:\n${result.content.slice(0, 100_000)}`,
-      'normal', 'agent_inferred',
-    );
-    frames.setMetadata(frame.id, meta);
-    workspaceFrameIds[run.workspaceId] = [frame.id];
-  } catch { /* reflected in status below */ }
-  const personalOk = personalFrameIds.length > 0;
-  const workspaceOk = (workspaceFrameIds[run.workspaceId]?.length ?? 0) > 0;
+  if (memoryScopes.includes('personal')) {
+    try {
+      const personal = server.multiMind.personal;
+      new SessionStore(personal).ensure('agent-runs', 'agent-runs', 'Agent collaboration index');
+      const frames = new FrameStore(personal);
+      const frame = frames.createIFrame(
+        'agent-runs',
+        `[Agent run]\nRun: ${run.id}\nWorkspace: ${run.workspaceId}\nPersona: ${run.executor.personaId}\nSummary: ${result.content.slice(0, 1_000)}`,
+        'normal', 'agent_inferred',
+      );
+      frames.setMetadata(frame.id, meta);
+      personalFrameIds.push(frame.id);
+    } catch { /* reflected in status below */ }
+  }
+  if (memoryScopes.includes('workspace') && workspaceMind) {
+    try {
+      new SessionStore(workspaceMind).ensure('agent-runs', 'agent-runs', 'Agent collaboration results');
+      const frames = new FrameStore(workspaceMind);
+      const frame = frames.createIFrame(
+        'agent-runs',
+        `[Agent run result]\nRun: ${run.id}\nTask:\n${prompt}\n\nResult:\n${result.content.slice(0, 100_000)}`,
+        'normal', 'agent_inferred',
+      );
+      frames.setMetadata(frame.id, meta);
+      workspaceFrameIds[run.workspaceId] = [frame.id];
+    } catch { /* reflected in status below */ }
+  }
+  const personalOk = !memoryScopes.includes('personal') || personalFrameIds.length > 0;
+  const workspaceOk = !memoryScopes.includes('workspace')
+    || (workspaceFrameIds[run.workspaceId]?.length ?? 0) > 0;
+  const wroteAny = personalFrameIds.length > 0
+    || (workspaceFrameIds[run.workspaceId]?.length ?? 0) > 0;
   return {
-    status: personalOk && workspaceOk ? 'complete' : (personalOk || workspaceOk ? 'partial' : 'failed'),
+    status: personalOk && workspaceOk ? 'complete' : (wroteAny ? 'partial' : 'failed'),
     personalFrameIds,
     workspaceFrameIds,
   };

@@ -24,6 +24,7 @@ import {
 } from '../fleet-run-executor.js';
 import { resolveUsableModel } from '../model-availability.js';
 import type { WorkspaceSessionActivityLease } from '../workspace-sessions.js';
+import { getAgent } from '../agents-store.js';
 
 /**
  * AI-OS #6 fast-follow — durable "why" for an agent spawn: project ← workspace
@@ -195,18 +196,28 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   // actually executes the task; this Phase A delivers the visible-state
   // halves of PM acceptance: live session count + Waggle Dance signal.
   fastify.post<{
-    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string; agentId?: string };
+    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string; agentId?: string; savedAgentId?: string };
   }>('/api/fleet/spawn', async (request, reply) => {
     if (shuttingDown) return reply.code(503).send({ error: 'server_shutting_down' });
-    const { task, persona, model, parentWorkspaceId, goal, agentId } = request.body;
+    const { task, persona, model, parentWorkspaceId, goal, agentId, savedAgentId } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
+
+    const persistedLegacyAgent = agentId
+      ? getAgent(fastify.localConfig.dataDir, agentId)
+      : undefined;
+    if (!fastify.agentRunRegistry && (savedAgentId || persistedLegacyAgent)) {
+      return reply.code(503).send({
+        error: 'saved_agent_runtime_unavailable',
+        message: 'Saved agents require the durable policy executor. Restart Waggle and try again.',
+      });
+    }
 
     // The durable registry is present in every production sidecar. Keep the
     // legacy workspace-session path below only for lightweight route tests and
     // old embedders that register fleetRoutes in isolation.
     if (fastify.agentRunRegistry) {
       const spawned = await spawnIsolatedFleetRun(fastify, {
-        task, persona, model, parentWorkspaceId, goal, agentId,
+        task, persona, model, parentWorkspaceId, goal, agentId, savedAgentId,
       }, durableLifecycle);
       return reply.code(spawned.statusCode).send(spawned.body);
     }
