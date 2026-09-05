@@ -21,7 +21,11 @@ describe('Cost Dashboard API', () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cost-test-'));
     // Set tier to TEAMS so cost routes pass tier enforcement
-    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: 'TEAMS' }));
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+      defaultModel: 'test/model',
+      providers: {},
+      tier: 'TEAMS',
+    }));
     // Prevent auto-install of starter skills
     fs.mkdirSync(path.join(tmpDir, 'skills'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, 'skills', '.starter-installed'), 'test');
@@ -148,7 +152,7 @@ describe('Cost Dashboard API', () => {
     try {
       fs.writeFileSync(
         path.join(policyDir, 'config.json'),
-        JSON.stringify({ tier: 'TEAMS', dailyBudget: 1 }),
+        JSON.stringify({ defaultModel: 'test/model', providers: {}, tier: 'TEAMS', dailyBudget: 1 }),
       );
       const mind = new MindDB(path.join(policyDir, 'personal.mind'));
       mind.close();
@@ -226,7 +230,7 @@ describe('Cost Dashboard API', () => {
     try {
       fs.writeFileSync(
         path.join(restartDir, 'config.json'),
-        JSON.stringify({ tier: 'TEAMS', dailyBudget: 10 }),
+        JSON.stringify({ defaultModel: 'test/model', providers: {}, tier: 'TEAMS', dailyBudget: 10 }),
       );
       const mind = new MindDB(path.join(restartDir, 'personal.mind'));
       mind.close();

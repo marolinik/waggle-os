@@ -1024,7 +1024,11 @@ describe('Model Validation', () => {
     // Set TRIAL tier so we're not capped at the FREE limit (5 workspaces).
     // Without this, ensureDefault() + 4 test workspaces = 5, making the next
     // POST hit the tier limit (403) before reaching model validation (400).
-    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: 'TRIAL' }));
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+      defaultModel: 'test/model',
+      providers: {},
+      tier: 'TRIAL',
+    }));
     server = await buildLocalServer({ dataDir: tmpDir });
   });
 

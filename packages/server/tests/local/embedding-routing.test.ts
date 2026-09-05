@@ -29,7 +29,10 @@ describe('Embedding routing API', () => {
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-embrouting-test-'));
     // No `tier` field → effective tier resolves to FREE (litellm gated off).
-    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({}));
+    fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+      defaultModel: 'test/model',
+      providers: {},
+    }));
     fs.mkdirSync(path.join(tmpDir, 'skills'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, 'skills', '.starter-installed'), 'test');
 

@@ -143,7 +143,7 @@ describe('POST /api/tier/start-trial', () => {
 
   it('applies a persisted paid tier to the runtime session cap on startup', async () => {
     await server.close();
-    writeConfig(tmpDir, { tier: 'TEAMS' });
+    writeConfig(tmpDir, { defaultModel: 'test/model', providers: {}, tier: 'TEAMS' });
     server = await buildLocalServer({ dataDir: tmpDir });
 
     expect(server.localConfig.tier).toBe('TEAMS');
