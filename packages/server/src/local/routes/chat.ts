@@ -4052,6 +4052,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Build agent loop config — with windowed conversation history + hooks
         let bufferedAgentTokens: string[] = [];
         let reasoningActivitySent = false;
+        let modelRequestSent = false;
+        let modelActivitySent = false;
         let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
         let pendingCapabilityToolResults: Array<{
           input: Record<string, unknown>;
@@ -4106,6 +4108,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           },
           onToken: (token: string) => {
             if (firstTokenAt === null) firstTokenAt = performance.now();
+            if (token.length > 0 && !modelActivitySent && !turnSignal.aborted) {
+              modelActivitySent = true;
+              sendEvent('step', {
+                content: 'Writing the answer…',
+                phase: 'model_streaming',
+              });
+            }
             bufferedAgentTokens.push(token);
           },
           onGiveUp: (giveUpMessage: string) => {
@@ -4423,6 +4432,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             : null;
           let attemptedResult: AgentResponse;
+          if (!modelRequestSent && !turnSignal.aborted) {
+            modelRequestSent = true;
+            sendEvent('step', {
+              content: 'Sending your request to the model…',
+              phase: 'model_requested',
+            });
+          }
           try {
             attemptedResult = await agentRunner({
               ...attemptBaseConfig,

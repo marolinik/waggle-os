@@ -319,6 +319,12 @@ class LocalAdapter {
   private ws: WebSocket | null = null;
   /** P1b-SSE: one ref-counted reconnecting stream per (path, eventName). */
   private sseStreams = new Map<string, { close: () => void; listeners: Set<(data: unknown) => void> }>();
+  /** One physical notifications socket carries both unnamed and named events. */
+  private notificationSseStream: {
+    close: () => void;
+    messages: Set<(data: unknown) => void>;
+    subagents: Set<(data: unknown) => void>;
+  } | null = null;
   /** Active chat requests, session-scoped with workspace-wide Stop fallback. */
   private activeChatControllers = new Map<string, Set<AbortController>>();
 
@@ -2312,7 +2318,7 @@ class LocalAdapter {
 
   // --- Notifications ---
   subscribeNotifications(onNotification: (n: Notification) => void): () => void {
-    return this.subscribeSSE('/api/notifications/stream', (data) => {
+    return this.subscribeNotificationSSE((data) => {
       // The route writes an UNNAMED `data: {"type":"connected"}` handshake on
       // every accept (notifications.ts:96) — with the reconnect loop that
       // would mint a junk unread Notification per connect/reopen. Filter it
@@ -2344,7 +2350,7 @@ class LocalAdapter {
    *
    * The server emits these as NAMED SSE events (`event: subagent_status`), so
    * the default `onmessage` used by subscribeNotifications doesn't catch them.
-   * We open a dedicated EventSource with `addEventListener('subagent_status')`.
+   * The shared notifications EventSource attaches a named listener for them.
    */
   subscribeSubagentStatus(
     onEvent: (event: {
@@ -2363,16 +2369,10 @@ class LocalAdapter {
       timestamp: string;
     }) => void,
   ): () => void {
-    // P1b-SSE: dedicated reconnecting EventSource (NOT subscribeSSE — that
-    // dedups by path, and this shares /api/notifications/stream with
-    // subscribeNotifications). configure re-attaches the named listener on
-    // every reopen.
-    const handler = (e: MessageEvent) => {
-      try { onEvent(JSON.parse(e.data)); } catch { /* skip malformed */ }
-    };
-    return this.openSSE('/api/notifications/stream', (es) => {
-      es.addEventListener('subagent_status', handler as EventListener);
-    });
+    return this.subscribeNotificationSSE(
+      (data) => onEvent(data as Parameters<typeof onEvent>[0]),
+      'subagent_status',
+    );
   }
 
   /**
@@ -3718,6 +3718,46 @@ class LocalAdapter {
       if (entry.listeners.size === 0) {
         entry.close();
         if (this.sseStreams.get(key) === entry) this.sseStreams.delete(key);
+      }
+    };
+  }
+
+  /**
+   * Notifications use one endpoint for ordinary `message` events and named
+   * `subagent_status` events. Multiplex them over one EventSource so two app
+   * windows do not consume the browser's entire per-origin HTTP/1 connection
+   * pool and starve ordinary workspace requests.
+   */
+  private subscribeNotificationSSE(
+    onData: (data: unknown) => void,
+    eventName: 'message' | 'subagent_status' = 'message',
+  ): () => void {
+    let stream = this.notificationSseStream;
+    if (!stream) {
+      const messages = new Set<(data: unknown) => void>();
+      const subagents = new Set<(data: unknown) => void>();
+      const dispatch = (listeners: Set<(data: unknown) => void>) => (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          for (const listener of listeners) listener(data);
+        } catch { /* skip malformed */ }
+      };
+      const close = this.openSSE('/api/notifications/stream', (source) => {
+        source.onmessage = dispatch(messages);
+        source.addEventListener('subagent_status', dispatch(subagents) as EventListener);
+      });
+      stream = { close, messages, subagents };
+      this.notificationSseStream = stream;
+    }
+
+    const entry = stream;
+    const listeners = eventName === 'subagent_status' ? entry.subagents : entry.messages;
+    listeners.add(onData);
+    return () => {
+      listeners.delete(onData);
+      if (entry.messages.size === 0 && entry.subagents.size === 0) {
+        entry.close();
+        if (this.notificationSseStream === entry) this.notificationSseStream = null;
       }
     };
   }

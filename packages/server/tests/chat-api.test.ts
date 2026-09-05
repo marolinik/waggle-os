@@ -742,16 +742,34 @@ describe('Chat Streaming API', () => {
         payload: { message: 'Think carefully' },
       });
       const events = parseSSE(res.body);
+      const modelRequestEvents = events.filter(event => event.event === 'step'
+        && JSON.parse(event.data).phase === 'model_requested');
       const reasoningEvents = events.filter(event => event.event === 'step'
         && JSON.parse(event.data).content === 'Thinking through your request…');
+      const modelActivityEvents = events.filter(event => event.event === 'step'
+        && JSON.parse(event.data).phase === 'model_streaming');
+      const modelRequestIndex = events.indexOf(modelRequestEvents[0]);
       const reasoningIndex = events.indexOf(reasoningEvents[0]);
+      const modelActivityIndex = events.indexOf(modelActivityEvents[0]);
       const tokenIndex = events.findIndex(event => event.event === 'token');
       const doneIndex = events.findIndex(event => event.event === 'done');
 
+      expect(modelRequestEvents).toHaveLength(1);
+      expect(JSON.parse(modelRequestEvents[0].data)).toEqual({
+        content: 'Sending your request to the model…',
+        phase: 'model_requested',
+      });
       expect(reasoningEvents).toHaveLength(1);
-      expect(reasoningIndex).toBeGreaterThanOrEqual(0);
+      expect(modelActivityEvents).toHaveLength(1);
+      expect(JSON.parse(modelActivityEvents[0].data)).toEqual({
+        content: 'Writing the answer…',
+        phase: 'model_streaming',
+      });
+      expect(modelRequestIndex).toBeGreaterThanOrEqual(0);
+      expect(reasoningIndex).toBeGreaterThan(modelRequestIndex);
       expect(events.some(event => event.event === 'draft_update')).toBe(false);
-      expect(tokenIndex).toBeGreaterThan(reasoningIndex);
+      expect(modelActivityIndex).toBeGreaterThan(reasoningIndex);
+      expect(tokenIndex).toBeGreaterThan(modelActivityIndex);
       expect(doneIndex).toBeGreaterThan(tokenIndex);
       expect(JSON.parse(events[tokenIndex].data).content).toBe('Authoritative answer');
       expect(JSON.parse(events[doneIndex].data).content).toBe('Authoritative answer');
