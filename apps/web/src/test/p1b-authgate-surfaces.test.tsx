@@ -56,7 +56,11 @@ const mocks = vi.hoisted(() => ({
     probeProvider: vi.fn().mockResolvedValue({ configured: false, valid: false, verified: false }),
   },
 }));
-vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
+vi.mock('@/lib/adapter', () => ({
+  adapter: mocks.adapter,
+  default: vi.fn(),
+  MODEL_SETTINGS_CHANGED_EVENT: 'waggle:model-settings-changed',
+}));
 vi.mock('@/hooks/use-toast', () => ({
   toast: mocks.toast,
   useToast: () => ({ toast: mocks.toast, toasts: [], dismiss: vi.fn() }),

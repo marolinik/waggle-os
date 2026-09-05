@@ -72,7 +72,10 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@/lib/adapter', () => ({ adapter: mocks }));
+vi.mock('@/lib/adapter', () => ({
+  adapter: mocks,
+  MODEL_SETTINGS_CHANGED_EVENT: 'waggle:model-settings-changed',
+}));
 vi.mock('@/hooks/useSessions', () => ({
   useSessions: (workspaceId: string, preferredSessionId?: string | null) => {
     mocks.sessionHookCalls.push({ workspaceId, preferredSessionId });
