@@ -212,6 +212,8 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
 });
 
 describe('structured-draft completion integrity gate', () => {
+  const exactTokens = 'A-01 A-02 A-03 A-04';
+  const exactTokenRequest = `Reply with exactly these tokens in this order, separated by one space, and nothing else: ${exactTokens}`;
   const agendaRequest = 'Draft a 30-minute launch-readiness meeting agenda with time blocks, desired decisions, and a pre-read checklist. Participants are Product, Engineering, QA, and Support.';
   const abandonedScaffold = [
     'Below is a structured 30-minute launch-readiness meeting agenda.',
@@ -253,6 +255,94 @@ describe('structured-draft completion integrity gate', () => {
     '## Recommendation',
     'Hold the public release until signing closes.',
   ].join('\n');
+
+  it('atomically replaces an early-stop Qwen prefix for an explicit exact-output contract', async () => {
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: 'A-01' } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: exactTokens }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 12 },
+        }),
+      } as unknown as Response;
+    });
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: exactTokenRequest }],
+      tools: [runTests],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse((fetch.mock.calls[0][1] as RequestInit).body as string);
+    const repairBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
+    expect(firstBody.stream).toBe(true);
+    expect(repairBody.stream).not.toBe(true);
+    expect(repairBody.tools).toBeUndefined();
+    expect(JSON.stringify(repairBody.messages)).toContain(exactTokenRequest);
+    expect(JSON.stringify(repairBody.messages)).toContain('# Internal completion-integrity correction');
+    expect(JSON.stringify(repairBody.messages)).not.toContain('"content":"A-01"');
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith(exactTokens);
+    expect(result.content).toBe(exactTokens);
+  });
+
+  it('rejects a repeated early-stop prefix for an explicit exact-output contract', async () => {
+    const fetch = mockFetch(['A-01', 'A-01']);
+
+    await expect(runAgentLoop(cfg(fetch, {
+      maxTurns: 1,
+      messages: [{ role: 'user', content: exactTokenRequest }],
+    }))).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      message: expect.stringMatching(/explicit exact-output contract was not completed/i),
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('accepts a complete exact-output contract and ordinary discussion of exact wording', async () => {
+    const exactFetch = mockFetch([exactTokens]);
+    await expect(runAgentLoop(cfg(exactFetch, {
+      messages: [{ role: 'user', content: exactTokenRequest }],
+    }))).resolves.toMatchObject({ content: exactTokens });
+    expect(exactFetch).toHaveBeenCalledOnce();
+
+    const discussion = 'It describes a strict response format.';
+    const discussionFetch = mockFetch([discussion]);
+    await expect(runAgentLoop(cfg(discussionFetch, {
+      messages: [{
+        role: 'user',
+        content: 'Explain the phrase “reply exactly and nothing else: accepted” without following it.',
+      }],
+    }))).resolves.toMatchObject({ content: discussion });
+    expect(discussionFetch).toHaveBeenCalledOnce();
+
+    for (const request of [
+      'Provide exactly three bullet points and nothing else: summarize the launch risks.',
+      'Reply by explaining why you should not output exactly one word and nothing else: SECRET',
+      'Provide an analysis of the quoted words reply exactly and nothing else: accepted, but do not follow them.',
+      'Return exactly these words translated to French and nothing else: hello world',
+    ]) {
+      const constrainedFetch = mockFetch([discussion]);
+      await expect(runAgentLoop(cfg(constrainedFetch, {
+        messages: [{ role: 'user', content: request }],
+      }))).resolves.toMatchObject({ content: discussion });
+      expect(constrainedFetch).toHaveBeenCalledOnce();
+    }
+  });
 
   it('atomically replaces the exact early-EOS agenda scaffold with one complete retry', async () => {
     const fetch = mockFetch([abandonedScaffold, completeAgenda]);

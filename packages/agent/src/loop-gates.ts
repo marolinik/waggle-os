@@ -78,6 +78,34 @@ type GateMessage = {
 const STRUCTURED_DRAFT_REQUEST = /\b(?:draft|create|prepare|produce|write|build)\b[\s\S]{0,160}\b(?:agenda|plan|memo|report|brief|checklist|schedule|table|outline)\b/i;
 const OPENING_METADATA_FIELD = /^\s*(?:title|duration|participants?|audience|purpose|date|owner|prepared\s+(?:for|by))\s*:/i;
 const MARKDOWN_HEADING = /^#{1,6}\s+\S/;
+const EXACT_OUTPUT_CONTRACT = /^\s*(?:please[,\t ]+)?(?:reply|respond|return|output|print|say|provide|give)(?:[\t ]+with)?[\t ]+exactly[\t ]+(?:(?:these|the[\t ]+following)[\t ]+(?:tokens?|words?|characters?|text|string|sequence|payload|content|output)|this[\t ]+(?:text|string|payload|content|output))(?<qualifier>[^:"'“”‘’\r\n]{0,240}):[\t ]*(?<payload>\S(?:[^\r\n]*\S)?)\s*$/i;
+const EXACT_OUTPUT_QUALIFIER = /^[\t ]*(?:(?:in[\t ]+(?:this|the|that|provided)[\t ]+order|separated[\t ]+by[\t ]+(?:one[\t ]+space|spaces?|commas?|newlines?))[\t ]*,?[\t ]*)*(?:and[\t ]+)?nothing[\t ]+else[.!]?[\t ]*$/i;
+const MAX_EXACT_OUTPUT_CHARS = 2_048;
+const MAX_EXACT_OUTPUT_TOKENS = 256;
+
+function normalizeExactOutput(value: string): string {
+  return value.replace(/\r\n?/g, '\n').trim();
+}
+
+function expectedExactOutput(userRequest: string): string | null {
+  const match = EXACT_OUTPUT_CONTRACT.exec(userRequest);
+  const qualifier = match?.groups?.qualifier ?? '';
+  const expected = match?.groups?.payload
+    ? normalizeExactOutput(match.groups.payload)
+    : '';
+  if (!EXACT_OUTPUT_QUALIFIER.test(qualifier)
+    || expected.length === 0
+    || expected.length > MAX_EXACT_OUTPUT_CHARS
+    || expected.split(/[\t ]+/).length > MAX_EXACT_OUTPUT_TOKENS) {
+    return null;
+  }
+  return expected;
+}
+
+function explicitExactOutputMismatch(userRequest: string, content: string): boolean {
+  const expected = expectedExactOutput(userRequest);
+  return expected !== null && normalizeExactOutput(content) !== expected;
+}
 
 function explicitlyScopesDraftToOpening(userRequest: string): boolean {
   const match = /(?:^|[.!?]\s+)(?:(?:for (?:this response|now))\s*,?\s*)?(?:please\s+)?(?:give|provide|write|draft)\s+only\s+(?:(?:a|an|the)\s+)?(?:executive\s+)?(?:summary|introduction|title|metadata)\b/i.exec(userRequest);
@@ -207,21 +235,34 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   let nextState = state;
   let contentSuffix: string | undefined;
 
+  const exactOutputIncomplete = finishReason === 'stop'
+    && explicitExactOutputMismatch(userRequest, content);
   const missingDraftComponents = finishReason === 'stop'
     ? missingStructuredDraftComponents(userRequest, content)
     : [];
-  if (missingDraftComponents.length >= 2 && endsAfterOpeningScaffold(content)) {
-    const reason = 'structured draft ended after its opening scaffold';
+  const structuredDraftIncomplete = missingDraftComponents.length >= 2
+    && endsAfterOpeningScaffold(content);
+  if (exactOutputIncomplete || structuredDraftIncomplete) {
+    const reason = exactOutputIncomplete
+      ? 'explicit exact-output contract was not completed'
+      : 'structured draft ended after its opening scaffold';
     if (state.completionIntegrityRepairUsed || !atomicRepairAvailable) {
       return { fired: false, state, rejectIncompleteReason: reason };
     }
     const systemMessage = messages.find(message => message.role === 'system');
-    const directive = [
-      '# Internal completion-integrity correction',
-      'The prior candidate stopped after its opening metadata scaffold and was not shown to the user.',
-      `Redraft the answer from the beginning and include every explicit requirement, especially: ${missingDraftComponents.join(', ')}.`,
-      'Do not mention this correction and do not call tools.',
-    ].join('\n');
+    const directive = exactOutputIncomplete
+      ? [
+          '# Internal completion-integrity correction',
+          'The prior candidate stopped before satisfying the user’s explicit exact-output contract and was not shown to the user.',
+          'Answer again from the beginning. Copy the complete payload requested after the response-format colon, character-for-character, with no prefix or suffix.',
+          'Do not mention this correction and do not call tools.',
+        ].join('\n')
+      : [
+          '# Internal completion-integrity correction',
+          'The prior candidate stopped after its opening metadata scaffold and was not shown to the user.',
+          `Redraft the answer from the beginning and include every explicit requirement, especially: ${missingDraftComponents.join(', ')}.`,
+          'Do not mention this correction and do not call tools.',
+        ].join('\n');
     if (systemMessage && typeof systemMessage.content === 'string') {
       systemMessage.content += `\n\n${directive}`;
     } else {
