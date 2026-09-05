@@ -115,6 +115,7 @@ describe('agent-run.ts route module', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-agent-run-model-'));
     fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
       defaultModel: 'openai-compatible/qwen3.8-flash-next',
+      providers: {},
     }));
     const server = Fastify({ logger: false });
     server.decorate('multiMind', { personal: {} } as never);

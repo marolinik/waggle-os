@@ -130,6 +130,7 @@ describe('isolated Fleet execution', () => {
     const workspaceDir = path.join(dataDir, 'project');
     fs.mkdirSync(workspaceDir);
     fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: 'openai-compatible/qwen3.8-flash-next',
       providers: {
         'openai-compatible': {
           apiKey: '',

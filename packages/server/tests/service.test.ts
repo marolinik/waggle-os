@@ -399,10 +399,12 @@ describe('Agent Service', () => {
 
     clearProviderEnv();
     fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: 'test/model',
       providers: {
         'openai-compatible': {
           baseUrl: '   ',
           apiKey: '',
+          models: [],
         },
       },
     }));
