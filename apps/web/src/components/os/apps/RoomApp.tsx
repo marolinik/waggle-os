@@ -317,6 +317,14 @@ function RunData({ run }: { run: CollaborationRun }) {
           {result.exitCode !== undefined && <span>Exit · {result.exitCode ?? 'pending'}</span>}
         </div>
       )}
+      {run.kind === 'worker' && result?.sessionId && (
+        <a
+          href={`/workspaces/${encodeURIComponent(run.workspaceId)}/chat?session=${encodeURIComponent(result.sessionId)}`}
+          className="inline-flex items-center rounded-md bg-primary/15 px-2 py-1 text-[11px] font-display font-medium text-honey hover:bg-primary/25 transition-colors"
+        >
+          Open result in chat
+        </a>
+      )}
       {metrics && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground" data-testid={`run-metrics-${run.id}`}>
           {(metrics.toolsUsed?.length ?? 0) > 0 && <span>Tools · {metrics.toolsUsed!.join(', ')}</span>}

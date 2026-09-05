@@ -118,7 +118,10 @@ const AgentsApp = ({ workspaces, activeWorkspaceId }: AgentsAppProps) => {
       const res = await adapter.runAgent(agent.id, workspaceId ? { workspaceId } : {});
       const wsName = workspaces?.find((w) => w.id === res.workspaceId)?.name ?? res.workspaceId;
       toast({ title: 'Run started', description: `${agent.name} → ${wsName}` });
-      await load();
+      // The run response is a durable navigation handoff. Keep the user with
+      // the work they just started instead of stranding them on a stale roster
+      // while the complete answer lands out of sight in Room/session storage.
+      navigate(`/room?room=${encodeURIComponent(res.roomId)}`);
     } catch (err) {
       // C23: ambiguity → open the workspace picker, then retry with a choice.
       const ids = workspaceAmbiguityIds(err);

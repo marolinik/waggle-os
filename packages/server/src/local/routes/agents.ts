@@ -147,6 +147,9 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
    *  No recorded run (or a session in 'error') → undefined → stored status.
    *  A mere open chat session in a shared workspace never reports 'running'. */
   function liveStatus(agent: AgentRecord): AgentRunState | undefined {
+    // Archiving is an explicit persistent user action. A completed durable run
+    // must not resurrect the agent in active UI views after that action.
+    if (agent.status === 'archived') return undefined;
     const durable = latestDurableRun(agent.id);
     if (durable) {
       if (durable.status === 'failed' || durable.status === 'interrupted') return 'failed';

@@ -2101,7 +2101,8 @@ class LocalAdapter {
    *  `error: 'workspace_ambiguous'` (+ workspaceIds) when the agent has several
    *  workspaces and none was picked — the FE shows a picker then retries. */
   async runAgent(id: string, opts: { input?: string; workspaceId?: string } = {}): Promise<{
-    sessionId: string; workspaceId: string; status: string; task: string;
+    runId: string; roomId: string; sessionId: string; workspaceId: string;
+    status: string; statusUrl: string; resumable: boolean; task: string;
   }> {
     const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}/run`, {
       method: 'POST', body: JSON.stringify(opts),
