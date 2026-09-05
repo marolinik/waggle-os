@@ -36,6 +36,7 @@ import type {
   CollaborationRun, CollaborationRunEvent, CollaborationRunSnapshot,
   CollaborationRunControl, ExternalToolAccess, ToolDetectionResult,
 } from '@waggle/shared';
+import { COLLABORATION_RUN_STATUSES } from '@waggle/shared';
 
 export type ChatRetryTarget =
   | {
@@ -60,6 +61,16 @@ export interface SpawnAgentResult {
   task: string;
   persona: string;
   model: string;
+}
+
+type AgentRunHandoff = Pick<SpawnAgentResult,
+  'runId' | 'roomId' | 'workspaceId' | 'sessionId' | 'status' | 'statusUrl' | 'resumable' | 'task'>;
+
+const VALID_RUN_STATUSES = new Set<string>(COLLABORATION_RUN_STATUSES);
+function isSafeRunHandoffId(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length <= 256
+    && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value);
 }
 
 export interface AgentGroupRunResult {
@@ -2106,10 +2117,7 @@ class LocalAdapter {
   /** C23: one-shot fleet-spawn into a chosen workspace. The server 400s with
    *  `error: 'workspace_ambiguous'` (+ workspaceIds) when the agent has several
    *  workspaces and none was picked — the FE shows a picker then retries. */
-  async runAgent(id: string, opts: { input?: string; workspaceId?: string } = {}): Promise<{
-    runId: string; roomId: string; sessionId: string; workspaceId: string;
-    status: string; statusUrl: string; resumable: boolean; task: string;
-  }> {
+  async runAgent(id: string, opts: { input?: string; workspaceId?: string } = {}): Promise<AgentRunHandoff> {
     const res = await this.fetch(`/api/agents/${encodeURIComponent(id)}/run`, {
       method: 'POST', body: JSON.stringify(opts),
     });
@@ -2126,7 +2134,28 @@ class LocalAdapter {
       err.body = errBody;
       throw err;
     }
-    return res.json();
+    const rawBody = await res.json().catch(() => null);
+    const body = rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody)
+      ? rawBody as Partial<AgentRunHandoff>
+      : null;
+    const canonicalStatusUrl = body?.runId
+      ? `/api/agent-runs/${encodeURIComponent(body.runId)}`
+      : null;
+    const valid = body
+      && isSafeRunHandoffId(body.runId)
+      && isSafeRunHandoffId(body.roomId)
+      && isSafeRunHandoffId(body.sessionId)
+      && isSafeRunHandoffId(body.workspaceId)
+      && typeof body.status === 'string'
+      && VALID_RUN_STATUSES.has(body.status)
+      && body.statusUrl === canonicalStatusUrl
+      && typeof body.resumable === 'boolean'
+      && typeof body.task === 'string'
+      && (!opts.workspaceId || body.workspaceId === opts.workspaceId);
+    if (!valid) {
+      throw new Error('Agent run returned an invalid navigation handoff. Restart Waggle and try again.');
+    }
+    return body as AgentRunHandoff;
   }
 
   /** NOTE: fleet pause ABORTS the in-flight one-shot run (stop, not suspend). */

@@ -317,7 +317,11 @@ function RunData({ run }: { run: CollaborationRun }) {
           {result.exitCode !== undefined && <span>Exit · {result.exitCode ?? 'pending'}</span>}
         </div>
       )}
-      {run.kind === 'worker' && result?.sessionId && (
+      {run.kind === 'worker'
+        && run.status === 'completed'
+        && result?.summary?.trim()
+        && !result.error?.startsWith('Assistant history could not be persisted:')
+        && result.sessionId && (
         <a
           href={`/workspaces/${encodeURIComponent(run.workspaceId)}/chat?session=${encodeURIComponent(result.sessionId)}`}
           className="inline-flex items-center rounded-md bg-primary/15 px-2 py-1 text-[11px] font-display font-medium text-honey hover:bg-primary/25 transition-colors"

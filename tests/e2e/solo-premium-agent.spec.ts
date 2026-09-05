@@ -146,6 +146,8 @@ test.describe('Windows Solo premium saved-agent journey', () => {
       expect(handoff.runId).toMatch(/^run_/);
       expect(handoff.roomId).toMatch(/^room_/);
       expect(handoff.workspaceId).toBe(workspace.id);
+      const statusPath = `/api/agent-runs/${encodeURIComponent(handoff.runId)}`;
+      expect(handoff.statusUrl).toBe(statusPath);
       sessionId = handoff.sessionId;
 
       await expect(page).toHaveURL(new RegExp(`/room\\?room=${encodeURIComponent(handoff.roomId)}(?:&|$)`), {
@@ -157,7 +159,7 @@ test.describe('Windows Solo premium saved-agent journey', () => {
       await expect(runCard).toBeVisible({ timeout: 30_000 });
 
       await expect.poll(async () => {
-        const response = await page.request.get(handoff.statusUrl, { headers: authHeaders(token!) });
+        const response = await page.request.get(statusPath, { headers: authHeaders(token!) });
         if (!response.ok()) return `http-${response.status()}`;
         const body = await response.json() as { run?: { status?: string; result?: { error?: string } } };
         const status = body.run?.status ?? 'missing';
@@ -167,7 +169,7 @@ test.describe('Windows Solo premium saved-agent journey', () => {
         return status;
       }, { timeout: 240_000, intervals: [500, 1_000, 2_000, 5_000] }).toBe('completed');
 
-      const runStatusResponse = await page.request.get(handoff.statusUrl, { headers: authHeaders(token) });
+      const runStatusResponse = await page.request.get(statusPath, { headers: authHeaders(token) });
       expect(runStatusResponse.ok(), await runStatusResponse.text().catch(() => '')).toBe(true);
       const runStatusBody = await runStatusResponse.json() as {
         run: { result?: { summary?: string; sessionId?: string } };
