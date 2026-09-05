@@ -62,7 +62,7 @@ const TAB_HINTS: Record<HubTab, string> = {
   custom: 'Skills you authored locally (not from any catalog)',
   workspace: 'Workspace-scoped skills (scope metadata lands with the backend ?scope= filter)',
   starter: 'Curated skill packs that ship with Waggle — starter packs + capability packs',
-  tools: 'Low-level tools agents can call (read_file, run_command, etc.). Not the same as skills.',
+  tools: 'Low-level tools agents can call (read_file, bash, etc.). Waggle selects only the relevant set for each task.',
   audit: 'Install / uninstall history — who added what and when',
 };
 
@@ -576,23 +576,24 @@ const CapabilitiesApp = () => {
         </>
       )}
 
-      {/* Tools tab — read-only overview of all agent capabilities */}
+      {/* Tools tab — representative, read-only overview of agent capabilities */}
       {tab === 'tools' && (
         <div className="space-y-3">
-          <p className="text-[11px] text-muted-foreground mb-3">These are the built-in tools the agent can use. They work automatically — no setup needed.</p>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            These are common built-in tools. Waggle gives the model a compact, task-specific set instead of loading every tool at once. Some require workspace access, an active connection, a Vault credential, or approval before they can run.
+          </p>
           {[
-            { category: 'File Operations', tools: ['read_file', 'write_file', 'edit_file', 'list_directory', 'find_files', 'delete_path'], desc: 'Read, write, search, and manage files in workspace' },
-            { category: 'Code & Shell', tools: ['bash', 'search_content', 'create_directory'], desc: 'Execute commands, search code, manage directories' },
+            { category: 'File Operations', tools: ['read_file', 'write_file', 'edit_file', 'multi_edit', 'search_files'], desc: 'Read, write, edit, and find files in the workspace' },
+            { category: 'Code & Shell', tools: ['bash', 'search_content', 'run_code', 'get_task_output', 'kill_task'], desc: 'Run commands or code, search content, and manage background tasks' },
             { category: 'Web & Search', tools: ['web_search', 'web_fetch', 'perplexity_search', 'tavily_search', 'brave_search'], desc: 'Search the web, fetch pages, get real-time information' },
-            { category: 'Memory', tools: ['save_memory', 'search_memory', 'get_awareness'], desc: 'Remember facts, search past conversations, track context' },
-            { category: 'Documents', tools: ['generate_docx', 'read_docx', 'summarize_document'], desc: 'Create Word docs, read documents, generate reports' },
-            { category: 'Git', tools: ['git_status', 'git_commit', 'git_push', 'git_diff', 'git_log'], desc: 'Version control — commit, push, diff, branch management' },
-            { category: 'Planning', tools: ['create_plan', 'update_plan', 'execute_plan'], desc: 'Break down tasks, track progress, execute step by step' },
-            { category: 'Skills', tools: ['create_skill', 'list_skills', 'suggest_skill'], desc: 'Create, manage, and discover reusable skills' },
-            { category: 'Agents', tools: ['spawn_agent'], desc: 'Launch specialist sub-agents for parallel work' },
-            { category: 'Scheduling', tools: ['schedule_cron', 'list_crons', 'trigger_cron'], desc: 'Set up recurring tasks and automated runs' },
-            { category: 'Browser', tools: ['open_page', 'screenshot', 'click', 'fill'], desc: 'Browse websites, fill forms, take screenshots' },
-            { category: 'Connectors', tools: ['29 services'], desc: 'GitHub, Slack, Notion, Jira, and more — connect in the Connectors app' },
+            { category: 'Memory', tools: ['save_memory', 'search_memory', 'get_awareness', 'query_knowledge'], desc: 'Remember facts, search past conversations, and query workspace knowledge' },
+            { category: 'Documents', tools: ['generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx'], desc: 'Create Word, PDF, spreadsheet, and presentation files' },
+            { category: 'Git', tools: ['git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit', 'git_push'], desc: 'Inspect and manage workspace version control' },
+            { category: 'Planning', tools: ['create_plan', 'add_plan_step', 'execute_step', 'show_plan'], desc: 'Break down tasks, record results, and track step status' },
+            { category: 'Skills', tools: ['list_skills', 'read_skill', 'search_skills', 'create_skill', 'suggest_skill'], desc: 'Discover, inspect, and create reusable skills' },
+            { category: 'Agents', tools: ['spawn_agent', 'list_agents', 'get_agent_result'], desc: 'Launch specialists, coordinate parallel work, and collect results' },
+            { category: 'Browser (optional)', tools: ['browser_navigate', 'browser_snapshot', 'browser_screenshot', 'browser_click', 'browser_fill', 'browser_evaluate'], desc: 'Requires an optional Playwright runtime; not included in Windows Solo' },
+            { category: 'Connectors', tools: ['find_connector', 'list_connector_categories'], desc: 'Discover integrations; connected services add their own task-specific actions' },
           ].map(group => (
             <div key={group.category} className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
               <div className="flex items-center justify-between mb-1">
@@ -602,7 +603,7 @@ const CapabilitiesApp = () => {
               <p className="text-[11px] text-muted-foreground mb-1.5">{group.desc}</p>
               <div className="flex flex-wrap gap-1">
                 {group.tools.map(t => (
-                  <span key={t} className="px-1.5 py-0.5 text-[11px] rounded bg-muted/50 text-muted-foreground font-mono">{t}</span>
+                  <span key={t} translate="no" className="px-1.5 py-0.5 text-[11px] rounded bg-muted/50 text-muted-foreground font-mono">{t}</span>
                 ))}
               </div>
             </div>

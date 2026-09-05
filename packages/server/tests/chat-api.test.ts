@@ -5,7 +5,8 @@ import os from 'node:os';
 import { MindDB, FrameStore, SessionStore, WaggleConfig } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
-import { runAgentLoop, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
+import { getPersona, runAgentLoop, type AgentLoopConfig, type AgentResponse } from '@waggle/agent';
+import { applyPersonaToolFilter } from '../src/local/persona-tool-filter.js';
 import {
   applyContextWindow,
   filterGatedToolsForConversationalTurn,
@@ -2204,6 +2205,24 @@ describe('Chat Streaming API', () => {
       }
     } finally {
       fs.rmSync(linkedDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps connector discovery in the effective named-workspace persona pools', () => {
+    const workspace = server.workspaceManager.create({
+      name: `Connector discovery ${Date.now()}`,
+      group: 'test',
+    });
+    const workspaceRoot = path.join(tmpDir, 'workspaces', workspace.id, 'files');
+    const workspaceTools = server.agentState
+      .buildToolsForWorkspace(workspaceRoot, undefined, workspace.id);
+
+    for (const personaId of ['general-purpose', 'planner']) {
+      const activePersona = getPersona(personaId);
+      expect(activePersona).not.toBeNull();
+      const names = applyPersonaToolFilter(workspaceTools, activePersona!).map(tool => tool.name);
+      expect(names, personaId).toContain('find_connector');
+      expect(names, personaId).toContain('list_connector_categories');
     }
   });
 

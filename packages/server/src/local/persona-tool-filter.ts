@@ -27,6 +27,9 @@ export const ALWAYS_AVAILABLE_TOOLS: ReadonlySet<string> = new Set([
   'search_memory', 'save_memory', 'get_identity', 'get_awareness', 'query_knowledge',
   'add_task', 'correct_knowledge', 'list_skills', 'search_skills', 'suggest_skill',
   'acquire_capability', 'install_capability',
+  // Static, read-only connector catalog discovery. Dynamic connector actions
+  // remain governed separately by the connector_ prefix policy below.
+  'find_connector', 'list_connector_categories',
   // Write-side skill tools — required for the self-evolving loop to close.
   'create_skill', 'read_skill', 'delete_skill', 'calculate_decision_matrix',
   'compose_workflow', 'create_plan', 'add_plan_step', 'execute_step', 'show_plan',
@@ -61,6 +64,7 @@ export const READ_ONLY_ALLOWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...READONLY_TOOLS,
   'read_skill',
   'calculate_decision_matrix',
+  'find_connector', 'list_connector_categories',
   // Plan authoring is read-only-safe: create_plan / add_plan_step only build an
   // in-memory Plan object in a closure (plan-tools.ts — no db/fs/persistence),
   // exactly like show_plan (already in READONLY_TOOLS). Keeping them here lets

@@ -1290,6 +1290,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       ...createBrowserTools(wsPath),
       ...createLspTools(wsPath),
       ...cliTools,
+      ...connectorSearchTools,
       ...connectorTools,
     ];
     return [

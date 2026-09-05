@@ -58,6 +58,35 @@ describe('CapabilitiesApp — Skills Hub', () => {
     expect(search).toHaveAttribute('autocomplete', 'off');
   });
 
+  it('shows truthful canonical tools and explains compact contextual disclosure', async () => {
+    const { container } = renderApp();
+    await screen.findByText('deep-research');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Tools' }));
+
+    const toolNames = Array.from(container.querySelectorAll('[translate="no"]'))
+      .map(node => node.textContent);
+    expect(toolNames).toEqual([
+      'read_file', 'write_file', 'edit_file', 'multi_edit', 'search_files',
+      'bash', 'search_content', 'run_code', 'get_task_output', 'kill_task',
+      'web_search', 'web_fetch', 'perplexity_search', 'tavily_search', 'brave_search',
+      'save_memory', 'search_memory', 'get_awareness', 'query_knowledge',
+      'generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx',
+      'git_status', 'git_diff', 'git_log', 'git_branch', 'git_commit', 'git_push',
+      'create_plan', 'add_plan_step', 'execute_step', 'show_plan',
+      'list_skills', 'read_skill', 'search_skills', 'create_skill', 'suggest_skill',
+      'spawn_agent', 'list_agents', 'get_agent_result',
+      'browser_navigate', 'browser_snapshot', 'browser_screenshot', 'browser_click', 'browser_fill', 'browser_evaluate',
+      'find_connector', 'list_connector_categories',
+    ]);
+    expect(screen.getByText(/compact, task-specific set/i)).toBeInTheDocument();
+    expect(screen.getByText(/require workspace access, an active connection, a Vault credential, or approval/i)).toBeInTheDocument();
+    expect(screen.getByText('Break down tasks, record results, and track step status')).toBeInTheDocument();
+    expect(screen.getByText('Browser (optional)')).toBeInTheDocument();
+    expect(screen.getByText(/not included in Windows Solo/i)).toBeInTheDocument();
+    expect(screen.queryByText(/work automatically|no setup needed/i)).not.toBeInTheDocument();
+  });
+
   it('renders the My Skills per-skill table from the adapter', async () => {
     renderApp();
     expect(await screen.findByText('deep-research')).toBeInTheDocument();
