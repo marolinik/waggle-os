@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     saveSettings: vi.fn(),
     toggleTelemetry: vi.fn(),
     clearTelemetry: vi.fn(),
+    fetchRaw: vi.fn(),
   },
 }));
 
@@ -62,6 +63,7 @@ beforeEach(() => {
   mocks.adapter.saveSettings.mockResolvedValue(undefined);
   mocks.adapter.toggleTelemetry.mockResolvedValue({ enabled: false });
   mocks.adapter.clearTelemetry.mockResolvedValue({ ok: true });
+  mocks.adapter.fetchRaw.mockResolvedValue(new Response(null, { status: 200 }));
 });
 
 afterEach(() => {
@@ -73,6 +75,7 @@ describe('Settings trust flows', () => {
   const primaryModel = 'openai-compatible/qwen3.8-flash-next';
   const fallbackModel = 'openai-compatible/qwen3.8-27b';
   const alternateFallbackModel = 'openai-compatible/qwen3.8-27b-uncensored';
+  const archiveTimeoutMs = 30 * 60_000;
   const compatibleProvider = {
     id: 'openai-compatible',
     name: 'OpenAI-compatible',
@@ -384,51 +387,213 @@ describe('Settings trust flows', () => {
 
   it('shows backup failures in-app without alerting', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: 'Vault key missing' }),
-    } as Response);
-    renderSettings();
+    const directFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 500 }));
+    mocks.adapter.fetchRaw.mockResolvedValue(new Response(
+      JSON.stringify({ error: 'Vault key missing' }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    ));
+    try {
+      renderSettings();
 
-    await openBackupTab();
-    fireEvent.click(screen.getByRole('button', { name: /create backup/i }));
+      await openBackupTab();
+      fireEvent.click(screen.getByRole('button', { name: /create backup/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3333/api/backup', { method: 'POST' }));
-    expect(alertSpy).not.toHaveBeenCalled();
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent(/vault key missing/i);
+      await waitFor(() => expect(mocks.adapter.fetchRaw).toHaveBeenCalledWith(
+        '/api/backup',
+        { method: 'POST' },
+        archiveTimeoutMs,
+      ));
+      expect(directFetch).not.toHaveBeenCalled();
+      expect(alertSpy).not.toHaveBeenCalled();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(/vault key missing/i);
+    } finally {
+      directFetch.mockRestore();
+    }
+  });
+
+  it('does not download an authentication failure as an export archive', async () => {
+    const unauthorized = () => new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { 'content-type': 'application/json' } },
+    );
+    mocks.adapter.fetchRaw.mockResolvedValue(unauthorized());
+    const directFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(unauthorized());
+    const createObjectURL = vi.fn(() => 'blob:false-export');
+    const revokeObjectURL = vi.fn();
+    const originalCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const originalRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    try {
+      renderSettings();
+      await openBackupTab();
+      fireEvent.click(screen.getByRole('button', { name: /export data/i }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(/export failed.*try again/i);
+      expect(mocks.adapter.fetchRaw).toHaveBeenCalledWith(
+        '/api/export',
+        { method: 'POST' },
+        archiveTimeoutMs,
+      );
+      expect(directFetch).not.toHaveBeenCalled();
+      expect(createObjectURL).not.toHaveBeenCalled();
+      expect(click).not.toHaveBeenCalled();
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+      directFetch.mockRestore();
+      if (originalCreateObjectURL) Object.defineProperty(URL, 'createObjectURL', originalCreateObjectURL);
+      else Reflect.deleteProperty(URL, 'createObjectURL');
+      if (originalRevokeObjectURL) Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectURL);
+      else Reflect.deleteProperty(URL, 'revokeObjectURL');
+    }
+  });
+
+  it('downloads a successful authenticated export with a trustworthy filename', async () => {
+    mocks.adapter.fetchRaw.mockResolvedValue(new Response('export-bytes', { status: 200 }));
+    const directFetch = vi.spyOn(globalThis, 'fetch');
+    const createObjectURL = vi.fn(() => 'blob:waggle-export');
+    const revokeObjectURL = vi.fn();
+    const originalCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const originalRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    let clickedHref = '';
+    let clickedDownload = '';
+    let clickedWhileConnected = false;
+    let resolveDownloadClick!: () => void;
+    const downloadClicked = new Promise<void>((resolve) => { resolveDownloadClick = resolve; });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      clickedHref = this.href;
+      clickedDownload = this.download;
+      clickedWhileConnected = this.isConnected;
+      this.dataset.settingsExportLink = 'observed';
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+      resolveDownloadClick();
+    });
+
+    try {
+      renderSettings();
+      await openBackupTab();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /export data/i }));
+        await downloadClicked;
+      });
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+      expect(document.querySelector('[data-settings-export-link="observed"]')).toBeNull();
+      await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 0)); });
+      const status = await screen.findByRole('status');
+      expect(status).toHaveTextContent(/export created.*download started/i);
+      expect(mocks.adapter.fetchRaw).toHaveBeenCalledWith(
+        '/api/export',
+        { method: 'POST' },
+        archiveTimeoutMs,
+      );
+      expect(directFetch).not.toHaveBeenCalled();
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(await (createObjectURL.mock.calls[0]?.[0] as Blob).text()).toBe('export-bytes');
+      expect(clickedWhileConnected).toBe(true);
+      expect(clickedHref).toBe('blob:waggle-export');
+      expect(clickedDownload).toMatch(/^waggle-export-\d{4}-\d{2}-\d{2}\.zip$/);
+      expect(click).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:waggle-export');
+      expect(screen.getByRole('button', { name: /export data/i })).toBeEnabled();
+    } finally {
+      click.mockRestore();
+      directFetch.mockRestore();
+      if (originalCreateObjectURL) Object.defineProperty(URL, 'createObjectURL', originalCreateObjectURL);
+      else Reflect.deleteProperty(URL, 'createObjectURL');
+      if (originalRevokeObjectURL) Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectURL);
+      else Reflect.deleteProperty(URL, 'revokeObjectURL');
+    }
+  });
+
+  it('revokes the export URL and reports failure when the browser rejects the download', async () => {
+    mocks.adapter.fetchRaw.mockResolvedValue(new Response('export-bytes', { status: 200 }));
+    const createObjectURL = vi.fn(() => 'blob:rejected-export');
+    const revokeObjectURL = vi.fn();
+    const originalCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
+    const originalRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    let clickedWhileConnected = false;
+    let resolveDownloadClick!: () => void;
+    const downloadClicked = new Promise<void>((resolve) => { resolveDownloadClick = resolve; });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      clickedWhileConnected = this.isConnected;
+      this.dataset.settingsExportFailureLink = 'observed';
+      resolveDownloadClick();
+      throw new Error('download blocked');
+    });
+
+    try {
+      renderSettings();
+      await openBackupTab();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /export data/i }));
+        await downloadClicked;
+      });
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+      expect(document.querySelector('[data-settings-export-failure-link="observed"]')).toBeNull();
+      await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 0)); });
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(/export failed.*try again/i);
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(click).toHaveBeenCalledTimes(1);
+      expect(clickedWhileConnected).toBe(true);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:rejected-export');
+      expect(screen.getByRole('button', { name: /export data/i })).toBeEnabled();
+    } finally {
+      click.mockRestore();
+      if (originalCreateObjectURL) Object.defineProperty(URL, 'createObjectURL', originalCreateObjectURL);
+      else Reflect.deleteProperty(URL, 'createObjectURL');
+      if (originalRevokeObjectURL) Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectURL);
+      else Reflect.deleteProperty(URL, 'revokeObjectURL');
+    }
   });
 
   it('asks in-app before restoring a backup and reports success in-app', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as Response);
-    renderSettings();
-
-    await openBackupTab();
-    const file = new File(['backup-data'], 'research.waggle-backup', { type: 'application/octet-stream' });
-    const input = screen.getByLabelText(/^restore$/i);
-    fireEvent.change(input, { target: { files: [file] } });
-
-    expect(confirmSpy).not.toHaveBeenCalled();
-    expect(alertSpy).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    const modal = await screen.findByTestId('approval-modal');
-    expect(modal).toHaveTextContent(/restore backup/i);
-    expect(modal).toHaveTextContent(/research\.waggle-backup/i);
-    expect(modal).toHaveTextContent(/overwrite current data/i);
-
-    fireEvent.click(screen.getByTestId('approval-modal-approve'));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:3333/api/restore',
-      expect.objectContaining({ method: 'POST' }),
+    const directFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 500 }));
+    mocks.adapter.fetchRaw.mockResolvedValue(new Response(
+      JSON.stringify({}),
+      { status: 200, headers: { 'content-type': 'application/json' } },
     ));
-    await screen.findByText(/backup restored successfully/i);
-    expect(screen.getByRole('status')).toHaveTextContent(/restart the server/i);
+    try {
+      renderSettings();
+
+      await openBackupTab();
+      const file = new File(['backup-data'], 'research.waggle-backup', { type: 'application/octet-stream' });
+      const input = screen.getByLabelText(/^restore$/i);
+      fireEvent.change(input, { target: { files: [file] } });
+
+      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(alertSpy).not.toHaveBeenCalled();
+      expect(mocks.adapter.fetchRaw).not.toHaveBeenCalled();
+      expect(directFetch).not.toHaveBeenCalled();
+
+      const modal = await screen.findByTestId('approval-modal');
+      expect(modal).toHaveTextContent(/restore backup/i);
+      expect(modal).toHaveTextContent(/research\.waggle-backup/i);
+      expect(modal).toHaveTextContent(/overwrite current data/i);
+
+      fireEvent.click(screen.getByTestId('approval-modal-approve'));
+
+      await waitFor(() => expect(mocks.adapter.fetchRaw).toHaveBeenCalledWith(
+        '/api/restore',
+        expect.objectContaining({ method: 'POST' }),
+        archiveTimeoutMs,
+      ));
+      expect(directFetch).not.toHaveBeenCalled();
+      await screen.findByText(/backup restored successfully/i);
+      expect(screen.getByRole('status')).toHaveTextContent(/restart the server/i);
+    } finally {
+      directFetch.mockRestore();
+    }
   });
 });

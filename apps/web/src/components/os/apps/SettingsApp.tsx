@@ -58,6 +58,8 @@ type ModelPilotSaveState =
   | { status: 'verifying' | 'saving' | 'saved'; label: string; verifiesModel: boolean }
   | { status: 'error'; label: string; message: string };
 
+const ARCHIVE_REQUEST_TIMEOUT_MS = 30 * 60_000;
+
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Palette },
   { id: 'models', label: 'Models', icon: Cpu },
@@ -77,6 +79,21 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('Failed to read backup file'));
     reader.readAsDataURL(file);
   });
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.hidden = true;
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
 }
 
 const SettingsApp = () => {
@@ -209,6 +226,7 @@ const SettingsApp = () => {
   const [telemetryNotice, setTelemetryNotice] = useState<string | null>(null);
   const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<SettingsApproval | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
 
@@ -413,19 +431,18 @@ const SettingsApp = () => {
     setBackupBusy(true);
     setBackupStatus(null);
     try {
-      const res = await fetch(`${adapter.getServerUrl()}/api/backup`, { method: 'POST' });
+      const res = await adapter.fetchRaw(
+        '/api/backup',
+        { method: 'POST' },
+        ARCHIVE_REQUEST_TIMEOUT_MS,
+      );
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Backup failed' }));
         setBackupStatus({ tone: 'error', message: err.error ?? 'Backup failed' });
         return;
       }
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `waggle-backup-${new Date().toISOString().slice(0, 10)}.waggle-backup`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `waggle-backup-${new Date().toISOString().slice(0, 10)}.waggle-backup`);
       setBackupStatus({ tone: 'success', message: 'Backup created and download started.' });
     } catch {
       setBackupStatus({ tone: 'error', message: 'Backup failed - server unreachable' });
@@ -439,11 +456,11 @@ const SettingsApp = () => {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       const base64 = dataUrl.split(',')[1] ?? '';
-      const res = await fetch(`${adapter.getServerUrl()}/api/restore`, {
+      const res = await adapter.fetchRaw('/api/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ backup: base64 }),
-      });
+      }, ARCHIVE_REQUEST_TIMEOUT_MS);
       if (res.ok) {
         setBackupStatus({ tone: 'success', message: 'Backup restored successfully. Restart the server to apply.' });
       } else {
@@ -452,6 +469,34 @@ const SettingsApp = () => {
       }
     } catch {
       setBackupStatus({ tone: 'error', message: 'Restore failed - server unreachable' });
+    }
+  };
+
+  const handleExportData = async () => {
+    setExportBusy(true);
+    setBackupStatus(null);
+    try {
+      const res = await adapter.fetchRaw(
+        '/api/export',
+        { method: 'POST' },
+        ARCHIVE_REQUEST_TIMEOUT_MS,
+      );
+      if (!res.ok) {
+        setBackupStatus({
+          tone: 'error',
+          message: res.status === 401 || res.status === 403
+            ? 'Export failed. Reconnect your local session and try again.'
+            : 'Export failed. Check the local service and try again.',
+        });
+        return;
+      }
+      const blob = await res.blob();
+      downloadBlob(blob, `waggle-export-${new Date().toISOString().slice(0, 10)}.zip`);
+      setBackupStatus({ tone: 'success', message: 'Export created and download started.' });
+    } catch {
+      setBackupStatus({ tone: 'error', message: 'Export failed. Check the local service and try again.' });
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -1183,21 +1228,14 @@ const SettingsApp = () => {
         {activeTab === 'backup' && (
           <div className="space-y-4">
             <h3 className="text-sm font-display font-semibold text-foreground">Backup & Export</h3>
-            <button onClick={async () => {
-              try {
-                const blob = await fetch(`${adapter.getServerUrl()}/api/export`, { method: 'POST' }).then(r => r.blob());
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `waggle-export-${new Date().toISOString().slice(0, 10)}.zip`;
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch { /* ignore */ }
-            }}
-              className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
+            <button
+              onClick={() => { void handleExportData(); }}
+              disabled={backupBusy || exportBusy}
+              className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <Download className="w-4 h-4 text-honey" />
               <div>
-                <p className="text-xs font-display font-medium text-foreground">Export Data</p>
+                <p className="text-xs font-display font-medium text-foreground">{exportBusy ? 'Preparing export...' : 'Export Data'}</p>
                 <p className="text-[11px] text-muted-foreground">Download all workspaces, sessions, and memory as a zip</p>
               </div>
             </button>
@@ -1218,7 +1256,7 @@ const SettingsApp = () => {
               <div className="flex gap-2">
                 <button
                   onClick={() => { void handleCreateBackup(); }}
-                  disabled={backupBusy}
+                  disabled={backupBusy || exportBusy}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Download className="w-3 h-3" /> {backupBusy ? 'Creating...' : 'Create Backup'}
