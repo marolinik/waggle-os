@@ -10,11 +10,16 @@ import type { ErrorContentBlock } from '@/lib/types';
  * (the "Provider API Keys" surface named by the server copy).
  */
 
+/** Endpoint-connectivity copy → offer the model endpoint settings action. */
+function isConnectivityShapedError(message: string): boolean {
+  return /could not reach (?:the )?(?:ai )?model|model endpoint (?:is )?not responding|ECONNREFUSED|fetch failed|server error retry cap exceeded.*(?:502|503|504)/i.test(message);
+}
+
 /** Auth/API-key-shaped error copy → offer the "Open API key settings" action.
- *  Matches both server strings (chat.ts 'API key is invalid…' / 'Check that
- *  your API key is configured…') and raw 401 passthroughs. */
+ *  Connectivity takes precedence so old persisted outage copy that also told
+ *  users to check an API key cannot keep sending them down the wrong path. */
 export function isAuthShapedError(message: string): boolean {
-  return /api key|unauthorized|401/i.test(message);
+  return !isConnectivityShapedError(message) && /api key|unauthorized|401/i.test(message);
 }
 
 interface ErrorBlockProps {
@@ -25,6 +30,7 @@ interface ErrorBlockProps {
 export default function ErrorBlock({ block, onRetry }: ErrorBlockProps) {
   const navigate = useNavigate();
   const showKeyAction = isAuthShapedError(block.message);
+  const showModelAction = isConnectivityShapedError(block.message);
 
   return (
     <div
@@ -36,7 +42,7 @@ export default function ErrorBlock({ block, onRetry }: ErrorBlockProps) {
         <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[var(--risk)]" />
         <span className="whitespace-pre-wrap">{block.message}</span>
       </div>
-      {(onRetry || showKeyAction) && (
+      {(onRetry || showKeyAction || showModelAction) && (
         <div className="mt-2 flex items-center gap-2">
           {onRetry && (
             <button
@@ -52,6 +58,14 @@ export default function ErrorBlock({ block, onRetry }: ErrorBlockProps) {
               className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-full border border-border/60 text-[var(--text)] hover:bg-muted/50 transition-colors"
             >
               <KeyRound className="w-3 h-3" /> Open API key settings
+            </button>
+          )}
+          {showModelAction && (
+            <button
+              onClick={() => navigate('/settings?tab=models')}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-full border border-border/60 text-[var(--text)] hover:bg-muted/50 transition-colors"
+            >
+              <KeyRound className="w-3 h-3" /> Open model settings
             </button>
           )}
         </div>

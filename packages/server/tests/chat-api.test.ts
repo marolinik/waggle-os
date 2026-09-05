@@ -2315,6 +2315,64 @@ describe('Chat Streaming API', () => {
     server.agentRunner = originalRunner;
   });
 
+  it.each([
+    [
+      'direct connection refusal',
+      'connect ECONNREFUSED 10.33.0.153:4000',
+    ],
+    [
+      'proxied transport failure',
+      'Server error retry cap exceeded (3 consecutive 502 errors): {"error":{"message":"openai-compatible API request failed: fetch failed"}}',
+    ],
+  ])('maps %s to one actionable endpoint outage without raw transport or API-key advice', async (
+    _case,
+    thrownMessage,
+  ) => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const workspaceId = server.workspaceManager.create({
+      name: `Endpoint outage ${_case} ${Date.now()}`,
+      group: 'test',
+    }).id;
+    const sessionId = `endpoint-outage-${Date.now()}`;
+    server.agentRunner = async () => {
+      throw new Error(thrownMessage);
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Continue after the model endpoint recovers.',
+          workspace: workspaceId,
+          session: sessionId,
+        },
+      });
+
+      const errorEvents = parseSSE(res.body).filter(event => event.event === 'error');
+      expect(errorEvents).toHaveLength(1);
+      const errorMessage = JSON.parse(errorEvents[0].data).message as string;
+      expect(errorMessage).toBe(
+        'The model endpoint is not responding. It may be down or restarting. Check Settings > Models, then try again.',
+      );
+      expect(errorMessage).not.toMatch(/api key|ECONNREFUSED|fetch failed|retry cap|502/i);
+
+      const inMemory = server.agentState.sessionHistories.get(
+        chatSessionStateKey(workspaceId, sessionId),
+      ) ?? [];
+      expect(inMemory).toHaveLength(2);
+      expect(inMemory[1]).toEqual({
+        role: 'assistant',
+        content: `${GENERATION_FAILED_PREFIX}${errorMessage}`,
+      });
+      expect(loadSessionMessages(tmpDir, workspaceId, sessionId)).toEqual(inMemory);
+    } finally {
+      server.agentRunner = originalRunner;
+      server.agentState.sessionHistories.delete(chatSessionStateKey(workspaceId, sessionId));
+    }
+  });
+
   it.each(['', ' \n\t'])('rejects a blank successful agent response %j', async (blankContent) => {
     resetRateLimiter(server);
     const originalRunner = server.agentRunner;

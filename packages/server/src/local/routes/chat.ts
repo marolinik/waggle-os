@@ -5336,11 +5336,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // Send user-friendly error event — never show raw traces
       let errorMessage: string;
       if (err instanceof Error) {
-        // Clean up common error messages for the user
-        if (err.message.includes('ECONNREFUSED')) {
-          errorMessage = 'Could not reach the AI model. Check that your API key is configured in Settings.';
-        } else if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+        // Clean up common error messages for the user. Authentication and
+        // endpoint availability are different recovery paths: never send a
+        // user to API-key settings when a local/OpenAI-compatible endpoint is
+        // simply down or restarting.
+        if (err.message.includes('401') || err.message.includes('Unauthorized')) {
           errorMessage = 'API key is invalid or expired. Update it in Settings > API Keys.';
+        } else if (
+          /ECONNREFUSED|fetch failed|ENETUNREACH|EHOSTUNREACH|socket hang up/i.test(err.message)
+          || /Could not reach (?:the )?(?:AI )?model endpoint/i.test(err.message)
+          || /Server error retry cap exceeded \(\d+ consecutive (?:502|503|504) errors\)/i.test(err.message)
+        ) {
+          errorMessage = 'The model endpoint is not responding. It may be down or restarting. Check Settings > Models, then try again.';
         } else if (err.message.includes('timeout') || err.message.includes('ETIMEDOUT')) {
           errorMessage = 'The request timed out. The model may be overloaded — try again in a moment.';
         } else if (err.message.includes('context_length') || err.message.includes('too many tokens')) {
