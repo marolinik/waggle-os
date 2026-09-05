@@ -1444,7 +1444,7 @@ const ChatApp = ({
                   {s.title}
                 </span>
                 {(s.messageCount != null || s.lastActive) && (
-                  <span className="text-[11px] text-muted-foreground/60">
+                  <span className={`text-[11px] ${activeSessionId === s.id ? 'text-[var(--text-2)]' : 'text-[var(--text-tertiary)]'}`}>
                     {s.messageCount != null && `${s.messageCount} msgs`}
                     {s.messageCount != null && s.lastActive && ' · '}
                     {s.lastActive && new Date(s.lastActive).toLocaleDateString(DATE_LOCALE)}
@@ -2270,7 +2270,10 @@ const ChatApp = ({
                   <span className="max-w-[82px] truncate font-mono text-[var(--text-2)] sm:max-w-[140px]">
                     {currentModel ? formatModelLabel(currentModel) : 'auto'}
                   </span>
-                  <span className="max-w-[82px] truncate text-[10px] text-[var(--text-dim)]">
+                  <span
+                    data-testid="chat-model-health-label"
+                    className="max-w-[82px] truncate text-[10px] text-[var(--text-tertiary)]"
+                  >
                     · {modelHealthLabel}{modelHealthStatus === 'checking' ? '…' : ''}
                   </span>
                   <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" aria-hidden="true" />

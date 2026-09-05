@@ -666,10 +666,14 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(sessionB).toHaveAttribute('data-session-id', 'session-b');
     expect(sessionB).toHaveAttribute('aria-current', 'true');
     expect(sessionA).not.toHaveAttribute('aria-current');
+    expect(within(sessionB).getByText('1 msgs')).toHaveClass('text-[var(--text-2)]');
+    expect(within(sessionA).getByText('2 msgs')).toHaveClass('text-[var(--text-tertiary)]');
 
     fireEvent.click(sessionA);
     expect(sessionA).toHaveAttribute('aria-current', 'true');
     expect(sessionB).not.toHaveAttribute('aria-current');
+    expect(within(sessionA).getByText('2 msgs')).toHaveClass('text-[var(--text-2)]');
+    expect(within(sessionB).getByText('1 msgs')).toHaveClass('text-[var(--text-tertiary)]');
 
     fireEvent.click(sessionB);
     expect(sessionB).toHaveAttribute('aria-current', 'true');
@@ -1150,6 +1154,7 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
 
     const trigger = screen.getByRole('button', { name: /saved model.*ready.*model list no models/i });
     expect(trigger.querySelector('span[aria-hidden="true"]')).toHaveAttribute('data-tone', 'healthy');
+    expect(within(trigger).getByTestId('chat-model-health-label')).toHaveClass('text-[var(--text-tertiary)]');
     fireEvent.click(trigger);
     const picker = screen.getByRole('region', { name: 'Available models' });
     expect(within(picker).getByRole('status')).toHaveTextContent(
