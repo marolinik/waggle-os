@@ -76,7 +76,7 @@ function resolvePersona(id: string) {
 import { FrameStore, SessionStore, TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   createPersistedCapabilityReceipt,
@@ -618,6 +618,14 @@ function isTerminalModelBudgetError(error: unknown): boolean {
 export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
   if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
+  const memoryActionable = actionableMemoryDirectiveText(message);
+  if (memoryActionable !== message) {
+    const remainder = memoryActionable.replace(/^[\s?.!,;:—–-]+/, '').trim();
+    if (remainder === ''
+      || /^(?:please\s+)?(?:explain|translate|quote|repeat|paraphrase|summari[sz]e|analy[sz]e|review)\b[^.;!?\r\n]{0,100}(?:[.!?]\s*)?$/i.test(remainder)) {
+      return false;
+    }
+  }
   const actionableMessage = stripNegatedCapabilityClauses(message);
   if (isInlineTextOnlyDraftRequest(actionableMessage)) return false;
   if (isInlineSelfContainedCalculationRequest(actionableMessage)) return false;
@@ -663,14 +671,16 @@ function isExplicitPlanAuthoringRequest(message: string): boolean {
 
 function hasExplicitPersistedMemoryRecallSignal(message: string): boolean {
   if (resolveExplicitPersistedMemoryReadDirective(message) === 'allow') return true;
-  const directRecall = /\b(?:what do you know about me|what have you saved|what memor(?:y|ies) have you saved(?: about me)?|what do you remember about (?:me|us|my|our))\b/i.test(message)
-    || /\bwhat do you remember\s*[?.!,;:]?\s*$/i.test(message)
-    || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(message);
-  const explicitMemoryLookup = /\b(?:search|find|look up|show|list|open|inspect|retrieve)\s+(?:me\s+)?(?:(?:in|inside|within)\s+)?(?:(?:my|our|your|the|saved|previous|prior)\s+)?memor(?:y|ies)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|containing|regarding)\b))/i;
+  const actionableMessage = actionableMemoryDirectiveText(message);
+  const directRecall = /\b(?:what do you know about me|what have you saved|what memor(?:y|ies) have you saved(?: about me)?|what do you remember about (?:me|us|my|our))\b/i.test(actionableMessage)
+    || /\bwhat do you remember\s*[?.!,;:]?\s*$/i.test(actionableMessage)
+    || /\b(?:recall|remember|do you remember)\s+(?:(?:what|when|where|who|which|whether|how)\s+(?:I|we|you)\b|(?:me|us|my|our|your|saved|previous|prior)\b)/i.test(actionableMessage)
+    || /\bwhat\b[^.?!\r\n]{0,120}\b(?:did\s+)?(?:I|we)\b[^.?!\r\n]{0,80}\b(?:ask(?:ed)?|tell|told)\s+you\s+to\s+remember\b[^.?!\r\n]{0,80}\b(?:another|other|previous|prior|earlier)\s+(?:session|chat|conversation|thread)\b/i.test(actionableMessage);
+  const explicitMemoryLookup = /\b(?:search|find|look\s+(?:up|in)|show|list|open|inspect|retrieve)\s+(?:me\s+)?(?:(?:in|inside|within)\s+)?(?:(?:my|our|your|the|saved|previous|prior)\s+)?memor(?:y|ies)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|containing|regarding)\b))/i;
   const ownedContextLookup = /\b(?:search|find|look up|recall|retrieve)\s+(?:(?:my|our)\s+saved\s+|(?:saved|previous|prior)\s+)(?:[\w'-]+\s+){0,3}(?:notes?|preferences?|decisions?|history|context)\b(?=\s*(?:$|[?.!,;:]|\b(?:for|about|from|on|containing|regarding)\b))/i;
   return directRecall
-    || explicitMemoryLookup.test(message)
-    || ownedContextLookup.test(message);
+    || explicitMemoryLookup.test(actionableMessage)
+    || ownedContextLookup.test(actionableMessage);
 }
 
 function isReportedToolFailure(result: string): boolean {

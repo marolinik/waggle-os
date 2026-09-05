@@ -4947,8 +4947,19 @@ describe('conversational gated tool filtering', () => {
       'Recall our launch decision',
       'Remember what I told you about launch timing',
       'Do you remember when we selected the local model?',
+      'Use Waggle memory if available: what did I ask you to remember in another session?',
+      'Use Waggle memory if available: what exact project codename did I ask you to remember in another session?',
+      'Use Waggle memory if available: when did we choose the codename in another session?',
+      'Use Waggle memory if available: after which meeting did we choose the codename?',
+      'Use Waggle memory if available: when did we approve the budget in another session?',
+      'Use Waggle memory if available: after which meeting did we approve the budget?',
+      'Use Waggle memory if available: when exactly did we approve the budget in another session?',
+      'Use Waggle memory if available: after exactly which meeting did we approve the budget?',
+      'Use Waggle memory if available: when, exactly, did we approve the budget?',
       'Find our saved launch decision',
       'Retrieve my saved decision',
+      'Tell me what I asked you to remember in another conversation.',
+      'Look in my memory for the Qwen endpoint.',
     ];
     const topicalRequests = [
       'How does persistent memory affect agent reliability?',
@@ -4962,6 +4973,7 @@ describe('conversational gated tool filtering', () => {
       'Find my context window limit',
       'Search prior history of SQLite',
       'Retrieve my notes app installer',
+      'Translate this sentence: "What project codename did I ask you to remember in another session?"',
       'Compare desktop AI memory store architectures',
       'Use current primary sources to compare SQLite vector search with PostgreSQL plus pgvector for a single-user desktop AI memory store.',
     ];
@@ -4972,6 +4984,52 @@ describe('conversational gated tool filtering', () => {
     for (const request of topicalRequests) {
       expect(isExplicitMemoryRecallRequest(request), request).toBe(false);
     }
+  });
+
+  it('does not treat an attributed memory question as the user requesting recall', () => {
+    for (const request of [
+      'Alice said: what did I ask you to remember in another session? Please explain her statement.',
+      'Alice asked: what did I ask you to remember in another session? Please explain her question.',
+      'Alice requested: what did I ask you to remember in another session? Please explain her request.',
+      'Alice said — search my saved memory for the codename. Explain her request.',
+      'Alice said, search my saved memory for the codename. Explain her request.',
+      'According to Alice: what did I ask you to remember in another session? Explain that.',
+      "Alice's request: use my saved memory if available. Critique it.",
+    ]) {
+      expect(isExplicitMemoryRecallRequest(request), request).toBe(false);
+      expect(filterGatedToolsForConversationalTurn(tools, request, 'normal').map(tool => tool.name), request).toEqual([]);
+    }
+  });
+
+  it('does not treat an unquoted descriptive memory question as a recall request', () => {
+    for (const request of [
+      'Quote: what did I ask you to remember in another session?',
+      'Explain: what did I ask you to remember in another session?',
+      'Analyze this question: what did I ask you to remember in another session?',
+      'Summarize this question: what did I ask you to remember in another session?',
+      'Rewrite this question: what did I ask you to remember in another session?',
+      'Summarize: what did I ask you to remember in another session?',
+      'Rewrite: what did I ask you to remember in another session?',
+      'alice said: what did I ask you to remember in another session? Please explain her statement.',
+      'Please summarize: what did I ask you to remember in another session?',
+      'Summarize briefly: what did I ask you to remember in another session?',
+      'Can you rewrite: what did I ask you to remember in another session?',
+      'Proofread this sentence: search my saved memory for launch notes.',
+      'Evaluate this prompt: search my saved memory for launch notes.',
+      'Answer whether this is clear: use my saved memory if available.',
+      'Discuss this question: what did I ask you to remember in another session?',
+      'Correct the grammar: what do you remember about me?',
+      'Alice told me: what did I ask you to remember in another session? Please explain her statement.',
+    ]) {
+      expect(isExplicitMemoryRecallRequest(request), request).toBe(false);
+      expect(filterGatedToolsForConversationalTurn(tools, request, 'normal').map(tool => tool.name), request).toEqual([]);
+    }
+  });
+
+  it('preserves a later explicit action after attributed memory content', () => {
+    const request = 'Alice said: what did I ask you to remember in another session? Please explain her statement. Then send the explanation to Bob.';
+    expect(isExplicitMemoryRecallRequest(request)).toBe(false);
+    expect(isExplicitGatedToolRequest(request)).toBe(true);
   });
 
   it('does not spend a memory-tool round on an external vector-search comparison', () => {

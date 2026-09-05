@@ -3350,6 +3350,7 @@ describe('persona acceptance prompt budget', () => {
       'Use my previous message and remember our agreement.',
       'Use my previous message and tell me what have you saved about me?',
       'Use my previous message and tell me what do you know about me?',
+      'Use Waggle memory if available: what exact project codename did I ask you to remember in another session? Reply with only the codename; if there is no reliable memory, reply UNKNOWN.',
       'Summarize what we discussed earlier in this chat and compare it to our agreed plan.',
       'Summarize this conversation so far and our previous decision.',
       'Summarize this conversation so far and compare it to our earlier decision.',
@@ -3403,6 +3404,12 @@ describe('persona acceptance prompt budget', () => {
     'Do not hesitate to use my saved memory. Explain our previous decision. Do not write files or execute code.',
     'Do not search the web, use my saved memory instead. Do not write files or execute code.',
     'Do not search the web — use my saved memory instead. Do not write files or execute code.',
+    'Use Waggle memory if available: what exact project codename did I ask you to remember in another session? Reply with only the codename; if there is no reliable memory, reply UNKNOWN.',
+    'Use my saved memory if available. If you find nothing, say UNKNOWN. Do not write files or execute code.',
+    'Use Waggle memory if available: when did we approve the budget in another session? Do not write files or execute code.',
+    'Use Waggle memory if available: when exactly did we approve the budget in another session? Do not write files or execute code.',
+    'Use Waggle memory if available: when, exactly, did we approve the budget? Do not write files or execute code.',
+    'Use my saved memory if available. When the command finishes, summarize the output. Do not write files or execute code.',
   ])('keeps first-turn owned context requests memory-capable: %s', async (message) => {
     capturedConfig = null;
     const response = await injectWithAuth(server, {
@@ -3462,6 +3469,18 @@ describe('persona acceptance prompt budget', () => {
     'Follow this constraint exactly: `Do not search memory.` Answer from scratch. Do not write files or execute code.',
     'Do not search memory, but search memory, only if I approve. Do not write files or execute code.',
     'Do not use memory, but use memory provided that I ask later. Do not write files or execute code.',
+    'Use my saved memory when relevant, but only after I explicitly approve. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available; only after I give permission. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but only after I allow it. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but wait until I approve. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, subject to my approval. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but not before I approve. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but defer using it until I approve. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but not without my permission. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but use it solely after I approve. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but ask me first. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but only if I tell you to. Tell me the exact project codename. Do not write files or execute code.',
+    'Use my saved memory if available, but first ask me. Tell me the exact project codename. Do not write files or execute code.',
     'Do not search the web, do not use my saved memory. Do not write files or execute code.',
     'Do not search the web—do not use my saved memory. Do not write files or execute code.',
     'Do not search memory. Explain ``but search memory for launch notes``. Do not write files or execute code.',
@@ -4417,8 +4436,11 @@ describe('persona acceptance prompt budget', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      expect(String(fetchSpy.mock.calls[0][0])).toContain('/api/marketplace/search');
+      const marketplaceSearchCalls = fetchSpy.mock.calls.filter(
+        ([url]) => String(url).includes('/api/marketplace/search'),
+      );
+      expect(marketplaceSearchCalls).toHaveLength(1);
+      expect(String(marketplaceSearchCalls[0]![0])).toContain('query=research%20-%20do%20not%20use%20memory');
     } finally {
       fetchSpy.mockRestore();
     }
