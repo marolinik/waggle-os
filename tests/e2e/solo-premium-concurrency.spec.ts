@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
 const RUN_LIVE_CONCURRENCY = process.env.WAGGLE_E2E_SOLO_CONCURRENCY === '1';
+const OWNS_ISOLATED_SERVER = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER === '0';
+const ENDPOINT = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_BASE_URL
+  ?? 'http://10.33.0.153:4000/v1';
 const MODEL = process.env.WAGGLE_E2E_OPENAI_COMPATIBLE_MODEL
   ?? 'openai-compatible/qwen3.8-flash-next';
 const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&skipBriefing=true&tier=simple';
@@ -302,8 +305,8 @@ async function createSession(page: Page, workspaceId: string, token: string, tit
 
 test.describe('Windows Solo same-workspace concurrency', () => {
   test.skip(
-    !RUN_LIVE_CONCURRENCY,
-    'Set WAGGLE_E2E_SOLO_CONCURRENCY=1 to run two real local-model sessions.',
+    !RUN_LIVE_CONCURRENCY || !OWNS_ISOLATED_SERVER,
+    'Set WAGGLE_E2E_SOLO_CONCURRENCY=1 and WAGGLE_E2E_REUSE_EXISTING_SERVER=0; this journey must own its disposable Waggle data dir.',
   );
   test.setTimeout(300_000);
 
@@ -331,12 +334,44 @@ test.describe('Windows Solo same-workspace concurrency', () => {
     }
 
     try {
-      await page.goto(`/home?${SKIP_PARAMS}`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`/settings?${SKIP_PARAMS}`, { waitUntil: 'domcontentloaded' });
+      await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
       token = await readBrowserSessionToken(page);
+
+      const onboardingStatusResponse = await page.request.get('/api/onboarding/status', {
+        headers: authHeaders(token),
+      });
+      expect(onboardingStatusResponse.ok(), await onboardingStatusResponse.text().catch(() => '')).toBe(true);
+      const onboardingStatus = await onboardingStatusResponse.json() as { profileId?: string };
+      expect(onboardingStatus.profileId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      const onboardingCompleteResponse = await page.request.post('/api/onboarding/complete', {
+        data: { expectedProfileId: onboardingStatus.profileId },
+        headers: authHeaders(token),
+      });
+      expect(onboardingCompleteResponse.ok(), await onboardingCompleteResponse.text().catch(() => '')).toBe(true);
+
+      await page.getByRole('button', { name: /openai-compatible/i }).click();
+      await page.getByLabel('Endpoint URL').fill(ENDPOINT);
+      await page.getByRole('button', { name: 'Discover models' }).click();
+      const discoveredModel = page.getByRole('combobox', { name: 'Model', exact: true });
+      await expect(discoveredModel).toBeVisible({ timeout: 60_000 });
+      await discoveredModel.selectOption(MODEL);
+      await page.getByRole('button', { name: 'Verify & save' }).click();
+      await expect(page.getByRole('status').filter({
+        hasText: 'Verified and saved. This model is now your primary model.',
+      })).toBeVisible({ timeout: 90_000 });
+
       const settingsResponse = await page.request.get('/api/settings', { headers: authHeaders(token) });
       expect(settingsResponse.ok(), await settingsResponse.text().catch(() => '')).toBe(true);
-      const settings = await settingsResponse.json() as { defaultModel?: string };
+      const settings = await settingsResponse.json() as {
+        defaultModel?: string;
+        providers?: Record<string, { baseUrl?: string; models?: string[] }>;
+      };
       expect(settings.defaultModel).toBe(MODEL);
+      expect(settings.providers?.['openai-compatible']?.baseUrl).toBe(ENDPOINT);
+      expect(settings.providers?.['openai-compatible']?.models).toContain(MODEL);
 
       const workspaceResponse = await page.request.post('/api/workspaces', {
         headers: authHeaders(token),
