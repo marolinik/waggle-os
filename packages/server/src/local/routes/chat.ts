@@ -735,23 +735,27 @@ function shouldUsePersistedMemoryForTurn(message: string): boolean {
     && !isCurrentConversationOnlyReferenceRequest(message);
 }
 
+const NATURAL_BOUNDED_EXACT_CODENAME_LOOKUP = /^(?:please\s+)?use\s+(?:(?:waggle|my\s+saved|our\s+saved|workspace)\s+)?memory\s+if\s+available\s*:\s*what\s+exact\s+project\s+codename\s+did\s+(?:I|we)\s+(?:ask|tell)\s+you\s+to\s+remember\s+in\s+(?:another|previous|prior|earlier)\s+(?:session|chat|conversation|thread)\s*\?\s*(?:please\s+)?(?:reply|respond|return|answer)\s+(?:with\s+)?(?:only|just)\s+(?:the\s+)?codename(?:\s*;\s*if\s+there\s+is\s+no\s+reliable\s+memory\s*,?\s*(?:please\s+)?(?:reply|respond|return|answer)\s+UNKNOWN)?[.!]?\s*$/i;
+
 export function isBoundedExactPersistedMemoryLookup(message: string): boolean {
   const request = message.trim();
   const actionable = request.replace(QUOTED_TOOL_DIRECTIVE_PATTERN, ' ').trim();
   const quotedOnlyRecall = actionable !== request
     && !hasExplicitPersistedMemoryRecallSignal(actionable);
-  const directLookup = /^(?:please\s+)?(?:search|look\s+(?:in|through))\s+(?:my\s+)?(?:saved\s+|persisted\s+)?memory\b/i.test(actionable);
+  const directLookup = /^(?:please\s+)?(?:search|look\s+(?:in|through))\s+(?:my\s+)?(?:saved\s+|persisted\s+)?memory\b/i.test(actionable)
+    || NATURAL_BOUNDED_EXACT_CODENAME_LOOKUP.test(actionable);
   if (!shouldUsePersistedMemoryForTurn(request)
     || request.length > 280
     || /[\r\n`]/.test(request)
     || quotedOnlyRecall
     || !directLookup
+    || !parseBoundedExactMemoryRequest(request)
     || hasMetaToolDirectivePrefix(actionable)
     || isMetaDecisionContentRequest(request)
     || hasCancelledPriorRequest(actionable)
     || /\b(?:password|passcode|one[- ]time\s+(?:password|code)|otp|token|api[_ -]?key|credential|private\s+key|secret)\b/i.test(request)) return false;
 
-  const asksForExactScalar = /\b(?:what|which)\s+(?:(?:is|was|are|were)\s+)?(?:the\s+)?exact\s+(?:codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i.test(request)
+  const asksForExactScalar = /\b(?:what|which)\s+(?:(?:is|was|are|were)\s+)?(?:the\s+)?exact\s+(?:project\s+)?(?:codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i.test(request)
     || /\b(?:repeat|return|give\s+me|tell\s+me)\s+(?:the\s+)?exact\s+(?:codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i.test(request);
   const requestsOnlyScalar = /\b(?:reply|respond|return|answer)\s+(?:with\s+)?(?:only|just)\s+(?:the\s+|that\s+)?(?:codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i.test(request);
   return asksForExactScalar && requestsOnlyScalar;
@@ -1032,19 +1036,32 @@ interface BoundedExactMemoryRequest {
   fieldPattern: string;
   query: string;
   topicTerms: string[];
+  strictCodenameToken?: boolean;
+  fallback?: 'UNKNOWN';
 }
 
+type BoundedExactMemoryExecutionOutcome =
+  | { status: 'found' }
+  | { status: 'no-match' }
+  | { status: 'failure' };
+
 function parseBoundedExactMemoryRequest(message: string): BoundedExactMemoryRequest | null {
-  const field = message.match(/\bexact\s+(codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i)?.[1];
+  const naturalCodenameLookup = NATURAL_BOUNDED_EXACT_CODENAME_LOOKUP.test(message.trim());
+  const field = naturalCodenameLookup
+    ? 'codename'
+    : message.match(/\bexact\s+(codename|name|label|identifier|project[_ -]?code|date|number|value|choice|option)\b/i)?.[1];
   if (!field) return null;
-  const topic = message.match(
+  const explicitTopic = message.match(
     /\b(?:search|look\s+(?:in|through))\s+(?:my\s+)?(?:saved\s+|persisted\s+)?memory\s+(?:for|about)\s+([^.!?]{3,160})/i,
   )?.[1]?.replace(/^(?:our|the|my)\s+/i, '').trim();
+  const topic = naturalCodenameLookup ? 'project codename' : explicitTopic;
   if (!topic) return null;
-  const topicTerms = Array.from(new Set(
-    (topic.toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? [])
-      .filter(term => !BOUNDED_EXACT_MEMORY_TOPIC_STOPWORDS.has(term)),
-  ));
+  const topicTerms = naturalCodenameLookup
+    ? ['project', 'codename']
+    : Array.from(new Set(
+      (topic.toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? [])
+        .filter(term => !BOUNDED_EXACT_MEMORY_TOPIC_STOPWORDS.has(term)),
+    ));
   if (topicTerms.length === 0) return null;
   return {
     fieldPattern: field.toLowerCase() === 'project code'
@@ -1053,6 +1070,10 @@ function parseBoundedExactMemoryRequest(message: string): BoundedExactMemoryRequ
       : field.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
     query: topic,
     topicTerms,
+    ...(naturalCodenameLookup ? { strictCodenameToken: true } : {}),
+    ...(naturalCodenameLookup && /\b(?:reply|respond|return|answer)\s+UNKNOWN\b/i.test(message)
+      ? { fallback: 'UNKNOWN' as const }
+      : {}),
   };
 }
 
@@ -1077,7 +1098,11 @@ function extractBoundedExactWorkspaceMemoryValue(
     .filter(Boolean);
   const candidates: Array<{ value: string; relevance: number }> = [];
   const field = request.fieldPattern;
-  const scalar = String.raw`[A-Za-z0-9][A-Za-z0-9._ -]{0,79}?`;
+  const scalar = request.strictCodenameToken
+    ? String.raw`[A-Za-z0-9][A-Za-z0-9._-]{0,79}`
+    : String.raw`[A-Za-z0-9][A-Za-z0-9._ -]{0,79}?`;
+  const scalarBoundary = String.raw`(?:["'”])?(?=\s*(?:$|[—–](?=\s|$)|[.,;](?=\s|$)))`;
+  const strictScalarTerminator = String.raw`(?:["'”])?\s*(?:\.?\s*$|[—–]\s*\d+\s+messages?\s*$)`;
   const beforeField = new RegExp(
     String.raw`\b(?:choose|chose|selected|pick|picked|use|using|go\s+with|went\s+with)\s+(?:the\s+)?(${scalar})\s+(?:as|for)\s+(?:the\s+|our\s+)?[^.\r\n]{0,100}\b${field}\b`,
     'i',
@@ -1088,39 +1113,79 @@ function extractBoundedExactWorkspaceMemoryValue(
   );
   const nonAuthoritativeDecision = /\b(?:not|never|rejected|discarded)\b/i;
   const afterField = new RegExp(
-    String.raw`\b${field}\b[^.\r\n]{0,40}?\b(?:is|was|equals?|set\s+to)\b\s*["'“”]?(${scalar})`,
+    String.raw`\b${field}\b[^.\r\n]{0,40}?\b(?:is|was|equals?|set\s+to)\b\s*["'“]?(${scalar})${scalarBoundary}`,
     'i',
   );
   const labelledField = new RegExp(
-    String.raw`\b${field}\b(?:\s+(?:decision|choice|selected|chosen))?\s*[:=]\s*["'“”]?(${scalar})`,
+    String.raw`\b${field}\b(?:\s+(?:decision|choice|selected|chosen))?\s*[:=]\s*["'“]?(${scalar})${scalarBoundary}`,
     'i',
   );
+  const rememberedExactField = field === 'codename'
+    ? new RegExp(
+      String.raw`\b(?:remember(?:ed)?(?:\s+this)?\s+exact\s+)?(?:project\s+)?codename(?:\s*\([^\r\n)]{1,60}\))?\s*[:=]\s*["'“]?(${scalar})${scalarBoundary}`,
+      'i',
+    )
+    : null;
+  const strictRememberedExactField = request.strictCodenameToken
+    ? new RegExp(
+      String.raw`^(?:Session\s*\(\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d))?\)\s*:\s*)?Remember(?:ed)?\s+this\s+exact\s+(?:project\s+)?codename\s*[:=]\s*["'“]?(${scalar})${strictScalarTerminator}`,
+      'i',
+    )
+    : null;
+  const strictUserStatedField = request.strictCodenameToken
+    ? new RegExp(
+      String.raw`^(?:Project\s+)?codename\s*\(\s*user-stated\s*,\s*exact\s*\)\s*[:=]\s*["'“]?(${scalar})${strictScalarTerminator}`,
+      'i',
+    )
+    : null;
+  const strictDeclarativeField = request.strictCodenameToken
+    ? new RegExp(
+      String.raw`^(?:The\s+)?(?:project\s+)?codename\s+(?:is|was|equals?|set\s+to)\s*["'“]?(${scalar})${strictScalarTerminator}`,
+      'i',
+    )
+    : null;
 
   for (const content of contents) {
     for (const line of content.split(/\r?\n/).map(value => value.trim()).filter(Boolean)) {
-      if (BOUNDED_EXACT_MEMORY_SENSITIVE_PATTERN.test(line)) continue;
+      if (BOUNDED_EXACT_MEMORY_SENSITIVE_PATTERN.test(line)
+        || nonAuthoritativeDecision.test(line)) continue;
       const normalized = line.toLowerCase();
       const relevance = request.topicTerms.filter(term => normalized.includes(term)).length;
       if (relevance === 0) continue;
-      const match = beforeField.exec(line)
-        ?? (nonAuthoritativeDecision.test(line) ? null : decidedField.exec(line))
-        ?? labelledField.exec(line)
-        ?? afterField.exec(line);
+      const match = request.strictCodenameToken
+        ? strictRememberedExactField?.exec(line)
+          ?? strictUserStatedField?.exec(line)
+          ?? strictDeclarativeField?.exec(line)
+        : beforeField.exec(line)
+          ?? decidedField.exec(line)
+          ?? rememberedExactField?.exec(line)
+          ?? labelledField.exec(line)
+          ?? afterField.exec(line);
       const value = match?.[1]
         ?.trim()
         .replace(/^["'“”]+|["'“”,;:.]+$/g, '');
-      if (value && value.length <= 80 && !BOUNDED_EXACT_MEMORY_SENSITIVE_PATTERN.test(value)) {
-        candidates.push({ value, relevance });
+      if (!value || value.length > 80 || BOUNDED_EXACT_MEMORY_SENSITIVE_PATTERN.test(value)) continue;
+      try {
+        if (!scanForInjection(value, 'tool_output').safe) continue;
+      } catch {
+        continue;
       }
+      candidates.push({ value, relevance });
     }
   }
   candidates.sort((left, right) => right.relevance - left.relevance);
-  return candidates[0]?.value ?? null;
+  const topRelevance = candidates[0]?.relevance;
+  if (topRelevance === undefined) return null;
+  const topValues = new Set(
+    candidates.filter(candidate => candidate.relevance === topRelevance).map(candidate => candidate.value),
+  );
+  return topValues.size === 1 ? candidates[0]!.value : null;
 }
 
 export function bindExactWorkspaceMemorySearchTool(
   tools: ToolDefinition[],
   message: string,
+  onOutcome?: (outcome: BoundedExactMemoryExecutionOutcome) => void,
 ): ToolDefinition[] {
   const request = parseBoundedExactMemoryRequest(message);
   return tools.map((tool) => {
@@ -1136,16 +1201,36 @@ export function bindExactWorkspaceMemorySearchTool(
       },
       execute: async (_args) => {
         if (!request) {
+          onOutcome?.({ status: 'failure' });
           return 'Error: exact workspace memory lookup could not bind the current request.';
         }
-        const rawResult = await tool.execute({
-          query: request.query,
-          scope: 'workspace',
-          limit: BOUNDED_EXACT_MEMORY_SEARCH_LIMIT,
-          profile: 'balanced',
-        });
+        let rawResult: string;
+        try {
+          rawResult = await tool.execute({
+            query: request.query,
+            scope: 'workspace',
+            limit: BOUNDED_EXACT_MEMORY_SEARCH_LIMIT,
+            profile: 'balanced',
+          });
+        } catch (error) {
+          onOutcome?.({ status: 'failure' });
+          throw error;
+        }
+        if (isReportedToolFailure(rawResult)) {
+          onOutcome?.({ status: 'failure' });
+          return rawResult;
+        }
         const value = extractBoundedExactWorkspaceMemoryValue(rawResult, request);
-        return value ?? 'Error: the requested exact workspace memory value could not be isolated safely.';
+        if (value !== null) {
+          onOutcome?.({ status: 'found' });
+          return value;
+        }
+        if (request.fallback) {
+          onOutcome?.({ status: 'no-match' });
+          return request.fallback;
+        }
+        onOutcome?.({ status: 'failure' });
+        return 'Error: the requested exact workspace memory value could not be isolated safely.';
       },
     };
   });
@@ -3477,6 +3562,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let explicitReadOnlyToolChoice: string | undefined;
         let requiredToolSequence: readonly string[] | undefined;
         let directReadFileExecutionOutcome: ToolExecutionOutcome | null = null;
+        let boundedExactMemoryExecutionOutcome: BoundedExactMemoryExecutionOutcome | null = null;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
@@ -3783,7 +3869,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               ? 'search_memory'
               : undefined;
             if (explicitReadOnlyToolChoice) {
-              effectiveTools = bindExactWorkspaceMemorySearchTool(effectiveTools, agentMessage);
+              effectiveTools = bindExactWorkspaceMemorySearchTool(
+                effectiveTools,
+                agentMessage,
+                outcome => { boundedExactMemoryExecutionOutcome = outcome; },
+              );
             }
           } else {
             explicitReadOnlyToolChoice = injectionResult.safe
@@ -4268,7 +4358,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             });
           },
           onToolResult: (name: string, input: Record<string, unknown>, result: string) => {
-            const isError = name === 'read_file' && explicitReadOnlyToolChoice === 'read_file'
+            const isBoundedExactMemoryResult = name === 'search_memory'
+              && explicitReadOnlyToolChoice === 'search_memory'
+              && boundedExactPersistedMemoryLookup;
+            const isError = isBoundedExactMemoryResult && boundedExactMemoryExecutionOutcome
+              ? boundedExactMemoryExecutionOutcome.status === 'failure'
+              : name === 'read_file' && explicitReadOnlyToolChoice === 'read_file'
               ? directReadFileExecutionOutcome === null
                 || directReadFileExecutionOutcome.isError
                 || directReadFileExecutionOutcome.content !== result
@@ -4299,6 +4394,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             }
 
+            const boundedExactMemoryResultSummary = isBoundedExactMemoryResult && !isError
+              ? boundedExactMemoryExecutionOutcome?.status === 'no-match'
+                ? 'No reliable matching value was found in this workspace.'
+                : 'Found one matching value in this workspace.'
+              : null;
+
             // Send tool_result SSE event so client can update status + show result
             if (name === 'acquire_capability') {
               if (createPersistedCapabilityReceipt(input, result)) {
@@ -4312,21 +4413,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 });
               }
             } else {
-              const disclosedResult = name === 'search_memory'
-                && explicitReadOnlyToolChoice === 'search_memory'
-                && boundedExactPersistedMemoryLookup
-                && !isError
-                ? 'Found one matching value in this workspace.'
-                : result;
+              const disclosedResult = boundedExactMemoryResultSummary ?? result;
               sendEvent('tool_result', { name, result: disclosedResult, duration, isError });
             }
           // F2: Audit trail — log tool result (truncated output)
-          const auditedResult = name === 'search_memory'
-            && explicitReadOnlyToolChoice === 'search_memory'
-            && boundedExactPersistedMemoryLookup
-            && !isError
-            ? 'Found one matching value in this workspace.'
-            : result;
+          const auditedResult = boundedExactMemoryResultSummary ?? result;
           emitAuditEvent(server, {
             workspaceId: executionScopeId,
               eventType: 'tool_result',
