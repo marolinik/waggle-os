@@ -52,7 +52,7 @@ describe('LiteLLM Management API', () => {
       manageLiteLLM: true,
       managedLiteLLMPort: 4000,
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await server.close();

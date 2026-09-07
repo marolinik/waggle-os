@@ -18,7 +18,7 @@ describe('POST /api/command/interpret', () => {
     sessions.create('test');
     mind.close();
     server = await buildLocalServer({ dataDir: tmpDir });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await server.close();

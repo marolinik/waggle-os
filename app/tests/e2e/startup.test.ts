@@ -119,6 +119,17 @@ describe('Startup & Settings E2E', () => {
     const { server: server1 } = await startService({ dataDir, port: port1, skipLiteLLM: true });
     servers.push(server1);
 
+    const providerRes = await injectWithAuth(server1, {
+      method: 'PUT',
+      url: '/api/settings',
+      payload: {
+        providers: {
+          openai: { apiKey: 'sk-test-openai-key-1234567', models: ['gpt-4o'] },
+        },
+      },
+    });
+    expect(providerRes.statusCode).toBe(200);
+
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       choices: [{ message: { content: 'WAGGLE_OK' } }],
     }), { status: 200 })));
@@ -129,9 +140,6 @@ describe('Startup & Settings E2E', () => {
           url: '/api/settings',
           payload: {
             defaultModel: 'openai/gpt-4o',
-            providers: {
-              openai: { apiKey: 'sk-test-openai-key-1234567', models: ['gpt-4o'] },
-            },
           },
         });
       } finally {
