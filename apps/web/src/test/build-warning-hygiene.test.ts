@@ -46,6 +46,13 @@ describe('build warning hygiene', () => {
     }
   });
 
+  it('does not present routine coordination signals as pending Agents work', () => {
+    const shellSource = readFileSync(join(sourceRoot, 'components', 'os', 'AppShell.tsx'), 'utf8');
+
+    expect(shellSource).not.toContain("from '@/hooks/useWaggleDance'");
+    expect(shellSource).not.toMatch(/key:\s*'agents'.*badge:/);
+  });
+
   it('arms the desktop gate before loading the app graph and keeps analytics lazy', () => {
     const mainSource = readFileSync(join(sourceRoot, 'main.tsx'), 'utf8');
     const appEntrySource = readFileSync(join(sourceRoot, 'app-entry.tsx'), 'utf8');

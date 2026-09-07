@@ -52,7 +52,6 @@ import {
   useWorkspaceSelectionChatDispatch,
 } from '@/hooks/useChatWidgetState';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { useWaggleDance } from '@/hooks/useWaggleDance';
 import { useBumpSessionCount } from '@/hooks/useDockLabels';
 import { useDockNudge } from '@/hooks/useDockNudge';
 import { useToast } from '@/hooks/use-toast';
@@ -375,12 +374,10 @@ const ShellLayout = () => {
     contextRailTarget, setContextRailTarget,
   } = useShell();
 
-  const { allSignals: waggleSignals } = useWaggleDance();
   const overlaysRef = useRef(ov);
   useEffect(() => {
     overlaysRef.current = ov;
   }, [ov]);
-  const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
   // W2A: no implicit workspaces[0] fallback — the chrome shows a workspace only
   // when one was explicitly selected. Sidebar/StatusBar accept null names; the
   // Chat spine item opens the WorkspaceSwitcher when there is no real selection.
@@ -698,8 +695,8 @@ const ShellLayout = () => {
 
   // Five-place spine + a power-tier "Pinned" group. Chat resolves to the active
   // workspace's chat tab (routeFor falls back to /home with no workspace). The
-  // Agents & tasks badge surfaces unacknowledged coordination signals for now;
-  // PR3 refines it to the real pending-approvals/tasks count.
+  // Agent activity belongs in Agent swarm. The Agents spine item must not show
+  // raw start/tool/completion signal counts as if they were pending work.
   const isPro = currentTier === 'power' || currentTier === 'admin';
   const billingRank = BILLING_TIER_ORDER[billingTier] ?? 0;
   const spine: SidebarNavItem[] = useMemo(() => [
@@ -718,9 +715,9 @@ const ShellLayout = () => {
       onClick: navigateToActiveChat,
     },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
-    { key: 'agents', label: 'Agents', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
+    { key: 'agents', label: 'Agents', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'] },
     { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
-  ], [effectiveActiveWorkspaceId, navigateToActiveChat, waggleUnacknowledged]);
+  ], [effectiveActiveWorkspaceId, navigateToActiveChat]);
   const pinned: SidebarNavItem[] = useMemo(() => {
     if (!isPro) return [];
     const items: SidebarNavItem[] = [
