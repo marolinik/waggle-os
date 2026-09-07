@@ -764,6 +764,7 @@ describe('Tauri Production Configuration', () => {
   it('pins patched transitive dependency versions used by desktop builds', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8')) as {
       engines?: { node?: string };
+      packageManager?: string;
       overrides?: Record<string, string | Record<string, string>>;
       dependencies?: Record<string, string>;
     };
@@ -794,6 +795,7 @@ describe('Tauri Production Configuration', () => {
     };
 
     expect(manifest.engines?.node).toBe('^20.19.0 || >=22.12.0');
+    expect(manifest.packageManager).toMatch(/^npm@\d+\.\d+\.\d+$/);
     expect(manifest.overrides).toMatchObject(expectedOverrides);
     expect(manifest.dependencies).toMatchObject({
       '@huggingface/transformers': '3.8.1',
