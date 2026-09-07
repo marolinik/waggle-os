@@ -3,6 +3,7 @@ import {
   Route, Loader2, CheckCircle2, XCircle, X, ChevronDown, ShieldAlert, ExternalLink,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { renderChatMarkdown } from '@/lib/render-markdown';
 import type {
   RouteProposalPayload,
   RouteProposalConfirmBody,
@@ -253,7 +254,7 @@ export default function RouteProposalCard({
           )}
 
           {/* Actions / terminal states */}
-          <div className="flex items-center gap-2 mt-2.5">
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
             {phase === 'proposed' && (
               <>
                 {blocked ? (
@@ -310,12 +311,11 @@ export default function RouteProposalCard({
               </span>
             )}
             {phase === 'dispatched' && dispatchResult?.resultText && (
-              <p
-                className="w-full text-xs text-foreground/90 whitespace-pre-wrap mt-1.5 border-l-2 border-emerald-500/40 pl-2"
+              <div
+                className="basis-full min-w-0 text-xs text-foreground/90 mt-1.5 border-l-2 border-emerald-500/40 pl-2"
                 data-testid="route-proposal-result-text"
-              >
-                {dispatchResult.resultText}
-              </p>
+                dangerouslySetInnerHTML={{ __html: renderChatMarkdown(dispatchResult.resultText) }}
+              />
             )}
             {phase === 'error' && (
               <>
