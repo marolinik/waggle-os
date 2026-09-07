@@ -12,6 +12,19 @@ describe('command catalog watch-agent (#4)', () => {
     expect(watch!.group).toBe('do');
   });
 
+  it('advertises only the Windows Solo launch cohort', () => {
+    const groups = buildCommandCatalog({ chatHref: '/chat', isPro: false, billingRank: 0 });
+    const commands = groups.flatMap((group) => group.items);
+
+    for (const id of ['launch-agent', 'watch-agent']) {
+      const subtitle = commands.find(command => command.id === id)?.subtitle ?? '';
+      expect(subtitle).toContain('Claude Code');
+      expect(subtitle).toContain('Codex');
+      expect(subtitle).toContain('Hermes');
+      expect(subtitle).not.toMatch(/Cursor|OpenClaw/i);
+    }
+  });
+
   it('labels the pinned group without legacy Pro copy', () => {
     const groups = buildCommandCatalog({ chatHref: '/chat', isPro: true, billingRank: 3 });
     const pinned = groups.find((g) => g.key === 'pinned');
