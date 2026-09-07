@@ -2,13 +2,38 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Notification } from '@/lib/types';
 
+function normalizeInternalRoute(value: string | undefined): string | null {
+  if (!value?.startsWith('/')) return null;
+  const path = value.split(/[?#]/, 1)[0]?.replace(/\/+$/, '') ?? '';
+  return path || '/';
+}
+
+export function notificationTargetsCurrentRoute(
+  actionUrl: string | undefined,
+  currentLocation: string,
+): boolean {
+  const target = normalizeInternalRoute(actionUrl);
+  return target !== null && target === normalizeInternalRoute(currentLocation);
+}
+
 export const useNotifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
+    const readIfVisible = (notification: Notification): Notification => {
+      if (notification.read || !notificationTargetsCurrentRoute(notification.actionUrl, window.location.pathname)) {
+        return notification;
+      }
+      if (notification.id) {
+        void adapter.markNotificationRead(notification.id)
+          .catch((err) => console.error('[useNotifications] visible notification read failed:', err));
+      }
+      return { ...notification, read: true };
+    };
+
     adapter.getNotificationHistory()
       .then(data => {
-        setNotifications(data);
+        setNotifications(data.map(readIfVisible));
       })
       .catch((err) => {
         console.error('[useNotifications] fetch failed:', err);
@@ -18,7 +43,7 @@ export const useNotifications = () => {
     let unsub: (() => void) | undefined;
     try {
       unsub = adapter.subscribeNotifications((n: Notification) => {
-        setNotifications(prev => [n, ...prev]);
+        setNotifications(prev => [readIfVisible(n), ...prev]);
       });
     } catch (err) { console.error('[useNotifications] SSE subscribe failed:', err); }
 
