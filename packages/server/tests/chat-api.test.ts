@@ -3113,6 +3113,17 @@ describe('Chat Streaming API', () => {
       expect.objectContaining({ role: 'user', content: 'Hello' }),
       expect.objectContaining({ role: 'assistant', content: 'Hello world', model: resolvedModel }),
     ]);
+    const liveTimestamps = liveHistory.json().messages.map(
+      (message: { timestamp: string }) => message.timestamp,
+    );
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const repeatedLiveHistory = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/history?workspace=${authorizedWorkspace}&session=${sessionId}`,
+    });
+    expect(repeatedLiveHistory.json().messages.map(
+      (message: { timestamp: string }) => message.timestamp,
+    )).toEqual(liveTimestamps);
 
     // Evict RAM to exercise the same disk path used after a sidecar restart.
     server.agentState.sessionHistories.delete(stateKey);
@@ -3125,6 +3136,9 @@ describe('Chat Streaming API', () => {
       expect.objectContaining({ role: 'user', content: 'Hello' }),
       expect.objectContaining({ role: 'assistant', content: 'Hello world', model: resolvedModel }),
     ]);
+    expect(coldHistory.json().messages.map(
+      (message: { timestamp: string }) => message.timestamp,
+    )).toEqual(liveTimestamps);
     expect(loadSessionMessages(
       tmpDir,
       authorizedWorkspace!,

@@ -121,58 +121,60 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       sessionId,
     );
 
-    // Try in-memory first
-    let history = server.agentState.sessionHistories.get(sessionStateKey);
+    const history = server.agentState.sessionHistories.get(sessionStateKey) ?? [];
+    const filePath = path.join(
+      historyTarget.dataDir,
+      'workspaces',
+      workspaceId,
+      'sessions',
+      `${sessionId}.jsonl`,
+    );
 
-    // If not in RAM, load from disk
-    if (!history || history.length === 0) {
-      const filePath = path.join(
-        historyTarget.dataDir,
-        'workspaces',
-        workspaceId,
-        'sessions',
-        `${sessionId}.jsonl`,
-      );
-      if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf-8').trim();
-        const messages: Array<ChatHistoryMessage & { timestamp?: string }> = [];
-        for (const line of content.split('\n')) {
-          if (!line.trim()) continue;
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed.type === 'meta') continue;
-            if (parsed.role && parsed.content !== undefined) {
-              const model = typeof parsed.model === 'string' && parsed.model.trim()
-                ? parsed.model
-                : undefined;
-              const tools = normalizePersistedCapabilityTools(parsed.tools);
-              messages.push({
-                role: parsed.role,
-                content: parsed.content,
-                timestamp: parsed.timestamp,
-                ...(model ? { model } : {}),
-                ...(tools ? { tools } : {}),
-              });
-            }
-          } catch { /* skip */ }
-        }
-        return {
-          sessionId,
-          messages: messages.map((m, i) => ({
-            id: `hist-${i}`,
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp ?? new Date().toISOString(),
-            ...(m.model ? { model: m.model } : {}),
-            ...(m.tools ? { tools: m.tools } : {}),
-          })),
-          count: messages.length,
-        };
+    // The JSONL transcript is the durable source of message timestamps. Reading
+    // timestamps from wall-clock time here made old messages appear newly created
+    // on every warm-cache request and again after Retry rewrote only the tail.
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8').trim();
+      const messages: Array<ChatHistoryMessage & { timestamp?: string }> = [];
+      for (const line of content.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.type === 'meta') continue;
+          if (parsed.role && parsed.content !== undefined) {
+            const model = typeof parsed.model === 'string' && parsed.model.trim()
+              ? parsed.model
+              : undefined;
+            const tools = normalizePersistedCapabilityTools(parsed.tools);
+            messages.push({
+              role: parsed.role,
+              content: parsed.content,
+              timestamp: parsed.timestamp,
+              ...(model ? { model } : {}),
+              ...(tools ? { tools } : {}),
+            });
+          }
+        } catch { /* skip */ }
       }
-      history = [];
+      if (history.length > 0) {
+        server.agentState.chatStateController?.touchSession(sessionStateKey);
+      }
+      const fallbackTimestamp = fs.statSync(filePath).birthtime.toISOString();
+      return {
+        sessionId,
+        messages: messages.map((m, i) => ({
+          id: `hist-${i}`,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp ?? fallbackTimestamp,
+          ...(m.model ? { model: m.model } : {}),
+          ...(m.tools ? { tools: m.tools } : {}),
+        })),
+        count: messages.length,
+      };
     }
 
-    if (history.length > 0 && server.agentState.sessionHistories.has(sessionStateKey)) {
+    if (history.length > 0) {
       server.agentState.chatStateController?.touchSession(sessionStateKey);
     }
 
