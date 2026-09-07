@@ -285,7 +285,7 @@ const ChannelsSettings = () => {
                     value={secretDrafts[field.key] ?? ''}
                     onChange={e => setSecretDrafts(d => ({ ...d, [field.key]: e.target.value }))}
                     placeholder={field.placeholder}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/40 text-xs text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/40 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                   />
                 </div>
                 <button

@@ -237,7 +237,7 @@ export default function RouteProposalCard({
                   <option key={alt.id} value={alt.id}>{alt.displayName}</option>
                 ))}
                 {proposal.rejected.map(rej => (
-                  <option key={rej.id} value={rej.id} disabled title={rej.reason} className="text-muted-foreground/50">
+                  <option key={rej.id} value={rej.id} disabled title={rej.reason} className="text-muted-foreground">
                     {rej.id} — unavailable
                   </option>
                 ))}
