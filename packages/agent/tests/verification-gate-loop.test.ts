@@ -255,6 +255,47 @@ describe('structured-draft completion integrity gate', () => {
     '## Recommendation',
     'Hold the public release until signing closes.',
   ].join('\n');
+  const danglingRecallLeadIn = 'From your recent session, I recall the key points:';
+  const completeRecall = 'Waggle remembers the active project goal and recent decisions in this workspace. The current model is Qwen3.8 Flash Next.';
+
+  it('atomically replaces a Qwen answer that stops after a dangling lead-in', async () => {
+    let requestIndex = 0;
+    const fetch = vi.fn(async () => {
+      if (requestIndex++ === 0) {
+        return streamResponse([
+          sse({ choices: [{ delta: { content: danglingRecallLeadIn } }] }),
+          sse({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 9 } }),
+          'data: [DONE]\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: completeRecall }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 24 },
+        }),
+      } as unknown as Response;
+    });
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(cfg(fetch as unknown as ReturnType<typeof mockFetch>, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: true,
+      onToken,
+      maxTurns: 1,
+      messages: [{ role: 'user', content: 'Explain what Waggle remembers and name the current model.' }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const repairBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
+    expect(repairBody.stream).not.toBe(true);
+    expect(JSON.stringify(repairBody.messages)).toContain('# Internal completion-integrity correction');
+    expect(JSON.stringify(repairBody.messages)).not.toContain(danglingRecallLeadIn);
+    expect(onToken).toHaveBeenCalledTimes(1);
+    expect(onToken).toHaveBeenCalledWith(completeRecall);
+    expect(result.content).toBe(completeRecall);
+  });
 
   it('completes a safe literal Qwen prefix locally without a probabilistic second request', async () => {
     const exactMarkers = Array.from({ length: 24 }, (_, index) => (

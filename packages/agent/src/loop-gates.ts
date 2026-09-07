@@ -179,6 +179,14 @@ function endsAfterOpeningScaffold(content: string): boolean {
   return endsAfterOpeningMetadataScaffold(content) || endsAfterOpeningMarkdownFragment(content);
 }
 
+function endsAfterDanglingLeadIn(content: string): boolean {
+  const trimmed = content.trim();
+  if (trimmed.length === 0 || trimmed.length > 320 || trimmed.includes('\n')) return false;
+  const wordCount = trimmed.split(/\s+/).length;
+  return wordCount >= 4
+    && /\b(?:are|is|include|includes|following|below|namely|recall(?:ed)?|remember(?:ed)?|points?|steps?|reasons?|items?|findings?|recommendations?)\b[^:\n]*:\s*$/i.test(trimmed);
+}
+
 export interface MaybeFireCompletionGateArgs {
   /** Current turn's final assistant content (concatenated from streaming or non-streaming) */
   content: string;
@@ -272,6 +280,8 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     : [];
   const structuredDraftIncomplete = missingDraftComponents.length >= 2
     && endsAfterOpeningScaffold(content);
+  const danglingLeadInIncomplete = finishReason === 'stop'
+    && endsAfterDanglingLeadIn(content);
   const literalSuffix = exactOutputIncomplete && atomicRepairAvailable
     ? safeExactOutputSuffix(userRequest, content)
     : undefined;
@@ -283,10 +293,14 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
       suffixChars: literalSuffix.length,
     });
   }
-  if ((exactOutputIncomplete && literalSuffix === undefined) || structuredDraftIncomplete) {
+  if ((exactOutputIncomplete && literalSuffix === undefined)
+    || structuredDraftIncomplete
+    || danglingLeadInIncomplete) {
     const reason = exactOutputIncomplete
       ? 'explicit exact-output contract was not completed'
-      : 'structured draft ended after its opening scaffold';
+      : structuredDraftIncomplete
+        ? 'structured draft ended after its opening scaffold'
+        : 'answer ended after an unfinished lead-in';
     if (state.completionIntegrityRepairUsed || !atomicRepairAvailable) {
       return { fired: false, state, rejectIncompleteReason: reason };
     }
@@ -298,10 +312,17 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
           'Answer again from the beginning. Copy the complete payload requested after the response-format colon, character-for-character, with no prefix or suffix.',
           'Do not mention this correction and do not call tools.',
         ].join('\n')
-      : [
+      : structuredDraftIncomplete
+        ? [
           '# Internal completion-integrity correction',
           'The prior candidate stopped after its opening metadata scaffold and was not shown to the user.',
           `Redraft the answer from the beginning and include every explicit requirement, especially: ${missingDraftComponents.join(', ')}.`,
+          'Do not mention this correction and do not call tools.',
+        ].join('\n')
+        : [
+          '# Internal completion-integrity correction',
+          'The prior candidate ended after an unfinished lead-in and was not shown to the user.',
+          'Answer again from the beginning, complete every thought, and directly satisfy the full user request.',
           'Do not mention this correction and do not call tools.',
         ].join('\n');
     if (systemMessage && typeof systemMessage.content === 'string') {
