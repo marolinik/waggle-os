@@ -226,6 +226,31 @@ describe('selectToolsForTurn', () => {
   });
 
   it.each([
+    ['Create Launch-Brief.docx as a polished Word document.', 'generate_docx'],
+    ['Create Launch-Brief.pdf as a polished PDF.', 'generate_pdf'],
+    ['Create Launch-Scorecard.xlsx as an Excel workbook.', 'generate_xlsx'],
+    ['Create Launch-Review.pptx as a PowerPoint presentation.', 'generate_pptx'],
+  ])('uses the specialized binary generator instead of text file writers: %s', (message, expectedTool) => {
+    const selected = selectToolsForTurn([
+      makeTool('generate_docx'),
+      makeTool('generate_pdf'),
+      makeTool('generate_xlsx'),
+      makeTool('generate_pptx'),
+      makeTool('write_file'),
+      makeTool('edit_file'),
+      makeTool('multi_edit'),
+      makeTool('read_file'),
+      makeTool('search_memory'),
+    ], { message, recentToolNames: ['write_file', 'edit_file'] });
+    const names = selected.tools.map(tool => tool.name);
+
+    expect(names).toContain(expectedTool);
+    expect(names).not.toContain('write_file');
+    expect(names).not.toContain('edit_file');
+    expect(names).not.toContain('multi_edit');
+  });
+
+  it.each([
     'Create two files named first.txt and second.txt containing exactly single line OK. Then verify them by reading them and respond with exactly OK.',
     'Create file named first.txt in this workspace containing exactly single line OK. Then verify second.txt by reading it and respond with exactly OK.',
     'Do not create file named task.txt containing exactly single line OK. Then verify saved file by reading it and respond with exactly OK.',

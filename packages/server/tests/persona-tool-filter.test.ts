@@ -75,6 +75,9 @@ describe('applyPersonaToolFilter — self-evolving skill loop guarantee', () => 
     expect(READ_ONLY_WRITE_TOOLS.has('create_skill')).toBe(true);
     expect(READ_ONLY_WRITE_TOOLS.has('delete_skill')).toBe(true);
     expect(READ_ONLY_WRITE_TOOLS.has('read_skill')).toBe(false);
+    for (const generator of ['generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx']) {
+      expect(READ_ONLY_WRITE_TOOLS.has(generator)).toBe(true);
+    }
   });
 });
 
@@ -182,6 +185,41 @@ describe('applyPersonaToolFilter — dynamic connector safety rails', () => {
 
     expect(out).not.toContain('connector_slack_list_channels');
     expect(out).not.toContain('connector_slack_send_message');
+  });
+});
+
+describe('applyPersonaToolFilter — explicit artifact requests', () => {
+  const ARTIFACT_POOL = [
+    'generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx',
+    'write_file', 'edit_file', 'search_memory',
+  ].map(tool);
+
+  it('lets a writable persona use only the explicitly requested specialized generator', () => {
+    const out = applyPersonaToolFilter(
+      ARTIFACT_POOL,
+      persona({ tools: ['generate_docx', 'write_file', 'search_memory'] }),
+      ['generate_xlsx'],
+    ).map(t => t.name);
+
+    expect(out).toContain('generate_xlsx');
+    expect(out).not.toContain('generate_pdf');
+    expect(out).not.toContain('generate_pptx');
+  });
+
+  it('does not broaden a read-only persona or override an explicit denylist', () => {
+    const readOnly = applyPersonaToolFilter(
+      ARTIFACT_POOL,
+      persona({ tools: ['search_memory'], isReadOnly: true }),
+      ['generate_xlsx'],
+    ).map(t => t.name);
+    const denied = applyPersonaToolFilter(
+      ARTIFACT_POOL,
+      persona({ tools: ['generate_docx'], disallowedTools: ['generate_xlsx'] }),
+      ['generate_xlsx'],
+    ).map(t => t.name);
+
+    expect(readOnly).not.toContain('generate_xlsx');
+    expect(denied).not.toContain('generate_xlsx');
   });
 });
 

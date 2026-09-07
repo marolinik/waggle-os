@@ -35,6 +35,10 @@ export const ALWAYS_AVAILABLE_TOOLS: ReadonlySet<string> = new Set([
   'compose_workflow', 'create_plan', 'add_plan_step', 'execute_step', 'show_plan',
 ]);
 
+const EXPLICIT_PERSONA_ARTIFACT_TOOLS: ReadonlySet<string> = new Set([
+  'generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx',
+]);
+
 /**
  * Write tools stripped for read-only personas (planner / verifier), even when
  * they would otherwise be always-available. `read_skill` is a read and stays.
@@ -48,7 +52,8 @@ export const ALWAYS_AVAILABLE_TOOLS: ReadonlySet<string> = new Set([
  */
 export const READ_ONLY_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'write_file', 'edit_file', 'git_commit', 'git_push', 'git_merge',
-  'save_memory', 'correct_knowledge', 'generate_docx', 'install_capability',
+  'save_memory', 'correct_knowledge', 'generate_docx', 'generate_pdf',
+  'generate_xlsx', 'generate_pptx', 'install_capability',
   'spawn_agent', 'execute_step', 'bash',
   // Skill authoring is a write — read-only personas must not create/delete skills.
   'create_skill', 'delete_skill',
@@ -88,11 +93,19 @@ export const READ_ONLY_ALLOWED_TOOLS: ReadonlySet<string> = new Set<string>([
 export function applyPersonaToolFilter(
   tools: ToolDefinition[],
   persona: AgentPersona,
+  requestedToolNames: readonly string[] = [],
 ): ToolDefinition[] {
   let out = tools;
 
   if (persona.tools.length > 0) {
-    const allowed = new Set([...persona.tools, ...ALWAYS_AVAILABLE_TOOLS]);
+    const explicitlyRequestedArtifacts = requestedToolNames.filter(name => (
+      EXPLICIT_PERSONA_ARTIFACT_TOOLS.has(name)
+    ));
+    const allowed = new Set([
+      ...persona.tools,
+      ...ALWAYS_AVAILABLE_TOOLS,
+      ...explicitlyRequestedArtifacts,
+    ]);
     out = out.filter(t => allowed.has(t.name) || t.name.startsWith('connector_'));
   }
 

@@ -166,6 +166,13 @@ const REPOSITORY_DISCOVERY_TOOL_NAMES = new Set(REPOSITORY_DISCOVERY_BUNDLE.tool
 
 const BOUNDED_FILE_ROUND_TRIP_PATTERN = /^\s*(?:please(?:,\s*|\s+))?(?:create|write)\s+(?:a\s+)?file\s+(?:named|called)\s+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([a-z0-9][a-z0-9._-]{0,127}))\s+(?:in\s+(?:this|the)\s+workspace\s+)?(?:containing|with(?:\s+the)?\s+content)\s+exactly\s+(?:a\s+)?single\s+line\s+([^\r\n]{1,512}?)\.\s*(?:then\s+)?(?:verify|check)\s+(?:the\s+)?(?:saved\s+)?file\s+by\s+reading\s+(?:it|the\s+same\s+file)(?:\s+back)?\s+and\s+(?:respond|reply)\s+(?:with\s+)?exactly\s+([^\r\n]{1,512}?)\.?\s*$/i;
 const GENERATED_DOCUMENT_EXTENSIONS = new Set(['doc', 'docx', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx']);
+const SPECIALIZED_ARTIFACT_REQUEST_PATTERNS = [
+  /\b(?:docx|word\s+document)\b/i,
+  /\bpdf\b/i,
+  /\b(?:xlsx|excel\s+(?:file|workbook|spreadsheet)|spreadsheet)\b/i,
+  /\b(?:pptx|powerpoint|slide\s+deck|presentation)\b/i,
+] as const;
+const GENERIC_TEXT_FILE_MUTATION_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit']);
 const WINDOWS_RESERVED_FILE_NAMES = /^(?:(?:con|prn|aux|nul|(?:com|lpt)(?:[1-9]|[¹²³]))(?:\..*)?|conin\$|conout\$)$/i;
 
 export function isBoundedSingleFileRoundTrip(message: string): boolean {
@@ -500,6 +507,8 @@ export function selectToolsForTurn(
   const recent = new Set(Array.from(new Set(options.recentToolNames ?? [])).slice(-4));
   const suppressImplicitCalculationTools = hasInlineCalculationOperands(message)
     && !EXPLICIT_CALCULATION_TOOL_PATTERN.test(message);
+  const requiresSpecializedArtifactGenerator = SPECIALIZED_ARTIFACT_REQUEST_PATTERNS
+    .some(pattern => pattern.test(intentMessage));
 
   if (isContinuation
     && previousUserIntent.length === 0
@@ -532,6 +541,9 @@ export function selectToolsForTurn(
       continue;
     }
     if (!mandatory.has(tool.name) && isNegatedExecutionTool(tool, negatedClauses)) continue;
+    if (requiresSpecializedArtifactGenerator && GENERIC_TEXT_FILE_MUTATION_TOOLS.has(tool.name)) {
+      continue;
+    }
     if (suppressImplicitCalculationTools
       && IMPLICIT_CALCULATION_TOOL_NAMES.has(tool.name)
       && !mandatory.has(tool.name)) {

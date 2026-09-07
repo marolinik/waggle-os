@@ -677,6 +677,12 @@ const BUILT_IN_ARTIFACT_GENERATOR_REQUESTS: ReadonlyArray<{
   { toolName: 'generate_pptx', pattern: /\b(?:pptx|powerpoint|slide\s+deck|presentation)\b/i },
 ];
 
+function requestedBuiltInArtifactToolNames(message: string): string[] {
+  return BUILT_IN_ARTIFACT_GENERATOR_REQUESTS
+    .filter(({ pattern }) => pattern.test(message))
+    .map(({ toolName }) => toolName);
+}
+
 export function shouldRequireCapabilityAcquisitionTools(
   message: string,
   availableTools: readonly { name: string }[] = [],
@@ -3616,7 +3622,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const activePersonaId = turnPersonaId;
         const activePersona = turnPersona;
         if (!hasCustomRunner && activePersona) {
-          effectiveTools = applyPersonaToolFilter(effectiveTools, activePersona);
+          effectiveTools = applyPersonaToolFilter(
+            effectiveTools,
+            activePersona,
+            requestedBuiltInArtifactToolNames(agentMessage),
+          );
         }
         if (closedWorldRewrite || toolFreeAdvisory) {
           effectiveTools = [];
