@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, FileText, Presentation, Table2, LayoutDashboard, Microscope,
-  Code2, Image as ImageIcon, Palette, File, Archive, Trash2, RotateCcw, Save, Plus, Link2,
+  Code2, Image as ImageIcon, Palette, File, Archive, Trash2, RotateCcw, Save, Plus, Link2, Download,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -51,6 +51,15 @@ const KINDS = Object.keys(KIND_META) as ArtifactKind[];
 
 /** Keyed warm cache for the artifact list; filters and workspace scope matter. */
 const artifactRouteCache = createSurfaceCache<Artifact[]>();
+
+function saveBlobToDevice(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 // eslint-disable-next-line react-refresh/only-export-components -- test-only cache reset
 export function resetArtifactRouteCache(): void {
@@ -187,6 +196,19 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
     riskLevel: 'medium',
   } : null;
   const remove = (a: Artifact) => setDeleteTarget(a);
+  const download = async (a: Artifact) => {
+    if (!a.storagePath) return;
+    setBusy(true);
+    try {
+      const blob = await adapter.downloadFile(a.workspaceId, a.storagePath);
+      const fileName = a.storagePath.split(/[\\/]/).filter(Boolean).at(-1) ?? a.title;
+      saveBlobToDevice(blob, fileName);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Download failed');
+    } finally {
+      setBusy(false);
+    }
+  };
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     setDeletingArtifact(true);
@@ -396,6 +418,11 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
         headerExtra={selected ? <StatusBadge tone={statusTone(selected.status)} label={selected.status.replace('_', ' ')} /> : undefined}
         footer={selected ? (
           <div className="flex items-center gap-2 w-full">
+            {selected.storagePath && (
+              <button onClick={() => { void download(selected); }} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted disabled:opacity-50">
+                <Download className="w-3 h-3" /> Download file
+              </button>
+            )}
             <button onClick={saveEdits} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
               <Save className="w-3 h-3" /> Save
             </button>
