@@ -13,6 +13,7 @@ export interface AgentCapabilities {
 
 export function buildSelfAwareness(caps: AgentCapabilities): string {
   const lines: string[] = [];
+  const toolNames = new Set(caps.tools.map(tool => tool.name));
 
   lines.push('# Self-Awareness');
   lines.push('');
@@ -23,19 +24,25 @@ export function buildSelfAwareness(caps: AgentCapabilities): string {
   const { frameCount, sessionCount, entityCount } = caps.memoryStats;
   if (frameCount > 0) {
     lines.push(`Memory: ${frameCount} memories across ${sessionCount} sessions, ${entityCount} knowledge entities.`);
-    lines.push('You have prior context. Use search_memory to recall relevant information before responding.');
+    lines.push(toolNames.has('search_memory')
+      ? 'You have prior context. Use search_memory to recall relevant information before responding.'
+      : 'Relevant prior context may be preloaded, but additional memory search is not available this turn.');
   } else {
-    lines.push('Memory: empty — this appears to be a fresh start. Learn the user\'s preferences and save important context.');
+    lines.push(toolNames.has('save_memory')
+      ? 'Memory: empty — this appears to be a fresh start. Learn the user\'s preferences and save important context.'
+      : 'Memory: empty — this appears to be a fresh start. No memory-writing tool is available this turn.');
   }
 
   // Tools — grouped by category for clarity
   lines.push('');
   lines.push('## Your Capabilities');
   const toolCount = caps.tools.length;
-  lines.push(`${toolCount} tools available. You can search the web, read/write files, run commands, manage git, create plans, access your persistent memory, and communicate with other workspace agents.`);
+  const toolLabel = toolCount === 1 ? 'tool' : 'tools';
+  lines.push(toolCount > 0
+    ? `${toolCount} ${toolLabel} available: ${caps.tools.map(tool => tool.name).join(', ')}.`
+    : '0 tools available. Answer only from the context supplied in this turn.');
 
   // F23: Ensure agent-comms tools are visible in self-discovery
-  const toolNames = new Set(caps.tools.map(t => t.name));
   if (toolNames.has('send_agent_message') || toolNames.has('check_agent_messages')) {
     lines.push('');
     lines.push('### Agent Communication');
@@ -57,8 +64,12 @@ export function buildSelfAwareness(caps: AgentCapabilities): string {
   lines.push('');
   lines.push('## Groundedness');
   lines.push('- Only claim capabilities you actually have (check your tools list).');
-  lines.push('- If you lack a tool the user needs, say so and suggest acquire_capability.');
-  lines.push('- Prefer memory search over guessing when prior context exists.');
+  lines.push(toolNames.has('acquire_capability')
+    ? '- If you lack a tool the user needs, say so and use acquire_capability when appropriate.'
+    : '- If you lack a tool the user needs, say so without implying that it is available.');
+  lines.push(toolNames.has('search_memory')
+    ? '- Prefer memory search over guessing when prior context exists.'
+    : '- Prefer supplied and preloaded context over guessing; do not attempt an unavailable memory search.');
   lines.push('- When uncertain, ask rather than fabricate.');
 
   // Improvement signals (per correction #1: structured, runtime-consumable)

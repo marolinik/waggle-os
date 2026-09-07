@@ -341,7 +341,10 @@ export class Orchestrator {
     return compute();
   }
 
-  buildSystemPrompt(modelOverride = this.model): string {
+  buildSystemPrompt(
+    modelOverride = this.model,
+    availableTools: readonly Pick<ToolDefinition, 'name' | 'description'>[] = this.tools,
+  ): string {
     // ── IDENTITY (always personal, stable within a session) ──
     // Cache key must hash the full identity content — updated_at alone
     // has only second precision in SQLite, so rapid successive edits
@@ -367,7 +370,7 @@ export class Orchestrator {
         this._pendingSurfacedAwareness = awareness;
       }
       const caps: AgentCapabilities = {
-        tools: this.tools.map(t => ({ name: t.name, description: t.description })),
+        tools: availableTools.map(t => ({ name: t.name, description: t.description })),
         skills: this.skills,
         model: modelOverride,
         memoryStats: this.getMemoryStats(),
@@ -401,12 +404,17 @@ export class Orchestrator {
   async buildAssembledPrompt(
     query: string,
     persona: AgentPersona | null = null,
-    opts: AssembleOptions & { model?: string } = {},
+    opts: AssembleOptions & {
+      model?: string;
+      availableTools?: readonly Pick<ToolDefinition, 'name' | 'description'>[];
+    } = {},
   ): Promise<AssembledPrompt> {
     const effectiveModel = opts.model ?? this.model;
     const tier = tierForModel(effectiveModel);
     const closedWorldRewrite = isClosedWorldRewriteRequest(query);
-    const corePrompt = closedWorldRewrite ? '' : this.buildSystemPrompt(effectiveModel);
+    const corePrompt = closedWorldRewrite
+      ? ''
+      : this.buildSystemPrompt(effectiveModel, opts.availableTools ?? this.tools);
     const context: ContextFramesImpl = closedWorldRewrite
       ? {
           stateFrames: [],

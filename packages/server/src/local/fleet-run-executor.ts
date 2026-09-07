@@ -635,10 +635,13 @@ async function executeFleetRun(
     orchestrator.setGoalAncestry(buildFleetAncestry(server.workspaceManager.get(run.workspaceId)?.name, goal));
     let systemPrompt: string;
     if (isEnabled('PROMPT_ASSEMBLER')) {
-      const assembled = await orchestrator.buildAssembledPrompt(task, persona, { taskShape });
+      const assembled = await orchestrator.buildAssembledPrompt(task, persona, {
+        taskShape,
+        availableTools: tools,
+      });
       systemPrompt = assembled.system + (assembled.responseScaffold ? `\n\n## Response shape\n${assembled.responseScaffold}` : '');
     } else {
-      systemPrompt = orchestrator.buildSystemPrompt();
+      systemPrompt = orchestrator.buildSystemPrompt(model, tools);
       if (persona?.systemPrompt) systemPrompt += `\n\n## Active persona\n${persona.systemPrompt}`;
     }
     if (savedAgentPolicy?.skills.length) {

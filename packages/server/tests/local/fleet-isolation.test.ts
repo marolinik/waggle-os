@@ -525,6 +525,7 @@ describe('isolated Fleet execution', () => {
     let recordedScopes: readonly string[] = [];
     let recordedWorkspaceMind: unknown = 'not-recorded';
     let capturedAncestry: Record<string, unknown> | null = null;
+    let promptToolNames: string[] = [];
     const server = Fastify({ logger: false });
     server.decorate('localConfig', {
       dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test',
@@ -563,8 +564,21 @@ describe('isolated Fleet execution', () => {
       createSessionOrchestrator: (...args: unknown[]) => ({
         mountedWorkspaceMind: args[0],
         setGoalAncestry: (ancestry: Record<string, unknown>) => { capturedAncestry = ancestry; },
-        buildSystemPrompt: () => 'system',
-        buildAssembledPrompt: async () => ({ system: 'assembled', responseScaffold: '', debug: {} }),
+        buildSystemPrompt: (
+          _model: string,
+          availableTools: ToolDefinition[],
+        ) => {
+          promptToolNames = availableTools.map((tool) => tool.name);
+          return 'system';
+        },
+        buildAssembledPrompt: async (
+          _query: string,
+          _persona: unknown,
+          options: { availableTools?: ToolDefinition[] },
+        ) => {
+          promptToolNames = options.availableTools?.map((tool) => tool.name) ?? [];
+          return { system: 'assembled', responseScaffold: '', debug: {} };
+        },
       }),
       buildToolsForSession: () => [
         makeTool('read_file'),
@@ -620,6 +634,7 @@ describe('isolated Fleet execution', () => {
     await waitFor(() => capturedConfig !== null, 'saved agent run did not start');
     const config = capturedConfig as AgentLoopConfig;
     const toolNames = config.tools.map((tool) => tool.name);
+    expect(promptToolNames).toEqual(toolNames);
     expect(toolNames).toEqual(expect.arrayContaining([
       'read_file', 'read_skill', 'connector_github_list_issues', 'mcp_docs_search',
     ]));
