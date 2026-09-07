@@ -101,6 +101,28 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe('premium Best fit continuity', () => {
+  it('binds the proposal to the active conversation instead of the workspace id', async () => {
+    mocks.adapter.routeProposals.propose.mockResolvedValueOnce(routeProposal('route-session-bound'));
+    render({
+      messages: [assistantMsg],
+      workspaceId: 'workspace-alpha',
+      activeSessionId: 'session-beta',
+    });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message composer' }), {
+      target: { value: 'Compare the launch options' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /best fit/i }));
+
+    await waitFor(() => expect(mocks.adapter.routeProposals.propose).toHaveBeenCalledWith({
+      workspaceId: 'workspace-alpha',
+      sessionId: 'session-beta',
+      prompt: 'Compare the launch options',
+    }));
+  });
+});
+
 describe('premium conversation clearing', () => {
   it('requires explicit confirmation and Cancel preserves the conversation', () => {
     const onClearHistory = vi.fn().mockResolvedValue(true);

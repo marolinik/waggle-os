@@ -83,6 +83,8 @@ export interface RouteProposalConfirmResponse {
 /** Propose request body (SPEC A4). */
 export interface RouteProposalProposeBody {
   workspaceId: string;
+  /** Active conversation that must own an internal persona turn. */
+  sessionId?: string;
   prompt: string;
   category?: string;
   privacy?: 'normal' | 'private';

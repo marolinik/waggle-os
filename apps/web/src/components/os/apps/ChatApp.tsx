@@ -1169,7 +1169,11 @@ const ChatApp = ({
     const proposalThreadKey = activeThreadKeyRef.current;
     setBestFitBusy(true);
     try {
-      const proposal = await adapter.routeProposals.propose({ workspaceId, prompt: text });
+      const proposal = await adapter.routeProposals.propose({
+        workspaceId,
+        ...(activeSessionId ? { sessionId: activeSessionId } : {}),
+        prompt: text,
+      });
       if (
         routeProposalEpochRef.current !== proposalEpoch
         || activeThreadKeyRef.current !== proposalThreadKey
@@ -1254,6 +1258,7 @@ const ChatApp = ({
     try {
       const proposal = await adapter.routeProposals.propose({
         workspaceId,
+        ...(activeSessionId ? { sessionId: activeSessionId } : {}),
         prompt: entry.prompt,
         ...(preferredExecutorId ? { preferredExecutorId } : {}),
       });

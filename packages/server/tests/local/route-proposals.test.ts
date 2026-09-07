@@ -261,7 +261,7 @@ describe('route proposal routes', () => {
       snapshots: [[personaCandidate()], [personaCandidate()]],
       personaDispatcher,
     });
-    const proposed = await propose(server);
+    const proposed = await propose(server, { sessionId: 'session-beta' });
     const { routeDecisionId } = proposed.json() as { routeDecisionId: string };
 
     const confirmed = await server.inject({
@@ -277,7 +277,7 @@ describe('route proposal routes', () => {
       sessionToken: 'ws-session-token',
       message: PROMPT,
       workspace: WORKSPACE_ID,
-      session: WORKSPACE_ID,
+      session: 'session-beta',
       persona: 'coder',
       proposeHeld: true,
       origin: 'router',
