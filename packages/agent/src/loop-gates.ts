@@ -39,6 +39,8 @@ import { logTurnEvent } from './turn-context.js';
 export interface GateState {
   /** True after one atomic structured-draft repair has been attempted. */
   completionIntegrityRepairUsed: boolean;
+  /** True after one explicit tool-evidence contradiction repair has been attempted. */
+  explicitEvidenceRepairUsed: boolean;
   /** True after the D3 verification gate has fired (one-shot) */
   verificationCorrectionUsed: boolean;
   /** True after the D1 skill-distillation gate has fired (one-shot) */
@@ -57,6 +59,7 @@ export interface GateState {
 export function initialGateState(): GateState {
   return {
     completionIntegrityRepairUsed: false,
+    explicitEvidenceRepairUsed: false,
     verificationCorrectionUsed: false,
     skillDistillationUsed: false,
     preservedAnswerForDistillation: null,
@@ -83,6 +86,27 @@ const EXACT_OUTPUT_QUALIFIER = /^[\t ]*(?:(?:in[\t ]+(?:this|the|that|provided)[
 const MAX_EXACT_OUTPUT_CHARS = 2_048;
 const MAX_EXACT_OUTPUT_TOKENS = 256;
 const RAW_TOOL_CALL_MARKUP = /\[\/?TOOL_CALL\]|<\s*tool_call\b|\{\s*tool\s*=>|```(?:json|tool)?\s*\{[^`]*"tool"/is;
+const PACKAGE_MANAGER_REQUEST = /\bpackage[\s_-]+manager\b/i;
+const EXPLICIT_PACKAGE_MANAGER = /["']packageManager["']\s*:\s*["'](?<manager>[a-z][a-z0-9._-]*)@[^"']+["']/i;
+const CLAIMED_PACKAGE_MANAGER = /\bpackage\s+manager\s*(?::|is|=)\s*(?:\*\*|`)?(?<manager>[a-z][a-z0-9._-]*)/i;
+
+function explicitPackageManagerMismatch(
+  userRequest: string,
+  content: string,
+  messages: GateMessage[],
+): string | null {
+  if (!PACKAGE_MANAGER_REQUEST.test(userRequest)) return null;
+  const evidence = messages
+    .filter(message => message.role === 'tool' && typeof message.content === 'string')
+    .map(message => message.content ?? '')
+    .join('\n');
+  const declared = EXPLICIT_PACKAGE_MANAGER.exec(evidence)?.groups?.manager?.toLowerCase();
+  if (!declared) return null;
+  const claimed = CLAIMED_PACKAGE_MANAGER.exec(content)?.groups?.manager?.toLowerCase();
+  const deniesDeclaration = /\b(?:no|without)\b[^.\n]{0,48}\bpackageManager\b/i.test(content)
+    || /\bpackageManager\b[^.\n]{0,48}\b(?:not\s+(?:found|present|read)|absent|missing)\b/i.test(content);
+  return claimed && claimed !== declared || deniesDeclaration ? declared : null;
+}
 
 function normalizeExactOutput(value: string): string {
   return value.replace(/\r\n?/g, '\n').trim();
@@ -259,6 +283,38 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
   let contentSuffix: string | undefined;
 
   const exactOutput = expectedExactOutput(userRequest);
+  const declaredPackageManager = explicitPackageManagerMismatch(userRequest, content, messages);
+  if (declaredPackageManager) {
+    if (state.explicitEvidenceRepairUsed || !atomicRepairAvailable) {
+      return {
+        fired: false,
+        state,
+        rejectIncompleteReason: 'answer contradicted an explicit package-manager declaration returned by a tool',
+      };
+    }
+    const systemMessage = messages.find(message => message.role === 'system');
+    const directive = [
+      '# Internal explicit-evidence correction',
+      `A successful tool result explicitly declared the package manager as ${declaredPackageManager}.`,
+      'The prior candidate contradicted that declaration and was not shown to the user.',
+      'Answer again from the beginning using the explicit declaration as authoritative. Do not mention this correction and do not call tools.',
+    ].join('\n');
+    if (systemMessage && typeof systemMessage.content === 'string') {
+      systemMessage.content += `\n\n${directive}`;
+    } else {
+      messages.unshift({ role: 'system', content: directive });
+    }
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.explicit-evidence-repair.fired',
+      evidenceKind: 'package-manager',
+      contentChars: content.length,
+    });
+    return {
+      fired: true,
+      atomicRepair: true,
+      state: { ...state, explicitEvidenceRepairUsed: true },
+    };
+  }
   if (finishReason === 'stop'
     && exactOutput !== null
     && RAW_TOOL_CALL_MARKUP.test(exactOutput)) {

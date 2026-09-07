@@ -379,6 +379,7 @@ describe('chat prompt packaging', () => {
     expect(compact).toMatch(/state exactly which tools were used/i);
     expect(compact).toMatch(/never write, edit, execute code, launch agents/i);
     expect(compact).toMatch(/explicit declaration.*authoritative.*inference/i);
+    expect(compact).toMatch(/do not read the same file range twice/i);
     expect(compact).not.toMatch(/No tools are available/i);
     expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
   });

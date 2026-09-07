@@ -70,6 +70,17 @@ const runTests: ToolDefinition = {
   execute: async () => 'tests passed',
 };
 
+const readFile: ToolDefinition = {
+  name: 'read_file',
+  description: 'Read a workspace file.',
+  parameters: {
+    type: 'object',
+    properties: { path: { type: 'string' } },
+    required: ['path'],
+  },
+  execute: async () => '{"name":"waggle-os","packageManager":"npm@10.9.8"}',
+};
+
 describe('verification tool classification', () => {
   it.each([
     ['run_tests', true],
@@ -84,6 +95,67 @@ describe('verification tool classification', () => {
 });
 
 describe('D3 — verification-before-completion gate (structural, locked)', () => {
+  it('atomically corrects a package-manager claim that contradicts explicit tool evidence', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{
+          id: 'read-manifest',
+          function: { name: 'read_file', arguments: '{"path":"package.json"}' },
+        }],
+      },
+      'Package manager: Bun. No packageManager field was found.',
+      'Package manager: npm, declared by packageManager npm@10.9.8.',
+    ]);
+    const onToken = vi.fn();
+
+    const result = await runAgentLoop(cfg(fetch, {
+      model: 'openai-compatible/qwen3.8-flash-next',
+      stream: false,
+      onToken,
+      messages: [{
+        role: 'user',
+        content: 'Identify the package manager from the workspace manifest.',
+      }],
+      tools: [readFile],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const repairBody = JSON.parse((fetch.mock.calls[2][1] as RequestInit).body as string);
+    expect(repairBody.tools).toBeUndefined();
+    expect(JSON.stringify(repairBody.messages)).toContain('Internal explicit-evidence correction');
+    expect(JSON.stringify(repairBody.messages)).not.toContain('Package manager: Bun');
+    expect(onToken).toHaveBeenCalledOnce();
+    expect(onToken).toHaveBeenCalledWith('Package manager: npm, declared by packageManager npm@10.9.8.');
+    expect(result.content).toBe('Package manager: npm, declared by packageManager npm@10.9.8.');
+  });
+
+  it('fails closed when the corrected package-manager answer still contradicts tool evidence', async () => {
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [{
+          id: 'read-manifest',
+          function: { name: 'read_file', arguments: '{"path":"package.json"}' },
+        }],
+      },
+      'Package manager: Bun.',
+      'Package manager: Bun.',
+    ]);
+
+    await expect(runAgentLoop(cfg(fetch, {
+      messages: [{
+        role: 'user',
+        content: 'Identify the package manager from the workspace manifest.',
+      }],
+      tools: [readFile],
+    }))).rejects.toMatchObject({
+      code: 'INCOMPLETE_COMPLETION',
+      message: expect.stringMatching(/contradicted an explicit package-manager declaration/i),
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it('does NOT accept an unverified completion claim — forces one corrective turn', async () => {
     const fetch = mockFetch([
       'All tests pass and the build succeeds.',           // unverified claim, no tools
