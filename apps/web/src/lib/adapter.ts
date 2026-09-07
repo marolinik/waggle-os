@@ -3424,14 +3424,14 @@ class LocalAdapter {
       const res = await this.fetch('/api/route-proposals', {
         method: 'POST',
         body: JSON.stringify(body),
-      });
+      }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
       return res.json();
     },
     confirm: async (id: string, body: RouteProposalConfirmBody = {}): Promise<RouteProposalConfirmResponse> => {
       const res = await this.fetch(`/api/route-proposals/${encodeURIComponent(id)}/confirm`, {
         method: 'POST',
         body: JSON.stringify(body),
-      });
+      }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
       return res.json();
     },
     reject: async (id: string): Promise<void> => {

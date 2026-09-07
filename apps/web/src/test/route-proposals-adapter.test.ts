@@ -37,6 +37,7 @@ beforeEach(() => {
   vi.spyOn(global, 'fetch');
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -50,6 +51,57 @@ describe('adapter.routeProposals (router arc B2)', () => {
     expect(url.endsWith('/api/route-proposals')).toBe(true);
     expect(init.method).toBe('POST');
     expect(JSON.parse(String(init.body))).toEqual({ workspaceId: 'ws-1', prompt: 'fix the flaky test' });
+  });
+
+  it('keeps a cold Windows executor-discovery proposal alive past the default 10s request deadline', async () => {
+    vi.useFakeTimers();
+    let resolveFetch!: (response: Response) => void;
+    vi.mocked(global.fetch).mockImplementation((_url, init) => new Promise((resolve, reject) => {
+      resolveFetch = resolve;
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    }));
+
+    let state: 'pending' | 'resolved' | 'rejected' = 'pending';
+    const proposal = adapter.routeProposals
+      .propose({ workspaceId: 'ws-1', prompt: 'compare two beta launch plans' })
+      .then((result) => {
+        state = 'resolved';
+        return { result, error: undefined };
+      }, (error: unknown) => {
+        state = 'rejected';
+        return { result: undefined, error };
+      });
+
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(state).toBe('pending');
+
+    resolveFetch(jsonResponse(payload));
+    await expect(proposal).resolves.toEqual({ result: payload, error: undefined });
+  });
+
+  it('keeps an internal-persona confirmation alive while its model turn completes', async () => {
+    vi.useFakeTimers();
+    let resolveFetch!: (response: Response) => void;
+    vi.mocked(global.fetch).mockImplementation((_url, init) => new Promise((resolve, reject) => {
+      resolveFetch = resolve;
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    }));
+
+    let state: 'pending' | 'resolved' | 'rejected' = 'pending';
+    const confirmation = adapter.routeProposals.confirm('rd-42').then((result) => {
+      state = 'resolved';
+      return { result, error: undefined };
+    }, (error: unknown) => {
+      state = 'rejected';
+      return { result: undefined, error };
+    });
+
+    await vi.advanceTimersByTimeAsync(10_001);
+    expect(state).toBe('pending');
+
+    const result = { status: 'dispatched' as const, mode: 'internal' as const, resultText: 'Use the concierge beta.' };
+    resolveFetch(jsonResponse(result));
+    await expect(confirmation).resolves.toEqual({ result, error: undefined });
   });
 
   it('confirm POSTs executorId + removeFrameIds to /api/route-proposals/:id/confirm', async () => {
