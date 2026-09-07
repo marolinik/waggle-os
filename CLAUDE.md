@@ -83,6 +83,12 @@ repository remains private until an explicit open-source and licensing decision 
 Public GO remains blocked until a publicly trusted Authenticode artifact and an exact-candidate
 sealed managed Deep Security report close with no unresolved Critical/High findings.
 
+The current controlled-internal-test candidate is private readiness-branch commit
+`c4e6a5157310876215d20c5e5f059f26ea1f4ba4`. Its internal-pilot installer passed 64/64
+clean-profile lifecycle and managed-model checks, and its exact artifact and receipt hashes
+are recorded in the launch recommendation. This is PM-qualified internal-pilot evidence,
+not a claim that the branch is merged, publicly trusted, or approved for public release.
+
 ### Key Technology Facts (Verified August 2026)
 
 | Layer | Stack |
