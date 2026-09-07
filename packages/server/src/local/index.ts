@@ -80,11 +80,12 @@ import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryCenterRoutes } from './routes/memory-center.js';
 import { artifactRoutes } from './routes/artifacts.js';
-import { settingsRoutes } from './routes/settings.js';
+import { probeConfiguredModel, settingsRoutes } from './routes/settings.js';
 import { embeddingRoutes, buildEmbeddingStatusPayload } from './routes/embedding.js';
 import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './routes/sessions.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
+import { providerConfigurationFingerprint } from './routes/anthropic-proxy.js';
 import { runMemoryLaneExtraction } from './memory-lane-cron.js';
 import { VectorEnrichmentService } from './services/vector-enrichment-service.js';
 import { HarvestAutoSyncService } from './services/harvest-autosync-service.js';
@@ -255,6 +256,8 @@ export interface LlmProviderStatus {
   detail: string;
   /** When this status was last checked */
   checkedAt: string;
+  /** Exact route whose successful completion established this status. */
+  verifiedModel?: string;
 }
 
 export interface WorkspaceCollaborationBinding {
@@ -2760,6 +2763,59 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           : localModels.length > 0;
       }
 
+      const providerBeforeProbe = server.agentState.llmProvider;
+      const compatibleModelNeedsVerification = selectedModel
+        .toLowerCase()
+        .startsWith('openai-compatible/')
+        && providerBeforeProbe.provider === 'anthropic-proxy'
+        && (
+          providerBeforeProbe.health !== 'healthy'
+          || providerBeforeProbe.verifiedModel !== selectedModel
+        );
+      if (compatibleModelNeedsVerification) {
+        const configurationBeforeProbe = providerConfigurationFingerprint(
+          server,
+          'openai-compatible',
+        );
+        const result = await probeConfiguredModel(server, selectedModel, true, {
+          signal,
+          passive: true,
+        });
+        if (signal.aborted) return false;
+
+        const providerAfterProbe = server.agentState.llmProvider;
+        const targetStillCurrent = server.agentState.currentModel.trim() === selectedModel
+          && providerAfterProbe.provider === 'anthropic-proxy'
+          && providerConfigurationFingerprint(server, 'openai-compatible')
+            === configurationBeforeProbe;
+        // Any provider status write during this passive request is newer. Leave
+        // it untouched and let the next single-flight tick inspect that state.
+        if (!targetStillCurrent || providerAfterProbe !== providerBeforeProbe) return false;
+
+        if (
+          result.configured
+          && result.verified
+          && result.model === selectedModel
+        ) {
+          server.agentState.llmProvider = {
+            provider: 'anthropic-proxy',
+            health: 'healthy',
+            detail: 'Built-in provider proxy (openai-compatible endpoint verified)',
+            checkedAt: new Date().toISOString(),
+            verifiedModel: selectedModel,
+          };
+          return true;
+        }
+
+        server.agentState.llmProvider = {
+          provider: 'anthropic-proxy',
+          health: 'degraded',
+          detail: 'Built-in provider proxy (selected model verification pending)',
+          checkedAt: new Date().toISOString(),
+        };
+        return false;
+      }
+
       const endpoint = resolveOfflineManagerEndpoint().replace(/\/+$/, '');
       const apiKey = server.agentState.litellmApiKey;
       const headers: Record<string, string> = {};
@@ -3173,6 +3229,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   function markAnthropicProxyDegraded(detail = 'Built-in Anthropic proxy (API key invalid or expired — update in Settings > API Keys)'): void {
     server.agentState.llmProvider.health = 'degraded';
     server.agentState.llmProvider.detail = detail;
+    delete server.agentState.llmProvider.verifiedModel;
   }
 
   async function validateAnthropicKey(): Promise<boolean> {
@@ -3238,6 +3295,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     if (server.agentState.llmProvider.health === 'degraded') {
       server.agentState.llmProvider.health = 'healthy';
       server.agentState.llmProvider.detail = 're-validating after key change';
+      delete server.agentState.llmProvider.verifiedModel;
     }
   };
 

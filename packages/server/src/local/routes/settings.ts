@@ -104,6 +104,7 @@ export async function probeConfiguredModel(
   server: FastifyInstance,
   preferred: string,
   exact: boolean,
+  options: { signal?: AbortSignal; passive?: boolean } = {},
 ): Promise<ModelProbeResult> {
   if (!preferred) return { model: null, configured: false, verified: false };
 
@@ -130,8 +131,11 @@ export async function probeConfiguredModel(
       headers: {
         'Content-Type': 'application/json',
         ...(!isOllama ? { Authorization: `Bearer ${server.agentState.wsSessionToken}` } : {}),
+        ...(options.passive ? { 'x-waggle-readiness-probe': 'passive' } : {}),
       },
-      signal: controller.signal,
+      signal: options.signal
+        ? AbortSignal.any([options.signal, controller.signal])
+        : controller.signal,
       body: JSON.stringify({
         model: sendModel,
         max_tokens: isQwenModel ? 32 : 1,

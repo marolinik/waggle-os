@@ -352,6 +352,300 @@ describe('Agent Service', () => {
     });
   });
 
+  it('passively re-verifies a compatible model after a cold-start outage clears', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    let upstreamResponse: 'empty' | 'invalid' | 'success' = 'empty';
+    let completionRequests = 0;
+    const gateway = createServer((request, response) => {
+      if (request.method === 'POST' && request.url === '/v1/chat/completions') {
+        completionRequests += 1;
+        request.resume();
+        request.on('end', () => {
+          response.writeHead(200, { 'content-type': 'application/json' });
+          if (upstreamResponse === 'invalid') {
+            response.end('{not-json');
+            return;
+          }
+          response.end(JSON.stringify({
+            choices: [{ message: {
+              role: 'assistant',
+              content: upstreamResponse === 'success' ? 'WAGGLE_OK' : '',
+            } }],
+          }));
+        });
+        return;
+      }
+      response.writeHead(404).end();
+    });
+    const gatewayPort = await occupyLoopbackPort(gateway);
+    cleanups.push(() => new Promise<void>((resolve) => gateway.close(() => resolve())));
+    const model = 'openai-compatible/qwen3.8-flash-next';
+
+    clearProviderEnv();
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: model,
+      providers: {
+        'openai-compatible': {
+          baseUrl: `http://127.0.0.1:${gatewayPort}/v1`,
+          apiKey: '',
+          models: [model],
+        },
+      },
+    }));
+
+    const { server } = await startService({
+      dataDir,
+      port: randomPort(),
+      litellmPort: randomPort(),
+      skipLiteLLM: true,
+    });
+    cleanups.push(async () => { await server.close(); });
+    await server.offlineManager.stop();
+    expect(server.agentState.llmProvider.health).toBe('degraded');
+    completionRequests = 0;
+    const notifications: string[] = [];
+    server.eventBus.on('notification', (event: { title?: string }) => {
+      if (event.title) notifications.push(event.title);
+    });
+
+    // A successful fallback must not hide a broken selected primary model.
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'Built-in provider proxy (openai-compatible endpoint verified)',
+      checkedAt: new Date().toISOString(),
+      verifiedModel: 'openai-compatible/qwen3.8-fallback',
+    };
+    upstreamResponse = 'invalid';
+
+    await expect(server.offlineManager.checkHealth()).resolves.toBe(false);
+    expect(completionRequests).toBe(1);
+    expect(server.agentState.llmProvider.health).toBe('degraded');
+
+    upstreamResponse = 'success';
+    await expect(server.offlineManager.checkHealth()).resolves.toBe(true);
+    await expect(server.offlineManager.checkHealth()).resolves.toBe(true);
+
+    expect(completionRequests).toBe(2);
+    expect(server.agentState.llmProvider).toMatchObject({
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      verifiedModel: model,
+    });
+    expect(notifications.filter(title => title === 'Back online')).toHaveLength(1);
+    expect(server.agentState.llmProvider.detail).toContain('openai-compatible');
+    expect(server.agentState.llmProvider.detail).toContain('endpoint verified');
+    const health = await server.inject({ method: 'GET', url: '/health' });
+    expect(health.json()).toMatchObject({
+      status: 'ok',
+      llm: {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+        reachable: true,
+      },
+    });
+
+    // A normal HTTP-200 request is not itself semantic certification. If its
+    // body is malformed, the next watchdog pass must still test the selected
+    // model instead of trusting the proxy's transport-level health write.
+    upstreamResponse = 'invalid';
+    const malformed = await server.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: { authorization: `Bearer ${server.agentState.wsSessionToken}` },
+      payload: {
+        model,
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'health check' }],
+      },
+    });
+    expect(malformed.statusCode).toBe(200);
+    expect(server.agentState.llmProvider.verifiedModel).toBeUndefined();
+    await expect(server.offlineManager.checkHealth()).resolves.toBe(false);
+    expect(completionRequests).toBe(4);
+    expect(server.agentState.llmProvider.health).toBe('degraded');
+  });
+
+  it('cancels passive compatible probes and ignores stale model results', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    let completionRequests = 0;
+    let releaseHeldResponse: (() => void) | undefined;
+    let failHeldResponse: (() => void) | undefined;
+    let markProbeStarted: (() => void) | undefined;
+    let heldContent = 'WAGGLE_OK';
+    const cleanupState: { appServer?: FastifyInstance } = {};
+    const gateway = createServer((request, response) => {
+      if (request.method !== 'POST' || request.url !== '/v1/chat/completions') {
+        response.writeHead(404).end();
+        return;
+      }
+      completionRequests += 1;
+      request.resume();
+      request.on('end', () => {
+        if (!markProbeStarted) {
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ choices: [{ message: { content: '' } }] }));
+          return;
+        }
+        const notifyStarted = markProbeStarted;
+        markProbeStarted = undefined;
+        releaseHeldResponse = () => {
+          if (response.writableEnded || response.destroyed) return;
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ choices: [{ message: { content: heldContent } }] }));
+        };
+        failHeldResponse = () => {
+          if (!response.writableEnded && !response.destroyed) {
+            response.destroy(new Error('deterministic upstream disconnect'));
+          }
+        };
+        notifyStarted();
+      });
+    });
+    const gatewayPort = await occupyLoopbackPort(gateway);
+    cleanups.push(async () => {
+      releaseHeldResponse?.();
+      failHeldResponse?.();
+      if (cleanupState.appServer?.server.listening) {
+        await cleanupState.appServer.close().catch(() => {});
+      }
+      await new Promise<void>((resolve) => gateway.close(() => resolve()));
+    });
+    const model = 'openai-compatible/qwen3.8-flash-next';
+
+    clearProviderEnv();
+    fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({
+      defaultModel: model,
+      providers: {
+        'openai-compatible': {
+          baseUrl: `http://127.0.0.1:${gatewayPort}/v1`,
+          apiKey: '',
+          models: [model],
+        },
+      },
+    }));
+
+    const { server } = await startService({
+      dataDir,
+      port: randomPort(),
+      litellmPort: randomPort(),
+      skipLiteLLM: true,
+    });
+    cleanupState.appServer = server;
+    await server.offlineManager.stop();
+    expect(server.agentState.llmProvider.health).toBe('degraded');
+
+    completionRequests = 0;
+    const staleProbeStarted = new Promise<void>((resolve) => { markProbeStarted = resolve; });
+    server.offlineManager.start();
+    server.offlineManager.start();
+    const staleStarted = await Promise.race([
+      staleProbeStarted.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 1_000)),
+    ]);
+    expect(staleStarted).toBe(true);
+    const staleCheck = (server.offlineManager as unknown as {
+      _activeCheck: Promise<boolean> | null;
+    })._activeCheck;
+    expect(staleCheck).not.toBeNull();
+    expect(completionRequests).toBe(1);
+    expect(server.agentState.llmProvider.health).toBe('degraded');
+
+    const newerModel = model;
+    const newerStatus = {
+      provider: 'anthropic-proxy' as const,
+      health: 'healthy' as const,
+      detail: 'Built-in provider proxy (openai-compatible endpoint verified)',
+      checkedAt: new Date().toISOString(),
+      verifiedModel: newerModel,
+    };
+    server.agentState.llmProvider = newerStatus;
+    failHeldResponse?.();
+    releaseHeldResponse = undefined;
+    failHeldResponse = undefined;
+    await expect(staleCheck).resolves.toBe(false);
+    await server.offlineManager.stop();
+
+    expect(server.agentState.currentModel).toBe(model);
+    expect(server.agentState.llmProvider).toBe(newerStatus);
+    expect(completionRequests).toBe(1);
+
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (selected model verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    heldContent = 'WAGGLE_OK';
+    const modelProbeStarted = new Promise<void>((resolve) => { markProbeStarted = resolve; });
+    server.offlineManager.start();
+    const modelStarted = await Promise.race([
+      modelProbeStarted.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 1_000)),
+    ]);
+    expect(modelStarted).toBe(true);
+    const modelCheck = (server.offlineManager as unknown as {
+      _activeCheck: Promise<boolean> | null;
+    })._activeCheck;
+    expect(modelCheck).not.toBeNull();
+    const changedModel = 'openai-compatible/qwen3.8-flash-next-v2';
+    const changedModelStatus = {
+      ...newerStatus,
+      checkedAt: new Date().toISOString(),
+      verifiedModel: changedModel,
+    };
+    server.agentState.currentModel = changedModel;
+    server.agentState.llmProvider = changedModelStatus;
+    releaseHeldResponse?.();
+    releaseHeldResponse = undefined;
+    failHeldResponse = undefined;
+    await expect(modelCheck).resolves.toBe(false);
+    await server.offlineManager.stop();
+    expect(server.agentState.currentModel).toBe(changedModel);
+    expect(server.agentState.llmProvider).toBe(changedModelStatus);
+    expect(completionRequests).toBe(2);
+
+    server.agentState.currentModel = model;
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (selected model verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    heldContent = 'WAGGLE_OK';
+    const abortProbeStarted = new Promise<void>((resolve) => { markProbeStarted = resolve; });
+    server.offlineManager.start();
+    server.offlineManager.start();
+    const abortStarted = await Promise.race([
+      abortProbeStarted.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 1_000)),
+    ]);
+    expect(abortStarted).toBe(true);
+    const abortedCheck = (server.offlineManager as unknown as {
+      _activeCheck: Promise<boolean> | null;
+    })._activeCheck;
+    expect(abortedCheck).not.toBeNull();
+    expect(completionRequests).toBe(3);
+
+    const providerBeforeClose = server.agentState.llmProvider;
+    const closePromise = server.close();
+    const closedWithoutFallback = await Promise.race([
+      closePromise.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 1_000)),
+    ]);
+    if (!closedWithoutFallback) releaseHeldResponse?.();
+    await closePromise;
+    releaseHeldResponse?.();
+    releaseHeldResponse = undefined;
+
+    expect(closedWithoutFallback).toBe(true);
+    await expect(abortedCheck).resolves.toBe(false);
+    expect(completionRequests).toBe(3);
+    expect(server.agentState.llmProvider).toBe(providerBeforeClose);
+  });
+
   it.each([
     'localhost',
     '127.0.0.2',

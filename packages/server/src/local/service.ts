@@ -25,6 +25,7 @@ import {
 } from './provider-env.js';
 import { prepareLiteLLMRuntimeConfig } from './litellm-runtime-config.js';
 import { probeConfiguredModel } from './routes/settings.js';
+import { providerConfigurationFingerprint } from './routes/anthropic-proxy.js';
 
 const log = createLogger('service');
 
@@ -493,8 +494,17 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     && providerHealth === 'degraded'
     && startupModel.startsWith('openai-compatible/')
   ) {
-    const probe = await probeConfiguredModel(server, startupModel, true);
-    if (probe.verified && probe.model === startupModel) {
+    const providerBeforeProbe = server.agentState.llmProvider;
+    const configurationBeforeProbe = providerConfigurationFingerprint(
+      server,
+      'openai-compatible',
+    );
+    const probe = await probeConfiguredModel(server, startupModel, true, { passive: true });
+    const targetStillCurrent = server.agentState.currentModel.trim() === startupModel
+      && server.agentState.llmProvider === providerBeforeProbe
+      && providerConfigurationFingerprint(server, 'openai-compatible')
+        === configurationBeforeProbe;
+    if (targetStillCurrent && probe.verified && probe.model === startupModel) {
       const providerId = probe.model.split('/')[0] ?? 'configured';
       const verificationKind = providerId === 'openai-compatible' ? 'endpoint' : 'credential';
       providerDetail = `Built-in provider proxy (${providerId} ${verificationKind} verified)`;
@@ -503,8 +513,9 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
         health: 'healthy',
         detail: providerDetail,
         checkedAt: new Date().toISOString(),
+        verifiedModel: startupModel,
       };
-    } else {
+    } else if (targetStillCurrent) {
       providerDetail = 'Built-in provider proxy (openai-compatible verification failed)';
       server.agentState.llmProvider = {
         provider: 'anthropic-proxy',
@@ -513,6 +524,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
         checkedAt: new Date().toISOString(),
       };
     }
+    providerDetail = server.agentState.llmProvider.detail;
   }
   server.offlineManager.start();
 

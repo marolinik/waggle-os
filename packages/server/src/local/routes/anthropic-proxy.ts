@@ -679,7 +679,7 @@ function retryAfterMilliseconds(value: string | null, now: number): number | nul
   return Math.min(PROVIDER_COOLDOWN_MAX_MS, Math.max(1_000, requested));
 }
 
-function providerConfigurationFingerprint(server: FastifyInstance, providerId: string): string {
+export function providerConfigurationFingerprint(server: FastifyInstance, providerId: string): string {
   const normalizedProviderId = providerId.toLowerCase();
   let configuredModels: string[] = [];
   try {
@@ -708,6 +708,7 @@ function providerConfigurationFingerprint(server: FastifyInstance, providerId: s
   }
   return createHash('sha256').update(JSON.stringify({
     providerId: normalizedProviderId,
+    selectedModel: server.agentState?.currentModel ?? '',
     baseUrl: configuredProviderBaseUrl(server, normalizedProviderId),
     models: [...new Set([...configuredModels, ...vaultModels])].sort(),
     credentials: [...credentials].sort(),
@@ -1150,6 +1151,7 @@ async function forwardCompatibleProvider(
   origin: string | undefined,
   reply: FastifyReply,
   providerCooldowns: ProviderReadinessCooldowns,
+  publishProviderHealth: boolean,
 ): Promise<unknown> {
   const apiKeys = getProviderApiKeys(route.providerId, server.vault);
   const keylessCompatible = route.providerId === 'openai-compatible'
@@ -1240,13 +1242,15 @@ async function forwardCompatibleProvider(
     } catch (error) {
       if (!requestAbort.clientDisconnected()) {
         providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
-        markProxyProviderDegraded(
-          server,
-          route.providerId,
-          requestAbort.timedOut() ? 'request timed out' : 'connection failed',
-          providerCooldowns,
-          providerFingerprint,
-        );
+        if (publishProviderHealth) {
+          markProxyProviderDegraded(
+            server,
+            route.providerId,
+            requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
       }
       return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
     }
@@ -1273,6 +1277,7 @@ async function forwardCompatibleProvider(
         applyProviderKeyToEnv(route.providerId, apiKey, true);
       }
       if (upstream.ok
+        && publishProviderHealth
         && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
         && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
         server.agentState.llmProvider = {
@@ -1282,6 +1287,7 @@ async function forwardCompatibleProvider(
           checkedAt: new Date().toISOString(),
         };
       } else if (!upstream.ok
+        && publishProviderHealth
         && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
         && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
         server.agentState.llmProvider = {
@@ -1304,7 +1310,8 @@ async function forwardCompatibleProvider(
       error: { message: `${route.providerId} rejected every configured API key.` },
     });
   }
-  if (credentialRejected
+  if (publishProviderHealth
+    && credentialRejected
     && providerCooldowns.isCurrent(route.providerId, providerFingerprint)
     && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
     server.agentState.llmProvider = {
@@ -1324,25 +1331,29 @@ async function forwardCompatibleProvider(
       upstream.ok ? () => {
         if (requestAbort.clientDisconnected()) return;
         providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
-        markProxyProviderDegraded(
-          server,
-          route.providerId,
-          'connection failed',
-          providerCooldowns,
-          providerFingerprint,
-        );
+        if (publishProviderHealth) {
+          markProxyProviderDegraded(
+            server,
+            route.providerId,
+            'connection failed',
+            providerCooldowns,
+            providerFingerprint,
+          );
+        }
       } : undefined,
     );
   } catch (error) {
     if (!requestAbort.clientDisconnected()) {
       providerCooldowns.markTransportFailure(route.providerId, providerFingerprint);
-      markProxyProviderDegraded(
-        server,
-        route.providerId,
-        requestAbort.timedOut() ? 'request timed out' : 'connection failed',
-        providerCooldowns,
-        providerFingerprint,
-      );
+      if (publishProviderHealth) {
+        markProxyProviderDegraded(
+          server,
+          route.providerId,
+          requestAbort.timedOut() ? 'request timed out' : 'connection failed',
+          providerCooldowns,
+          providerFingerprint,
+        );
+      }
     }
     return sendCloudProviderFailure(reply, route.providerId, requestAbort, error);
   }
@@ -1450,6 +1461,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     }
     const body = request.body;
+    const publishProviderHealth = request.headers['x-waggle-readiness-probe'] !== 'passive';
     const route = resolveProviderRoute(body.model);
     if (!route) {
       return reply.status(400).send({
@@ -1526,6 +1538,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
         request.headers.origin as string | undefined,
         reply,
         providerCooldowns,
+        publishProviderHealth,
       );
       if (DEFINITE_PRE_INFERENCE_REJECTION_STATUSES.has(reply.statusCode)) {
         releaseProxySpend(server, spend);
