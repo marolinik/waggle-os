@@ -253,9 +253,10 @@ describe('WorkspaceManager', () => {
       manager.create({ name: 'Rename Refusal', group: 'Temp' });
       const workspacesDir = path.join(tmpDir, 'workspaces');
       const workspaceDir = path.join(workspacesDir, 'rename-refusal');
+      const canonicalWorkspaceDir = fs.realpathSync.native(workspaceDir);
       const originalRenameSync = fs.renameSync.bind(fs);
       const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((source, destination) => {
-        if (String(source) === workspaceDir) {
+        if (String(source) === canonicalWorkspaceDir) {
           throw Object.assign(new Error('synthetic Windows rename refusal'), { code: 'EPERM' });
         }
         originalRenameSync(source, destination);
