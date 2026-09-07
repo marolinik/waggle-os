@@ -725,6 +725,34 @@ describe('P1b auth gate', () => {
     await expect(consume()).rejects.toThrow(AdapterHttpError);
   });
 
+  it('sendMessage carries a known starter skill as hidden request metadata', async () => {
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [
+      [TOKEN_PATH, () => jsonRes({ token: 'tok-A' })],
+      ['/api/chat', () => new Response('', { status: 200 })],
+    ]);
+
+    for await (const _event of a.sendMessage(
+      'ws1',
+      'Build a decision matrix for: choosing a launch vendor',
+      'session-a',
+    )) { /* consume stream */ }
+
+    const request = callsTo(fetchSpy, '/api/chat')[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      message: 'Build a decision matrix for: choosing a launch vendor',
+      selectedSkill: 'decision-matrix',
+    });
+
+    for await (const _event of a.sendMessage(
+      'ws1',
+      'Build a decision matrix for:',
+      'session-b',
+    )) { /* consume stream */ }
+    const incomplete = JSON.parse(String(callsTo(fetchSpy, '/api/chat')[1]?.[1].body));
+    expect(incomplete).not.toHaveProperty('selectedSkill');
+  });
+
   it('fetchWithTimeout preserves fresh and pre-aborted caller cancellation without AbortSignal.any', async () => {
     const anyDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, 'any');
     Object.defineProperty(AbortSignal, 'any', { configurable: true, value: undefined });

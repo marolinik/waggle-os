@@ -2166,6 +2166,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       sessionId?: string;
       workspacePath?: string;
       persona?: string;
+      /** Exact installed skill proposed by a first-party starter chip; always validated here. */
+      selectedSkill?: string;
       /**
        * Phase B.5: tiered autonomy override. When absent or 'normal', the
        * existing gate applies. 'trusted' or 'yolo' relax the gate per the
@@ -2220,6 +2222,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       message, workspace: _ws, workspaceId: _wsId, model, session,
       sessionId: sessionIdAlias,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
+      selectedSkill: selectedSkillRaw,
       autonomy: autonomyRaw, retry: retryTurn, retryTarget: retryTargetRaw,
       proposeHeld: proposeHeldTurn,
       origin, channel: channelMeta,
@@ -2238,6 +2241,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const MAX_MESSAGE_LENGTH = parseInt(process.env.WAGGLE_MAX_MESSAGE_LENGTH ?? '50000', 10);
     if (message.length > MAX_MESSAGE_LENGTH) {
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
+    }
+    let selectedSkill: string | undefined;
+    if (selectedSkillRaw !== undefined) {
+      if (typeof selectedSkillRaw !== 'string') {
+        return reply.status(400).send({
+          error: 'selectedSkill must be a string',
+          code: 'INVALID_FIELD_TYPE',
+        });
+      }
+      selectedSkill = selectedSkillRaw.trim().toLowerCase();
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(selectedSkill)) {
+        return reply.status(400).send({
+          error: 'selectedSkill is invalid',
+          code: 'INVALID_SELECTED_SKILL',
+        });
+      }
+      if (!server.agentState.skills.some(skill => skill.name === selectedSkill)) {
+        return reply.status(409).send({
+          error: 'The selected skill is not available',
+          code: 'SKILL_NOT_AVAILABLE',
+        });
+      }
     }
     if (retryTurn !== undefined && typeof retryTurn !== 'boolean') {
       return reply.status(400).send({
@@ -2436,6 +2461,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       Array.from(EXPLICIT_READ_ONLY_TOOL_NAMES, name => ({ name })),
     );
     const decisionMatrixToolSequenceRequested = isDecisionMatrixSkillRequest(message)
+      && (!selectedSkill || selectedSkill === 'decision-matrix')
       && autonomyLevel === 'normal'
       && !isAutomatedTurn
       && turnMutationPolicy.contextScope === 'default';
@@ -2455,6 +2481,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       ?? (decisionMatrixToolSequenceRequested
         ? 'read_skill'
         : undefined)
+      ?? (selectedSkill ? 'read_skill' : undefined)
       ?? (boundedExactPersistedMemoryLookup ? 'search_memory' : undefined)
       ?? (resolvedReadOnlyToolDirective === 'list_skills'
         && autonomyLevel === 'normal'
@@ -3872,7 +3899,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             turnMutationPolicy,
             externalToolNames,
           );
-          if (decisionMatrixToolSequenceRequested && turnMutationPolicy.denyMemoryRead) {
+          if ((decisionMatrixToolSequenceRequested || selectedSkill) && turnMutationPolicy.denyMemoryRead) {
             const builtInReadSkill = policyInputTools.find(tool => (
               tool.name === 'read_skill' && !externalToolNames.has(tool.name)
             ));
@@ -3906,6 +3933,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               effectiveTools = [];
             }
             explicitReadOnlyToolChoice = undefined;
+          } else if (selectedSkill && explicitReadOnlyToolCandidate === 'read_skill') {
+            explicitReadOnlyToolChoice = injectionResult.safe
+              && effectiveTools.some(tool => tool.name === 'read_skill')
+              ? 'read_skill'
+              : undefined;
+            if (explicitReadOnlyToolChoice) {
+              effectiveTools = bindExactReadSkillTool(effectiveTools, selectedSkill);
+            }
           } else if (explicitReadOnlyToolCandidate === 'read_file') {
             explicitReadOnlyToolChoice = injectionResult.safe
               && directReadFileDirective.kind === 'valid'
@@ -4288,7 +4323,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             maxTokenBudget: 12_000,
             synthesisReserveTokens: explicitReadOnlyToolChoice === 'read_file' ? 3_500 : 1_500,
           };
-          maxOutputTokens = explicitReadOnlyToolChoice === 'read_file' ? 3_072 : 512;
+          maxOutputTokens = explicitReadOnlyToolChoice === 'read_file'
+            ? 3_072
+            : explicitReadOnlyToolChoice === 'read_skill'
+              ? 1_536
+              : 512;
         } else if (explicitReadOnlyToolCandidate && !explicitReadOnlyToolChoice) {
           agentRunBudget = {
             ...agentRunBudget,

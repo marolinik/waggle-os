@@ -482,6 +482,81 @@ describe('persona acceptance prompt budget', () => {
     }
   });
 
+  it('binds a UI-selected starter skill without exposing tool syntax in the user message', async () => {
+    const message = 'Build a decision matrix for: choosing a launch vendor';
+    capturedConfig = null;
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message,
+        selectedSkill: 'decision-matrix',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session: 'selected-skill-intent',
+        workspace: collaborationWorkspaceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.messages).toEqual([{ role: 'user', content: message }]);
+    expect(capturedConfig!.tools.map(tool => tool.name)).toEqual(['read_skill']);
+    expect(capturedConfig!.toolChoice).toBe('read_skill');
+    expect(capturedConfig!.maxOutputTokens).toBe(1_536);
+    expect((capturedConfig!.tools[0].parameters.properties?.name as { enum?: string[] }).enum)
+      .toEqual(['decision-matrix']);
+  });
+
+  it('keeps the selected starter skill authoritative over a different heuristic match', async () => {
+    const message = 'Compare Option A and Option B with a decision matrix. Criteria Cost and Speed have weights 5 and 3; scores are A 4/3 and B 2/5.';
+    capturedConfig = null;
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message,
+        selectedSkill: 'risk-assessment',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session: 'selected-skill-precedence',
+        workspace: collaborationWorkspaceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.tools.map(tool => tool.name)).toEqual(['read_skill']);
+    expect(capturedConfig!.requiredToolSequence).toBeUndefined();
+    expect((capturedConfig!.tools[0].parameters.properties?.name as { enum?: string[] }).enum)
+      .toEqual(['risk-assessment']);
+  });
+
+  it.each([
+    ['unknown skill', 'not-installed', 409, 'SKILL_NOT_AVAILABLE'],
+    ['malformed skill', '../decision-matrix', 400, 'INVALID_SELECTED_SKILL'],
+    ['wrong field type', 42, 400, 'INVALID_FIELD_TYPE'],
+  ])('rejects %s metadata before model execution', async (_label, selectedSkill, status, code) => {
+    capturedConfig = null;
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Build a decision matrix for: choosing a launch vendor',
+        selectedSkill,
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        session: `selected-skill-invalid-${status}-${String(selectedSkill)}`,
+        workspace: collaborationWorkspaceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(status);
+    expect(response.json()).toMatchObject({ code });
+    expect(capturedConfig).toBeNull();
+  });
+
   it.each([
     ['no exact skill name', 'Call read_skill once, then compare A and B.'],
     ['missing exact qualifier', 'Call read_skill with the name decision-matrix. Compare A and B.'],

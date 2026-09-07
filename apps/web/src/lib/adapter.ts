@@ -5,6 +5,7 @@ import type {
   RouteProposalPayload, RouteProposalConfirmBody, RouteProposalConfirmResponse, RouteProposalProposeBody,
 } from './route-proposals';
 import { getSelectedShape } from './shape-selection';
+import { resolveSkillStarterIntent } from './skill-recommendations';
 import {
   isTauri,
   recallMemory as tauriRecallMemory,
@@ -1117,6 +1118,7 @@ class LocalAdapter {
     // runRetrievalAgentLoop; carrying it now means A3.1 is a one-line server
     // change with no client redeploy needed.
     const shape = getSelectedShape();
+    const selectedSkill = resolveSkillStarterIntent(message);
     const controller = new AbortController();
     const chatControllerKey = this.chatControllerKey(workspaceId, sessionId);
     let controllers = this.activeChatControllers.get(chatControllerKey);
@@ -1140,6 +1142,7 @@ class LocalAdapter {
           retry,
           model,
           retryTarget,
+          ...(selectedSkill ? { selectedSkill } : {}),
         }),
         signal: controller.signal,
       }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);

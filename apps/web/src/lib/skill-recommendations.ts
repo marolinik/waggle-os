@@ -109,6 +109,20 @@ export function recommendSkills(personaId: string | undefined | null): SkillReco
   });
 }
 
+/**
+ * Recover the skill represented by a completed one-click starter without
+ * changing the user-visible message. The server still validates the supplied
+ * id against the live installed-skill catalog before binding read_skill.
+ */
+export function resolveSkillStarterIntent(message: string): string | undefined {
+  const normalized = message.trimStart();
+  for (const [id, meta] of Object.entries(SKILL_CATALOG)) {
+    if (!normalized.startsWith(meta.starter)) continue;
+    if (normalized.slice(meta.starter.length).trim().length > 0) return id;
+  }
+  return undefined;
+}
+
 /** All skill ids referenced anywhere in this file. Used by the catalog
  *  membership test to assert every recommendation resolves into a real
  *  starter skill. */
