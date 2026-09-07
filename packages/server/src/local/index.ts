@@ -709,7 +709,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const capabilityProposalStore = new CapabilityProposalStore();
   server.decorate('capabilityProposalStore', capabilityProposalStore);
 
-  // ── Daily marketplace sync (non-blocking, 60s delay after startup) ──
+  // ── Opt-in daily marketplace sync (60s delay after startup) ──
+  // Bulk registry refreshes can monopolize SQLite and the Node event loop;
+  // users can refresh explicitly, while managed deployments may opt in.
   const stopMarketplaceBackgroundSync = scheduleMarketplaceBackgroundSync({ marketplaceDb, log });
 
   // ── Agent state (matches CLI initialization) ────────────────────────

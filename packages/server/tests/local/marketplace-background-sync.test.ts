@@ -12,7 +12,8 @@ describe('marketplace background sync startup control', () => {
   it('is disabled by the Playwright/local E2E escape hatch', () => {
     expect(isMarketplaceBackgroundSyncDisabled({ WAGGLE_DISABLE_MARKETPLACE_SYNC: '1' })).toBe(true);
     expect(isMarketplaceBackgroundSyncDisabled({ WAGGLE_SKIP_MARKETPLACE_SYNC: '1' })).toBe(true);
-    expect(isMarketplaceBackgroundSyncDisabled({})).toBe(false);
+    expect(isMarketplaceBackgroundSyncDisabled({})).toBe(true);
+    expect(isMarketplaceBackgroundSyncDisabled({ WAGGLE_ENABLE_MARKETPLACE_SYNC: '1' })).toBe(false);
   });
 
   it('does not schedule sync work when disabled', async () => {
@@ -31,13 +32,13 @@ describe('marketplace background sync startup control', () => {
     expect(syncAll).not.toHaveBeenCalled();
   });
 
-  it('keeps the first minute after startup free of marketplace sync work by default', async () => {
+  it('keeps automatic marketplace sync opt-in and the first minute after startup free', async () => {
     vi.useFakeTimers();
     const syncAll = vi.fn().mockResolvedValue([]);
     const stop = scheduleMarketplaceBackgroundSync({
       marketplaceDb: {} as never,
       log: { info: vi.fn() },
-      env: {},
+      env: { WAGGLE_ENABLE_MARKETPLACE_SYNC: '1' },
       createSync: () => ({ syncAll }),
     });
 
@@ -56,7 +57,7 @@ describe('marketplace background sync startup control', () => {
     const stop = scheduleMarketplaceBackgroundSync({
       marketplaceDb: {} as never,
       log,
-      env: {},
+      env: { WAGGLE_ENABLE_MARKETPLACE_SYNC: '1' },
       delayMs: 10,
       intervalMs: 100,
       createSync: () => ({ syncAll }),
