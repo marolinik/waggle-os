@@ -72,6 +72,13 @@ export const ACTION_VERBS = [
 ];
 export const ACTION_VERB_PATTERN = new RegExp(`^(${ACTION_VERBS.join('|')})\\b`, 'i');
 
+const WORKSPACE_CATCH_UP_PATTERN = /\b(?:catch me up|get me up to speed|where did we leave off|where were we|what matters here now)\b/i;
+
+/** Explicit continuity requests are actionable even when they are short. */
+export function isWorkspaceCatchUpRequest(text: string): boolean {
+  return WORKSPACE_CATCH_UP_PATTERN.test(text.trim());
+}
+
 /**
  * Detect whether a user message is too brief/vague to act on confidently.
  * Returns true when the message is short and lacks clear intent signals.
@@ -81,6 +88,8 @@ export const ACTION_VERB_PATTERN = new RegExp(`^(${ACTION_VERBS.join('|')})\\b`,
 export function isAmbiguousMessage(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
+
+  if (isWorkspaceCatchUpRequest(trimmed)) return false;
 
   // Must have fewer than 10 words
   const words = trimmed.split(/\s+/);

@@ -76,12 +76,13 @@ function resolvePersona(id: string) {
 import { FrameStore, SessionStore, TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
+import { actionableMemoryDirectiveText, allowsAutomaticRecall, allowsConversationHistory, allowsPersistedMemoryRead, allowsPostResponseDecoration, buildTemplateWelcomePrompt, buildTurnMessageWindow, canUseBudgetModelWithoutCloudEgress, classifyExplicitTurnMutationPolicy, filterToolsByTurnMutationPolicy, isExclusiveSuppliedOnlyResponseRequest, isExplicitToolFreeAdvisoryRequest, isOfflineOllamaModelReference, isRegulatedContent, isRetryableError, isAmbiguousMessage, isWorkspaceCatchUpRequest, primeMemoryDirectiveClassifier, resolveExplicitPersistedMemoryReadDirective, resolveTurnPersistencePermissions, selectAdvisoryMaxOutputTokens, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnContextScope, type TurnMutationPolicy } from './chat-helpers.js';
 import {
   chatSessionStateKey,
   createPersistedCapabilityReceipt,
   isChatSessionStateKeyForWorkspace,
   isolateLegacyDefaultChatSessions,
+  loadRecentWorkspaceSessionContext,
   registerChatHistoryRestoreParticipant,
   resolveChatHistoryTarget,
   persistMessage,
@@ -2626,6 +2627,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // Declare at handler scope so error handler can surface recalled memories (P1-4)
     let recalledContext = '';
+    let workspaceSessionContext = '';
     // W4.5: unprefixed recall text handed to the PromptAssembler (fixes
     // double-compute — assembler reuses it instead of re-searching).
     let recallTextForAssembler = '';
@@ -3655,6 +3657,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             requestedBuiltInArtifactToolNames(agentMessage),
           );
         }
+
+        if (!hasCustomRunner
+          && usesNamedWorkspace
+          && persistedMemoryReadAllowed
+          && allowsConversationHistory(turnMutationPolicy)
+          && isWorkspaceCatchUpRequest(agentMessage)) {
+          const recentSessions = loadRecentWorkspaceSessionContext(
+            sessionPersistenceDataDir,
+            activeWorkspaceId,
+            sessionId,
+          );
+          if (recentSessions.text) {
+            const sessionContextScan = scanForInjection(recentSessions.text, 'tool_output');
+            if (sessionContextScan.safe) {
+              workspaceSessionContext = `\n\n${recentSessions.text}`;
+              sendEvent('step', {
+                content: `Reviewed ${recentSessions.sessionCount} recent workspace session${recentSessions.sessionCount === 1 ? '' : 's'}.`,
+              });
+            } else {
+              log.warn('[security] Injection detected in prior workspace session context — dropping context', sessionContextScan.flags);
+            }
+          }
+        }
         if (closedWorldRewrite || toolFreeAdvisory) {
           effectiveTools = [];
           spawnAvailableTools = [];
@@ -4251,7 +4276,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 + packagedSystemPrompt
                 + templateContext
                 + conversationalToolPolicyPrompt(agentMessage, autonomyLevel, effectiveTools.length)
-                + (assembledForModel ? '' : recalledContext);
+                + (assembledForModel ? '' : recalledContext)
+                + workspaceSessionContext;
             return hasSpecialEvidenceBoundary
               ? basePrompt
               : basePrompt + buildTurnContextSuffix(
@@ -5338,8 +5364,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // honest hedge note; durations/percents only inform the log signal
         // (noisier — advice timelines like "2 weeks" would false-positive). The
         // nuanced cases (proper nouns, "4 months runway") need the LLM verifier.
-        if (!hasCustomRunner && allowResponseDecoration && finalContent && recalledContext) {
-          const grounding = checkGrounding(finalContent, recalledContext + '\n' + message);
+        if (!hasCustomRunner && allowResponseDecoration && finalContent && (recalledContext || workspaceSessionContext)) {
+          const grounding = checkGrounding(finalContent, recalledContext + workspaceSessionContext + '\n' + message);
           if (grounding.ungrounded.length > 0) {
             log.info('[grounding] reply asserts specifics absent from recalled memory', {
               score: grounding.score,

@@ -16,6 +16,7 @@ import {
   canUseBudgetModelWithoutCloudEgress,
   classifyExplicitTurnMutationPolicy,
   filterToolsByTurnMutationPolicy,
+  isAmbiguousMessage,
   isExplicitToolFreeAdvisoryRequest,
   isRegulatedContent,
   isRetryableError,
@@ -51,6 +52,18 @@ function canonicalPrompt(id: 'coder' | 'data-engineer' | 'verifier' | 'coordinat
   if (!acceptanceCase) throw new Error(`Missing canonical persona case: ${id}`);
   return acceptanceCase.prompt;
 }
+
+describe('isAmbiguousMessage', () => {
+  it('treats workspace catch-up starters as actionable continuity requests', () => {
+    for (const message of [
+      'Catch me up on this workspace',
+      'Where did we leave off?',
+      'Get me up to speed on this workspace',
+    ]) {
+      expect(isAmbiguousMessage(message), message).toBe(false);
+    }
+  });
+});
 
 // ─── isRegulatedContent ──────────────────────────────────────────────
 

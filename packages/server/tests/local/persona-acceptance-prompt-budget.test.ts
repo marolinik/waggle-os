@@ -3613,6 +3613,68 @@ describe('persona acceptance prompt budget', () => {
     });
   });
 
+  it('grounds a first-turn workspace catch-up in the most recent prior session', async () => {
+    const workspaceId = server.workspaceManager.create({
+      name: 'Workspace catch-up isolation',
+      group: 'Test',
+    }).id;
+    const priorSession = 'workspace-catch-up-prior-session';
+    const currentSession = 'workspace-catch-up-current-session';
+    const priorRequest = 'Inspect the release package manager evidence for this workspace.';
+    const priorAnswer = 'The release uses npm because package.json declares npm@10.9.8.';
+    persistMessage(tmpDir, workspaceId, priorSession, {
+      role: 'user',
+      content: priorRequest,
+    });
+    persistMessage(tmpDir, workspaceId, priorSession, {
+      role: 'assistant',
+      content: priorAnswer,
+    });
+    const sessionsDir = path.join(tmpDir, 'workspaces', workspaceId, 'sessions');
+    const priorTime = new Date(Date.now() - 10_000);
+    fs.utimesSync(path.join(sessionsDir, `${priorSession}.jsonl`), priorTime, priorTime);
+    for (let index = 0; index < 4; index += 1) {
+      const recursiveSession = `workspace-catch-up-recursive-session-${index}`;
+      persistMessage(tmpDir, workspaceId, recursiveSession, {
+        role: 'user',
+        content: 'Catch me up on this workspace',
+      });
+      persistMessage(tmpDir, workspaceId, recursiveSession, {
+        role: 'assistant',
+        content: `RECIRCULATED-CATCH-UP-${index} must not become evidence for another catch-up.`,
+      });
+      const recursiveTime = new Date(Date.now() - index * 100);
+      fs.utimesSync(path.join(sessionsDir, `${recursiveSession}.jsonl`), recursiveTime, recursiveTime);
+    }
+
+    capturedConfig = null;
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Catch me up on this workspace',
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        persona: 'general-purpose',
+        session: currentSession,
+        workspace: workspaceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(capturedConfig).not.toBeNull();
+    expect(capturedConfig!.systemPrompt).toContain('# Recent Workspace Sessions');
+    expect(capturedConfig!.systemPrompt).toContain(priorRequest);
+    expect(capturedConfig!.systemPrompt).toContain(priorAnswer);
+    expect(capturedConfig!.systemPrompt).not.toContain('RECIRCULATED-CATCH-UP');
+    expect(capturedConfig!.systemPrompt).toContain('Answer this catch-up request directly');
+    expect(capturedConfig!.systemPrompt).toContain(
+      'Do not reopen an explicit historical conclusion as an open question unless the excerpts conflict',
+    );
+    expect(capturedConfig!.systemPrompt).not.toContain(
+      "The user's message is very brief and may be vague",
+    );
+  });
+
   it.each([
     ['drop', 'Recalled memories were not used because they failed safety checks', false],
     ['throw', 'Memory recall was unavailable for this response', true],
