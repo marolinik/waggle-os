@@ -253,7 +253,7 @@ describe('runAgentLoop', () => {
     }));
 
     expect(result.content).toContain('All tests passed.');
-    expect(result.content).toContain('UNVERIFIED');
+    expect(result.content).toContain('Verification scope: EVIDENCE-ONLY');
     expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(result.content);
     expect(onToken).toHaveBeenCalledTimes(1);
     expect(echoTool.execute).toHaveBeenCalledTimes(5);

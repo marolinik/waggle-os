@@ -150,7 +150,7 @@ describe('subagent-tools', () => {
       max_turns: 0.5,
     });
     expect(runner.mock.calls[0][0].maxTurns).toBe(5);
-    expect(runner.mock.calls[1][0].maxTurns).toBe(9);
+    expect(runner.mock.calls[1][0].maxTurns).toBe(5);
   });
 
   it('bounds a large custom tool pool and caps requested turns with the task policy', async () => {
@@ -190,14 +190,14 @@ describe('subagent-tools', () => {
     expect(config.tools.map((tool) => tool.name)).toContain('read_file');
     expect(measureOpenAiToolSchemaChars(config.tools)).toBeLessThanOrEqual(8_000);
     expect(config).toMatchObject({
-      maxTurns: 9,
-      maxToolRounds: 8,
-      maxTokenBudget: 80_000,
-      synthesisReserveTokens: 14_000,
+      maxTurns: 5,
+      maxToolRounds: 4,
+      maxTokenBudget: 48_000,
+      synthesisReserveTokens: 10_000,
       toolContextBudget: {
-        maxSingleResultChars: 8_000,
+        maxSingleResultChars: 4_000,
         recentResultCount: 2,
-        historicalResultChars: 750,
+        historicalResultChars: 600,
       },
     });
   });

@@ -981,14 +981,14 @@ describe('isolated Fleet execution', () => {
     );
     expect(measureOpenAiToolSchemaChars(selected)).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
     expect(capturedConfig).toMatchObject({
-      maxTurns: 9,
-      maxToolRounds: 8,
-      maxTokenBudget: 80_000,
-      synthesisReserveTokens: 14_000,
+      maxTurns: 5,
+      maxToolRounds: 4,
+      maxTokenBudget: 48_000,
+      synthesisReserveTokens: 10_000,
       toolContextBudget: {
-        maxSingleResultChars: 8_000,
+        maxSingleResultChars: 4_000,
         recentResultCount: 2,
-        historicalResultChars: 750,
+        historicalResultChars: 600,
       },
     });
     await waitFor(() => registry.get(runId)?.status === 'completed', 'bounded Fleet run did not complete');

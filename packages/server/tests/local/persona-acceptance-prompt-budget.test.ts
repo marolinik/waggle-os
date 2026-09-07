@@ -3534,7 +3534,7 @@ describe('persona acceptance prompt budget', () => {
       count: recalledCount,
     });
     expect(done?.contextMetrics).toMatchObject({
-      packageMode: 'full',
+      packageMode: 'compact',
     });
   });
 
@@ -3646,21 +3646,21 @@ describe('persona acceptance prompt budget', () => {
   });
 
   it.each([
-    'Summarize our previous decisions. Do not write files or execute code.',
-    'Explain what we decided. Do not write files or execute code.',
-    'Draft the agreed plan. Do not write files or execute code.',
-    'Explain "Do not search memory." Then explain what we decided. Do not write files or execute code.',
-    'Do not search memory; instead, search memory for our approved launch decision.',
-    'Review the memory database architecture, then summarize our previous decisions. Do not write files or execute code.',
-    'Do not hesitate to use my saved memory. Explain our previous decision. Do not write files or execute code.',
-    'Do not search the web, use my saved memory instead. Do not write files or execute code.',
-    'Do not search the web — use my saved memory instead. Do not write files or execute code.',
-    'Use my saved memory if available. If you find nothing, say UNKNOWN. Do not write files or execute code.',
-    'Use Waggle memory if available: when did we approve the budget in another session? Do not write files or execute code.',
-    'Use Waggle memory if available: when exactly did we approve the budget in another session? Do not write files or execute code.',
-    'Use Waggle memory if available: when, exactly, did we approve the budget? Do not write files or execute code.',
-    'Use my saved memory if available. When the command finishes, summarize the output. Do not write files or execute code.',
-  ])('keeps first-turn owned context requests memory-capable: %s', async (message) => {
+    ['Summarize our previous decisions. Do not write files or execute code.', 'compact'],
+    ['Explain what we decided. Do not write files or execute code.', 'compact'],
+    ['Draft the agreed plan. Do not write files or execute code.', 'full'],
+    ['Explain "Do not search memory." Then explain what we decided. Do not write files or execute code.', 'compact'],
+    ['Do not search memory; instead, search memory for our approved launch decision.', 'compact'],
+    ['Review the memory database architecture, then summarize our previous decisions. Do not write files or execute code.', 'full'],
+    ['Do not hesitate to use my saved memory. Explain our previous decision. Do not write files or execute code.', 'compact'],
+    ['Do not search the web, use my saved memory instead. Do not write files or execute code.', 'compact'],
+    ['Do not search the web — use my saved memory instead. Do not write files or execute code.', 'compact'],
+    ['Use my saved memory if available. If you find nothing, say UNKNOWN. Do not write files or execute code.', 'compact'],
+    ['Use Waggle memory if available: when did we approve the budget in another session? Do not write files or execute code.', 'compact'],
+    ['Use Waggle memory if available: when exactly did we approve the budget in another session? Do not write files or execute code.', 'compact'],
+    ['Use Waggle memory if available: when, exactly, did we approve the budget? Do not write files or execute code.', 'compact'],
+    ['Use my saved memory if available. When the command finishes, summarize the output. Do not write files or execute code.', 'full'],
+  ] as const)('keeps first-turn owned context requests memory-capable: %s', async (message, expectedPackageMode) => {
     capturedConfig = null;
     const response = await injectWithAuth(server, {
       method: 'POST',
@@ -3681,9 +3681,17 @@ describe('persona acceptance prompt budget', () => {
     expect(capturedConfig!.systemPrompt).toContain(PERSISTED_IDENTITY_SENTINEL);
     expect(capturedConfig!.systemPrompt).toContain(PERSISTED_PROFILE_SENTINEL);
     expect(capturedConfig!.systemPrompt).toContain(PERSISTED_MEMORY_SENTINEL);
-    expect(capturedConfig!.systemPrompt).toContain(PERSISTED_SKILL_SENTINEL);
+    if (expectedPackageMode === 'full') {
+      expect(capturedConfig!.systemPrompt).toContain(PERSISTED_SKILL_SENTINEL);
+    } else {
+      expect(capturedConfig!.systemPrompt).not.toContain(PERSISTED_SKILL_SENTINEL);
+    }
     expect(capturedConfig!.capabilityRouter).toBeDefined();
-    expect(parseSse(response.body).some(event => event.data.name === 'auto_recall')).toBe(true);
+    const events = parseSse(response.body);
+    expect(events.some(event => event.data.name === 'auto_recall')).toBe(true);
+    expect(events.find(event => event.event === 'done')?.data.contextMetrics).toMatchObject({
+      packageMode: expectedPackageMode,
+    });
   });
 
   it.each([
