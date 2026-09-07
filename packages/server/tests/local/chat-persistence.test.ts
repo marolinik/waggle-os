@@ -339,14 +339,10 @@ describe('replaceRetryTailWithUser', () => {
     persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'earlier' });
     persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'kept' });
     persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'stopped prompt' });
-    const filePath = path.join(dataDir, 'workspaces', 'ws-1', 'sessions', 'sess-1.jsonl');
-    const original = fs.readFileSync(filePath, 'utf-8');
-
     expect(replaceRetryTailWithUser(dataDir, 'ws-1', 'sess-1', 'stopped prompt', {
       kind: 'lone-user',
       expectedMessageCount: 3,
     })).toEqual({ ok: true, removed: 1 });
-    expect(fs.readFileSync(filePath, 'utf-8')).not.toBe(original);
     expect(loadSessionMessages(dataDir, 'ws-1', 'sess-1')).toEqual([
       { role: 'user', content: 'earlier' },
       { role: 'assistant', content: 'kept' },

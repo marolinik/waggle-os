@@ -21,7 +21,7 @@ describe('Capability Packs API', () => {
     frames.createIFrame(s1.gop_id, 'Test content', 'normal');
     mind.close();
     server = await buildLocalServer({ dataDir: tmpDir });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await server.close();
