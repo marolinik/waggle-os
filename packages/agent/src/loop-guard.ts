@@ -25,6 +25,18 @@ interface CallRecord {
   success: boolean;
 }
 
+interface SuccessfulReadRange {
+  path: string;
+  start: number;
+  end: number;
+  lineNumbers: boolean;
+}
+
+const FILE_MUTATION_TOOLS = new Set([
+  'bash', 'run_code', 'write_file', 'edit_file', 'multi_edit',
+  'git_commit', 'git_merge', 'git_pull', 'git_stash',
+]);
+
 /**
  * Graduated verdict from {@link LoopGuard.checkTiered}. `block` results are
  * surfaced as first-party tool-result nudges; `abort` is a hard stop that the
@@ -47,6 +59,7 @@ export class LoopGuard {
 
   /** Graduated-tier state: outcome history of attempted executions. */
   private history: CallRecord[] = [];
+  private successfulReadRanges: SuccessfulReadRange[] = [];
   private identicalCallLimit: number;
   private identicalFailureLimit: number;
   private sameToolFailureLimit: number;
@@ -110,6 +123,23 @@ export class LoopGuard {
     if (this.history.length > this.historyCap) {
       this.history.splice(0, this.history.length - this.historyCap);
     }
+    if (!success) return;
+    if (FILE_MUTATION_TOOLS.has(toolName)) {
+      this.successfulReadRanges = [];
+      return;
+    }
+    const range = this.readRange(toolName, args);
+    if (!range) return;
+    this.successfulReadRanges = this.successfulReadRanges.filter(existing => !(
+      existing.path === range.path
+      && existing.lineNumbers === range.lineNumbers
+      && range.start <= existing.start
+      && range.end >= existing.end
+    ));
+    this.successfulReadRanges.push(range);
+    if (this.successfulReadRanges.length > this.historyCap) {
+      this.successfulReadRanges.splice(0, this.successfulReadRanges.length - this.historyCap);
+    }
   }
 
   /**
@@ -120,6 +150,19 @@ export class LoopGuard {
    */
   checkTiered(toolName: string, args: Record<string, unknown>): LoopGuardVerdict {
     const argsHash = this.hashArgs(args);
+    const requestedRead = this.readRange(toolName, args);
+    if (requestedRead && this.successfulReadRanges.some(existing => (
+      existing.path === requestedRead.path
+      && existing.lineNumbers === requestedRead.lineNumbers
+      && existing.start <= requestedRead.start
+      && existing.end >= requestedRead.end
+    ))) {
+      return {
+        action: 'block',
+        tier: 'T1',
+        reason: 'This file range was already read successfully. Use the prior result instead of reading it again.',
+      };
+    }
 
     // Same-tool consecutive failures (shared by T3 abort + T4 block).
     // Break on a different tool or on a success.
@@ -196,9 +239,28 @@ export class LoopGuard {
     this.consecutiveCount = 0;
     this.window = [];
     this.history = [];
+    this.successfulReadRanges = [];
   }
 
   private hashArgs(args: Record<string, unknown>): string {
     return createHash('sha256').update(JSON.stringify(args)).digest('hex');
+  }
+
+  private readRange(toolName: string, args: Record<string, unknown>): SuccessfulReadRange | null {
+    if (toolName !== 'read_file' || typeof args.path !== 'string' || args.path.trim().length === 0) {
+      return null;
+    }
+    const path = args.path.trim().replace(/\\/g, '/').replace(/^\.\/+/, '');
+    const start = typeof args.offset === 'number' && Number.isFinite(args.offset) && args.offset >= 1
+      ? Math.floor(args.offset)
+      : 1;
+    if (args.limit !== undefined
+      && (typeof args.limit !== 'number' || !Number.isFinite(args.limit) || args.limit < 1)) {
+      return null;
+    }
+    const end = typeof args.limit === 'number'
+      ? start + Math.floor(args.limit) - 1
+      : Number.POSITIVE_INFINITY;
+    return { path, start, end, lineNumbers: args.line_numbers === true };
   }
 }
