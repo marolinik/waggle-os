@@ -761,6 +761,31 @@ describe('P1b auth gate', () => {
     }
   });
 
+  it('auditSkills keeps a run-and-grade request alive beyond the default 10-second timeout', async () => {
+    vi.useFakeTimers();
+    const a = new LocalAdapter(BASE);
+    fetchSpy.mockImplementation(async (_url, init) => new Promise<Response>((resolve, reject) => {
+      const signal = (init as RequestInit | undefined)?.signal;
+      const completion = setTimeout(() => resolve(jsonRes({
+        ok: true,
+        report: {
+          verified: ['decision-matrix'], failed: [], flagged: [], inconclusive: [], demoted: [], skipped: [],
+        },
+      })), 11_000);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(completion);
+        reject(new DOMException('The operation was aborted', 'AbortError'));
+      }, { once: true });
+    }));
+
+    const request = a.auditSkills(['decision-matrix']);
+    await vi.advanceTimersByTimeAsync(11_000);
+    await expect(request).resolves.toMatchObject({
+      ok: true,
+      report: { verified: ['decision-matrix'] },
+    });
+  });
+
   it('abortAgent cancels only the requested chat session', async () => {
     const a = new LocalAdapter(BASE);
     const requestSignals: AbortSignal[] = [];

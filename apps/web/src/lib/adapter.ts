@@ -1810,7 +1810,7 @@ class LocalAdapter {
     const res = await this.fetch('/api/skills/audit', {
       method: 'POST',
       body: JSON.stringify(names && names.length ? { names } : {}),
-    });
+    }, 180_000);
     return res.json();
   }
 
