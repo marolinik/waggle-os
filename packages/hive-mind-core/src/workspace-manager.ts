@@ -190,7 +190,10 @@ export class WorkspaceManager {
   ensure(id: string, options: Partial<CreateWorkspaceOptions> = {}): WorkspaceConfig {
     this.assertWorkspaceId(id);
     const existing = this.get(id);
-    if (existing) return existing;
+    if (existing) {
+      this.ensureManagedFilesDirectory(existing);
+      return existing;
+    }
     const workspacePath = path.join(this.resolveWorkspaceRoot(), id);
     const workspaceStat = fs.lstatSync(workspacePath, { throwIfNoEntry: false });
     if (workspaceStat) {
@@ -223,6 +226,9 @@ export class WorkspaceManager {
       throw new Error(`Workspace path escapes workspace root: ${id}`);
     }
     fs.mkdirSync(path.join(canonicalWorkspace, 'sessions'));
+    if (options.directory === undefined) {
+      fs.mkdirSync(path.join(canonicalWorkspace, 'files'));
+    }
 
     // Touch workspace.mind — MindDB will init schema when first opened
     fs.writeFileSync(path.join(canonicalWorkspace, 'workspace.mind'), '', { flag: 'wx' });
@@ -471,6 +477,25 @@ export class WorkspaceManager {
     return canonicalWorkspace;
   }
 
+  private ensureManagedFilesDirectory(workspace: WorkspaceConfig): void {
+    if (workspace.directory !== undefined) return;
+    const workspaceDir = this.resolveWorkspaceDir(workspace.id);
+    if (!workspaceDir) throw new Error(`Workspace not found: ${workspace.id}`);
+
+    const filesDir = path.join(workspaceDir, 'files');
+    const existing = fs.lstatSync(filesDir, { throwIfNoEntry: false });
+    if (!existing) fs.mkdirSync(filesDir);
+
+    const filesStat = fs.lstatSync(filesDir);
+    if (filesStat.isSymbolicLink() || !filesStat.isDirectory()) {
+      throw new Error(`Workspace files path is not a regular directory: ${workspace.id}`);
+    }
+    const canonicalFiles = fs.realpathSync.native(filesDir);
+    if (!isContained(workspaceDir, canonicalFiles)) {
+      throw new Error(`Workspace files path escapes workspace directory: ${workspace.id}`);
+    }
+  }
+
   private resolveWorkspaceRoot(): string {
     const rootStat = fs.lstatSync(this.workspacesDir, { throwIfNoEntry: false });
     if (!rootStat?.isDirectory() || rootStat.isSymbolicLink()) {
@@ -510,7 +535,9 @@ export class WorkspaceManager {
     if (existing.length > 0) {
       const defaultId = this.getDefault();
       const found = defaultId ? this.get(defaultId) : null;
-      return found ?? existing[0];
+      const selected = found ?? existing[0];
+      this.ensureManagedFilesDirectory(selected);
+      return selected;
     }
 
     const ws = this.create({

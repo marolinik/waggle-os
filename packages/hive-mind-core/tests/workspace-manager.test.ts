@@ -35,7 +35,7 @@ describe('WorkspaceManager', () => {
   });
 
   describe('create', () => {
-    it('creates workspace with directory, config, mind file, and sessions dir', () => {
+    it('creates workspace with directory, config, mind file, sessions, and managed files dir', () => {
       const ws = manager.create({ name: 'My Project', group: 'Work' });
 
       expect(ws.id).toBe('my-project');
@@ -49,6 +49,33 @@ describe('WorkspaceManager', () => {
       expect(fs.existsSync(path.join(wsDir, 'workspace.mind'))).toBe(true);
       expect(fs.existsSync(path.join(wsDir, 'sessions'))).toBe(true);
       expect(fs.statSync(path.join(wsDir, 'sessions')).isDirectory()).toBe(true);
+      expect(fs.statSync(path.join(wsDir, 'files')).isDirectory()).toBe(true);
+    });
+
+    it('repairs a missing managed files dir when restoring the default workspace', () => {
+      const ws = manager.ensureDefault();
+      const filesDir = path.join(tmpDir, 'workspaces', ws.id, 'files');
+      fs.rmSync(filesDir, { recursive: true, force: true });
+
+      const restored = manager.ensureDefault();
+
+      expect(restored.id).toBe(ws.id);
+      expect(fs.statSync(filesDir).isDirectory()).toBe(true);
+    });
+
+    it('rejects a managed files junction that escapes the workspace', () => {
+      const ws = manager.ensureDefault();
+      const filesDir = path.join(tmpDir, 'workspaces', ws.id, 'files');
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-ws-files-outside-'));
+      fs.rmSync(filesDir, { recursive: true, force: true });
+      fs.symlinkSync(outsideDir, filesDir, process.platform === 'win32' ? 'junction' : 'dir');
+
+      try {
+        expect(() => manager.ensureDefault()).toThrow(/files path/i);
+      } finally {
+        fs.unlinkSync(filesDir);
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
     });
   });
 
