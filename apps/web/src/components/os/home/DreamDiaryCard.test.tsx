@@ -5,8 +5,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
+const h = vi.hoisted(() => ({ adapterFetch: vi.fn() }));
+
 vi.mock('@/lib/adapter', () => ({
-  adapter: { getServerUrl: () => 'http://127.0.0.1:3333' },
+  adapter: {
+    getServerUrl: () => 'http://127.0.0.1:3333',
+    fetch: h.adapterFetch,
+  },
 }));
 
 import DreamDiaryCard, { dreamDateLabel, type DreamDayView } from './DreamDiaryCard';
@@ -21,13 +26,12 @@ function day(date: string, overrides: Partial<DreamDayView> = {}): DreamDayView 
 }
 
 function stubDreams(body: DreamDayView[]): void {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(body), { status: 200 }),
-  ));
+  h.adapterFetch.mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
 }
 
 beforeEach(() => {
   vi.useRealTimers();
+  h.adapterFetch.mockReset();
 });
 
 afterEach(() => {
@@ -39,15 +43,21 @@ describe('DreamDiaryCard', () => {
   it('renders nothing when there are no dreams yet', async () => {
     stubDreams([]);
     const { container } = render(<DreamDiaryCard />);
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    await waitFor(() => expect(h.adapterFetch).toHaveBeenCalled());
     expect(container.querySelector('[data-testid="home-dream-diary"]')).toBeNull();
   });
 
   it('renders nothing when the service is unreachable', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    h.adapterFetch.mockRejectedValue(new Error('ECONNREFUSED'));
     const { container } = render(<DreamDiaryCard />);
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    await waitFor(() => expect(h.adapterFetch).toHaveBeenCalled());
     expect(container.querySelector('[data-testid="home-dream-diary"]')).toBeNull();
+  });
+
+  it('loads through the authenticated adapter rather than raw fetch', async () => {
+    stubDreams([]);
+    render(<DreamDiaryCard />);
+    await waitFor(() => expect(h.adapterFetch).toHaveBeenCalledWith('/api/dreams?days=7'));
   });
 
   it('shows the narrative when present, summary otherwise', async () => {
