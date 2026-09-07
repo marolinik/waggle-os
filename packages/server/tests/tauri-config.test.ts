@@ -777,7 +777,8 @@ describe('Tauri Production Configuration', () => {
       'brace-expansion@1': '1.1.18',
       'brace-expansion@2': '2.1.4',
       'brace-expansion@5': '5.0.9',
-      'fast-uri': '3.1.5',
+      'fast-uri': '3.1.7',
+      browserslist: '4.28.9',
       'ip-address': '10.4.0',
       'find-my-way': '9.7.0',
       'js-yaml': '4.3.1',
@@ -829,7 +830,8 @@ describe('Tauri Production Configuration', () => {
 
     expect(versionsFor('@fastify/static')).toEqual(new Set(['10.1.2']));
     expect(versionsFor('brace-expansion')).toEqual(new Set(['1.1.18', '2.1.4', '5.0.9']));
-    expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.5']));
+    expect(versionsFor('fast-uri')).toEqual(new Set(['3.1.7']));
+    expect(versionsFor('browserslist')).toEqual(new Set(['4.28.9']));
     expect(versionsFor('ip-address')).toEqual(new Set(['10.4.0']));
     expect(versionsFor('find-my-way')).toEqual(new Set(['9.7.0']));
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
@@ -873,7 +875,7 @@ describe('Tauri Production Configuration', () => {
 
     try {
       writeManifest('brace-expansion', 'brace-expansion', '5.0.9');
-      writeManifest('fast-uri', 'fast-uri', '3.1.5');
+      writeManifest('fast-uri', 'fast-uri', '3.1.7');
       writeManifest('ip-address', 'ip-address', '10.4.0');
       writeManifest('better-sqlite3', 'better-sqlite3', '12.9.0');
       writeManifest('sharp', 'sharp', '0.35.3');
@@ -942,11 +944,11 @@ describe('Tauri Production Configuration', () => {
       expect(vulnerableStagedBrace.stderr).toContain('brace-expansion@5.0.7');
       writeManifest('brace-expansion', 'brace-expansion', '5.0.9');
 
-      writeManifest('fast-uri', 'fast-uri', '3.1.4');
+      writeManifest('fast-uri', 'fast-uri', '3.1.5');
       const vulnerableFastUri = run();
       expect(vulnerableFastUri.status).toBe(1);
-      expect(vulnerableFastUri.stderr).toContain('fast-uri@3.1.4');
-      writeManifest('fast-uri', 'fast-uri', '3.1.5');
+      expect(vulnerableFastUri.stderr).toContain('fast-uri@3.1.5');
+      writeManifest('fast-uri', 'fast-uri', '3.1.7');
 
       writeManifest('ip-address', 'ip-address', '10.2.0');
       const vulnerableIpAddress = run();
