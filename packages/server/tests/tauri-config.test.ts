@@ -1980,6 +1980,13 @@ describe('Tauri Production Configuration', () => {
 });
 
 describe('CI/CD Configuration', () => {
+  it('gives broad-suite lifecycle hooks the same contention budget as tests', () => {
+    const config = fs.readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf-8');
+
+    expect(config).toMatch(/testTimeout:\s*30_000/);
+    expect(config).toMatch(/hookTimeout:\s*30_000/);
+  });
+
   it('bounds the broad root Vitest lane to two workers', () => {
     const workflow = parseYaml(
       fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf-8'),

@@ -20,6 +20,9 @@ export default defineConfig({
     // diagnostics. Use `--silent=false` when investigating a failing case.
     silent: true,
     testTimeout: 30_000,
+    // Fastify setup/teardown can exceed Vitest's 10s hook default when the
+    // complete 700+ file gate shares a two-worker CI runner.
+    hookTimeout: 30_000,
     setupFiles: ['./vitest.setup.ts'],
     pool: 'forks',
     maxWorkers: 4,
