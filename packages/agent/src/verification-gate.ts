@@ -250,5 +250,5 @@ export const VERIFICATION_GATE_DIRECTIVE =
   + 'remains unchecked. Do not reassert success without evidence.';
 
 export const VERIFICATION_NO_TOOL_DISCLOSURE =
-  '\n\n**Verification: UNVERIFIED** — No verification-capable tool was available in this turn. '
-  + 'Any success or readiness condition above is therefore a proposed criterion, not a measured result.';
+  '\n\n**Verification scope: EVIDENCE-ONLY** — No execution/test tool was available in this turn. '
+  + 'File/source inspection may support content findings, but runtime success or readiness claims remain unverified.';

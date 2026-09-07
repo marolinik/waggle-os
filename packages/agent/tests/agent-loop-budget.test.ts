@@ -6,6 +6,7 @@ import {
 } from '../src/agent-run-budget.js';
 import { BudgetExceededError, CostTracker } from '../src/cost-tracker.js';
 import type { ToolDefinition } from '../src/tools.js';
+import { VERIFICATION_NO_TOOL_DISCLOSURE } from '../src/verification-gate.js';
 import {
   UNTRUSTED_GUARD_CLOSE,
   UNTRUSTED_GUARD_OPEN,
@@ -81,6 +82,12 @@ function researchConfig(
 }
 
 describe('agent run budget policy', () => {
+  it('describes a no-execution result as evidence-only without denying file inspection', () => {
+    expect(VERIFICATION_NO_TOOL_DISCLOSURE).toContain('Verification scope: EVIDENCE-ONLY');
+    expect(VERIFICATION_NO_TOOL_DISCLOSURE).toContain('File/source inspection may support content findings');
+    expect(VERIFICATION_NO_TOOL_DISCLOSURE).not.toContain('No verification-capable tool');
+  });
+
   it('bounds research while reserving a final synthesis turn', () => {
     const policy = selectAgentRunBudget({
       taskShape: 'research',
@@ -120,6 +127,19 @@ describe('agent run budget policy', () => {
     expect(multiStep.maxToolRounds).toBeGreaterThan(12);
     expect(document.maxToolRounds).toBeGreaterThan(12);
     expect(document.toolContextBudget.maxSingleResultChars).toBeGreaterThan(4_000);
+  });
+
+  it('keeps simple read-only workspace inspection within four tool rounds', () => {
+    const policy = selectAgentRunBudget({
+      taskShape: 'draft',
+      complexity: 'simple',
+      selectedToolNames: ['search_files', 'search_content', 'read_file'],
+    });
+
+    expect(policy.maxTurns).toBe(5);
+    expect(policy.maxToolRounds).toBe(4);
+    expect(policy.maxTokenBudget).toBe(48_000);
+    expect(policy.synthesisReserveTokens).toBe(10_000);
   });
 });
 

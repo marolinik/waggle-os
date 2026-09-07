@@ -2,7 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { execFile, type ChildProcess } from 'node:child_process';
+import ExcelJS from 'exceljs';
 import { glob } from 'glob';
+import JSZip from 'jszip';
 import type { ToolDefinition } from './tools.js';
 import { SearchCache, RateLimiter } from './web-search-utils.js';
 import { dedupTextResults, truncateToTokenBudget } from './tool-output-compressor.js';
@@ -102,6 +104,74 @@ export function extractWebPageText(body: string, sourceUrl: string): string {
 // Module-level instances — shared across all tool invocations
 const searchCache = new SearchCache(300_000); // 5 min TTL
 const searchRateLimiter = new RateLimiter(10, 60_000); // 10 searches per minute
+
+const OFFICE_DOCUMENT_EXTENSIONS = new Set(['.docx', '.pptx', '.xlsx']);
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
+}
+
+function extractTaggedText(xml: string, tag: string): string[] {
+  const pattern = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'g');
+  return [...xml.matchAll(pattern)].map(match => decodeXmlText(match[1])).filter(Boolean);
+}
+
+async function extractDocumentText(buffer: Buffer, ext: string): Promise<string> {
+  if (ext === '.pdf') {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      return (await parser.getText()).text.trim();
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  if (ext === '.xlsx') {
+    const workbook = new ExcelJS.Workbook();
+    const workbookBytes = Uint8Array.from(buffer).buffer as ArrayBuffer;
+    await workbook.xlsx.load(workbookBytes);
+    return workbook.worksheets.map((worksheet) => {
+      const rows: string[] = [];
+      worksheet.eachRow((row) => {
+        const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+        rows.push(values.map((value) => {
+          if (value === null || value === undefined) return '';
+          if (typeof value === 'object' && 'result' in value) return String(value.result ?? '');
+          if (typeof value === 'object' && 'text' in value) return String(value.text ?? '');
+          return String(value);
+        }).join(','));
+      });
+      return `--- Sheet: ${worksheet.name} ---\n${rows.join('\n')}`;
+    }).join('\n\n').trim();
+  }
+
+  const archive = await JSZip.loadAsync(buffer);
+  if (ext === '.docx') {
+    const document = archive.file('word/document.xml');
+    if (!document) throw new Error('DOCX document body is missing');
+    const xml = await document.async('string');
+    const paragraphs = [...xml.matchAll(/<w:p(?:\s[^>]*)?>([\s\S]*?)<\/w:p>/g)]
+      .map(match => extractTaggedText(match[1], 'w:t').join(''))
+      .filter(Boolean);
+    return paragraphs.join('\n').trim();
+  }
+
+  const slides = Object.keys(archive.files)
+    .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => Number(a.match(/(\d+)\.xml$/)?.[1]) - Number(b.match(/(\d+)\.xml$/)?.[1]));
+  return (await Promise.all(slides.map(async (name, index) => {
+    const xml = await archive.file(name)!.async('string');
+    return `--- Slide ${index + 1} ---\n${extractTaggedText(xml, 'a:t').join('\n')}`;
+  }))).join('\n\n').trim();
+}
 
 /** Background task tracking */
 interface BackgroundTask {
@@ -440,42 +510,9 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
       const filePath = args.path as string;
       const ext = path.extname(filePath).toLowerCase();
 
-      // Image / PDF branches are fs-only in v1. Team-storage users will see
-      // backend routing for text files; images/PDFs stay on local disk until
-      // Bucket 2 adds binary-stream support in the backend contract.
-      if (!fileBackend) {
-        const resolved = resolveReadablePath(filePath);
-
-        if (IMAGE_EXTENSIONS.has(ext)) {
-          const stat = fs.statSync(resolved);
-          return { content: `[Image file: ${filePath}, ${stat.size} bytes]`, isError: false };
-        }
-        if (ext === '.pdf') {
-          const stat = fs.statSync(resolved);
-          try {
-            // pdf-parse is an optional CJS module; describe only the call we make.
-            type PdfParseFn = (buf: Buffer) => Promise<{ text: string }>;
-            const pdfModule = (await import('pdf-parse')) as unknown as
-              PdfParseFn & { default?: PdfParseFn };
-            const buffer = fs.readFileSync(resolved);
-            const parseFn: PdfParseFn = pdfModule.default ?? pdfModule;
-            const data = await parseFn(buffer);
-            const text = data.text;
-            return {
-              content: text || `[PDF file: ${filePath}, ${stat.size} bytes, no text content extracted]`,
-              isError: false,
-            };
-          } catch {
-            return {
-              content: `[PDF file: ${filePath}, ${stat.size} bytes. Install pdf-parse for text extraction: npm install pdf-parse]`,
-              isError: false,
-            };
-          }
-        }
-      }
-
-      // Text read — branch on backend presence.
+      // Read once from the active storage boundary, then decode by file type.
       let content: string;
+      let buffer: Buffer;
       if (fileBackend) {
         if (IMAGE_EXTENSIONS.has(ext)) {
           return {
@@ -483,18 +520,29 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             isError: false,
           };
         }
-        if (ext === '.pdf') {
-          return {
-            content: `[PDF file: ${filePath}, backend-routed read does not yet extract PDF text. Download the file to inspect it.]`,
-            isError: false,
-          };
-        }
         const key = resolveReadableBackendKey(filePath);
-        const buf = await fileBackend.read(key);
-        content = buf.toString('utf-8');
+        buffer = await fileBackend.read(key);
       } else {
         const resolved = resolveReadablePath(filePath);
-        content = fs.readFileSync(resolved, 'utf-8');
+        if (IMAGE_EXTENSIONS.has(ext)) {
+          const stat = fs.statSync(resolved);
+          return { content: `[Image file: ${filePath}, ${stat.size} bytes]`, isError: false };
+        }
+        buffer = fs.readFileSync(resolved);
+      }
+
+      if (ext === '.pdf' || OFFICE_DOCUMENT_EXTENSIONS.has(ext)) {
+        try {
+          content = await extractDocumentText(buffer, ext);
+          if (!content) content = `[${ext.slice(1).toUpperCase()} file: ${filePath}, ${buffer.length} bytes, no text content extracted]`;
+        } catch (error) {
+          return {
+            content: `[${ext.slice(1).toUpperCase()} file: ${filePath}, ${buffer.length} bytes, text extraction failed: ${error instanceof Error ? error.message : String(error)}]`,
+            isError: true,
+          };
+        }
+      } else {
+        content = buffer.toString('utf-8');
       }
 
       let lines = content.split('\n');
@@ -528,7 +576,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
   const readFileTool: ToolDefinition = {
     name: 'read_file',
-    description: 'Read contents of a file (path relative to workspace). Supports offset/limit for partial reads and line numbers.',
+    description: 'Read text from a workspace file, including PDF, DOCX, PPTX, and XLSX documents. Supports offset/limit for partial reads and line numbers.',
     offlineCapable: true,
     parameters: {
       type: 'object',

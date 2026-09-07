@@ -42,6 +42,7 @@ const DOCUMENT_TOOLS = new Set([
   'generate_docx',
   'generate_pdf',
   'generate_pptx',
+  'generate_xlsx',
   'write_file',
   'multi_edit',
 ]);
@@ -99,6 +100,20 @@ export function selectAgentRunBudget(input: AgentRunBudgetInput): AgentRunBudget
         maxSingleResultChars: 12_000,
         recentResultCount: 3,
         historicalResultChars: 1_200,
+      },
+    };
+  }
+
+  if (input.complexity === 'simple') {
+    return {
+      maxTurns: 5,
+      maxToolRounds: 4,
+      maxTokenBudget: 48_000,
+      synthesisReserveTokens: 10_000,
+      toolContextBudget: {
+        maxSingleResultChars: 4_000,
+        recentResultCount: 2,
+        historicalResultChars: 600,
       },
     };
   }
