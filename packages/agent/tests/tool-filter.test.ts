@@ -206,6 +206,25 @@ describe('selectToolsForTurn', () => {
     expect(selected.omittedCount).toBe(candidates.length - 2);
   });
 
+  it('keeps the document generator available for an explicit regenerate follow-up', () => {
+    const candidates = [
+      makeTool('generate_docx'),
+      makeTool('generate_pdf'),
+      makeTool('read_file'),
+      makeTool('search_memory'),
+    ];
+    const selected = selectToolsForTurn(candidates, {
+      message: 'Regenerate PM-Launch-Brief.docx with the same one-page launch brief content.',
+    });
+
+    expect(selected.tools.map(tool => tool.name)).toContain('generate_docx');
+
+    const bounded = selectToolsForTurn(candidates, {
+      message: 'Regenerate PM-Launch-Brief.docx with the same one-page launch brief content so it is refreshed in the workspace Library. Do not create any other file.',
+    });
+    expect(bounded.tools.map(tool => tool.name)).toContain('generate_docx');
+  });
+
   it.each([
     'Create two files named first.txt and second.txt containing exactly single line OK. Then verify them by reading them and respond with exactly OK.',
     'Create file named first.txt in this workspace containing exactly single line OK. Then verify second.txt by reading it and respond with exactly OK.',

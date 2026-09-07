@@ -121,7 +121,8 @@ import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import { getBoundTeamServer } from '../team-server-binding.js';
 import { fetchTeamServer } from '../team-server-egress.js';
 import { getResolvedChatWorkspaceId } from '../security-middleware.js';
-import type { GoalAncestry } from '@waggle/shared';
+import { addArtifact, patchArtifactInWorkspace, readArtifactIndex } from './artifact-index.js';
+import type { ArtifactKind, GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX, RISK_LEVELS, type RiskLevel } from '@waggle/shared';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
@@ -266,6 +267,28 @@ const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'read_other_workspace_file',
 ]);
 const EXPLICIT_READ_ONLY_TOOL_NAMES = new Set([...READONLY_TOOLS, 'read_skill']);
+const GENERATED_ARTIFACT_TO_LIBRARY: Record<string, {
+  kind: ArtifactKind;
+  mimeType: string;
+  pathKey: 'path' | 'filePath';
+}> = {
+  generate_docx: {
+    kind: 'document',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pathKey: 'path',
+  },
+  generate_pdf: { kind: 'document', mimeType: 'application/pdf', pathKey: 'filePath' },
+  generate_xlsx: {
+    kind: 'spreadsheet',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pathKey: 'filePath',
+  },
+  generate_pptx: {
+    kind: 'presentation',
+    mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    pathKey: 'filePath',
+  },
+};
 const PLAN_AUTHORING_TOOL_NAMES = new Set(['create_plan', 'add_plan_step']);
 const DECISION_MATRIX_TOOL_SEQUENCE = ['read_skill', 'calculate_decision_matrix'] as const;
 
@@ -312,14 +335,14 @@ export function hasRegulatedDisclaimer(content: string, personaId: string): bool
   return false;
 }
 
-const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|explore|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
+const EXPLICIT_GATED_ACTION_VERB_SOURCE = String.raw`(?:write|read|edit|modify|create|generate|regenerate|export|download|commit|push|pull|merge|branch|run|execute|install|delete|remove|inspect|explore|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|schedule|send|email|publish|upload|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|compute)`;
 const AMBIGUOUS_GATED_ACTION_VERB_SOURCE = String.raw`(?:message|share|post|update)`;
 const NEGATABLE_CAPABILITY_VERB_SOURCE = String.raw`(?:${EXPLICIT_GATED_ACTION_VERB_SOURCE}|${AMBIGUOUS_GATED_ACTION_VERB_SOURCE}|use|call|invoke|search|research|investigate|try|retry)`;
 const PRESENTATION_SIDE_EFFECT_PATTERN = new RegExp(
   String.raw`\b(?:${NEGATABLE_CAPABILITY_VERB_SOURCE}|persist|store|remember|launch)\b`,
   'i',
 );
-const CAPABILITY_GERUND_SOURCE = String.raw`(?:writing|reading|editing|modifying|creating|generating|exporting|downloading|committing|pushing|pulling|merging|branching|running|executing|installing|deleting|removing|inspecting|exploring|reviewing|analy[sz]ing|fixing|debugging|testing|validating|verifying|checking|building|compiling|typechecking|linting|refactoring|implementing|drafting|preparing|scheduling|sending|emailing|messaging|sharing|publishing|uploading|updating|posting|delegating|coordinating|orchestrating|browsing|navigating|opening|clicking|filling|querying|calculating|computing|using|calling|invoking|searching|researching|investigating|trying|retrying)`;
+const CAPABILITY_GERUND_SOURCE = String.raw`(?:writing|reading|editing|modifying|creating|generating|regenerating|exporting|downloading|committing|pushing|pulling|merging|branching|running|executing|installing|deleting|removing|inspecting|exploring|reviewing|analy[sz]ing|fixing|debugging|testing|validating|verifying|checking|building|compiling|typechecking|linting|refactoring|implementing|drafting|preparing|scheduling|sending|emailing|messaging|sharing|publishing|uploading|updating|posting|delegating|coordinating|orchestrating|browsing|navigating|opening|clicking|filling|querying|calculating|computing|using|calling|invoking|searching|researching|investigating|trying|retrying)`;
 const NEGATABLE_CAPABILITY_NOUN_SOURCE = String.raw`(?:calculator(?:\s+(?:tool|plugin))?|tools?|files?|documents?|artifacts?|workbooks?|spreadsheets?|xlsx|code|python|shell|browser|web|internet)`;
 const NEGATED_CAPABILITY_RESUME_SOURCE = String.raw`(?:\b(?:but|however|yet|instead|then)\b|[:\u2013\u2014]\s*(?=(?:please\s+)?${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
 const WITHOUT_CAPABILITY_RESUME_SOURCE = String.raw`(?:${NEGATED_CAPABILITY_RESUME_SOURCE}|\band\s+(?=${NEGATABLE_CAPABILITY_VERB_SOURCE}\b))`;
@@ -644,13 +667,32 @@ export function isExplicitGatedToolRequest(message: string): boolean {
   return hasExplicitGatedToolIntent(actionableMessage);
 }
 
-export function shouldRequireCapabilityAcquisitionTools(message: string): boolean {
+const BUILT_IN_ARTIFACT_GENERATOR_REQUESTS: ReadonlyArray<{
+  toolName: string;
+  pattern: RegExp;
+}> = [
+  { toolName: 'generate_docx', pattern: /\b(?:docx|word\s+document)\b/i },
+  { toolName: 'generate_pdf', pattern: /\bpdf\b/i },
+  { toolName: 'generate_xlsx', pattern: /\b(?:xlsx|excel\s+(?:file|workbook|spreadsheet)|spreadsheet)\b/i },
+  { toolName: 'generate_pptx', pattern: /\b(?:pptx|powerpoint|slide\s+deck|presentation)\b/i },
+];
+
+export function shouldRequireCapabilityAcquisitionTools(
+  message: string,
+  availableTools: readonly { name: string }[] = [],
+): boolean {
   if (isBoundedSingleFileRoundTrip(message)) return false;
   const actionableMessage = stripNegatedCapabilityClauses(message);
   if (RETRY_GATED_ACTION_PATTERN.test(actionableMessage)) return false;
   if (!DIRECT_CAPABILITY_ACTION_PATTERN.test(actionableMessage)) return false;
   if (/\bexplor(?:e|ing)\b/i.test(actionableMessage)) return false;
   if (isReadOnlyRepositoryDiscoveryRequest(actionableMessage)) {
+    return false;
+  }
+  const availableToolNames = new Set(availableTools.map(tool => tool.name));
+  if (BUILT_IN_ARTIFACT_GENERATOR_REQUESTS.some(({ toolName, pattern }) => (
+    availableToolNames.has(toolName) && pattern.test(actionableMessage)
+  ))) {
     return false;
   }
   return isExplicitGatedToolRequest(message);
@@ -3987,7 +4029,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               ...(requiredToolSequence ?? []),
               ...(explicitReadOnlyToolChoice ? [explicitReadOnlyToolChoice] : []),
               ...(shouldUsePersistedMemoryForTurn(agentMessage) ? ['search_memory'] : []),
-              ...(shouldRequireCapabilityAcquisitionTools(agentMessage)
+              ...(shouldRequireCapabilityAcquisitionTools(agentMessage, effectiveTools)
                 && !turnMutationPolicy.denyAllMutations
                 && !activePersona?.isReadOnly
                 ? ['search_skills', 'create_skill']
@@ -4454,15 +4496,56 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               sessionId,
             });
 
+            // Make generated Office/PDF outcomes discoverable in both the live
+            // chat and the persistent Library. Regeneration updates the same
+            // storage-path card instead of creating duplicates.
+            const generatedArtifact = GENERATED_ARTIFACT_TO_LIBRARY[name];
+            const generatedPath = generatedArtifact
+              ? String(input[generatedArtifact.pathKey] ?? '').trim()
+              : '';
+            if (generatedArtifact && generatedPath && !isError) {
+              const title = String(input.title ?? path.basename(generatedPath, path.extname(generatedPath))).trim();
+              const artifactInput = {
+                title: title || path.basename(generatedPath),
+                kind: generatedArtifact.kind,
+                source: 'agent',
+                createdBy: 'Waggle AI',
+                status: 'draft' as const,
+                mimeType: generatedArtifact.mimeType,
+                storagePath: generatedPath,
+                ...(sessionId ? { relatedSessionIds: [sessionId] } : {}),
+              };
+              try {
+                const existing = readArtifactIndex(server.localConfig.dataDir, executionScopeId)
+                  .find(artifact => artifact.storagePath === generatedPath);
+                if (existing) {
+                  patchArtifactInWorkspace(
+                    server.localConfig.dataDir,
+                    executionScopeId,
+                    existing.id,
+                    artifactInput,
+                  );
+                } else {
+                  addArtifact(server.localConfig.dataDir, executionScopeId, artifactInput);
+                }
+              } catch (error) {
+                log.warn('[chat] could not index generated artifact:', error);
+              }
+            }
+
             // Emit file_created events for file-writing tools
             const fileTools: Record<string, 'write' | 'edit' | 'generate'> = {
               write_file: 'write',
               edit_file: 'edit',
               generate_docx: 'generate',
+              generate_pdf: 'generate',
+              generate_xlsx: 'generate',
+              generate_pptx: 'generate',
             };
             const fileAction = fileTools[name];
-            if (fileAction && input.path && !result.startsWith('Error')) {
-              const filePath = String(input.path);
+            const filePathInput = input.path ?? input.filePath;
+            if (fileAction && filePathInput && !isError) {
+              const filePath = String(filePathInput);
               sendEvent('file_created', { filePath, fileAction });
             }
 

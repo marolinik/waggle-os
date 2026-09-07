@@ -7,7 +7,10 @@ import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/age
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
-import { isExplicitGatedToolRequest } from '../src/local/routes/chat.js';
+import {
+  isExplicitGatedToolRequest,
+  shouldRequireCapabilityAcquisitionTools,
+} from '../src/local/routes/chat.js';
 import { loadSessionMessages, persistMessage } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
@@ -109,6 +112,101 @@ describe('chat smart-router integration', () => {
     expect(capturedConfigs[0].modelSpendBillingClass).toBe('free');
     expect(capturedConfigs[0].spendWorkspaceId).toBe(activeWorkspaceId);
     expect(response.body).not.toContain('event: model_switch');
+  });
+
+  it('indexes successful Office and PDF outputs in the workspace Library', async () => {
+    server.agentRunner = async (agentConfig: AgentLoopConfig): Promise<AgentResponse> => {
+      agentConfig.onToolResult?.(
+        'generate_docx',
+        { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief' },
+        'Successfully generated PM-Launch-Brief.docx (11.9 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_pdf',
+        { filePath: 'PM-Launch-Brief.pdf', title: 'PM Launch Brief PDF' },
+        'Successfully generated PM-Launch-Brief.pdf (8.2 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_xlsx',
+        { filePath: 'PM-Launch-Tracker.xlsx', title: 'PM Launch Tracker' },
+        'Successfully generated PM-Launch-Tracker.xlsx (6.4 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_pptx',
+        { filePath: 'PM-Launch-Deck.pptx', title: 'PM Launch Deck' },
+        'Successfully generated PM-Launch-Deck.pptx (21.0 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_docx',
+        { path: 'PM-Launch-Brief.docx', title: 'PM Launch Brief Refreshed' },
+        'Successfully regenerated PM-Launch-Brief.docx (12.1 KB)',
+      );
+      agentConfig.onToolResult?.(
+        'generate_pdf',
+        { filePath: 'failed.pdf', title: 'Failed PDF' },
+        'Error generating PDF: renderer unavailable',
+      );
+      return {
+        content: 'Created the requested launch artifacts.',
+        toolsUsed: ['generate_docx', 'generate_pdf', 'generate_xlsx', 'generate_pptx'],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    };
+
+    const response = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/chat',
+      payload: {
+        message: 'Create polished Word, PDF, Excel, and PowerPoint launch artifacts.',
+        session: 'generated-artifact-library-index',
+      },
+    });
+    const library = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/artifacts?workspaceId=${encodeURIComponent(activeWorkspaceId)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(library.statusCode).toBe(200);
+    expect(library.json()).toMatchObject({
+      count: 4,
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          title: 'PM Launch Brief Refreshed',
+          kind: 'document',
+          workspaceId: activeWorkspaceId,
+          source: 'agent',
+          status: 'draft',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          storagePath: 'PM-Launch-Brief.docx',
+          relatedSessionIds: ['generated-artifact-library-index'],
+        }),
+        expect.objectContaining({
+          title: 'PM Launch Brief PDF',
+          kind: 'document',
+          storagePath: 'PM-Launch-Brief.pdf',
+        }),
+        expect.objectContaining({
+          title: 'PM Launch Tracker',
+          kind: 'spreadsheet',
+          storagePath: 'PM-Launch-Tracker.xlsx',
+        }),
+        expect.objectContaining({
+          title: 'PM Launch Deck',
+          kind: 'presentation',
+          storagePath: 'PM-Launch-Deck.pptx',
+        }),
+      ]),
+    });
+    expect(library.body).not.toContain('failed.pdf');
+    for (const fileName of [
+      'PM-Launch-Brief.docx',
+      'PM-Launch-Brief.pdf',
+      'PM-Launch-Tracker.xlsx',
+      'PM-Launch-Deck.pptx',
+    ]) {
+      expect(response.body).toContain(fileName);
+    }
   });
 
   it('does not retry or fall back after terminal hard-budget rejection', async () => {
@@ -823,6 +921,20 @@ describe('chat smart-router integration', () => {
 
   it('preserves a positive bounded execution request', () => {
     expect(isExplicitGatedToolRequest('Run no more than 2 tests.')).toBe(true);
+  });
+
+  it('preserves an explicit artifact regeneration request', () => {
+    expect(isExplicitGatedToolRequest('Regenerate PM-Launch-Brief.docx.')).toBe(true);
+    expect(isExplicitGatedToolRequest(
+      'Regenerate PM-Launch-Brief.docx with the same one-page launch brief content so it is refreshed in the workspace Library. Do not create any other file.',
+    )).toBe(true);
+  });
+
+  it('uses an available built-in artifact generator before capability acquisition', () => {
+    const message = 'Regenerate PM-Launch-Brief.docx with the same one-page launch brief content.';
+
+    expect(shouldRequireCapabilityAcquisitionTools(message, [{ name: 'generate_docx' }])).toBe(false);
+    expect(shouldRequireCapabilityAcquisitionTools(message, [])).toBe(true);
   });
 
   it.each([
