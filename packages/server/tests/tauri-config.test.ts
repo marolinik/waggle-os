@@ -772,6 +772,12 @@ describe('Tauri Production Configuration', () => {
     ) as {
       packages: Record<string, { version?: string }>;
     };
+    const appManifest = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'app', 'package.json'), 'utf-8'),
+    ) as { overrides?: Record<string, string> };
+    const appLockfile = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'app', 'package-lock.json'), 'utf-8'),
+    ) as { packages: Record<string, { version?: string }> };
     const expectedOverrides = {
       '@fastify/static': '>=10.1.2 <11',
       'brace-expansion@1': '1.1.18',
@@ -793,6 +799,7 @@ describe('Tauri Production Configuration', () => {
       '@huggingface/transformers': '3.8.1',
       sharp: '0.35.3',
     });
+    expect(appManifest.overrides).toMatchObject({ browserslist: '4.28.9' });
 
     const fastifyStaticRanges = ['launcher', 'server'].map((workspace) => {
       const workspaceManifest = JSON.parse(fs.readFileSync(
@@ -837,6 +844,11 @@ describe('Tauri Production Configuration', () => {
     expect(versionsFor('js-yaml')).toEqual(new Set(['4.3.1']));
     expect(versionsFor('sharp')).toEqual(new Set(['0.35.3']));
     expect(versionsFor('better-sqlite3')).toEqual(new Set(['12.6.2']));
+    expect(new Set(
+      Object.entries(appLockfile.packages)
+        .filter(([packagePath]) => packagePath.endsWith('node_modules/browserslist'))
+        .map(([, metadata]) => metadata.version),
+    )).toEqual(new Set(['4.28.9']));
     const sharpBindings = Object.entries(lockfile.packages)
       .filter(([packagePath]) => (
         /node_modules\/@img\/sharp-(?!libvips-)[^/]+$/.test(packagePath)
