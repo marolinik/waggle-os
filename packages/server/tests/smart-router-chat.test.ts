@@ -869,6 +869,7 @@ describe('chat smart-router integration', () => {
     const providerRequests: Array<{
       model?: string;
       tools?: Array<{ function?: { name?: string } }>;
+      messages?: Array<{ role?: string; content?: string }>;
     }> = [];
     server.agentRunner = undefined;
     vi.restoreAllMocks();
@@ -930,6 +931,16 @@ describe('chat smart-router integration', () => {
         'search_skills',
         'create_skill',
       ]));
+      const transmittedSystemPrompt = providerRequests[0]?.messages
+        ?.find(message => message.role === 'system')?.content ?? '';
+      const selfAwarenessSection = transmittedSystemPrompt.match(
+        /# Self-Awareness[\s\S]*?## Groundedness/,
+      )?.[0] ?? '';
+      expect(selfAwarenessSection).toContain(
+        `${transmittedNames.length} tools available: ${transmittedNames.join(', ')}.`,
+      );
+      const omittedNames = candidateNames.filter(name => !transmittedNames.includes(name));
+      expect(omittedNames.some(name => selfAwarenessSection.includes(name))).toBe(false);
       const serializedSchemaChars = JSON.stringify(transmittedTools).length;
       expect(serializedSchemaChars).toBeLessThanOrEqual(8_000);
 

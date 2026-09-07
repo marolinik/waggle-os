@@ -1803,6 +1803,7 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
     toolFreeAdvisory = false,
     includePersistedMemory = true,
     includeConversationDerivedWorkspaceState = true,
+    availableTools?: readonly Pick<ToolDefinition, 'name' | 'description'>[],
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
@@ -1904,7 +1905,7 @@ const PERSONAL_CHAT_COMMAND_CONTEXT = 'Personal';
       orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
     }
     prompt += assembled?.system
-      ?? (includePersistedMemory ? orch.buildSystemPrompt(selectedModel) : '');
+      ?? (includePersistedMemory ? orch.buildSystemPrompt(selectedModel, availableTools) : '');
 
     // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
     if (includePersistedMemory) {
@@ -3257,32 +3258,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // to the static system prompt — never block a chat turn on assembler errors.
         const turnTaskShape = detectTaskShape(agentMessage);
         let assembled: AssembledPrompt | null = null;
-        if (!hasCustomRunner
+        const shouldAssemblePrompt = !hasCustomRunner
           && turnMutationPolicy.contextScope === 'default'
           && persistedMemoryReadAllowed
           && !toolFreeAdvisory
           && !explicitReadOnlyToolCandidate
-          && isEnabled('PROMPT_ASSEMBLER')) {
-          try {
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
-              taskShape: turnTaskShape,
-              turnId,
-              recalledText: recallTextForAssembler,
-              model: resolvedModel,
-            });
-            throwIfTurnAborted();
-            log.info(
-              `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
-              + `shape=${turnTaskShape.type ?? 'none'} conf=${turnTaskShape.confidence.toFixed(2)} `
-              + `tier=${assembled.debug.tier} sections=${assembled.debug.sectionsIncluded.length} `
-              + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`
-            );
-          } catch (err) {
-            throwIfTurnAborted();
-            log.warn(`[prompt-assembler] failed, falling back to static prompt: ${(err as Error).message}`);
-            assembled = null;
-          }
-        }
+          && isEnabled('PROMPT_ASSEMBLER');
 
         // W4.5 (plan bug #9-1, double-inject): when the assembler ran, the
         // recall block is already INSIDE the assembled prompt — appending
@@ -4027,6 +4008,29 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           explicitReadOnlyToolChoice = undefined;
         }
 
+        if (shouldAssemblePrompt) {
+          try {
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, turnPersona, {
+              taskShape: turnTaskShape,
+              turnId,
+              recalledText: recallTextForAssembler,
+              model: resolvedModel,
+              availableTools: effectiveTools,
+            });
+            throwIfTurnAborted();
+            log.info(
+              `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
+              + `shape=${turnTaskShape.type ?? 'none'} conf=${turnTaskShape.confidence.toFixed(2)} `
+              + `tier=${assembled.debug.tier} sections=${assembled.debug.sectionsIncluded.length} `
+              + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`,
+            );
+          } catch (err) {
+            throwIfTurnAborted();
+            log.warn(`[prompt-assembler] failed, falling back to static prompt: ${(err as Error).message}`);
+            assembled = null;
+          }
+        }
+
         if (workspaceTurnScope) {
           const workspaceAccess = workspaceTurnScope.classify(effectiveTools, externalToolNames);
           if (workspaceAccess !== 'none') {
@@ -4089,6 +4093,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                   turnId,
                   recalledText: recallTextForAssembler,
                   model: logicalModel,
+                  availableTools: effectiveTools,
                 });
                 throwIfTurnAborted();
                 log.info(
@@ -4127,6 +4132,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               ),
               persistedMemoryReadAllowed,
               allowsConversationHistory(turnMutationPolicy),
+              effectiveTools,
             );
             const hasSpecialEvidenceBoundary = turnMutationPolicy.contextScope !== 'default'
               || closedWorldRewrite
