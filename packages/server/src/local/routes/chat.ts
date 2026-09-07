@@ -333,8 +333,20 @@ const DIRECT_CAPABILITY_ACTION_PATTERN = new RegExp(
   String.raw`^\s*${DIRECT_CAPABILITY_LEAD_SOURCE}${NEGATABLE_CAPABILITY_VERB_SOURCE}\b`,
   'i',
 );
-const READ_ONLY_REPOSITORY_DISCOVERY_PATTERN = /(?:^|[.;:!?\r\n]\s*|\b(?:and|but|then)\s+)(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want)\s+you\s+to\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?(?:(?:explore|examine|understand|look\s+(?:through|at))\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|code|project|workspace)\b|inspect\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|workspace)\b)/i;
+const READ_ONLY_REPOSITORY_DISCOVERY_PATTERN = /(?:^|[.;:!?\r\n]\s*|\b(?:and|but|then)\s+)(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want)\s+you\s+to\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?(?:(?:use|using)\s+(?:the\s+)?(?:available\s+)?tools?\s+to\s+)?(?:(?:explore|examine|understand|look\s+(?:through|at))\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|code|project|workspace)\b|inspect\b[^.;!?\r\n]*\b(?:repo(?:sitory)?|codebase|workspace)\b)/i;
 const REPOSITORY_EXECUTION_OR_MUTATION_PATTERN = /(?:^|[.;:!?\r\n]\s*|\b(?:and|but|then)\s+)(?:(?:please(?:,\s*|\s+))|(?:(?:can|could|would|will)\s+(?:you|we)\s+(?:please(?:,\s*|\s+))?)|(?:i\s+(?:need|want)\s+you\s+to\s+)|(?:let(?:['\u2019]s|\s+us)\s+))?(?:run|execute|test|fix|debug|edit|modify|write|create|implement|compile|lint|refactor|commit|push|pull|merge|delete|remove)\b|\b(?:use|using)\s+(?:bash|terminal|shell)\b/i;
+const REPOSITORY_MUTATION_OR_EXECUTION_SIGNAL = /\b(?:run|execute|test|fix|debug|edit|modify|write|create|generate|implement|compile|lint|refactor|commit|push|pull|merge|delete|remove|delegate|launch|send|publish|upload|install)\b/i;
+const REPOSITORY_DISCOVERY_TOOL_NAMES = new Set([
+  'read_file', 'search_files', 'search_content',
+  'git_status', 'git_diff', 'git_log',
+]);
+
+function isReadOnlyRepositoryDiscoveryRequest(message: string): boolean {
+  const actionableMessage = stripNegatedCapabilityClauses(message);
+  return READ_ONLY_REPOSITORY_DISCOVERY_PATTERN.test(actionableMessage)
+    && !REPOSITORY_EXECUTION_OR_MUTATION_PATTERN.test(actionableMessage)
+    && !REPOSITORY_MUTATION_OR_EXECUTION_SIGNAL.test(actionableMessage);
+}
 const NEGATED_CAPABILITY_DIRECTIVE_SOURCE = String.raw`(?:do\s+not|don['\u2019]t|(?:do\s+not|don['\u2019]t)\s+want\s+to|never|must\s+not|mustn['\u2019]t|should\s+not|shouldn['\u2019]t|may\s+not|might\s+not|cannot|can\s+not|can['\u2019]t|will\s+not|won['\u2019]t|would\s+not|wouldn['\u2019]t|(?:am|are|is|['\u2019](?:m|re|s))\s+not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?|(?:aren['\u2019]t|isn['\u2019]t)\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to)|there\s+(?:is|['\u2019]s)\s+no\s+need\s+to|not(?:\s+(?:ready(?:\s+to)?|able\s+to|allowed\s+to|going\s+to))?)`;
 const DIRECT_NEGATED_CAPABILITY_PATTERN = new RegExp(
   String.raw`\b${NEGATED_CAPABILITY_DIRECTIVE_SOURCE}\s+${NEGATABLE_CAPABILITY_VERB_SOURCE}\b${DIRECT_NEGATED_CAPABILITY_TAIL_SOURCE}`,
@@ -638,8 +650,7 @@ export function shouldRequireCapabilityAcquisitionTools(message: string): boolea
   if (RETRY_GATED_ACTION_PATTERN.test(actionableMessage)) return false;
   if (!DIRECT_CAPABILITY_ACTION_PATTERN.test(actionableMessage)) return false;
   if (/\bexplor(?:e|ing)\b/i.test(actionableMessage)) return false;
-  if (READ_ONLY_REPOSITORY_DISCOVERY_PATTERN.test(actionableMessage)
-    && !REPOSITORY_EXECUTION_OR_MUTATION_PATTERN.test(actionableMessage)) {
+  if (isReadOnlyRepositoryDiscoveryRequest(actionableMessage)) {
     return false;
   }
   return isExplicitGatedToolRequest(message);
@@ -1254,6 +1265,9 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
   if (mutationPolicy.denyAllMutations) {
     return eligibleTools.filter(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name));
   }
+  if (autonomyLevel === 'normal' && isReadOnlyRepositoryDiscoveryRequest(message)) {
+    return eligibleTools.filter(tool => REPOSITORY_DISCOVERY_TOOL_NAMES.has(tool.name));
+  }
   if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return eligibleTools;
   const allowMemorySearch = shouldUsePersistedMemoryForTurn(message);
   const allowMemorySave = isExplicitMemorySaveRequest(message);
@@ -1280,6 +1294,8 @@ export function filterPluginToolsForConversationalTurn(
   onWithheld?: (count: number) => void,
   mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): PluginToolProvider {
+  const readOnlyRepositoryDiscovery = autonomyLevel === 'normal'
+    && isReadOnlyRepositoryDiscoveryRequest(message);
   if (!mutationPolicy.denyAllMutations
     && !mutationPolicy.denyMemoryRead
     && !mutationPolicy.denyMemoryPersistence
@@ -1287,7 +1303,8 @@ export function filterPluginToolsForConversationalTurn(
     && !mutationPolicy.denyCodeExecution
     && !mutationPolicy.denyAgentLaunch
     && mutationPolicy.contextScope === 'default'
-    && !shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
+    && !shouldNarrowToolsForConversationalTurn(message, autonomyLevel)
+    && !readOnlyRepositoryDiscovery) return provider;
 
   return {
     getAllTools: () => {
@@ -1302,6 +1319,7 @@ export function filterPluginToolsForConversationalTurn(
         pluginNames,
       );
       const filtered = shouldNarrowToolsForConversationalTurn(message, autonomyLevel)
+        || readOnlyRepositoryDiscovery
         ? []
         : policyFiltered;
       if (filtered.length !== pluginTools.length) {
@@ -1992,7 +2010,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // BEHAVIORAL_SPEC when the server hasn't decorated activeBehavioralSpec
     // (legacy test harness).
     const activeSpec = server.activeBehavioralSpec ?? BEHAVIORAL_SPEC;
-    prompt += '\n' + behavioralRulesForPromptPackage(activeSpec, packageMode);
+    prompt += '\n' + behavioralRulesForPromptPackage(activeSpec, packageMode, selectedToolCount);
 
     // Token monitoring
     const estimatedTokens = Math.ceil(prompt.length / 4);
@@ -4073,6 +4091,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             explicitCapabilityRequest,
             taskComplexity: turnTaskShape.complexity,
             suspiciousInjection: !injectionResult.safe,
+            selectedToolsReadOnly: effectiveTools.length > 0
+              && effectiveTools.every(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name)),
             explicitReadOnlyToolChoice: explicitReadOnlyToolChoice === explicitReadOnlyToolCandidate
               ? explicitReadOnlyToolChoice
               : undefined,

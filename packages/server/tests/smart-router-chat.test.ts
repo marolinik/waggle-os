@@ -1002,6 +1002,10 @@ describe('chat smart-router integration', () => {
       ]));
       const discoverySchemaChars = JSON.stringify(discoveryTools).length;
       expect(discoverySchemaChars).toBeLessThanOrEqual(8_000);
+      const discoverySystemPrompt = providerRequests[1]?.messages
+        ?.find(message => message.role === 'system')?.content ?? '';
+      expect(discoverySystemPrompt).toContain('# READ-ONLY OPERATING CONTRACT');
+      expect(discoverySystemPrompt.length).toBeLessThan(18_000);
       const discoveryDoneMatches = [
         ...discoveryResponse.body.matchAll(/event: done\r?\ndata: (.+?)(?:\r?\n|$)/g),
       ];

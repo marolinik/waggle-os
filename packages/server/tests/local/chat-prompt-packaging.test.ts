@@ -109,6 +109,36 @@ describe('chat prompt packaging', () => {
     })).toBe('compact');
   });
 
+  it('keeps a short normal read-only workspace inspection on the compact package', () => {
+    const message = 'Use the available tools to inspect this workspace. Report only evidence you actually verified, state exactly which tools you used, and do not claim any unavailable capability.';
+
+    expect(message.length).toBeLessThanOrEqual(512);
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message,
+      selectedToolCount: 11,
+      selectedToolsReadOnly: true,
+      explicitCapabilityRequest: true,
+      taskComplexity: 'moderate',
+    })).toBe('compact');
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message,
+      selectedToolCount: 11,
+      selectedToolsReadOnly: false,
+      explicitCapabilityRequest: true,
+      taskComplexity: 'moderate',
+    })).toBe('full');
+    expect(selectChatPromptPackageMode({
+      ...baseModeInput,
+      message: 'Inspect this workspace for API keys and private credentials.',
+      selectedToolCount: 5,
+      selectedToolsReadOnly: true,
+      explicitCapabilityRequest: true,
+      taskComplexity: 'moderate',
+    })).toBe('full');
+  });
+
   it('recognizes the explicit no-tools onboarding first task before tool selection', () => {
     const policy = classifyExplicitTurnMutationPolicy(onboardingFirstTaskPrompt);
     const explicitToolFreeAdvisory = isExplicitToolFreeAdvisoryRequest(
@@ -337,6 +367,18 @@ describe('chat prompt packaging', () => {
     expect(compact).toMatch(/do not claim.*tool/i);
     expect(compact).toMatch(/regulated topics/i);
     expect(compact).toContain('unless the user specified a response syntax or shape that does not permit it');
+    expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
+  });
+
+  it('compact read-only rules remain truthful and mutation-free', () => {
+    const compact = behavioralRulesForPromptPackage(BEHAVIORAL_SPEC, 'compact', 5);
+
+    expect(compact.length).toBeLessThan(5_000);
+    expect(compact).toContain('# READ-ONLY OPERATING CONTRACT');
+    expect(compact).toMatch(/explicitly serialized read-only tools/i);
+    expect(compact).toMatch(/state exactly which tools were used/i);
+    expect(compact).toMatch(/never write, edit, execute code, launch agents/i);
+    expect(compact).not.toMatch(/No tools are available/i);
     expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
   });
 
@@ -725,6 +767,26 @@ describe('chat prompt packaging', () => {
 
     expect(filterGatedToolsForConversationalTurn(tools, message, 'normal'))
       .toEqual([{ name: 'read_file' }, { name: 'search_files' }]);
+  });
+
+  it('keeps the exact live workspace-inspection request read-only before selection', () => {
+    const message = 'Use the available tools to inspect this workspace. Report only evidence you actually verified, state exactly which tools you used, and do not claim any unavailable capability.';
+    const tools = [
+      'bash', 'read_file', 'write_file', 'edit_file', 'search_files',
+      'search_content', 'web_search', 'web_fetch', 'search_memory',
+      'save_memory', 'generate_docx', 'create_skill', 'search_skills',
+      'get_awareness', 'git_status', 'git_diff', 'git_log',
+    ].map(name => ({ name }));
+
+    expect(filterGatedToolsForConversationalTurn(tools, message, 'normal'))
+      .toEqual([
+        { name: 'read_file' },
+        { name: 'search_files' },
+        { name: 'search_content' },
+        { name: 'git_status' },
+        { name: 'git_diff' },
+        { name: 'git_log' },
+      ]);
   });
 
   it('requires executive-assistant timed agendas to fill the requested duration', () => {
