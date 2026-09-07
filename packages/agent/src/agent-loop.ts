@@ -70,6 +70,8 @@ export interface AgentLoopConfig {
   onToken?: (token: string) => void;
   /** Reports a bounded, user-safe retry notice without mixing it into answer tokens. */
   onRetry?: (notice: string) => void;
+  /** Signals the first valid provider stream activity without exposing its contents. */
+  onModelActivity?: () => void;
   /** Signals provider reasoning activity without exposing private reasoning text. */
   onReasoningActivity?: () => void;
   onToolUse?: (name: string, input: Record<string, unknown>) => void;
@@ -324,6 +326,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     tools: configTools,
     messages: inputMessages,
     onToken,
+    onModelActivity,
     onReasoningActivity,
     onToolUse: userOnToolUse,
     onToolResult: userOnToolResult,
@@ -352,6 +355,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // streams and emit the normalized accepted response once; other providers
   // retain their existing token streaming behavior.
   const bufferReasoningSensitiveStream = stream && isQwenModel;
+  let modelActivityObserved = false;
 
   if (
     config.maxTokenBudget !== undefined
@@ -1189,6 +1193,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
                 onActivity: () => {
                   if (!streamStageActive || requestSignal.aborted) return;
                   disarmInitialModelActivityTimeout();
+                  if (!modelActivityObserved) {
+                    modelActivityObserved = true;
+                    onModelActivity?.();
+                  }
                 },
                 onToken: (token) => {
                   if (!streamStageActive || requestSignal.aborted || modelOperationExpired(modelOperationSignal)) {

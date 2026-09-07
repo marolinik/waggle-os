@@ -4330,6 +4330,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let bufferedAgentTokens: string[] = [];
         let reasoningActivitySent = false;
         let modelRequestSent = false;
+        let modelResponseActivitySent = false;
         let modelActivitySent = false;
         let capabilityReceipt: ReturnType<typeof createPersistedCapabilityReceipt> = null;
         let pendingCapabilityToolResults: Array<{
@@ -4374,6 +4375,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           signal: turnSignal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
+          onModelActivity: () => {
+            if (modelResponseActivitySent || turnSignal.aborted) return;
+            modelResponseActivitySent = true;
+            sendEvent('step', {
+              content: 'Model is responding; verifying the answer before display…',
+              phase: 'model_active',
+            });
+          },
           onReasoningActivity: () => {
             if (reasoningActivitySent || turnSignal.aborted) return;
             reasoningActivitySent = true;

@@ -723,6 +723,78 @@ describe('Chat Streaming API', () => {
     expect(JSON.parse(tokenEvents[1].data).content).toBe('world');
   });
 
+  it('publishes safe model activity before a reasoning-sensitive turn settles', async () => {
+    const originalRunner = server.agentRunner;
+    let releaseRunner!: () => void;
+    let markRunnerEntered!: () => void;
+    let runnerSettled = false;
+    const runnerGate = new Promise<void>(resolve => { releaseRunner = resolve; });
+    const runnerEntered = new Promise<void>(resolve => { markRunnerEntered = resolve; });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
+    server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {
+      config.onModelActivity?.();
+      markRunnerEntered();
+      await runnerGate;
+      config.onToken?.('<think>PRIVATE_REASONING</think>Safe answer');
+      runnerSettled = true;
+      return {
+        content: 'Safe answer',
+        toolsUsed: [],
+        usage: { inputTokens: 1, outputTokens: 2 },
+      };
+    };
+
+    try {
+      const baseUrl = server.server.listening
+        ? `http://127.0.0.1:${(server.server.address() as { port: number }).port}`
+        : await server.listen({ host: '127.0.0.1', port: 0 });
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${getAuthToken(server)}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: 'Do not use tools. Provide a concise recommendation between Option A and Option B.',
+          session: `live-single-pass-${Date.now()}`,
+        }),
+      });
+      reader = response.body!.getReader();
+      await runnerEntered;
+
+      const decoder = new TextDecoder();
+      let observedBody = '';
+      const deadline = Date.now() + 1_500;
+      while (!observedBody.includes('"phase":"model_active"')) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) throw new Error('Timed out waiting for safe model activity');
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_resolve, reject) => {
+            setTimeout(() => reject(new Error('Timed out waiting for safe model activity')), remainingMs);
+          }),
+        ]);
+        if (chunk.done) break;
+        observedBody += decoder.decode(chunk.value, { stream: true });
+      }
+
+      expect(runnerSettled).toBe(false);
+      expect(observedBody).toContain('event: step');
+      expect(observedBody).toContain(JSON.stringify({
+        content: 'Model is responding; verifying the answer before display…',
+        phase: 'model_active',
+      }));
+      expect(observedBody).not.toContain('event: token');
+      expect(observedBody).not.toContain('event: draft_update');
+      expect(observedBody).not.toContain('PRIVATE_REASONING');
+    } finally {
+      releaseRunner();
+      await reader?.cancel().catch(() => undefined);
+      server.agentRunner = originalRunner;
+    }
+  });
+
   it('surfaces safe reasoning activity without exposing provisional model content', async () => {
     const originalRunner = server.agentRunner;
     server.agentRunner = async (config: AgentLoopConfig): Promise<AgentResponse> => {

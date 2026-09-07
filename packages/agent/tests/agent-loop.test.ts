@@ -144,15 +144,18 @@ describe('runAgentLoop', () => {
       malformed.slice(52),
     ]);
     const onToken = vi.fn();
+    const onModelActivity = vi.fn();
 
     const result = await runAgentLoop(makeConfig({
       fetch,
       onToken,
+      onModelActivity,
       stream: true,
       model: 'openai-compatible/qwen3.8-flash-next',
     }));
 
     expect(result.content).toBe(answer);
+    expect(onModelActivity).toHaveBeenCalledTimes(1);
     expect(onToken.mock.calls.map(call => call[0]).join('')).toBe(answer);
     expect(JSON.stringify(onToken.mock.calls)).not.toContain('private analysis');
     expect(JSON.stringify(onToken.mock.calls)).not.toContain('</think>');
