@@ -1154,6 +1154,27 @@ test.describe('five-persona state-bundle evidence', () => {
       const failureEvidence: FailureEvidence[] = [];
       const overlayEvidence: OverlayEvidence[] = [];
 
+      // This persona exercises memory and timeline state, not provider discovery.
+      // Keep repeated full-page navigations independent of that unrelated catalog.
+      if (persona.slug === 'researcher') {
+        await page.route('**/api/providers', (route) => route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ providers: [], search: [], activeSearch: null }),
+        }));
+      }
+      if (persona.slug === 'engineer-power-user') {
+        await page.route('**/api/tools/detect', (route) => route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            platform: 'win32',
+            detectedAt: '2026-07-08T00:00:00.000Z',
+            tools: [],
+          }),
+        }));
+      }
+
       expect(persona.failureProbes, `${persona.slug} failure probes`).not.toHaveLength(0);
 
       await page.addInitScript(() => {
@@ -1162,7 +1183,7 @@ test.describe('five-persona state-bundle evidence', () => {
         localStorage.setItem('waggle:tooltips_done', 'true');
         const activeWorkspace = new URLSearchParams(window.location.search).get('activeWorkspace');
         if (activeWorkspace) {
-          localStorage.setItem('waggle:active-workspace-v1', activeWorkspace);
+          localStorage.setItem('waggle:active-workspace-v2:unbound', activeWorkspace);
         }
       });
 
@@ -1188,6 +1209,11 @@ test.describe('five-persona state-bundle evidence', () => {
           overflow: await visibleHorizontalOverflow(page),
           bodyPreview: (await page.locator('body').innerText()).slice(0, 1200),
         });
+      }
+
+      // Failure probe 1 owns this route next and must see its deliberate abort.
+      if (persona.slug === 'engineer-power-user') {
+        await page.unroute('**/api/tools/detect');
       }
 
       for (const [index, probe] of persona.failureProbes.entries()) {

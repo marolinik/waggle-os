@@ -143,7 +143,7 @@ test.describe('Bug #7 — Ctrl+Shift+N', () => {
 
     try {
       await page.addInitScript((workspaceId: string) => {
-        localStorage.setItem('waggle:active-workspace-v1', workspaceId);
+        localStorage.setItem('waggle:active-workspace-v2:unbound', workspaceId);
       }, workspace.id);
       await gotoDesktop(page);
 
