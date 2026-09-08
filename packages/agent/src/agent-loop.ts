@@ -254,16 +254,56 @@ function safeFetchedCitationUrl(value: unknown): string | null {
   }
 }
 
+function fetchedUrlRedactionVariants(value: unknown): string[] {
+  if (typeof value !== 'string' || value.trim().length === 0) return [];
+  const raw = value.trim();
+  try {
+    const parsed = new URL(raw);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return [];
+    const normalized = parsed.toString();
+    parsed.hash = '';
+    return [...new Set([raw, normalized, parsed.toString()])];
+  } catch {
+    return [];
+  }
+}
+
+function fetchedUrlIdentity(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function appendFetchedSourceFooter(
   content: string,
   citationIntent: boolean,
   fetchedUrls: ReadonlySet<string>,
+  unusableUrls: ReadonlySet<string>,
 ): { content: string; suffix: string } {
-  if (!citationIntent || fetchedUrls.size === 0) return { content, suffix: '' };
-  const missing = [...fetchedUrls].filter(url => !content.includes(url));
-  if (missing.length === 0) return { content, suffix: '' };
-  const suffix = `${content.endsWith('\n') ? '\n' : '\n\n'}Sources fetched:\n${missing.map(url => `- ${url}`).join('\n')}`;
-  return { content: `${content}${suffix}`, suffix };
+  let safeContent = content;
+  const successfulIdentities = new Set(
+    [...fetchedUrls]
+      .map(fetchedUrlIdentity)
+      .filter((identity): identity is string => identity !== null),
+  );
+  for (const url of [...unusableUrls].sort((left, right) => right.length - left.length)) {
+    const identity = fetchedUrlIdentity(url);
+    if (!fetchedUrls.has(url) && (!identity || !successfulIdentities.has(identity))) {
+      safeContent = safeContent.split(url).join('[unavailable source removed]');
+    }
+  }
+  if (!citationIntent) return { content: safeContent, suffix: '' };
+  if (fetchedUrls.size === 0) return { content: safeContent, suffix: '' };
+  const missing = [...fetchedUrls].filter(url => !safeContent.includes(url));
+  if (missing.length === 0) return { content: safeContent, suffix: '' };
+  const suffix = `${safeContent.endsWith('\n') ? '\n' : '\n\n'}Sources fetched:\n${missing.map(url => `- ${url}`).join('\n')}`;
+  return { content: `${safeContent}${suffix}`, suffix };
 }
 
 const SUPPORTED_COMPLETION_FINISH_REASONS = new Set(['stop', 'tool_calls']);
@@ -370,11 +410,6 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   } = config;
 
   const isQwenModel = isQwenModelId(config.billingModel ?? model);
-  // Literal reasoning tags cannot be removed safely token-by-token because an
-  // orphan close can retroactively mark earlier text as private. Buffer Qwen
-  // streams and emit the normalized accepted response once; other providers
-  // retain their existing token streaming behavior.
-  const bufferReasoningSensitiveStream = stream && isQwenModel;
   let modelActivityObserved = false;
 
   if (
@@ -408,9 +443,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   const citationIntent = EXPLICIT_CITATION_INTENT.test(userRequest)
     && !NEGATED_CITATION_INTENT.test(userRequest);
   const successfullyFetchedCitationUrls = new Set<string>();
+  const unusableFetchedCitationUrls = new Set<string>();
   let lastToolObservation: {
     name: string;
     citationUrl: string | null;
+    redactionUrls: string[];
     usableResult: boolean;
   } | undefined;
 
@@ -462,6 +499,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     lastToolObservation = {
       name,
       citationUrl: safeFetchedCitationUrl(input.url),
+      redactionUrls: fetchedUrlRedactionVariants(input.url),
       usableResult: trimmedResult.length > 0 && !UNUSABLE_FETCH_RESULT.test(trimmedResult),
     };
     traceCallbacks?.onToolResult(name, input, result);
@@ -478,6 +516,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         })),
       ]
     : configTools;
+  // Literal Qwen reasoning and source URLs cannot be retracted after a streamed
+  // token is displayed. Any turn that can call web_fetch must therefore remain
+  // atomic until its tool outcome is known; streams without web_fetch stay live.
+  const bufferAtomicStream = stream && (
+    isQwenModel || tools.some(tool => tool.name === 'web_fetch')
+  );
 
   // Build messages array with system prompt + input messages
   const messages: AgentMessage[] = [
@@ -826,9 +870,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // preserved-answer slot for issue #4. See `./loop-gates.ts` for details.
   let gateState = initialGateState();
   let toolRoundCount = 0;
+  let failedFetchRecoveryTriggered = false;
   let requiredToolIndex = 0;
   let synthesisForced = false;
   let lastRequestInputTokens = 0;
+  let bufferCurrentStream = bufferAtomicStream;
   const maxTokenBudget = typeof config.maxTokenBudget === 'number'
     && Number.isFinite(config.maxTokenBudget)
     && config.maxTokenBudget > 0
@@ -853,9 +899,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       baseContent,
       citationIntent,
       successfullyFetchedCitationUrls,
+      unusableFetchedCitationUrls,
     );
     if (onToken) {
-      if (!stream || bufferReasoningSensitiveStream) {
+      if (!stream || bufferCurrentStream) {
         onToken(finalized.content);
       } else if (preservedContent || usableContentWasStreamed) {
         if (finalized.suffix) onToken(finalized.suffix);
@@ -922,7 +969,15 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
 
     const pendingRequiredTool = requiredToolSequence[requiredToolIndex];
-    if (!synthesisForced && maxToolRounds !== undefined && toolRoundCount >= maxToolRounds) {
+    bufferCurrentStream = bufferAtomicStream || unusableFetchedCitationUrls.size > 0;
+    const failedFetchRecoveryRounds = failedFetchRecoveryTriggered && maxToolRounds !== undefined
+      ? Math.min(2, Math.max(0, maxTurns - maxToolRounds - 1))
+      : 0;
+    if (
+      !synthesisForced
+      && maxToolRounds !== undefined
+      && toolRoundCount >= maxToolRounds + failedFetchRecoveryRounds
+    ) {
       forceSynthesis('tool-round-limit');
     }
     const usedBeforeRequest = totalInputTokens + totalOutputTokens;
@@ -1225,7 +1280,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
                   }
                   currentTurnStreamedContent += token;
                   allStreamedContent += token;
-                  if (onToken && !bufferReasoningSensitiveStream) onToken(token);
+                  if (onToken && !bufferCurrentStream) onToken(token);
                 },
                 onReasoningActivity: () => {
                   if (!streamStageActive || requestSignal.aborted || modelOperationExpired(modelOperationSignal)) {
@@ -1564,7 +1619,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         messages,
         userRequest,
         finishReason: completionFinishReason,
-        atomicRepairAvailable: !requestUsesStream || bufferReasoningSensitiveStream,
+        atomicRepairAvailable: !requestUsesStream || bufferCurrentStream,
         state: gateState,
         enableVerification: verificationGate,
         enableSkillDistillation: skillDistillationGate,
@@ -1584,7 +1639,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
           synthesisForced = true;
           turn--;
         }
-        if (stream && !bufferReasoningSensitiveStream && onToken && gate.contentSuffix) {
+        if (stream && !bufferCurrentStream && onToken && gate.contentSuffix) {
           onToken(gate.contentSuffix);
         }
         continue;
@@ -1597,11 +1652,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         gateState.preservedAnswerForDistillation ?? acceptedContent,
         citationIntent,
         successfullyFetchedCitationUrls,
+        unusableFetchedCitationUrls,
       );
       const finalContent = finalized.content;
 
       // In non-streaming mode, emit the full content as a single token
-      if ((!requestUsesStream || bufferReasoningSensitiveStream) && onToken && finalContent) {
+      if ((!requestUsesStream || bufferCurrentStream) && onToken && finalContent) {
         onToken(finalContent);
       } else if (requestUsesStream && onToken) {
         if (gate.contentSuffix) onToken(gate.contentSuffix);
@@ -1632,8 +1688,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         gateState.preservedAnswerForDistillation ?? synthesis,
         citationIntent,
         successfullyFetchedCitationUrls,
+        unusableFetchedCitationUrls,
       );
-      if ((!requestUsesStream || bufferReasoningSensitiveStream) && onToken && finalized.content) {
+      if ((!requestUsesStream || bufferCurrentStream) && onToken && finalized.content) {
         onToken(finalized.content);
       } else if (requestUsesStream && onToken && finalized.suffix) {
         onToken(finalized.suffix);
@@ -1677,6 +1734,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       : toolMap;
     for (const toolCall of assistantMessage.tool_calls) {
       lastToolObservation = undefined;
+      if (toolCall.function.name === 'web_fetch') {
+        try {
+          const attemptedArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+          lastToolObservation = {
+            name: 'web_fetch',
+            citationUrl: safeFetchedCitationUrl(attemptedArgs.url),
+            redactionUrls: fetchedUrlRedactionVariants(attemptedArgs.url),
+            usableResult: false,
+          };
+        } catch {
+          // Invalid arguments are rejected by executeToolCall; there is no URL to retain.
+        }
+      }
       const r = await executeToolCall(toolCall, {
         toolMap: turnToolMap,
         guard,
@@ -1690,17 +1760,34 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       const observation = lastToolObservation as {
         name: string;
         citationUrl: string | null;
+        redactionUrls: string[];
         usableResult: boolean;
       } | undefined;
       if (
-        citationIntent
-        && r.countedAsUsed
-        && r.toolName === 'web_fetch'
+        r.toolName === 'web_fetch'
         && observation?.name === 'web_fetch'
-        && observation.usableResult
-        && observation.citationUrl
       ) {
-        successfullyFetchedCitationUrls.add(observation.citationUrl);
+        if (r.countedAsUsed && r.succeeded && observation.usableResult && observation.citationUrl) {
+          successfullyFetchedCitationUrls.add(observation.citationUrl);
+          for (const url of unusableFetchedCitationUrls) {
+            if (fetchedUrlIdentity(url) === observation.citationUrl) {
+              unusableFetchedCitationUrls.delete(url);
+            }
+          }
+        } else if (observation.redactionUrls.length > 0) {
+          failedFetchRecoveryTriggered = true;
+          const successfulIdentities = new Set(
+            [...successfullyFetchedCitationUrls]
+              .map(fetchedUrlIdentity)
+              .filter((identity): identity is string => identity !== null),
+          );
+          for (const url of observation.redactionUrls) {
+            const identity = fetchedUrlIdentity(url);
+            if (!identity || !successfulIdentities.has(identity)) {
+              unusableFetchedCitationUrls.add(url);
+            }
+          }
+        }
       }
       if (r.countedAsUsed) toolsUsed.push(r.toolName);
       if (config.signal?.aborted) throw clientAbortError();
@@ -1763,9 +1850,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         : `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`)),
     citationIntent,
     successfullyFetchedCitationUrls,
+    unusableFetchedCitationUrls,
   );
   if (stream && onToken) {
-    if (bufferReasoningSensitiveStream) {
+    if (bufferCurrentStream) {
       onToken(finalized.content);
     } else if (fallbackBaseWasStreamed) {
       if (finalized.suffix) onToken(finalized.suffix);

@@ -72,7 +72,7 @@ export function selectAgentRunBudget(input: AgentRunBudgetInput): AgentRunBudget
 
   if (RESEARCH_SHAPES.has(input.taskShape)) {
     return {
-      maxTurns: 5,
+      maxTurns: 7,
       maxToolRounds: 4,
       maxTokenBudget: 56_000,
       synthesisReserveTokens: 13_000,
