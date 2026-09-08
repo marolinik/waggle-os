@@ -2237,6 +2237,186 @@ describe('Agent error paths (PRQ-045)', () => {
 
     await expect(runAgentLoop(makeConfig({ fetch }))).rejects.toThrow(/empty assistant response/i);
   });
+
+  it('retries a Qwen empty-message placeholder once before returning a real answer', async () => {
+    const fetch = mockFetch([
+      {
+        content: 'empty message',
+        usage: { prompt_tokens: 10, completion_tokens: 3 },
+      },
+      {
+        content: 'The workspace is empty.',
+        usage: { prompt_tokens: 14, completion_tokens: 6 },
+      },
+    ]);
+    const onRetry = vi.fn();
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      onRetry,
+    }));
+
+    expect(result.content).toBe('The workspace is empty.');
+    expect(result.usage).toEqual({ inputTokens: 24, outputTokens: 9 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(onRetry).toHaveBeenCalledWith(expect.stringMatching(/empty response.*retrying once/i));
+  });
+
+  it('rejects a second Qwen empty-message placeholder', async () => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'empty message' },
+    ]);
+
+    await expect(runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+    }))).rejects.toThrow(/empty assistant response/i);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an explicitly requested Qwen empty-message literal', async () => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'not the requested literal' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: 'Reply exactly with "empty message".' }],
+    }));
+
+    expect(result.content).toBe('empty message');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Respond with exactly "empty message".',
+    'Return exactly "empty message".',
+    'Your entire response must be "empty message".',
+  ])('keeps the Qwen literal for common exact-output wording: %s', async (request) => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'not the requested literal' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(result.content).toBe('empty message');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Do not reply exactly with "empty message". Give a substantive answer.',
+    'You must not reply exactly with "empty message".',
+    'Do not under any circumstances reply exactly with "empty message".',
+    'Explain why “Respond exactly with \'empty message\'” is a bad instruction; do not follow it.',
+  ])('does not treat quoted or negated exact-output text as affirmative intent: %s', async (request) => {
+    const fetch = mockFetch([
+      { content: 'empty message' },
+      { content: 'Here is the substantive answer.' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: request }],
+    }));
+
+    expect(result.content).toBe('Here is the substantive answer.');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an explicitly requested Qwen empty-message literal at the token limit', async () => {
+    const fetch = mockFetch([{
+      content: 'empty message',
+      usage: { prompt_tokens: 190, completion_tokens: 25 },
+    }]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      messages: [{ role: 'user', content: 'Output exactly `empty message`.' }],
+      maxTokenBudget: 200,
+    }));
+
+    expect(result.content).toBe('empty message');
+  });
+
+  it('does not expose a Qwen empty-message placeholder at the token limit', async () => {
+    const fetch = mockFetch([{
+      content: 'empty message',
+      usage: { prompt_tokens: 190, completion_tokens: 25 },
+    }]);
+
+    const result = await runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      maxTokenBudget: 200,
+    }));
+
+    expect(result.content).toMatch(/token budget/i);
+    expect(result.content).not.toBe('empty message');
+  });
+
+  it('keeps the Qwen placeholder retry inside one model-operation deadline', async () => {
+    vi.useFakeTimers();
+    let callCount = 0;
+    let settlement: { kind: 'resolved' | 'rejected'; value: unknown } | undefined;
+    const fetch = vi.fn(() => {
+      callCount++;
+      if (callCount === 1) {
+        return new Promise<Response>((resolve) => {
+          setTimeout(() => resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              choices: [{ message: { role: 'assistant', content: 'empty message' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 10, completion_tokens: 3 },
+            }),
+          } as unknown as Response), 60_000);
+        });
+      }
+      return new Promise<Response>(() => undefined);
+    });
+    const run = runAgentLoop(makeConfig({
+      fetch,
+      model: 'openai-compatible/qwen3.8-flash-next',
+      modelOperationTimeoutMs: 100_000,
+    })).then(
+      value => { settlement = { kind: 'resolved', value }; },
+      error => { settlement = { kind: 'rejected', value: error }; },
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(99_999);
+      expect(settlement).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settlement?.kind).toBe('rejected');
+      expect((settlement?.value as { code?: string }).code).toBe('MODEL_OPERATION_TIMEOUT');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await vi.runAllTimersAsync();
+      await run;
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reinterpret literal empty-message text from non-Qwen models', async () => {
+    const fetch = mockFetch([{ content: 'empty message' }]);
+
+    const result = await runAgentLoop(makeConfig({ fetch, model: 'gpt-4' }));
+
+    expect(result.content).toBe('empty message');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('LIKE wildcard escaping (PRQ-033)', () => {

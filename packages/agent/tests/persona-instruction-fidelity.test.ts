@@ -91,6 +91,12 @@ describe('persona defaults yield without losing domain discipline', () => {
     expect(prompt).toMatch(/files or schedules/i);
   });
 
+  it('Coder inventories the bounded workspace before trying named files', () => {
+    const prompt = personaPrompt('coder');
+    expect(prompt).toMatch(/report exactly what files exist.*search_files.*\*\*\/\*.*before.*read_file/i);
+    expect(prompt).toMatch(/successful search result.*inventory evidence/i);
+  });
+
   it('General Purpose keeps operational recommendations evidence-bounded', () => {
     const prompt = personaPrompt('general-purpose');
     expect(prompt).toMatch(/operational recommendations.*supplied or verified tool-derived evidence/i);

@@ -304,6 +304,26 @@ function isQwenModelId(modelId: string): boolean {
   return /(?:^|[/._-])qwen(?:$|[/_.:-]|\d)/i.test(modelId);
 }
 
+function isEmptyModelPlaceholder(content: string): boolean {
+  return /^(?:empty (?:message|response)|no response generated)[.!]?$/i.test(content.trim());
+}
+
+function explicitlyRequestsExactContent(userRequest: string, content: string): boolean {
+  const quotedLiterals = userRequest.matchAll(/(["'`])([^"'`]+)\1/g);
+  for (const match of quotedLiterals) {
+    if (match[2].trim() !== content.trim()) continue;
+    const suffix = userRequest.slice(match.index + match[0].length);
+    if (!/^\s*(?:[.!?]\s*)?(?:and\s+nothing\s+else[.!?]?\s*)?$/i.test(suffix)) continue;
+    const prefix = userRequest.slice(0, match.index).trimEnd();
+    const allowedLeadIn = (value: string): boolean => /^(?:(?:for\s+(?:this|the)\s+(?:test|check),\s*)?(?:please(?:\s+just)?|kindly|(?:can|could|would|will)\s+you(?:\s+please)?|i\s+(?:want|need|would\s+like)\s+you\s+to)?)?\s*$/i.test(value);
+    const direct = /(?:reply|respond|answer|say|write|output|return)\s+(?:(?:exactly|only)(?:\s+with)?|with\s+(?:exactly|only))\s*$/i.exec(prefix);
+    if (direct && allowedLeadIn(prefix.slice(0, direct.index))) return true;
+    const wholeResponse = /(?:your\s+)?(?:entire|whole)\s+(?:response|answer|output)\s+(?:must|should)\s+(?:be|contain(?:\s+only)?)\s*$/i.exec(prefix);
+    if (wholeResponse && allowedLeadIn(prefix.slice(0, wholeResponse.index))) return true;
+  }
+  return false;
+}
+
 function emptyModelResponseError(
   usage: AgentResponse['usage'],
   toolsUsed: readonly string[],
@@ -547,6 +567,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let allStreamedContent = ''; // Accumulate ALL streamed content across all turns
   const guard = new LoopGuard();
   let rawToolMarkupCorrectionUsed = false;
+  let emptyPlaceholderCorrectionUsed = false;
   // 429 / 5xx / network retry counters — see `./retry-policy.ts` for the protocol.
   let retryState = initialRetryState();
   // Per-request LLM timeout, merged with the client-disconnect signal below, so a
@@ -1414,6 +1435,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     disarmInitialModelActivityTimeout();
     lastRequestInputTokens = turnInputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
+    const completedModelOperationDeadlineAt = modelOperationDeadlineAt;
     modelOperationDeadlineAt = undefined;
 
     // Provider usage is authoritative and known only after the response. Once
@@ -1425,9 +1447,16 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       if (requiredTool) {
         throw new Error(`Required tool ${requiredTool} could not complete within the token budget`);
       }
+      const candidateContent = ((assistantMessage.content ?? '').trim() || allStreamedContent.trim() || undefined);
+      const candidateIsEmptyPlaceholder = candidateContent !== undefined
+        && isQwenModel
+        && isEmptyModelPlaceholder(candidateContent)
+        && !explicitlyRequestsExactContent(userRequest, candidateContent);
       const usableContent = assistantMessage.tool_calls?.length && !synthesisForced
         ? undefined
-        : ((assistantMessage.content ?? '').trim() || allStreamedContent.trim() || undefined);
+        : (candidateContent && !candidateIsEmptyPlaceholder
+          ? candidateContent
+          : undefined);
       if (usableContent && (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0)) {
         const integrityGate = await maybeFireCompletionGate({
           content: usableContent,
@@ -1496,11 +1525,25 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       // Use this turn's content, or fall back to all accumulated streamed content
       const content = (assistantMessage.content ?? '') || allStreamedContent;
       allStreamedContent = ''; // Release accumulated tokens once consumed
-      if (content.trim().length === 0) {
+      const emptyPlaceholder = isQwenModel
+        && isEmptyModelPlaceholder(content)
+        && !explicitlyRequestsExactContent(userRequest, content);
+      if (content.trim().length === 0 || (emptyPlaceholder && emptyPlaceholderCorrectionUsed)) {
         throw emptyModelResponseError(
           { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
           toolsUsed,
         );
+      }
+      if (emptyPlaceholder) {
+        emptyPlaceholderCorrectionUsed = true;
+        modelOperationDeadlineAt = completedModelOperationDeadlineAt;
+        config.onRetry?.('The model returned an empty response. Retrying once…');
+        messages.push({
+          role: 'user',
+          content: 'Your previous response contained only an empty-response placeholder. Answer the original request now with a substantive final response based on the available evidence.',
+        });
+        turn--;
+        continue;
       }
       if (containsRawToolCallMarkup(content) && !rawToolMarkupCorrectionUsed) {
         rawToolMarkupCorrectionUsed = true;
